@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy · Claim Checker</title>
+  <meta name="description" content="What Claim Checker keeps, what it sends where, and what it never collects." />
+  <meta name="theme-color" content="#0b1226" />
+  <meta name="color-scheme" content="light" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon.svg') }}" type="image/svg+xml" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="page-doc">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-quote" viewBox="100 120 320 260"><g fill="currentColor"><circle cx="176" cy="300" r="62"/><path d="M114 300 C114 222 150 168 232 140 L246 172 C198 192 176 224 176 264 Z"/><circle cx="346" cy="300" r="62"/><path d="M284 300 C284 222 320 168 402 140 L416 172 C368 192 346 224 346 264 Z"/></g></symbol>
+    </defs>
+  </svg>
+  <div class="band">
+    <header class="top">
+      <a class="wordmark" href="/" aria-label="Claim Checker home">Claim Checker</a>
+    </header>
+  </div>
+  <main class="wrap doc">
+    <h1 class="hero">Privacy</h1>
+    <p class="lede">The short version: nothing you type is tied to you, and there is no account to tie it to.</p>
+
+    <h2 class="section-label">What we keep</h2>
+    <p>The text of each claim, the verdict, and the studies that were read, stored anonymously. That is what makes the trending list and the 24-hour cache work. There is no user record: no name, no email, no account, no IP address stored with a check.</p>
+    <p>An anonymous thumbs up or down when you give one, tied to the claim, not to you.</p>
+
+    <h2 class="section-label">What stays on your phone</h2>
+    <p>Your recent checks live only in your browser's storage so they open offline. Clearing them on the home screen, or clearing site data, removes them. We never see that list.</p>
+
+    <h2 class="section-label">Where a claim goes</h2>
+    <p>To check a claim we send its text to two services: PubMed (the U.S. National Library of Medicine) to find studies, and {{ provider }} to turn the claim into a search and to weigh the studies. On Google's free tier, Google's terms say submitted text may be used to improve their products. Don't paste anything you would not want read.</p>
+
+    <h2 class="section-label">Rate limits</h2>
+    <p>To keep the free AI quota fair, the server counts checks per IP address for ten minutes in memory. Nothing is written to disk, and the count disappears when the server restarts.</p>
+
+    <h2 class="section-label">No tracking</h2>
+    <p>No analytics scripts, no advertising, no cookies. Fonts and images are served from this site, not from a third party.</p>
+
+    <p class="fine">Not medical advice. This tool summarizes published research and can be wrong. For your own health, talk to a clinician.</p>
+    <p><a href="/">Back to Claim Checker</a></p>
+  </main>
+  <footer class="foot">
+    <p><strong>Not medical advice.</strong> This summarizes published research and can be wrong. For your own health, talk to a clinician.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- A masthead: newsprint, a double rule, the paper's initial. -->
+  <rect width="512" height="512" fill="#FAF9F6"/>
+  <rect x="64" y="96" width="384" height="14" fill="#14140F"/>
+  <rect x="64" y="128" width="384" height="6" fill="#14140F"/>
+  <text x="256" y="366" text-anchor="middle" font-family="Libre Caslon Text, Georgia, serif"
+        font-weight="700" font-size="230" fill="#14140F">C</text>
+  <rect x="64" y="404" width="384" height="6" fill="#14140F"/>
+</svg>

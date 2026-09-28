@@ -1,0 +1,21 @@
+# Secrets — never commit
+.env
+
+# Local data
+health_claim_checker.db
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Editor / tooling
+.claude/
+.DS_Store
+
+# Node (the QA gate's Playwright only; never deployed)
+node_modules/
+package-lock.json
+
+# Local QA output
+/tmp/qa-*.png
