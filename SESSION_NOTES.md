@@ -192,23 +192,27 @@ rule); analytics of any kind.
 
 ## 6. Known bugs and rough edges
 
-**Five dead database tables.** `classes`, `students`, `curated_claims`,
-`assignments`, `activity_log` are left over from an abandoned classroom
-version of this product. No Python code creates or queries them. They still
-hold rows on the local development database, including 20 rows in
-`activity_log` that pair claim text with a student id. That file is
-gitignored and has never been deployed, but it contradicts the product's
-own privacy promise and should be dropped.
+**Five dead database tables: fixed 2026-09-28.** `classes`, `students`,
+`curated_claims`, `assignments` and `activity_log` (left over from the
+abandoned classroom version, including 20 rows pairing claim text with a
+student id) were dropped from the local database and the file was vacuumed
+so the deleted rows are not recoverable from free pages. Integrity check
+passes; `verdict_cache` (26), `checks` (80) and `feedback` (1) are intact.
+`db.py` never referenced these tables, so nothing recreates them.
 
 **One detector warning**, `border-accent-on-rounded` on `dialog.sheet`'s
 4px top edge. Believed to be a false positive, since the element has
 `border-radius: 0`. Left alone deliberately: it is a design mark from the
 field redesign.
 
-**Unused font files.** `archivo`, `jetbrains` (x3) and `librecaslon` (x3)
-woff2 files plus two TTFs remain in `static/fonts/` from earlier design
-worlds. They are not referenced and not preloaded, so they cost nothing at
-runtime, but they are dead weight in the repo.
+**Unused font files.** Removed 2026-09-28. Ten unreferenced faces
+(archivo, jetbrains x3, librecaslon x3 woff2s and three TTFs) were deleted
+from `static/fonts/`, taking it from 1.4MB to 232KB. Only
+`librefranklin-normal-400-900.woff2` (the page) and `LibreFranklin.ttf`
+(the Pillow card) remain. Verified afterwards: 132 tests pass, the OG card
+still renders, the QA gate passes, and no page requests a font that 404s.
+`OFL-LibreCaslon.txt` was deliberately left in place; an orphaned licence
+file costs nothing and removing licences is a habit worth not forming.
 
 **Python version mismatch.** Development is on 3.14.2; `render.yaml` pins
 3.12.7 because it is reliably available. Nothing in the code needs newer
