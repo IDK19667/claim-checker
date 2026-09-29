@@ -4,6 +4,56 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-09-29: Second reversal within the same branch — real stock footage, not generated imagery
+
+**This reverses the 2026-09-28 entry above, on the same branch, before any
+credits were spent.** The Higgsfield route was approved, a style tile and a
+scroll pacing plan were built against it, and a Pexels API key was obtained
+specifically to source comparison footage for the generated stills. The key
+request was refused by Pexels ("new keys are paused"), which forced sourcing
+real clips by hand instead, and having done that comparison Dhruv chose real
+footage over generated: "find the clips yourself... the most cinematic,
+realistic, high-quality footage."
+
+**Why real footage answers the original objection better than a generated
+one did.** The 2026-09-22 and 2026-09-24 rejections were never about motion
+as such; they were about "pictures of health imply evidence the page does
+not have" and "copying the surface without the assets is exactly what 'AI
+slop' means." Generated imagery of a library that does not exist is still a
+picture asserting something no PubMed record backs. Real footage of a real
+phone, a real library and a real lab is not evidence either, but it does not
+pretend to be a specific place tied to a specific claim: it is illustrative
+by construction, not by disclaimer alone. The "Illustrative footage,
+generated" caption becomes "Illustrative footage. A real check, replayed,"
+naming the actual date of the actual cached check the animation replays,
+which is a stronger and more literal honesty claim than the generated
+version could make.
+
+**What changes.** Three licensed stock clips replace the five-scene
+generated library route: a phone in a dark room (Pixabay 169445), library
+shelves (Pexels 18969594, carried over from the very first candidate round
+and never beaten), and an automated lab instrument (Pixabay 76395). The
+route drops from five scenes plus two transitions to four stages, one per
+real step of the pipeline: phone, archive, lab, verdict. The overlay is no
+longer decorative copy beside the footage; it is the real cached "apple
+cider vinegar cures diabetes" check (checked 2026-09-22) animating in, with
+its real query, real study titles and years, real evidence grades from
+`evidence.py`, and its real verdict and still-open line. Sources and
+licences for all three clips are recorded in `media/PRODUCTION.md`.
+
+**What does not change.** Every constraint from both prior entries still
+holds: no faces, no lab coats posing at camera, no pills, no readable
+screens, logos, signage or text of any kind (checked at full resolution
+before any clip was chosen, not assumed from a title); the claim input
+usable on the first frame with "Skip to the checker" always visible;
+verdicts never colour-coded; citations enforced in code; `still_open` on
+every verdict; the offline-first, no-build-step, no-accounts rules
+untouched.
+
+**Credits spent: 0.** No generation tool was used. All three clips are free
+for commercial use under their own licences (Pixabay Content License,
+Pexels License), recorded with direct links in `media/PRODUCTION.md`.
+
 ## 2026-09-28 (later still): Reversal — a generated fly-through hero, on a branch
 
 **This knowingly reverses prior decisions.** Generated hero imagery and

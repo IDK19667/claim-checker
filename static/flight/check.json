@@ -1,0 +1,112 @@
+{
+ "claim": "Apple cider vinegar cures diabetes",
+ "checkedAt": "2026-09-22",
+ "query": "apple cider vinegar AND diabetes mellitus",
+ "verdict": "complicated",
+ "tldr": "Apple cider vinegar can lower blood sugar, but nothing shows it cures diabetes.",
+ "stillOpen": "Large, long-term randomized trials are needed to prove whether apple cider vinegar can reverse or cure diabetes.",
+ "snapshot": {
+  "read": 8,
+  "relied_on": 3,
+  "pooled": 4,
+  "trials": 0,
+  "registered": 1,
+  "retracted": 0,
+  "year_from": 2007,
+  "year_to": 2025,
+  "mix": [
+   {
+    "tier": "strong",
+    "label": "strong designs",
+    "count": 4,
+    "percent": 50
+   },
+   {
+    "tier": "moderate",
+    "label": "human studies",
+    "count": 3,
+    "percent": 38
+   },
+   {
+    "tier": "weak",
+    "label": "opinion or single case",
+    "count": 1,
+    "percent": 12
+   }
+  ]
+ },
+ "studies": [
+  {
+   "pmid": "34187442",
+   "title": "The effect of apple cider vinegar on lipid profiles and glycemic parameters: a systematic review and meta-analysis of randomized clinical trials.",
+   "year": "2021",
+   "journal": "BMC complementary medicine and therapies",
+   "tier": "strong",
+   "label": "Meta-Analysis",
+   "cited": true
+  },
+  {
+   "pmid": "39949546",
+   "title": "Effects of apple cider vinegar on glycemic control and insulin sensitivity in patients with type 2 diabetes: A GRADE-assessed systematic review and dose-response meta-analysis of controlled clinical trials.",
+   "year": "2025",
+   "journal": "Frontiers in nutrition",
+   "tier": "strong",
+   "label": "Systematic Review",
+   "cited": true
+  },
+  {
+   "pmid": "41010525",
+   "title": "Effect of Apple Cider Vinegar Intake on Body Composition in Humans with Type 2 Diabetes and/or Overweight: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+   "year": "2025",
+   "journal": "Nutrients",
+   "tier": "strong",
+   "label": "Meta-Analysis",
+   "cited": false
+  },
+  {
+   "pmid": "40771528",
+   "title": "Improbable data characteristics and extreme effects of apple cider vinegar on weight loss.",
+   "year": "2025",
+   "journal": "BMJ nutrition, prevention & health",
+   "tier": "weak",
+   "label": "Comment",
+   "cited": false
+  },
+  {
+   "pmid": "19630216",
+   "title": "Apple cider vinegar attenuates lipid profile in normal and diabetic rats.",
+   "year": "2008",
+   "journal": "Pakistan journal of biological sciences : PJBS",
+   "tier": "moderate",
+   "label": "",
+   "cited": false
+  },
+  {
+   "pmid": "18093343",
+   "title": "Effect of apple cider vinegar on delayed gastric emptying in patients with type 1 diabetes mellitus: a pilot study.",
+   "year": "2007",
+   "journal": "BMC gastroenterology",
+   "tier": "moderate",
+   "label": "",
+   "cited": true
+  },
+  {
+   "pmid": "31140380",
+   "title": "Antidiabetic and Antioxidant Effects of Apple Cider Vinegar on Normal and Streptozotocin-Induced Diabetic Rats.",
+   "year": "2018",
+   "journal": "International journal for vitamin and nutrition research. Internationale Zeitschrift fur Vitamin- und Ernahrungsforschung. Journal international de vitaminologie et de nutrition",
+   "tier": "moderate",
+   "label": "",
+   "cited": false
+  },
+  {
+   "pmid": "37451111",
+   "title": "Comparative effectiveness of six herbs in the management of glycemic status of type 2 diabetes mellitus patients: A systematic review and network meta-analysis of randomized controlled trials.",
+   "year": "2023",
+   "journal": "Diabetes & metabolic syndrome",
+   "tier": "strong",
+   "label": "Network Meta-Analysis",
+   "cited": false
+  }
+ ]
+}

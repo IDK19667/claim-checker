@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "static/flight.css"
+        ],
+        "createdAt": "2026-09-29T22:57:56.060Z",
+        "reason": "Border width/style (not colour) encodes evidence tier, consistent with the project rule that evidence is never colour-coded (evidence.py, DESIGN.md). User confirmed intentional."
+      }
+    ]
+  }
+}

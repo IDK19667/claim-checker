@@ -1,0 +1,11 @@
+{
+ "version": 1,
+ "pattern": "frame-%04d.webp",
+ "count": 324,
+ "fps": 12,
+ "width": 1280,
+ "height": 720,
+ "poster": "frame-0000.webp",
+ "seconds": 27.0,
+ "totalBytes": 10636324
+}

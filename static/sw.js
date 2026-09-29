@@ -5,7 +5,7 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "claim-checker-v34";
+const CACHE = "claim-checker-v35";
 const SHELL = [
   "/",
   "/static/style.css",

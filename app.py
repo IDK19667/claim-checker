@@ -343,6 +343,47 @@ def healthz():
     return jsonify({"ok": True})
 
 
+# "How a check works": a scroll fly-through of one real, cached check,
+# reachable from a quiet link on the front page rather than replacing its
+# hero. Everything it shows is read from files on disk: the timeline from
+# beats.json and the check from check.json, which
+# scripts/export_flight_check.py exports out of the verdict cache. If either
+# file is missing the route 404s rather than inventing a placeholder check,
+# because a fabricated verdict is the one thing this product must never show.
+_FLIGHT_STILLS = [
+    {"file": "still-1-phone.webp",
+     "alt": "A hand scrolling a phone in a dark room, the screen unreadable.",
+     "caption": "A claim arrives at night, on a phone, with no source attached."},
+    {"file": "still-2-archive.webp",
+     "alt": "Tiers of bound volumes in a historic library, lit warm.",
+     "caption": "We search the published research, not the internet."},
+    {"file": "still-3-lab.webp",
+     "alt": "An automated pipette head over a rack of sample tubes.",
+     "caption": "Each study graded by what kind of evidence it is."},
+    {"file": "still-4-verdict.webp",
+     "alt": "The footage fading into the deep field colour.",
+     "caption": "Likely true. Likely false. It's complicated. And what is still open."},
+]
+
+
+@app.route("/flight")
+def flight():
+    base = os.path.join(app.static_folder, "flight")
+    try:
+        with open(os.path.join(base, "check.json")) as f:
+            check = json.load(f)
+        with open(os.path.join(base, "beats.json")) as f:
+            beats = json.load(f)
+    except (OSError, ValueError):
+        return render_template("404.html"), 404
+
+    d = datetime.fromisoformat(check["checkedAt"])
+    check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
+
+    return render_template("flight.html", check=check,
+                           chapters=beats["chapters"], stills=_FLIGHT_STILLS)
+
+
 # ---------------------------------------------------------------------
 # The check pipeline, as a generator of stage events. Both the JSON and
 # the streaming endpoint consume it, so the logic lives in one place.

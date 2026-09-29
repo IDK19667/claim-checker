@@ -23,3 +23,11 @@ package-lock.json
 # Local agent tooling, not part of this project
 .agents/
 skills-lock.json
+
+# Fly-through raw footage: large binary, re-fetchable from the URLs and
+# licences recorded in media/PRODUCTION.md, re-buildable with
+# scripts/build_flight.py. Only the derived frame sequence in static/flight/
+# ships. Contact sheets in media/qc/ are small and kept.
+/media/clips/
+/media/master.mp4
+/media/_frames_png/

@@ -517,37 +517,13 @@ t("a result that rests on evidence carries no next_steps in its payload",
   '"next_steps": null' in _r.data.decode() or '"next_steps":null' in _r.data.decode()
   or "next_steps" in _r.data.decode())
 
-# ---- the fly-through timeline ----------------------------------------------------
-# beats.json drives a pinned canvas. A gap, an overlap or a missing chapter would
-# show as a stall or a blank caption mid-scroll, which is exactly the kind of fault
-# that is invisible until someone scrolls the whole hero on a phone.
-_beats_path = ROOT / "static" / "flight" / "beats.json"
-if _beats_path.exists():
-    _bt = json.loads(_beats_path.read_text())
-    _bs = _bt["beats"]
-    t("every beat has an id, a scroll distance and a chapter key",
-      all(b.get("id") and isinstance(b.get("vh"), int) and "chapter" in b for b in _bs))
-    t("beat ids are unique", len({b["id"] for b in _bs}) == len(_bs))
-    t("every beat is either a footage range or a held frame, never both",
-      all(("from" in b) != ("hold" in b) for b in _bs), [b["id"] for b in _bs if ("from" in b) == ("hold" in b)])
-    _segs = [(b["from"], b["to"]) for b in _bs if "from" in b]
-    t("footage ranges run forwards", all(a < z for a, z in _segs))
-    t("footage ranges are contiguous, no gaps or overlaps",
-      all(abs(_segs[i][1] - _segs[i + 1][0]) < 1e-6 for i in range(len(_segs) - 1)),
-      [(_segs[i][1], _segs[i + 1][0]) for i in range(len(_segs) - 1)
-       if abs(_segs[i][1] - _segs[i + 1][0]) >= 1e-6])
-    t("the timeline covers the whole planned master",
-      _segs[0][0] == 0 and abs(_segs[-1][1] - _bt["plannedMasterSeconds"]) < 1e-6)
-    t("every chapter a beat names is defined",
-      all(b["chapter"] in _bt["chapters"] for b in _bs if b["chapter"]))
-    t("every defined chapter is used by at least one beat",
-      set(_bt["chapters"]) == {b["chapter"] for b in _bs if b["chapter"]})
-    t("mobile focusX stays inside the frame",
-      all(0 <= b.get("mobile", {}).get("focusX", 0.5) <= 1 for b in _bs))
-    t("mobile pacing is shorter than desktop, never longer",
-      all(b.get("mobile", {}).get("vh", b["vh"]) <= b["vh"] for b in _bs))
-    t("the opening beat holds a still so the claim input is usable first",
-      _bs[0].get("hold") == 0 and _bs[0]["vh"] >= 60)
+# The fly-through's beats.json, manifest.json, check.json and /flight route
+# are covered in tests/test_flight.py, on the video-flythrough branch. That
+# file's schema (four real stages, masterSeconds, a stage per beat) replaced
+# an earlier one this block used to check (plannedMasterSeconds, a fixed
+# five-scene chapter set); keeping both would mean two tests asserting two
+# different shapes for the same file, so this one moved rather than stayed
+# stale beside its replacement.
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
