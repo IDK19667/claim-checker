@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "note": "Clip seconds are the PLAN. They are re-timed against the real master after generation; nothing downstream may assume they are final.",
+  "plannedMasterSeconds": 42,
+  "beats": [
+    {
+      "id": "hero-hold",
+      "vh": 85,
+      "hold": 0,
+      "chapter": "ch-hero",
+      "mobile": { "vh": 70 },
+      "why": "The claim input must be readable and usable before anything moves. This is the longest still beat on purpose."
+    },
+    {
+      "id": "arrive",
+      "vh": 110,
+      "from": 0.0,
+      "to": 4.5,
+      "chapter": "ch-hero",
+      "mobile": { "vh": 80 },
+      "why": "Arc past the lamp post, line up with the doors, glide in."
+    },
+    {
+      "id": "reading-room",
+      "vh": 165,
+      "from": 4.5,
+      "to": 11.0,
+      "chapter": "ch-search",
+      "mobile": { "vh": 120, "focusX": 0.45 },
+      "why": "Dense interior move. More scroll distance so the banked sweep and the S-curve are readable rather than a blur."
+    },
+    {
+      "id": "shelf-gap",
+      "vh": 60,
+      "from": 11.0,
+      "to": 15.0,
+      "chapter": null,
+      "mobile": { "vh": 50 },
+      "why": "Transition. Short and fast, no copy to read."
+    },
+    {
+      "id": "stacks",
+      "vh": 155,
+      "from": 15.0,
+      "to": 22.0,
+      "chapter": "ch-studies",
+      "mobile": { "vh": 115, "focusX": 0.55 },
+      "why": "Weaving an aisle. focusX right of centre on mobile because the move turns right at the end."
+    },
+    {
+      "id": "archive",
+      "vh": 130,
+      "from": 22.0,
+      "to": 27.0,
+      "chapter": "ch-graded",
+      "mobile": { "vh": 95 },
+      "why": "Side door into the archive room, curving past the drawers."
+    },
+    {
+      "id": "drawer",
+      "vh": 120,
+      "from": 27.0,
+      "to": 31.0,
+      "chapter": "ch-open",
+      "mobile": { "vh": 95 },
+      "why": "The open card drawer. Slow: this beat carries the still-open line, which is the product's signature claim."
+    },
+    {
+      "id": "courtyard",
+      "vh": 70,
+      "from": 31.0,
+      "to": 34.0,
+      "chapter": null,
+      "mobile": { "vh": 55 },
+      "why": "Out the rear door. Transition, no copy."
+    },
+    {
+      "id": "yaw",
+      "vh": 80,
+      "from": 34.0,
+      "to": 37.0,
+      "chapter": null,
+      "mobile": { "vh": 70 },
+      "why": "The 180 degree turn gets its own beat so it never has to share scroll with copy."
+    },
+    {
+      "id": "reveal",
+      "vh": 150,
+      "from": 37.0,
+      "to": 42.0,
+      "chapter": "ch-verdicts",
+      "mobile": { "vh": 110 },
+      "why": "Backwards climb, the campus opening out."
+    },
+    {
+      "id": "reveal-hold",
+      "vh": 95,
+      "hold": -1,
+      "chapter": "ch-verdicts",
+      "mobile": { "vh": 80 },
+      "why": "Holds the final aerial while the closing copy and the claim input are read. hold -1 means the last frame."
+    }
+  ],
+  "chapters": {
+    "ch-hero": "Heard a health claim? Check it against the research.",
+    "ch-search": "We search the published research, not the internet.",
+    "ch-studies": "Up to eight real studies per claim. Every one linked.",
+    "ch-graded": "Each study graded by what kind of evidence it is.",
+    "ch-open": "And every verdict says what is still open.",
+    "ch-verdicts": "Likely true. Likely false. It's complicated. And what's still open."
+  }
+}
