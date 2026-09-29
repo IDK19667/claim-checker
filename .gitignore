@@ -19,3 +19,7 @@ package-lock.json
 
 # Local QA output
 /tmp/qa-*.png
+
+# Local agent tooling, not part of this project
+.agents/
+skills-lock.json
