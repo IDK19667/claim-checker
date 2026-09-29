@@ -4,6 +4,49 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-09-28 (later still): Reversal — a generated fly-through hero, on a branch
+
+**This knowingly reverses prior decisions.** Generated hero imagery and
+scroll-driven video were rejected here three times: 2026-09-22 ("no
+scroll-driven video, film grain over the page... Motion that decorates
+makes a credibility product read as a marketing page"), 2026-09-24 ("Do
+not use a generated hero video, scroll-driven storytelling, or
+AI-generated imagery... Copying the surface without the assets is exactly
+what 'AI slop' means"), and 2026-09-26 twice over, the second time
+specifically against this same source video: "Generated hero imagery and
+video (Higgsfield) are rejected on the same grounds plus two of their
+own: pictures of health imply evidence the page does not have, and a
+video hero breaks the offline first paint."
+
+Dhruv reversed this in a separate session on 2026-09-28, writing
+`VIDEO_REDESIGN_BRIEF.md` and recording there: **"Owner decision (Dhruv,
+2026-09-28): implement all of it."** That brief instructs this entry to be
+written before any building starts, quoting that line, which is done here.
+
+**What changes and what does not.** A scroll-scrubbed first-person
+fly-through through a generated library building becomes the front-page
+hero, replacing the plain masthead-and-claim-field opening. The three
+things that made the earlier rejections correct are addressed head-on
+rather than argued away: no medical imagery of any kind (no scrubs, no
+pills, no stethoscopes, nothing that reads as clinical endorsement); no
+legible text, journal titles or logos in any generated frame, so nothing
+implies a specific finding; a visible caption reading "Illustrative
+footage, generated," which keeps the credibility promise the earlier
+entries were protecting. The claim input stays reachable on the first
+frame, before any video loads, with a permanent "Skip to the checker".
+Every other non-negotiable is unchanged: verdicts are never colour-coded,
+citations are still enforced in code, `still_open` still ships everywhere,
+nothing in the pipeline changes, and the privacy page stays true.
+
+**Where this lives.** On a branch, `video-flythrough`, per the brief's
+first rule: `main` is not touched and stays what ships until Dhruv reviews
+both side by side on his phone and says which one goes live. The full
+build plan, including hard imagery constraints, the scroll-pacing engine,
+frame QC and repair steps, the mobile pass, and what "done" means, is
+`VIDEO_REDESIGN_BRIEF.md` and is not repeated here. If the branch is
+merged, this entry stays; if it is discarded, this entry stays too and
+says why the attempt happened and what it cost.
+
 ## 2026-09-28 (later): The palette had two tells, and the numbers were too quiet
 
 **What read as slop.** Two values were doing most of the damage. `#000000`
