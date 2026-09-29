@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Style tile · Claim Checker fly-through</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#0b1226" />
+<meta name="color-scheme" content="light" />
+<link rel="preload" href="/static/fonts/woff2/librefranklin-normal-400-900.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="/static/style.css" />
+<style>
+  /* Tile-only scaffolding. Nothing here ships; every colour and size below
+     comes from the tokens already in DESIGN.md, so the fly-through is
+     forced to live inside the identity rather than beside it. */
+  body { background: var(--paper); }
+  .tile { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+  .tile h1 { font-size: 34px; font-weight: 900; letter-spacing: -0.03em; margin: 0 0 4px; }
+  .tile .sub { color: var(--ink-2); font-size: 15px; margin: 0 0 32px; }
+  .spec { margin: 44px 0 10px; padding-top: 10px; border-top: 4px solid var(--ink);
+          font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; }
+  .note { font-size: 12.5px; color: var(--ink-3); margin: 6px 0 14px; max-width: 62ch; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 8px; }
+  .sw { width: 116px; }
+  .sw i { display: block; height: 52px; border: 1px solid var(--rule); }
+  .sw b { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.06em; margin-top: 5px; }
+  .sw span { display: block; font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+  /* A stand-in for a bright frame of the flight. Deliberately light: the
+     header must be legible over the BRIGHTEST scene, not over frame 0. */
+  .frame { position: relative; height: 290px; overflow: hidden; border: 1px solid var(--rule);
+           background:
+             radial-gradient(120% 90% at 62% 24%, #d8d2c4 0%, #8d8574 38%, #3c3f4d 76%, var(--deep) 100%); }
+  .frame.dark { background:
+             radial-gradient(120% 90% at 50% 70%, #2a3352 0%, var(--deep-2) 45%, var(--deep) 100%); }
+
+  /* Header, both states, drawn exactly as section 6 specifies. */
+  .hdr { position: absolute; inset: 0 0 auto 0; z-index: 2; display: flex;
+         align-items: center; justify-content: space-between; gap: 16px;
+         padding: 12px 16px; color: var(--on-deep); }
+  .hdr .mark { font-size: 15px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
+  .hdr nav { display: flex; gap: 14px; font-size: 11px; font-weight: 700;
+             text-transform: uppercase; letter-spacing: 0.06em; }
+  /* A plain top-to-bottom fade put the text at roughly half the top-edge
+     opacity and measured 1.86:1 over a bright dusk frame. The scrim now
+     holds through the text row and compresses the fade into the lower
+     third, so there is still no hard line but the text sits in full cover. */
+  .hdr.over {
+    background: linear-gradient(to bottom,
+      rgba(11, 18, 38, 0.88) 0%,
+      var(--header-over) 62%,
+      rgba(11, 18, 38, 0) 100%);
+    padding-bottom: 20px;
+  }
+  .hdr.solid { background: var(--header-solid); -webkit-backdrop-filter: blur(10px);
+               backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.14); }
+
+  /* Copy chapter over footage. */
+  .chapter { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+             padding: 46px 18px 18px; color: var(--on-deep);
+             background: linear-gradient(to top, var(--flight-scrim), rgba(11,18,38,0)); }
+  .chapter p { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: -0.015em;
+               line-height: 1.26; max-width: 22ch; }
+  .chapter .cap { margin-top: 10px; font-size: 10.5px; font-weight: 600; color: var(--on-deep-2);
+                  text-transform: uppercase; letter-spacing: 0.08em; }
+  .skip { position: absolute; right: 16px; bottom: 18px; z-index: 3;
+          font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+          color: var(--on-deep); border-bottom: 1px solid var(--on-deep-2); padding-bottom: 2px; }
+
+  .cardstack { display: grid; gap: 12px; }
+  .vcard { border: 1px solid var(--rule); background: var(--paper); padding: 14px; }
+  .vcard:hover { border-color: var(--ink); }
+  .vcard .claim { font-size: 17px; font-weight: 700; line-height: 1.3; margin: 0 0 8px; }
+  .vcard .verd { font-size: 10px; font-weight: 900; text-transform: uppercase;
+                 letter-spacing: 0.06em; color: var(--ink-2); }
+  .vcard .open { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .bar2 { display: flex; height: 8px; gap: 3px; margin: 9px 0 0; }
+  .bar2 i { display: block; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+</style>
+</head>
+<body class="page-doc">
+<div class="tile">
+  <h1>Style tile</h1>
+  <p class="sub">Every surface the fly-through touches, drawn only from tokens already in DESIGN.md. Not linked from the site.</p>
+
+  <p class="spec">Tokens in play</p>
+  <div class="swatches">
+    <div class="sw"><i style="background:var(--deep)"></i><b>deep</b><span>#0b1226</span></div>
+    <div class="sw"><i style="background:var(--deep-2)"></i><b>deep-2</b><span>#18213e</span></div>
+    <div class="sw"><i style="background:var(--ink)"></i><b>ink</b><span>#0e1422</span></div>
+    <div class="sw"><i style="background:var(--paper)"></i><b>paper</b><span>#fafbfc</span></div>
+    <div class="sw"><i style="background:var(--rule)"></i><b>rule</b><span>#d3d8e2</span></div>
+    <div class="sw"><i style="background:var(--act)"></i><b>act</b><span>#8a4f13</span></div>
+    <div class="sw"><i style="background:var(--header-over)"></i><b>header-over</b><span>78% deep</span></div>
+    <div class="sw"><i style="background:var(--header-solid)"></i><b>header-solid</b><span>92% deep</span></div>
+  </div>
+  <p class="note">Three colours are new and were added to DESIGN.md before this file existed: <code>header-over</code>, <code>header-solid</code>, <code>flight-scrim</code>. No new hue: all three are the existing deep field at different opacities, so the fly-through introduces no colour the product did not already have.</p>
+
+  <p class="spec">Header over the flight, on a bright frame</p>
+  <p class="note">Tested against a light scene rather than frame 0, per the brief. 88% deep at the top edge, holding 78% through the text row, fading to nothing below. Measured 12.33:1 on the brightest part of this frame; a plain top-to-bottom fade measured 1.86:1 and failed.</p>
+  <div class="frame">
+    <div class="hdr over"><span class="mark">Claim Checker</span><nav><span>How it works</span><span>Install</span></nav></div>
+    <div class="chapter">
+      <p>We search the published research, not the internet.</p>
+      <div class="cap">Illustrative footage, generated</div>
+    </div>
+    <span class="skip">Skip to the checker</span>
+  </div>
+
+  <p class="spec">Header after the flight</p>
+  <div class="frame dark" style="height:150px">
+    <div class="hdr solid"><span class="mark">Claim Checker</span><nav><span>How it works</span><span>Install</span></nav></div>
+  </div>
+
+  <p class="spec">Hero chapter over a dark frame, with the claim input reachable</p>
+  <p class="note">The input is usable on the first frame, before any video loads. That is rule 4 of the brief and it is a hard constraint, not a nicety.</p>
+  <div class="frame dark" style="height:330px">
+    <div class="hdr over"><span class="mark">Claim Checker</span><nav><span>How it works</span></nav></div>
+    <div style="position:absolute;left:18px;right:18px;top:64px;z-index:1">
+      <p style="margin:0 0 14px;color:var(--on-deep);font-size:34px;font-weight:900;letter-spacing:-0.035em;line-height:1.0;max-width:16ch">Heard a health claim?</p>
+      <div style="background:rgba(11,18,38,0.55);border:1px solid var(--on-deep-2);padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--on-deep-2)">Submit a claim</div>
+        <div style="margin-top:6px;font-size:15px;color:var(--on-deep-2)">Apple cider vinegar cures diabetes</div>
+      </div>
+      <button class="primary" style="margin-top:10px;width:100%">Check the research</button>
+    </div>
+  </div>
+
+  <p class="spec">Verdict band</p>
+  <p class="note">Unchanged from what ships. Ink only, never tinted, identical for all three verdicts.</p>
+  <div style="background:var(--deep);padding:16px;max-width:520px">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--on-deep-2)">Verdict</div>
+    <div style="font-size:32px;font-weight:900;letter-spacing:-0.035em;line-height:0.98;color:var(--on-deep);margin-top:6px">IT'S COMPLICATED</div>
+  </div>
+
+  <p class="spec">Evidence card, and cards that stack</p>
+  <div class="cardstack" style="max-width:520px">
+    <div class="vcard">
+      <p class="claim">Turmeric reduces joint inflammation</p>
+      <span class="verd">Likely true</span>
+      <div class="bar2">
+        <i style="background:var(--ev-strong);width:38%"></i>
+        <i style="background:var(--ev-moderate);width:50%"></i>
+        <i style="background:var(--ev-weak);width:12%;box-shadow:inset 0 0 0 1px var(--rule-2)"></i>
+      </div>
+      <p class="open"><b>Still open:</b> Long-term data remain scarce; most trials ran 4 to 36 weeks.</p>
+    </div>
+    <div class="vcard">
+      <p class="claim">Sunscreen causes cancer</p>
+      <span class="verd">Likely false</span>
+      <div class="bar2">
+        <i style="background:var(--ev-strong);width:25%"></i>
+        <i style="background:var(--ev-moderate);width:63%"></i>
+        <i style="background:var(--ev-weak);width:12%;box-shadow:inset 0 0 0 1px var(--rule-2)"></i>
+      </div>
+      <p class="open"><b>Still open:</b> Long-term effects of newer filters are still being studied.</p>
+    </div>
+  </div>
+
+  <p class="spec">Buttons and links</p>
+  <div class="row">
+    <button class="primary">Check the research</button>
+    <button class="secondary">Share this verdict</button>
+    <a href="#" style="color:var(--act);font-weight:700;font-size:13px;text-decoration:underline;text-underline-offset:3px">More on PubMed</a>
+  </div>
+  <p class="note">The ochre is for actions only. It never touches a verdict, which is why the bands and cards above carry none of it.</p>
+</div>
+</body>
+</html>

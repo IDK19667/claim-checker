@@ -43,6 +43,11 @@
   --on-deep-2: #a9b3cb;
   /* Interactive only: links and controls, never a verdict, never evidence. */
   --act: #8a4f13;
+  /* The fly-through's three surfaces. All are the deep field at different
+     opacities: the hero introduces no hue the product did not already have. */
+  --header-over: rgba(11, 18, 38, 0.78);
+  --header-solid: rgba(11, 18, 38, 0.92);
+  --flight-scrim: rgba(11, 18, 38, 0.55);
   --focus: #0e1422;
   --scrim: rgba(0, 0, 0, 0.55);
   --shadow-sheet: rgba(0, 0, 0, 0.28);

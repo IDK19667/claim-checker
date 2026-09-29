@@ -23,6 +23,9 @@ colors:
   on-deep-2: "#a9b3cb"
   act: "#8a4f13"
   focus: "{colors.primary}"
+  header-over: "rgba(11, 18, 38, 0.78)"
+  header-solid: "rgba(11, 18, 38, 0.92)"
+  flight-scrim: "rgba(11, 18, 38, 0.55)"
   scrim: "rgba(0, 0, 0, 0.55)"
   shadow-sheet: "rgba(0, 0, 0, 0.28)"
 typography:
@@ -202,6 +205,15 @@ components:
     backgroundColor: "{colors.rule-2}"
   surface-hover:
     backgroundColor: "{colors.paper-2}"
+  header-over-flight:
+    backgroundColor: "{colors.header-over}"
+    textColor: "{colors.on-deep}"
+  header-after-flight:
+    backgroundColor: "{colors.header-solid}"
+    textColor: "{colors.on-deep}"
+  flight-chapter:
+    backgroundColor: "{colors.flight-scrim}"
+    textColor: "{colors.on-deep}"
   evidence-bar-strong:
     backgroundColor: "{colors.ev-strong}"
   evidence-bar-moderate:
