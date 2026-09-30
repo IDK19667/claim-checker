@@ -34,12 +34,11 @@
          data-beats="{{ url_for('static', filename='flight/beats.json') }}">
   <div class="flight-stage">
     <canvas id="flight-canvas" aria-hidden="true"></canvas>
-    <div class="flight-scrim" aria-hidden="true"></div>
 
-    <p class="flight-progress" id="flight-progress" hidden>Loading footage &hellip;</p>
+    <p class="flight-chip flight-progress" id="flight-progress" hidden>Loading footage &hellip;</p>
 
     <div class="flight-overlay" id="flight-overlay">
-      <div class="chapter-zone">
+      <div class="flight-chip chapter-zone">
         {% for id, text in chapters.items() %}
         <div class="chapter" id="{{ id }}" data-on="0">
           <p>{{ text }}</p>
@@ -47,7 +46,7 @@
         {% endfor %}
       </div>
 
-      <div class="flight-work" data-stage="phone">
+      <div class="flight-chip flight-work" data-stage="surface">
 
         <div class="claim-card">
           <q>{{ check.claim }}</q>
@@ -63,8 +62,9 @@
         <p class="query-line">
           <span>Searched PubMed for</span>
           <code>{{ check.query }}</code>
-          <span class="counter">0 of {{ check.studies|length }} studies read</span>
         </p>
+
+        <p class="counter">0 of {{ check.studies|length }} studies read</p>
 
         <ul class="stack">
           {% for s in check.studies %}
@@ -96,12 +96,11 @@
           <button type="submit">Check it</button>
         </form>
 
+        <p class="flight-note">
+          Illustrative footage. A real check, replayed,
+          {{ check.checkedAt_long }}. Not medical advice.
+        </p>
       </div>
-
-      <p class="flight-note">
-        <span>Illustrative footage. A real check, replayed,
-          {{ check.checkedAt_long }}. Not medical advice.</span>
-      </p>
     </div>
 
     {# Shown instead of the canvas under reduced motion, Save-Data, or a

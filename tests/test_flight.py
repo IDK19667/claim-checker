@@ -105,8 +105,8 @@ if beats_path.exists():
       bs[0].get("hold") == 0)
     t("the closing beat holds the last frame (hold -1)",
       bs[-1].get("hold") == -1)
-    t("all four real stages are represented: phone, archive, lab, verdict",
-      {"phone", "archive", "lab", "verdict"}.issubset({b["stage"] for b in bs}))
+    t("all four real stages are represented: surface, rising, weighing, horizon",
+      {"surface", "rising", "weighing", "horizon"}.issubset({b["stage"] for b in bs}))
     t("a transition beat (the crossfade itself) never carries a chapter",
       all(b.get("chapter") is None for b in bs if b["stage"] == "transition"))
     t("every fade window is a valid in-before-out range inside 0..1",

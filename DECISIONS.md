@@ -4,6 +4,80 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-09-29 (latest): "From noise to clarity", four clips, no scrim
+
+**Round 2's shipped fly-through (phone/archive/lab/verdict, a full-frame
+scrim behind white text) read as "too blurry", "fades when text appears",
+and "doesn't feel like a fly-through".** All three complaints trace to the
+same two causes: 1280px frames at WebP quality 72 upscaling visibly on a
+normal desktop screen, and a heavy scrim (`rgba(11,18,38,0.86)` at its
+darkest) that dimmed the footage itself every time a chapter of text
+needed to be legible. Given explicit creative freedom to redesign the
+concept rather than patch it, both causes were removed rather than eased.
+
+**The concept changes to "from noise to clarity", still one stage per real
+step of the pipeline:** city rooftops (surface: the noise a claim starts
+as, hero and input) leads into rising over a coastline (stepping back: the
+real PubMed query appears, before any study has arrived) leads into
+churning water (weighing: studies stack in, get graded, and form the
+evidence bar, all three continuous through one stage rather than split
+across two) leads into an open sea horizon (clarity, plus what is still
+unknown: the verdict, the still-open line, the input again). Clips:
+Surface = Pexels 2248532, Rising = 5619876, Weighing = 7666608, Horizon =
+9209847. 13992029, a Horizon candidate, was rejected for an emblem in
+frame whose clearance could not be confirmed. Full sourcing, motion
+scores and the rest of the rejection list are in `media/PRODUCTION.md`.
+
+**Every candidate this round was motion-scored before download**
+(`scripts/flight_motion.py --clip`), not trusted by its Pixabay/Pexels
+title. This mattered: most Pixabay results tagged "drone" or "aerial"
+scored as static hover shots once measured, which is why the shipped set
+is almost entirely Pexels. All four shipped clips read as sustained motion
+90-100% of their length, against round 2's one measured real camera move
+(the archive tilt) in three clips. Every stage now gets its own
+text-then-text-free beat pair rather than the one stage that earned it
+last round.
+
+**The scrim is gone, not reduced.** Footage stays at full brightness for
+the entire flight; the only darkening anywhere is the master's final 1s
+drain to the site's deep field colour, after all four stages have played,
+which is an exit into the next section rather than a contrast aid. Text
+moved into small, solid, paper-backed panels (`.flight-chip`) anchored to
+a corner or the lower edge: a headline chip top-left, the work panel
+bottom-left, the header itself now two small chips instead of a
+full-width gradient band. Contrast comes from the panel (the same
+paper-on-ink pair used sitewide, so it is unaffected by whatever colour
+the footage under it happens to be), never from dimming the shot.
+
+**Frames ship at 1920px wide, quality 72, not the literal round-3 quality
+ask (85-90).** Measured directly: this footage, being real and unblurred,
+costs 3-4x more per WebP frame than round 2's clips did at identical
+settings, and the literal 1920/quality-88 ask measured 139MB for a 37s
+sequence, unfit for a mobile-first PWA that has to work under Save-Data.
+A first pass shipped 1440px/quality-76 instead, which turned out to still
+read soft at true DPR2 resolution: a DPR2 screen needs roughly 2x its CSS
+width in source pixels to avoid visible upscale, so 1440px was thinner
+margin over a 1280-CSS-px desktop than round 2's 1280px build had at DPR1.
+1920px (Rising and Weighing's real ceiling; Surface and Horizon are native
+4K) cuts that upscale ratio to ~1.33x, which is what actually fixes it;
+quality moved back to round 2's own 72 to make room, landing at 56.2MB.
+Full measurement table, including a render-backend correction along the
+way (a Playwright screenshot in this sandbox runs on software SwiftShader
+and blurs noticeably worse than the real GPU a reader's browser uses, so
+sharpness here was ultimately judged on the Browser pane / a real device,
+not a Playwright screenshot), is in `media/PRODUCTION.md`. fps moved (12
+to 9) to help make budget, since it was never part of the ask and was the
+one lever that did not cost visible sharpness.
+
+**What does not change.** Every non-negotiable from the branch's prior
+entries: no faces, no readable text, logo or signage in any clip; the
+claim input usable on the first screen without scrolling; "Skip to the
+checker" always reachable; verdicts never colour-coded; `still_open`
+rendered on every verdict; the reduced-motion/no-sequence fallback (now
+four new stills matching this concept) works standalone. `tests/test_flight.py`
+(34/34) and `tests/test_app.py` (135/135) pass; `node scripts/qa.mjs`
+passes; `static/sw.js` bumped to v37.
+
 ## 2026-09-29 (later still): Renamed to Evident, on the video-flythrough branch
 
 **"Claim Checker" becomes "Evident"** across every user-facing surface (page

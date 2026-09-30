@@ -351,17 +351,17 @@ def healthz():
 # file is missing the route 404s rather than inventing a placeholder check,
 # because a fabricated verdict is the one thing this product must never show.
 _FLIGHT_STILLS = [
-    {"file": "still-1-phone.webp",
-     "alt": "A hand scrolling a phone in a dark room, the screen unreadable.",
-     "caption": "A claim arrives at night, on a phone, with no source attached."},
-    {"file": "still-2-archive.webp",
-     "alt": "Tiers of bound volumes in a historic library, lit warm.",
-     "caption": "We search the published research, not the internet."},
-    {"file": "still-3-lab.webp",
-     "alt": "An automated pipette head over a rack of sample tubes.",
-     "caption": "Each study graded by what kind of evidence it is."},
-    {"file": "still-4-verdict.webp",
-     "alt": "The footage fading into the deep field colour.",
+    {"file": "still-1-surface.webp",
+     "alt": "An aerial view over a dense city, rooftops and streets in every direction.",
+     "caption": "A claim starts as noise, one voice among a whole city of them."},
+    {"file": "still-2-rising.webp",
+     "alt": "A drone rising over a grassy coastline above chalk cliffs and the sea.",
+     "caption": "We step back and search the published research, not the internet."},
+    {"file": "still-3-weighing.webp",
+     "alt": "Churning turquoise ocean water seen from directly above.",
+     "caption": "Each study is weighed, graded by what kind of evidence it is."},
+    {"file": "still-4-horizon.webp",
+     "alt": "An open sea horizon at dusk, the sky fading from gold to blue.",
      "caption": "Likely true. Likely false. It's complicated. And what is still open."},
 ]
 

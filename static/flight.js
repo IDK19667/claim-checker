@@ -18,8 +18,8 @@
  *     its high-res copy has arrived. High-res bytes for the whole sequence
  *     are also fetched up front (a small progress indicator tracks this),
  *     but only a window of them stays decoded to an ImageBitmap at once —
- *     decoding all 324 at 1280x720 simultaneously is roughly a gigabyte of
- *     bitmap memory, which a phone will not tolerate.
+ *     decoding all 334 at 1440x810 simultaneously is well over a gigabyte
+ *     of bitmap memory, which a phone will not tolerate.
  *  4. The displayed frame eases toward the scroll-implied one every
  *     animation frame rather than jumping straight to it, so a fast flick
  *     glides across frames instead of visibly skipping between them.
@@ -43,7 +43,6 @@
 
   var canvas = document.getElementById("flight-canvas");
   var overlay = document.getElementById("flight-overlay");
-  var header = document.querySelector(".hdr");
   var progressEl = document.getElementById("flight-progress");
 
   function giveUp(why) {
@@ -59,13 +58,17 @@
   }
 
   var ctx = canvas.getContext("2d", { alpha: false });
-  // The footage sits behind a heavy scrim and the text it plays under, never
-  // shown at native sharpness; at a device pixel ratio of 2 the backing
-  // store is ~4.1 megapixels, and resampling a much smaller source frame up
-  // to fill it at "high" quality measurably slowed drawImage enough to
-  // reintroduce dropped frames during a fast scroll (confirmed: 0 misses at
-  // DPR 1 in the same sweep, 29 at DPR 2, before this line existed). Lower
-  // quality is not visibly different here and removes that cost.
+  // Footage now plays at full brightness in its own right (no scrim), so
+  // sharpness rests entirely on the source frame and this setting. At a
+  // device pixel ratio of 2 the backing store is several megapixels, and
+  // resampling a frame up to fill it at "high" quality measurably slowed
+  // drawImage enough to reintroduce dropped frames during a fast scroll
+  // (confirmed: 0 misses at DPR 1 in the same sweep, 29 at DPR 2, before
+  // this line existed). Re-checked this round on a real GPU (not the
+  // software-rendered SwiftShader path Playwright uses in this sandbox,
+  // which blurs noticeably worse than either setting and should not be
+  // trusted for judging sharpness): "low" and "high" looked the same, so
+  // "low" stays for the scroll-performance win it measurably buys.
   if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "low";
   var manifest = null;
   var beats = null;
@@ -92,8 +95,8 @@
 
   var LORES_CONCURRENCY = 10;
 
-  // Concurrency-limited like the hi-res loader below. Firing all 324 tiny
-  // fetches (and, worse, 324 simultaneous createImageBitmap decodes) at
+  // Concurrency-limited like the hi-res loader below. Firing all 334 tiny
+  // fetches (and, worse, 334 simultaneous createImageBitmap decodes) at
   // once congests the main thread for a couple of seconds right when the
   // page has just loaded and a reader is most likely to start scrolling:
   // measured with scripts/flight_scroll_test.mjs, an unthrottled version of
@@ -395,60 +398,78 @@
 
     el.work.setAttribute("data-stage", stage);
 
-    // The claim panel: visible only during the phone stage, opacity tied to
-    // this beat's own text window rather than a stage-wide fade, so it can
-    // vanish before the phone clip's quiet, text-free tail.
+    // The claim panel: visible only during the surface stage (the noise,
+    // the claim landing, the input), opacity tied to this beat's own text
+    // window rather than a stage-wide fade, so it can vanish before that
+    // clip's quiet, text-free tail.
     if (el.claim) {
-      el.claim.style.opacity = String(stage === "phone" ? tOp : 0);
-      el.claim.hidden = !(stage === "phone" && tOp > 0.02);
+      el.claim.style.opacity = String(stage === "surface" ? tOp : 0);
+      el.claim.hidden = !(stage === "surface" && tOp > 0.02);
     }
-    if (el.form) el.form.hidden = stage !== "phone";
-    if (el.query) {
-      el.query.style.opacity = String(stage === "archive" ? tOp : 0);
-      el.query.hidden = !(stage === "archive" && tOp > 0.02);
-    }
-    if (el.stackWrap) el.stackWrap.hidden = stage === "phone" || stage === "verdict";
+    if (el.form) el.form.hidden = stage !== "surface";
 
-    // Continuous progress through the whole ARCHIVE stage, not this one
-    // beat: the counter and the cards keep climbing smoothly across
-    // archive-text and archive-move alike.
-    var archiveP = stageProgress("archive", scrollPx);
-    var arrived = 0;
-    if (stage === "archive") arrived = Math.round(clamp01(archiveP / 0.9) * cards.length);
-    else if (stage === "lab" || stage === "verdict") arrived = cards.length;
+    // The query: rising is where the real PubMed query appears (stepping
+    // back before any study has arrived), and it stays in view through
+    // weighing since the search that produced these studies is still the
+    // relevant context while they are graded.
+    if (el.query) {
+      var queryOn = stage === "rising" || stage === "weighing";
+      el.query.style.opacity = String(stage === "rising" ? tOp : (queryOn ? 1 : 0));
+      el.query.hidden = !queryOn;
+    }
+
+    // Weighing is where the studies arrive, get graded and sort into the
+    // evidence bar; horizon holds that result while the verdict, the still
+    // open line and the next input reveal. Continuous progress through
+    // each named stage, not any one beat's local p, so nothing resets at a
+    // beat boundary inside weighing (its text beat and its text-free tail
+    // share one climbing count) or at the weighing-to-horizon seam.
+    if (el.stackWrap) el.stackWrap.hidden = !(stage === "weighing" || stage === "horizon");
+
+    var weighP = stageProgress("weighing", scrollPx);
+    var horizonP = stageProgress("horizon", scrollPx);
+
+    var arrived = 0, graded = 0, sorting = 0;
+    if (stage === "weighing") {
+      arrived = Math.round(clamp01(weighP / 0.5) * cards.length);
+      graded = Math.round(clamp01((weighP - 0.15) / 0.45) * cards.length);
+      sorting = clamp01((weighP - 0.55) / 0.35);
+    } else if (stage === "horizon") {
+      arrived = cards.length;
+      graded = cards.length;
+      sorting = 1;
+    }
 
     for (var i = 0; i < cards.length; i++) cards[i].setAttribute("data-in", i < arrived ? "1" : "0");
-    if (el.counter) el.counter.textContent = arrived + " of " + cards.length + " studies read";
-
-    // Continuous progress through the whole LAB stage: grading happens in
-    // its first half, the sort in its second, regardless of which of the
-    // two lab beats is currently active — the point of splitting lab into
-    // a "text" and a "quiet" beat was so the sort finishes text-free, not
-    // so the state itself resets at the seam.
-    var labP = stageProgress("lab", scrollPx);
-    var graded = stage === "lab" ? Math.round(clamp01(labP / 0.45) * cards.length)
-               : stage === "verdict" ? cards.length : 0;
-    var sorting = stage === "lab" ? clamp01((labP - 0.55) / 0.4)
-                : stage === "verdict" ? 1 : 0;
+    if (el.counter) {
+      el.counter.style.opacity = String(stage === "weighing" || stage === "horizon" ? 1 : 0);
+      el.counter.textContent = arrived + " of " + cards.length + " studies read";
+    }
 
     var midFade = 1 - 0.45 * Math.sin(Math.min(1, Math.max(0, sorting)) * Math.PI);
     for (i = 0; i < cards.length; i++) {
       cards[i].setAttribute("data-graded", i < graded ? "1" : "0");
       var shift = ((targetTop[i] || 0) - (originalTop[i] || 0)) * sorting;
-      var hide = stage === "verdict" ? clamp01(p * 1.6) : 0;
+      // The cards shrink away over the course of horizon so the panel can
+      // simplify down to the bar, the verdict and what is still open by
+      // the time the reader has sat with it a moment.
+      var hide = stage === "horizon" ? clamp01(horizonP * 2.2) : 0;
       cards[i].style.transform = "translateY(" + shift.toFixed(1) + "px) scaleY(" + (1 - hide) + ")";
       cards[i].style.opacity = String((1 - hide) * midFade);
     }
 
-    // The verdict stage: the bar, the word, what is still open, then the
-    // input again. Driven by the "verdict-hold" beat's own p (it is the
-    // last beat and holds the last frame, so p there is really just how
-    // long the reader has sat on this screen).
-    var verdictP = stage === "verdict" ? p : 0;
-    setOn(el.bar, stage === "verdict" && verdictP > 0.12);
-    setOn(el.verdict, stage === "verdict" && verdictP > 0.28);
-    if (el.open) el.open.hidden = !(stage === "verdict" && verdictP > 0.5);
-    if (el.again) el.again.hidden = !(stage === "verdict" && verdictP > 0.68);
+    // The bar forms once weighing's sort has mostly landed and then stays
+    // up through horizon: it is the evidence the verdict rests on, not a
+    // thing that belongs only to one stage.
+    setOn(el.bar, (stage === "weighing" && weighP > 0.75) || stage === "horizon");
+
+    // Horizon: the verdict, what is still open, then the input again, each
+    // a little further into the stage than the last. 0.3 sits just past
+    // where the headline's own fade-out finishes, so the verdict never
+    // overlaps the chapter sentence above it.
+    setOn(el.verdict, stage === "horizon" && horizonP > 0.3);
+    if (el.open) el.open.hidden = !(stage === "horizon" && horizonP > 0.55);
+    if (el.again) el.again.hidden = !(stage === "horizon" && horizonP > 0.75);
   }
 
   /* ---- scroll + a persistent easing loop ---------------------------------
@@ -481,11 +502,6 @@
 
     wantedFrame = frameFor(row, p);
     paint(row, p, local);
-
-    if (header) {
-      var past = y > top + travelPx - window.innerHeight * 0.15;
-      header.classList.toggle("solid", past);
-    }
   }
 
   function tick() {

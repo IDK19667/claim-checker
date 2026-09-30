@@ -1,113 +1,145 @@
 {
- "version": 3,
- "note": "Real footage, real motion. Text now lives in short fade-in/hold/fade-out bursts (see `fade`, fractions of the beat's own local scroll progress), never during a beat with chapter:null. Two `stage:\"transition\"` beats are the crossfades themselves: no text, ever. `archive-move` (15.0-19.0s) is the one place in the master with a real, measured camera move (a tilt, motion score climbing from ~3 to ~12.5 right before the archive-to-lab cut, per scripts/flight_motion.py) and is deliberately the only beat billed as a pure camera-move; phone and lab hold no comparably distinct pan or turn on inspection, so their quiet stretches are honest breathing room, not a dressed-up motion claim. Card arrival, grading and sorting are driven by continuous progress through each named `stage` (summed across every beat that shares it), not by any one beat's local p, so the state does not stutter at a beat boundary.",
- "masterSeconds": 27.0,
+ "version": 4,
+ "note": "Round 3: four real clips (surface, rising, weighing, horizon), each with genuine sustained camera motion end to end (scripts/flight_motion.py --clip on every source read 90-100% 'clearly moving'), so every stage gets an honest text-then-text-free pair instead of the one 'archive-move' this master used to reserve as its single real move. Text lives in small panels (`.flight-chip`, `.flight-work`) at corners/edges now, never over a full-frame scrim, so nothing here fades footage brightness for contrast (see DECISIONS.md). Card arrival, grading, sorting and the evidence bar are driven by continuous progress through the whole `weighing` stage and held through `horizon`, not by any one beat's local p; the verdict, still-open line and second input are driven by continuous `horizon` stage progress so they do not reset at the weighing-to-horizon seam either. `stage:\"transition\"` beats are the three crossfades themselves: no text, ever.",
+ "masterSeconds": 37.08,
  "beats": [
   {
-   "id": "phone-hold",
-   "stage": "phone",
+   "id": "surface-hold",
+   "stage": "surface",
    "vh": 55,
    "hold": 0,
-   "chapter": "ch-claim",
-   "mobile": { "vh": 43, "focusX": 0.45 },
+   "chapter": "ch-surface",
+   "mobile": { "vh": 43, "focusX": 0.5 },
    "why": "The claim input is usable before anything moves. No fade: this is the one screen with no scroll happening at all."
   },
   {
-   "id": "phone-text",
-   "stage": "phone",
-   "vh": 110,
+   "id": "surface-text",
+   "stage": "surface",
+   "vh": 90,
    "from": 0.0,
-   "to": 9.5,
-   "chapter": "ch-claim",
-   "fade": { "in": 0.1, "out": 0.72 },
-   "mobile": { "vh": 86, "focusX": 0.45 },
-   "why": "Covers the whole phone clip. Text (headline, claim, input) fades out by 72% local progress so the last ~2.6s plays with no text at all, breathing room even though this clip has no single big camera move to hide behind (measured: motion stays flat throughout, unlike the archive tilt below)."
+   "to": 6.0,
+   "chapter": "ch-surface",
+   "fade": { "in": 0.1, "out": 0.75 },
+   "mobile": { "vh": 70, "focusX": 0.5 },
+   "why": "The headline, the claim and the input, fading out well before the crossfade so the last stretch of the surface clip plays clean."
   },
   {
-   "id": "x-phone-archive",
+   "id": "surface-move",
+   "stage": "surface",
+   "vh": 55,
+   "from": 6.0,
+   "to": 8.4,
+   "chapter": null,
+   "mobile": { "vh": 43, "focusX": 0.5 },
+   "why": "Text-free: the rooftops keep passing underneath with nothing asking to be read. Every clip in this build reads as sustained motion throughout (measured), so every stage earns this, not just one."
+  },
+  {
+   "id": "x-surface-rising",
    "stage": "transition",
    "vh": 25,
-   "from": 9.5,
-   "to": 10.0,
+   "from": 8.4,
+   "to": 9.0,
    "chapter": null,
    "mobile": { "vh": 20 },
-   "why": "The crossfade itself. Two images blending is never a moment to ask someone to read a sentence."
+   "why": "The first crossfade. Two images blending is never a moment to ask someone to read a sentence."
   },
   {
-   "id": "archive-text",
-   "stage": "archive",
-   "vh": 75,
-   "from": 10.0,
-   "to": 15.0,
-   "chapter": "ch-search",
-   "fade": { "in": 0.12, "out": 0.85 },
-   "mobile": { "vh": 59 },
-   "why": "The headline and the real query. Cards are already arriving underneath (continuous archive-stage progress), so the visual proof and the words appear together, then the words leave first."
+   "id": "rising-text",
+   "stage": "rising",
+   "vh": 80,
+   "from": 9.0,
+   "to": 13.8,
+   "chapter": "ch-rising",
+   "fade": { "in": 0.12, "out": 0.8 },
+   "mobile": { "vh": 63, "focusX": 0.5 },
+   "why": "Stepping back: the real PubMed query appears here, before a single study has arrived. Nothing in the panel claims a study is in hand yet."
   },
   {
-   "id": "archive-move",
-   "stage": "archive",
-   "vh": 95,
-   "from": 15.0,
-   "to": 19.0,
+   "id": "rising-move",
+   "stage": "rising",
+   "vh": 55,
+   "from": 13.8,
+   "to": 16.5,
    "chapter": null,
-   "mobile": { "vh": 74 },
-   "why": "The one real, measured camera move in the whole master: a tilt, motion score climbing from ~3 to ~12.5 right up to the cut. No text at all here on purpose, and the most generous scroll distance of any beat so the move actually reads instead of blurring past."
+   "mobile": { "vh": 43, "focusX": 0.5 },
+   "why": "Text-free: the climb over the coast keeps going with the query already stated, nothing new to read."
   },
   {
-   "id": "x-archive-lab",
+   "id": "x-rising-weighing",
    "stage": "transition",
    "vh": 25,
-   "from": 19.0,
-   "to": 19.5,
+   "from": 16.5,
+   "to": 17.1,
    "chapter": null,
    "mobile": { "vh": 20 },
    "why": "The second crossfade. Same rule: no text on a blend."
   },
   {
-   "id": "lab-text",
-   "stage": "lab",
+   "id": "weighing-text",
+   "stage": "weighing",
+   "vh": 95,
+   "from": 17.1,
+   "to": 23.0,
+   "chapter": "ch-weighing",
+   "fade": { "in": 0.12, "out": 0.8 },
+   "mobile": { "vh": 74, "focusX": 0.5 },
+   "why": "The headline arrives as studies start stacking underneath (continuous weighing-stage progress), so the words and the visual proof appear together."
+  },
+  {
+   "id": "weighing-move",
+   "stage": "weighing",
+   "vh": 90,
+   "from": 23.0,
+   "to": 28.1,
+   "chapter": null,
+   "mobile": { "vh": 70, "focusX": 0.5 },
+   "why": "Text is gone before grading finishes and the stack actually re-sorts into the evidence bar, so the reordering (the most legible single motion in the study cards) never competes with a fading sentence. Generous distance: this is the moment being made easier to see, not harder."
+  },
+  {
+   "id": "x-weighing-horizon",
+   "stage": "transition",
+   "vh": 25,
+   "from": 28.1,
+   "to": 28.7,
+   "chapter": null,
+   "mobile": { "vh": 20 },
+   "why": "The third crossfade, into the one clip that gets no crossfade out of it: horizon runs to the end of the master."
+  },
+  {
+   "id": "horizon-text",
+   "stage": "horizon",
    "vh": 70,
-   "from": 19.5,
-   "to": 22.0,
-   "chapter": "ch-grade",
+   "from": 28.7,
+   "to": 33.0,
+   "chapter": "ch-horizon",
    "fade": { "in": 0.15, "out": 0.8 },
-   "mobile": { "vh": 55 },
-   "why": "The headline arrives, grades start appearing on the cards underneath."
+   "mobile": { "vh": 55, "focusX": 0.5 },
+   "why": "The evidence bar is already up from weighing and stays up: this headline names the shape of what comes next without repeating anything the bar already showed."
   },
   {
-   "id": "lab-quiet",
-   "stage": "lab",
-   "vh": 100,
-   "from": 22.0,
-   "to": 25.5,
+   "id": "horizon-move",
+   "stage": "horizon",
+   "vh": 70,
+   "from": 33.0,
+   "to": 37.08,
    "chapter": null,
-   "mobile": { "vh": 78 },
-   "why": "Text is gone before the stack actually re-sorts, so the reordering itself (the most legible single motion in the study cards) never competes with a fading sentence. Generous distance: this is the moment being made easier to see, not harder."
+   "mobile": { "vh": 55, "focusX": 0.5 },
+   "why": "Text-free for the remaining real footage, including its 1s drain to the site's deep field (scripts/build_flight.py's tail fade). Nothing competes with watching that happen."
   },
   {
-   "id": "verdict-fade",
-   "stage": "verdict",
-   "vh": 45,
-   "from": 25.5,
-   "to": 27.0,
-   "chapter": null,
-   "mobile": { "vh": 35 },
-   "why": "The footage itself drains to the site's deep field colour (scripts/build_flight.py's tail fade). Nothing competes with watching that happen."
-  },
-  {
-   "id": "verdict-hold",
-   "stage": "verdict",
-   "vh": 85,
+   "id": "horizon-hold",
+   "stage": "horizon",
+   "vh": 90,
    "hold": -1,
    "chapter": null,
-   "mobile": { "vh": 66 },
-   "why": "No separate headline: the verdict word and the still-open card are already the shortest possible statement of what this stage means, and a duplicate sentence above them would be exactly the redundant text this pass was asked to remove."
+   "mobile": { "vh": 70 },
+   "why": "Holds the settled, deep-coloured last frame while horizon-stage progress keeps climbing to reveal the verdict, what is still open, and the input again, each with its own room to land. No separate headline here: the verdict word and the still-open card are already the shortest possible statement of what this stage means."
   }
  ],
  "chapters": {
-  "ch-claim": "Check it against the research.",
-  "ch-search": "We search real medical research.",
-  "ch-grade": "Graded by strength of evidence."
+  "ch-surface": "A claim starts as noise.",
+  "ch-rising": "Step back. Search the research.",
+  "ch-weighing": "Weigh what the evidence says.",
+  "ch-horizon": "What’s clear. What’s still open."
  }
 }
