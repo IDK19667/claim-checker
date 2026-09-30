@@ -4,7 +4,71 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-09-29 (latest): "From noise to clarity", four clips, no scrim
+## 2026-09-30 (latest): Round 5, "Inside the evidence": write/publish ending, no grade, three frame tiers
+
+**The closing beat changes again.** Round 3 and round 4's checkpoint both
+still ended the sequence on the lab/chemical-mixing footage. Direct
+product direction rejected that: "don't just end it on the chemical
+mixing, show the writing of papers and them putting them online." Two new
+stages replace the old single ending: Write (a hand annotating real
+research notes, `pexels-8534605`, clears the sharpness bar outright) and
+Publish (an open-access guide webpage, `pexels-38496194`, an acknowledged
+near-miss on sharpness, kept anyway on this branch's established pattern
+of shipping the best honestly-labelled real option rather than leaving a
+beat unbuilt). Full sourcing in
+`media/_candidates/stage3b-publish/REPORT.md`. The five real stages are
+now claim, archive, weighing (two sub-clips crossfaded together), write,
+publish; horizon carries no footage of its own any more, it is purely the
+settled last frame while the verdict and what is still open reveal.
+
+**An ornate/baroque library alternative for the archive stage was explored
+and explicitly rejected.** Prompted by a reference photo (a grand,
+symmetric, leather-shelved corridor), a fourth sourcing pass
+(`media/_candidates/stage2-archive-ornate/REPORT.md`) found nothing that
+cleared the project's own bar: Pexels' free ornate libraries are all
+tourist-attraction interiors full of visitors; the one true-4K, genuinely
+sharp ornate room found (Videezy, Library of Congress Main Reading Room)
+is the wrong shot geometry, full of seated readers, and has a readable
+"MAIN CATALOG" sign in frame, three content-rule violations at once. A
+tighter crop was tried and still read as "statues, not an actual library"
+on inspection. The original modern library clip (`pexels-854417`) ships
+unchanged.
+
+**The round-3 saturation-ramp grade is dropped, not replaced.** That ramp
+(0.82 to 0.88 across four clips) was tied directly to the "noise to
+clarity" story, which this round no longer tells. Rather than invent a new
+grade for a story that has no equivalent arc, all six clips now play at
+their own native colour, full brightness, no scrim: a simplification, not
+a separately measured choice.
+
+**Three frame tiers ship where round 3 (and round 2 before it) only ever
+shipped one.** The product direction was explicit: desktop frames at
+1920px, 2560px for large screens, plus a portrait phone set under 10MB,
+never upscaled. The 1920/2560 ask actually dates back to round 3's own
+brief (see `media/PRODUCTION.md`, "Frame export") but only the 1920 tier
+was ever built. This round builds all three: both desktop tiers are now
+downscaled from a single 2560x1440 landscape master (never upscaled from
+each other), and the phone tier comes from a second, genuinely portrait
+master built by cropping each clip to 9:16 *before* the final downscale,
+not by cropping the landscape frame at draw time. The old single-tier
+design's `focusX` mobile crop happened at draw time on the canvas, which
+on a DPR2 portrait phone means scaling a 1920x1080 frame *up* to cover a
+tall narrow canvas: real upscale, the opposite of what was asked for. The
+portrait master fixes this at the root instead of patching the symptom.
+Measured: default 10.6MB, large 15.5MB, phone 3.94MB (well inside the
+10MB budget), shared lores 0.49MB. Full detail, including the corrected
+large-screen breakpoint (compare CSS viewport width alone, not width ×
+DPR, after an early draft put ordinary DPR2 laptops onto the 2560 tier)
+and measured 4G load numbers, is in `media/PRODUCTION.md`.
+
+**Scope limit, stated plainly:** the frame-tier variant is chosen once at
+load and is not re-picked on resize, orientation change, or window
+dragging between a normal and a large display. Re-fetching an entirely
+different manifest and frame sequence mid-scroll was judged not worth the
+added engineering weight and risk this round; a reader who resizes an
+open `/flight` tab keeps the tier it loaded with.
+
+## 2026-09-29: "From noise to clarity", four clips, no scrim
 
 **Round 2's shipped fly-through (phone/archive/lab/verdict, a full-frame
 scrim behind white text) read as "too blurry", "fades when text appears",

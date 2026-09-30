@@ -285,92 +285,108 @@ broken.
 
 ## 9. The `video-flythrough` branch (not on `main`)
 
-Written 2026-09-29. Everything below is on a branch and untouched on `main`;
-see `DECISIONS.md` (2026-09-28 and 2026-09-29) for the full reasoning and
-two reversals behind it.
+Rewritten 2026-09-30 for round 5, verified against the code at the time of
+writing. Everything below is on a branch and untouched on `main`; see
+`DECISIONS.md` (newest entries first) for the full reasoning and every
+reversal behind it, and `media/PRODUCTION.md` for per-clip sourcing detail.
 
-**What it is.** A scroll-scrubbed fly-through added at `/flight` (a separate
-route, not yet wired into the front page) showing "the journey of a claim"
-across four stages: a phone at night, library archive shelves, a lab
-instrument, then a fade into the site's deep field colour for the verdict.
-The animation over the footage is the real cached "apple cider vinegar
-cures diabetes" check from 2026-09-22, exported by
-`scripts/export_flight_check.py` into `static/flight/check.json`: real
-query, real study titles and years, real evidence grades, real verdict,
-real still-open line. Nothing is invented.
+**What it is.** A scroll-scrubbed fly-through added at `/flight` (a
+separate route, not wired into the front page, reached only by a quiet
+link from it) showing "the journey of a claim" across five real stages —
+claim (a phone at night) → archive (library shelves) → weighing (a
+research lab, two cropped/cut shots) → write (a hand annotating research
+notes) → publish (an open-access guide webpage) — then a stage with no
+footage of its own: a hold on the settled, deep-navy last frame while the
+verdict, the still-open line and a second input reveal. The animation over
+the footage is the real cached "apple cider vinegar cures diabetes" check
+from 2026-09-22, exported by `scripts/export_flight_check.py` into
+`static/flight/check.json`: real query, real study titles and years, real
+evidence grades, real verdict, real still-open line. Nothing is invented.
 
-**Reversed twice on the way here.** First from "no scroll-driven hero"
-(the standing rule on `main`) to "a generated fly-through through an
-invented library" (2026-09-28, Higgsfield). Then from generated imagery to
-real stock footage (2026-09-29), after a Pexels API key request was refused
-and hand-sourcing turned out to answer the original objection better: real
-footage of a real phone and a real library does not assert a specific place
-tied to a specific claim the way a generated one does. Zero credits were
-spent at any point; the Higgsfield route was never built past a style tile.
+**History.** Reversed from "no scroll-driven hero" (the standing rule on
+`main`) to a generated fly-through (2026-09-28, Higgsfield, never built
+past a style tile, zero credits spent), then to real stock footage
+(2026-09-29, round 1-2), then round 3 replaced a blurry/scrim-heavy build
+with "from noise to clarity" (four clips, full brightness, no scrim, text
+in small corner panels). Round 5 (this one) replaced round 3's ending
+(the sequence stopped on lab/chemical-mixing footage) with two new closing
+stages, write and publish, on direct product feedback that the ending
+should show the findings being written up and made public, not chemistry;
+it also finally shipped the dual desktop frame tiers (1920/2560) that
+round 3's own brief had asked for but never built, plus an entirely new
+portrait-phone frame tier. An ornate/baroque library alternative for the
+archive stage was explored this round and explicitly rejected (see
+`media/_candidates/stage2-archive-ornate/REPORT.md` and `DECISIONS.md`).
 
-**New files.**
-- `scripts/build_flight.py` — trims, grades, crossfades and fades the three
-  source clips to the deep field, then extracts the WebP frame sequence and
-  `manifest.json`. Run with `.venv/bin/python`, not system Python, for
-  Pillow's WebP encoder.
+**Files that matter now.**
+- `scripts/build_flight.py` — six clips in, three frame-sequence tiers out
+  (see `media/PRODUCTION.md`, "Round 5: build, shipped", for the full
+  pipeline: a 2560x1440 landscape master both desktop tiers downscale
+  from, plus a second, genuinely portrait master for the phone tier, built
+  by cropping to 9:16 before the final downscale rather than cropping the
+  landscape frame at draw time). Run with `.venv/bin/python`, not system
+  Python, for Pillow's WebP encoder. Takes roughly 10-15 minutes end to
+  end (two full-quality `libx264 -preset slow` master encodes plus three
+  frame-extraction passes).
 - `scripts/export_flight_check.py` — writes one cached check from
   `verdict_cache` to `static/flight/check.json`, so the animation always
   replays something the pipeline actually produced.
-- `scripts/pexels_scout.py` — the Pexels API search tool, written before
-  the key request was refused. Left in place; unusable without a key.
 - `scripts/flight_shots.mjs` — Playwright screenshots of `/flight` at
-  named scroll stops, both overlay styles, both widths. The Browser pane
-  scales a 1280 viewport down to fit, which hides exactly the kind of
-  overlap and contrast bug this script is for; use it, not the pane, when
-  judging type and layout at true size.
+  named scroll stops (fractions of the pinned travel, recomputed for round
+  5's beats.json), both widths. The Browser pane scales a 1280 viewport
+  down to fit, which hides exactly the kind of overlap and contrast bug
+  this script is for; use it, not the pane, when judging type and layout
+  at true size — but never trust either for *sharpness*: both this
+  environment's Browser pane and Playwright's default Chromium render
+  canvas via SwiftShader (software, not a real GPU), which blurs
+  noticeably worse than hardware rendering. Sharpness judgments in this
+  session were made from the real-GPU Browser pane's screenshots instead.
 - `scripts/flight_sort_check.mjs` — one-off diagnostic that swept the
-  study-card sort animation frame by frame to tell a genuine layout bug
-  from a normal mid-shuffle crossing. Not part of the regular toolchain.
-- `static/flight.css`, `static/flight.js` — the scroll engine and two
-  overlay treatments (`data-flight-style="a"` darkens the footage behind
-  white text; `"b"` keeps it lighter with text on a solid panel), chosen
-  side by side while `main`'s front page keeps working unchanged.
-- `templates/flight.html` — the `/flight` route's markup, `noindex`.
-- `media/clips/`, gitignored — the three source clips, re-fetchable from
-  the URLs in `media/PRODUCTION.md`.
-- `static/flight/` — the shipped frame sequence, `manifest.json`,
-  `beats.json` (the four-stage timeline), `check.json`, and four stills
-  for the reduced-motion path.
+  study-card sort animation frame by frame; sweep range recomputed for
+  round 5's shorter weighing-stage span. Not part of the regular
+  toolchain.
+- `scripts/flight_scroll_test.mjs`, `scripts/flight_speed.mjs` — fast-scroll
+  frame-drop test and page-speed measurement; both stage-agnostic, no
+  changes needed for round 5.
+- `static/flight.css`, `static/flight.js` — the scroll engine (unchanged
+  architecture: two-tier frame loading, continuous stage-vs-beat progress,
+  easing rAF loop) plus, new this round, three-tier variant selection
+  (`pickVariant()`: phone portrait / large desktop / default desktop,
+  chosen once at load) and the stage-name rewrite (`surface`→`claim`,
+  `rising`→`archive`, `weighing` kept, `horizon` kept but now footage-free,
+  `write`/`publish` added to every stage-scoped visibility check that used
+  to stop at `weighing`/`horizon`).
+- `templates/flight.html` — the `/flight` route's markup, `noindex`, plus
+  a credits line that renders when `app.py`'s `_FLIGHT_CREDITS` is
+  non-empty (currently empty: every round-5 clip is Pexels License /
+  Pixabay License, no attribution required).
+- `media/clips/`, gitignored — the six source clips, re-fetchable from the
+  URLs in `media/PRODUCTION.md`; `media/clips_round3_backup/`, also
+  gitignored, keeps round 3's four clips in case of a revert.
+- `static/flight/` — the shipped frame sequences: `frame-*.webp` +
+  `manifest.json` (1920, default), `2560/` + `manifest-2560.json` (large
+  screens), `phone/` + `manifest-phone.json` (portrait, under 10MB),
+  `lores/` (shared, resolution-independent), `beats.json` (the five-stage
+  timeline plus the footage-free horizon hold), `check.json`, and five
+  stills (`still-1-claim.webp` … `still-5-publish.webp`) for the
+  reduced-motion/no-JS path.
 
-**Bugs found by looking at real screenshots, not by the tests passing.**
-Three shipped broken and were only visible once captured at true device
-size: the sticky-scroll travel used the section's full height instead of
-`height - one viewport`, so the last beats were never reached; the study
-cards' sort animation assumed every card was the same height, which held
-on desktop and broke the moment a title wrapped to two lines on a phone
-width, producing a permanent overlap rather than a passing shuffle; and in
-style B the footnote sat under the fixed "Skip to the checker" button at
-phone width. All three fixed; the second was distinguished from a normal
-mid-shuffle crossing frame by sweeping the animation with
-`flight_sort_check.mjs` before touching the code, rather than guessing.
-
-**What is still undecided.** Which of the two overlay styles ships, which
-Dhruv picks by looking at `/tmp/flight-shots/` (or the live `/flight` route
-locally). Whether `/flight` replaces the front page's hero or stays a
-separate route. Whether style B's solid panel wants its own entry in
-`DESIGN.md` if it ships.
-
-**Page speed, measured with `scripts/flight_speed.mjs`.** The front page is
-untouched: 63ms load, LCP 108ms, CLS 0, in line with the recorded baseline
-(71ms, CLS 0). `/flight` itself: style A loads in 118ms, LCP 164ms, CLS 0.
-Style B loads in 85ms, LCP 124ms, but carries a measured CLS of 0.087,
-sourced (via the Layout Instability API) to `.flight-work` and `.chapter`,
-both of which are boxed panels in style B and plain text in style A. The
-cause is the font swap: `librefranklin` is preloaded with
-`font-display: swap`, and if the fallback font wraps a line differently
-than Libre Franklin does, a box sized to its content resizes once the real
-font arrives, whereas the same swap in style A just reflows text with
-nothing box-shaped to measure. This is a genuine, if small, cost specific
-to style B's "text on a solid panel" treatment, not a bug in the scroll
-engine, and worth knowing before picking a style rather than after.
-
-**Tests added:** `tests/test_flight.py`, covering `manifest.json` and
+**Tests:** `tests/test_flight.py`, covering `manifest.json` and
 `beats.json` integrity (frame count matches file count, fps and dimensions
 are sane, every beat is a range or a hold, chapters resolve, mobile never
-exceeds desktop) and that `/flight` 404s cleanly rather than fabricating a
-check when `check.json` is absent.
+exceeds desktop, all five real stages plus the footage-free horizon hold
+are represented) and that `/flight` 404s cleanly rather than fabricating a
+check when `check.json` is absent. 34/34 pass; the full app suite
+(`tests/test_app.py`) is unaffected at 135/135.
+
+**Page weight and 4G load, measured this round** (Playwright CDP network
+emulation, 12Mbps/3Mbps/70ms): full numbers and methodology are in
+`media/PRODUCTION.md`, "Page weight and 4G load, measured". Summary: an
+ordinary laptop gets the 1920 tier (≈11.2MB total, never-blank ≈6.1s,
+fully sharp ≈9.9s on 4G); a 1600px+ CSS-wide window gets the 2560 tier
+(≈16.1MB, never-blank ≈6.2s, fully sharp ≈12.6s); a portrait phone gets
+its own tier (≈4.5MB, never-blank ≈5.2s, fully sharp ≈7.2s).
+
+**Known scope limit, stated rather than hidden:** the frame-tier variant
+is chosen once at page load and is not re-picked on resize, orientation
+change, or a window dragged between a normal and a very wide display.

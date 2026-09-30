@@ -1,14 +1,14 @@
 {
- "version": 2,
+ "version": 5,
  "pattern": "frame-%04d.webp",
  "loresPattern": "lores/frame-%04d.webp",
- "count": 334,
+ "count": 207,
  "fps": 9,
  "width": 1920,
  "height": 1080,
  "loresWidth": 240,
  "poster": "frame-0000.webp",
- "seconds": 37.11,
- "totalBytes": 56211934,
- "loresTotalBytes": 1170384
+ "seconds": 23.0,
+ "totalBytes": 10643668,
+ "loresTotalBytes": 490428
 }

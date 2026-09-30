@@ -46,7 +46,7 @@
         {% endfor %}
       </div>
 
-      <div class="flight-chip flight-work" data-stage="surface">
+      <div class="flight-chip flight-work" data-stage="claim">
 
         <div class="claim-card">
           <q>{{ check.claim }}</q>
@@ -99,6 +99,7 @@
         <p class="flight-note">
           Illustrative footage. A real check, replayed,
           {{ check.checkedAt_long }}. Not medical advice.
+          {% if credits %}{% for c in credits %}{{ c.credit }} {% endfor %}{% endif %}
         </p>
       </div>
     </div>
@@ -117,6 +118,7 @@
         <p class="flight-note" style="position: static; color: var(--ink-3)">
           Illustrative footage. A real check, replayed, {{ check.checkedAt_long }}.
           Not medical advice.
+          {% if credits %}{% for c in credits %}{{ c.credit }} {% endfor %}{% endif %}
         </p>
       </div></div>
     </div>

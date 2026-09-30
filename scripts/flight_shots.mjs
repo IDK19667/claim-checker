@@ -21,15 +21,16 @@ const OUT = "/tmp/flight-shots";
 // Fractions computed against the sum of beats.json vh values, which is
 // exactly what flight.js lays proportionally across the pinned travel, so
 // these land in the same beat every time regardless of viewport height.
-// Recomputed for round 3's four-stage "from noise to clarity" beats.json
-// (surface/rising/weighing/horizon, desktop vh sums to 825).
+// Recomputed for round 5's five-stage beats.json (claim/archive/weighing/
+// write/publish, then the footage-free horizon hold; desktop vh sums to 601).
 const STOPS = [
-  ["1-claim", 0.033],    // surface-hold: the static entry screen, claim input usable
-  ["2-move", 0.21],      // surface-move: text-free, the one clip's own camera move
-  ["3-search", 0.32],    // rising-text: the real query, before any study has arrived
-  ["4-weigh", 0.52],     // weighing-text: studies stacking in, grading underway
-  ["5-settled", 0.68],   // weighing-move, late: sorted, evidence bar formed, no text
-  ["6-verdict", 0.93],   // horizon-hold: the verdict, the still-open card, the input again
+  ["1-claim", 0.046],    // claim-hold: the static entry screen, claim input usable
+  ["2-move", 0.231],     // claim-move: text-free, the claim clip's own camera move
+  ["3-search", 0.350],   // archive-text: the real query, before any study has arrived
+  ["4-weigh", 0.538],    // weighing-text: studies stacking in, grading underway
+  ["5-write", 0.686],    // write-text: the findings being written up
+  ["6-publish", 0.790],  // publish-text: the paper going public
+  ["7-verdict", 0.925],  // horizon-hold: the verdict, the still-open card, the input again
 ];
 
 const SIZES = [

@@ -15,7 +15,7 @@ const travel = await page.evaluate(() => {
   return parseFloat(getComputedStyle(s).height) - window.innerHeight;
 });
 
-for (let frac = 0.5; frac <= 0.78; frac += 0.02) {
+for (let frac = 0.45; frac <= 0.7; frac += 0.02) {
   await page.evaluate((y) => window.scrollTo(0, y), Math.round(travel * frac));
   await page.waitForTimeout(250);
   const info = await page.evaluate(() => {

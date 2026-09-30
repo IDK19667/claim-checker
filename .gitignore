@@ -30,4 +30,14 @@ skills-lock.json
 # ships. Contact sheets in media/qc/ are small and kept.
 /media/clips/
 /media/master.mp4
+/media/master-phone.mp4
+/media/preview.mp4
 /media/_frames_png/
+/media/clips_round3_backup/
+
+# Candidate clips explored and rejected/replaced during fly-through rounds:
+# large binary, re-fetchable from the URLs recorded in each stage's own
+# REPORT.md, which is kept.
+/media/_candidates/**
+!/media/_candidates/**/
+!/media/_candidates/**/REPORT.md

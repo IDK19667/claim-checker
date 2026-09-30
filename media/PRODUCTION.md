@@ -6,7 +6,286 @@ replaced the generated-footage plan recorded lower down in this file, and
 the later 2026-09-29 entry for why round 2's three-clip build was itself
 replaced by round 3's four-clip "noise to clarity" concept, recorded here.
 
-## Status (round 3, current)
+## Round 4: "Inside the evidence" — candidate sourcing (2026-09-30, checkpoint, not yet built)
+
+Round 3's "noise to clarity" landscape concept was rejected: it has no
+connection to health or this product (city rooftops, a coastline, open
+water read as generic travel footage, not as evidence). It is kept on this
+branch only as history, not merged to `main`. The replacement concept,
+"Inside the evidence," ties each of 4 stages to a real step the app takes:
+the claim (a phone in a dim room) -> searching the research (an archive/
+library glide, the real PubMed query on screen) -> weighing the studies (a
+working research lab, the 8 real study cards stacking/grading) -> the
+honest answer (pull back from the lab, fade to deep navy, the verdict).
+
+This section records two full sourcing passes for the two hardest shots
+(the claim/phone push-in, and the lab walk-through/pull-back) plus the one
+shot that cleared every bar on the first pass (the archive glide). Nothing
+has been built yet; `beats.json`, `flight.js` and the shipped frames are
+still round 3's. Full per-candidate tables, rejected-candidate reasons, and
+100% crops live in `media/_candidates/*/REPORT.md` (gitignored working
+files, not shipped) — this section is the durable summary and the licence
+record.
+
+### Sourcing bar (every stage)
+
+True 4K+ source (3840x2160 minimum, verified with `ffprobe` on the actual
+downloaded file, never site metadata or an embedded preview player), no
+soft focus/motion blur/compression noise at a 100% pixel crop, real
+cinematic camera motion (gimbal/dolly/steadicam/push, not a locked shot
+and not "only the hands move while the camera holds still") scored with
+`scripts/flight_motion.py` and confirmed by eye on the frames, and content
+that is clearly health/medical research with no pills, patients, hospital
+beds, readable text or logos, or implied diagnostic finding. People are
+fine only as incidental workers (hands, backs, out of focus), never the
+sharp-focus subject.
+
+### Finding: Pexels' page metadata under-reports resolution
+
+Pexels' video pages embed a preview-player JSON (`src` field) that serves
+a downscaled file (seen: a page claiming 3840x2160 whose embedded preview
+was actually 2560x1440), which is what the first stage-3 sourcing pass
+mistakenly read as "the" resolution. The real free-download file comes
+from a different endpoint and is the clip's true original:
+
+```
+curl -sL -A "<real browser UA>" -e "<the clip's own page URL>" \
+  -o out.mp4 "https://www.pexels.com/download/video/<id>/"
+```
+
+This 302-redirects to `videos.pexels.com/video-files/<id>/<file>_<W>_<H>_<fps>fps.mp4`
+at true original resolution, confirmed with `ffprobe` on the downloaded
+bytes (not the filename or the page). Always verify Pexels resolution this
+way. The correction changed one real verdict (`pexels-31575747` went from
+"wrongly rejected, 2560x1440" to "confirmed 3840x2160, genuinely the
+sharpest real-lab clip found") but did not change the overall outcome for
+either hard shot — see below.
+
+### Licences of every candidate that reached full inspection
+
+All Pexels and Pixabay clips below are royalty-free, no attribution
+required (Pexels License / Pixabay Content License). No CC-BY, Vecteezy,
+or Dareful clip was actually usable this round (see access/content notes),
+so no attribution line is owed yet; if a credit-required clip is picked
+later, its exact required credit text must be recorded here before ship.
+
+| Clip | Stage | Resolution | Licence | Outcome |
+|---|---|---|---|---|
+| `pixabay-169445` "Man's hand scrolling photos on smartphone at night" | claim | 3840x2160 | Pixabay Content License | Best available: content/resolution/sharpness all pass, camera does not move (locked/handheld-static) |
+| `pexels-854417` "Video Inside a Library" | archive | 3840x2160 | Pexels License | **Clears every bar.** Sustained camera glide, consistently sharp, no people, no readable text |
+| `pexels-34345704` "Modern Library Glass Elevator" | archive | 3840x2160 | Pexels License | 2nd pick: sharpest of the set, real gimbal/crane move, 6s, two small out-of-focus incidental people |
+| `pexels-14543425` "Walking Modern Library" | archive | 3840x2160 | Pexels License | 3rd pick: fastest glide, but a children's-library aisle, loses sharpness at speed |
+| `pixabay-262189` "Laboratory Glassware Microbiology" | lab | 4096x2160 | Pixabay License | Sharpest real-lab macro, clean content, reads as a detail insert not a walk-through |
+| `pixabay-216231` "Chemistry Science Laboratory" | lab | 3840x2160 | Pixabay License | Best "hands pipetting" content match, camera locked off |
+| `pixabay-262464` "Scientist Laboratory Lab" | lab | 3840x2160 | Pixabay License | Sharpest + most camera motion of any lab candidate, but frame full of readable signage |
+| `pexels-31575747` "Young Scientist Working in Laboratory" | lab | 3840x2160 | Pexels License | Sharpest true-4K real-lab clip found across both passes (beats the Pixabay macro inserts); camera near-locked ("mostly still" per `flight_motion.py`), and a readable safety poster / partial equipment label sit in the background |
+| `pexels-8088612` "Fashion People Smartphone Dark" | claim | 3840x2160 | Pexels License | Rejected on content: a crowd scene with several sharp, camera-facing faces |
+| `pexels-4121322`, `pexels-8534540` | lab | 3840x2160 | Pexels License | Rejected: overtly staged "clean lab" stock sets (surgical mask, coloured gel lighting, a readable ID badge and bottle label on one), camera locked |
+
+### Sources checked and ruled out entirely
+
+- **Government b-roll is a 1080p product, not a 4K one.** Every government
+  lab source checked — NIH/NHGRI (`genome.gov`), NASA's own
+  `images-api.nasa.gov` (JSC Microbiology Lab, JSC Materials Evaluation
+  Lab), Wikimedia's mirrored CDC hematology-lab and DOE (Idaho National
+  Laboratory, Argonne) footage — caps at 1920x1080 or lower even at its
+  highest published tier. This held across every agency tried, not one
+  unlucky source.
+- **Vecteezy**: gated behind a Cloudflare "Verify you are human" check.
+  Not bypassed (bot-detection bypass is out of scope for this project,
+  on principle, regardless of how promising the indexed category titles
+  looked — "Phone At Night," "Phone Dark," "Dark Room").
+- **Videvo and Mazwai**: both now redirect into Freepik, no longer
+  independent free-CC catalogues; Freepik's own free tier is
+  account/attribution-gated in a way that didn't fit the time budget to
+  pursue this round.
+- **Videezy, Dareful, Life of Vids**: reachable, but confirmed by
+  actually browsing their categories to be travel/nature/abstract
+  libraries with no lifestyle-device or lab content; Life of Vids'
+  catalogue turned out to already be inside Pixabay (same contributor
+  account).
+- **Mixkit**: the only lab clips with real camera movement are gated at
+  720p under a personal-use-only licence; true 4K needs an Envato Elements
+  subscription.
+- **Research universities** (Stanford, Stanford Medicine, Johns Hopkins,
+  MIT, UCSF): every press/b-roll service found is explicitly
+  non-commercial or requires emailing a film-request address, not a
+  self-serve open-licence download. Not pursued past reading each
+  source's own stated restriction.
+- **Internet Archive**: search results were YouTube mirrors, cartoons, and
+  decades-old archival film, nothing resembling modern lab b-roll.
+
+### Honest verdict, both hard shots
+
+**The claim (phone push-in): no clip clears all four bars.** Free-licence
+inventory splits into two families — well-lit faces (static, disqualified
+on the face rule) and bright legible app-screen close-ups (static,
+disqualified on readable content). `pixabay-169445` is the best available:
+passes content, resolution and sharpness, but the camera does not move.
+
+**Weighing the studies (lab walk-through) and the honest answer
+(pull-back): no clip clears all four bars, across two full passes and
+roughly ten sources.** What's genuinely sharp is a locked macro insert;
+what moves is either outdoor field work with a visible logo, a real lab
+buried in readable signage, or goes soft partway through. No pull-back/
+wide shot was found anywhere. This is the hardest shot in the sequence, as
+anticipated going in.
+
+Real options from here, not mutually exclusive: accept a compromise build
+(a locked shot with a digital push-in added in the grade pass; the lab
+beat cut from more than one near-miss clip rather than one continuous
+glide); a paid library (Artgrid/Artlist/Shutterstock/Storyblocks) for just
+these two shots; or a one-month Higgsfield-style generation plan for the
+phone push-in and the lab walk-through specifically, keeping the archive
+glide as real stock. Decision pending.
+
+## Round 5: build, shipped (2026-09-30)
+
+Round 4's checkpoint above records why neither hard shot (claim, lab)
+cleared every bar. Round 5 shipped anyway, on the reasoning already used
+twice on this branch: a compromise is better recorded honestly than left
+unbuilt. It also replaced the closing beat: round 3 and round 4 both ended
+on the lab/chemical-mixing footage; this round ends on the findings being
+written up and the paper going public instead, per direct product
+direction ("don't just end it on the chemical mixing, show the writing of
+papers and them putting them online"). A further sourcing pass for that
+new closing beat lives in `media/_candidates/stage3b-publish/REPORT.md`
+(writing half clears the bar outright; publishing half is a second,
+smaller, acknowledged near-miss, kept anyway on the same reasoning).
+
+### The six clips shipped
+
+| Stage | Clip | Trim | Licence |
+|---|---|---|---|
+| Claim | `pixabay-169445` (phone, dim room) | 3.0s–9.5s | Pixabay Content License |
+| Archive | `pexels-854417` (library glide) | 2.0s–8.5s | Pexels License |
+| Weighing (a) | `pexels-31575747` (lab, cropped 700,400,3100,1750) | 1.0s–4.25s | Pexels License |
+| Weighing (b) | `pixabay-216231` (lab, wider) | 2.0s–5.25s | Pixabay Content License |
+| Write | `pexels-8534605` (hand annotating research notes) | 1.0s–4.0s | Pexels License |
+| Publish | `pexels-38496194` (open-access guide webpage) | 8.0s–11.5s | Pexels License |
+
+All six confirmed true 4K (3840x2160) via `ffprobe` on the actual files
+before this build (not page metadata). All free, no attribution required;
+`_FLIGHT_CREDITS` in `app.py` and the credit-rendering line in
+`flight.html` exist for the day a credited clip is used, but are empty
+this round.
+
+### No grade this round
+
+Round 3 ran a per-stage saturation ramp ("noise to clarity": 0.82 to 0.88
+across the four clips) tied directly to that rejected narrative. Round 5
+drops the ramp along with the story it served: all six clips play at their
+own native colour and full brightness, no scrim, per the standing
+no-darkening rule (see DECISIONS.md). This is a simplification, not a
+measured trade-off — there was no round-5 equivalent narrative for a grade
+to serve.
+
+### Three frame tiers, not one
+
+The direction asked for desktop frames at 1920px (2560px for large
+screens) plus a portrait phone set under 10MB, never upscaled. Round 3
+already had the 1920/2560 ask on paper (see "Frame export" below) but only
+ever shipped the 1920 tier. Round 5 ships all three:
+
+1. **A landscape master at 2560x1440**, not 1920x1080. Both desktop tiers
+   (1920 and 2560) are downscaled *from* this master, never upscaled from
+   each other; all six source clips clear 2560 easily even after
+   weighing-a's hard crop.
+2. **A second, genuinely portrait master (`media/master-phone.mp4`)**,
+   built from the same six clips cropped to 9:16 before the final
+   downscale, not the landscape master cropped at draw time. The old
+   single-tier design let a phone crop the landscape frame at draw time
+   (`focusX`), which on a DPR2 portrait canvas means scaling a 1920x1080
+   frame *up*, real upscale. The portrait master fixes that at the root:
+   crop first (still native 4K at the crop step), scale down second.
+   `flight.js` picks this tier only for a narrow *and* taller-than-wide
+   viewport, and forces `focusX` back to centre when it is active (the
+   crop is already baked into the asset; applying beats.json's per-beat
+   `mobile.focusX` on top of it would crop an already-cropped frame).
+3. The low-res "never blank" fallback tier is unchanged and shared by all
+   three: resolution-independent at 240px wide, built once from the
+   landscape master.
+
+Measured sizes, this build:
+
+| Tier | Frames | Size | Per-frame |
+|---|---|---|---|
+| Default (1920x1080) | 207 | 10.6MB | 50KB |
+| Large (2560x1440) | 207 | 15.5MB | 73KB |
+| Phone (810x1440, portrait) | 207 | 3.94MB | 18.6KB |
+| Lores (240px, shared) | 207 | 0.49MB | 2.3KB |
+
+The phone tier's budget was "under 10MB total": it measured 3.94MB,
+comfortably inside it, at quality 46 (tuned down from the desktop tiers'
+72, since a phone screen at 810px wide hides the difference a 1920px
+screen would show). The master videos themselves: landscape 36.8MB,
+portrait 11.2MB, both 23.0s at 24fps, neither shipped (only their
+extracted frames are).
+
+### The large-screen breakpoint is a CSS width, not a DPR-scaled one
+
+The first `pickVariant()` draft compared `viewport width * devicePixelRatio`
+against a 1600 threshold, which put nearly every ordinary DPR2 laptop
+(1280–1440 CSS px, the common case) onto the 2560 tier — not what "for
+large screens" meant. Re-measured and fixed to compare CSS viewport width
+alone: an ordinary 1280–1440px laptop at DPR2 keeps the 1920 tier (already
+the accepted compromise for that case, see "Frame export" below); 1600px+
+of actual CSS viewport width is what now reaches the 2560 tier. The
+variant is chosen once at load, not re-picked on resize or orientation
+change, a deliberate scope limit: re-fetching a whole different manifest
+and frame set mid-scroll was judged not worth the engineering weight this
+round.
+
+### Page weight and 4G load, measured
+
+Measured with a Playwright CDP network emulation at a representative "4G"
+profile (12Mbps down / 3Mbps up / 70ms RTT), against the real running app:
+
+| Visitor | Tier | Total page weight | Never-blank (lores done) | Fully sharp (hi-res done) |
+|---|---|---|---|---|
+| Ordinary laptop, 1280 CSS px, DPR2 | Default (1920) | ≈11.2MB | ≈6.1s | ≈9.9s |
+| Wide desktop, 1920+ CSS px | Large (2560) | ≈16.1MB | ≈6.2s | ≈12.6s |
+| Phone, portrait | Phone (810x1440) | ≈4.5MB | ≈5.2s | ≈7.2s |
+
+"Page weight" is the shell (HTML, `flight.css`, `flight.js`, the shared
+site font, `beats.json`, the manifest: ≈0.11MB) plus the lores tier
+(always loaded, ≈0.49MB) plus whichever hi-res tier the viewport picked.
+"Never-blank" is when the reader can scroll the whole sequence with
+something correct on screen, even if soft; "fully sharp" is when every
+frame's hi-res bytes have finished preloading in the background. A phone
+visitor is scrolling a correct (if soft) sequence in about five seconds on
+4G, tack-sharp within about seven; a desktop visitor on the large tier
+waits the longest for full sharpness (≈12.6s) but is just as quickly
+never-blank, because the lores tier does not depend on which hi-res tier
+was picked.
+
+### Status
+
+| Phase | State |
+|---|---|
+| Concept picked: claim/archive/weighing/write/publish, ending on publication not the lab | done, this document, DECISIONS.md |
+| Candidate sourcing for the new write/publish closing beat | done, `media/_candidates/stage3b-publish/REPORT.md` |
+| Six clips consolidated into `media/clips/`, landscape + portrait masters built | done, `scripts/build_flight.py` |
+| Three frame tiers extracted (1920, 2560, phone-portrait) + shared lores | done, measured above |
+| `beats.json` rebuilt for the five real stages plus the footage-free horizon hold | done, `static/flight/beats.json` |
+| `flight.js`: stage-name rewrite, write/publish visibility, three-tier variant selection | done, `static/flight.js` |
+| Tests (`tests/test_flight.py`), full suite, QA gate | done, 34/34 + 135/135 + QA gate green |
+| Page weight / 4G load measured | done, table above |
+| Screenshot comparison at desktop and phone, real GPU | done |
+| **Credits spent** | **0. No generation tool was used.** |
+
+## The five stages, round 5
+
+| Stage | Footage | What the overlay shows |
+|---|---|---|
+| Claim | A phone screen in a dim room | The claim lands; the input is usable immediately (hero + input) |
+| Archive | A library glide past the shelves | Stepping back: the real PubMed query appears, no study has arrived yet |
+| Weighing | A research lab, two cropped/cut shots | Studies stack in, get graded, sort, and form the evidence bar |
+| Write | A hand annotating research notes | The bar holds; the findings get written up |
+| Publish | An open-access guide webpage | The paper goes public: this is what "the research" in "archive" meant |
+| Horizon (no footage) | The settled, deep-navy last frame | The verdict, the still-open line, then the input again |
+
+## Status (round 3, superseded by round 5 above)
 
 | Phase | State |
 |---|---|
@@ -21,7 +300,7 @@ replaced by round 3's four-clip "noise to clarity" concept, recorded here.
 | Screenshot comparison at desktop and phone | done |
 | **Credits spent** | **0. No generation tool was used.** |
 
-## The four stages ("from noise to clarity")
+## The four stages ("from noise to clarity"), round 3, superseded
 
 | Stage | Footage | What the overlay shows |
 |---|---|---|

@@ -1,75 +1,75 @@
 {
- "version": 4,
- "note": "Round 3: four real clips (surface, rising, weighing, horizon), each with genuine sustained camera motion end to end (scripts/flight_motion.py --clip on every source read 90-100% 'clearly moving'), so every stage gets an honest text-then-text-free pair instead of the one 'archive-move' this master used to reserve as its single real move. Text lives in small panels (`.flight-chip`, `.flight-work`) at corners/edges now, never over a full-frame scrim, so nothing here fades footage brightness for contrast (see DECISIONS.md). Card arrival, grading, sorting and the evidence bar are driven by continuous progress through the whole `weighing` stage and held through `horizon`, not by any one beat's local p; the verdict, still-open line and second input are driven by continuous `horizon` stage progress so they do not reset at the weighing-to-horizon seam either. `stage:\"transition\"` beats are the three crossfades themselves: no text, ever.",
- "masterSeconds": 37.08,
+ "version": 5,
+ "note": "Round 5: six real clips across five stages (claim, archive, weighing [two sub-clips crossfaded together], write, publish), replacing round 3's four-clip 'noise to clarity' set and its chemical-mixing ending. The closing beat is now the findings being written up and the paper going public; horizon carries no footage of its own any more, it is purely the settled last frame (deep navy, from the tail fade) while the verdict, what is still open and the input again reveal on continuous horizon-stage progress, same mechanism as before. No grade is applied to any clip this round: full brightness, natural colour, no scrim, per the standing no-darkening rule (see DECISIONS.md). `stage:\"transition\"` beats are the four crossfades themselves: no text, ever. Card arrival, grading, sorting and the evidence bar are driven by continuous progress through the whole `weighing` stage and held through `write`, `publish` and `horizon`, not by any one beat's local p.",
+ "masterSeconds": 23.0,
  "beats": [
   {
-   "id": "surface-hold",
-   "stage": "surface",
+   "id": "claim-hold",
+   "stage": "claim",
    "vh": 55,
    "hold": 0,
-   "chapter": "ch-surface",
+   "chapter": "ch-claim",
    "mobile": { "vh": 43, "focusX": 0.5 },
    "why": "The claim input is usable before anything moves. No fade: this is the one screen with no scroll happening at all."
   },
   {
-   "id": "surface-text",
-   "stage": "surface",
-   "vh": 90,
+   "id": "claim-text",
+   "stage": "claim",
+   "vh": 67,
    "from": 0.0,
-   "to": 6.0,
-   "chapter": "ch-surface",
+   "to": 4.2,
+   "chapter": "ch-claim",
    "fade": { "in": 0.1, "out": 0.75 },
-   "mobile": { "vh": 70, "focusX": 0.5 },
-   "why": "The headline, the claim and the input, fading out well before the crossfade so the last stretch of the surface clip plays clean."
+   "mobile": { "vh": 52, "focusX": 0.5 },
+   "why": "The headline, the claim and the input, fading out before the crossfade so the last stretch of the claim clip plays clean."
   },
   {
-   "id": "surface-move",
-   "stage": "surface",
-   "vh": 55,
-   "from": 6.0,
-   "to": 8.4,
+   "id": "claim-move",
+   "stage": "claim",
+   "vh": 34,
+   "from": 4.2,
+   "to": 5.9,
    "chapter": null,
-   "mobile": { "vh": 43, "focusX": 0.5 },
-   "why": "Text-free: the rooftops keep passing underneath with nothing asking to be read. Every clip in this build reads as sustained motion throughout (measured), so every stage earns this, not just one."
+   "mobile": { "vh": 27, "focusX": 0.5 },
+   "why": "Text-free: the claim clip keeps playing with nothing asking to be read, same rule every stage gets."
   },
   {
-   "id": "x-surface-rising",
+   "id": "x-claim-archive",
    "stage": "transition",
    "vh": 25,
-   "from": 8.4,
-   "to": 9.0,
+   "from": 5.9,
+   "to": 6.5,
    "chapter": null,
    "mobile": { "vh": 20 },
    "why": "The first crossfade. Two images blending is never a moment to ask someone to read a sentence."
   },
   {
-   "id": "rising-text",
-   "stage": "rising",
-   "vh": 80,
-   "from": 9.0,
-   "to": 13.8,
-   "chapter": "ch-rising",
+   "id": "archive-text",
+   "stage": "archive",
+   "vh": 59,
+   "from": 6.5,
+   "to": 10.2,
+   "chapter": "ch-archive",
    "fade": { "in": 0.12, "out": 0.8 },
-   "mobile": { "vh": 63, "focusX": 0.5 },
-   "why": "Stepping back: the real PubMed query appears here, before a single study has arrived. Nothing in the panel claims a study is in hand yet."
+   "mobile": { "vh": 46, "focusX": 0.5 },
+   "why": "Stepping back into the archive: the real PubMed query appears here, before a single study has arrived."
   },
   {
-   "id": "rising-move",
-   "stage": "rising",
-   "vh": 55,
-   "from": 13.8,
-   "to": 16.5,
+   "id": "archive-move",
+   "stage": "archive",
+   "vh": 32,
+   "from": 10.2,
+   "to": 11.8,
    "chapter": null,
-   "mobile": { "vh": 43, "focusX": 0.5 },
-   "why": "Text-free: the climb over the coast keeps going with the query already stated, nothing new to read."
+   "mobile": { "vh": 25, "focusX": 0.5 },
+   "why": "Text-free: the shelves keep passing with the query already stated, nothing new to read."
   },
   {
-   "id": "x-rising-weighing",
+   "id": "x-archive-weighing",
    "stage": "transition",
    "vh": 25,
-   "from": 16.5,
-   "to": 17.1,
+   "from": 11.8,
+   "to": 12.4,
    "chapter": null,
    "mobile": { "vh": 20 },
    "why": "The second crossfade. Same rule: no text on a blend."
@@ -77,53 +77,84 @@
   {
    "id": "weighing-text",
    "stage": "weighing",
-   "vh": 95,
-   "from": 17.1,
-   "to": 23.0,
+   "vh": 53,
+   "from": 12.4,
+   "to": 15.7,
    "chapter": "ch-weighing",
    "fade": { "in": 0.12, "out": 0.8 },
-   "mobile": { "vh": 74, "focusX": 0.5 },
-   "why": "The headline arrives as studies start stacking underneath (continuous weighing-stage progress), so the words and the visual proof appear together."
+   "mobile": { "vh": 41, "focusX": 0.5 },
+   "why": "The headline arrives as studies start stacking underneath (continuous weighing-stage progress), so the words and the visual proof appear together. This stage runs across two crossfaded sub-clips (a cropped close shot, then the wider one); the internal cut needs no transition marker of its own since nothing here is ever text over a cut."
   },
   {
    "id": "weighing-move",
    "stage": "weighing",
-   "vh": 90,
-   "from": 23.0,
-   "to": 28.1,
+   "vh": 28,
+   "from": 15.7,
+   "to": 17.1,
    "chapter": null,
-   "mobile": { "vh": 70, "focusX": 0.5 },
-   "why": "Text is gone before grading finishes and the stack actually re-sorts into the evidence bar, so the reordering (the most legible single motion in the study cards) never competes with a fading sentence. Generous distance: this is the moment being made easier to see, not harder."
+   "mobile": { "vh": 22, "focusX": 0.5 },
+   "why": "Text is gone before grading finishes and the stack re-sorts into the evidence bar, so the reordering never competes with a fading sentence."
   },
   {
-   "id": "x-weighing-horizon",
+   "id": "x-weighing-write",
    "stage": "transition",
    "vh": 25,
-   "from": 28.1,
-   "to": 28.7,
+   "from": 17.1,
+   "to": 17.7,
    "chapter": null,
    "mobile": { "vh": 20 },
-   "why": "The third crossfade, into the one clip that gets no crossfade out of it: horizon runs to the end of the master."
+   "why": "The third crossfade, into the findings being written up."
   },
   {
-   "id": "horizon-text",
-   "stage": "horizon",
-   "vh": 70,
-   "from": 28.7,
-   "to": 33.0,
-   "chapter": "ch-horizon",
-   "fade": { "in": 0.15, "out": 0.8 },
-   "mobile": { "vh": 55, "focusX": 0.5 },
-   "why": "The evidence bar is already up from weighing and stays up: this headline names the shape of what comes next without repeating anything the bar already showed."
+   "id": "write-text",
+   "stage": "write",
+   "vh": 18,
+   "from": 17.7,
+   "to": 18.8,
+   "chapter": "ch-write",
+   "fade": { "in": 0.12, "out": 0.75 },
+   "mobile": { "vh": 14, "focusX": 0.5 },
+   "why": "The shortest real clip in the sequence: a hand annotating the research notes that became this verdict. The evidence bar and the stack stay up, already graded, while this headline names what happens to them next."
   },
   {
-   "id": "horizon-move",
-   "stage": "horizon",
-   "vh": 70,
-   "from": 33.0,
-   "to": 37.08,
+   "id": "write-move",
+   "stage": "write",
+   "vh": 14,
+   "from": 18.8,
+   "to": 19.5,
    "chapter": null,
-   "mobile": { "vh": 55, "focusX": 0.5 },
+   "mobile": { "vh": 11, "focusX": 0.5 },
+   "why": "Text-free for the last beat of the writing clip before the next crossfade."
+  },
+  {
+   "id": "x-write-publish",
+   "stage": "transition",
+   "vh": 25,
+   "from": 19.5,
+   "to": 20.1,
+   "chapter": null,
+   "mobile": { "vh": 20 },
+   "why": "The fourth crossfade, into the paper going public."
+  },
+  {
+   "id": "publish-text",
+   "stage": "publish",
+   "vh": 29,
+   "from": 20.1,
+   "to": 21.9,
+   "chapter": "ch-publish",
+   "fade": { "in": 0.12, "out": 0.75 },
+   "mobile": { "vh": 23, "focusX": 0.5 },
+   "why": "The open-access page this whole sequence has been building toward: not a lab shot, a public record."
+  },
+  {
+   "id": "publish-move",
+   "stage": "publish",
+   "vh": 22,
+   "from": 21.9,
+   "to": 23.0,
+   "chapter": null,
+   "mobile": { "vh": 17, "focusX": 0.5 },
    "why": "Text-free for the remaining real footage, including its 1s drain to the site's deep field (scripts/build_flight.py's tail fade). Nothing competes with watching that happen."
   },
   {
@@ -133,13 +164,14 @@
    "hold": -1,
    "chapter": null,
    "mobile": { "vh": 70 },
-   "why": "Holds the settled, deep-coloured last frame while horizon-stage progress keeps climbing to reveal the verdict, what is still open, and the input again, each with its own room to land. No separate headline here: the verdict word and the still-open card are already the shortest possible statement of what this stage means."
+   "why": "Holds the settled, deep-coloured last frame while horizon-stage progress keeps climbing to reveal the verdict, what is still open, and the input again, each with its own room to land. No footage of its own: the camera work is done by the time the page reaches this stage."
   }
  ],
  "chapters": {
-  "ch-surface": "A claim starts as noise.",
-  "ch-rising": "Step back. Search the research.",
+  "ch-claim": "A claim can travel anywhere.",
+  "ch-archive": "We go back to the research.",
   "ch-weighing": "Weigh what the evidence says.",
-  "ch-horizon": "What’s clear. What’s still open."
+  "ch-write": "Findings become a written record.",
+  "ch-publish": "Then that record goes public."
  }
 }

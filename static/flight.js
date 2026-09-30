@@ -37,6 +37,34 @@
   var HIRES_CONCURRENCY = 6;
   var HIRES_KEEP = 90; // decoded ImageBitmaps held at once; the rest redecode from cached bytes
 
+  // Three frame tiers, chosen once at load. "large" gives a genuinely wide
+  // desktop viewport a real 2560px source instead of the 1920 tier
+  // stretched to fill it; "phone" gives a narrow portrait viewport a frame
+  // sequence that was cropped to 9:16 at build time (native pixels, never
+  // an upscale) instead of the landscape tier cropped at draw time (which
+  // on a DPR2 phone canvas means scaling *up*). The breakpoint is a CSS
+  // viewport width, not multiplied by DPR: an ordinary 1280-1440px laptop
+  // at DPR2 already has the 1920 tier as its accepted compromise (see this
+  // file's build script), so "large" is reserved for a viewport wide
+  // enough that 1920 would visibly upscale regardless of DPR. Chosen once,
+  // not re-picked on resize/orientation change: a deliberate scope limit,
+  // see DECISIONS.md.
+  var LARGE_BREAKPOINT = 1600; // CSS px, viewport width alone
+  var variant = "default";
+
+  function pickVariant() {
+    var w = window.innerWidth, h = window.innerHeight;
+    if (w < 700 && h > w) return "phone";
+    if (w >= LARGE_BREAKPOINT) return "large";
+    return "default";
+  }
+
+  function manifestUrl() {
+    if (variant === "large") return section.dataset.frames + "/manifest-2560.json";
+    if (variant === "phone") return section.dataset.frames + "/manifest-phone.json";
+    return section.dataset.frames + "/manifest.json";
+  }
+
   var root = document.documentElement;
   var section = document.getElementById("flight");
   if (!section) return;
@@ -337,6 +365,10 @@
   }
 
   function currentFocusX() {
+    // The phone tier's crop is already baked into the asset at build time
+    // (see scripts/build_flight.py); applying beats.json's per-beat
+    // mobile.focusX on top of that would crop an already-cropped frame.
+    if (variant === "phone") return 0.5;
     var row = activeRow;
     if (!row || !isMobile) return 0.5;
     var m = row.b.mobile || {};
@@ -398,33 +430,36 @@
 
     el.work.setAttribute("data-stage", stage);
 
-    // The claim panel: visible only during the surface stage (the noise,
-    // the claim landing, the input), opacity tied to this beat's own text
-    // window rather than a stage-wide fade, so it can vanish before that
-    // clip's quiet, text-free tail.
+    // The claim panel: visible only during the claim stage (the landing,
+    // the input), opacity tied to this beat's own text window rather than
+    // a stage-wide fade, so it can vanish before that clip's quiet,
+    // text-free tail.
     if (el.claim) {
-      el.claim.style.opacity = String(stage === "surface" ? tOp : 0);
-      el.claim.hidden = !(stage === "surface" && tOp > 0.02);
+      el.claim.style.opacity = String(stage === "claim" ? tOp : 0);
+      el.claim.hidden = !(stage === "claim" && tOp > 0.02);
     }
-    if (el.form) el.form.hidden = stage !== "surface";
+    if (el.form) el.form.hidden = stage !== "claim";
 
-    // The query: rising is where the real PubMed query appears (stepping
+    // The query: archive is where the real PubMed query appears (stepping
     // back before any study has arrived), and it stays in view through
-    // weighing since the search that produced these studies is still the
-    // relevant context while they are graded.
+    // weighing, write and publish since the search that produced these
+    // studies is still the relevant context for everything that follows.
     if (el.query) {
-      var queryOn = stage === "rising" || stage === "weighing";
-      el.query.style.opacity = String(stage === "rising" ? tOp : (queryOn ? 1 : 0));
+      var queryOn = stage === "archive" || stage === "weighing" || stage === "write" || stage === "publish";
+      el.query.style.opacity = String(stage === "archive" ? tOp : (queryOn ? 1 : 0));
       el.query.hidden = !queryOn;
     }
 
     // Weighing is where the studies arrive, get graded and sort into the
-    // evidence bar; horizon holds that result while the verdict, the still
-    // open line and the next input reveal. Continuous progress through
-    // each named stage, not any one beat's local p, so nothing resets at a
-    // beat boundary inside weighing (its text beat and its text-free tail
-    // share one climbing count) or at the weighing-to-horizon seam.
-    if (el.stackWrap) el.stackWrap.hidden = !(stage === "weighing" || stage === "horizon");
+    // evidence bar; write, publish and horizon hold that result while the
+    // sequence moves on to the findings being written up, made public, and
+    // finally the verdict, still-open line and next input reveal.
+    // Continuous progress through each named stage, not any one beat's
+    // local p, so nothing resets at a beat boundary inside weighing (its
+    // text beat and its text-free tail share one climbing count) or at any
+    // later stage seam.
+    var stackOn = stage === "weighing" || stage === "write" || stage === "publish" || stage === "horizon";
+    if (el.stackWrap) el.stackWrap.hidden = !stackOn;
 
     var weighP = stageProgress("weighing", scrollPx);
     var horizonP = stageProgress("horizon", scrollPx);
@@ -434,7 +469,7 @@
       arrived = Math.round(clamp01(weighP / 0.5) * cards.length);
       graded = Math.round(clamp01((weighP - 0.15) / 0.45) * cards.length);
       sorting = clamp01((weighP - 0.55) / 0.35);
-    } else if (stage === "horizon") {
+    } else if (stage === "write" || stage === "publish" || stage === "horizon") {
       arrived = cards.length;
       graded = cards.length;
       sorting = 1;
@@ -442,7 +477,7 @@
 
     for (var i = 0; i < cards.length; i++) cards[i].setAttribute("data-in", i < arrived ? "1" : "0");
     if (el.counter) {
-      el.counter.style.opacity = String(stage === "weighing" || stage === "horizon" ? 1 : 0);
+      el.counter.style.opacity = String(stackOn ? 1 : 0);
       el.counter.textContent = arrived + " of " + cards.length + " studies read";
     }
 
@@ -459,9 +494,9 @@
     }
 
     // The bar forms once weighing's sort has mostly landed and then stays
-    // up through horizon: it is the evidence the verdict rests on, not a
-    // thing that belongs only to one stage.
-    setOn(el.bar, (stage === "weighing" && weighP > 0.75) || stage === "horizon");
+    // up through write, publish and horizon: it is the evidence the
+    // verdict rests on, not a thing that belongs only to one stage.
+    setOn(el.bar, (stage === "weighing" && weighP > 0.75) || stage === "write" || stage === "publish" || stage === "horizon");
 
     // Horizon: the verdict, what is still open, then the input again, each
     // a little further into the stage than the last. 0.3 sits just past
@@ -541,8 +576,9 @@
 
   /* ---- start --------------------------------------------------------------- */
 
+  variant = pickVariant();
   Promise.all([
-    fetch(section.dataset.frames + "/manifest.json").then(function (r) { return r.json(); }),
+    fetch(manifestUrl()).then(function (r) { return r.json(); }),
     fetch(section.dataset.beats).then(function (r) { return r.json(); })
   ]).then(function (both) {
     manifest = both[0];

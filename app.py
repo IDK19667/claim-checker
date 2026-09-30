@@ -351,19 +351,29 @@ def healthz():
 # file is missing the route 404s rather than inventing a placeholder check,
 # because a fabricated verdict is the one thing this product must never show.
 _FLIGHT_STILLS = [
-    {"file": "still-1-surface.webp",
-     "alt": "An aerial view over a dense city, rooftops and streets in every direction.",
-     "caption": "A claim starts as noise, one voice among a whole city of them."},
-    {"file": "still-2-rising.webp",
-     "alt": "A drone rising over a grassy coastline above chalk cliffs and the sea.",
+    {"file": "still-1-claim.webp",
+     "alt": "A hand holding a phone, a health claim on its screen.",
+     "caption": "A claim can reach anyone, anywhere, in a moment."},
+    {"file": "still-2-archive.webp",
+     "alt": "Rows of bound volumes on library shelves, viewed down the aisle.",
      "caption": "We step back and search the published research, not the internet."},
     {"file": "still-3-weighing.webp",
-     "alt": "Churning turquoise ocean water seen from directly above.",
+     "alt": "A closeup of hands sorting through papers and printed pages on a desk.",
      "caption": "Each study is weighed, graded by what kind of evidence it is."},
-    {"file": "still-4-horizon.webp",
-     "alt": "An open sea horizon at dusk, the sky fading from gold to blue.",
-     "caption": "Likely true. Likely false. It's complicated. And what is still open."},
+    {"file": "still-4-write.webp",
+     "alt": "A hand annotating handwritten research notes on a desk.",
+     "caption": "The findings get written up, ready to stand behind."},
+    {"file": "still-5-publish.webp",
+     "alt": "A laptop screen showing an open-access research guide webpage.",
+     "caption": "Then the record goes public, so anyone can check it."},
 ]
+
+# Clips with a licence that requires attribution would list a short credit
+# line here ({"clip": "...", "credit": "..."}); the round-5 set is Pexels
+# License / Pixabay License throughout (free, no attribution required), so
+# this is empty in practice, but flight.html still renders it when present
+# rather than assuming it will always stay empty.
+_FLIGHT_CREDITS = []
 
 
 @app.route("/flight")
@@ -380,8 +390,8 @@ def flight():
     d = datetime.fromisoformat(check["checkedAt"])
     check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
 
-    return render_template("flight.html", check=check,
-                           chapters=beats["chapters"], stills=_FLIGHT_STILLS)
+    return render_template("flight.html", check=check, chapters=beats["chapters"],
+                           stills=_FLIGHT_STILLS, credits=_FLIGHT_CREDITS)
 
 
 # ---------------------------------------------------------------------
