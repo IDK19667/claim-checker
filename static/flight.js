@@ -3,7 +3,7 @@
  * A pinned canvas scrubbed by scroll position, with the checker's own work
  * animated over it. No framework, no build step, same as the rest of the site.
  *
- * Four things this file is careful about:
+ * Five things this file is careful about:
  *
  *  1. The page works with the animation off. If the sequence cannot load, or
  *     the reader asked for reduced motion, or Save-Data is on, we add
@@ -11,17 +11,31 @@
  *     The claim input is in the markup either way.
  *  2. Native scroll only. Nothing here calls preventDefault or moves the
  *     scroll position; the reader stays in charge, forwards and backwards.
- *  3. Bounded memory and network. At most CONCURRENCY requests are in flight
- *     and at most KEEP decoded bitmaps are held, oldest evicted and closed.
- *  4. The numbers on screen are the real check, loaded from check.json, which
- *     is exported from the database by scripts/export_flight_check.py.
+ *  3. Two frame tiers. A tiny low-res copy of every frame is fetched and
+ *     decoded up front and held for the whole session (small enough that
+ *     this costs nothing): it is what "never blank" actually means, since
+ *     the exact wanted frame is always available at low quality even before
+ *     its high-res copy has arrived. High-res bytes for the whole sequence
+ *     are also fetched up front (a small progress indicator tracks this),
+ *     but only a window of them stays decoded to an ImageBitmap at once —
+ *     decoding all 324 at 1280x720 simultaneously is roughly a gigabyte of
+ *     bitmap memory, which a phone will not tolerate.
+ *  4. The displayed frame eases toward the scroll-implied one every
+ *     animation frame rather than jumping straight to it, so a fast flick
+ *     glides across frames instead of visibly skipping between them.
+ *  5. Card arrival, grading and sorting progress continuously across a
+ *     named *stage* (every beat that shares a stage name), never reset by
+ *     a beat boundary; only text visibility (the headline, the small
+ *     supporting labels) is scoped to one beat's own fade window. That is
+ *     what lets a "no text" beat exist without the underlying state
+ *     jumping when text next appears.
  */
 
 (function () {
   "use strict";
 
-  var CONCURRENCY = 6;
-  var KEEP = 60;
+  var HIRES_CONCURRENCY = 6;
+  var HIRES_KEEP = 90; // decoded ImageBitmaps held at once; the rest redecode from cached bytes
 
   var root = document.documentElement;
   var section = document.getElementById("flight");
@@ -30,6 +44,7 @@
   var canvas = document.getElementById("flight-canvas");
   var overlay = document.getElementById("flight-overlay");
   var header = document.querySelector(".hdr");
+  var progressEl = document.getElementById("flight-progress");
 
   function giveUp(why) {
     root.classList.add("no-flight");
@@ -44,117 +59,240 @@
   }
 
   var ctx = canvas.getContext("2d", { alpha: false });
+  // The footage sits behind a heavy scrim and the text it plays under, never
+  // shown at native sharpness; at a device pixel ratio of 2 the backing
+  // store is ~4.1 megapixels, and resampling a much smaller source frame up
+  // to fill it at "high" quality measurably slowed drawImage enough to
+  // reintroduce dropped frames during a fast scroll (confirmed: 0 misses at
+  // DPR 1 in the same sweep, 29 at DPR 2, before this line existed). Lower
+  // quality is not visibly different here and removes that cost.
+  if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "low";
   var manifest = null;
   var beats = null;
-  var check = null;
 
-  /* ---- frame store ----------------------------------------------------- */
+  // Cheap, always-on counters so a fast-scroll test can measure dropped and
+  // stale frames instead of guessing from a screenshot. A handful of integer
+  // increments per tick; read from outside as window.__flightStats.
+  window.__flightStats = { draws: 0, misses: 0, seen: {} };
 
-  var frames = new Map();   // index -> ImageBitmap
-  var order = [];           // insertion order, for eviction
-  var pending = new Map();  // index -> AbortController
-  var failed = new Set();
-  var lastDrawn = -1;
+  /* ---- low-res tier: fetched and decoded fully, kept forever ------------ */
 
-  function frameUrl(i) {
+  var lores = new Array(0); // index -> ImageBitmap, always present once loaded
+  var loresReady = false;
+
+  function loresUrl(i) {
+    return section.dataset.frames + "/" + manifest.loresPattern.replace("%04d", pad(i));
+  }
+
+  function pad(i) {
     var n = String(i);
     while (n.length < 4) n = "0" + n;
-    return section.dataset.frames + "/frame-" + n + ".webp";
+    return n;
   }
 
-  function remember(i, bitmap) {
-    frames.set(i, bitmap);
-    order.push(i);
-    while (order.length > KEEP) {
-      var old = order.shift();
-      if (old === lastDrawn) { order.push(old); continue; }
-      var b = frames.get(old);
-      if (b && b.close) b.close();
-      frames.delete(old);
-    }
-  }
+  var LORES_CONCURRENCY = 10;
 
-  function fetchFrame(i) {
-    if (i < 0 || i >= manifest.count) return;
-    if (frames.has(i) || pending.has(i) || failed.has(i)) return;
-    if (pending.size >= CONCURRENCY) return;
+  // Concurrency-limited like the hi-res loader below. Firing all 324 tiny
+  // fetches (and, worse, 324 simultaneous createImageBitmap decodes) at
+  // once congests the main thread for a couple of seconds right when the
+  // page has just loaded and a reader is most likely to start scrolling:
+  // measured with scripts/flight_scroll_test.mjs, an unthrottled version of
+  // this function made even a plain scroll sweep run 1.7s behind real time.
+  var loresLoadedCount = 0;
 
-    var ac = new AbortController();
-    pending.set(i, ac);
-    fetch(frameUrl(i), { signal: ac.signal })
-      .then(function (r) {
-        if (!r.ok) throw new Error(r.status);
-        return r.blob();
-      })
-      .then(createImageBitmap)
-      .then(function (bmp) {
-        pending.delete(i);
-        remember(i, bmp);
-        if (i === wanted) draw(i);
-        pump();
-      })
-      .catch(function (err) {
-        pending.delete(i);
-        if (err && err.name === "AbortError") return;
-        failed.add(i);
-        if (failed.size > 8) giveUp("frames-failed");
-      });
-  }
-
-  var wanted = 0;
-  var direction = 1;
-
-  function pump() {
-    fetchFrame(wanted);
-    for (var d = 1; d <= 10 && pending.size < CONCURRENCY; d++) {
-      fetchFrame(wanted + d * direction);
-    }
-  }
-
-  function abortFar() {
-    pending.forEach(function (ac, i) {
-      if (Math.abs(i - wanted) > 24) { ac.abort(); pending.delete(i); }
+  function loadLores() {
+    var next = 0, inFlight = 0;
+    return new Promise(function (resolve) {
+      function pump() {
+        while (inFlight < LORES_CONCURRENCY && next < manifest.count) {
+          (function (idx) {
+            inFlight++;
+            fetch(loresUrl(idx)).then(function (r) { return r.blob(); })
+              .then(createImageBitmap).then(function (bmp) { lores[idx] = bmp; })
+              .catch(function () { /* a missing low-res frame just leaves that slot empty */ })
+              .then(function () {
+                inFlight--;
+                loresLoadedCount++;
+                updateProgress();
+                if (loresLoadedCount >= manifest.count) { loresReady = true; resolve(); }
+                else pump();
+              });
+          })(next);
+          next++;
+        }
+      }
+      pump();
     });
   }
 
-  /* ---- drawing --------------------------------------------------------- */
+  /* ---- high-res tier: bytes preloaded for all frames, decoded on a window */
 
-  function sizeCanvas() {
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = canvas.clientWidth, h = canvas.clientHeight;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    if (lastDrawn >= 0) draw(lastDrawn, true);
+  var hiresBlobs = new Array(0);   // index -> Blob, once downloaded, kept forever (~10MB total)
+  var hiresBitmaps = new Map();    // index -> ImageBitmap, bounded LRU
+  var hiresOrder = [];             // insertion order, for eviction
+  var hiresLoaded = 0;
+  var hiresTotal = 0;
+
+  function hiresUrl(i) {
+    return section.dataset.frames + "/" + manifest.pattern.replace("%04d", pad(i));
   }
 
-  function draw(i, force) {
-    var bmp = frames.get(i);
-    if (!bmp) return;
-    if (i === lastDrawn && !force) return;
-    lastDrawn = i;
+  function preloadHiresBytes() {
+    hiresTotal = manifest.count;
+    var next = 0;
+    var inFlight = 0;
+    return new Promise(function (resolve) {
+      function pump() {
+        while (inFlight < HIRES_CONCURRENCY && next < manifest.count) {
+          (function (idx) {
+            inFlight++;
+            fetch(hiresUrl(idx)).then(function (r) { return r.blob(); })
+              .then(function (blob) {
+                hiresBlobs[idx] = blob;
+              })
+              .catch(function () { /* the low-res tier still covers this frame */ })
+              .then(function () {
+                inFlight--;
+                hiresLoaded++;
+                updateProgress();
+                if (hiresLoaded >= manifest.count) resolve();
+                else pump();
+              });
+          })(next);
+          next++;
+        }
+      }
+      pump();
+    });
+  }
 
+  function evictHiresIfNeeded() {
+    while (hiresOrder.length > HIRES_KEEP) {
+      var old = hiresOrder.shift();
+      if (old === Math.round(displayedFrame)) { hiresOrder.push(old); continue; }
+      var b = hiresBitmaps.get(old);
+      if (b && b.close) b.close();
+      hiresBitmaps.delete(old);
+    }
+  }
+
+  var hiresDecoding = new Set(); // indices with a decode already in flight
+
+  // Decoding from an already-downloaded Blob is local and fast (no network
+  // round trip), so this can happen the moment a frame is wanted rather
+  // than needing to be anticipated far in advance. The persistent easing
+  // loop calls this every animation frame while a frame is still missing,
+  // so without the in-flight guard the same index gets re-decoded on every
+  // tick until the first decode resolves — the other real source of the
+  // main-thread congestion the scroll test caught.
+  function ensureHiresDecoded(i) {
+    if (hiresBitmaps.has(i) || hiresDecoding.has(i) || !hiresBlobs[i]) return;
+    hiresDecoding.add(i);
+    createImageBitmap(hiresBlobs[i]).then(function (bmp) {
+      hiresDecoding.delete(i);
+      hiresBitmaps.set(i, bmp);
+      hiresOrder.push(i);
+      evictHiresIfNeeded();
+    }).catch(function () { hiresDecoding.delete(i); });
+  }
+
+  /* ---- progress indicator ------------------------------------------------ */
+
+  // Called up to twice per downloaded frame (roughly 650 times across both
+  // tiers). A per-call DOM write forces a style/layout recalc each time,
+  // which is real, measured main-thread cost for a number nobody reads at
+  // that resolution; rAF-coalescing collapses any calls landing in the same
+  // frame into one write. The counter is exact either way.
+  var progressScheduled = false;
+
+  function updateProgress() {
+    if (!progressEl || progressScheduled) return;
+    progressScheduled = true;
+    requestAnimationFrame(function () {
+      progressScheduled = false;
+      var frac = (hiresLoaded + loresLoadedCount) / (manifest.count * 2);
+      if (frac >= 0.999) {
+        progressEl.hidden = true;
+        return;
+      }
+      progressEl.hidden = false;
+      progressEl.textContent = "Loading footage … " + Math.round(frac * 100) + "%";
+    });
+  }
+
+  /* ---- drawing: never blank, never stale ---------------------------------
+   * Preference order for the wanted index: its decoded hi-res bitmap, else
+   * its low-res bitmap (the "always available once loaded" tier), else the
+   * nearest index in either direction that has *something* decoded, so the
+   * canvas is never simply left showing an old, unrelated frame while the
+   * reader has scrolled somewhere else. */
+
+  function bitmapFor(i) {
+    var hi = hiresBitmaps.get(i);
+    if (hi) return hi;
+    ensureHiresDecoded(i); // kick off a decode for next time; use lores now
+    if (lores[i]) return lores[i];
+    return null;
+  }
+
+  function nearestAvailable(i) {
+    var direct = bitmapFor(i);
+    if (direct) return { bmp: direct, index: i };
+    for (var d = 1; d < manifest.count; d++) {
+      var lo = i - d, hi = i + d;
+      if (lo >= 0) {
+        var b = bitmapFor(lo);
+        if (b) return { bmp: b, index: lo };
+      }
+      if (hi < manifest.count) {
+        var b2 = bitmapFor(hi);
+        if (b2) return { bmp: b2, index: hi };
+      }
+    }
+    return null;
+  }
+
+  var lastDrawnIndex = -1;
+
+  function draw(i, force) {
+    var found = nearestAvailable(i);
+    if (!found) { window.__flightStats.misses++; return; }
+    if (found.index === lastDrawnIndex && !force) return;
+    if (found.index !== i) window.__flightStats.misses++;
+    lastDrawnIndex = found.index;
+    window.__flightStats.draws++;
+    window.__flightStats.seen[found.index] = 1;
+
+    var bmp = found.bmp;
     var cw = canvas.width, ch = canvas.height;
-    var fw = bmp.width, fh = bmp.height;
-    var scale = Math.max(cw / fw, ch / fh);
-    var dw = fw * scale, dh = fh * scale;
+    var scale = Math.max(cw / bmp.width, ch / bmp.height);
+    var dw = bmp.width * scale, dh = bmp.height * scale;
     // focusX lets a mobile crop follow the subject instead of always
     // centring, which is what loses the phone at narrow widths.
     var fx = currentFocusX();
     ctx.drawImage(bmp, (cw - dw) * fx, (ch - dh) / 2, dw, dh);
   }
 
-  /* ---- the timeline ---------------------------------------------------- */
+  function sizeCanvas() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    if (lastDrawnIndex >= 0) draw(lastDrawnIndex, true);
+  }
 
-  var plan = [];     // {beat, startPx, endPx, from, to, hold}
+  /* ---- the timeline ------------------------------------------------------ */
+
+  var plan = [];       // {b, start, end} in scroll pixels
+  var stageSpans = {};  // stage name -> {start, end} in scroll pixels, for continuous state
   var totalPx = 0;
+  var travelPx = 1;
   var isMobile = false;
 
   function beatVh(b) {
     var m = b.mobile || {};
     return isMobile && typeof m.vh === "number" ? m.vh : b.vh;
   }
-
-  var travelPx = 1;
 
   function layout() {
     isMobile = window.innerWidth < 700;
@@ -164,9 +302,7 @@
     // only pinned for (height - one viewport). The timeline has to be laid
     // out across that travel, or the last beats sit in the stretch where the
     // stage has already scrolled away and are never seen.
-    var heightPx = beats.beats.reduce(function (sum, b) {
-      return sum + beatVh(b) * vh;
-    }, 0);
+    var heightPx = beats.beats.reduce(function (sum, b) { return sum + beatVh(b) * vh; }, 0);
     travelPx = Math.max(1, heightPx - window.innerHeight);
 
     var at = 0;
@@ -178,8 +314,23 @@
       return row;
     });
     totalPx = at;
+
+    stageSpans = {};
+    plan.forEach(function (row) {
+      var s = stageSpans[row.b.stage] || { start: row.start, end: row.end };
+      s.start = Math.min(s.start, row.start);
+      s.end = Math.max(s.end, row.end);
+      stageSpans[row.b.stage] = s;
+    });
+
     section.style.setProperty("--flight-height", heightPx + "px");
     sizeCanvas();
+  }
+
+  function stageProgress(name, scrollPx) {
+    var span = stageSpans[name];
+    if (!span) return 0;
+    return clamp01((scrollPx - span.start) / Math.max(1, span.end - span.start));
   }
 
   function currentFocusX() {
@@ -196,130 +347,123 @@
       return row.b.hold < 0 ? manifest.count - 1 : row.b.hold;
     }
     var secs = row.b.from + (row.b.to - row.b.from) * p;
-    return Math.max(0, Math.min(manifest.count - 1,
-      Math.round(secs * manifest.fps)));
+    return Math.max(0, Math.min(manifest.count - 1, Math.round(secs * manifest.fps)));
   }
 
-  /* ---- the animation over the footage ---------------------------------- */
+  // Fade-in/hold/fade-out, computed from a beat's own local progress and its
+  // own {in, out} window. A beat with no `fade` (a hold, or a transition/
+  // move beat with chapter:null) is simply on or off, never fading.
+  function textOpacity(row, p) {
+    if (!row.b.chapter) return 0;
+    var f = row.b.fade;
+    if (!f) return 1; // a hold beat: steady while it is the active beat
+    if (p < f.in) return f.in <= 0 ? 1 : clamp01(p / f.in);
+    if (p > f.out) return clamp01((1 - p) / Math.max(1e-6, 1 - f.out));
+    return 1;
+  }
 
-  var el = {};          // cached overlay nodes
-  var cards = [];       // <li> per study, in original order
-  var sortedIndex = []; // where each card goes once graded
-  var originalTop = []; // each card's real top offset, current order
-  var targetTop = [];   // each card's real top offset, once sorted
+  /* ---- the animation over the footage ------------------------------------ */
 
-  // Real offsets, not an assumed uniform row height. A study title wraps to
-  // a second line more often on a phone width, and the eight cards are
-  // rarely all the same height even on desktop, so a shift computed from
-  // one card's height (as an earlier version of this did) drifts out of
-  // sync with its neighbours and the stack visibly overlaps mid-sort.
-  var STACK_GAP = 6; // matches the gap in .stack in flight.css
+  var el = {};
+  var cards = [];
+  var sortedIndex = [];
+  var originalTop = [];
+  var targetTop = [];
+  var STACK_GAP = 8; // matches the gap in .stack in flight.css
 
   function computeTops() {
     if (!cards.length) return;
     var heights = cards.map(function (c) { return c.getBoundingClientRect().height; });
-
     var top = 0;
-    originalTop = heights.map(function (h) {
-      var t = top; top += h + STACK_GAP; return t;
-    });
-
+    originalTop = heights.map(function (h) { var t = top; top += h + STACK_GAP; return t; });
     var order = cards.map(function (_, i) { return i; });
     order.sort(function (a, b) { return sortedIndex[a] - sortedIndex[b]; });
     targetTop = new Array(cards.length);
     top = 0;
-    order.forEach(function (i) {
-      targetTop[i] = top;
-      top += heights[i] + STACK_GAP;
-    });
+    order.forEach(function (i) { targetTop[i] = top; top += heights[i] + STACK_GAP; });
   }
 
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+  function setOn(node, on) { if (node) node.setAttribute("data-on", on ? "1" : "0"); }
 
-  function setOn(node, on) {
-    if (node) node.setAttribute("data-on", on ? "1" : "0");
-  }
+  function paint(row, p, scrollPx) {
+    var stage = row.b.stage;
+    var tOp = textOpacity(row, p);
 
-  function paint(stage, p) {
-    // Chapters: one visible at a time, keyed to the beat.
-    for (var id in el.chapters) {
-      setOn(el.chapters[id], id === activeRow.b.chapter);
-    }
+    for (var id in el.chapters) setOn(el.chapters[id], id === row.b.chapter && tOp > 0.02);
+    if (el.chapterZone) el.chapterZone.style.opacity = String(tOp);
 
     el.work.setAttribute("data-stage", stage);
 
-    // The claim shrinks and fades as the verdict arrives, then leaves the
-    // layout entirely. Opacity alone is not enough: an invisible element
-    // still holds its row, and the panel is taller than a phone viewport
-    // with the claim still in it, which pushes the verdict off the top.
+    // The claim panel: visible only during the phone stage, opacity tied to
+    // this beat's own text window rather than a stage-wide fade, so it can
+    // vanish before the phone clip's quiet, text-free tail.
     if (el.claim) {
-      var gone = stage === "verdict" ? clamp01(p * 2) : 0;
-      el.claim.style.opacity = String(1 - gone);
-      el.claim.style.transform = "scale(" + (1 - 0.12 * gone) + ")";
-      el.claim.hidden = gone >= 1;
+      el.claim.style.opacity = String(stage === "phone" ? tOp : 0);
+      el.claim.hidden = !(stage === "phone" && tOp > 0.02);
     }
-    // Only one claim input is on screen at a time: the opening one during
-    // the phone stage, the closing one once the verdict has landed.
     if (el.form) el.form.hidden = stage !== "phone";
-    if (el.query) el.query.hidden = stage === "phone" || stage === "verdict";
+    if (el.query) {
+      el.query.style.opacity = String(stage === "archive" ? tOp : 0);
+      el.query.hidden = !(stage === "archive" && tOp > 0.02);
+    }
     if (el.stackWrap) el.stackWrap.hidden = stage === "phone" || stage === "verdict";
 
-    // Stage 2: the counter climbs as the studies arrive.
+    // Continuous progress through the whole ARCHIVE stage, not this one
+    // beat: the counter and the cards keep climbing smoothly across
+    // archive-text and archive-move alike.
+    var archiveP = stageProgress("archive", scrollPx);
     var arrived = 0;
-    if (stage === "archive") arrived = Math.round(clamp01(p / 0.85) * cards.length);
+    if (stage === "archive") arrived = Math.round(clamp01(archiveP / 0.9) * cards.length);
     else if (stage === "lab" || stage === "verdict") arrived = cards.length;
 
-    for (var i = 0; i < cards.length; i++) {
-      cards[i].setAttribute("data-in", i < arrived ? "1" : "0");
-    }
-    if (el.counter) {
-      el.counter.textContent = arrived + " of " + cards.length + " studies read";
-    }
+    for (var i = 0; i < cards.length; i++) cards[i].setAttribute("data-in", i < arrived ? "1" : "0");
+    if (el.counter) el.counter.textContent = arrived + " of " + cards.length + " studies read";
 
-    // Stage 3: grades appear one by one, then the stack sorts with the
-    // strongest at the bottom.
-    var graded = stage === "lab" ? Math.round(clamp01(p / 0.55) * cards.length)
+    // Continuous progress through the whole LAB stage: grading happens in
+    // its first half, the sort in its second, regardless of which of the
+    // two lab beats is currently active — the point of splitting lab into
+    // a "text" and a "quiet" beat was so the sort finishes text-free, not
+    // so the state itself resets at the seam.
+    var labP = stageProgress("lab", scrollPx);
+    var graded = stage === "lab" ? Math.round(clamp01(labP / 0.45) * cards.length)
                : stage === "verdict" ? cards.length : 0;
-    var sorting = stage === "lab" ? clamp01((p - 0.6) / 0.35)
+    var sorting = stage === "lab" ? clamp01((labP - 0.55) / 0.4)
                 : stage === "verdict" ? 1 : 0;
 
-    // Two cards swapping rank cross paths partway through the shuffle, which
-    // briefly lands one card's text on top of another's regardless of how
-    // exact the offsets are. A shallow dip in opacity right at the midpoint
-    // (full strength at the ends, where nothing overlaps) reads as a soft
-    // shuffle instead of two headlines colliding.
     var midFade = 1 - 0.45 * Math.sin(Math.min(1, Math.max(0, sorting)) * Math.PI);
-
     for (i = 0; i < cards.length; i++) {
       cards[i].setAttribute("data-graded", i < graded ? "1" : "0");
       var shift = ((targetTop[i] || 0) - (originalTop[i] || 0)) * sorting;
       var hide = stage === "verdict" ? clamp01(p * 1.6) : 0;
-      cards[i].style.transform =
-        "translateY(" + shift.toFixed(1) + "px) scaleY(" + (1 - hide) + ")";
+      cards[i].style.transform = "translateY(" + shift.toFixed(1) + "px) scaleY(" + (1 - hide) + ")";
       cards[i].style.opacity = String((1 - hide) * midFade);
     }
 
-    // Stage 4: the bar, then the verdict, then what is still open.
-    setOn(el.bar, stage === "verdict" && p > 0.25);
-    setOn(el.verdict, stage === "verdict" && p > 0.45);
-    if (el.tldr) el.tldr.hidden = !(stage === "verdict" && p > 0.55);
-    if (el.open) el.open.hidden = !(stage === "verdict" && p > 0.7);
-    if (el.again) el.again.hidden = !(stage === "verdict" && p > 0.8);
+    // The verdict stage: the bar, the word, what is still open, then the
+    // input again. Driven by the "verdict-hold" beat's own p (it is the
+    // last beat and holds the last frame, so p there is really just how
+    // long the reader has sat on this screen).
+    var verdictP = stage === "verdict" ? p : 0;
+    setOn(el.bar, stage === "verdict" && verdictP > 0.12);
+    setOn(el.verdict, stage === "verdict" && verdictP > 0.28);
+    if (el.open) el.open.hidden = !(stage === "verdict" && verdictP > 0.5);
+    if (el.again) el.again.hidden = !(stage === "verdict" && verdictP > 0.68);
   }
 
-  /* ---- scroll ---------------------------------------------------------- */
+  /* ---- scroll + a persistent easing loop ---------------------------------
+   * Scroll updates `wantedFrame` (and everything else that should feel
+   * instant: the text panels, the cards, the verdict). A separate rAF loop
+   * eases `displayedFrame` toward it every tick, including between scroll
+   * events, so a fast flick glides across frames instead of jumping. */
 
   var lastY = window.scrollY;
-  var queued = false;
+  var direction = 1;
+  var wantedFrame = 0;
+  var displayedFrame = 0;
+  var EASE = 0.35;
 
   function onScroll() {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(update);
-  }
-
-  function update() {
-    queued = false;
     var y = window.scrollY;
     direction = y >= lastY ? 1 : -1;
     lastY = y;
@@ -333,27 +477,30 @@
       row = plan[i];
     }
     activeRow = row;
-    var p = (local - row.start) / Math.max(1, row.end - row.start);
-    p = clamp01(p);
+    var p = clamp01((local - row.start) / Math.max(1, row.end - row.start));
 
-    wanted = frameFor(row, p);
-    if (frames.has(wanted)) draw(wanted);
-    abortFar();
-    pump();
-    paint(row.b.stage, p);
+    wantedFrame = frameFor(row, p);
+    paint(row, p, local);
 
-    // Glass over the footage, solid once the pinned section has passed the
-    // header's own height.
     if (header) {
       var past = y > top + travelPx - window.innerHeight * 0.15;
       header.classList.toggle("solid", past);
     }
   }
 
-  /* ---- build the overlay from the real check --------------------------- */
+  function tick() {
+    var delta = wantedFrame - displayedFrame;
+    if (Math.abs(delta) < 0.05) displayedFrame = wantedFrame;
+    else displayedFrame += delta * EASE;
+    draw(Math.round(displayedFrame));
+    requestAnimationFrame(tick);
+  }
+
+  /* ---- build the overlay from the real check ------------------------------ */
 
   function buildOverlay() {
     el.work = overlay.querySelector(".flight-work");
+    el.chapterZone = overlay.querySelector(".chapter-zone");
     el.claim = overlay.querySelector(".claim-card");
     el.form = overlay.querySelector(".claim-form");
     el.query = overlay.querySelector(".query-line");
@@ -361,7 +508,6 @@
     el.stackWrap = overlay.querySelector(".stack");
     el.bar = overlay.querySelector(".evidence-bar");
     el.verdict = overlay.querySelector(".verdict-word");
-    el.tldr = overlay.querySelector(".tldr");
     el.open = overlay.querySelector(".still-open");
     el.again = overlay.querySelector(".again");
     el.chapters = {};
@@ -370,20 +516,14 @@
     });
 
     cards = Array.prototype.slice.call(el.stackWrap.querySelectorAll("li"));
-
-    // Strongest at the bottom: the order the evidence snapshot argues for.
     var rank = { weak: 0, moderate: 1, strong: 2, retracted: -1 };
-    var withIdx = cards.map(function (c, i) {
-      return { i: i, r: rank[c.dataset.tier] || 0 };
-    });
-    var target = withIdx.slice().sort(function (a, b) {
-      return a.r - b.r || a.i - b.i;
-    });
+    var withIdx = cards.map(function (c, i) { return { i: i, r: rank[c.dataset.tier] || 0 }; });
+    var target = withIdx.slice().sort(function (a, b) { return a.r - b.r || a.i - b.i; });
     sortedIndex = new Array(cards.length);
     target.forEach(function (row, pos) { sortedIndex[row.i] = pos; });
   }
 
-  /* ---- start ----------------------------------------------------------- */
+  /* ---- start --------------------------------------------------------------- */
 
   Promise.all([
     fetch(section.dataset.frames + "/manifest.json").then(function (r) { return r.json(); }),
@@ -392,15 +532,25 @@
     manifest = both[0];
     beats = both[1];
     if (!manifest.count) throw new Error("empty manifest");
-    check = window.__flightCheck || null;
+    lores = new Array(manifest.count);
+    hiresBlobs = new Array(manifest.count);
 
     buildOverlay();
     computeTops();
     layout();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", function () { computeTops(); layout(); update(); });
-    window.addEventListener("orientationchange", function () { computeTops(); layout(); update(); });
-    update();
+    window.addEventListener("resize", function () { computeTops(); layout(); onScroll(); });
+    window.addEventListener("orientationchange", function () { computeTops(); layout(); onScroll(); });
+
+    // The low-res pass is small (a few hundred KB total) and finishes fast:
+    // once it does, every frame index has *something* correct to show.
+    // High-res bytes for the whole sequence preload alongside it in the
+    // background; the progress indicator tracks both together.
+    loadLores();
+    preloadHiresBytes();
+
+    onScroll();
+    requestAnimationFrame(tick);
   }).catch(function () {
     giveUp("manifest-failed");
   });

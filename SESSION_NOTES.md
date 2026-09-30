@@ -1,4 +1,4 @@
-# SESSION_NOTES.md: Claim Checker handoff
+# SESSION_NOTES.md: Evident handoff
 
 Written 2026-09-28. Everything below was verified against the code at the
 time of writing rather than recalled. Where something is uncertain it says

@@ -1,4 +1,4 @@
-/* Claim Checker front end. No framework, no build step. */
+/* Evident front end. No framework, no build step. */
 
 const $ = (id) => document.getElementById(id);
 
@@ -88,10 +88,10 @@ const askMore = $("ask-more");
 // The tab title follows the view, so history entries and open tabs are
 // tellable apart. The server sets the result title; this keeps it honest
 // when the view changes without a page load.
-const DEFAULT_TITLE = "Claim Checker: check a health claim against real research";
+const DEFAULT_TITLE = "Evident: check a health claim against real research";
 function setTitle(result) {
   document.title = result
-    ? `${VERDICT_LABELS[result.verdict] || result.verdict}: \u201c${result.claim}\u201d \u00b7 Claim Checker`
+    ? `${VERDICT_LABELS[result.verdict] || result.verdict}: \u201c${result.claim}\u201d \u00b7 Evident`
     : DEFAULT_TITLE;
 }
 function show(section) {
@@ -864,7 +864,7 @@ async function shareResult() {
         const file = new File([blob], "claim-check.png", { type: "image/png" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) files = [file];
       } catch { /* card failed: share text */ }
-      await navigator.share(files ? { files, title: "Claim Checker", text: `${text}\n${url}` } : { title: "Claim Checker", text, url });
+      await navigator.share(files ? { files, title: "Evident", text: `${text}\n${url}` } : { title: "Evident", text, url });
       toast.textContent = "Shared";
       setTimeout(() => { toast.textContent = ""; }, 2000);
       return;

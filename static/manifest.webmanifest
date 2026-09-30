@@ -1,6 +1,6 @@
 {
-  "name": "Health Claim Checker",
-  "short_name": "ClaimCheck",
+  "name": "Evident",
+  "short_name": "Evident",
   "description": "Paste a health claim you saw online. Checks it against real medical studies on PubMed and gives you a straight answer with sources.",
   "start_url": "/",
   "scope": "/",

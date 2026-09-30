@@ -1,72 +1,113 @@
 {
- "version": 2,
- "note": "Four stages, each tied to a real step of the checker. Clip seconds are measured against media/master.mp4 as built by scripts/build_flight.py, not planned. Change the master and this file has to change with it; the tests check the two agree.",
+ "version": 3,
+ "note": "Real footage, real motion. Text now lives in short fade-in/hold/fade-out bursts (see `fade`, fractions of the beat's own local scroll progress), never during a beat with chapter:null. Two `stage:\"transition\"` beats are the crossfades themselves: no text, ever. `archive-move` (15.0-19.0s) is the one place in the master with a real, measured camera move (a tilt, motion score climbing from ~3 to ~12.5 right before the archive-to-lab cut, per scripts/flight_motion.py) and is deliberately the only beat billed as a pure camera-move; phone and lab hold no comparably distinct pan or turn on inspection, so their quiet stretches are honest breathing room, not a dressed-up motion claim. Card arrival, grading and sorting are driven by continuous progress through each named `stage` (summed across every beat that shares it), not by any one beat's local p, so the state does not stutter at a beat boundary.",
  "masterSeconds": 27.0,
  "beats": [
   {
    "id": "phone-hold",
    "stage": "phone",
-   "vh": 60,
+   "vh": 55,
    "hold": 0,
    "chapter": "ch-claim",
-   "mobile": { "vh": 45 },
-   "why": "The first frame holds still while the claim input and the skip link are read and used. Nothing moves until the reader chooses to scroll."
+   "mobile": { "vh": 43, "focusX": 0.45 },
+   "why": "The claim input is usable before anything moves. No fade: this is the one screen with no scroll happening at all."
   },
   {
-   "id": "phone",
+   "id": "phone-text",
    "stage": "phone",
-   "vh": 90,
+   "vh": 110,
    "from": 0.0,
-   "to": 9.6,
+   "to": 9.5,
    "chapter": "ch-claim",
-   "mobile": { "vh": 70, "focusX": 0.45 },
-   "why": "The claim arrives the way it really arrives: at night, on a phone, with no source attached. focusX left of centre on mobile because the phone sits left of frame."
+   "fade": { "in": 0.1, "out": 0.72 },
+   "mobile": { "vh": 86, "focusX": 0.45 },
+   "why": "Covers the whole phone clip. Text (headline, claim, input) fades out by 72% local progress so the last ~2.6s plays with no text at all, breathing room even though this clip has no single big camera move to hide behind (measured: motion stays flat throughout, unlike the archive tilt below)."
   },
   {
-   "id": "archive",
+   "id": "x-phone-archive",
+   "stage": "transition",
+   "vh": 25,
+   "from": 9.5,
+   "to": 10.0,
+   "chapter": null,
+   "mobile": { "vh": 20 },
+   "why": "The crossfade itself. Two images blending is never a moment to ask someone to read a sentence."
+  },
+  {
+   "id": "archive-text",
    "stage": "archive",
-   "vh": 130,
-   "from": 9.6,
-   "to": 19.2,
+   "vh": 75,
+   "from": 10.0,
+   "to": 15.0,
    "chapter": "ch-search",
-   "mobile": { "vh": 100 },
-   "why": "The longest beat. It carries the real PubMed query, the counter climbing to eight, and eight real study cards stacking in, so it needs the most scroll distance of any stage."
+   "fade": { "in": 0.12, "out": 0.85 },
+   "mobile": { "vh": 59 },
+   "why": "The headline and the real query. Cards are already arriving underneath (continuous archive-stage progress), so the visual proof and the words appear together, then the words leave first."
   },
   {
-   "id": "lab",
+   "id": "archive-move",
+   "stage": "archive",
+   "vh": 95,
+   "from": 15.0,
+   "to": 19.0,
+   "chapter": null,
+   "mobile": { "vh": 74 },
+   "why": "The one real, measured camera move in the whole master: a tilt, motion score climbing from ~3 to ~12.5 right up to the cut. No text at all here on purpose, and the most generous scroll distance of any beat so the move actually reads instead of blurring past."
+  },
+  {
+   "id": "x-archive-lab",
+   "stage": "transition",
+   "vh": 25,
+   "from": 19.0,
+   "to": 19.5,
+   "chapter": null,
+   "mobile": { "vh": 20 },
+   "why": "The second crossfade. Same rule: no text on a blend."
+  },
+  {
+   "id": "lab-text",
    "stage": "lab",
-   "vh": 105,
-   "from": 19.2,
-   "to": 25.4,
+   "vh": 70,
+   "from": 19.5,
+   "to": 22.0,
    "chapter": "ch-grade",
-   "mobile": { "vh": 80 },
-   "why": "Each card takes its grade from evidence.py and the stack sorts, strongest at the bottom. Long enough to watch the order change rather than see it jump."
+   "fade": { "in": 0.15, "out": 0.8 },
+   "mobile": { "vh": 55 },
+   "why": "The headline arrives, grades start appearing on the cards underneath."
   },
   {
-   "id": "verdict",
+   "id": "lab-quiet",
+   "stage": "lab",
+   "vh": 100,
+   "from": 22.0,
+   "to": 25.5,
+   "chapter": null,
+   "mobile": { "vh": 78 },
+   "why": "Text is gone before the stack actually re-sorts, so the reordering itself (the most legible single motion in the study cards) never competes with a fading sentence. Generous distance: this is the moment being made easier to see, not harder."
+  },
+  {
+   "id": "verdict-fade",
    "stage": "verdict",
-   "vh": 50,
-   "from": 25.4,
+   "vh": 45,
+   "from": 25.5,
    "to": 27.0,
-   "chapter": "ch-verdict",
-   "mobile": { "vh": 45 },
-   "why": "The footage drains into the deep field. The cards compress into the evidence bar and the claim shrinks away. Short: this is a transition, not a reading beat."
+   "chapter": null,
+   "mobile": { "vh": 35 },
+   "why": "The footage itself drains to the site's deep field colour (scripts/build_flight.py's tail fade). Nothing competes with watching that happen."
   },
   {
    "id": "verdict-hold",
    "stage": "verdict",
-   "vh": 65,
+   "vh": 85,
    "hold": -1,
-   "chapter": "ch-open",
-   "mobile": { "vh": 55 },
-   "why": "Holds on the deep field while the verdict, the still-open card and the claim input are read. hold -1 means the last frame, which is the flat deep field the section below continues."
+   "chapter": null,
+   "mobile": { "vh": 66 },
+   "why": "No separate headline: the verdict word and the still-open card are already the shortest possible statement of what this stage means, and a duplicate sentence above them would be exactly the redundant text this pass was asked to remove."
   }
  ],
  "chapters": {
-  "ch-claim": "Heard a health claim? Check it against the research.",
-  "ch-search": "We search the published research, not the internet.",
-  "ch-grade": "Each study graded by what kind of evidence it is.",
-  "ch-verdict": "Likely true. Likely false. It's complicated.",
-  "ch-open": "And every verdict says what is still open."
+  "ch-claim": "Check it against the research.",
+  "ch-search": "We search real medical research.",
+  "ch-grade": "Graded by strength of evidence."
  }
 }

@@ -1,9 +1,11 @@
-# Claim Checker
+# Evident
+
+Health claims, checked against the evidence.
 
 Context files: `PRODUCT.md` (what it is and who for), `DESIGN.md` (the
 visual system), `DECISIONS.md` (why), `CLAUDE.md` (how to work on it).
 
-Paste a health claim you saw online. Claim Checker searches real medical
+Paste a health claim you saw online. Evident searches real medical
 studies on PubMed, weighs how strong they are (a large clinical trial
 outranks a single small pilot), and gives you a straight answer
 (**likely true / likely false / it's complicated**) with the studies it
@@ -29,7 +31,7 @@ browser (no app store). One page, no accounts, no tracking.
 - **Share it.** On a phone, a sticky Share button sends a square image
   card (stamp + claim + takeaway + the strongest study it used) to any
   app. Shared links unfurl in iMessage/WhatsApp
-  with the verdict as the preview. On Android, Claim Checker appears in
+  with the verdict as the preview. On Android, Evident appears in
   the system share sheet, so you can send it a claim from TikTok or a
   group chat directly.
 - **Trending this week**: what people are checking, anonymously.

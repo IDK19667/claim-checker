@@ -106,7 +106,13 @@ if beats_path.exists():
     t("the closing beat holds the last frame (hold -1)",
       bs[-1].get("hold") == -1)
     t("all four real stages are represented: phone, archive, lab, verdict",
-      {"phone", "archive", "lab", "verdict"} == {b["stage"] for b in bs})
+      {"phone", "archive", "lab", "verdict"}.issubset({b["stage"] for b in bs}))
+    t("a transition beat (the crossfade itself) never carries a chapter",
+      all(b.get("chapter") is None for b in bs if b["stage"] == "transition"))
+    t("every fade window is a valid in-before-out range inside 0..1",
+      all(0 <= b["fade"]["in"] < b["fade"]["out"] <= 1 for b in bs if "fade" in b))
+    t("a fade window only ever appears on a beat that has a chapter to fade",
+      all(b.get("chapter") for b in bs if "fade" in b))
 else:
     print("SKIP beats.json checks: static/flight/beats.json is missing")
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   {% if preview %}
-  <title>{{ preview.title }} · Claim Checker</title>
+  <title>{{ preview.title }} · Evident</title>
   <meta name="description" content="{{ preview.description }}" />
   <meta property="og:title" content="{{ preview.title }}" />
   <meta property="og:description" content="{{ preview.description }}" />
@@ -14,9 +14,9 @@
   <meta property="og:url" content="{{ preview.url }}" />
   <meta name="twitter:card" content="summary_large_image" />
   {% else %}
-  <title>Claim Checker: check a health claim against real research</title>
-  <meta name="description" content="Paste a health claim you saw online. Claim Checker searches real medical studies on PubMed, weighs how strong they are, and gives you a straight answer with sources." />
-  <meta property="og:title" content="Claim Checker" />
+  <title>Evident: check a health claim against real research</title>
+  <meta name="description" content="Paste a health claim you saw online. Evident searches real medical studies on PubMed, weighs how strong they are, and gives you a straight answer with sources." />
+  <meta property="og:title" content="Evident" />
   <meta property="og:description" content="Saw a health claim? Check it against the research." />
   <meta property="og:image" content="{{ base_url }}/og/_.png" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -25,7 +25,7 @@
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
   {% if jsonld %}<script type="application/ld+json" nonce="{{ csp_nonce }}">{{ jsonld | tojson }}</script>{% endif %}
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Claim Checker" />
+  <meta property="og:site_name" content="Evident" />
 
   <meta name="theme-color" content="#0b1226" />
   <meta name="color-scheme" content="light" />
@@ -37,7 +37,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="ClaimCheck" />
+  <meta name="apple-mobile-web-app-title" content="Evident" />
 
   <!-- Fonts are served from here (latin subsets): no third-party request, and they work offline. -->
   <!-- The one face the stylesheet actually uses. Preloading a font the page
@@ -65,7 +65,7 @@
   <div class="band">
     <header class="top">
       <p class="dateline"><span>{{ today }}</span></p>
-      <a class="wordmark" href="/" aria-label="Claim Checker home">Claim Checker</a>
+      <a class="wordmark" href="/" aria-label="Evident home">Evident</a>
       <div class="top-actions">
         <button class="ghost" id="how-btn" type="button">How it works</button>
         <button class="install" id="install-btn" type="button" hidden>Install</button>

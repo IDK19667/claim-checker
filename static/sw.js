@@ -1,11 +1,11 @@
-/* Claim Checker service worker.
+/* Evident service worker.
    - App shell + static assets: network first, cache fallback, so every
      deploy is picked up immediately when online, and the app still opens
      offline.
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "claim-checker-v35";
+const CACHE = "evident-v36";
 const SHELL = [
   "/",
   "/static/style.css",

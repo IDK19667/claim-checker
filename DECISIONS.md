@@ -1,8 +1,41 @@
-# DECISIONS.md: Claim Checker
+# DECISIONS.md: Evident
 
 Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
+
+## 2026-09-29 (later still): Renamed to Evident, on the video-flythrough branch
+
+**"Claim Checker" becomes "Evident"** across every user-facing surface (page
+titles, the header wordmark, the OG/ClaimReview metadata, `llms.txt`, the
+PWA manifest) and the working docs that describe the shipped product
+(`README.md`, `DESIGN.md`, `SESSION_NOTES.md`, `CLAUDE.md`). New tagline:
+"Health claims, checked against the evidence."
+
+**Why not "Weighed", which was the first choice.** Checked before writing
+a single line: `weighed.app` resolves to a live marketing site titled
+"Weighed", which is the App Store page for an existing iOS app that does
+exactly this kind of thing in a neighbouring space, weight and body-fat
+tracking with Apple Health integration. That is not a parked domain or a
+coincidental partial match, it is an active health product using the
+exact name, which is precisely the "clearly taken in health" condition
+the fallback plan was written to catch.
+
+**"Evident" is not spotless either, and that is worth saying plainly.**
+`evidentapp.com` is a live self-tracking app (sleep, activity, wellbeing,
+productivity, reading from Apple Health). The collision is weaker than
+Weighed's: a different top-level domain, a common English word rather
+than an invented one, and a self-tracking app is a further conceptual
+distance from a claim-verification tool than another weight tracker was
+from a health product broadly. Recorded here rather than glossed over, so
+the choice is understood as "clearly better, not provably clean."
+
+**What does not change.** The repository folder name, the Render service,
+any deployed domain, and every dated entry above this one: those describe
+what was actually true at the time and are left as they read. Only this
+document's own title line was brought current, on the same reasoning as
+`README.md`'s and `CLAUDE.md`'s.
+
 
 ## 2026-09-29: Second reversal within the same branch — real stock footage, not generated imagery
 

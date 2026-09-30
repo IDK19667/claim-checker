@@ -18,11 +18,15 @@ const OUT = "/tmp/flight-shots";
 // per stage. Using fractions of the section height instead lands these
 // mid-transition, which is how the first round of these screenshots managed
 // to show the lab footage with the opening form still on it.
+// Fractions computed against the sum of beats.json vh values, which is
+// exactly what flight.js lays proportionally across the pinned travel, so
+// these land in the same beat every time regardless of viewport height.
 const STOPS = [
-  ["1-claim", 0.02],
-  ["2-search", 0.44],
-  ["3-grade", 0.74],   // after the sort settles, not mid-crossing (see flight_sort_check.mjs)
-  ["4-verdict", 0.96],
+  ["1-claim", 0.04],   // phone-hold: the static entry screen
+  ["2-search", 0.33],  // archive-text: the real query, cards arriving
+  ["3-move", 0.46],    // archive-move: the one real camera move, no text at all
+  ["4-grade", 0.81],   // lab-quiet, past the sort (labP>=0.95): settled, not mid-crossing
+  ["5-verdict", 0.94], // verdict-hold: the verdict and the still-open card
 ];
 
 const SIZES = [

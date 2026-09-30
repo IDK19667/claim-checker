@@ -12,7 +12,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>How a check works · Claim Checker</title>
+<title>How a check works · Evident</title>
 <meta name="theme-color" content="#0b1226">
 <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/librefranklin-normal-400-900.woff2') }}" as="font" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="{{ url_for('static', filename='flight/frame-0000.webp') }}" fetchpriority="high">
@@ -22,7 +22,7 @@
 <body>
 
 <header class="hdr">
-  <a class="mark" href="/">Claim Checker</a>
+  <a class="mark" href="/">Evident</a>
   <a class="mark" href="#checker">The checker</a>
 </header>
 
@@ -36,10 +36,12 @@
     <canvas id="flight-canvas" aria-hidden="true"></canvas>
     <div class="flight-scrim" aria-hidden="true"></div>
 
+    <p class="flight-progress" id="flight-progress" hidden>Loading footage &hellip;</p>
+
     <div class="flight-overlay" id="flight-overlay">
       <div class="chapter-zone">
         {% for id, text in chapters.items() %}
-        <div class="chapter" id="{{ id }}" data-on="{{ '1' if loop.first else '0' }}">
+        <div class="chapter" id="{{ id }}" data-on="0">
           <p>{{ text }}</p>
         </div>
         {% endfor %}
@@ -48,7 +50,6 @@
       <div class="flight-work" data-stage="phone">
 
         <div class="claim-card">
-          <p class="eyebrow">A claim, with no source attached</p>
           <q>{{ check.claim }}</q>
         </div>
 
@@ -82,7 +83,6 @@
         </div>
 
         <p class="verdict-word" data-on="0">It&rsquo;s complicated.</p>
-        <p class="tldr" hidden>{{ check.tldr }}</p>
 
         <div class="still-open" hidden>
           <b>Still open</b>

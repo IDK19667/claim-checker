@@ -1,6 +1,6 @@
 ---
 version: alpha
-name: Claim Checker
+name: Evident
 description: The logic of a facts panel. One typeface, near-black on off-white with every neutral mixed from the deep field, weight and scale doing all the work. Rule weight encodes importance, numbers carry the argument, caps are set tight and never tracked out. No accent colour anywhere and no verdict is tinted.
 colors:
   primary: "#0e1422"
@@ -233,7 +233,7 @@ components:
     backgroundColor: "{colors.scrim}"
 ---
 
-# DESIGN.md: Claim Checker
+# DESIGN.md: Evident
 
 The visual system, written down. `DECISIONS.md` holds why each choice was
 made; this holds what the choice is. Refinement preserves this world. A

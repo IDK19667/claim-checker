@@ -1,4 +1,4 @@
-# CLAUDE.md: Claim Checker
+# CLAUDE.md: Evident
 
 Public, mobile-first PWA: paste a health claim, get a PubMed-backed
 verdict with the studies it used. One page, no accounts. Flask + vanilla

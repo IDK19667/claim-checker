@@ -43,6 +43,8 @@ FPS_MASTER = 24
 FPS_FRAMES = 12
 FRAME_WIDTH = 1280
 WEBP_QUALITY = 72
+LORES_WIDTH = 240      # the always-available fallback tier: tiny, held fully decoded
+LORES_QUALITY = 40
 XFADE = 0.5          # seconds of crossfade between stages
 TAIL_FADE = 1.5      # seconds of fade into DEEP at the end
 
@@ -105,13 +107,15 @@ def build_master() -> float:
 
 
 def extract_frames() -> dict:
-    """PNG frames from the master, then WebP via Pillow."""
+    """PNG frames from the master, then WebP via Pillow, full res and low."""
     from PIL import Image
 
+    lores_dir = FRAMES / "lores"
     if FRAMES.exists():
         for old in FRAMES.glob("frame-*.webp"):
             old.unlink()
     FRAMES.mkdir(parents=True, exist_ok=True)
+    lores_dir.mkdir(exist_ok=True)
 
     tmp = ROOT / "media" / "_frames_png"
     if tmp.exists():
@@ -127,17 +131,29 @@ def extract_frames() -> dict:
         sys.exit("no frames extracted")
 
     total_bytes = 0
+    lores_bytes = 0
     for p in pngs:
         target = FRAMES / (p.stem + ".webp")
         with Image.open(p) as im:
             im.save(target, "WEBP", quality=WEBP_QUALITY, method=6)
-        total_bytes += target.stat().st_size
+            total_bytes += target.stat().st_size
+
+            # The low-res tier: small enough to preload and keep fully
+            # decoded for the whole session, so there is always something
+            # correct to show at the exact wanted frame index even before
+            # (or instead of) the matching high-res frame is ready.
+            lh = round(im.height * LORES_WIDTH / im.width)
+            small = im.resize((LORES_WIDTH, lh), Image.LANCZOS)
+            lo_target = lores_dir / (p.stem + ".webp")
+            small.save(lo_target, "WEBP", quality=LORES_QUALITY, method=6)
+            lores_bytes += lo_target.stat().st_size
 
     with Image.open(pngs[0]) as im:
         w, h = im.size
     shutil.rmtree(tmp)
 
-    return {"count": len(pngs), "width": w, "height": h, "bytes": total_bytes}
+    return {"count": len(pngs), "width": w, "height": h, "bytes": total_bytes,
+            "loresBytes": lores_bytes, "loresWidth": LORES_WIDTH}
 
 
 def main() -> None:
@@ -156,20 +172,26 @@ def main() -> None:
     info = extract_frames()
     poster = "frame-0000.webp"
     manifest = {
-        "version": 1,
+        "version": 2,
         "pattern": "frame-%04d.webp",
+        "loresPattern": "lores/frame-%04d.webp",
         "count": info["count"],
         "fps": FPS_FRAMES,
         "width": info["width"],
         "height": info["height"],
+        "loresWidth": info["loresWidth"],
         "poster": poster,
         "seconds": round(info["count"] / FPS_FRAMES, 2),
         "totalBytes": info["bytes"],
+        "loresTotalBytes": info["loresBytes"],
     }
     (FRAMES / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     print(f"frames: {info['count']} at {info['width']}x{info['height']}, "
           f"{info['bytes']/1e6:.1f}MB total, "
           f"{info['bytes']/info['count']/1024:.0f}KB average")
+    print(f"lores:  {info['count']} at {info['loresWidth']}px wide, "
+          f"{info['loresBytes']/1e6:.2f}MB total, "
+          f"{info['loresBytes']/info['count']/1024:.1f}KB average")
 
 
 if __name__ == "__main__":

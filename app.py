@@ -145,7 +145,7 @@ def _claim_review_jsonld(cached: dict, url: str) -> dict:
         "claimReviewed": cached["claim_text"],
         "author": {
             "@type": "Organization",
-            "name": "Claim Checker",
+            "name": "Evident",
             "url": PUBLIC_URL or "/",
             "description": "Checks health claims against studies indexed on PubMed. "
                            "Verdicts are written by an AI model that reads the abstracts.",
@@ -259,7 +259,7 @@ def llms_txt():
     base = _base_url()
     recent = db.recent_cached(25)
     lines = [
-        "# Claim Checker",
+        "# Evident",
         "",
         "> Paste a health claim; it is checked against studies indexed on PubMed "
         "and answered with a verdict, the studies the verdict relied on, and one "
