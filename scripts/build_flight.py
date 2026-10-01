@@ -2,9 +2,10 @@
 Build the scroll fly-through: six stock clips in, three frame-sequence tiers
 out.
 
-Run from the project root with the venv python, because the WebP encoding
-uses Pillow (already a dependency for the link-preview cards) rather than
-an ffmpeg built with libwebp, which most Homebrew builds are not:
+Run from the project root with the venv python, because the AVIF encoding
+uses Pillow (already a dependency for the link-preview cards, and built
+with native AVIF support) rather than an ffmpeg built with libaom, which
+most Homebrew builds are not:
 
     .venv/bin/python scripts/build_flight.py
 
@@ -15,10 +16,10 @@ for source and licence). Outputs:
                                sheet beside it
   * media/master-phone.mp4    a second, portrait-cropped master built from
                                the same six clips
-  * static/flight/frame-NNNN.webp + manifest.json          1920-wide tier
-  * static/flight/2560/frame-NNNN.webp + manifest-2560.json 2560-wide tier
-  * static/flight/phone/frame-NNNN.webp + manifest-phone.json portrait tier
-  * static/flight/lores/frame-NNNN.webp                    shared low-res
+  * static/flight/frame-NNNN.avif + manifest.json          1920-wide tier
+  * static/flight/2560/frame-NNNN.avif + manifest-2560.json 2560-wide tier
+  * static/flight/phone/frame-NNNN.avif + manifest-phone.json portrait tier
+  * static/flight/lores/frame-NNNN.avif                    shared low-res
                                                             fallback tier
 
 Four deliberate choices worth knowing:
@@ -48,12 +49,14 @@ Four deliberate choices worth knowing:
     centre; flight.js ignores beats.json's per-beat mobile.focusX whenever
     this tier is active, since the crop is already baked into the asset.
 
-  * Frame width/quality numbers are carried over from round 3's measured
-    settings (1920/quality-72 for the default tier: see the prior note this
-    docstring used to carry, in git history, for the DPR2-upscale math that
-    produced it) rather than re-guessed. The phone tier's width and quality
-    are new and sized to a hard budget (under 10MB total): see
-    PHONE_WIDTH/PHONE_QUALITY below.
+  * Round 6: 9fps to 24fps, and WebP to AVIF. Every FRAME_QUALITY/
+    LARGE_QUALITY/PHONE_QUALITY/LORES_QUALITY number below comes from a real
+    extraction at 24fps measured against the per-tier budget (desktop
+    25MB, phone 10MB), not a guess: see scripts/flight_scroll_test.mjs and
+    DECISIONS.md for the before/after numbers. AVIF was picked over WebP at
+    matched PSNR (smaller output) and measured roughly 2x faster to decode
+    via createImageBitmap on real hardware, which matters more now that the
+    frame count has nearly tripled.
 """
 
 import json
@@ -73,19 +76,36 @@ FRAMES = ROOT / "static" / "flight"
 DEEP = "0x0b1226"
 
 FPS_MASTER = 24
-FPS_FRAMES = 9
+# Round 6: 9fps was the single biggest source of visible choppiness (the
+# frame-blend and easing work in flight.js only has two real frames to work
+# with per 220ms at 9fps). 24fps was measured against the 25MB/10MB budgets
+# below with real extractions before being chosen over 30fps: 30fps left the
+# default tier at 24.17MB (96% of budget, no margin, and untested on the
+# other two tiers), where 24fps leaves 19-27% headroom on every tier. See
+# DECISIONS.md.
+FPS_FRAMES = 24
 
 # Landscape master resolution: the working canvas both desktop tiers are
 # downscaled from. See the docstring above for why this moved up from 1920.
 MASTER_W, MASTER_H = 2560, 1440
 
-FRAME_WIDTH = 1920         # default desktop tier
-WEBP_QUALITY = 72
-LARGE_WIDTH = 2560         # large-screen desktop tier
-LARGE_QUALITY = 72
+# AVIF, not WebP: measured equal-quality AVIF frames at roughly 60-70% of a
+# WebP frame's size (PSNR-matched, scripts/avif_test), and real-browser
+# createImageBitmap decode on this hardware came out about 2x faster for
+# AVIF too (this file's frame budget triples with 24fps, so decode speed
+# now matters as much as transfer size). Pillow encodes AVIF natively, no
+# extra dependency. Qualities below are each tuned against a real
+# extraction at 24fps to land comfortably under budget, not guessed.
+FRAME_FORMAT = "AVIF"
+FRAME_SPEED = 6            # Pillow AVIF encode speed (0 slow/small .. 10 fast/large)
+
+FRAME_WIDTH = 1920         # default desktop tier: 552 frames, 19.3MB measured
+FRAME_QUALITY = 45
+LARGE_WIDTH = 2560         # large-screen desktop tier: 552 frames, 17.3MB measured
+LARGE_QUALITY = 32
 
 PHONE_W, PHONE_H = 810, 1440   # 9:16, a real phone canvas size, never upscaled
-PHONE_QUALITY = 46             # tuned to land the whole sequence under 10MB
+PHONE_QUALITY = 35              # 552 frames, 7.1MB measured, well under the 10MB budget
 
 LORES_WIDTH = 240      # the always-available fallback tier: tiny, held fully decoded
 LORES_QUALITY = 40
@@ -176,11 +196,21 @@ def build_master_phone() -> float:
     return total
 
 
+def _save(im, target: Path, quality: int) -> None:
+    if FRAME_FORMAT == "AVIF":
+        im.save(target, "AVIF", quality=quality, speed=FRAME_SPEED)
+    else:
+        im.save(target, "WEBP", quality=quality, method=6)
+
+
+FRAME_EXT = ".avif" if FRAME_FORMAT == "AVIF" else ".webp"
+
+
 def _extract_one(src: Path, width: int, quality: int, out_dir: Path, clean: bool = True) -> dict:
     from PIL import Image
 
     if clean and out_dir.exists():
-        for old in out_dir.glob("frame-*.webp"):
+        for old in out_dir.glob("frame-*" + FRAME_EXT):
             old.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -199,9 +229,9 @@ def _extract_one(src: Path, width: int, quality: int, out_dir: Path, clean: bool
 
     total_bytes = 0
     for p in pngs:
-        target = out_dir / (p.stem + ".webp")
+        target = out_dir / (p.stem + FRAME_EXT)
         with Image.open(p) as im:
-            im.save(target, "WEBP", quality=quality, method=6)
+            _save(im, target, quality)
             total_bytes += target.stat().st_size
     with Image.open(pngs[0]) as im:
         w, h = im.size
@@ -216,7 +246,7 @@ def extract_lores(src: Path) -> dict:
 
     lores_dir = FRAMES / "lores"
     if lores_dir.exists():
-        for old in lores_dir.glob("frame-*.webp"):
+        for old in lores_dir.glob("frame-*" + FRAME_EXT):
             old.unlink()
     lores_dir.mkdir(parents=True, exist_ok=True)
 
@@ -230,9 +260,9 @@ def extract_lores(src: Path) -> dict:
     pngs = sorted(tmp.glob("frame-*.png"))
     total_bytes = 0
     for p in pngs:
-        target = lores_dir / (p.stem + ".webp")
+        target = lores_dir / (p.stem + FRAME_EXT)
         with Image.open(p) as im:
-            im.save(target, "WEBP", quality=LORES_QUALITY, method=6)
+            _save(im, target, LORES_QUALITY)
             total_bytes += target.stat().st_size
     shutil.rmtree(tmp)
     return {"count": len(pngs), "width": LORES_WIDTH, "bytes": total_bytes}
@@ -257,17 +287,17 @@ def main() -> None:
     print(f"lores:  {lores['count']} at {lores['width']}px wide, "
           f"{lores['bytes']/1e6:.2f}MB total, {lores['bytes']/lores['count']/1024:.1f}KB average")
 
-    default_info = _extract_one(OUT_VIDEO, FRAME_WIDTH, WEBP_QUALITY, FRAMES)
+    default_info = _extract_one(OUT_VIDEO, FRAME_WIDTH, FRAME_QUALITY, FRAMES)
     manifest = {
-        "version": 5,
-        "pattern": "frame-%04d.webp",
-        "loresPattern": "lores/frame-%04d.webp",
+        "version": 6,
+        "pattern": "frame-%04d" + FRAME_EXT,
+        "loresPattern": "lores/frame-%04d" + FRAME_EXT,
         "count": default_info["count"],
         "fps": FPS_FRAMES,
         "width": default_info["width"],
         "height": default_info["height"],
         "loresWidth": lores["width"],
-        "poster": "frame-0000.webp",
+        "poster": "frame-0000" + FRAME_EXT,
         "seconds": round(default_info["count"] / FPS_FRAMES, 2),
         "totalBytes": default_info["bytes"],
         "loresTotalBytes": lores["bytes"],
@@ -281,11 +311,11 @@ def main() -> None:
     large_info = _extract_one(OUT_VIDEO, LARGE_WIDTH, LARGE_QUALITY, FRAMES / "2560")
     manifest_large = dict(manifest)
     manifest_large.update({
-        "pattern": "2560/frame-%04d.webp",
+        "pattern": "2560/frame-%04d" + FRAME_EXT,
         "count": large_info["count"],
         "width": large_info["width"],
         "height": large_info["height"],
-        "poster": "2560/frame-0000.webp",
+        "poster": "2560/frame-0000" + FRAME_EXT,
         "seconds": round(large_info["count"] / FPS_FRAMES, 2),
         "totalBytes": large_info["bytes"],
     })
@@ -298,11 +328,11 @@ def main() -> None:
     phone_info = _extract_one(OUT_VIDEO_PHONE, None, PHONE_QUALITY, FRAMES / "phone")
     manifest_phone = dict(manifest)
     manifest_phone.update({
-        "pattern": "phone/frame-%04d.webp",
+        "pattern": "phone/frame-%04d" + FRAME_EXT,
         "count": phone_info["count"],
         "width": phone_info["width"],
         "height": phone_info["height"],
-        "poster": "phone/frame-0000.webp",
+        "poster": "phone/frame-0000" + FRAME_EXT,
         "seconds": round(phone_info["count"] / FPS_FRAMES, 2),
         "totalBytes": phone_info["bytes"],
     })

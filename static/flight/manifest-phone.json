@@ -1,14 +1,14 @@
 {
- "version": 5,
- "pattern": "phone/frame-%04d.webp",
- "loresPattern": "lores/frame-%04d.webp",
- "count": 207,
- "fps": 9,
+ "version": 6,
+ "pattern": "phone/frame-%04d.avif",
+ "loresPattern": "lores/frame-%04d.avif",
+ "count": 552,
+ "fps": 24,
  "width": 810,
  "height": 1440,
  "loresWidth": 240,
- "poster": "phone/frame-0000.webp",
+ "poster": "phone/frame-0000.avif",
  "seconds": 23.0,
- "totalBytes": 3935642,
- "loresTotalBytes": 490428
+ "totalBytes": 7079495,
+ "loresTotalBytes": 1023604
 }

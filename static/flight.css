@@ -200,6 +200,10 @@
   opacity: 0;
   transform: translateY(14px);
   transition: opacity 180ms linear, transform 260ms cubic-bezier(.22,.61,.36,1);
+  /* flight.js writes a new transform/opacity here on every scroll-driven
+     paint while a stage sorts the stack: the one overlay element that is
+     genuinely moving continuously, not just transitioning on toggle. */
+  will-change: transform, opacity;
 }
 
 .stack li[data-in="1"] { opacity: 1; transform: translateY(0); }

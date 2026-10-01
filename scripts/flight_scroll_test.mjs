@@ -44,7 +44,7 @@ async function runOne(name, width, height, throttle) {
     return parseFloat(getComputedStyle(s).height) - window.innerHeight;
   });
 
-  await page.evaluate(() => { window.__flightStats = { draws: 0, blanks: 0, seen: {} }; });
+  await page.evaluate(() => { window.__flightStats = { draws: 0, misses: 0, seen: {} }; });
 
   // A real fast swipe: ~60 steps targeting ~1000ms. Each step is a real
   // round trip (evaluate + the page's own scroll handler), and that round
@@ -72,12 +72,12 @@ async function runOne(name, width, height, throttle) {
     `[${label}] ${name}${throttle ? " (throttled 4x CPU, slow network)" : ""}: ` +
     `swept in ${elapsed}ms (target ${DURATION_MS}ms, ${overrun >= 0 ? "+" : ""}${overrun}ms overrun), ` +
     `${stats.draws} draws, ${distinct} distinct frames shown, ` +
-    `${stats.blanks} misses (scroll ticks where the wanted frame wasn't ready yet)`
+    `${stats.misses} misses (scroll ticks where the wanted frame wasn't ready yet)`
   );
 
   await page.close();
   await browser.close();
-  return { name, throttle, elapsed, overrun, draws: stats.draws, distinct, blanks: stats.blanks };
+  return { name, throttle, elapsed, overrun, draws: stats.draws, distinct, misses: stats.misses };
 }
 
 // This browser launch renders canvas via whatever GL backend is available
@@ -104,4 +104,4 @@ results.push(await runOne("desktop", 1280, 800, false));
 results.push(await runOne("phone (throttled)", 390, 844, true));
 
 console.log(`\n[${label}] summary: ` + results.map(r =>
-  `${r.name}=${r.blanks} misses`).join(", "));
+  `${r.name}=${r.misses} misses`).join(", "));

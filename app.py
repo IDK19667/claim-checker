@@ -384,6 +384,8 @@ def flight():
             check = json.load(f)
         with open(os.path.join(base, "beats.json")) as f:
             beats = json.load(f)
+        with open(os.path.join(base, "manifest.json")) as f:
+            poster = json.load(f)["poster"]
     except (OSError, ValueError):
         return render_template("404.html"), 404
 
@@ -391,7 +393,7 @@ def flight():
     check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
 
     return render_template("flight.html", check=check, chapters=beats["chapters"],
-                           stills=_FLIGHT_STILLS, credits=_FLIGHT_CREDITS)
+                           stills=_FLIGHT_STILLS, credits=_FLIGHT_CREDITS, poster=poster)
 
 
 # ---------------------------------------------------------------------

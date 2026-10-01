@@ -43,7 +43,11 @@ FLIGHT = ROOT / "static" / "flight"
 manifest_path = FLIGHT / "manifest.json"
 if manifest_path.exists():
     manifest = json.loads(manifest_path.read_text())
-    frame_files = sorted(FLIGHT.glob("frame-*.webp"))
+    # The pattern's own extension, not a hardcoded one: round 6 switched the
+    # frame tiers from WebP to AVIF, and this test should track whatever
+    # build_flight.py actually produced rather than assume a format.
+    ext = pathlib.Path(manifest.get("pattern", "frame-%04d.webp")).suffix
+    frame_files = sorted(FLIGHT.glob("frame-*" + ext))
 
     t("manifest count matches the number of frame files on disk",
       manifest["count"] == len(frame_files),
@@ -54,10 +58,10 @@ if manifest_path.exists():
       manifest.get("width", 0) > 0 and manifest.get("height", 0) > 0)
     t("the poster frame named in the manifest exists",
       (FLIGHT / manifest["poster"]).exists() if manifest.get("poster") else False)
-    t("frame-0000.webp exists (the first frame, used as the poster)",
-      (FLIGHT / "frame-0000.webp").exists())
+    t(f"frame-0000{ext} exists (the first frame, used as the poster)",
+      (FLIGHT / ("frame-0000" + ext)).exists())
     if frame_files:
-        last = f"frame-{len(frame_files) - 1:04d}.webp"
+        last = f"frame-{len(frame_files) - 1:04d}{ext}"
         t("the last frame implied by the count exists",
           (FLIGHT / last).exists(), last)
     t("totalBytes roughly matches the frames' real size on disk",

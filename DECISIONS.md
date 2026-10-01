@@ -4,7 +4,96 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-09-30 (latest): Round 5, "Inside the evidence": write/publish ending, no grade, three frame tiers
+## 2026-09-30 (latest): Round 6, smoothness overhaul: 24fps AVIF, crossfade, decode-priority fix
+
+**The brief was to make the scroll-scrubbed fly-through as smooth as
+possible without changing anything it shows.** Five changes, in order of
+how much they moved the needle:
+
+**1. Frame rate: 9fps to 24fps, all three tiers.** A 30fps test built for
+the default tier alone left only 0.83MB (3%) of headroom against the
+25MB desktop budget, with the other two tiers' 30fps size untested. 24fps
+is uniformly safe across all three tiers with real margin and is still
+2.67x smoother than the old 9fps, so it shipped instead of a thin-margin,
+partially-validated 30fps.
+
+**2. Frame format: WebP to AVIF.** Real-browser benchmarking
+(`createImageBitmap`, real GPU, not Playwright/SwiftShader) showed AVIF
+both smaller at matched PSNR quality and roughly 2x faster to decode than
+WebP. That decode-speed win is what makes 552 frames per tier affordable
+to keep bounded-window-decoded in memory during a fast scroll. Pillow
+encodes AVIF natively, no new dependency. Sizes before (9fps, WebP) vs
+after (24fps, AVIF): default 10.64MB to 19.34MB, large 15.50MB to
+17.29MB, phone 3.94MB to 7.08MB, lores 0.49MB to 1.02MB. All three real
+tiers stay under budget (desktop <=25MB, phone <=10MB) despite 2.67x more
+frames, because the format switch paid for the frame-count increase.
+
+**3. Crossfade blending and time-based easing replace a frame-snapping
+display.** `draw()` now takes a continuous scroll position, draws the
+floor frame at alpha 1 and the next frame at alpha equal to the
+fractional part, so adjacent frames blend instead of popping. Displayed
+position now eases toward the scroll-driven target via
+`1 - exp(-dt/100ms)` using real rAF timestamp deltas (not a fixed
+per-tick fraction), so the motion reads the same regardless of the
+viewer's actual frame rate, capped at 8 frames of catch-up per tick so a
+long stall doesn't cause a visible jump.
+
+**4. Decode and eviction rewritten around a bounded, GPU-aware window.**
+`HIRES_KEEP` (the count of hi-res bitmaps held decoded at once) is now
+computed from the manifest's own resolution and fps relative to a
+1920x1080/9fps baseline, rather than a fixed constant, so a denser tier
+doesn't blow memory and a lighter one doesn't under-cache. Eviction is
+now distance-from-current rather than FIFO: whichever decoded frame is
+furthest from the one on screen goes first, never the one actually
+visible. Idle time (`requestIdleCallback`) is spent decoding ahead within
+the current and next named stage only, discovered by grouping the beats
+timeline by `stage` and rebuilding the wishlist only when scroll crosses
+into a new group, capped at 6 decodes per idle slice so it never competes
+with the scroll-driven work.
+
+**5. The actual bug behind "it gets blurry if I scroll fast": decode
+priority, not decode capacity.** Live testing after the above still
+showed persistent lores fallback under fast, sustained scrolling. The
+cause was ordering, not throughput: `tick()` ran the speculative
+ahead-of-scroll decode loop before calling `draw()` for the exact
+on-screen frame, so both competed for the same small per-tick decode
+budget (2 decodes) and the speculative loop could win, starving the
+frame actually being displayed. Reordering `tick()` to call `draw()`
+first, so the exact visible position always gets first claim on the
+decode budget, fixed it outright: a scripted fast-jump sweep across the
+full fly-through, including repeated runs that deliberately jump far
+ahead of any plausible decode-ahead window, now shows zero lores-fallback
+draws. The ±2-frame wording in the original brief ("never show lores once
+hi-res exists within ±2 frames") was read the first time as a search
+*ceiling*; it is a *floor*, and the neighbor search in `bitmapFor()` was
+widened to a ~1-second radius (24 frames) accordingly, with the priority
+fix above being what actually keeps that search from being needed in the
+first place during normal scrolling.
+
+Real-GPU measurement (Browser pane, not Playwright/SwiftShader) on a
+desktop viewport doing a full top-to-bottom sweep in 2 seconds: average
+frame time 18.6ms, worst 64.6ms (first-frame decode warm-up), 9 of 123
+frames over 1.5x vsync, one long task over 50ms (63ms, same warm-up), and
+zero lores-fallback draws across 112 draws spanning 176 distinct frames
+shown. A true continuous-scroll trace at a phone viewport size could not
+be captured in this automated session: the Browser pane's tab is
+background-throttled by Chromium to roughly one `requestAnimationFrame`
+tick per second whenever it isn't the one actually composited to a real
+display, which starves the same rAF-driven animation loop under test
+regardless of the code's own performance. Phone-tier correctness (zero
+misses, no console errors, correct frame selection) was confirmed by
+direct position checks instead.
+
+**A real, unrelated 404 turned up during this round's rebuild and was
+fixed in passing.** `templates/flight.html` preloaded
+`flight/frame-0000.webp` by a hardcoded filename; the format switch to
+AVIF left that preload 404ing even though the real poster loaded fine
+through the manifest-driven `<img>` tag. Fixed by having `/flight` read
+the poster filename out of `manifest.json` (as every other reference to
+a frame file already does) and passing it to the template, rather than
+hardcoding an extension a future format change would break again.
+
+## 2026-09-30: Round 5, "Inside the evidence": write/publish ending, no grade, three frame tiers
 
 **The closing beat changes again.** Round 3 and round 4's checkpoint both
 still ended the sequence on the lab/chemical-mixing footage. Direct

@@ -35,7 +35,15 @@
   "use strict";
 
   var HIRES_CONCURRENCY = 6;
-  var HIRES_KEEP = 90; // decoded ImageBitmaps held at once; the rest redecode from cached bytes
+  // Decoded ImageBitmaps held at once; the rest redecode from cached bytes
+  // on demand (fast: no network, just createImageBitmap on an already-
+  // downloaded blob). Set once the manifest's real width/height/fps are
+  // known (see computeHiresKeep below): the raw bitmap size varies by
+  // tier (phone frames are a third the pixels of the 2560 tier), and the
+  // frame count per second of footage now varies by fps too, so a single
+  // constant tuned for the old 9fps/1920px baseline would either waste
+  // memory on a small tier or starve a large one.
+  var HIRES_KEEP = 90;
 
   // Three frame tiers, chosen once at load. "large" gives a genuinely wide
   // desktop viewport a real 2560px source instead of the 1920 tier
@@ -159,10 +167,18 @@
   /* ---- high-res tier: bytes preloaded for all frames, decoded on a window */
 
   var hiresBlobs = new Array(0);   // index -> Blob, once downloaded, kept forever (~10MB total)
-  var hiresBitmaps = new Map();    // index -> ImageBitmap, bounded LRU
-  var hiresOrder = [];             // insertion order, for eviction
+  var hiresBitmaps = new Map();    // index -> ImageBitmap, bounded by HIRES_KEEP
   var hiresLoaded = 0;
   var hiresTotal = 0;
+
+  // One frame's raw decoded size (RGBA), used both to size HIRES_KEEP and
+  // to pick a sane idle-decode budget. Set once the manifest is read.
+  function computeHiresKeep(width, height, fps) {
+    var sizeRatio = (width * height) / (1920 * 1080);
+    var fpsRatio = (fps || 9) / 9;
+    var cap = variant === "phone" ? 140 : 220;
+    return Math.max(60, Math.min(cap, Math.round(90 * Math.sqrt(fpsRatio / Math.max(0.1, sizeRatio)))));
+  }
 
   function hiresUrl(i) {
     return section.dataset.frames + "/" + manifest.pattern.replace("%04d", pad(i));
@@ -197,17 +213,28 @@
     });
   }
 
+  // Distance-based, not insertion-order: a stage-ahead idle decode can fill
+  // the map with frames far from where the reader actually is, and FIFO
+  // eviction would throw away whichever of those happened to be decoded
+  // first rather than whichever is actually farthest from the scroll
+  // position. Never evicts the frame currently on screen.
   function evictHiresIfNeeded() {
-    while (hiresOrder.length > HIRES_KEEP) {
-      var old = hiresOrder.shift();
-      if (old === Math.round(displayedFrame)) { hiresOrder.push(old); continue; }
-      var b = hiresBitmaps.get(old);
-      if (b && b.close) b.close();
-      hiresBitmaps.delete(old);
-    }
+    if (hiresBitmaps.size <= HIRES_KEEP) return;
+    var cur = Math.round(displayedFrame);
+    var farthest = -1, farthestDist = -1;
+    hiresBitmaps.forEach(function (_, idx) {
+      if (idx === cur) return;
+      var d = Math.abs(idx - cur);
+      if (d > farthestDist) { farthestDist = d; farthest = idx; }
+    });
+    if (farthest < 0) return;
+    var b = hiresBitmaps.get(farthest);
+    if (b && b.close) b.close();
+    hiresBitmaps.delete(farthest);
   }
 
   var hiresDecoding = new Set(); // indices with a decode already in flight
+  var decodesThisTick = 0;
 
   // Decoding from an already-downloaded Blob is local and fast (no network
   // round trip), so this can happen the moment a frame is wanted rather
@@ -222,9 +249,18 @@
     createImageBitmap(hiresBlobs[i]).then(function (bmp) {
       hiresDecoding.delete(i);
       hiresBitmaps.set(i, bmp);
-      hiresOrder.push(i);
       evictHiresIfNeeded();
     }).catch(function () { hiresDecoding.delete(i); });
+  }
+
+  // Caps how many decodes a single hot-path tick can kick off (point 4: at
+  // most ~2 per frame). Idle-time stage-ahead decoding (scheduleIdleDecode,
+  // below) uses its own separate budget and doesn't count against this.
+  function kickDecode(i) {
+    if (decodesThisTick >= 2) return;
+    if (hiresBitmaps.has(i) || hiresDecoding.has(i) || !hiresBlobs[i]) return;
+    decodesThisTick++;
+    ensureHiresDecoded(i);
   }
 
   /* ---- progress indicator ------------------------------------------------ */
@@ -258,16 +294,25 @@
    * canvas is never simply left showing an old, unrelated frame while the
    * reader has scrolled somewhere else. */
 
+  // How far to widen the search for a sharp stand-in before giving up and
+  // showing the blurry lores copy. +/-2 (point 4's wording) is a floor, not
+  // a ceiling: it guarantees lores never stands in once a hi-res frame is
+  // that close, but during a fast flick the exact frame can be dozens of
+  // indices from whatever is already decoded. A sharp neighbour from the
+  // same clip beats a blurry exact frame, so keep searching out to about a
+  // second of footage before conceding to lores.
+  var HIRES_FALLBACK_RADIUS = 24;
+
   function bitmapFor(i) {
     var hi = hiresBitmaps.get(i);
     if (hi) return hi;
-    ensureHiresDecoded(i); // kick off a decode for next time
-    // A sharp neighbour 1-3 frames away looks far better than a blurry
-    // 240px lores copy of the exact frame, so prefer it while i decodes.
-    for (var d = 1; d <= 3; d++) {
-      var a = hiresBitmaps.get(i - d) || hiresBitmaps.get(i + d);
-      if (a) return a;
-    }
+    kickDecode(i); // kick off a decode for next time, budget permitting
+    var best = null, bestDist = Infinity;
+    hiresBitmaps.forEach(function (bmp, idx) {
+      var d = Math.abs(idx - i);
+      if (d <= HIRES_FALLBACK_RADIUS && d < bestDist) { bestDist = d; best = bmp; }
+    });
+    if (best) return best;
     if (lores[i]) return lores[i];
     return null;
   }
@@ -289,30 +334,50 @@
     return null;
   }
 
-  var lastDrawnIndex = -1;
-  var lastDrawnBmp = null;
+  var lastB0 = null, lastB1 = null, lastT = -1;
+  var hasDrawn = false;
 
-  function draw(i, force) {
-    var found = nearestAvailable(i);
-    if (!found) { window.__flightStats.misses++; return; }
-    // Redraw when the bitmap changes too, not only the index: otherwise a
-    // hi-res frame that finishes decoding after its lores stand-in was drawn
-    // never replaces it, and the canvas stays blurry until the next scroll.
-    if (found.index === lastDrawnIndex && found.bmp === lastDrawnBmp && !force) return;
-    if (found.index !== i) window.__flightStats.misses++;
-    lastDrawnIndex = found.index;
-    lastDrawnBmp = found.bmp;
-    window.__flightStats.draws++;
-    window.__flightStats.seen[found.index] = 1;
-
-    var bmp = found.bmp;
+  // focusX lets a mobile crop follow the subject instead of always
+  // centring, which is what loses the phone at narrow widths.
+  function drawOne(bmp, alpha) {
     var cw = canvas.width, ch = canvas.height;
     var scale = Math.max(cw / bmp.width, ch / bmp.height);
     var dw = bmp.width * scale, dh = bmp.height * scale;
-    // focusX lets a mobile crop follow the subject instead of always
-    // centring, which is what loses the phone at narrow widths.
     var fx = currentFocusX();
+    ctx.globalAlpha = alpha;
     ctx.drawImage(bmp, (cw - dw) * fx, (ch - dh) / 2, dw, dh);
+    ctx.globalAlpha = 1;
+  }
+
+  // Draws the continuous scroll position `pos`, not a single frame index:
+  // when pos lands between two decoded frames, both are drawn (the lower
+  // at full opacity, the upper crossfaded in at the fractional part) so
+  // in-between positions look like motion instead of a visible step.
+  function draw(pos, force) {
+    var i0 = Math.max(0, Math.min(manifest.count - 1, Math.floor(pos)));
+    var i1 = Math.min(manifest.count - 1, i0 + 1);
+    var t = i1 === i0 ? 0 : pos - i0;
+
+    var f0 = nearestAvailable(i0);
+    if (!f0) { window.__flightStats.misses++; return; }
+    var f1 = t > 0.004 ? nearestAvailable(i1) : null;
+
+    if (!force && hasDrawn && f0.bmp === lastB0 && (f1 ? f1.bmp : null) === lastB1 &&
+        Math.abs(t - lastT) < 0.004) return;
+
+    if (f0.index !== i0) window.__flightStats.misses++;
+    if (f1 && f1.index !== i1) window.__flightStats.misses++;
+
+    lastB0 = f0.bmp;
+    lastB1 = f1 ? f1.bmp : null;
+    lastT = t;
+    hasDrawn = true;
+    window.__flightStats.draws++;
+    window.__flightStats.seen[f0.index] = 1;
+    if (f1) window.__flightStats.seen[f1.index] = 1;
+
+    drawOne(f0.bmp, 1);
+    if (f1) drawOne(f1.bmp, t);
   }
 
   function sizeCanvas() {
@@ -320,7 +385,7 @@
     var w = canvas.clientWidth, h = canvas.clientHeight;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
-    if (lastDrawnIndex >= 0) draw(lastDrawnIndex, true);
+    if (hasDrawn) draw(displayedFrame, true);
   }
 
   /* ---- the timeline ------------------------------------------------------ */
@@ -330,6 +395,9 @@
   var totalPx = 0;
   var travelPx = 1;
   var isMobile = false;
+  // Read once per layout, not once per tick: section.offsetTop forces a
+  // layout recalc, and the easing loop reads scroll position every frame.
+  var sectionTop = 0;
 
   function beatVh(b) {
     var m = b.mobile || {};
@@ -366,7 +434,9 @@
     });
 
     section.style.setProperty("--flight-height", heightPx + "px");
+    sectionTop = section.offsetTop;
     sizeCanvas();
+    buildStageGroups();
   }
 
   function stageProgress(name, scrollPx) {
@@ -394,6 +464,95 @@
     }
     var secs = row.b.from + (row.b.to - row.b.from) * p;
     return Math.max(0, Math.min(manifest.count - 1, Math.round(secs * manifest.fps)));
+  }
+
+  function beatFrameRange(row) {
+    if (typeof row.b.hold === "number") {
+      var f = row.b.hold < 0 ? manifest.count - 1 : row.b.hold;
+      return [f, f];
+    }
+    var f0 = frameFor(row, 0), f1 = frameFor(row, 1);
+    return f0 < f1 ? [f0, f1] : [f1, f0];
+  }
+
+  // Groups consecutive beats sharing a stage name into one {minF, maxF,
+  // startPx, endPx} span each, so idle decoding (point 4) can target "every
+  // frame this stage and the next one touch" instead of guessing from the
+  // single current frame.
+  var stageGroups = [];
+
+  function buildStageGroups() {
+    stageGroups = [];
+    var cur = null;
+    plan.forEach(function (row) {
+      var range = beatFrameRange(row);
+      if (cur && cur.stage === row.b.stage) {
+        cur.minF = Math.min(cur.minF, range[0]);
+        cur.maxF = Math.max(cur.maxF, range[1]);
+        cur.endPx = row.end;
+      } else {
+        cur = { stage: row.b.stage, minF: range[0], maxF: range[1], startPx: row.start, endPx: row.end };
+        stageGroups.push(cur);
+      }
+    });
+    aheadQueued = null; // force refreshAheadQueue to recompute on next call
+  }
+
+  // requestIdleCallback, or a setTimeout stand-in where it's missing (older
+  // Safari). Either way idle decoding never competes with the hot path.
+  var ric = typeof window.requestIdleCallback === "function"
+    ? window.requestIdleCallback.bind(window)
+    : function (cb) {
+        return setTimeout(function () {
+          cb({ didTimeout: true, timeRemaining: function () { return 0; } });
+        }, 60);
+      };
+
+  var aheadQueue = [];
+  var aheadQueued = null; // last stage-group index the queue was built for
+  var idleScheduled = false;
+
+  // Point 4: "keep the current stage's frames plus the next stage's decoded
+  // ahead of time." Rebuilds the wanted set only when the reader crosses
+  // into a new stage group (cheap to check every scroll update, since most
+  // calls land in the same group as last time and bail immediately).
+  function refreshAheadQueue(scrollPx) {
+    if (!stageGroups.length) return;
+    var idx = 0;
+    for (var i = 0; i < stageGroups.length; i++) {
+      idx = i;
+      if (scrollPx < stageGroups[i].endPx) break;
+    }
+    if (idx === aheadQueued) return;
+    aheadQueued = idx;
+
+    var want = [];
+    function addRange(g) { for (var f = g.minF; f <= g.maxF; f++) want.push(f); }
+    addRange(stageGroups[idx]);
+    if (stageGroups[idx + 1]) addRange(stageGroups[idx + 1]);
+
+    var cur = Math.round(displayedFrame);
+    want.sort(function (a, b) { return Math.abs(a - cur) - Math.abs(b - cur); });
+    aheadQueue = want.filter(function (f) { return !hiresBitmaps.has(f) && !hiresDecoding.has(f); });
+    scheduleIdleDecode();
+  }
+
+  function scheduleIdleDecode() {
+    if (idleScheduled || !aheadQueue.length) return;
+    idleScheduled = true;
+    ric(function (deadline) {
+      idleScheduled = false;
+      var budget = 6; // this slice's own cap, separate from the hot-path per-tick cap
+      while (aheadQueue.length && budget > 0 &&
+             (deadline.didTimeout || deadline.timeRemaining() > 0)) {
+        var f = aheadQueue.shift();
+        if (!hiresBitmaps.has(f) && !hiresDecoding.has(f) && hiresBlobs[f]) {
+          ensureHiresDecoded(f);
+          budget--;
+        }
+      }
+      if (aheadQueue.length) scheduleIdleDecode();
+    }, { timeout: 500 });
   }
 
   // Fade-in/hold/fade-out, computed from a beat's own local progress and its
@@ -519,24 +678,34 @@
   }
 
   /* ---- scroll + a persistent easing loop ---------------------------------
-   * Scroll updates `wantedFrame` (and everything else that should feel
-   * instant: the text panels, the cards, the verdict). A separate rAF loop
-   * eases `displayedFrame` toward it every tick, including between scroll
-   * events, so a fast flick glides across frames instead of jumping. */
+   * The native scroll listener does nothing but set a flag: no DOM read, no
+   * DOM write (point 5). Once per animation frame, `tick` reads scrollY,
+   * recomputes everything that should feel instant (wantedFrame, the text
+   * panels, the cards, the verdict) in `updateFromScroll`, then eases
+   * `displayedFrame` toward `wantedFrame` by a fraction based on real
+   * elapsed time, not a fixed per-tick factor, so motion reads the same at
+   * 60Hz and 120Hz and across frames dropped by other work. */
 
   var lastY = window.scrollY;
   var direction = 1;
   var wantedFrame = 0;
   var displayedFrame = 0;
-  var EASE = 0.35;
+  var scrollDirty = true; // run once at startup even before any scroll event
+  var EASE_TAU_MS = 100; // displayed catches up to ~63% of the gap every tau
+  var MAX_FRAME_STEP = 8; // never skip ahead more than a few frames in one tick
+  var lastTickTime = null;
+  var firstTick = true; // skip the catch-up sweep if the page loads mid-scroll
 
   function onScroll() {
+    scrollDirty = true;
+  }
+
+  function updateFromScroll() {
     var y = window.scrollY;
     direction = y >= lastY ? 1 : -1;
     lastY = y;
 
-    var top = section.offsetTop;
-    var local = Math.max(0, Math.min(totalPx, y - top));
+    var local = Math.max(0, Math.min(totalPx, y - sectionTop));
 
     var row = plan[0];
     for (var i = 0; i < plan.length; i++) {
@@ -548,22 +717,52 @@
 
     wantedFrame = frameFor(row, p);
     paint(row, p, local);
+    refreshAheadQueue(local);
   }
 
-  function tick() {
+  function tick(now) {
+    if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
+
+    if (firstTick) { firstTick = false; displayedFrame = wantedFrame; }
+
+    var dt = lastTickTime == null ? 16 : Math.max(0, Math.min(200, now - lastTickTime));
+    lastTickTime = now;
+
     var delta = wantedFrame - displayedFrame;
-    if (Math.abs(delta) < 0.05) displayedFrame = wantedFrame;
-    else displayedFrame += delta * EASE;
+    if (Math.abs(delta) < 0.02) {
+      displayedFrame = wantedFrame;
+    } else {
+      var alpha = 1 - Math.exp(-dt / EASE_TAU_MS);
+      var step = delta * alpha;
+      if (step > MAX_FRAME_STEP) step = MAX_FRAME_STEP;
+      else if (step < -MAX_FRAME_STEP) step = -MAX_FRAME_STEP;
+      displayedFrame += step;
+    }
+
+    decodesThisTick = 0;
     var cur = Math.round(displayedFrame);
-    // Decode a small window ahead in the scroll direction (and a little
-    // behind) so frames are already sharp when the reader arrives at them.
+
+    // draw() goes first and gets first claim on this tick's decode budget:
+    // it needs the exact frame(s) on screen right now. A fast flick can
+    // move displayedFrame through dozens of indices per second, and if the
+    // speculative ahead-decode below ran first and spent the whole budget
+    // on frames the reader hasn't reached yet, the frame actually being
+    // shown would never get its own decode kicked off and would sit on the
+    // blurry lores stand-in indefinitely — exactly the "blurry when I go
+    // fast" symptom this ordering fixes.
+    draw(displayedFrame);
+
+    // Whatever budget draw() didn't use goes to a small window ahead in
+    // the scroll direction (and a little behind) so frames are already
+    // sharp by the time the reader arrives, capped at ~2 decode kickoffs
+    // per tick total (point 4).
     var dir = delta >= 0 ? 1 : -1;
     for (var k = 1; k <= 6; k++) {
       var ahead = cur + dir * k;
-      if (ahead >= 0 && ahead < manifest.count) ensureHiresDecoded(ahead);
+      if (ahead >= 0 && ahead < manifest.count) kickDecode(ahead);
     }
-    if (cur - dir >= 0 && cur - dir < manifest.count) ensureHiresDecoded(cur - dir);
-    draw(cur);
+    if (cur - dir >= 0 && cur - dir < manifest.count) kickDecode(cur - dir);
+
     requestAnimationFrame(tick);
   }
 
@@ -606,6 +805,7 @@
     if (!manifest.count) throw new Error("empty manifest");
     lores = new Array(manifest.count);
     hiresBlobs = new Array(manifest.count);
+    HIRES_KEEP = computeHiresKeep(manifest.width, manifest.height, manifest.fps);
 
     buildOverlay();
     computeTops();

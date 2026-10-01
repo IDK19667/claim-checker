@@ -5,7 +5,7 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v38";
+const CACHE = "evident-v39";
 const SHELL = [
   "/",
   "/static/style.css",
