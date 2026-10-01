@@ -261,7 +261,13 @@
   function bitmapFor(i) {
     var hi = hiresBitmaps.get(i);
     if (hi) return hi;
-    ensureHiresDecoded(i); // kick off a decode for next time; use lores now
+    ensureHiresDecoded(i); // kick off a decode for next time
+    // A sharp neighbour 1-3 frames away looks far better than a blurry
+    // 240px lores copy of the exact frame, so prefer it while i decodes.
+    for (var d = 1; d <= 3; d++) {
+      var a = hiresBitmaps.get(i - d) || hiresBitmaps.get(i + d);
+      if (a) return a;
+    }
     if (lores[i]) return lores[i];
     return null;
   }
@@ -284,13 +290,18 @@
   }
 
   var lastDrawnIndex = -1;
+  var lastDrawnBmp = null;
 
   function draw(i, force) {
     var found = nearestAvailable(i);
     if (!found) { window.__flightStats.misses++; return; }
-    if (found.index === lastDrawnIndex && !force) return;
+    // Redraw when the bitmap changes too, not only the index: otherwise a
+    // hi-res frame that finishes decoding after its lores stand-in was drawn
+    // never replaces it, and the canvas stays blurry until the next scroll.
+    if (found.index === lastDrawnIndex && found.bmp === lastDrawnBmp && !force) return;
     if (found.index !== i) window.__flightStats.misses++;
     lastDrawnIndex = found.index;
+    lastDrawnBmp = found.bmp;
     window.__flightStats.draws++;
     window.__flightStats.seen[found.index] = 1;
 
@@ -543,7 +554,16 @@
     var delta = wantedFrame - displayedFrame;
     if (Math.abs(delta) < 0.05) displayedFrame = wantedFrame;
     else displayedFrame += delta * EASE;
-    draw(Math.round(displayedFrame));
+    var cur = Math.round(displayedFrame);
+    // Decode a small window ahead in the scroll direction (and a little
+    // behind) so frames are already sharp when the reader arrives at them.
+    var dir = delta >= 0 ? 1 : -1;
+    for (var k = 1; k <= 6; k++) {
+      var ahead = cur + dir * k;
+      if (ahead >= 0 && ahead < manifest.count) ensureHiresDecoded(ahead);
+    }
+    if (cur - dir >= 0 && cur - dir < manifest.count) ensureHiresDecoded(cur - dir);
+    draw(cur);
     requestAnimationFrame(tick);
   }
 

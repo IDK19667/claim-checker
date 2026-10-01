@@ -410,8 +410,12 @@
   .hdr a { padding: 7px 11px; }
   .chapter-zone { top: 64px; left: 12px; min-height: 48px; width: calc(100% - 24px); }
   .chapter p { font-size: 17px; }             /* entry-claim, DESIGN.md */
-  .flight-work { left: 12px; bottom: 12px; width: calc(100% - 24px); gap: 12px; padding: 15px 15px 12px; }
-  .stack li { font-size: 14px; padding: 11px 12px; }
+  /* Keep the footage visible on phones: the panel never takes more than
+     about half the screen; anything beyond that scrolls inside it
+     (overflow-y: auto is already set on the base rule above). */
+  .flight-work { left: 12px; bottom: 12px; width: calc(100% - 24px); max-height: 50svh; gap: 10px; padding: 12px 12px 10px; }
+  .stack { gap: 4px; }
+  .stack li { font-size: 13px; padding: 7px 10px; line-height: 1.25; }
   .stack .g { font-size: 11px; }
   .evidence-bar { height: 18px; }
   /* The panel runs edge to edge at this width, which would otherwise tuck
