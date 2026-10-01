@@ -336,9 +336,16 @@ else:
 # honest (every label comes from a stream event) and legible (a solid panel,
 # no blur, no colour-coded verdict).
 
+import re  # noqa: E402
+
 app_js = (ROOT / "static" / "app.js").read_text()
 flight_css = (ROOT / "static" / "flight.css").read_text()
 style_css = (ROOT / "static" / "style.css").read_text()
+
+_m = re.search(r"var CINEMA_REST_SECOND = ([\d.]+);", flight_js)
+_rest_second = float(_m.group(1)) if _m else None
+beats_master_seconds = (
+    json.loads(beats_path.read_text())["masterSeconds"] if beats_path.exists() else 23.0)
 
 t("the live check has its own panel on the stage",
   'id="cinema-chip"' in flight_tpl and 'id="cinema-claim"' in flight_tpl
@@ -358,17 +365,19 @@ t("the page can drive the footage without a scroll",
   "window.EvidentFlight" in flight_js
   and all(k in flight_js.split("window.EvidentFlight")[1][:900]
           for k in ("enter:", "stage:", "leave:")))
-t("the verdict rests on a lit frame, not on the fade to black",
-  "function cinemaRestPx(" in flight_js
-  and '=== "publish"' in flight_js.split("function cinemaRestPx(")[1][:400])
-t("a cached verdict cuts to the rest frame instead of whipping through "
-  "work that never ran",
-  "totalPx * 0.5" in flight_js.split('name === "end"')[1][:600])
+t("the verdict rests on a frame the beats actually cover, not on the fade "
+  "to black at the end of the sequence",
+  "function cinemaRestPx(" in flight_js and "var CINEMA_REST_SECOND = " in flight_js
+  and _rest_second is not None and _rest_second < beats_master_seconds)
+t("the rest frame is the brightest still frame of the clip, measured",
+  _rest_second is not None and abs(_rest_second - 243 / 24) < 1 / 24)
+t("the verdict is a cut, so the footage never rewinds under it and a cached "
+  "verdict never swoops through work that never ran",
+  "cinema.pos = cinema.target;" in flight_js.split('name === "end"')[1][:900])
 
 # Every footage step is an event off the stream. A timer would be a progress
 # bar that lies: the one thing this screen must not be.
 stream_stages = {m for m in ("search", "query", "found", "weigh", "done")}
-import re  # noqa: E402
 _map = re.search(r"const CINEMA_STAGES = \{(.*?)\n\};", app_js, re.S)
 t("the footage-stage map exists", bool(_map))
 if _map:

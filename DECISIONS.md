@@ -30,18 +30,41 @@ bar that invents motion is the one thing a credibility product must not
 ship; the test suite holds the rule by asserting there is no timer
 anywhere in the controller or the stage handler.
 
-**The verdict rests on frame 525, not frame 551.** The clip fades to black
-over its final beat. Measured mean luminance across the end of the
-sequence: 54 to 55 at frames 500 to 525, 51.7 at 530, 35.8 at 540, 17.8 at
-the last frame. Resting on the last frame put the verdict on a black
-rectangle, which looks like a bug and reads like one. The rest point is
-now the end of the `publish` beat, where there is still a picture.
+**The verdict rests on frame 243, the brightest still frame of the clip.**
+It went to the end of the sequence first, which was wrong twice over: the
+clip fades to black over its final beat (measured mean luminance 17.8 at
+the last frame), and even the lit frames before the fade only reach 55,
+because the closing scene is a dark desk at night. A verdict on a near
+black rectangle looks like a bug and reads like one.
 
-**A cached verdict cuts rather than swoops.** When a verdict comes back
-instantly from the cache, easing from the first beat to the rest frame
-would be a four second whip past every stage of work that never ran. If
-the target is more than half the timeline away, the position snaps. The
-honest move for work that did not happen is a cut.
+Every candidate frame of the two bright stretches was measured on a
+480x270 grey reduction, for mean luminance and for focus (variance of the
+Laplacian):
+
+| stretch | frames | brightest | mean | median sharpness |
+|---|---|---|---|---|
+| library, `archive` | 156 to 283 | 117.6 | 112.7 | ~1060 |
+| notes, `weighing` | 298 to 410 | 108.4 | 102.3 | ~525 |
+| desk, `publish` to the end | 500 to 551 | 55 | falling to 17.8 | n/a |
+
+The library wins on both counts: the notes footage is shallow focus macro
+and inherently soft. Frame 243 (10.125s) is the brightest frame of the
+library and also its sharpest (1428 against a median of 1093), with no
+jump in frame to frame motion around it. It is a daylit corridor with
+windows on one side and stacks on the other, so the sheet lands on a page
+of a bright library rather than on a dark room.
+
+**So the verdict is a cut, not a move.** Frame 243 sits in the `archive`
+beat, which the clip has already gone past by the time the weighing and
+the writing have run. Easing there would rewind the footage under the
+verdict, which reads as a fault. A cached verdict is the same cut seen
+from the other side: it had no search and no reading, so swooping forward
+through four seconds of work that never ran would be a lie. One behaviour
+both ways, which is also less code than the two it replaced: the position
+jumps and the panel arrives on the new shot, the way a cut to a new shot
+works anywhere else. Traced over a cached check, the footage shows two
+distinct frames across 131 animation frames, frame 0 and frame 243, so
+there is no swoop hiding between screenshots.
 
 **The panel is solid, and the footage stays bright.** The live panel and
 the verdict sheet are opaque paper in the same corner and the same fixed

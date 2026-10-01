@@ -928,13 +928,23 @@
   var CINEMA_LOOP_SECONDS = 9;  // one breath, when a step outlasts its clip
   var cinema = { on: false, pos: 0, target: 0, amp: 0, tau: CINEMA_TAU, phase: 0, want: null };
 
-  // Where a verdict rests. Not the last frame of the sequence: the clip fades
-  // out over the beat after this one (measured mean luminance 55 at the end of
-  // the publish beat, 18 at the last frame), and a verdict belongs on the
-  // picture at full brightness rather than on the fade to black.
+  // Where a verdict rests: frame 243, 10.125s in, the brightest frame of the
+  // whole clip that is also still and in focus. Measured mean luminance over
+  // the two candidate stretches, on a 480x270 grey reduction: the library runs
+  // 112 to 118, the notes 101 to 108, the desk at the end of the sequence 55
+  // falling to 18 as it fades out. Frame 243 is the brightest of the library
+  // (117.6) and also its sharpest (variance of the Laplacian 1428, against a
+  // median of 1093), with no jump in frame-to-frame motion around it.
+  var CINEMA_REST_SECOND = 10.125;
+
   function cinemaRestPx() {
     for (var i = 0; i < plan.length; i++) {
-      if (plan[i].b.stage === "publish") return plan[i].end;
+      var b = plan[i].b;
+      if (typeof b.hold === "number") continue;
+      if (CINEMA_REST_SECOND >= b.from && CINEMA_REST_SECOND <= b.to) {
+        var p = (CINEMA_REST_SECOND - b.from) / Math.max(1e-6, b.to - b.from);
+        return plan[i].start + (plan[i].end - plan[i].start) * p;
+      }
     }
     return totalPx;
   }
@@ -942,13 +952,17 @@
   function applyCinemaStage(name) {
     if (!manifest) return;
     if (name === "end") {
+      // The verdict is a cut, not a move. The rest frame is in the library,
+      // which the clip has already gone past by the time the weighing and the
+      // writing have run, and footage rewinding under a verdict reads as a
+      // fault. A cached verdict is the same cut from the other side: it had no
+      // search and no reading, so swooping through four seconds of work that
+      // never ran would be a lie. One behaviour, both ways: the position jumps
+      // and the panel arrives on the new shot.
       cinema.target = cinemaRestPx();
+      cinema.pos = cinema.target;
       cinema.amp = 0;
       cinema.tau = CINEMA_SETTLE_TAU;
-      // From the far side of the timeline this would be a four second whip
-      // past every stage of work that never ran: a cached verdict had no
-      // search and no reading, so the honest move is a cut, not a swoop.
-      if (cinema.target - cinema.pos > totalPx * 0.5) cinema.pos = cinema.target;
       return;
     }
     var span = stageSpans[name];

@@ -410,10 +410,14 @@ Four rules hold it together:
 - **The footage stays at full brightness** around the panel. It is not
   dimmed, scrimmed or desaturated to make room for the words. The words
   make their own room.
-- **The verdict rests on a lit frame.** The clip fades to black over its
-  last beat; the verdict lands at the end of the beat before that, where
-  there is still a picture. Verdicts are not colour coded here either:
-  the stamp on the sheet is ink on paper, exactly as it is on `/checks`.
+- **The verdict rests on the brightest still frame of the clip**, frame
+  243 of the library, measured rather than chosen by eye. The verdict is
+  a **cut** to that frame, not a move: it sits earlier in the sequence
+  than the weighing and the writing, and footage rewinding under a
+  verdict reads as a fault. A cut is also what a cached verdict deserves,
+  since none of the work in between actually ran. Verdicts are not colour
+  coded here either: the stamp on the sheet is ink on paper, exactly as
+  it is on `/checks`.
 
 **Transitions between the three states** (claim, checking, verdict) are
 `transform` and `opacity` only, 300 to 500ms, measured CLS 0. No layout
