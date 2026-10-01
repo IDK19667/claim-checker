@@ -122,16 +122,62 @@ if decoder.exists():
     src = decoder.read_text()
     t("the decode worker transfers the finished bitmap rather than copying it",
       "postMessage" in src and "createImageBitmap" in src and "[bmp]" in src)
-flight_tpl = (ROOT / "templates" / "flight.html").read_text()
+flight_tpl = (ROOT / "templates" / "_flythrough.html").read_text()
 t("the page tells flight.js where the decode worker lives",
   'data-decoder=' in flight_tpl)
+t("the fly-through's own claim fields are real forms, so they work without JS",
+  flight_tpl.count('class="claim-form flight-ask') == 2
+  and flight_tpl.count('action="/" method="get"') == 2)
+t("the poster is set on the stage, so the first screen has a picture "
+  "before any frame is decoded",
+  "--poster:" in flight_tpl)
 flight_js = (ROOT / "static" / "flight.js").read_text()
+t("frames are not downloaded until the page is interactive",
+  "whenInteractive" in flight_js)
+t("a 2g or 3g connection gets the motion tier only",
+  "slowNetwork" in flight_js and "slow-2g" in flight_js)
 t("flight.js keeps a main-thread decode path for browsers without Worker",
   'typeof Worker !== "function"' in flight_js and "MAIN_DECODE_MAX" in flight_js)
 t("the low-res tier is retired after its window rather than drawn forever",
   "LORES_WINDOW_MS" in flight_js and "retireLores" in flight_js)
 t("the freeze limit is 100ms and the stand-in radius is 2 frames",
   "var FREEZE_LIMIT_MS = 100;" in flight_js and "var SUB_RADIUS = 2;" in flight_js)
+
+# ---- the overlay shifts nothing ----------------------------------------------
+# Measured CLS on a phone while scrubbing was 0.3364 when a stage change added
+# and removed rows inside one growing panel. Three cross-faded panels of fixed
+# geometry bring it to 0, so nothing here may go back to toggling layout.
+
+t("the work panel is three cross-faded layers, not one growing panel",
+  flight_tpl.count('class="work-layer flight-chip"') == 3
+  and 'class="work-deck"' in flight_tpl)
+t("a stage change is opacity and visibility, never a row leaving the flow",
+  "function setLayer(" in flight_js
+  and ".hidden = !(" not in flight_js
+  and ".hidden = !stackOn" not in flight_js)
+t("nothing in the work panel is hidden with the hidden attribute",
+  "still-open\" data-on" in flight_tpl
+  and 'class="claim-form flight-ask again" data-on' in flight_tpl)
+t("the skip link rides the pinned stage rather than floating over the "
+  "whole page",
+  flight_tpl.index('class="skip-checker"') > flight_tpl.index('class="flight-stage"')
+  and "position: absolute" in (ROOT / "static" / "flight.css").read_text()
+      .split(".skip-checker {")[1].split("}")[0])
+
+# ---- the fallback stills exist -----------------------------------------------
+# Without these files the reduced-motion and Save-Data path is five broken
+# images, which is the one path a reader cannot work around.
+
+import app as _app  # noqa: E402
+for _s in _app._FLIGHT_STILLS:
+    t(f"the fallback still {_s['file']} is built", (FLIGHT / _s["file"]).exists())
+
+sw = (ROOT / "static" / "sw.js").read_text()
+t("the fly-through's stylesheet and script are shell files now that it is "
+  "the home page",
+  '"/static/flight.css"' in sw and '"/static/flight.js"' in sw)
+t("the frames themselves are never cached by the service worker",
+  'url.pathname.startsWith("/static/flight/")' in sw)
 
 # ---- beats.json --------------------------------------------------------------
 
@@ -204,35 +250,70 @@ if check_path.exists():
     appmod.app.logger.setLevel(logging.ERROR)
     client = appmod.app.test_client()
 
-    r = client.get("/flight")
-    t("/flight responds 200 when check.json and beats.json are present",
+    r = client.get("/")
+    t("the home page responds 200 with the fly-through on it",
       r.status_code == 200, r.status_code)
     body = r.data.decode()
     t("the real claim text appears in the rendered page",
       check["claim"] in body)
     t("the real still-open line appears in the rendered page",
       check["stillOpen"] in body)
-    t("the page is titled for its own function, not the branch's working name",
-      "<title>How a check works" in body)
+    t("the fly-through's canvas is on the home page",
+      'id="flight-canvas"' in body)
 
-    # The failure path: if check.json is temporarily unreadable, the route
-    # must 404, never fabricate a placeholder verdict.
+    # The checker is not something you scroll to find: it is on the same page,
+    # with its own field, and reachable from any scroll position.
+    t("the home page still carries the checker's own hero and field",
+      'id="ask-heading"' in body and 'id="claim-input"' in body)
+    t('"Skip to the checker" is on the page', "Skip to the checker" in body)
+    t("the home page carries the ledger and the latest checks below the footage",
+      'class="ledger' in body or 'id="ask-more"' in body)
+
+    # /flight moved to "/" and the old link has to keep working.
+    r = client.get("/flight")
+    t("/flight redirects permanently to the home page",
+      r.status_code == 301 and r.headers.get("Location", "").endswith("/"),
+      f"{r.status_code} {r.headers.get('Location')}")
+
+    # The checker on its own, for anyone who wants the tool and not the film.
+    r = client.get("/checks")
+    checks_body = r.data.decode()
+    t("/checks responds 200", r.status_code == 200, r.status_code)
+    t("/checks renders the checker without the frame sequence",
+      'id="ask-heading"' in checks_body and 'id="flight-canvas"' not in checks_body)
+
+    t("sitemap.xml lists /checks", b"/checks" in client.get("/sitemap.xml").data)
+    t("llms.txt names both the home page and /checks",
+      b"/checks" in client.get("/llms.txt").data)
+
+    # The failure path: if check.json is temporarily unreadable, the home page
+    # must still serve the checker rather than 500 or invent a check.
     tmp = check_path.with_suffix(".json.bak")
     check_path.rename(tmp)
     try:
-        r = client.get("/flight")
-        t("/flight 404s rather than inventing a check when check.json is missing",
-          r.status_code == 404, r.status_code)
+        r = client.get("/")
+        t("the home page still works when the fly-through is not built",
+          r.status_code == 200 and b'id="claim-input"' in r.data
+          and b'id="flight-canvas"' not in r.data, r.status_code)
     finally:
         tmp.rename(check_path)
 
-    # The front page's own hero is untouched; /flight is reached only
-    # through a quiet link, not by replacing anything on "/".
-    front = client.get("/").data.decode()
-    t("the front page still renders its own hero heading",
-      'id="ask-heading"' in front)
-    t("the front page links to /flight rather than embedding it",
-      'href="/flight"' in front)
+    # A shared result link is a result page, not a 23MB film. Needs a verdict
+    # actually in the cache: without one, "/?q=..." is just the home page, and
+    # asserting against that would be testing nothing.
+    import db as dbmod  # noqa: E402
+    dbmod.init_db()
+    dbmod.put_cached_verdict(
+        "test claim for the flight route", "test AND claim", "complicated",
+        "An explanation.", ["1"],
+        [{"pmid": "1", "title": "T", "journal": "J", "year": 2020,
+          "publication_types": ["Randomized Controlled Trial"], "abstract": "A.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/1/"}],
+        tldr="A takeaway.", still_open="What is still open.")
+    r = client.get("/?q=test+claim+for+the+flight+route")
+    t("a shared result link renders the verdict", b"A takeaway." in r.data)
+    t("a shared result link does not load the frame sequence",
+      b'id="flight-canvas"' not in r.data)
 else:
     print("SKIP check.json / /flight route checks: static/flight/check.json "
           "not exported yet (run scripts/export_flight_check.py)")

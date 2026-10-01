@@ -1,0 +1,133 @@
+{#
+  The fly-through: one real, cached check replayed as scroll-driven footage.
+  Included at the top of the home page ("/"), above the checker itself.
+
+  Everything numeric here comes from static/flight/check.json, which
+  scripts/export_flight_check.py writes out of the verdict cache. There is no
+  invented study, count, grade or verdict anywhere in this file.
+
+  It is never included on a result page: a shared link loaded cold gets a
+  still header instead of a 23MB frame sequence.
+#}
+<section class="flight" id="flight"
+         data-frames="{{ url_for('static', filename='flight') }}"
+         data-beats="{{ url_for('static', filename='flight/beats.json') }}"
+         data-decoder="{{ url_for('static', filename='flight-decoder.js') }}">
+  {# The poster is the first screen's picture until the first frame is decoded:
+     17KB, preloaded in the head, painted before any script runs. #}
+  <div class="flight-stage" style="--poster: url('{{ url_for('static', filename='flight/' + flight.poster) }}')">
+    <canvas id="flight-canvas" aria-hidden="true"></canvas>
+
+    <p class="flight-chip flight-progress" id="flight-progress" hidden>Loading footage &hellip;</p>
+
+    <div class="flight-overlay" id="flight-overlay">
+      <div class="flight-chip chapter-zone">
+        {% for id, text in flight.chapters.items() %}
+        <div class="chapter" id="{{ id }}" data-on="0">
+          <p>{{ text }}</p>
+        </div>
+        {% endfor %}
+      </div>
+
+      {# Three bottom-anchored panels in one corner, cross-faded, never
+         reflowed. Each stage used to add and remove rows inside a single
+         growing panel, which moved whatever was already on screen: real,
+         measurable layout shift (CLS 0.34 on a phone while scrubbing). Every
+         stage change here is opacity and visibility only, so the measured
+         CLS is 0 at load and while scrolling. See DECISIONS.md. #}
+      <div class="flight-work" data-stage="claim">
+        <div class="work-deck">
+
+          <div class="work-layer flight-chip" data-layer="claim">
+            <div class="claim-card">
+              <q>{{ flight.check.claim }}</q>
+            </div>
+
+            {# Action and method are real, so this works with no JavaScript at
+               all. With JavaScript, app.js intercepts it and runs the same
+               streamed check the main form runs. #}
+            <form class="claim-form flight-ask" action="/" method="get">
+              <label class="sr-only" for="flight-q">Paste a health claim</label>
+              <input type="text" id="flight-q" name="q" maxlength="500"
+                     placeholder="Paste a health claim" autocomplete="off">
+              <button type="submit">Check it</button>
+            </form>
+          </div>
+
+          <div class="work-layer flight-chip" data-layer="work">
+            <p class="query-line">
+              <span>Searched PubMed for</span>
+              <code>{{ flight.check.query }}</code>
+            </p>
+
+            <p class="counter">0 of {{ flight.check.studies|length }} studies read</p>
+
+            <ul class="stack">
+              {% for s in flight.check.studies %}
+              <li data-tier="{{ s.tier }}" data-in="0" data-graded="0">
+                <span class="t">{{ s.title }}</span>
+                <span class="g">{{ s.label }}{% if s.year %}, {{ s.year }}{% endif %}</span>
+              </li>
+              {% endfor %}
+            </ul>
+
+            <div class="evidence-bar" data-on="0" role="img"
+                 aria-label="{% for m in flight.check.snapshot.mix %}{{ m.count }} {{ m.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
+              {% for m in flight.check.snapshot.mix %}
+              <span data-tier="{{ m.tier }}" style="width: {{ m.percent }}%"></span>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="work-layer flight-chip" data-layer="verdict">
+            <p class="verdict-word" data-on="0">It&rsquo;s complicated.</p>
+
+            <div class="still-open" data-on="0">
+              <b>Still open</b>
+              {{ flight.check.stillOpen }}
+            </div>
+
+            <form class="claim-form flight-ask again" data-on="0" action="/" method="get">
+              <label class="sr-only" for="flight-q2">Now check yours</label>
+              <input type="text" id="flight-q2" name="q" maxlength="500"
+                     placeholder="Now check yours" autocomplete="off">
+              <button type="submit">Check it</button>
+            </form>
+          </div>
+
+        </div>
+
+        <p class="flight-chip flight-note">
+          Illustrative footage. A real check, replayed,
+          {{ flight.check.checkedAt_long }}. Not medical advice.
+          {% if flight.credits %}{% for c in flight.credits %}{{ c.credit }} {% endfor %}{% endif %}
+        </p>
+      </div>
+    </div>
+
+    {# Inside the pinned stage, so it is on screen at every scroll position
+       and on every stage of the footage, and stops being there the moment
+       the footage ends and the checker itself is what you are looking at.
+       No script decides this: the stage is sticky, the link rides it. #}
+    <a class="skip-checker" href="#ask">Skip to the checker</a>
+
+    {# Shown instead of the canvas under reduced motion, Save-Data, or a
+       failed sequence. The four stages, in normal page flow. #}
+    <div class="stills">
+      <div class="after"><div class="inner">
+        {% for still in flight.stills %}
+        <figure>
+          <img src="{{ url_for('static', filename='flight/' + still.file) }}"
+               width="960" height="540" alt="{{ still.alt }}" loading="lazy" decoding="async">
+          <figcaption>{{ still.caption }}</figcaption>
+        </figure>
+        {% endfor %}
+        <p class="flight-note" style="position: static; color: var(--ink-3)">
+          Illustrative footage. A real check, replayed, {{ flight.check.checkedAt_long }}.
+          Not medical advice.
+          {% if flight.credits %}{% for c in flight.credits %}{{ c.credit }} {% endfor %}{% endif %}
+        </p>
+      </div></div>
+    </div>
+  </div>
+</section>

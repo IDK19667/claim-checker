@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 load_dotenv()  # must run before verdict.py reads the provider keys
 
 import requests
-from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory
+from flask import (Flask, Response, g, jsonify, redirect, render_template, request,
+                   send_from_directory)
 
 import db
 import evidence
@@ -178,8 +179,32 @@ def _citation(s: dict, relied_on: bool) -> dict:
     return c
 
 
-@app.route("/")
-def index():
+def _flight_context():
+    """
+    The fly-through's own data, or None if it is not built.
+
+    The home page must render without it: a fresh checkout has no frame
+    sequence, and a missing or unreadable check.json is not a reason to
+    serve a 500 or, worse, an invented check. The checker below it is the
+    page's actual job and works either way.
+    """
+    base = os.path.join(app.static_folder, "flight")
+    try:
+        with open(os.path.join(base, "check.json")) as f:
+            check = json.load(f)
+        with open(os.path.join(base, "beats.json")) as f:
+            beats = json.load(f)
+        with open(os.path.join(base, "manifest.json")) as f:
+            poster = json.load(f)["poster"]
+    except (OSError, ValueError):
+        return None
+    d = datetime.fromisoformat(check["checkedAt"])
+    check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
+    return {"check": check, "chapters": beats["chapters"], "stills": _FLIGHT_STILLS,
+            "credits": _FLIGHT_CREDITS, "poster": poster}
+
+
+def _render_home(with_flight: bool):
     claim = _claim_from_query_args()
     preview = None
     cached = None
@@ -210,10 +235,36 @@ def index():
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
+    # The fly-through is the home page's first screen, but never on a result
+    # page: a shared link loaded cold gets a still header rather than a 23MB
+    # frame sequence it did not ask for.
+    flight = _flight_context() if (with_flight and not cached) else None
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
-                           ledger=ledger, latest=latest,
+                           ledger=ledger, latest=latest, flight=flight,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
+
+
+@app.route("/")
+def index():
+    """The fly-through, then the checker, then the ledger and recent checks."""
+    return _render_home(with_flight=True)
+
+
+@app.route("/checks")
+def checks():
+    """
+    The checker on its own, with no footage above it: the page the home
+    page used to be. Same ledger, same recent checks, same everything, for
+    anyone who wants the tool and not the film.
+    """
+    return _render_home(with_flight=False)
+
+
+@app.route("/flight")
+def flight_redirect():
+    """The fly-through moved to the home page. Old links keep working."""
+    return redirect("/", code=301)
 
 
 @app.route("/robots.txt")
@@ -242,7 +293,7 @@ def robots():
 @app.route("/sitemap.xml")
 def sitemap():
     base = _base_url()
-    urls = [(f"{base}/", "1.0"), (f"{base}/privacy", "0.3")]
+    urls = [(f"{base}/", "1.0"), (f"{base}/checks", "0.8"), (f"{base}/privacy", "0.3")]
     for row in db.recent_cached(200):
         urls.append((f"{base}/?q={quote(row['claim_text'])}", "0.7"))
     body = "".join(
@@ -280,7 +331,9 @@ def llms_txt():
         "",
         "## Pages",
         "",
-        f"- [Check a claim]({base}/): the tool itself",
+        f"- [How a check works]({base}/): one real check replayed as footage, "
+        f"with the checker on the same page",
+        f"- [Check a claim]({base}/checks): the tool on its own, no footage",
         f"- [Privacy]({base}/privacy): what is kept, what is sent where, what is never collected",
     ]
     if recent:
@@ -352,13 +405,13 @@ def healthz():
 # because a fabricated verdict is the one thing this product must never show.
 _FLIGHT_STILLS = [
     {"file": "still-1-claim.webp",
-     "alt": "A hand holding a phone, a health claim on its screen.",
+     "alt": "A finger scrolling a phone lying on a desk, its screen lit.",
      "caption": "A claim can reach anyone, anywhere, in a moment."},
     {"file": "still-2-archive.webp",
      "alt": "Rows of bound volumes on library shelves, viewed down the aisle.",
      "caption": "We step back and search the published research, not the internet."},
     {"file": "still-3-weighing.webp",
-     "alt": "A closeup of hands sorting through papers and printed pages on a desk.",
+     "alt": "A researcher at a laboratory bench, working at a computer.",
      "caption": "Each study is weighed, graded by what kind of evidence it is."},
     {"file": "still-4-write.webp",
      "alt": "A hand annotating handwritten research notes on a desk.",
@@ -374,26 +427,6 @@ _FLIGHT_STILLS = [
 # this is empty in practice, but flight.html still renders it when present
 # rather than assuming it will always stay empty.
 _FLIGHT_CREDITS = []
-
-
-@app.route("/flight")
-def flight():
-    base = os.path.join(app.static_folder, "flight")
-    try:
-        with open(os.path.join(base, "check.json")) as f:
-            check = json.load(f)
-        with open(os.path.join(base, "beats.json")) as f:
-            beats = json.load(f)
-        with open(os.path.join(base, "manifest.json")) as f:
-            poster = json.load(f)["poster"]
-    except (OSError, ValueError):
-        return render_template("404.html"), 404
-
-    d = datetime.fromisoformat(check["checkedAt"])
-    check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
-
-    return render_template("flight.html", check=check, chapters=beats["chapters"],
-                           stills=_FLIGHT_STILLS, credits=_FLIGHT_CREDITS, poster=poster)
 
 
 # ---------------------------------------------------------------------

@@ -4,7 +4,94 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-01 (latest): Round 9, the fast-scroll pipeline: a motion tier, a worker pool, and a residency budget that is all or nothing
+## 2026-10-01 (latest): The fly-through becomes the home page, and the overlay stops moving the page under the reader
+
+`/` is the fly-through now. The checker on its own moved to `/checks`, and
+`/flight` is a permanent redirect to `/`. The masthead, the nav, sitemap.xml,
+llms.txt and the service worker shell all name the new pair.
+
+**One page, two routes, one template.** Both routes render `templates/index.html`;
+the fly-through is an included partial (`templates/_flythrough.html`) that
+`app.py` passes a `flight` mapping to, or `None`. Nothing about streaming,
+result rendering, suggest, trending, recent, ClaimReview or the OG card had to
+change, which is the point: the front door gained a first screen, it did not
+gain a second implementation. The partial is omitted whenever a result is
+present, so a shared link loaded cold is still a result page, not a 23MB frame
+sequence. The ledger, the latest checks and the trending list sit below the
+footage on `/` and are unchanged on `/checks`.
+
+**Nothing blocks the claim field.** The first screen is a 17KB poster
+preloaded in the head and painted as the stage's background before any script
+runs; both claim fields are real GET forms, so they work with no JavaScript at
+all. `flight.js` starts its tick immediately but does not ask for a single
+frame until `whenInteractive` fires (load, then an idle callback). A
+`saveData` connection gets no sequence at all, and a 2g or 3g one gets the
+motion tier only: 6MB instead of 23MB.
+
+Measured on a Pixel 5 profile, 4x CPU throttling, 4G (9Mbps down, 85ms RTT),
+five loads each, headed Chromium on a real GPU:
+
+| page | LCP median | LCP worst | CLS | field painted | keystroke lands |
+|---|---|---|---|---|---|
+| before, the front page with no footage (`/checks`) | 676ms | 876ms | 0 | 640ms | 856ms |
+| after, the front page with the fly-through (`/`) | 728ms | 964ms | 0 | 668ms | 1004ms |
+
+Two interactivity numbers, because one would be dishonest. "Field painted" is
+timed inside the page off a rAF: the claim field is in the DOM, laid out and
+painted. "Keystroke lands" is a real key driven from the test harness, so it
+also carries two CDP round trips under 4x throttling; read it as an upper
+bound, not as what a thumb feels. The fly-through costs about 50ms of LCP and
+nothing measurable in layout stability.
+
+**The overlay was moving the page, and now it cannot.** The work panel used to
+be one chip whose rows were added and removed with the `hidden` attribute as
+the stages advanced. Every toggle moved every row that was still on screen.
+Scrubbing the timeline on a phone measured **CLS 0.3364** across three shifts,
+which is a quarter of the way to a failing Core Web Vital from one panel.
+
+It is now three bottom-anchored panels inside a frame of fixed geometry, cross
+faded: claim, work, verdict. The frame pins both its top and its bottom, so its
+height never depends on which stage is showing; each panel is absolutely
+positioned inside it, so a short stage still reads as a short panel in the same
+corner; a panel taller than its frame scrolls inside itself, which moves
+nothing on the page. Every stage change is `opacity` and `visibility`. Measured
+again over six loads with a full scroll through the timeline: **CLS 0.0000**,
+every run.
+
+Two things fell out of that rewrite:
+
+* The study stack holds all eight rows from the first frame of the stage, so a
+  study that has not been read yet is a blank ruled slot rather than nothing.
+  That is what makes the panel's height constant, and it reads as a form
+  filling in, which is what the stage actually is.
+* It exposed a real bug. `paint()` wrote an inline `opacity` on every card each
+  frame, which beat the `[data-in]` rule in the stylesheet, so all eight
+  studies were on screen from the start while the counter under them still
+  said "2 of 8 studies read". Arrival is carried in that inline write now.
+
+**"Skip to the checker" moved inside the pinned stage.** It was `position:
+fixed`, which was right when the fly-through was the whole of `/flight` and
+wrong the moment the page continued underneath: it sat on top of the latest
+checks. Absolutely positioned inside the sticky stage, it is on screen at every
+scroll position and on every stage of the footage, and it stops being there the
+moment the footage ends and the checker itself is what you are looking at. No
+script decides this.
+
+**The reduced-motion fallback was broken and is now built.** `_FLIGHT_STILLS`
+has named five WebP stills since round 5 and not one of them existed: anyone
+with reduced motion or Save-Data got five broken images. `scripts/build_flight_stills.py`
+writes them out of the frame sequence itself, one real frame from the middle of
+each stage, so the fallback cannot drift away from the footage. Two alt texts
+described shots the footage does not contain and were corrected against the
+frames. In that mode the overlay no longer disappears either: it flattens into
+one ordinary block carrying the claim panel and the standing line, so the claim
+field is still on the first screen, with the stills below it. A test now fails
+if any still is missing.
+
+Service worker at `evident-v43`, with `/static/flight.css` and
+`/static/flight.js` added to the shell. The frames stay deliberately uncached.
+
+## 2026-10-01: Round 9, the fast-scroll pipeline: a motion tier, a worker pool, and a residency budget that is all or nothing
 
 **The brief: someone flings the page top to bottom and back as hard as
 they can, on desktop and phone, and every single refresh shows a sharp,

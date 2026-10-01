@@ -118,11 +118,18 @@
   }
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var saveData = navigator.connection && navigator.connection.saveData;
+  var conn = navigator.connection || {};
+  var saveData = !!conn.saveData;
   if (reduced || saveData || !canvas) {
     giveUp(reduced ? "reduced-motion" : saveData ? "save-data" : "no-canvas");
     return;
   }
+
+  // A connection that reports 2g or 3g gets the motion tier and nothing else:
+  // 6MB instead of 23MB, still sharp enough to read at any scroll speed, and
+  // the hi-res tier that a stopped reader would otherwise get is simply not
+  // worth 17MB on a connection like that.
+  var slowNetwork = /^(slow-2g|2g|3g)$/.test(conn.effectiveType || "");
 
   var ctx = canvas.getContext("2d", { alpha: false });
   // Footage plays at full brightness in its own right (no scrim), so sharpness
@@ -692,6 +699,21 @@
         }, 60);
       };
 
+  // "After the page is interactive": the load event has fired and the browser
+  // has reported an idle moment. ric's own 1500ms timeout is the backstop, so a
+  // page that never goes idle still gets its footage.
+  function whenInteractive(fn) {
+    var go = function () {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(fn, { timeout: 1500 });
+      } else {
+        setTimeout(fn, 200);
+      }
+    };
+    if (document.readyState === "complete") go();
+    else window.addEventListener("load", go, { once: true });
+  }
+
   var idleScheduled = false;
 
   // "Pre-decoded into memory after the page goes idle, as much as memory
@@ -765,6 +787,17 @@
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
   function setOn(node, on) { if (node) node.setAttribute("data-on", on ? "1" : "0"); }
 
+  /* A panel that is faded out is also made invisible, so its field cannot be
+     tabbed into and a screen reader does not read three panels at once.
+     `visibility` keeps the box, so this costs no reflow. */
+  function setLayer(name, op) {
+    var node = el.layers && el.layers[name];
+    if (!node) return;
+    var o = clamp01(op);
+    node.style.opacity = String(o);
+    node.style.visibility = o > 0.02 ? "visible" : "hidden";
+  }
+
   function textOpacity(row, p) {
     if (!row.b.chapter) return 0;
     var f = row.b.fade;
@@ -783,23 +816,28 @@
 
     el.work.setAttribute("data-stage", stage);
 
-    if (el.claim) {
-      el.claim.style.opacity = String(stage === "claim" ? tOp : 0);
-      el.claim.hidden = !(stage === "claim" && tOp > 0.02);
-    }
-    if (el.form) el.form.hidden = stage !== "claim";
-
-    if (el.query) {
-      var queryOn = stage === "archive" || stage === "weighing" || stage === "write" || stage === "publish";
-      el.query.style.opacity = String(stage === "archive" ? tOp : (queryOn ? 1 : 0));
-      el.query.hidden = !queryOn;
-    }
-
-    var stackOn = stage === "weighing" || stage === "write" || stage === "publish" || stage === "horizon";
-    if (el.stackWrap) el.stackWrap.hidden = !stackOn;
-
     var weighP = stageProgress("weighing", scrollPx);
     var horizonP = stageProgress("horizon", scrollPx);
+
+    /* Three panels, cross-faded, never reflowed. Nothing here may add or
+       remove a row: a row that leaves the flow moves every row that is still
+       on screen, and that is layout shift a reader can see and a Core Web
+       Vital can measure. Opacity and visibility only. */
+    // A panel belongs to a stage, not to a beat's text fade: the chapter
+    // headline fades with its beat, but the panel carrying the claim field
+    // must not blink out halfway through the stage that owns it. The only
+    // moments with no panel are the four crossfades, which carry no text at
+    // all, and the gap between the work panel leaving and the verdict
+    // arriving.
+    var workOn = stage === "archive" || stage === "weighing"
+      || stage === "write" || stage === "publish";
+    setLayer("claim", stage === "claim" ? 1 : 0);
+    setLayer("work", workOn ? 1
+      : (stage === "horizon" ? 1 - clamp01(horizonP / 0.22) : 0));
+    setLayer("verdict", stage === "horizon" ? clamp01((horizonP - 0.3) / 0.2) : 0);
+
+    var stackOn = stage === "weighing" || stage === "write"
+      || stage === "publish" || stage === "horizon";
 
     var arrived = 0, graded = 0, sorting = 0;
     if (stage === "weighing") {
@@ -823,15 +861,24 @@
       cards[i].setAttribute("data-graded", i < graded ? "1" : "0");
       var shift = ((targetTop[i] || 0) - (originalTop[i] || 0)) * sorting;
       var hide = stage === "horizon" ? clamp01(horizonP * 2.2) : 0;
-      cards[i].style.transform = "translateY(" + shift.toFixed(1) + "px) scaleY(" + (1 - hide) + ")";
-      cards[i].style.opacity = String((1 - hide) * midFade);
+      // Arrival has to be carried here rather than left to the data-in rule:
+      // this inline opacity wins over the stylesheet, so without the factor
+      // every study is on screen from the first frame of the stage while the
+      // counter underneath still says two of eight. A study that has not
+      // arrived yet is a blank slot rather than nothing at all: the stack
+      // holds all eight rows from the start, so the panel never changes
+      // height, and the empty ones read as a form filling in.
+      var inOp = i < arrived ? 1 : 0.26;
+      cards[i].style.transform = "translateY(" + shift.toFixed(1)
+        + "px) scaleY(" + (1 - hide) + ")";
+      cards[i].style.opacity = String((1 - hide) * midFade * inOp);
     }
 
     setOn(el.bar, (stage === "weighing" && weighP > 0.75) || stage === "write" || stage === "publish" || stage === "horizon");
 
     setOn(el.verdict, stage === "horizon" && horizonP > 0.3);
-    if (el.open) el.open.hidden = !(stage === "horizon" && horizonP > 0.55);
-    if (el.again) el.again.hidden = !(stage === "horizon" && horizonP > 0.75);
+    setOn(el.open, stage === "horizon" && horizonP > 0.55);
+    setOn(el.again, stage === "horizon" && horizonP > 0.75);
   }
 
   /* ---- scroll + the deadline loop ----------------------------------------
@@ -984,15 +1031,16 @@
   function buildOverlay() {
     el.work = overlay.querySelector(".flight-work");
     el.chapterZone = overlay.querySelector(".chapter-zone");
-    el.claim = overlay.querySelector(".claim-card");
-    el.form = overlay.querySelector(".claim-form");
-    el.query = overlay.querySelector(".query-line");
     el.counter = overlay.querySelector(".counter");
     el.stackWrap = overlay.querySelector(".stack");
     el.bar = overlay.querySelector(".evidence-bar");
     el.verdict = overlay.querySelector(".verdict-word");
     el.open = overlay.querySelector(".still-open");
     el.again = overlay.querySelector(".again");
+    el.layers = {};
+    Array.prototype.forEach.call(overlay.querySelectorAll(".work-layer"), function (n) {
+      el.layers[n.dataset.layer] = n;
+    });
     el.chapters = {};
     Array.prototype.forEach.call(overlay.querySelectorAll(".chapter"), function (c) {
       el.chapters[c.id] = c;
@@ -1087,14 +1135,21 @@
     // to show immediately. The motion tier comes next because it is what makes
     // a fast scroll possible at all, and it is a third the bytes of the hi-res
     // tier. Hi-res bytes load last, in parallel, for the reader who stops.
-    loadLores();
-    motionStore.preloadBytes().then(function () {
-      scheduleIdlePredecode();
-      return hiresStore.preloadBytes();
-    });
-
     onScroll();
     requestAnimationFrame(tick);
+
+    // Frames start downloading only once the page is interactive. The claim
+    // field is the reason anyone is here, and 23MB of footage queued ahead of
+    // it would make the one control that matters wait on the one thing that
+    // does not. The poster is already painted by then (17KB, preloaded in the
+    // head), so there is something on screen throughout.
+    whenInteractive(function () {
+      loadLores();
+      motionStore.preloadBytes().then(function () {
+        scheduleIdlePredecode();
+        if (!slowNetwork) return hiresStore.preloadBytes();
+      });
+    });
   }).catch(function () {
     giveUp("manifest-failed");
   });

@@ -45,6 +45,13 @@
        does need, so this list must track @font-face exactly. -->
   <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/librefranklin-normal-400-900.woff2') }}" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  {% if flight %}
+  <!-- One image, 17KB, is the whole of the first paint's imagery. The frame
+       sequence is 23MB and does not start loading until the page is
+       interactive, so it can never be what the reader is waiting for. -->
+  <link rel="preload" as="image" href="{{ url_for('static', filename='flight/' + flight.poster) }}" fetchpriority="high" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='flight.css') }}" />
+  {% endif %}
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -61,6 +68,8 @@
       <symbol id="i-ext" viewBox="0 0 20 20"><path d="M11.5 4.5h4v4m0-4-6 6M8.5 5.5h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     </defs>
   </svg>
+
+  {% if flight %}{% include "_flythrough.html" %}{% endif %}
 
   <div class="band">
     <header class="top">
@@ -411,12 +420,13 @@
     <p class="fine">
       Studies from PubMed, U.S. National Library of Medicine. Verdicts written
       by an AI model that reads the abstracts. Nothing you type is tied to you.
-      <a href="/privacy">Privacy</a> &middot;
-      <a href="/flight">See how a check works &rarr;</a>
+      <a href="/privacy">Privacy</a>{% if not flight %} &middot;
+      <a href="/">See how a check works &rarr;</a>{% endif %}
     </p>
   </footer>
 
   {% if result %}<script id="server-result" type="application/json" nonce="{{ csp_nonce }}">{{ result | tojson }}</script>{% endif %}
   <script src="{{ url_for('static', filename='app.js') }}" nonce="{{ csp_nonce }}"></script>
+  {% if flight %}<script src="{{ url_for('static', filename='flight.js') }}" nonce="{{ csp_nonce }}" defer></script>{% endif %}
 </body>
 </html>

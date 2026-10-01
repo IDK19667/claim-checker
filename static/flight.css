@@ -19,6 +19,12 @@
   top: 0;
   height: 100svh;
   overflow: hidden;
+  /* The poster, set per page from the manifest. It is what the first screen
+     shows until the first frame is decoded, and what a reader on a connection
+     that never finishes the sequence keeps. Full brightness, no scrim. */
+  background-image: var(--poster, none);
+  background-size: cover;
+  background-position: center;
 }
 
 #flight-canvas {
@@ -86,17 +92,48 @@
 
 /* ---- the panel that carries everything the checker does ----------------- */
 
+/* The work area is an invisible frame of fixed geometry: top and bottom are
+   both pinned, so its height never depends on which stage is showing. Inside
+   it the deck takes the free row and the standing note sits under it. The
+   panels themselves are the three layers, each bottom-anchored inside the
+   deck, so a short stage reads as a short panel in the same corner and a long
+   one as a tall panel, with nothing on screen ever moving between them. */
 .flight-work {
+  position: absolute;
+  top: 164px;
   bottom: 16px;
   left: 16px;
   width: min(420px, calc(100% - 32px));
-  max-height: calc(100svh - 32px);
+  z-index: 2;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  pointer-events: none;
+}
+
+.work-deck { position: relative; }
+
+.work-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 100%;
   overflow-y: auto;
   display: grid;
   gap: 14px;
   justify-items: stretch;
-  padding: 18px 18px 14px;
+  padding: 18px;
+  border-bottom: 0;
+  pointer-events: auto;
+  /* Set by flight.js: a stage change is a cross-fade, never a reflow. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 220ms linear;
 }
+
+/* Before flight.js runs, the first stage's panel is the one on screen: the
+   claim and its field are usable on the first screen with no script at all. */
+.work-layer[data-layer="claim"] { opacity: 1; visibility: visible; }
 
 
 /* ---- stage 1: the claim ------------------------------------------------- */
@@ -208,7 +245,13 @@
 
 .stack li[data-in="1"] { opacity: 1; transform: translateY(0); }
 
+/* A row that has not been read yet is an empty ruled slot, not a gap: the
+   stack holds every study's place from the start so the panel never resizes,
+   and the title arrives into its slot. */
+.stack li[data-in="0"] .t { opacity: 0; }
+
 .stack .t {
+  transition: opacity 200ms linear;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
@@ -274,6 +317,15 @@
   line-height: 1.45;
 }
 
+/* Inside the verdict panel the three rows reveal in turn, but all three hold
+   their space from the moment the panel appears: the reveal is opacity, so
+   the verdict word does not move when the rest arrives. */
+.still-open,
+.work-layer .again { opacity: 0; transition: opacity 260ms linear; }
+.still-open[data-on="1"],
+.work-layer .again[data-on="1"] { opacity: 1; }
+.work-layer .again[data-on="0"] { visibility: hidden; }
+
 .still-open b {
   display: block;
   font-size: 11px;
@@ -286,16 +338,18 @@
 
 /* ---- always-there furniture -------------------------------------------- */
 
-/* Lives as the last row inside the work panel rather than floating on its
-   own, so it gets the panel's paper background and never needs a scrim to
-   stay legible. */
+/* The standing line sits directly under the deck in its own paper chip, so it
+   is on screen at every stage and through every cross-fade, and so that no
+   panel has to change height to carry it. Borders meet rather than double:
+   this chip's top edge is the rule under whichever panel is showing. */
 .flight-note {
+  position: relative;
   margin: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--rule);
+  padding: 10px 18px 12px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--ink-3);
+  pointer-events: auto;
 }
 
 /* The preload progress indicator. Small, top-centre, gone once loaded. */
@@ -310,10 +364,10 @@
 }
 
 .skip-checker {
-  position: fixed;
+  position: absolute;
   right: 16px;
   bottom: 16px;
-  z-index: 40;
+  z-index: 3;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -376,10 +430,49 @@
 .stills { display: none; }
 
 .no-flight .flight { height: auto; background: var(--paper); }
-.no-flight .flight-stage { position: static; height: auto; }
+.no-flight .flight-stage {
+  position: static;
+  height: auto;
+  overflow: visible;
+  background-image: none;      /* no poster behind a page in normal flow */
+}
 .no-flight #flight-canvas,
-.no-flight .flight-overlay { display: none; }
+.no-flight .flight-progress,
+.no-flight .chapter-zone { display: none; }
 .no-flight .stills { display: block; }
+
+/* The claim field has to be on the first screen here too, so the overlay
+   does not disappear: it flattens into one ordinary block at the top of the
+   section, carrying the claim panel and nothing else. The stages that only
+   make sense while scrubbing become the stills below. */
+.no-flight .flight-overlay { position: static; pointer-events: auto; }
+.no-flight .flight-work {
+  position: static;
+  display: block;
+  width: auto;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 48px 20px 0;
+}
+.no-flight .work-deck { position: static; }
+.no-flight .work-layer:not([data-layer="claim"]) { display: none; }
+/* The standing line comes with the panel, so the stills do not repeat it. */
+.no-flight .stills .flight-note { display: none; }
+.no-flight .work-layer[data-layer="claim"] {
+  position: static;
+  opacity: 1;
+  visibility: visible;
+  max-height: none;
+  overflow: visible;
+}
+/* With no pinned stage to ride, the link is simply the first thing in the
+   section, in normal flow, where it is still the way out of the stills. */
+.no-flight .skip-checker {
+  position: static;
+  display: flex;
+  width: max-content;
+  margin: 20px auto 0;
+}
 
 .stills figure {
   margin: 0 0 40px;
@@ -406,6 +499,8 @@
   .stack li,
   .verdict-word,
   .evidence-bar,
+  .work-layer,
+  .still-open,
   .hdr { transition: none; }
 }
 
@@ -414,10 +509,13 @@
   .hdr a { padding: 7px 11px; }
   .chapter-zone { top: 64px; left: 12px; min-height: 48px; width: calc(100% - 24px); }
   .chapter p { font-size: 17px; }             /* entry-claim, DESIGN.md */
-  /* Keep the footage visible on phones: the panel never takes more than
-     about half the screen; anything beyond that scrolls inside it
-     (overflow-y: auto is already set on the base rule above). */
-  .flight-work { left: 12px; bottom: 12px; width: calc(100% - 24px); max-height: 50svh; gap: 10px; padding: 12px 12px 10px; }
+  /* Keep the footage visible on phones: the deck starts at the halfway mark,
+     so no panel can take more than about half the screen; a panel taller than
+     that scrolls inside itself (overflow-y: auto on .work-layer), which moves
+     nothing on the page. */
+  .flight-work { left: 12px; bottom: 12px; top: 50svh; width: calc(100% - 24px); }
+  .work-layer { gap: 10px; padding: 12px; }
+  .flight-note { padding: 8px 12px 10px; }
   .stack { gap: 4px; }
   .stack li { font-size: 13px; padding: 7px 10px; line-height: 1.25; }
   .stack .g { font-size: 11px; }
@@ -425,7 +523,7 @@
   /* The panel runs edge to edge at this width, which would otherwise tuck
      its last line under the fixed skip-checker button sitting in the same
      corner: reserve that corner's width so the note wraps clear of it. */
-  .flight-note { padding-right: 108px; }
+  .flight-note { padding-right: 156px; }
   .skip-checker { right: 12px; bottom: 12px; font-size: 12px; padding: 10px 12px; }
   .flight-progress { top: 64px; font-size: 10px; padding: 5px 10px; }
 }

@@ -94,9 +94,18 @@ function setTitle(result) {
     ? `${VERDICT_LABELS[result.verdict] || result.verdict}: \u201c${result.claim}\u201d \u00b7 Evident`
     : DEFAULT_TITLE;
 }
+const flightSection = $("flight");
 function show(section) {
   for (const s of [askSection, resultSection, errorSection]) s.hidden = s !== section;
   askMore.hidden = section !== askSection;
+  // The fly-through belongs to the home page's resting state. A result or an
+  // error replaces it rather than sitting five screens below it, and the
+  // resize tells flight.js to recompute its scroll map for the page's new
+  // height rather than keeping offsets from a layout that no longer exists.
+  if (flightSection && flightSection.hidden !== (section !== askSection)) {
+    flightSection.hidden = section !== askSection;
+    window.dispatchEvent(new Event("resize"));
+  }
   document.body.classList.toggle("view-ask", section === askSection);
   if (section !== resultSection) { $("bar-sticky").hidden = true; document.body.classList.remove("has-bar"); }
   window.scrollTo(0, 0);
@@ -505,6 +514,20 @@ async function check(claim) {
 $("cancel-btn")?.addEventListener("click", () => { if (controller) controller.abort(); });
 
 form.addEventListener("submit", (e) => { e.preventDefault(); check(input.value); });
+
+// The fly-through carries its own claim fields, on the first screen and at the
+// end of the footage. They are real GET forms so they work with no JavaScript
+// at all; with JavaScript they run the same streamed check this page runs,
+// rather than reloading into a server-rendered result.
+for (const f of document.querySelectorAll(".flight-ask")) {
+  f.addEventListener("submit", (e) => {
+    const field = f.querySelector("input[name=q]");
+    if (!field || !field.value.trim()) return;   // let the browser's own validation speak
+    e.preventDefault();
+    input.value = field.value;
+    check(field.value);
+  });
+}
 
 const clearBtn = $("clear-btn");
 input.addEventListener("input", () => { clearBtn.hidden = !input.value; askSuggest(); });
