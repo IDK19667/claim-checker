@@ -314,9 +314,129 @@ if check_path.exists():
     t("a shared result link renders the verdict", b"A takeaway." in r.data)
     t("a shared result link does not load the frame sequence",
       b'id="flight-canvas"' not in r.data)
+    # A link opened cold is a page about one claim, not a film. It gets the
+    # closing still as a header image, roughly 14KB where the sequence is 23MB.
+    last_still = _app._FLIGHT_STILLS[-1]["file"]
+    t("a shared result link carries the closing still as a header image",
+      b'class="result-still"' in r.data and last_still.encode() in r.data,
+      last_still)
+    t("the header still is decorative, so a screen reader skips it",
+      b'alt=""' in r.data.split(b'class="result-still"')[1][:300])
+    t("the header still is small enough to be a header image",
+      (FLIGHT / last_still).stat().st_size < 60_000,
+      (FLIGHT / last_still).stat().st_size)
 else:
     print("SKIP check.json / /flight route checks: static/flight/check.json "
           "not exported yet (run scripts/export_flight_check.py)")
+
+# ---- the footage keeps running through checking and the result ---------------
+# Part 3: a check does not cut away to a paper screen. The clip stays on, the
+# live panel takes the replay panel's place, and the verdict lands on a solid
+# sheet over the last lit frame. These tests hold the rules that make that
+# honest (every label comes from a stream event) and legible (a solid panel,
+# no blur, no colour-coded verdict).
+
+app_js = (ROOT / "static" / "app.js").read_text()
+flight_css = (ROOT / "static" / "flight.css").read_text()
+style_css = (ROOT / "static" / "style.css").read_text()
+
+t("the live check has its own panel on the stage",
+  'id="cinema-chip"' in flight_tpl and 'id="cinema-claim"' in flight_tpl
+  and 'id="cinema-steps"' in flight_tpl)
+t("arriving steps are announced to a screen reader",
+  'id="cinema-steps"' in flight_tpl
+  and 'aria-live="polite"' in flight_tpl.split('id="cinema-steps"')[1][:120])
+t("the live panel carries 'Not medical advice', because the replay's own "
+  "note is faded out while a check runs",
+  "Not medical advice." in flight_tpl.split('class="cinema-note"')[1][:200])
+t("the live panel is shown by a data attribute, never by the hidden "
+  "attribute, so it cross-fades instead of popping",
+  'id="cinema-chip" data-on="0"' in flight_tpl
+  or 'data-on="0"' in flight_tpl.split('id="cinema-chip"')[1][:60])
+
+t("the page can drive the footage without a scroll",
+  "window.EvidentFlight" in flight_js
+  and all(k in flight_js.split("window.EvidentFlight")[1][:900]
+          for k in ("enter:", "stage:", "leave:")))
+t("the verdict rests on a lit frame, not on the fade to black",
+  "function cinemaRestPx(" in flight_js
+  and '=== "publish"' in flight_js.split("function cinemaRestPx(")[1][:400])
+t("a cached verdict cuts to the rest frame instead of whipping through "
+  "work that never ran",
+  "totalPx * 0.5" in flight_js.split('name === "end"')[1][:600])
+
+# Every footage step is an event off the stream. A timer would be a progress
+# bar that lies: the one thing this screen must not be.
+stream_stages = {m for m in ("search", "query", "found", "weigh", "done")}
+import re  # noqa: E402
+_map = re.search(r"const CINEMA_STAGES = \{(.*?)\n\};", app_js, re.S)
+t("the footage-stage map exists", bool(_map))
+if _map:
+    pairs = re.findall(r"(\w+):\s*\"(\w+)\"", _map.group(1))
+    keys, vals = {k for k, _ in pairs}, {v for _, v in pairs}
+    t("every step the footage follows is a real stream stage, plus the "
+      "synthetic 'start' fired when the claim is submitted",
+      keys <= stream_stages | {"start"}, keys - stream_stages - {"start"})
+    t("every stage the footage is sent to is a real beat, or the end",
+      vals <= {"claim", "transition", "archive", "weighing", "write",
+               "publish", "horizon", "end"}, vals)
+_cinema_obj = app_js.split("const cinema = {")[1].split("\n};")[0]
+t("nothing in the cinema controller runs on a timer",
+  "setTimeout" not in _cinema_obj and "setInterval" not in _cinema_obj)
+t("the live panel is revealed synchronously, so a fast check cannot leave "
+  "the checking panel sitting on top of the verdict",
+  "requestAnimationFrame" not in _cinema_obj)
+_stage_fn = app_js.split("function handleStage(")[1].split("\n}")[0]
+t("step labels are written from the stream event, never from a clock",
+  "setTimeout" not in _stage_fn and "setInterval" not in _stage_fn
+  and "cinema.at(ev.stage)" in _stage_fn)
+t("a long step holds or loops the clip rather than running past the work",
+  "CINEMA_LOOP_SECONDS" in flight_js and "Math.cos" in flight_js)
+
+# Legibility. The panel is solid: footage stays at full brightness around it,
+# but nothing readable sits on moving pictures.
+t("no backdrop blur anywhere in the shipped stylesheets",
+  "backdrop-filter:" not in flight_css and "backdrop-filter:" not in style_css)
+t("the verdict sheet is opaque paper, not a tint over the footage",
+  "background: var(--paper)" in
+  flight_css.split('[data-cinema="result"] #result,')[1][:600])
+t("the verdict is never colour-coded, in cinema as anywhere else",
+  "[data-verdict" not in flight_css)
+
+# Motion. Only transform and opacity, so a transition cannot shift layout.
+_props = set()
+for decl in re.findall(r"transition:\s*([^;]+);", flight_css, re.S):
+    # cubic-bezier(.22,.61,.36,1) has commas of its own, and they are not
+    # property separators.
+    decl = re.sub(r"\([^)]*\)", "", decl)
+    for part in decl.split(","):
+        word = part.strip().split()[0] if part.strip() else ""
+        if word and not word[0].isdigit():
+            _props.add(word)
+t("transitions animate opacity and transform only",
+  _props <= {"opacity", "transform", "visibility", "none"}, sorted(_props))
+_sheet = re.search(r"@keyframes sheet-in \{(.*?)\n\}", flight_css, re.S)
+t("the sheet arrives on opacity and transform, with no layout property",
+  bool(_sheet) and set(re.findall(r"(\w[\w-]*):", _sheet.group(1)))
+  <= {"opacity", "transform"},
+  _sheet.group(1) if _sheet else "missing")
+
+# Reduced motion: the same panel, the same copy, the same flow, nothing plays.
+_rm = flight_css.split("@media (prefers-reduced-motion: reduce)")[1]
+t("reduced motion stills the live panel and the replay overlay",
+  ".cinema-chip" in _rm and ".flight-overlay" in _rm)
+t("reduced motion lands the verdict sheet without an entrance",
+  'animation: none' in _rm and '[data-cinema="result"]' in _rm)
+t("reduced motion keeps a picture behind the panel rather than a blank "
+  "stage: the stage still paints its poster",
+  "--poster" in flight_css.split("[data-cinema] .flight-stage")[1][:400])
+
+t("the skip link stays through checking and steps aside for the verdict, "
+  "which carries its own way out",
+  '[data-cinema="result"] .skip-checker' in flight_css
+  and '[data-cinema="error"] .skip-checker' in flight_css)
+t("an error lands on the same sheet as a verdict, with the same way out",
+  '[data-cinema="error"] #error' in flight_css)
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

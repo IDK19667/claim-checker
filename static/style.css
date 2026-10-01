@@ -315,6 +315,22 @@ body.view-ask #ask .primary {
   padding: 13px 0; cursor: pointer; font-family: inherit;
   font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink);
 }
+/* A shared result opens cold, with no footage. One still of the fly-through's
+   last stage stands in for it: the same world, 14KB, and it ends at the top of
+   the report rather than playing. It bleeds to the column edge like the field
+   under it, and the two meet with no gap, so they read as one header. */
+.result-still {
+  margin: 14px calc(-1 * var(--gutter)) 0;
+  background: var(--deep);
+}
+/* A band, not a picture: capped so the verdict is still what you land on, and
+   cropped rather than letterboxed so the cap costs no empty space. */
+.result-still img {
+  display: block; width: 100%; height: auto;
+  max-height: 34vh; object-fit: cover;
+}
+.result-still + .report-head { margin-top: 0; }
+
 /* The field: a dark ground carrying the claim, the verdict and the evidence
    the verdict rests on. Bleeds to the edge of the column, not the viewport,
    so it can never introduce a horizontal scrollbar. */
@@ -667,6 +683,10 @@ body.view-ask .band .wrap { padding-bottom: 6px; }
     column-gap: 40px; align-items: start;
   }
   body:not(.view-ask) #result > .back { grid-column: 1 / -1; }
+  /* The still heads the verdict column, not the whole grid. The studies
+     column below is pinned from row 2 all the way down, so a band spanning
+     both columns has no row to sit in and gets placed underneath the lot. */
+  body:not(.view-ask) #result > .result-still { grid-column: 1; margin-inline: 0; }
   body:not(.view-ask) #result > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 0; }
   .study { margin-inline: 0; padding-inline: 0; }
 }

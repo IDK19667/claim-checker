@@ -4,7 +4,104 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-01 (latest): The fly-through becomes the home page, and the overlay stops moving the page under the reader
+## 2026-10-01 (latest): The footage keeps running through checking and the verdict
+
+The fly-through used to end where the product began. Submitting a claim
+tore the film down and dropped the reader onto the plain paper checking
+screen, then onto the plain paper result screen. Two worlds, one page, and
+the join was the most interesting moment in the product.
+
+**Now it is one continuous experience.** The clip stays on screen from the
+first frame to the verdict. While a check runs it is driven by the stream
+instead of the scroll; when the verdict arrives it settles onto a lit
+frame and the result opens on a solid sheet over it. The plain-paper result
+screen is gone from `/`. It is unchanged on `/checks` and on a shared link,
+which are the two places a reader asked for the tool rather than the film.
+
+**The footage follows events, never a clock.** `app.js` maps the stream's
+own stages onto beats of the timeline: `start` to the claim beat, `query`
+to the archive, `found` to the weighing, `weigh` to the writing, `done` to
+the rest frame. A stage the map does not know is ignored rather than
+guessed at. The clip eases toward its target on an exponential approach
+(`CINEMA_TAU` 0.62s), and if a step outlasts its stretch of footage it
+holds, then breathes **backwards** over nine seconds and returns, so the
+picture can never show a step before the event that caused it. A progress
+bar that invents motion is the one thing a credibility product must not
+ship; the test suite holds the rule by asserting there is no timer
+anywhere in the controller or the stage handler.
+
+**The verdict rests on frame 525, not frame 551.** The clip fades to black
+over its final beat. Measured mean luminance across the end of the
+sequence: 54 to 55 at frames 500 to 525, 51.7 at 530, 35.8 at 540, 17.8 at
+the last frame. Resting on the last frame put the verdict on a black
+rectangle, which looks like a bug and reads like one. The rest point is
+now the end of the `publish` beat, where there is still a picture.
+
+**A cached verdict cuts rather than swoops.** When a verdict comes back
+instantly from the cache, easing from the first beat to the rest frame
+would be a four second whip past every stage of work that never ran. If
+the target is more than half the timeline away, the position snaps. The
+honest move for work that did not happen is a cut.
+
+**The panel is solid, and the footage stays bright.** The live panel and
+the verdict sheet are opaque paper in the same corner and the same fixed
+geometry as the replay's own panels, cross faded with them. No
+`backdrop-filter` anywhere: blur is a way of making text legible by
+damaging the picture, and the picture is the product here. The footage is
+not dimmed or scrimmed to make room either. `DESIGN.md` now bans glass
+over the footage explicitly, because that is exactly where the temptation
+is.
+
+**Verdicts are still not colour coded.** Nothing about the sheet's
+treatment changes with the verdict. The stamp is ink on paper over the
+footage exactly as it is on paper, and the test suite asserts `flight.css`
+contains no verdict-keyed selector at all.
+
+**The footer is a second chip, not part of the sheet.** Joining "Not
+medical advice" to the bottom of the result panel produced a doubled
+border and shadow seam. It sits below as its own small panel, which is the
+fly-through's existing language: each piece of text in its own solid
+block.
+
+**The skip link stays through checking and steps aside for the verdict.**
+During a check it cancels the request in flight and returns to the
+checker, which is a better way out than a link that abandons it silently.
+Once a sheet is on screen the sheet carries its own way out ("Check
+another claim", "Try again"), and on a phone the floating link would sit
+on top of it.
+
+**A fast check used to land behind the checking panel.** The live panel
+was revealed inside a `requestAnimationFrame` callback. A backgrounded tab
+does not run animation frames, so on a cached verdict the callback fired
+after the check had finished and after the panel had been told to fade
+out, putting the checking panel back on top of the result. The attribute
+is now set synchronously; the panel is never `display:none`, so its faded
+state is already computed and the transition still has two ends to run
+between. A test asserts no animation frame in the controller.
+
+**Reduced motion gets the same flow, not a lesser one.** With no rig
+(reduced motion, Save-Data, or a sequence that never loaded) the stage
+holds its poster still and everything else is identical: same panel, same
+step lines off the same stream, same sheet, same way out. Nothing plays.
+
+**A shared link opens on paper.** `/?q=...` with a cached verdict renders
+server side with the closing still as a decorative header image
+(`still-5-publish.webp`, 13.8KB, `alt=""`) instead of the 23MB sequence.
+The verdict, the reasoning, the studies and the ClaimReview markup are all
+in the HTML before any script runs, as they have always been.
+
+**One fix outside the feature.** `scripts/qa.mjs` counted `alt=""` as a
+missing alt and failed the result page. An empty alt is the correct markup
+for a decorative image; the detector now flags a missing `alt` attribute
+rather than an intentional empty one. QA passes at both widths in both
+schemes.
+
+Instrumentation kept on purpose: `window.__flightStats` now carries
+`wanted` (the frame the engine is asking for) and `cinema` (the whole
+cinema state), so "the footage stopped where the check stopped" is
+something to check rather than something to argue about from a screenshot.
+
+## 2026-10-01: The fly-through becomes the home page, and the overlay stops moving the page under the reader
 
 `/` is the fly-through now. The checker on its own moved to `/checks`, and
 `/flight` is a permanent redirect to `/`. The masthead, the nav, sitemap.xml,

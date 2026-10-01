@@ -378,6 +378,61 @@ blindness, and it cannot be mistaken for a verdict.
   Wordmark, one heavy rule, the claim, the verdict reversed out of an ink
   band, the takeaway, the strongest source it leaned on, the colophon.
 
+## The footage
+
+The home page opens on a fly-through: real footage of one real check,
+replayed. It is the one place in the product where a moving picture is
+allowed, and it earns that on a single condition, stated on the clip
+itself in every state: **"Illustrative footage. A real check, replayed."**
+It is not a mood film and not a generated hero. It is a recording of the
+thing the page does, which is why it is not covered by the ban on
+generated imagery and video below.
+
+**The footage does not stop when a check starts.** Submit a claim and the
+clip keeps playing, driven now by the stream instead of the scroll: the
+search being built, PubMed being searched, the studies being read, the
+evidence being weighed, the verdict. It is one continuous experience from
+the first screen to the verdict, not a film that cuts to a form. There is
+no plain-paper checking screen and no plain-paper result screen on `/`
+any more.
+
+Four rules hold it together:
+
+- **Every step is an event, never a timer.** A label appears because the
+  server said that thing happened. If a step outlasts its stretch of
+  clip, the clip holds, then breathes backwards over nine seconds and
+  returns. It never runs on to footage of work that has not happened.
+- **Text never sits on moving pictures.** The live panel and the verdict
+  sheet are solid paper in the same corner and the same geometry the
+  replay's own panels use, cross faded with them. Full WCAG AA contrast,
+  and **no backdrop blur anywhere**: a panel earns its legibility by
+  being opaque, not by smearing the picture behind it.
+- **The footage stays at full brightness** around the panel. It is not
+  dimmed, scrimmed or desaturated to make room for the words. The words
+  make their own room.
+- **The verdict rests on a lit frame.** The clip fades to black over its
+  last beat; the verdict lands at the end of the beat before that, where
+  there is still a picture. Verdicts are not colour coded here either:
+  the stamp on the sheet is ink on paper, exactly as it is on `/checks`.
+
+**Transitions between the three states** (claim, checking, verdict) are
+`transform` and `opacity` only, 300 to 500ms, measured CLS 0. No layout
+jump, no white flash.
+
+**Reduced motion, Save-Data and a slow connection get the same screens
+with nothing playing**: the stage holds its poster still, the same panel
+arrives with the same copy in the same order, and the same way out. Not a
+degraded flow, the same flow without the motion.
+
+**A shared result link opens cold on paper**, not on film. It gets the
+closing still as a decorative header image, about 14KB where the sequence
+is 23MB, above the verdict it was shared for.
+
+**"Skip to the checker"** is visible on the first screen and stays through
+checking, where it cancels the check in flight. It steps aside once a
+verdict or an error is on screen, because the sheet carries its own way
+out and a floating link over it is a second, worse one.
+
 ## The keyboard
 
 Arrow up and down walk between studies with focus visible on each, and
@@ -397,9 +452,13 @@ arrived**: the closed state sits on the base rule, `@starting-style`
 supplies the entry, and `overlay` and `display` transition
 `allow-discrete` so it is still painted on the way out.
 
-Nothing else animates. No entrances on sections, no parallax, no cursor
-effects, no scroll hijacking, no animated backgrounds. All of it
+Nothing else in the page animates. No entrances on sections, no parallax,
+no cursor effects, no scroll hijacking, no animated backgrounds. All of it
 collapses under `prefers-reduced-motion`.
+
+The fly-through on `/` is the one exception, and it is footage rather than
+animation: see **The footage** above for what it is allowed to do and what
+it is not.
 
 ## Copy
 
@@ -419,3 +478,11 @@ colour coded verdicts, pill buttons, stat rows, gauges, glass, shadows
 used for depth, emoji icons, gradient washes, generated hero imagery or
 video, component library drop-ins, animated or shader backgrounds, cursor
 effects, or analytics of any kind.
+
+Two of those need their edges drawn, now that the home page carries
+footage. **Generated** imagery and video stay banned: pictures invented by
+a model imply evidence the page does not have. The fly-through is a
+recording of a real check and says so on screen. **Glass** stays banned
+without exception, including over the footage: no backdrop blur, no
+translucent panels, no scrim under text. Panels are opaque or they are not
+panels.

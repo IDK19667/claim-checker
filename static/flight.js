@@ -895,8 +895,8 @@
 
   function onScroll() { scrollDirty = true; }
 
-  function updateFromScroll() {
-    var local = Math.max(0, Math.min(totalPx, window.scrollY - sectionTop));
+  function positionAt(local, withOverlay) {
+    local = Math.max(0, Math.min(totalPx, local));
 
     var row = plan[0];
     for (var i = 0; i < plan.length; i++) {
@@ -907,15 +907,105 @@
     var p = clamp01((local - row.start) / Math.max(1, row.end - row.start));
 
     wantedFrame = frameFor(row, p);
-    paint(row, p, local);
+    if (withOverlay) paint(row, p, local);
   }
 
-  function tick(now) {
-    if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
-    if (firstTick) { firstTick = false; lastWantedFrame = wantedFrame; }
+  function updateFromScroll() { positionAt(window.scrollY - sectionTop, true); }
 
+  /* ---- cinema mode: the same footage, driven by a real check ---------------
+   * While a check runs the page stops being a scroll and becomes a shot: the
+   * stage is fixed over the viewport and the position below is what moves it.
+   * Each step of the check owns one stage of the footage, and the position
+   * eases toward the end of that stage and no further. If the real step
+   * outlasts its clip, the position breathes backwards and returns inside the
+   * stage's own last stretch rather than running on into footage for work that
+   * has not happened yet. Nothing here is on a timer: every target change
+   * comes from an event off the stream (see static/app.js).
+   */
+
+  var CINEMA_TAU = 0.62;        // seconds, exponential approach to the target
+  var CINEMA_SETTLE_TAU = 1.2;  // slower for the last move, onto the end frame
+  var CINEMA_LOOP_SECONDS = 9;  // one breath, when a step outlasts its clip
+  var cinema = { on: false, pos: 0, target: 0, amp: 0, tau: CINEMA_TAU, phase: 0, want: null };
+
+  // Where a verdict rests. Not the last frame of the sequence: the clip fades
+  // out over the beat after this one (measured mean luminance 55 at the end of
+  // the publish beat, 18 at the last frame), and a verdict belongs on the
+  // picture at full brightness rather than on the fade to black.
+  function cinemaRestPx() {
+    for (var i = 0; i < plan.length; i++) {
+      if (plan[i].b.stage === "publish") return plan[i].end;
+    }
+    return totalPx;
+  }
+
+  function applyCinemaStage(name) {
+    if (!manifest) return;
+    if (name === "end") {
+      cinema.target = cinemaRestPx();
+      cinema.amp = 0;
+      cinema.tau = CINEMA_SETTLE_TAU;
+      // From the far side of the timeline this would be a four second whip
+      // past every stage of work that never ran: a cached verdict had no
+      // search and no reading, so the honest move is a cut, not a swoop.
+      if (cinema.target - cinema.pos > totalPx * 0.5) cinema.pos = cinema.target;
+      return;
+    }
+    var span = stageSpans[name];
+    if (!span) return;
+    var len = Math.max(1, span.end - span.start);
+    cinema.target = span.end - len * 0.04;
+    cinema.amp = Math.min(len * 0.08, 90);
+    cinema.tau = CINEMA_TAU;
+    cinema.phase = 0;
+  }
+
+  function cinemaStep(dts) {
+    cinema.pos += (cinema.target - cinema.pos) * (1 - Math.exp(-dts / cinema.tau));
+    cinema.phase += dts;
+    if (!cinema.amp) return cinema.pos;
+    // Only once the clip has arrived where it was going, and only backwards:
+    // 0 to -amp to 0, so the footage never shows a step before its event.
+    if (Math.abs(cinema.target - cinema.pos) > Math.max(2, cinema.amp * 0.3)) return cinema.pos;
+    var w = (2 * Math.PI) / CINEMA_LOOP_SECONDS;
+    return cinema.pos - cinema.amp * (1 - Math.cos(cinema.phase * w)) / 2;
+  }
+
+  // The same counters the fast-scroll harness reads carry the cinema state, so
+  // "the footage stopped where the check stopped" is checkable rather than
+  // argued from a screenshot.
+  stats.cinema = cinema;
+
+  // What app.js drives. Deliberately small: a stage name in, nothing out.
+  window.EvidentFlight = {
+    enter: function () {
+      cinema.on = true;
+      cinema.pos = 0;
+      cinema.phase = 0;
+      this.stage("claim");
+      return true;
+    },
+    stage: function (name) {
+      cinema.want = name;
+      applyCinemaStage(name);
+    },
+    leave: function () {
+      cinema.on = false;
+      cinema.want = null;
+      scrollDirty = true;
+    }
+  };
+
+  function tick(now) {
     var dt = lastTickTime == null ? 16 : Math.max(1, Math.min(200, now - lastTickTime));
     lastTickTime = now;
+
+    // The overlay belongs to the replay, and in cinema mode it is faded out:
+    // painting it every frame would be style recalculation for something no
+    // one can see.
+    if (cinema.on) positionAt(cinemaStep(dt / 1000), false);
+    else if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
+    if (firstTick) { firstTick = false; lastWantedFrame = wantedFrame; }
 
     var raw = (wantedFrame - lastWantedFrame) / (dt / 1000);
     var moving = Math.abs(wantedFrame - lastWantedFrame) > 0.01;
@@ -923,6 +1013,7 @@
     signedVelocity += (raw - signedVelocity) * VELOCITY_SMOOTHING;
     var speed = Math.abs(signedVelocity);
     stats.velocity = speed;
+    stats.wanted = Math.round(wantedFrame);
     if (speed > stats.peakVelocity) stats.peakVelocity = speed;
 
     // Hysteresis, so a scroll sitting near the threshold does not alternate
@@ -1127,6 +1218,10 @@
     buildOverlay();
     computeTops();
     layout();
+    // A claim submitted inside the first second can put the page into cinema
+    // mode before the timeline exists. The stage it asked for is remembered
+    // and applied here rather than lost.
+    if (cinema.on && cinema.want) applyCinemaStage(cinema.want);
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", function () { computeTops(); layout(); onScroll(); });
     window.addEventListener("orientationchange", function () { computeTops(); layout(); onScroll(); });

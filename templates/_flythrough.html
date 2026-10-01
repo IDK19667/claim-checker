@@ -105,6 +105,17 @@
       </div>
     </div>
 
+    {# The live check's own panel, in the same corner the replay's panels use,
+       cross-faded with them. Empty until app.js fills it: every line in it
+       comes from an event off the stream, never from a timer. The standing
+       line rides it too, because the replay's own note is faded out with the
+       rest of the overlay while a real check is running. #}
+    <div class="flight-chip cinema-chip" id="cinema-chip" data-on="0">
+      <p class="cinema-claim" id="cinema-claim"></p>
+      <ol class="cinema-steps" id="cinema-steps" aria-live="polite"></ol>
+      <p class="cinema-note">Illustrative footage. Not medical advice.</p>
+    </div>
+
     {# Inside the pinned stage, so it is on screen at every scroll position
        and on every stage of the footage, and stops being there the moment
        the footage ends and the checker itself is what you are looking at.

@@ -239,9 +239,19 @@ def _render_home(with_flight: bool):
     # page: a shared link loaded cold gets a still header rather than a 23MB
     # frame sequence it did not ask for.
     flight = _flight_context() if (with_flight and not cached) else None
+    # The still that stands in for the footage on a result page: the last
+    # stage of the fly-through, 14KB, instead of the sequence. Only if it has
+    # actually been built, so a fresh checkout renders a result page with no
+    # header image rather than a broken one.
+    header_still = None
+    if cached:
+        last = _FLIGHT_STILLS[-1]["file"]
+        if os.path.exists(os.path.join(app.static_folder, "flight", last)):
+            header_still = last
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
                            ledger=ledger, latest=latest, flight=flight,
+                           header_still=header_still,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 

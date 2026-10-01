@@ -210,6 +210,19 @@
         <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
       </button>
 
+      {# A shared link opens cold, with no frame sequence: one 14KB still of the
+         last stage carries the same world the home page's footage does, in
+         place of 23MB nobody asked for. Decorative, so alt is empty: it says
+         nothing about the verdict, and the verdict is what a reader is here
+         for. Dimensions are on the tag, so it reserves its box and shifts
+         nothing when it lands. #}
+      {% if header_still %}
+      <div class="result-still">
+        <img src="{{ url_for('static', filename='flight/' + header_still) }}"
+             width="960" height="540" alt="" decoding="async">
+      </div>
+      {% endif %}
+
       <!-- The head is a field, not a headline: the claim, the verdict, and the
            evidence the verdict rests on, drawn at the size they deserve. The
            ground is identical on every verdict, so nothing here is colour coded. -->

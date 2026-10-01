@@ -98,7 +98,10 @@ const AUDIT = () => {
     contrast, targets: [...new Set(targets)], overflow: [...new Set(overflow)].slice(0, 5),
     scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
     title: document.title, h1: document.querySelectorAll("h1").length,
-    imgsNoAlt: [...document.images].filter((i) => !i.alt).length,
+    // A missing alt is the fault. alt="" is the correct markup for a
+    // decorative image (the result page's film still), and a screen reader
+    // should skip it rather than be read a description of scenery.
+    imgsNoAlt: [...document.images].filter((i) => !i.hasAttribute("alt")).length,
     bodyBg: getComputedStyle(document.body).backgroundColor,
     paperToken: (() => {
       const v = getComputedStyle(document.documentElement).getPropertyValue("--paper").trim();
