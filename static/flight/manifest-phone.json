@@ -1,14 +1,18 @@
 {
- "version": 6,
+ "version": 7,
  "pattern": "phone/frame-%04d.avif",
  "loresPattern": "lores/frame-%04d.avif",
  "count": 552,
  "fps": 24,
  "width": 810,
  "height": 1440,
- "loresWidth": 240,
+ "loresWidth": 160,
  "poster": "phone/frame-0000.avif",
  "seconds": 23.0,
- "totalBytes": 7079495,
- "loresTotalBytes": 1023604
+ "totalBytes": 6037406,
+ "loresTotalBytes": 567837,
+ "motionPattern": "motion-phone/frame-%04d.avif",
+ "motionWidth": 540,
+ "motionHeight": 960,
+ "motionTotalBytes": 3230334
 }

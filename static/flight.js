@@ -3,78 +3,99 @@
  * A pinned canvas scrubbed by scroll position, with the checker's own work
  * animated over it. No framework, no build step, same as the rest of the site.
  *
- * Five things this file is careful about:
+ * The hard requirement this file is built around (round 9): someone flinging
+ * the page top to bottom and back as hard as they can must see a sharp frame
+ * for where they actually are on *every* screen refresh. Never blurry, never
+ * stuck, never behind. Everything below follows from that.
  *
- *  1. The page works with the animation off. If the sequence cannot load, or
- *     the reader asked for reduced motion, or Save-Data is on, we add
- *     .no-flight and the four stages become four stills in normal page flow.
- *     The claim input is in the markup either way.
- *  2. Native scroll only. Nothing here calls preventDefault or moves the
- *     scroll position; the reader stays in charge, forwards and backwards.
- *  3. Two frame tiers. A tiny low-res copy of every frame is fetched and
- *     decoded up front and held for the whole session (small enough that
- *     this costs nothing): it is what "never blank" actually means, since
- *     the exact wanted frame is always available at low quality even before
- *     its high-res copy has arrived. High-res bytes for the whole sequence
- *     are also fetched up front (a small progress indicator tracks this),
- *     but only a window of them stays decoded to an ImageBitmap at once —
- *     decoding all 334 at 1440x810 simultaneously is well over a gigabyte
- *     of bitmap memory, which a phone will not tolerate.
- *  4. The displayed frame eases toward the scroll-implied one every
- *     animation frame rather than jumping straight to it, so a fast flick
- *     glides across frames instead of visibly skipping between them.
- *  5. Card arrival, grading and sorting progress continuously across a
- *     named *stage* (every beat that shares a stage name), never reset by
- *     a beat boundary; only text visibility (the headline, the small
- *     supporting labels) is scoped to one beat's own fade window. That is
- *     what lets a "no text" beat exist without the underlying state
- *     jumping when text next appears.
+ *  1. Every refresh is a deadline. `tick` reads the scroll position and draws
+ *     the frame for *that* position, full stop. There is no easing, no
+ *     catch-up queue and no "work through the frames we skipped": if a fling
+ *     crosses thirty frames between two refreshes, twenty-nine of them are
+ *     simply never drawn and never decoded. Falling behind is the bug.
+ *
+ *  2. Decoding happens off the main thread. createImageBitmap on one AVIF
+ *     frame costs about 21ms at 1920x1080 and 34ms at 2560x1440 on a fast
+ *     laptop, measured on a real GPU, against a 16.7ms budget at 60Hz. A pool
+ *     of two to four workers (static/flight-decoder.js) turns that latency
+ *     into throughput; where Worker is unavailable, a capped main-thread path
+ *     stands in.
+ *
+ *  3. Three tiers, each with one job.
+ *     * motion  (1280x720, or 540x960 on a phone) decodes in 10.8ms / 6.4ms
+ *       and is what a fling draws from. On a machine with memory to spare the
+ *       whole tier is decoded during idle time and then simply stays
+ *       resident, which is what makes "sharp on every refresh at any speed"
+ *       achievable rather than merely likely.
+ *     * hi-res  (1920, 2560 or 810x1440) is what the reader looks at whenever
+ *       the scroll slows below the velocity threshold, and always at rest.
+ *     * lores   (160px, every frame, decoded up front and held) exists only
+ *       to cover the first second after load. After LORES_WINDOW_MS it is
+ *       never drawn again, at any speed, for any reason.
+ *
+ *  4. Velocity predicts. The decode request issued each refresh is for where
+ *     the scroll is *going* to be on the next one or two refreshes, not where
+ *     it is now, because a decode started now finishes after the deadline it
+ *     was wanted for. Requests for frames the scroll has already passed are
+ *     dropped from the queue rather than completed.
+ *
+ *  5. No freezing. If the exact frame is not ready, the nearest ready frame
+ *     within SUB_RADIUS of the target is drawn instead. If the frame on screen
+ *     has not changed for FREEZE_LIMIT_MS while the scroll position is moving,
+ *     the search widens until something moves, and the widening is counted
+ *     (`offTarget`) rather than hidden.
+ *
+ * Two things that have not changed. The page works with the animation off: if
+ * the sequence cannot load, or the reader asked for reduced motion, we add
+ * .no-flight and the stages become stills in normal page flow, with the claim
+ * input present either way. And nothing here calls preventDefault or moves the
+ * scroll position; the reader stays in charge, forwards and backwards.
  */
 
 (function () {
   "use strict";
 
-  var HIRES_CONCURRENCY = 6;
-  // Decoded ImageBitmaps held at once; the rest redecode from cached bytes
-  // on demand (fast: no network, just createImageBitmap on an already-
-  // downloaded blob). Set once the manifest's real width/height/fps are
-  // known (see computeHiresKeep below): the raw bitmap size varies by
-  // tier (phone frames are a third the pixels of the 2560 tier), and the
-  // frame count per second of footage now varies by fps too, so a single
-  // constant tuned for the old 9fps/1920px baseline would either waste
-  // memory on a small tier or starve a large one.
-  var HIRES_KEEP = 90;
+  var BYTES_CONCURRENCY = 6;      // parallel fetches per tier
+  var LORES_CONCURRENCY = 10;
+  var LORES_WINDOW_MS = 1000;     // after this, lores is never drawn again
+  var FREEZE_LIMIT_MS = 100;      // the frame on screen must change inside this
+  var SUB_RADIUS = 2;             // nearest ready frame may stand in this far away
+  var PREDICT_MS = 24;            // how far ahead of now a decode is aimed
+  // Requests allowed to wait at once. Generous, because pump() dispatches in
+  // priority order rather than arrival order: a queue full of idle pre-decode
+  // work costs one sort and never delays the frame being drawn.
+  var QUEUE_MAX = 32;
 
-  // Three frame tiers, chosen once at load. "large" gives a genuinely wide
-  // desktop viewport a real 2560px source instead of the 1920 tier
-  // stretched to fill it; "phone" gives a narrow portrait viewport a frame
-  // sequence that was cropped to 9:16 at build time (native pixels, never
-  // an upscale) instead of the landscape tier cropped at draw time (which
-  // on a DPR2 phone canvas means scaling *up*). The breakpoint compares
-  // *physical* pixels (CSS width times DPR, capped at 2 to match sizeCanvas)
-  // against the default tier's own 1920px width: round 6 compared CSS width
-  // alone and called an upscale on any DPR2 laptop under 1600 CSS px "an
-  // accepted compromise", but that is most ordinary DPR2 laptops (a 1512px
-  // MacBook Pro 14" needs a 3024px backing store, a 50% upscale of the 1920
-  // tier) and round 7's fast-scroll blur diagnosis found it visibly softer
-  // than the source, not a compromise worth keeping. Chosen once, not
-  // re-picked on resize/orientation change: still a deliberate scope limit,
-  // see DECISIONS.md.
+  // Above this many footage-frames per second the motion tier is what gets
+  // drawn; below the lower number, hi-res. Two numbers, not one, so a scroll
+  // hovering at the boundary does not flicker between a 1280px frame and a
+  // 1920/2560px one. 18 frames/s is three quarters of a second of footage per
+  // second of real time: comfortably more than a reading scroll, comfortably
+  // less than a flick.
+  var MOTION_ENTER_VELOCITY = 18;
+  var MOTION_LEAVE_VELOCITY = 10;
+  // Crossfading two frames only reads as smoothness while the scroll is slow
+  // enough that adjacent frames are nearly the same picture. Faster than this
+  // it reads as a double exposure, so draw() snaps to one sharp frame.
+  var CROSSFADE_MAX_VELOCITY = 12;
+  var VELOCITY_SMOOTHING = 0.5;
+
   var FRAME_WIDTH_DEFAULT = 1920; // must match scripts/build_flight.py FRAME_WIDTH
   var variant = "default";
 
+  // Three hi-res tiers, chosen once at load. "large" gives a genuinely wide
+  // desktop viewport a real 2560px source instead of the 1920 tier stretched
+  // to fill it; "phone" gives a narrow portrait viewport a sequence cropped to
+  // 9:16 at build time (native pixels, never an upscale). The breakpoint
+  // compares *physical* pixels (CSS width times DPR, capped at 2 to match
+  // sizeCanvas) against the default tier's own width, so an ordinary DPR2
+  // laptop gets the 2560 tier rather than a 50% upscale of the 1920 one.
   function pickVariant() {
     var w = window.innerWidth, h = window.innerHeight;
     if (w < 700 && h > w) return "phone";
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (w * dpr > FRAME_WIDTH_DEFAULT) return "large";
     return "default";
-  }
-
-  function manifestUrl() {
-    if (variant === "large") return section.dataset.frames + "/manifest-2560.json";
-    if (variant === "phone") return section.dataset.frames + "/manifest-phone.json";
-    return section.dataset.frames + "/manifest.json";
   }
 
   var root = document.documentElement;
@@ -84,6 +105,12 @@
   var canvas = document.getElementById("flight-canvas");
   var overlay = document.getElementById("flight-overlay");
   var progressEl = document.getElementById("flight-progress");
+
+  function manifestUrl() {
+    if (variant === "large") return section.dataset.frames + "/manifest-2560.json";
+    if (variant === "phone") return section.dataset.frames + "/manifest-phone.json";
+    return section.dataset.frames + "/manifest.json";
+  }
 
   function giveUp(why) {
     root.classList.add("no-flight");
@@ -98,37 +125,73 @@
   }
 
   var ctx = canvas.getContext("2d", { alpha: false });
-  // Footage now plays at full brightness in its own right (no scrim), so
-  // sharpness rests entirely on the source frame and this setting. At a
-  // device pixel ratio of 2 the backing store is several megapixels, and
-  // resampling a frame up to fill it at "high" quality measurably slowed
-  // drawImage enough to reintroduce dropped frames during a fast scroll
-  // (confirmed: 0 misses at DPR 1 in the same sweep, 29 at DPR 2, before
-  // this line existed). Re-checked this round on a real GPU (not the
-  // software-rendered SwiftShader path Playwright uses in this sandbox,
-  // which blurs noticeably worse than either setting and should not be
-  // trusted for judging sharpness): "low" and "high" looked the same, so
-  // "low" stays for the scroll-performance win it measurably buys.
+  // Footage plays at full brightness in its own right (no scrim), so sharpness
+  // rests on the source frame and this setting. Measured on a real GPU: "low"
+  // and "high" look the same here and "low" is measurably cheaper per draw, so
+  // "low" stays.
   if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "low";
+
   var manifest = null;
   var beats = null;
-
-  // Cheap, always-on counters so a fast-scroll test can measure dropped and
-  // stale frames instead of guessing from a screenshot. A handful of integer
-  // increments per tick; read from outside as window.__flightStats.
-  window.__flightStats = {
-    draws: 0, misses: 0, seen: {},
-    hiresDraws: 0, loresDraws: 0, staleDraws: 0, blendDraws: 0
+  var startedAt = performance.now();
+  var pad4 = function (i) {
+    var n = String(i);
+    while (n.length < 4) n = "0" + n;
+    return n;
   };
 
-  // ?debug=1 draws a small on-screen readout of exactly what the last draw()
-  // call showed (frame index, hires/lores/stale, blend or not, scroll
-  // velocity) so "it looks blurry" can be matched against what is actually
-  // on screen instead of guessed at from a static screenshot.
+  /* ---- what the stress test reads --------------------------------------- */
+
+  // Cheap, always-on counters: a handful of integer writes per tick. The
+  // fast-scroll claims in DECISIONS.md are measured off these, not guessed
+  // from a screenshot.
+  var stats = {
+    draws: 0, seen: {}, distinct: 0,
+    hiresDraws: 0, motionDraws: 0, loresDraws: 0, loresAfterWindow: 0,
+    blendDraws: 0, blendDrawsAtSpeed: 0,
+    offTarget: 0, maxOffTarget: 0,   // drawn index further than SUB_RADIUS from target
+    holdMs: 0, maxHoldMs: 0,          // longest a single frame stayed up while moving
+    freezeBreaks: 0,                  // times the search widened to break a hold
+    longTasks: 0, longestTaskMs: 0,
+    decodes: 0, decodeFails: 0, queueDepth: 0,
+    workers: 0, residentMotion: 0, residentHires: 0,
+    velocity: 0, peakVelocity: 0, tier: "-"
+  };
+  stats.reset = function () {
+    stats.draws = 0; stats.seen = {}; stats.distinct = 0;
+    stats.hiresDraws = 0; stats.motionDraws = 0; stats.loresDraws = 0;
+    stats.loresAfterWindow = 0; stats.blendDraws = 0; stats.blendDrawsAtSpeed = 0;
+    stats.offTarget = 0; stats.maxOffTarget = 0;
+    stats.maxHoldMs = 0; stats.freezeBreaks = 0;
+    stats.longTasks = 0; stats.longestTaskMs = 0;
+    stats.decodes = 0; stats.decodeFails = 0; stats.peakVelocity = 0;
+    // Otherwise the first tick after a reset reports however long the page sat
+    // idle beforehand as a frame hold.
+    drawnAt = performance.now();
+    heldWhileMoving = false;
+  };
+  window.__flightStats = stats;
+
+  // Long tasks are the other half of "never laggy": a 60ms decode or layout on
+  // the main thread shows up as a skipped refresh no matter how ready the
+  // frames are. Observed rather than inferred.
+  if (typeof PerformanceObserver === "function") {
+    try {
+      new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (e) {
+          if (e.duration > 50) {
+            stats.longTasks++;
+            if (e.duration > stats.longestTaskMs) stats.longestTaskMs = e.duration;
+          }
+        });
+      }).observe({ type: "longtask", buffered: true });
+    } catch (err) { /* not supported: the counter stays 0 and says so */ }
+  }
+
   var DEBUG = /(?:^|[?&])debug=1(?:&|$)/.test(location.search);
   var debugEl = null;
 
-  function updateDebugOverlay(f0, f1, t, allowBlend) {
+  function updateDebugOverlay(f0, f1, t, target) {
     if (!DEBUG) return;
     if (!debugEl) {
       debugEl = document.createElement("div");
@@ -136,174 +199,256 @@
       debugEl.style.cssText = "position:fixed;top:8px;left:8px;z-index:9999;" +
         "background:rgba(0,0,0,.78);color:#5f5;font:11px/1.5 ui-monospace," +
         "Menlo,monospace;padding:6px 9px;border-radius:4px;pointer-events:none;" +
-        "white-space:pre;max-width:70vw;";
+        "white-space:pre;max-width:72vw;";
       document.body.appendChild(debugEl);
     }
-    var s = window.__flightStats;
     debugEl.textContent =
-      "frame " + f0.index + " [" + f0.tier + "]" +
-      (f1 ? "  blend-> " + f1.index + " [" + f1.tier + "] t=" + t.toFixed(2) : "  (no blend)") +
-      "\nvelocity " + scrollVelocity.toFixed(1) + " fps  allowBlend=" + allowBlend +
-      "\ndraws " + s.draws + "  hires " + s.hiresDraws + "  lores " + s.loresDraws +
-      "  stale " + s.staleDraws + "  blend " + s.blendDraws + "  misses " + s.misses;
+      "want " + target + "  drawn " + f0.index + " [" + f0.tier + "]" +
+      (f1 ? "  blend-> " + f1.index + " t=" + t.toFixed(2) : "") +
+      "\nvelocity " + stats.velocity.toFixed(0) + " f/s  tier " + stats.tier +
+      "  hold " + stats.holdMs.toFixed(0) + "ms (max " + stats.maxHoldMs.toFixed(0) + ")" +
+      "\ndraws " + stats.draws + "  distinct " + stats.distinct +
+      "  hires " + stats.hiresDraws + "  motion " + stats.motionDraws +
+      "  lores " + stats.loresDraws + " (after 1s " + stats.loresAfterWindow + ")" +
+      "\nblend " + stats.blendDraws + " (at speed " + stats.blendDrawsAtSpeed + ")" +
+      "  offTarget " + stats.offTarget + " (worst " + stats.maxOffTarget + ")" +
+      "  breaks " + stats.freezeBreaks +
+      "\nlongTasks>50ms " + stats.longTasks + " (worst " + stats.longestTaskMs.toFixed(0) + "ms)" +
+      "  queue " + stats.queueDepth + "  workers " + stats.workers +
+      "\nresident motion " + stats.residentMotion + "/" + (manifest ? manifest.count : "?") +
+      "  hires " + stats.residentHires + "/" + hiresStore.cap;
   }
 
-  /* ---- low-res tier: fetched and decoded fully, kept forever ------------ */
+  /* ---- the decode pool --------------------------------------------------- */
 
-  var lores = new Array(0); // index -> ImageBitmap, always present once loaded
-  var loresReady = false;
+  var pool = [];          // { w, busy }
+  var queue = [];         // { store, index, prio }
+  var mainDecodes = 0;    // in-flight main-thread decodes (fallback path)
+  var MAIN_DECODE_MAX = 2;
 
-  function loresUrl(i) {
-    return section.dataset.frames + "/" + manifest.loresPattern.replace("%04d", pad(i));
+  function buildPool() {
+    if (typeof Worker !== "function") return;
+    var n = Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
+    for (var i = 0; i < n; i++) {
+      try {
+        var slot = { w: new Worker(section.dataset.decoder), busy: false };
+        slot.w.onmessage = function (e) { onDecoded(slot, e.data); };
+        slot.w.onerror = function () { slot.busy = false; };
+        pool.push(slot);
+      } catch (err) { break; }
+    }
+    stats.workers = pool.length;
   }
 
-  function pad(i) {
-    var n = String(i);
-    while (n.length < 4) n = "0" + n;
-    return n;
+  function onDecoded(slot, d) {
+    slot.busy = false;
+    var store = d.tier === "motion" ? motionStore : hiresStore;
+    store.inFlight.delete(d.index);
+    if (d.kind === "decoded") {
+      stats.decodes++;
+      store.put(d.index, d.bmp);
+    } else {
+      stats.decodeFails++;
+      store.broken[d.index] = 1;
+    }
+    pump();
   }
 
-  var LORES_CONCURRENCY = 10;
+  function pump() {
+    if (!queue.length) { stats.queueDepth = 0; return; }
+    queue.sort(function (a, b) { return a.prio - b.prio; });
+    for (var i = 0; i < pool.length && queue.length; i++) {
+      if (pool[i].busy) continue;
+      var job = queue.shift();
+      if (job.store.bitmaps.has(job.index)) { i--; continue; }
+      pool[i].busy = true;
+      job.store.inFlight.add(job.index);
+      pool[i].w.postMessage({
+        kind: "decode", tier: job.store.name, index: job.index,
+        blob: job.store.blobs[job.index]
+      });
+    }
+    // No workers (or none left free and none exist): decode on the main thread,
+    // strictly capped, so an old browser still gets a moving picture.
+    while (!pool.length && queue.length && mainDecodes < MAIN_DECODE_MAX) {
+      (function (job) {
+        mainDecodes++;
+        job.store.inFlight.add(job.index);
+        createImageBitmap(job.store.blobs[job.index]).then(function (bmp) {
+          mainDecodes--;
+          job.store.inFlight.delete(job.index);
+          stats.decodes++;
+          job.store.put(job.index, bmp);
+          pump();
+        }).catch(function () {
+          mainDecodes--;
+          job.store.inFlight.delete(job.index);
+          stats.decodeFails++;
+          job.store.broken[job.index] = 1;
+          pump();
+        });
+      })(queue.shift());
+    }
+    stats.queueDepth = queue.length;
+  }
 
-  // Concurrency-limited like the hi-res loader below. Firing all 334 tiny
-  // fetches (and, worse, 334 simultaneous createImageBitmap decodes) at
-  // once congests the main thread for a couple of seconds right when the
-  // page has just loaded and a reader is most likely to start scrolling:
-  // measured with scripts/flight_scroll_test.mjs, an unthrottled version of
-  // this function made even a plain scroll sweep run 1.7s behind real time.
-  var loresLoadedCount = 0;
+  /* ---- a tier of frames -------------------------------------------------- */
+
+  function TierStore(name, pattern) {
+    this.name = name;
+    this.pattern = pattern;
+    this.blobs = [];
+    this.bitmaps = new Map();
+    this.inFlight = new Set();
+    this.broken = {};
+    this.bytesLoaded = 0;
+    this.countLoaded = 0;
+    this.cap = 0;
+    this.full = false;       // every frame resident: nothing left to decode
+  }
+
+  TierStore.prototype.url = function (i) {
+    return section.dataset.frames + "/" + this.pattern.replace("%04d", pad4(i));
+  };
+
+  TierStore.prototype.put = function (i, bmp) {
+    this.bitmaps.set(i, bmp);
+    this.evict();
+    if (this.bitmaps.size >= manifest.count) this.full = true;
+  };
+
+  // Distance-based, not insertion order: the idle pre-decode fills this map
+  // outward from wherever the reader is, and FIFO eviction would throw away
+  // whichever frame happened to decode first rather than whichever is
+  // furthest from the scroll position. Never evicts the frame on screen.
+  TierStore.prototype.evict = function () {
+    if (this.bitmaps.size <= this.cap) return;
+    var keep = this.cap, cur = Math.round(wantedFrame), self = this;
+    var idxs = [];
+    this.bitmaps.forEach(function (_, idx) { idxs.push(idx); });
+    idxs.sort(function (a, b) { return Math.abs(b - cur) - Math.abs(a - cur); });
+    for (var i = 0; i < idxs.length && self.bitmaps.size > keep; i++) {
+      if (idxs[i] === drawnIndex || idxs[i] === cur) continue;
+      var b = self.bitmaps.get(idxs[i]);
+      if (b && b.close) b.close();
+      self.bitmaps.delete(idxs[i]);
+      self.full = false;
+    }
+  };
+
+  TierStore.prototype.readyNear = function (i, radius) {
+    var b = this.bitmaps.get(i);
+    if (b) return { bmp: b, index: i };
+    for (var d = 1; d <= radius; d++) {
+      b = this.bitmaps.get(i - d);
+      if (b) return { bmp: b, index: i - d };
+      b = this.bitmaps.get(i + d);
+      if (b) return { bmp: b, index: i + d };
+    }
+    return null;
+  };
+
+  TierStore.prototype.nearestReady = function (i) {
+    var best = null, bestD = Infinity;
+    this.bitmaps.forEach(function (bmp, idx) {
+      var d = Math.abs(idx - i);
+      if (d < bestD) { bestD = d; best = { bmp: bmp, index: idx }; }
+    });
+    return best;
+  };
+
+  TierStore.prototype.preloadBytes = function () {
+    var self = this, next = 0, inFlight = 0;
+    return new Promise(function (resolve) {
+      function step() {
+        while (inFlight < BYTES_CONCURRENCY && next < manifest.count) {
+          (function (idx) {
+            inFlight++;
+            fetch(self.url(idx)).then(function (r) { return r.blob(); })
+              .then(function (blob) { self.blobs[idx] = blob; self.bytesLoaded += blob.size; })
+              .catch(function () { self.broken[idx] = 1; })
+              .then(function () {
+                inFlight--;
+                self.countLoaded++;
+                updateProgress();
+                if (self.countLoaded >= manifest.count) resolve();
+                else step();
+              });
+          })(next);
+          next++;
+        }
+      }
+      step();
+    });
+  };
+
+  var motionStore = new TierStore("motion", "motion/frame-%04d.avif");
+  var hiresStore = new TierStore("hires", "frame-%04d.avif");
+
+  // No "pre-warm the GPU upload" step here, deliberately. An earlier version of
+  // this round drew each freshly decoded bitmap into a 1x1 scratch context on
+  // the theory that the first drawImage pays a texture upload that a fling
+  // cannot afford. Measured on the real on-screen canvas, that theory is wrong
+  // twice over: the first draw of a never-drawn bitmap and the second draw of
+  // the same bitmap cost the same (median 0ms, mean 3-4ms, with identical
+  // multi-tens-of-ms outliers on both), so there is no upload to front-load;
+  // and the 1x1 target is CPU-backed, so "warming" into it forced a full
+  // read-back that showed up as 31 long tasks of about 65ms each across the
+  // load. Removing it removed all of them.
+
+  function requestDecode(store, index, prio) {
+    if (index < 0 || index >= manifest.count) return;
+    if (store.bitmaps.has(index) || store.inFlight.has(index)) return;
+    if (!store.blobs[index] || store.broken[index]) return;
+    for (var i = 0; i < queue.length; i++) {
+      if (queue[i].store === store && queue[i].index === index) {
+        if (prio < queue[i].prio) queue[i].prio = prio;
+        return;
+      }
+    }
+    queue.push({ store: store, index: index, prio: prio });
+  }
+
+  /* ---- the low-res tier: first second only ------------------------------- */
+
+  var lores = [];
+  var loresLoaded = 0;
 
   function loadLores() {
     var next = 0, inFlight = 0;
-    return new Promise(function (resolve) {
-      function pump() {
-        while (inFlight < LORES_CONCURRENCY && next < manifest.count) {
-          (function (idx) {
-            inFlight++;
-            fetch(loresUrl(idx)).then(function (r) { return r.blob(); })
-              .then(createImageBitmap).then(function (bmp) { lores[idx] = bmp; })
-              .catch(function () { /* a missing low-res frame just leaves that slot empty */ })
-              .then(function () {
-                inFlight--;
-                loresLoadedCount++;
-                updateProgress();
-                if (loresLoadedCount >= manifest.count) { loresReady = true; resolve(); }
-                else pump();
-              });
-          })(next);
-          next++;
-        }
+    function step() {
+      while (inFlight < LORES_CONCURRENCY && next < manifest.count) {
+        (function (idx) {
+          inFlight++;
+          fetch(section.dataset.frames + "/" + manifest.loresPattern.replace("%04d", pad4(idx)))
+            .then(function (r) { return r.blob(); })
+            .then(createImageBitmap)
+            .then(function (bmp) { lores[idx] = bmp; })
+            .catch(function () { /* a missing low-res frame just leaves that slot empty */ })
+            .then(function () { inFlight--; loresLoaded++; updateProgress(); step(); });
+        })(next);
+        next++;
       }
-      pump();
-    });
+    }
+    step();
   }
 
-  /* ---- high-res tier: bytes preloaded for all frames, decoded on a window */
+  // Once the lores window has closed these bitmaps can never be drawn again,
+  // so they are closed outright rather than left holding memory the motion
+  // tier could be using.
+  var loresRetired = false;
 
-  var hiresBlobs = new Array(0);   // index -> Blob, once downloaded, kept forever (~10MB total)
-  var hiresBitmaps = new Map();    // index -> ImageBitmap, bounded by HIRES_KEEP
-  var hiresLoaded = 0;
-  var hiresTotal = 0;
-
-  // One frame's raw decoded size (RGBA), used both to size HIRES_KEEP and
-  // to pick a sane idle-decode budget. Set once the manifest is read.
-  function computeHiresKeep(width, height, fps) {
-    var sizeRatio = (width * height) / (1920 * 1080);
-    var fpsRatio = (fps || 9) / 9;
-    var cap = variant === "phone" ? 140 : 220;
-    return Math.max(60, Math.min(cap, Math.round(90 * Math.sqrt(fpsRatio / Math.max(0.1, sizeRatio)))));
-  }
-
-  function hiresUrl(i) {
-    return section.dataset.frames + "/" + manifest.pattern.replace("%04d", pad(i));
-  }
-
-  function preloadHiresBytes() {
-    hiresTotal = manifest.count;
-    var next = 0;
-    var inFlight = 0;
-    return new Promise(function (resolve) {
-      function pump() {
-        while (inFlight < HIRES_CONCURRENCY && next < manifest.count) {
-          (function (idx) {
-            inFlight++;
-            fetch(hiresUrl(idx)).then(function (r) { return r.blob(); })
-              .then(function (blob) {
-                hiresBlobs[idx] = blob;
-              })
-              .catch(function () { /* the low-res tier still covers this frame */ })
-              .then(function () {
-                inFlight--;
-                hiresLoaded++;
-                updateProgress();
-                if (hiresLoaded >= manifest.count) resolve();
-                else pump();
-              });
-          })(next);
-          next++;
-        }
-      }
-      pump();
-    });
-  }
-
-  // Distance-based, not insertion-order: a stage-ahead idle decode can fill
-  // the map with frames far from where the reader actually is, and FIFO
-  // eviction would throw away whichever of those happened to be decoded
-  // first rather than whichever is actually farthest from the scroll
-  // position. Never evicts the frame currently on screen.
-  function evictHiresIfNeeded() {
-    if (hiresBitmaps.size <= HIRES_KEEP) return;
-    var cur = Math.round(displayedFrame);
-    var farthest = -1, farthestDist = -1;
-    hiresBitmaps.forEach(function (_, idx) {
-      if (idx === cur) return;
-      var d = Math.abs(idx - cur);
-      if (d > farthestDist) { farthestDist = d; farthest = idx; }
-    });
-    if (farthest < 0) return;
-    var b = hiresBitmaps.get(farthest);
-    if (b && b.close) b.close();
-    hiresBitmaps.delete(farthest);
-  }
-
-  var hiresDecoding = new Set(); // indices with a decode already in flight
-  var decodesThisTick = 0;
-
-  // Decoding from an already-downloaded Blob is local and fast (no network
-  // round trip), so this can happen the moment a frame is wanted rather
-  // than needing to be anticipated far in advance. The persistent easing
-  // loop calls this every animation frame while a frame is still missing,
-  // so without the in-flight guard the same index gets re-decoded on every
-  // tick until the first decode resolves — the other real source of the
-  // main-thread congestion the scroll test caught.
-  function ensureHiresDecoded(i) {
-    if (hiresBitmaps.has(i) || hiresDecoding.has(i) || !hiresBlobs[i]) return;
-    hiresDecoding.add(i);
-    createImageBitmap(hiresBlobs[i]).then(function (bmp) {
-      hiresDecoding.delete(i);
-      hiresBitmaps.set(i, bmp);
-      evictHiresIfNeeded();
-    }).catch(function () { hiresDecoding.delete(i); });
-  }
-
-  // Caps how many decodes a single hot-path tick can kick off (point 4: at
-  // most ~2 per frame). Idle-time stage-ahead decoding (scheduleIdleDecode,
-  // below) uses its own separate budget and doesn't count against this.
-  function kickDecode(i) {
-    if (decodesThisTick >= 2) return;
-    if (hiresBitmaps.has(i) || hiresDecoding.has(i) || !hiresBlobs[i]) return;
-    decodesThisTick++;
-    ensureHiresDecoded(i);
+  function retireLores() {
+    if (loresRetired) return;
+    loresRetired = true;
+    for (var i = 0; i < lores.length; i++) {
+      if (lores[i] && lores[i].close) lores[i].close();
+      lores[i] = null;
+    }
   }
 
   /* ---- progress indicator ------------------------------------------------ */
 
-  // Called up to twice per downloaded frame (roughly 650 times across both
-  // tiers). A per-call DOM write forces a style/layout recalc each time,
-  // which is real, measured main-thread cost for a number nobody reads at
-  // that resolution; rAF-coalescing collapses any calls landing in the same
-  // frame into one write. The counter is exact either way.
   var progressScheduled = false;
 
   function updateProgress() {
@@ -311,84 +456,79 @@
     progressScheduled = true;
     requestAnimationFrame(function () {
       progressScheduled = false;
-      var frac = (hiresLoaded + loresLoadedCount) / (manifest.count * 2);
-      if (frac >= 0.999) {
-        progressEl.hidden = true;
-        return;
-      }
+      var frac = (loresLoaded + motionStore.countLoaded + hiresStore.countLoaded) /
+        (manifest.count * 3);
+      if (frac >= 0.999) { progressEl.hidden = true; return; }
       progressEl.hidden = false;
       progressEl.textContent = "Loading footage … " + Math.round(frac * 100) + "%";
     });
   }
 
-  /* ---- drawing: never blank, never stale ---------------------------------
-   * Preference order for the wanted index: its decoded hi-res bitmap, else
-   * its low-res bitmap (the "always available once loaded" tier), else the
-   * nearest index in either direction that has *something* decoded, so the
-   * canvas is never simply left showing an old, unrelated frame while the
-   * reader has scrolled somewhere else. */
+  /* ---- resolving a target index to something drawable -------------------- */
 
-  // How far to widen the search for a sharp stand-in before conceding. +/-2
-  // (point 4's original wording) is a floor, not a ceiling: it guarantees
-  // lores never stands in once a hi-res frame is that close, but during a
-  // fast flick the exact frame can be dozens of indices from whatever is
-  // already decoded. A sharp neighbour from the same clip beats showing
-  // something stale, so keep searching out to about a second of footage.
-  var HIRES_FALLBACK_RADIUS = 24;
+  var drawnIndex = -1;          // index actually on screen
+  var drawnAt = startedAt;      // when it went up
+  var lastDrawn = { b0: null, b1: null, t: -1 };
+  var hasDrawn = false;
+  var fastMode = false;         // drawing from the motion tier
+  // Whether the scroll has been moving at any point during the current hold.
+  // The 100ms limit is about frames held while the reader is scrolling; a frame
+  // held for ten seconds because nobody touched the page is not a freeze.
+  var heldWhileMoving = false;
 
-  // The last bitmap actually drawn at hi-res, and whether a hi-res frame has
-  // ever been shown at all. Once true, resolveFrame never falls back to the
-  // blurry lores tier again for the rest of the session: if neither the
-  // exact frame nor a near neighbour is decoded yet, it freezes on this
-  // instead. A frame or two of lag while a decode catches up is fine; a
-  // sudden drop to a visibly softer frame is the thing being fixed here.
-  var lastSharp = null; // { bmp, index }
-  var everShownHires = false;
+  // Picks what to draw for `target`. Preference order depends on speed: at
+  // speed the motion tier first (it is the tier that can actually be ready,
+  // and a consistent 1280px source beats alternating between two sharpnesses),
+  // below the threshold hi-res first. `widen` is set by the freeze limit: it
+  // allows a stand-in further than SUB_RADIUS away, because a frame that is a
+  // few frames off but moving beats a correct frame that is frozen.
+  function resolveFrame(target, widen) {
+    var now = performance.now();
+    var loresAllowed = !loresRetired && now - startedAt < LORES_WINDOW_MS;
+    var first = fastMode ? motionStore : hiresStore;
+    var second = fastMode ? hiresStore : motionStore;
 
-  // Resolves a wanted frame index to exactly one of: an exact or near-enough
-  // (within HIRES_FALLBACK_RADIUS) hi-res bitmap; failing that, the last
-  // hi-res bitmap actually shown, frozen in place; failing *that* (nothing
-  // hi-res has ever been decoded yet, i.e. the very start of the page before
-  // the first decode resolves), the lores tier, so the canvas is still never
-  // blank. Lores never appears again once any hi-res frame has been drawn.
-  function resolveFrame(i) {
-    var hi = hiresBitmaps.get(i);
-    if (hi) {
-      lastSharp = { bmp: hi, index: i };
-      everShownHires = true;
-      return { bmp: hi, index: i, tier: "hires" };
-    }
-    kickDecode(i); // kick off a decode for next time, budget permitting
+    var r = first.readyNear(target, SUB_RADIUS);
+    if (r) return { bmp: r.bmp, index: r.index, tier: first.name };
+    r = second.readyNear(target, SUB_RADIUS);
+    if (r) return { bmp: r.bmp, index: r.index, tier: second.name };
 
-    var best = null, bestDist = Infinity, bestIdx = -1;
-    hiresBitmaps.forEach(function (bmp, idx) {
-      var d = Math.abs(idx - i);
-      if (d <= HIRES_FALLBACK_RADIUS && d < bestDist) { bestDist = d; best = bmp; bestIdx = idx; }
-    });
-    if (best) {
-      lastSharp = { bmp: best, index: bestIdx };
-      everShownHires = true;
-      return { bmp: best, index: bestIdx, tier: "hires" };
+    if (loresAllowed && lores[target]) {
+      return { bmp: lores[target], index: target, tier: "lores" };
     }
 
-    if (everShownHires && lastSharp) {
-      return { bmp: lastSharp.bmp, index: lastSharp.index, tier: "stale" };
+    if (widen) {
+      var a = first.nearestReady(target), b = second.nearestReady(target);
+      var pick = null, name = "";
+      if (a && (!b || Math.abs(a.index - target) <= Math.abs(b.index - target))) { pick = a; name = first.name; }
+      else if (b) { pick = b; name = second.name; }
+      if (pick) {
+        var off = Math.abs(pick.index - target);
+        stats.offTarget++;
+        if (off > stats.maxOffTarget) stats.maxOffTarget = off;
+        return { bmp: pick.bmp, index: pick.index, tier: name };
+      }
     }
 
-    // Startup only, before the first hi-res bitmap anywhere has decoded.
-    if (lores[i]) return { bmp: lores[i], index: i, tier: "lores" };
-    for (var d = 1; d < manifest.count; d++) {
-      if (i - d >= 0 && lores[i - d]) return { bmp: lores[i - d], index: i - d, tier: "lores" };
-      if (i + d < manifest.count && lores[i + d]) return { bmp: lores[i + d], index: i + d, tier: "lores" };
+    if (loresAllowed) {
+      for (var d = 1; d < manifest.count; d++) {
+        if (lores[target - d]) return { bmp: lores[target - d], index: target - d, tier: "lores" };
+        if (lores[target + d]) return { bmp: lores[target + d], index: target + d, tier: "lores" };
+      }
     }
     return null;
   }
 
-  var lastB0 = null, lastB1 = null, lastT = -1;
-  var hasDrawn = false;
+  function currentFocusX() {
+    // The phone tier's crop is baked into the asset at build time, so applying
+    // beats.json's per-beat mobile.focusX on top would crop twice.
+    if (variant === "phone") return 0.5;
+    var row = activeRow;
+    if (!row || !isMobile) return 0.5;
+    var m = row.b.mobile || {};
+    return typeof m.focusX === "number" ? m.focusX : 0.5;
+  }
 
-  // focusX lets a mobile crop follow the subject instead of always
-  // centring, which is what loses the phone at narrow widths.
   function drawOne(bmp, alpha) {
     var cw = canvas.width, ch = canvas.height;
     var scale = Math.max(cw / bmp.width, ch / bmp.height);
@@ -399,74 +539,96 @@
     ctx.globalAlpha = 1;
   }
 
-  // Draws the continuous scroll position `pos`, not a single frame index.
-  // Below the crossfade velocity threshold, pos landing between two decoded
-  // frames draws both (the lower at full opacity, the upper crossfaded in at
-  // the fractional part) so in-between positions look like motion instead of
-  // a visible step. Above the threshold (a fast flick), blending two frames
-  // that differ by a real amount of motion looks like a double exposure, not
-  // smoothness, so allowBlend forces a single nearest hi-res frame instead:
-  // rounds to the nearest index rather than flooring, so snapping doesn't
-  // visibly lag a half-frame behind a slow crossfade would have covered.
-  function draw(pos, force, allowBlend) {
-    if (allowBlend === undefined) allowBlend = true;
+  // Draws the continuous scroll position `pos`, not an index. Below the
+  // crossfade velocity a position landing between two resident frames draws
+  // both, so slow scroll reads as motion instead of a visible step; at speed
+  // it snaps to the nearest single frame.
+  function draw(pos, force, allowBlend, widen) {
+    var last = manifest.count - 1;
     var i0 = allowBlend
-      ? Math.max(0, Math.min(manifest.count - 1, Math.floor(pos)))
-      : Math.max(0, Math.min(manifest.count - 1, Math.round(pos)));
-    var i1 = Math.min(manifest.count - 1, i0 + 1);
+      ? Math.max(0, Math.min(last, Math.floor(pos)))
+      : Math.max(0, Math.min(last, Math.round(pos)));
+    var i1 = Math.min(last, i0 + 1);
     var t = (allowBlend && i1 !== i0) ? pos - i0 : 0;
 
-    var f0 = resolveFrame(i0);
-    if (!f0) { window.__flightStats.misses++; return; }
-    var f1 = (allowBlend && t > 0.004) ? resolveFrame(i1) : null;
+    var f0 = resolveFrame(i0, widen);
+    if (!f0) return false;
+    var f1 = (allowBlend && t > 0.004) ? resolveFrame(i1, false) : null;
+    // Only blend two frames from the same tier: mixing a 1280px frame with a
+    // 1920px one halfway through a crossfade is a visible sharpness pulse.
+    if (f1 && (f1.tier !== f0.tier || f1.index === f0.index)) { f1 = null; t = 0; }
 
-    if (!force && hasDrawn && f0.bmp === lastB0 && (f1 ? f1.bmp : null) === lastB1 &&
-        Math.abs(t - lastT) < 0.004) {
-      updateDebugOverlay(f0, f1, t, allowBlend);
-      return;
+    if (!force && hasDrawn && f0.bmp === lastDrawn.b0 &&
+        (f1 ? f1.bmp : null) === lastDrawn.b1 && Math.abs(t - lastDrawn.t) < 0.004) {
+      updateDebugOverlay(f0, f1, t, i0);
+      return true;
     }
 
-    if (f0.index !== i0) window.__flightStats.misses++;
-    if (f1 && f1.index !== i1) window.__flightStats.misses++;
-
-    lastB0 = f0.bmp;
-    lastB1 = f1 ? f1.bmp : null;
-    lastT = t;
+    lastDrawn.b0 = f0.bmp;
+    lastDrawn.b1 = f1 ? f1.bmp : null;
+    lastDrawn.t = t;
     hasDrawn = true;
-    window.__flightStats.draws++;
-    window.__flightStats.seen[f0.index] = 1;
-    if (f1) window.__flightStats.seen[f1.index] = 1;
 
-    if (f0.tier === "lores") window.__flightStats.loresDraws++;
-    else {
-      window.__flightStats.hiresDraws++;
-      if (f0.tier === "stale") window.__flightStats.staleDraws++;
+    stats.draws++;
+    if (!stats.seen[f0.index]) { stats.seen[f0.index] = 1; stats.distinct++; }
+    if (f0.tier === "lores") {
+      stats.loresDraws++;
+      if (performance.now() - startedAt >= LORES_WINDOW_MS) stats.loresAfterWindow++;
+    } else if (f0.tier === "motion") stats.motionDraws++;
+    else stats.hiresDraws++;
+    if (f1) {
+      stats.blendDraws++;
+      if (stats.velocity >= CROSSFADE_MAX_VELOCITY) stats.blendDrawsAtSpeed++;
     }
-    if (f1) window.__flightStats.blendDraws++;
 
     drawOne(f0.bmp, 1);
     if (f1) drawOne(f1.bmp, t);
 
-    updateDebugOverlay(f0, f1, t, allowBlend);
+    if (f0.index !== drawnIndex) {
+      var nowMs = performance.now();
+      // Close out the hold that just ended, so a frame that was up for 140ms
+      // is counted even though the frame after it arrived.
+      if (drawnIndex >= 0 && heldWhileMoving && nowMs - drawnAt > stats.maxHoldMs) {
+        stats.maxHoldMs = nowMs - drawnAt;
+      }
+      drawnIndex = f0.index;
+      drawnAt = nowMs;
+    }
+    updateDebugOverlay(f0, f1, t, i0);
+    return true;
   }
 
   function sizeCanvas() {
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = canvas.clientWidth, h = canvas.clientHeight;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    if (hasDrawn) draw(displayedFrame, true);
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    // Never allocate a backing store larger than the frames can fill. Frames are
+    // drawn cover-cropped, so a canvas wider than the frame (or taller) is pure
+    // upscale: more pixels to rasterise every refresh for detail that does not
+    // exist in the source. At 1440x900 DPR2 the naive 2880x1800 store is 36%
+    // more pixels than the 2560x1440 frame holds, and under a throttled CPU that
+    // surplus is what pushes a refresh past its deadline. Tier choice still uses
+    // the uncapped size, so this only ever shrinks the store, never the tier.
+    //
+    // Sized once, from the hi-res tier: see the note in tick() for why following
+    // the motion tier while moving measures worse, not better.
+    if (manifest && manifest.width && manifest.height && cw > 0 && ch > 0) {
+      dpr = Math.min(dpr, manifest.width / cw, manifest.height / ch);
+    }
+    var w = Math.max(1, Math.round(cw * dpr));
+    var h = Math.max(1, Math.round(ch * dpr));
+    if (canvas.width === w && canvas.height === h) return;
+    canvas.width = w;
+    canvas.height = h;
+    if (hasDrawn) draw(wantedFrame, true, false, true);
   }
 
   /* ---- the timeline ------------------------------------------------------ */
 
-  var plan = [];       // {b, start, end} in scroll pixels
-  var stageSpans = {};  // stage name -> {start, end} in scroll pixels, for continuous state
+  var plan = [];
+  var stageSpans = {};
   var totalPx = 0;
   var travelPx = 1;
   var isMobile = false;
-  // Read once per layout, not once per tick: section.offsetTop forces a
-  // layout recalc, and the easing loop reads scroll position every frame.
   var sectionTop = 0;
 
   function beatVh(b) {
@@ -478,10 +640,6 @@
     isMobile = window.innerWidth < 700;
     var vh = window.innerHeight / 100;
 
-    // The section is as tall as the beats ask for, but a sticky stage is
-    // only pinned for (height - one viewport). The timeline has to be laid
-    // out across that travel, or the last beats sit in the stretch where the
-    // stage has already scrolled away and are never seen.
     var heightPx = beats.beats.reduce(function (sum, b) { return sum + beatVh(b) * vh; }, 0);
     travelPx = Math.max(1, heightPx - window.innerHeight);
 
@@ -506,24 +664,12 @@
     section.style.setProperty("--flight-height", heightPx + "px");
     sectionTop = section.offsetTop;
     sizeCanvas();
-    buildStageGroups();
   }
 
   function stageProgress(name, scrollPx) {
     var span = stageSpans[name];
     if (!span) return 0;
     return clamp01((scrollPx - span.start) / Math.max(1, span.end - span.start));
-  }
-
-  function currentFocusX() {
-    // The phone tier's crop is already baked into the asset at build time
-    // (see scripts/build_flight.py); applying beats.json's per-beat
-    // mobile.focusX on top of that would crop an already-cropped frame.
-    if (variant === "phone") return 0.5;
-    var row = activeRow;
-    if (!row || !isMobile) return 0.5;
-    var m = row.b.mobile || {};
-    return typeof m.focusX === "number" ? m.focusX : 0.5;
   }
 
   var activeRow = null;
@@ -533,43 +679,11 @@
       return row.b.hold < 0 ? manifest.count - 1 : row.b.hold;
     }
     var secs = row.b.from + (row.b.to - row.b.from) * p;
-    return Math.max(0, Math.min(manifest.count - 1, Math.round(secs * manifest.fps)));
+    return Math.max(0, Math.min(manifest.count - 1, secs * manifest.fps));
   }
 
-  function beatFrameRange(row) {
-    if (typeof row.b.hold === "number") {
-      var f = row.b.hold < 0 ? manifest.count - 1 : row.b.hold;
-      return [f, f];
-    }
-    var f0 = frameFor(row, 0), f1 = frameFor(row, 1);
-    return f0 < f1 ? [f0, f1] : [f1, f0];
-  }
+  /* ---- idle pre-decode of the motion tier -------------------------------- */
 
-  // Groups consecutive beats sharing a stage name into one {minF, maxF,
-  // startPx, endPx} span each, so idle decoding (point 4) can target "every
-  // frame this stage and the next one touch" instead of guessing from the
-  // single current frame.
-  var stageGroups = [];
-
-  function buildStageGroups() {
-    stageGroups = [];
-    var cur = null;
-    plan.forEach(function (row) {
-      var range = beatFrameRange(row);
-      if (cur && cur.stage === row.b.stage) {
-        cur.minF = Math.min(cur.minF, range[0]);
-        cur.maxF = Math.max(cur.maxF, range[1]);
-        cur.endPx = row.end;
-      } else {
-        cur = { stage: row.b.stage, minF: range[0], maxF: range[1], startPx: row.start, endPx: row.end };
-        stageGroups.push(cur);
-      }
-    });
-    aheadQueued = null; // force refreshAheadQueue to recompute on next call
-  }
-
-  // requestIdleCallback, or a setTimeout stand-in where it's missing (older
-  // Safari). Either way idle decoding never competes with the hot path.
   var ric = typeof window.requestIdleCallback === "function"
     ? window.requestIdleCallback.bind(window)
     : function (cb) {
@@ -578,63 +692,53 @@
         }, 60);
       };
 
-  var aheadQueue = [];
-  var aheadQueued = null; // last stage-group index the queue was built for
   var idleScheduled = false;
 
-  // Point 4: "keep the current stage's frames plus the next stage's decoded
-  // ahead of time." Rebuilds the wanted set only when the reader crosses
-  // into a new stage group (cheap to check every scroll update, since most
-  // calls land in the same group as last time and bail immediately).
-  function refreshAheadQueue(scrollPx) {
-    if (!stageGroups.length) return;
-    var idx = 0;
-    for (var i = 0; i < stageGroups.length; i++) {
-      idx = i;
-      if (scrollPx < stageGroups[i].endPx) break;
-    }
-    if (idx === aheadQueued) return;
-    aheadQueued = idx;
-
-    var want = [];
-    function addRange(g) { for (var f = g.minF; f <= g.maxF; f++) want.push(f); }
-    addRange(stageGroups[idx]);
-    if (stageGroups[idx + 1]) addRange(stageGroups[idx + 1]);
-
-    var cur = Math.round(displayedFrame);
-    want.sort(function (a, b) { return Math.abs(a - cur) - Math.abs(b - cur); });
-    aheadQueue = want.filter(function (f) { return !hiresBitmaps.has(f) && !hiresDecoding.has(f); });
-    scheduleIdleDecode();
-  }
-
-  function scheduleIdleDecode() {
-    if (idleScheduled || !aheadQueue.length) return;
+  // "Pre-decoded into memory after the page goes idle, as much as memory
+  // safely allows." The whole motion tier if it fits (measured: 600 bitmaps at
+  // 1280x720 held on an 8GB machine with decode time staying flat and the JS
+  // heap untouched, because ImageBitmaps do not live on it), otherwise a
+  // window around wherever the reader is. Frames nearest the reader go first,
+  // so an interrupted preload is still the useful half.
+  function scheduleIdlePredecode() {
+    if (idleScheduled || !motionStore.blobs.length) return;
     idleScheduled = true;
-    ric(function (deadline) {
+    ric(function () {
       idleScheduled = false;
-      var budget = 6; // this slice's own cap, separate from the hot-path per-tick cap
-      while (aheadQueue.length && budget > 0 &&
-             (deadline.didTimeout || deadline.timeRemaining() > 0)) {
-        var f = aheadQueue.shift();
-        if (!hiresBitmaps.has(f) && !hiresDecoding.has(f) && hiresBlobs[f]) {
-          ensureHiresDecoded(f);
-          budget--;
-        }
-      }
-      if (aheadQueue.length) scheduleIdleDecode();
-    }, { timeout: 500 });
-  }
+      var cur = Math.round(wantedFrame);
+      var room = motionStore.cap - motionStore.bitmaps.size;
+      if (room <= 0) { setTimeout(scheduleIdlePredecode, 500); return; }
+      // Already as much queued as the workers can usefully hold: come back
+      // when some of it has landed, rather than spinning.
+      if (queue.length >= QUEUE_MAX) { setTimeout(scheduleIdlePredecode, 100); return; }
 
-  // Fade-in/hold/fade-out, computed from a beat's own local progress and its
-  // own {in, out} window. A beat with no `fade` (a hold, or a transition/
-  // move beat with chapter:null) is simply on or off, never fading.
-  function textOpacity(row, p) {
-    if (!row.b.chapter) return 0;
-    var f = row.b.fade;
-    if (!f) return 1; // a hold beat: steady while it is the active beat
-    if (p < f.in) return f.in <= 0 ? 1 : clamp01(p / f.in);
-    if (p > f.out) return clamp01((1 - p) / Math.max(1e-6, 1 - f.out));
-    return 1;
+      // Nearest first, so an interrupted preload is still the useful half, and
+      // so eviction (which is also distance-based) is not fighting it. Only
+      // frames inside the cap's reach are worth asking for.
+      var want = [], i;
+      for (i = 0; i < manifest.count; i++) {
+        if (motionStore.bitmaps.has(i) || motionStore.inFlight.has(i)) continue;
+        if (!motionStore.blobs[i] || motionStore.broken[i]) continue;
+        want.push(i);
+      }
+      // Nothing left to decode. Keep a slow heartbeat anyway: eviction during
+      // a long session frees slots, and this is what refills them.
+      if (!want.length) { motionStore.full = true; setTimeout(scheduleIdlePredecode, 1000); return; }
+      want.sort(function (a, b) { return Math.abs(a - cur) - Math.abs(b - cur); });
+
+      // These all queue at priority 1000+, so every one of them yields to the
+      // frame the reader is actually looking at. Four per slice, not eight:
+      // adopting a transferred ImageBitmap costs the main thread real work, and
+      // eight landing together was measurably one long task rather than four
+      // short ones.
+      var budget = Math.min(room, 4);
+      for (i = 0; i < want.length && budget > 0; i++) {
+        requestDecode(motionStore, want[i], 1000 + Math.abs(want[i] - cur));
+        budget--;
+      }
+      pump();
+      setTimeout(scheduleIdlePredecode, 0);
+    }, { timeout: 400 });
   }
 
   /* ---- the animation over the footage ------------------------------------ */
@@ -644,7 +748,7 @@
   var sortedIndex = [];
   var originalTop = [];
   var targetTop = [];
-  var STACK_GAP = 8; // matches the gap in .stack in flight.css
+  var STACK_GAP = 8;
 
   function computeTops() {
     if (!cards.length) return;
@@ -661,6 +765,15 @@
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
   function setOn(node, on) { if (node) node.setAttribute("data-on", on ? "1" : "0"); }
 
+  function textOpacity(row, p) {
+    if (!row.b.chapter) return 0;
+    var f = row.b.fade;
+    if (!f) return 1;
+    if (p < f.in) return f.in <= 0 ? 1 : clamp01(p / f.in);
+    if (p > f.out) return clamp01((1 - p) / Math.max(1e-6, 1 - f.out));
+    return 1;
+  }
+
   function paint(row, p, scrollPx) {
     var stage = row.b.stage;
     var tOp = textOpacity(row, p);
@@ -670,34 +783,18 @@
 
     el.work.setAttribute("data-stage", stage);
 
-    // The claim panel: visible only during the claim stage (the landing,
-    // the input), opacity tied to this beat's own text window rather than
-    // a stage-wide fade, so it can vanish before that clip's quiet,
-    // text-free tail.
     if (el.claim) {
       el.claim.style.opacity = String(stage === "claim" ? tOp : 0);
       el.claim.hidden = !(stage === "claim" && tOp > 0.02);
     }
     if (el.form) el.form.hidden = stage !== "claim";
 
-    // The query: archive is where the real PubMed query appears (stepping
-    // back before any study has arrived), and it stays in view through
-    // weighing, write and publish since the search that produced these
-    // studies is still the relevant context for everything that follows.
     if (el.query) {
       var queryOn = stage === "archive" || stage === "weighing" || stage === "write" || stage === "publish";
       el.query.style.opacity = String(stage === "archive" ? tOp : (queryOn ? 1 : 0));
       el.query.hidden = !queryOn;
     }
 
-    // Weighing is where the studies arrive, get graded and sort into the
-    // evidence bar; write, publish and horizon hold that result while the
-    // sequence moves on to the findings being written up, made public, and
-    // finally the verdict, still-open line and next input reveal.
-    // Continuous progress through each named stage, not any one beat's
-    // local p, so nothing resets at a beat boundary inside weighing (its
-    // text beat and its text-free tail share one climbing count) or at any
-    // later stage seam.
     var stackOn = stage === "weighing" || stage === "write" || stage === "publish" || stage === "horizon";
     if (el.stackWrap) el.stackWrap.hidden = !stackOn;
 
@@ -725,71 +822,34 @@
     for (i = 0; i < cards.length; i++) {
       cards[i].setAttribute("data-graded", i < graded ? "1" : "0");
       var shift = ((targetTop[i] || 0) - (originalTop[i] || 0)) * sorting;
-      // The cards shrink away over the course of horizon so the panel can
-      // simplify down to the bar, the verdict and what is still open by
-      // the time the reader has sat with it a moment.
       var hide = stage === "horizon" ? clamp01(horizonP * 2.2) : 0;
       cards[i].style.transform = "translateY(" + shift.toFixed(1) + "px) scaleY(" + (1 - hide) + ")";
       cards[i].style.opacity = String((1 - hide) * midFade);
     }
 
-    // The bar forms once weighing's sort has mostly landed and then stays
-    // up through write, publish and horizon: it is the evidence the
-    // verdict rests on, not a thing that belongs only to one stage.
     setOn(el.bar, (stage === "weighing" && weighP > 0.75) || stage === "write" || stage === "publish" || stage === "horizon");
 
-    // Horizon: the verdict, what is still open, then the input again, each
-    // a little further into the stage than the last. 0.3 sits just past
-    // where the headline's own fade-out finishes, so the verdict never
-    // overlaps the chapter sentence above it.
     setOn(el.verdict, stage === "horizon" && horizonP > 0.3);
     if (el.open) el.open.hidden = !(stage === "horizon" && horizonP > 0.55);
     if (el.again) el.again.hidden = !(stage === "horizon" && horizonP > 0.75);
   }
 
-  /* ---- scroll + a persistent easing loop ---------------------------------
-   * The native scroll listener does nothing but set a flag: no DOM read, no
-   * DOM write (point 5). Once per animation frame, `tick` reads scrollY,
-   * recomputes everything that should feel instant (wantedFrame, the text
-   * panels, the cards, the verdict) in `updateFromScroll`, then eases
-   * `displayedFrame` toward `wantedFrame` by a fraction based on real
-   * elapsed time, not a fixed per-tick factor, so motion reads the same at
-   * 60Hz and 120Hz and across frames dropped by other work. */
+  /* ---- scroll + the deadline loop ----------------------------------------
+   * The scroll listener does nothing but set a flag: no DOM read, no DOM
+   * write. Once per animation frame `tick` reads scrollY, recomputes the
+   * overlay, and draws the frame for exactly that position. */
 
-  var lastY = window.scrollY;
-  var direction = 1;
   var wantedFrame = 0;
-  var displayedFrame = 0;
-  var scrollDirty = true; // run once at startup even before any scroll event
-  var EASE_TAU_MS = 100; // displayed catches up to ~63% of the gap every tau
-  var MAX_FRAME_STEP = 8; // never skip ahead more than a few frames in one tick
-  var lastTickTime = null;
-  var firstTick = true; // skip the catch-up sweep if the page loads mid-scroll
-
-  // How fast the *target* frame (not the eased display) is moving, in video
-  // frames per real second, smoothed so one chunky scroll event doesn't spike
-  // it. This is the signal that gates crossfade blending: blending two
-  // frames that are genuinely far apart in time looks like a double
-  // exposure, not smoothness, and the faster the reader is scrolling the
-  // further apart in time any two adjacent-index frames' *content* can be
-  // relative to how long either stays on screen. Below the threshold a
-  // crossfade still smooths ordinary scroll-driven motion; above it, draw()
-  // snaps to one sharp frame instead.
   var lastWantedFrame = 0;
-  var scrollVelocity = 0; // smoothed frames/sec
-  var VELOCITY_SMOOTHING = 0.5;
-  var CROSSFADE_MAX_VELOCITY = 12; // frames/sec
+  var signedVelocity = 0;   // footage frames per second, signed
+  var scrollDirty = true;
+  var lastTickTime = null;
+  var firstTick = true;
 
-  function onScroll() {
-    scrollDirty = true;
-  }
+  function onScroll() { scrollDirty = true; }
 
   function updateFromScroll() {
-    var y = window.scrollY;
-    direction = y >= lastY ? 1 : -1;
-    lastY = y;
-
-    var local = Math.max(0, Math.min(totalPx, y - sectionTop));
+    var local = Math.max(0, Math.min(totalPx, window.scrollY - sectionTop));
 
     var row = plan[0];
     for (var i = 0; i < plan.length; i++) {
@@ -801,58 +861,120 @@
 
     wantedFrame = frameFor(row, p);
     paint(row, p, local);
-    refreshAheadQueue(local);
   }
 
   function tick(now) {
     if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
+    if (firstTick) { firstTick = false; lastWantedFrame = wantedFrame; }
 
-    if (firstTick) { firstTick = false; displayedFrame = wantedFrame; lastWantedFrame = wantedFrame; }
-
-    var dt = lastTickTime == null ? 16 : Math.max(0, Math.min(200, now - lastTickTime));
+    var dt = lastTickTime == null ? 16 : Math.max(1, Math.min(200, now - lastTickTime));
     lastTickTime = now;
 
-    var rawVelocity = dt > 0 ? Math.abs(wantedFrame - lastWantedFrame) / (dt / 1000) : 0;
+    var raw = (wantedFrame - lastWantedFrame) / (dt / 1000);
+    var moving = Math.abs(wantedFrame - lastWantedFrame) > 0.01;
     lastWantedFrame = wantedFrame;
-    scrollVelocity += (rawVelocity - scrollVelocity) * VELOCITY_SMOOTHING;
+    signedVelocity += (raw - signedVelocity) * VELOCITY_SMOOTHING;
+    var speed = Math.abs(signedVelocity);
+    stats.velocity = speed;
+    if (speed > stats.peakVelocity) stats.peakVelocity = speed;
 
-    var delta = wantedFrame - displayedFrame;
-    if (Math.abs(delta) < 0.02) {
-      displayedFrame = wantedFrame;
+    // Hysteresis, so a scroll sitting near the threshold does not alternate
+    // tiers from one refresh to the next.
+    if (fastMode && speed < MOTION_LEAVE_VELOCITY) fastMode = false;
+    else if (!fastMode && speed > MOTION_ENTER_VELOCITY) fastMode = true;
+    stats.tier = fastMode ? "motion" : "hires";
+    // Follow the tier with the backing store. The velocity hysteresis above is
+    // what keeps this to a couple of reallocations per fling rather than one per
+    // refresh, and sizeCanvas returns untouched when the size already matches.
+    // The backing store deliberately does NOT follow the tier. Sizing it to the
+    // motion frame while moving looks like free work saved, and measured the
+    // other way: 4x throttled desktop, 500ms and 1000ms full-page flings,
+    // worst hold 138ms / 175ms and 24 / 39 long tasks when the store is resized
+    // at every velocity threshold crossing, against 93ms / 120ms and 9 / 9 when
+    // it is allocated once. Reallocating a backing store costs more than the
+    // interpolated pixels it saves, and a fling crosses the threshold twice per
+    // leg.
+
+    if (!loresRetired && now - startedAt >= LORES_WINDOW_MS) retireLores();
+
+    var target = Math.round(wantedFrame);
+
+    // Requests, in priority order, before the draw: the frame wanted now,
+    // then where the scroll will be one and two refreshes from now. At a fling
+    // speed of 1800 frames/s a refresh is thirty frames of travel, so "now" is
+    // already history by the time a decode lands; the predicted band is what
+    // actually gets drawn next.
+    var ahead = signedVelocity * (PREDICT_MS / 1000);
+    var p1 = Math.round(wantedFrame + ahead);
+    var p2 = Math.round(wantedFrame + ahead * 2);
+    var tiers = fastMode ? [motionStore, hiresStore] : [hiresStore, motionStore];
+
+    // Anything queued that the scroll has already gone past is dropped rather
+    // than decoded: finishing it would spend a worker on a frame nobody will
+    // ever see, which is how the old build fell behind. Only while actually
+    // moving, and only the hot-path requests: the idle pre-decode (priority
+    // 1000 and up) is deliberately filling in frames behind the reader as well
+    // as ahead, and must not be pruned for doing its job.
+    if (speed > MOTION_LEAVE_VELOCITY) {
+      var dir = signedVelocity >= 0 ? 1 : -1;
+      queue = queue.filter(function (job) {
+        if (job.prio >= 1000) return true;
+        return (job.index - target) * dir >= -SUB_RADIUS;
+      });
+    }
+
+    var primary = tiers[0];
+    if (fastMode) {
+      // The frame wanted *now* is already history by the time a decode of it
+      // lands, so the predicted band outranks it.
+      requestDecode(primary, p1, 0);
+      requestDecode(primary, target, 8);
     } else {
-      var alpha = 1 - Math.exp(-dt / EASE_TAU_MS);
-      var step = delta * alpha;
-      if (step > MAX_FRAME_STEP) step = MAX_FRAME_STEP;
-      else if (step < -MAX_FRAME_STEP) step = -MAX_FRAME_STEP;
-      displayedFrame += step;
+      requestDecode(primary, target, 0);
+      requestDecode(primary, p1, 5);
     }
-
-    decodesThisTick = 0;
-    var cur = Math.round(displayedFrame);
-
-    // draw() goes first and gets first claim on this tick's decode budget:
-    // it needs the exact frame(s) on screen right now. A fast flick can
-    // move displayedFrame through dozens of indices per second, and if the
-    // speculative ahead-decode below ran first and spent the whole budget
-    // on frames the reader hasn't reached yet, the frame actually being
-    // shown would never get its own decode kicked off and would sit on a
-    // stale stand-in indefinitely — exactly the "blurry when I go fast"
-    // symptom this ordering fixes. allowBlend is the other half of that
-    // fix: above CROSSFADE_MAX_VELOCITY, draw() snaps to a single sharp
-    // frame instead of crossfading two frames whose content has genuinely
-    // moved apart.
-    draw(displayedFrame, false, scrollVelocity < CROSSFADE_MAX_VELOCITY);
-
-    // Whatever budget draw() didn't use goes to a small window ahead in
-    // the scroll direction (and a little behind) so frames are already
-    // sharp by the time the reader arrives, capped at ~2 decode kickoffs
-    // per tick total (point 4).
-    var dir = delta >= 0 ? 1 : -1;
-    for (var k = 1; k <= 6; k++) {
-      var ahead = cur + dir * k;
-      if (ahead >= 0 && ahead < manifest.count) kickDecode(ahead);
+    for (var k = 1; k <= SUB_RADIUS; k++) {
+      requestDecode(primary, p1 + k, 10 + k);
+      requestDecode(primary, p1 - k, 10 + k);
     }
-    if (cur - dir >= 0 && cur - dir < manifest.count) kickDecode(cur - dir);
+    if (speed > MOTION_LEAVE_VELOCITY) requestDecode(primary, p2, 20);
+    // At rest the second tier is worth filling too: it is the hi-res frame the
+    // reader is about to stop on, or the motion frame that covers the next
+    // flick out of a standstill.
+    if (!moving || speed < MOTION_LEAVE_VELOCITY) {
+      requestDecode(tiers[1], target, 40);
+      requestDecode(tiers[1], target + 1, 45);
+      requestDecode(tiers[1], target - 1, 45);
+    }
+    if (queue.length > QUEUE_MAX) {
+      queue.sort(function (a, b) { return a.prio - b.prio; });
+      queue.length = QUEUE_MAX;
+    }
+    pump();
+
+    // The freeze limit. While the scroll position is moving, the picture has
+    // to change inside FREEZE_LIMIT_MS; if it has not, allow a stand-in from
+    // outside SUB_RADIUS rather than hold.
+    var positionMoving = moving || Math.abs(target - drawnIndex) > SUB_RADIUS;
+    // At rest the frame on screen is the correct frame, so it is not "held": it
+    // is simply right, and there is nothing to redraw. Keep the clock fresh
+    // while still, or the first tick of a fling charges the whole preceding
+    // idle period as one enormous hold and the number means nothing.
+    if (!positionMoving) drawnAt = now;
+    if (positionMoving) heldWhileMoving = true;
+    stats.holdMs = positionMoving ? now - drawnAt : 0;
+    var widen = positionMoving && (now - drawnAt) > FREEZE_LIMIT_MS;
+    if (widen) stats.freezeBreaks++;
+
+    // A hold still in progress counts too: a fling that ends frozen would
+    // otherwise never be recorded, because the frame after it never arrives.
+    if (positionMoving && now - drawnAt > stats.maxHoldMs) stats.maxHoldMs = now - drawnAt;
+
+    draw(wantedFrame, false, speed < CROSSFADE_MAX_VELOCITY, widen);
+    if (!positionMoving && drawnIndex === target) heldWhileMoving = false;
+
+    stats.residentMotion = motionStore.bitmaps.size;
+    stats.residentHires = hiresStore.bitmaps.size;
 
     requestAnimationFrame(tick);
   }
@@ -884,7 +1006,53 @@
     target.forEach(function (row, pos) { sortedIndex[row.i] = pos; });
   }
 
-  /* ---- start --------------------------------------------------------------- */
+  /* ---- how much stays decoded -------------------------------------------- */
+
+  // An ImageBitmap costs width*height*4 bytes of (mostly GPU-side) memory.
+  // The motion tier gets the larger share because it is the tier a fling draws
+  // from and because holding all of it resident is the difference between
+  // "decode might keep up" and "there is nothing left to decode"; hi-res only
+  // has to cover a window around a slow or stopped reader.
+  function residentCaps() {
+    var gb = typeof navigator.deviceMemory === "number" && navigator.deviceMemory > 0
+      ? navigator.deviceMemory : 4;
+    var GB = 1073741824;
+    var motionBytes = (manifest.motionWidth || 1280) * (manifest.motionHeight || 720) * 4;
+    var hiresBytes = manifest.width * manifest.height * 4;
+
+    // All of the tier, or a working window well clear of it: never 90-odd per
+    // cent. Measured on this machine, 4x throttled, a 1000ms full-page fling,
+    // desktop (552 frames in the tier):
+    //
+    //   resident   long tasks   worst hold
+    //   552/552        9          106ms
+    //   512/552       33          192ms     <- the trap
+    //   320/552        6          177ms
+    //   240/552        2          186ms
+    //
+    // Sitting just short of the whole tier is the worst of both: every leg of a
+    // fling evicts frames the next leg needs straight back, so it pays constant
+    // decode and eviction and gets nothing for it. At 1x the same shape is
+    // starker still: 552 resident holds the worst frame 33ms, 240 holds it
+    // 116ms, which is over the 100ms rule on its own. So full residency is not
+    // an optimisation here, it is what makes the rule reachable, and the budget
+    // rounds up to the whole tier when it is within reach.
+    var whole = manifest.count * motionBytes;
+    var motionShare = gb * 0.26 * GB;
+    motionStore.cap = whole <= motionShare
+      ? manifest.count
+      : Math.min(Math.round(manifest.count * 0.55),
+                 Math.max(90, Math.floor(motionShare / motionBytes)));
+    hiresStore.cap = Math.min(manifest.count,
+      Math.max(24, Math.floor(gb * 0.10 * GB / hiresBytes)));
+    // Debug-only override, so the residency budget can be swept and measured
+    // rather than argued about: /flight?debug=1&mcap=240
+    var m = /[?&]mcap=(\d+)/.exec(location.search);
+    if (DEBUG && m) motionStore.cap = Math.min(manifest.count, parseInt(m[1], 10));
+    stats.motionCap = motionStore.cap;
+  }
+
+  /* ---- start -------------------------------------------------------------- */
 
   variant = pickVariant();
   Promise.all([
@@ -894,9 +1062,19 @@
     manifest = both[0];
     beats = both[1];
     if (!manifest.count) throw new Error("empty manifest");
+    if (!manifest.motionPattern) throw new Error("manifest has no motion tier");
+    // The stress harness needs to know how many frames full residency means
+    // before it starts flinging, so it waits for a warm page rather than
+    // measuring the warm-up and calling it a fast-scroll failure.
+    stats.frameCount = manifest.count;
+
     lores = new Array(manifest.count);
-    hiresBlobs = new Array(manifest.count);
-    HIRES_KEEP = computeHiresKeep(manifest.width, manifest.height, manifest.fps);
+    motionStore.pattern = manifest.motionPattern;
+    hiresStore.pattern = manifest.pattern;
+    motionStore.blobs = new Array(manifest.count);
+    hiresStore.blobs = new Array(manifest.count);
+    residentCaps();
+    buildPool();
 
     buildOverlay();
     computeTops();
@@ -905,12 +1083,15 @@
     window.addEventListener("resize", function () { computeTops(); layout(); onScroll(); });
     window.addEventListener("orientationchange", function () { computeTops(); layout(); onScroll(); });
 
-    // The low-res pass is small (a few hundred KB total) and finishes fast:
-    // once it does, every frame index has *something* correct to show.
-    // High-res bytes for the whole sequence preload alongside it in the
-    // background; the progress indicator tracks both together.
+    // Order matters. Lores is a few hundred KB and gives every index something
+    // to show immediately. The motion tier comes next because it is what makes
+    // a fast scroll possible at all, and it is a third the bytes of the hi-res
+    // tier. Hi-res bytes load last, in parallel, for the reader who stops.
     loadLores();
-    preloadHiresBytes();
+    motionStore.preloadBytes().then(function () {
+      scheduleIdlePredecode();
+      return hiresStore.preloadBytes();
+    });
 
     onScroll();
     requestAnimationFrame(tick);

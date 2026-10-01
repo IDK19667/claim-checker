@@ -68,9 +68,70 @@ if manifest_path.exists():
       abs(manifest.get("totalBytes", 0) -
           sum(f.stat().st_size for f in frame_files)) < 1024,
       "manifest bytes drifted from the files on disk")
+
+    # ---- the motion tier (round 9) -------------------------------------------
+    # flight.js refuses to start without it (a fast fling has no other way to
+    # put a decoded frame up every refresh), so the manifest has to describe it
+    # and the files have to be there.
+    t("the manifest names a motion tier",
+      bool(manifest.get("motionPattern")), manifest.get("motionPattern"))
+    if manifest.get("motionPattern"):
+        mpat = manifest["motionPattern"]
+        mdir = FLIGHT / pathlib.Path(mpat).parent
+        mfiles = sorted(mdir.glob("frame-*" + ext))
+        t("the motion tier has exactly as many frames as the hi-res tier",
+          len(mfiles) == manifest["count"],
+          f"motion has {len(mfiles)}, hi-res has {manifest['count']}")
+        t("motion frames are smaller than hi-res frames (that is the point)",
+          0 < manifest.get("motionWidth", 0) < manifest["width"] or
+          0 < manifest.get("motionHeight", 0) < manifest["height"],
+          f"{manifest.get('motionWidth')}x{manifest.get('motionHeight')} vs "
+          f"{manifest['width']}x{manifest['height']}")
+        t("motionTotalBytes roughly matches the motion frames on disk",
+          abs(manifest.get("motionTotalBytes", 0) -
+              sum(f.stat().st_size for f in mfiles)) < 1024)
+
+    # ---- per-device byte budgets --------------------------------------------
+    # One session downloads one hi-res tier, one motion tier and the shared
+    # lores tier. Those three together are what has to fit: desktop 25MB,
+    # phone 10MB. Asserted here rather than eyeballed off a build log, because
+    # a quality tweak that quietly blows the budget is exactly the kind of
+    # thing that only shows up on someone else's phone bill.
+    lores_files = sorted((FLIGHT / "lores").glob("frame-*" + ext))
+    lores_bytes = sum(f.stat().st_size for f in lores_files)
+    for label, mf, cap in (("manifest.json", None, 25_000_000),
+                           ("manifest-2560.json", None, 25_000_000),
+                           ("manifest-phone.json", None, 10_000_000)):
+        p = FLIGHT / label
+        if not p.exists():
+            continue
+        m = json.loads(p.read_text())
+        total = m.get("totalBytes", 0) + m.get("motionTotalBytes", 0) + lores_bytes
+        t(f"{label}: hi-res + motion + lores fits the "
+          f"{cap // 1_000_000}MB budget ({total / 1e6:.2f}MB)",
+          0 < total <= cap, f"{total / 1e6:.2f}MB")
 else:
     print("SKIP manifest.json checks: static/flight/manifest.json not built yet "
           "(run scripts/build_flight.py)")
+
+# ---- the decode worker -------------------------------------------------------
+
+decoder = ROOT / "static" / "flight-decoder.js"
+t("the decode worker file exists", decoder.exists())
+if decoder.exists():
+    src = decoder.read_text()
+    t("the decode worker transfers the finished bitmap rather than copying it",
+      "postMessage" in src and "createImageBitmap" in src and "[bmp]" in src)
+flight_tpl = (ROOT / "templates" / "flight.html").read_text()
+t("the page tells flight.js where the decode worker lives",
+  'data-decoder=' in flight_tpl)
+flight_js = (ROOT / "static" / "flight.js").read_text()
+t("flight.js keeps a main-thread decode path for browsers without Worker",
+  'typeof Worker !== "function"' in flight_js and "MAIN_DECODE_MAX" in flight_js)
+t("the low-res tier is retired after its window rather than drawn forever",
+  "LORES_WINDOW_MS" in flight_js and "retireLores" in flight_js)
+t("the freeze limit is 100ms and the stand-in radius is 2 frames",
+  "var FREEZE_LIMIT_MS = 100;" in flight_js and "var SUB_RADIUS = 2;" in flight_js)
 
 # ---- beats.json --------------------------------------------------------------
 

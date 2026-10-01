@@ -31,7 +31,8 @@
 
 <section class="flight" id="flight"
          data-frames="{{ url_for('static', filename='flight') }}"
-         data-beats="{{ url_for('static', filename='flight/beats.json') }}">
+         data-beats="{{ url_for('static', filename='flight/beats.json') }}"
+         data-decoder="{{ url_for('static', filename='flight-decoder.js') }}">
   <div class="flight-stage">
     <canvas id="flight-canvas" aria-hidden="true"></canvas>
 

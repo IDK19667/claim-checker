@@ -19,8 +19,15 @@ for source and licence). Outputs:
   * static/flight/frame-NNNN.avif + manifest.json          1920-wide tier
   * static/flight/2560/frame-NNNN.avif + manifest-2560.json 2560-wide tier
   * static/flight/phone/frame-NNNN.avif + manifest-phone.json portrait tier
+  * static/flight/motion/frame-NNNN.avif                   1280-wide motion
+                                                            tier (desktop)
+  * static/flight/motion-phone/frame-NNNN.avif             540x960 motion tier
   * static/flight/lores/frame-NNNN.avif                    shared low-res
                                                             fallback tier
+
+Pass --frames-only to skip re-encoding the two masters when only the frame
+tiers or their qualities have changed (the masters are deterministic from the
+clips and take several minutes each).
 
 Four deliberate choices worth knowing:
 
@@ -53,10 +60,17 @@ Four deliberate choices worth knowing:
     LARGE_QUALITY/PHONE_QUALITY/LORES_QUALITY number below comes from a real
     extraction at 24fps measured against the per-tier budget (desktop
     25MB, phone 10MB), not a guess: see scripts/flight_scroll_test.mjs and
-    DECISIONS.md for the before/after numbers. AVIF was picked over WebP at
-    matched PSNR (smaller output) and measured roughly 2x faster to decode
-    via createImageBitmap on real hardware, which matters more now that the
-    frame count has nearly tripled.
+    DECISIONS.md for the before/after numbers.
+
+  * Round 9 correction: round 6 claimed AVIF decodes "roughly 2x faster" than
+    WebP. A careful real-GPU measurement (16 frames per tier, four decodes
+    each, createImageBitmap in the browser pane) says that is wrong. AVIF and
+    WebP decode within 5% of each other at every tier; high-quality JPEG is
+    genuinely the fastest, about 25-30% quicker than either. AVIF stays
+    anyway, because JPEG costs 4-6x the bytes (the default tier would be
+    113MB against a 25MB budget) and WebP 1.4-1.9x for no speed gain. The
+    real answer to decode cost was never the format: it was a smaller motion
+    tier plus a pool of decode workers. See DECISIONS.md for the full table.
 """
 
 import json
@@ -99,16 +113,38 @@ MASTER_W, MASTER_H = 2560, 1440
 FRAME_FORMAT = "AVIF"
 FRAME_SPEED = 6            # Pillow AVIF encode speed (0 slow/small .. 10 fast/large)
 
-FRAME_WIDTH = 1920         # default desktop tier: 552 frames, 19.3MB measured
-FRAME_QUALITY = 45
-LARGE_WIDTH = 2560         # large-screen desktop tier: 552 frames, 17.3MB measured
+FRAME_WIDTH = 1920         # default desktop tier
+FRAME_QUALITY = 42
+LARGE_WIDTH = 2560         # large-screen desktop tier
 LARGE_QUALITY = 32
 
 PHONE_W, PHONE_H = 810, 1440   # 9:16, a real phone canvas size, never upscaled
-PHONE_QUALITY = 35              # 552 frames, 7.1MB measured, well under the 10MB budget
+PHONE_QUALITY = 30
 
-LORES_WIDTH = 240      # the always-available fallback tier: tiny, held fully decoded
-LORES_QUALITY = 40
+# The motion tier (round 9). A fast fling has to put a *decoded* frame on the
+# canvas every screen refresh, and the hi-res tiers cannot be decoded that
+# fast: measured on a real GPU via createImageBitmap, one 2560x1440 AVIF frame
+# takes 34.4ms average and one 1920x1080 frame 20.8ms, against a 16.7ms
+# deadline at 60Hz and 8.3ms at 120Hz. 1280x720 takes 10.8ms and 540x960
+# takes 6.4ms, which a pool of three or four decode workers clears with real
+# headroom. So the fast-scroll path draws from this tier and the hi-res tier
+# takes over the moment the scroll slows down. The quality numbers are far
+# below the hi-res tiers' on purpose: a motion-tier frame is on screen for one
+# refresh during a fling, where compression detail is invisible but *position*
+# and sharpness of edges are not, and the bytes have to fit inside the same
+# per-device budget as the hi-res tier it sits beside.
+MOTION_WIDTH = 1280            # desktop motion tier, from the landscape master
+MOTION_QUALITY = 26
+PHONE_MOTION_W, PHONE_MOTION_H = 540, 960   # phone motion tier, 9:16 like its hi-res tier
+PHONE_MOTION_QUALITY = 26
+
+# The always-available fallback tier: tiny, held fully decoded. Round 9 cut it
+# from 240px/q40 to 160px/q36 (0.94MB -> 0.48MB) because its job shrank: it now
+# only covers the first second after load, before any motion-tier frame has
+# decoded, and never appears again. The bytes it gives back go to the motion
+# tier, which is inside the same budget.
+LORES_WIDTH = 160
+LORES_QUALITY = 36
 
 XFADE = 0.6          # seconds of crossfade between stages
 TAIL_FADE = 1.0      # seconds of fade into DEEP at the end
@@ -273,23 +309,44 @@ def main() -> None:
         if not (CLIPS / name).exists():
             sys.exit(f"missing clip: {name}")
 
-    total = build_master()
-    print(f"master (landscape): {total:.1f}s, {OUT_VIDEO.stat().st_size/1e6:.1f}MB")
-    total_phone = build_master_phone()
-    print(f"master (phone):     {total_phone:.1f}s, {OUT_VIDEO_PHONE.stat().st_size/1e6:.1f}MB")
+    frames_only = "--frames-only" in sys.argv
+    if frames_only and OUT_VIDEO.exists() and OUT_VIDEO_PHONE.exists():
+        print("--frames-only: reusing the existing masters")
+    else:
+        total = build_master()
+        print(f"master (landscape): {total:.1f}s, {OUT_VIDEO.stat().st_size/1e6:.1f}MB")
+        total_phone = build_master_phone()
+        print(f"master (phone):     {total_phone:.1f}s, {OUT_VIDEO_PHONE.stat().st_size/1e6:.1f}MB")
 
-    (ROOT / "media" / "qc").mkdir(exist_ok=True)
-    run(["ffmpeg", "-v", "error", "-y", "-i", str(OUT_VIDEO),
-         "-vf", "fps=1,scale=320:-2,tile=7x4", "-frames:v", "1",
-         str(ROOT / "media" / "qc" / "master-contact.jpg")])
+        (ROOT / "media" / "qc").mkdir(exist_ok=True)
+        run(["ffmpeg", "-v", "error", "-y", "-i", str(OUT_VIDEO),
+             "-vf", "fps=1,scale=320:-2,tile=7x4", "-frames:v", "1",
+             str(ROOT / "media" / "qc" / "master-contact.jpg")])
 
     lores = extract_lores(OUT_VIDEO)
     print(f"lores:  {lores['count']} at {lores['width']}px wide, "
           f"{lores['bytes']/1e6:.2f}MB total, {lores['bytes']/lores['count']/1024:.1f}KB average")
 
+    # The two motion tiers. The desktop one is shared by the default and large
+    # variants (both are drawing it into the same canvas at speed, and a
+    # second copy would cost budget for no visible difference); the phone one
+    # keeps the portrait master's 9:16 framing so a fast fling on a phone is
+    # not cropping a landscape frame.
+    motion_info = _extract_one(OUT_VIDEO, MOTION_WIDTH, MOTION_QUALITY, FRAMES / "motion")
+    print(f"motion ({MOTION_WIDTH}w): {motion_info['count']} frames at "
+          f"{motion_info['width']}x{motion_info['height']}, "
+          f"{motion_info['bytes']/1e6:.2f}MB total, "
+          f"{motion_info['bytes']/motion_info['count']/1024:.1f}KB average")
+    pmotion_info = _extract_one(OUT_VIDEO_PHONE, PHONE_MOTION_W, PHONE_MOTION_QUALITY,
+                                FRAMES / "motion-phone")
+    print(f"motion-phone:   {pmotion_info['count']} frames at "
+          f"{pmotion_info['width']}x{pmotion_info['height']}, "
+          f"{pmotion_info['bytes']/1e6:.2f}MB total, "
+          f"{pmotion_info['bytes']/pmotion_info['count']/1024:.1f}KB average")
+
     default_info = _extract_one(OUT_VIDEO, FRAME_WIDTH, FRAME_QUALITY, FRAMES)
     manifest = {
-        "version": 6,
+        "version": 7,
         "pattern": "frame-%04d" + FRAME_EXT,
         "loresPattern": "lores/frame-%04d" + FRAME_EXT,
         "count": default_info["count"],
@@ -301,6 +358,10 @@ def main() -> None:
         "seconds": round(default_info["count"] / FPS_FRAMES, 2),
         "totalBytes": default_info["bytes"],
         "loresTotalBytes": lores["bytes"],
+        "motionPattern": "motion/frame-%04d" + FRAME_EXT,
+        "motionWidth": motion_info["width"],
+        "motionHeight": motion_info["height"],
+        "motionTotalBytes": motion_info["bytes"],
     }
     (FRAMES / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     print(f"default (1920): {default_info['count']} frames at "
@@ -335,13 +396,31 @@ def main() -> None:
         "poster": "phone/frame-0000" + FRAME_EXT,
         "seconds": round(phone_info["count"] / FPS_FRAMES, 2),
         "totalBytes": phone_info["bytes"],
+        "motionPattern": "motion-phone/frame-%04d" + FRAME_EXT,
+        "motionWidth": pmotion_info["width"],
+        "motionHeight": pmotion_info["height"],
+        "motionTotalBytes": pmotion_info["bytes"],
     })
     (FRAMES / "manifest-phone.json").write_text(json.dumps(manifest_phone, indent=1) + "\n")
-    budget_flag = " -- OVER the 10MB budget" if phone_info["bytes"] > 10_000_000 else " -- within the 10MB budget"
     print(f"phone ({PHONE_W}w):  {phone_info['count']} frames at "
           f"{phone_info['width']}x{phone_info['height']}, "
-          f"{phone_info['bytes']/1e6:.2f}MB total{budget_flag}, "
+          f"{phone_info['bytes']/1e6:.2f}MB total, "
           f"{phone_info['bytes']/phone_info['count']/1024:.1f}KB average")
+
+    # The budget is per device, not per tier: one session downloads exactly one
+    # hi-res tier, one motion tier and the shared lores tier, so those three
+    # are what has to fit. Printed here rather than eyeballed, because round 9
+    # added a tier and the old per-tier print no longer answers the question.
+    for label, hires_bytes, motion_bytes, cap in (
+        ("desktop (default + motion)", default_info["bytes"], motion_info["bytes"], 25_000_000),
+        ("desktop (large + motion)", large_info["bytes"], motion_info["bytes"], 25_000_000),
+        ("phone (phone + motion-phone)", phone_info["bytes"], pmotion_info["bytes"], 10_000_000),
+    ):
+        total_bytes = hires_bytes + motion_bytes + lores["bytes"]
+        flag = "OVER" if total_bytes > cap else "within"
+        print(f"budget {label}: {total_bytes/1e6:.2f}MB "
+              f"({hires_bytes/1e6:.2f} hi-res + {motion_bytes/1e6:.2f} motion + "
+              f"{lores['bytes']/1e6:.2f} lores) -- {flag} the {cap//1_000_000}MB budget")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,180 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-09-30 (latest): Round 7, residual fast-scroll blur: diagnosis and velocity-gated fix
+## 2026-10-01 (latest): Round 9, the fast-scroll pipeline: a motion tier, a worker pool, and a residency budget that is all or nothing
+
+**The brief: someone flings the page top to bottom and back as hard as
+they can, on desktop and phone, and every single refresh shows a sharp,
+correct frame. Never blurry, never stuck, never lagging.** Round 7 got
+the picture sharp at moderate speed; a real fling still froze, because
+one thread cannot decode a 2560x1440 AVIF inside a 16.7ms refresh.
+
+### What the measurements actually said
+
+Decode cost, `createImageBitmap` on an already-fetched Blob, real GPU
+(headed Chromium on this Mac, never headless: Playwright's default
+rasteriser is SwiftShader and its numbers describe nobody's machine), 12
+decodes per file, three frames per tier, regenerate with
+`scripts/flight_decode_bench.py` then `scripts/flight_decode_bench.mjs`:
+
+| tier         | pixels    | format | avg ms | worst ms | avg KB/frame |
+|--------------|-----------|--------|--------|----------|--------------|
+| phone        | 810x1440  | AVIF   | 18.3   | 44.6     | 13           |
+| phone        | 810x1440  | JPEG   | 14.5   | 28.4     | 103          |
+| phone        | 810x1440  | WebP   | 14.1   | 18.2     | 26           |
+| default      | 1920x1080 | AVIF   | 26.9   | 38.9     | 31           |
+| default      | 1920x1080 | JPEG   | 34.6   | 89.5     | 208          |
+| default      | 1920x1080 | WebP   | 40.4   | 83.9     | 60           |
+| large        | 2560x1440 | AVIF   | 46.9   | 74.9     | 42           |
+| large        | 2560x1440 | JPEG   | 40.9   | 73.4     | 318          |
+| large        | 2560x1440 | WebP   | 49.8   | 181.9    | 83           |
+| motion       | 1280x720  | AVIF   | 11.1   | 16.5     | 15           |
+| motion       | 1280x720  | JPEG   | 9.4    | 12.0     | 109          |
+| motion       | 1280x720  | WebP   | 13.3   | 23.3     | 35           |
+| motion-phone | 540x960   | AVIF   | 6.3    | 9.3      | 8            |
+| motion-phone | 540x960   | JPEG   | 5.2    | 6.9      | 56           |
+| motion-phone | 540x960   | WebP   | 6.5    | 7.8      | 16           |
+
+Three things follow, and the second corrects this file.
+
+1. **No format decodes a full-size frame inside one refresh.** The
+   cheapest 2560x1440 result is 40.9ms against a 16.7ms budget. Format
+   choice cannot solve this; only fewer pixels can.
+2. **Round 6's "AVIF decodes roughly 2x faster than WebP" was wrong.**
+   They are within a few per cent at every tier, and at the phone tier
+   WebP is the faster of the two. AVIF stays, but on bytes, not speed:
+   it is half of WebP and a seventh of JPEG, and bytes are what the
+   10MB phone budget is spent on. JPEG is genuinely 10-25% faster to
+   decode and never usable here: the default tier alone would be 113MB.
+3. **1280x720 at 16.5ms worst is right at the deadline**, which is why
+   decoding during a fling was never going to be the plan.
+
+### The pipeline
+
+- **A motion tier**, 1280x720 on desktop and 540x960 on phone, drawn
+  above 18 footage-frames/sec and left below 10 (hysteresis, so a fling
+  that eases does not flicker between tiers). Full hi-res below the
+  threshold and always at rest.
+- **A pool of 2 to 4 Web Workers** (`static/flight-decoder.js`,
+  `clamp(hardwareConcurrency - 1, 2, 4)`) returning ImageBitmaps as
+  transferables, with a capped main-thread fallback for browsers with no
+  `Worker`.
+- **Prediction, not queueing.** Each tick decodes the frame 24ms ahead of
+  where the scroll is going first and the current frame second, plus a
+  +/-2 band; jobs for frames already passed are dropped from the queue.
+  No easing between frames: the drawn frame is the frame for the current
+  scroll position, every refresh, and in-between frames are skipped.
+- **A freeze limit.** If the position is moving and the picture has not
+  changed in 100ms, the search widens past the +/-2 band rather than
+  hold.
+- **Low-res only in the first second.** After `LORES_WINDOW_MS` the
+  low-res bitmaps are closed outright, so there is no path that can draw
+  one later.
+
+### The residency budget is all-or-window, never 93%
+
+The whole design rests on the motion tier being decoded into memory
+after idle, so a fling has nothing left to decode. The interesting
+result is what happens when it *nearly* fits. Desktop, 552 frames, 4x
+CPU throttle, a 1000ms full-page fling:
+
+| resident | long tasks | worst hold |
+|---|---|---|
+| 552/552 | 9 | 106ms |
+| 512/552 | 33 | 192ms |
+| 320/552 | 6 | 177ms |
+| 240/552 | 2 | 186ms |
+
+Sitting just short of the whole tier is the worst of every world: each
+leg of a fling evicts the frames the next leg immediately needs back, so
+it pays constant decode and eviction and buys nothing. At 1x the shape
+is starker: 552 resident holds the worst frame 33ms, 240 holds it 116ms,
+which breaks the 100ms rule on its own. **Full residency is not an
+optimisation here, it is what makes the rule reachable.** So the budget
+takes the whole tier when it fits in its share of `deviceMemory` and
+otherwise drops to at most 55% of it, deliberately clear of the trap.
+
+Stated plainly because it is the one number worth vetoing: on an 8GB
+machine the desktop motion tier resident in full is about 2.0GB of
+ImageBitmaps, and the phone tier about 1.1GB. These do not live on the
+JS heap, and 600 bitmaps at 1280x720 were held with decode time staying
+flat. If that is too much to spend, the lever is the motion tier's
+dimensions, not the cap.
+
+### Two experiments that failed, kept here so they are not retried
+
+- **GPU prewarm.** Round 9 first drew every newly decoded bitmap into a
+  1x1 canvas on the theory that the first `drawImage` pays a texture
+  upload. It produced 31 long tasks of ~65ms. A 1x1 2D canvas is
+  CPU-backed, so the "prewarm" forced a full GPU read-back of each
+  bitmap. Re-measured on the real on-screen canvas, the first draw of a
+  never-drawn bitmap and the second draw of the same bitmap are
+  indistinguishable (avg 3.9ms vs 3.1ms). There was nothing to front-load.
+  Removed.
+- **A backing store that follows the tier.** Sizing the canvas down to
+  the motion frame while moving looks like free work saved and measures
+  the other way: 4x throttled desktop, 500ms and 1000ms flings, worst
+  hold 138ms / 175ms and 24 / 39 long tasks when the store is resized at
+  every threshold crossing, against 93ms / 120ms and 9 / 9 when it is
+  allocated once. Reallocating a backing store costs more than the
+  interpolated pixels it saves. Reverted.
+
+What did survive from that line of work: **the backing store is never
+larger than the frames can fill.** At 1440x900 DPR2 the naive
+2880x1800 store is 36% more pixels than the 2560x1440 frame holds, all
+of it upscale.
+
+### Where it ended up
+
+Full-page flings, five round trips each, debug overlay on, real GPU,
+`node scripts/flight_stress.mjs`:
+
+| cpu | view | fling | worst hold | long tasks >50ms | low-res after 1s | frames >2 off |
+|---|---|---|---|---|---|---|
+| 1x | desktop | 300ms | 57ms | 0 | 0 | 0 |
+| 1x | desktop | 500ms | 26ms | 0 | 0 | 0 |
+| 1x | desktop | 1000ms | 40ms | 0 | 0 | 0 |
+| 1x | phone | 300ms | 19ms | 0 | 0 | 0 |
+| 1x | phone | 500ms | 21ms | 0 | 0 | 0 |
+| 1x | phone | 1000ms | 19ms | 0 | 0 | 0 |
+| 4x | desktop | 300ms | 48ms | 0 | 0 | 0 |
+| 4x | desktop | 500ms | 83ms | 7 | 0 | 0 |
+| 4x | desktop | 1000ms | 135ms | 32 | 0 | 0 |
+| 4x | phone | 300ms | 22ms | 0 | 0 | 0 |
+| 4x | phone | 500ms | 28ms | 0 | 0 | 0 |
+| 4x | phone | 1000ms | 34ms | 0 | 0 | 0 |
+
+Every target is met unthrottled on both viewports, and on phone with the
+CPU throttled 4x. **What degrades, honestly: desktop at 4x throttle on
+the slower flings.** The fastest fling is the cleanest there, because it
+stays in the motion tier the whole way; a 1000ms fling repeatedly crosses
+back under the velocity threshold and draws 2560x1440 hi-res frames, and
+rasterising those on a quartered CPU is what produces the 32 long tasks
+and the 135ms hold. No script is responsible: under that load no single
+callback exceeds 25ms, so this is the browser's own raster and composite
+work, not the pipeline's.
+
+Byte budgets, asserted in `tests/test_flight.py` rather than eyeballed
+off a build log: desktop 23.51MB (default) and 23.86MB (large) against
+25MB, phone 9.84MB against 10MB, motion tier included.
+
+### Deviations from the brief, and why
+
+- **The phone motion tier is 540x960, not the literal "720px".** A
+  720x1280 phone motion tier is only 21% fewer pixels than the 810x1440
+  tier it would stand in for (9.9ms against 12.2ms: no real win) and
+  costs 4.3-4.9MB of a 10MB budget. 540x960 decodes in 6.3ms and is
+  upscaled only 1.23x on a 390pt phone, which is why phone is the
+  cleanest column in the table above.
+- **Sharpness at speed, assessed honestly** against full hi-res at a 42%
+  centre crop, which is a harsher test than any reader's viewing
+  condition: indistinguishable on shallow-depth-of-field frames (96,
+  330); visibly softer on dense library shelving (236) and clearly
+  softer on the handwritten page (470), where the pencil annotations
+  lose legibility. It is only ever on screen above 18 footage-frames/sec,
+  and the hi-res frame is back before the scroll stops.
+
+## 2026-09-30: Round 7, residual fast-scroll blur: diagnosis and velocity-gated fix
 
 **Round 6 made fast scrolling smoother but still visibly blurry. Diagnosed
 before fixing, with a `?debug=1` overlay that reports every drawn frame's

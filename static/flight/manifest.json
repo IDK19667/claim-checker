@@ -1,14 +1,18 @@
 {
- "version": 6,
+ "version": 7,
  "pattern": "frame-%04d.avif",
  "loresPattern": "lores/frame-%04d.avif",
  "count": 552,
  "fps": 24,
  "width": 1920,
  "height": 1080,
- "loresWidth": 240,
+ "loresWidth": 160,
  "poster": "frame-0000.avif",
  "seconds": 23.0,
- "totalBytes": 19341749,
- "loresTotalBytes": 1023604
+ "totalBytes": 16944805,
+ "loresTotalBytes": 567837,
+ "motionPattern": "motion/frame-%04d.avif",
+ "motionWidth": 1280,
+ "motionHeight": 720,
+ "motionTotalBytes": 6001298
 }
