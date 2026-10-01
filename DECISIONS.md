@@ -4,7 +4,99 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-09-30 (latest): Round 6, smoothness overhaul: 24fps AVIF, crossfade, decode-priority fix
+## 2026-09-30 (latest): Round 7, residual fast-scroll blur: diagnosis and velocity-gated fix
+
+**Round 6 made fast scrolling smoother but still visibly blurry. Diagnosed
+before fixing, with a `?debug=1` overlay that reports every drawn frame's
+index, tier (hires/stale/lores) and blend amount in real time, plus
+`window.__flightStats` counters (`hiresDraws`, `loresDraws`, `staleDraws`,
+`blendDraws`).**
+
+**Finding (b), the dominant cause: `draw()` crossfaded on almost every
+tick, not just fast ones.** The continuous scroll position `pos` is
+rarely exactly an integer while the reader is moving, so the old
+`draw(pos)` blended two adjacent frames (`t = pos - i0`) on nearly every
+call regardless of scroll speed. Two frames 1/24s apart blended together
+is imperceptible when the position lingers there; at speed, a new blended
+pair replaces the last one every ~16ms, and the content moves enough
+between the two blended frames that it reads as a sustained double
+exposure. Fix: a smoothed `scrollVelocity` (frames/sec, computed from the
+raw scroll-driven `wantedFrame`, not the eased display) gates blending.
+Below 12 frames/sec, `draw()` still crossfades exactly as round 6 did.
+Above it, `draw(pos, force, allowBlend=false)` rounds to the single
+nearest frame and draws it alone, no blend. When scrolling stops,
+`wantedFrame` is always an integer and the easing converges onto it
+exactly, so the fractional part is 0 and the frame drawn is never a
+blend, independent of `allowBlend`.
+
+**Finding (a), a secondary risk: nothing capped how stale a "sharp"
+stand-in could be.** `nearestAvailable` (round 6) searched outward with no
+distance limit once the ±24-frame hi-res radius failed, so under decode
+pressure it could return a hi-res bitmap many seconds away from the
+actual position: sharp, but the wrong moment. Replaced with
+`resolveFrame`, which adds a third tier (`"stale"`): once any hi-res frame
+has ever been shown, a lookup that finds neither the exact frame nor a
+near neighbour freezes on the last hi-res frame actually drawn instead of
+searching arbitrarily far or falling back to lores. Lores now only
+appears before the first hi-res decode of the session resolves; confirmed
+via `window.__flightStats.loresDraws`, which was 0 in every fast-scroll
+measurement after that first frame, both before and after this round's
+fix (round 6's lores guarantee was already solid; this round's finding
+was blending, not lores).
+
+**Finding (c), confirmed and fixed: the "large" tier breakpoint ignored
+DPR, so most DPR2 laptops were upscaling the 1920px tier.** `pickVariant`
+compared CSS viewport width alone against 1600px; round 5/6 called this
+"an accepted compromise" for ordinary 1280-1440px laptops. In practice
+that is most real DPR2 laptops (a 1512px MacBook Pro 14" needs a 3024px
+canvas backing store, a 50% upscale of the 1920px tier), which is a much
+larger and more common case than the comment implied, and directly
+produces visible softness independent of scroll speed or crossfade. Fixed
+by comparing physical pixels (`CSS width * min(dpr, 2)`) against the
+default tier's own 1920px width, so any viewport that would need to
+upscale the 1920px tier gets the 2560px tier instead. The 2560px tier
+measures 17.3MB (round 6), comfortably under the 25MB desktop budget even
+served more often.
+
+**Finding (d), checked and not actionable by frame-dropping: `01-claim`
+(the phone-in-hand clip) is genuinely the softest footage, confirmed with
+a hand-rolled variance-of-Laplacian sharpness score (numpy; cv2/scipy are
+not installed) sampled across all six clips' frames, excluding the
+crossfade transitions at each clip's edges:**
+
+| clip | mean sharpness | range |
+|---|---|---|
+| `01-claim` | 8.1 | 5.1 - 11.0 |
+| `05-publish` | 9.1 (dark scene; tail fade pulls this down further) | |
+| `03b-weighing-b` | 29.1 | |
+| `03a-weighing-a` | 57.2 | 54.9 - 59.7 |
+| `02-archive` | 91.6 | |
+| `04-write` | 144.2 | 130.7 - 160.0 |
+
+Visual inspection confirmed it: `01-claim` is a genuinely soft, low-light
+handheld shot (shallow depth of field, real motion blur on the moving
+hand), next to `04-write`'s crisp handwriting close-up. But the
+per-frame distribution within `01-claim` is tight (5.1 to 11.0 across all
+143 frames, no local outliers) and the same is true of every other clip
+sampled: softness here is a whole-clip property of the source footage,
+not a handful of bad frames mixed into an otherwise sharp clip. A
+sharpness-based skip/replace step, as built, would have had no sharper
+local neighbour to substitute and would not have moved this number. Did
+not implement it, since dead machinery that provably does nothing is
+worse than reporting the finding plainly: if `01-claim` needs to look
+sharper, the fix is re-sourcing that clip, a content decision left to the
+user, not a decode-time or build-time one.
+
+**Verification.** Repeated 1-second top-to-bottom fast-scroll sweeps in a
+real-GPU browser (both desktop 1280px and phone 390px viewports)
+consistently measured `loresDraws: 0` and `blendDraws: 0` throughout,
+with `allowBlend=false` holding at every sampled point (velocities
+100-1200 frames/sec observed). Five mid-scroll screenshots per viewport
+(not after settling) all show `[hires] (no blend)` in the debug overlay.
+At rest, velocity drops to 0 and the frame shown is still tagged
+`(no blend)`, confirming scrolling always settles on an exact frame.
+
+## 2026-09-30: Round 6, smoothness overhaul: 24fps AVIF, crossfade, decode-priority fix
 
 **The brief was to make the scroll-scrubbed fly-through as smooth as
 possible without changing anything it shows.** Five changes, in order of

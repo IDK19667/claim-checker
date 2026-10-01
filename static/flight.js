@@ -50,20 +50,24 @@
   // stretched to fill it; "phone" gives a narrow portrait viewport a frame
   // sequence that was cropped to 9:16 at build time (native pixels, never
   // an upscale) instead of the landscape tier cropped at draw time (which
-  // on a DPR2 phone canvas means scaling *up*). The breakpoint is a CSS
-  // viewport width, not multiplied by DPR: an ordinary 1280-1440px laptop
-  // at DPR2 already has the 1920 tier as its accepted compromise (see this
-  // file's build script), so "large" is reserved for a viewport wide
-  // enough that 1920 would visibly upscale regardless of DPR. Chosen once,
-  // not re-picked on resize/orientation change: a deliberate scope limit,
+  // on a DPR2 phone canvas means scaling *up*). The breakpoint compares
+  // *physical* pixels (CSS width times DPR, capped at 2 to match sizeCanvas)
+  // against the default tier's own 1920px width: round 6 compared CSS width
+  // alone and called an upscale on any DPR2 laptop under 1600 CSS px "an
+  // accepted compromise", but that is most ordinary DPR2 laptops (a 1512px
+  // MacBook Pro 14" needs a 3024px backing store, a 50% upscale of the 1920
+  // tier) and round 7's fast-scroll blur diagnosis found it visibly softer
+  // than the source, not a compromise worth keeping. Chosen once, not
+  // re-picked on resize/orientation change: still a deliberate scope limit,
   // see DECISIONS.md.
-  var LARGE_BREAKPOINT = 1600; // CSS px, viewport width alone
+  var FRAME_WIDTH_DEFAULT = 1920; // must match scripts/build_flight.py FRAME_WIDTH
   var variant = "default";
 
   function pickVariant() {
     var w = window.innerWidth, h = window.innerHeight;
     if (w < 700 && h > w) return "phone";
-    if (w >= LARGE_BREAKPOINT) return "large";
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (w * dpr > FRAME_WIDTH_DEFAULT) return "large";
     return "default";
   }
 
@@ -112,7 +116,37 @@
   // Cheap, always-on counters so a fast-scroll test can measure dropped and
   // stale frames instead of guessing from a screenshot. A handful of integer
   // increments per tick; read from outside as window.__flightStats.
-  window.__flightStats = { draws: 0, misses: 0, seen: {} };
+  window.__flightStats = {
+    draws: 0, misses: 0, seen: {},
+    hiresDraws: 0, loresDraws: 0, staleDraws: 0, blendDraws: 0
+  };
+
+  // ?debug=1 draws a small on-screen readout of exactly what the last draw()
+  // call showed (frame index, hires/lores/stale, blend or not, scroll
+  // velocity) so "it looks blurry" can be matched against what is actually
+  // on screen instead of guessed at from a static screenshot.
+  var DEBUG = /(?:^|[?&])debug=1(?:&|$)/.test(location.search);
+  var debugEl = null;
+
+  function updateDebugOverlay(f0, f1, t, allowBlend) {
+    if (!DEBUG) return;
+    if (!debugEl) {
+      debugEl = document.createElement("div");
+      debugEl.id = "flight-debug";
+      debugEl.style.cssText = "position:fixed;top:8px;left:8px;z-index:9999;" +
+        "background:rgba(0,0,0,.78);color:#5f5;font:11px/1.5 ui-monospace," +
+        "Menlo,monospace;padding:6px 9px;border-radius:4px;pointer-events:none;" +
+        "white-space:pre;max-width:70vw;";
+      document.body.appendChild(debugEl);
+    }
+    var s = window.__flightStats;
+    debugEl.textContent =
+      "frame " + f0.index + " [" + f0.tier + "]" +
+      (f1 ? "  blend-> " + f1.index + " [" + f1.tier + "] t=" + t.toFixed(2) : "  (no blend)") +
+      "\nvelocity " + scrollVelocity.toFixed(1) + " fps  allowBlend=" + allowBlend +
+      "\ndraws " + s.draws + "  hires " + s.hiresDraws + "  lores " + s.loresDraws +
+      "  stale " + s.staleDraws + "  blend " + s.blendDraws + "  misses " + s.misses;
+  }
 
   /* ---- low-res tier: fetched and decoded fully, kept forever ------------ */
 
@@ -294,42 +328,58 @@
    * canvas is never simply left showing an old, unrelated frame while the
    * reader has scrolled somewhere else. */
 
-  // How far to widen the search for a sharp stand-in before giving up and
-  // showing the blurry lores copy. +/-2 (point 4's wording) is a floor, not
-  // a ceiling: it guarantees lores never stands in once a hi-res frame is
-  // that close, but during a fast flick the exact frame can be dozens of
-  // indices from whatever is already decoded. A sharp neighbour from the
-  // same clip beats a blurry exact frame, so keep searching out to about a
-  // second of footage before conceding to lores.
+  // How far to widen the search for a sharp stand-in before conceding. +/-2
+  // (point 4's original wording) is a floor, not a ceiling: it guarantees
+  // lores never stands in once a hi-res frame is that close, but during a
+  // fast flick the exact frame can be dozens of indices from whatever is
+  // already decoded. A sharp neighbour from the same clip beats showing
+  // something stale, so keep searching out to about a second of footage.
   var HIRES_FALLBACK_RADIUS = 24;
 
-  function bitmapFor(i) {
+  // The last bitmap actually drawn at hi-res, and whether a hi-res frame has
+  // ever been shown at all. Once true, resolveFrame never falls back to the
+  // blurry lores tier again for the rest of the session: if neither the
+  // exact frame nor a near neighbour is decoded yet, it freezes on this
+  // instead. A frame or two of lag while a decode catches up is fine; a
+  // sudden drop to a visibly softer frame is the thing being fixed here.
+  var lastSharp = null; // { bmp, index }
+  var everShownHires = false;
+
+  // Resolves a wanted frame index to exactly one of: an exact or near-enough
+  // (within HIRES_FALLBACK_RADIUS) hi-res bitmap; failing that, the last
+  // hi-res bitmap actually shown, frozen in place; failing *that* (nothing
+  // hi-res has ever been decoded yet, i.e. the very start of the page before
+  // the first decode resolves), the lores tier, so the canvas is still never
+  // blank. Lores never appears again once any hi-res frame has been drawn.
+  function resolveFrame(i) {
     var hi = hiresBitmaps.get(i);
-    if (hi) return hi;
+    if (hi) {
+      lastSharp = { bmp: hi, index: i };
+      everShownHires = true;
+      return { bmp: hi, index: i, tier: "hires" };
+    }
     kickDecode(i); // kick off a decode for next time, budget permitting
-    var best = null, bestDist = Infinity;
+
+    var best = null, bestDist = Infinity, bestIdx = -1;
     hiresBitmaps.forEach(function (bmp, idx) {
       var d = Math.abs(idx - i);
-      if (d <= HIRES_FALLBACK_RADIUS && d < bestDist) { bestDist = d; best = bmp; }
+      if (d <= HIRES_FALLBACK_RADIUS && d < bestDist) { bestDist = d; best = bmp; bestIdx = idx; }
     });
-    if (best) return best;
-    if (lores[i]) return lores[i];
-    return null;
-  }
+    if (best) {
+      lastSharp = { bmp: best, index: bestIdx };
+      everShownHires = true;
+      return { bmp: best, index: bestIdx, tier: "hires" };
+    }
 
-  function nearestAvailable(i) {
-    var direct = bitmapFor(i);
-    if (direct) return { bmp: direct, index: i };
+    if (everShownHires && lastSharp) {
+      return { bmp: lastSharp.bmp, index: lastSharp.index, tier: "stale" };
+    }
+
+    // Startup only, before the first hi-res bitmap anywhere has decoded.
+    if (lores[i]) return { bmp: lores[i], index: i, tier: "lores" };
     for (var d = 1; d < manifest.count; d++) {
-      var lo = i - d, hi = i + d;
-      if (lo >= 0) {
-        var b = bitmapFor(lo);
-        if (b) return { bmp: b, index: lo };
-      }
-      if (hi < manifest.count) {
-        var b2 = bitmapFor(hi);
-        if (b2) return { bmp: b2, index: hi };
-      }
+      if (i - d >= 0 && lores[i - d]) return { bmp: lores[i - d], index: i - d, tier: "lores" };
+      if (i + d < manifest.count && lores[i + d]) return { bmp: lores[i + d], index: i + d, tier: "lores" };
     }
     return null;
   }
@@ -349,21 +399,32 @@
     ctx.globalAlpha = 1;
   }
 
-  // Draws the continuous scroll position `pos`, not a single frame index:
-  // when pos lands between two decoded frames, both are drawn (the lower
-  // at full opacity, the upper crossfaded in at the fractional part) so
-  // in-between positions look like motion instead of a visible step.
-  function draw(pos, force) {
-    var i0 = Math.max(0, Math.min(manifest.count - 1, Math.floor(pos)));
+  // Draws the continuous scroll position `pos`, not a single frame index.
+  // Below the crossfade velocity threshold, pos landing between two decoded
+  // frames draws both (the lower at full opacity, the upper crossfaded in at
+  // the fractional part) so in-between positions look like motion instead of
+  // a visible step. Above the threshold (a fast flick), blending two frames
+  // that differ by a real amount of motion looks like a double exposure, not
+  // smoothness, so allowBlend forces a single nearest hi-res frame instead:
+  // rounds to the nearest index rather than flooring, so snapping doesn't
+  // visibly lag a half-frame behind a slow crossfade would have covered.
+  function draw(pos, force, allowBlend) {
+    if (allowBlend === undefined) allowBlend = true;
+    var i0 = allowBlend
+      ? Math.max(0, Math.min(manifest.count - 1, Math.floor(pos)))
+      : Math.max(0, Math.min(manifest.count - 1, Math.round(pos)));
     var i1 = Math.min(manifest.count - 1, i0 + 1);
-    var t = i1 === i0 ? 0 : pos - i0;
+    var t = (allowBlend && i1 !== i0) ? pos - i0 : 0;
 
-    var f0 = nearestAvailable(i0);
+    var f0 = resolveFrame(i0);
     if (!f0) { window.__flightStats.misses++; return; }
-    var f1 = t > 0.004 ? nearestAvailable(i1) : null;
+    var f1 = (allowBlend && t > 0.004) ? resolveFrame(i1) : null;
 
     if (!force && hasDrawn && f0.bmp === lastB0 && (f1 ? f1.bmp : null) === lastB1 &&
-        Math.abs(t - lastT) < 0.004) return;
+        Math.abs(t - lastT) < 0.004) {
+      updateDebugOverlay(f0, f1, t, allowBlend);
+      return;
+    }
 
     if (f0.index !== i0) window.__flightStats.misses++;
     if (f1 && f1.index !== i1) window.__flightStats.misses++;
@@ -376,8 +437,17 @@
     window.__flightStats.seen[f0.index] = 1;
     if (f1) window.__flightStats.seen[f1.index] = 1;
 
+    if (f0.tier === "lores") window.__flightStats.loresDraws++;
+    else {
+      window.__flightStats.hiresDraws++;
+      if (f0.tier === "stale") window.__flightStats.staleDraws++;
+    }
+    if (f1) window.__flightStats.blendDraws++;
+
     drawOne(f0.bmp, 1);
     if (f1) drawOne(f1.bmp, t);
+
+    updateDebugOverlay(f0, f1, t, allowBlend);
   }
 
   function sizeCanvas() {
@@ -696,6 +766,20 @@
   var lastTickTime = null;
   var firstTick = true; // skip the catch-up sweep if the page loads mid-scroll
 
+  // How fast the *target* frame (not the eased display) is moving, in video
+  // frames per real second, smoothed so one chunky scroll event doesn't spike
+  // it. This is the signal that gates crossfade blending: blending two
+  // frames that are genuinely far apart in time looks like a double
+  // exposure, not smoothness, and the faster the reader is scrolling the
+  // further apart in time any two adjacent-index frames' *content* can be
+  // relative to how long either stays on screen. Below the threshold a
+  // crossfade still smooths ordinary scroll-driven motion; above it, draw()
+  // snaps to one sharp frame instead.
+  var lastWantedFrame = 0;
+  var scrollVelocity = 0; // smoothed frames/sec
+  var VELOCITY_SMOOTHING = 0.5;
+  var CROSSFADE_MAX_VELOCITY = 12; // frames/sec
+
   function onScroll() {
     scrollDirty = true;
   }
@@ -723,10 +807,14 @@
   function tick(now) {
     if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
 
-    if (firstTick) { firstTick = false; displayedFrame = wantedFrame; }
+    if (firstTick) { firstTick = false; displayedFrame = wantedFrame; lastWantedFrame = wantedFrame; }
 
     var dt = lastTickTime == null ? 16 : Math.max(0, Math.min(200, now - lastTickTime));
     lastTickTime = now;
+
+    var rawVelocity = dt > 0 ? Math.abs(wantedFrame - lastWantedFrame) / (dt / 1000) : 0;
+    lastWantedFrame = wantedFrame;
+    scrollVelocity += (rawVelocity - scrollVelocity) * VELOCITY_SMOOTHING;
 
     var delta = wantedFrame - displayedFrame;
     if (Math.abs(delta) < 0.02) {
@@ -747,10 +835,13 @@
     // move displayedFrame through dozens of indices per second, and if the
     // speculative ahead-decode below ran first and spent the whole budget
     // on frames the reader hasn't reached yet, the frame actually being
-    // shown would never get its own decode kicked off and would sit on the
-    // blurry lores stand-in indefinitely — exactly the "blurry when I go
-    // fast" symptom this ordering fixes.
-    draw(displayedFrame);
+    // shown would never get its own decode kicked off and would sit on a
+    // stale stand-in indefinitely — exactly the "blurry when I go fast"
+    // symptom this ordering fixes. allowBlend is the other half of that
+    // fix: above CROSSFADE_MAX_VELOCITY, draw() snaps to a single sharp
+    // frame instead of crossfading two frames whose content has genuinely
+    // moved apart.
+    draw(displayedFrame, false, scrollVelocity < CROSSFADE_MAX_VELOCITY);
 
     // Whatever budget draw() didn't use goes to a small window ahead in
     // the scroll direction (and a little behind) so frames are already
