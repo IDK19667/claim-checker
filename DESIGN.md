@@ -125,6 +125,12 @@ typography:
     fontSize: 26px
     fontWeight: 600
     letterSpacing: -0.02em
+  flight-claim:
+    fontFamily: Libre Franklin
+    fontSize: 36px
+    fontWeight: 400
+    lineHeight: 1.16
+    letterSpacing: -0.02em
   hero-sub-wide:
     fontFamily: Libre Franklin
     fontSize: 32px
