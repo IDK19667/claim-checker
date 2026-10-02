@@ -82,16 +82,16 @@ typography:
     lineHeight: 1.45
   takeaway:
     fontFamily: Libre Franklin
-    fontSize: 23px
+    fontSize: 26px
     fontWeight: 700
-    lineHeight: 1.26
-    letterSpacing: -0.015em
+    lineHeight: 1.22
+    letterSpacing: -0.02em
   takeaway-min:
     fontFamily: Libre Franklin
-    fontSize: 19px
+    fontSize: 21px
     fontWeight: 700
-    lineHeight: 1.26
-    letterSpacing: -0.015em
+    lineHeight: 1.22
+    letterSpacing: -0.02em
   figure-xl:
     fontFamily: Libre Franklin
     fontSize: 26px
@@ -125,27 +125,44 @@ typography:
     fontSize: 26px
     fontWeight: 600
     letterSpacing: -0.02em
-  claim:
-    fontFamily: Libre Franklin
-    fontSize: 34px
-    fontWeight: 900
-    lineHeight: 1.04
-    letterSpacing: -0.035em
-  verdict:
+  hero-sub-wide:
     fontFamily: Libre Franklin
     fontSize: 32px
+    fontWeight: 500
+    letterSpacing: -0.02em
+  claim-min:
+    fontFamily: Libre Franklin
+    fontSize: 17px
+    fontWeight: 500
+    lineHeight: 1.34
+    letterSpacing: 0em
+  claim:
+    fontFamily: Libre Franklin
+    fontSize: 20px
+    fontWeight: 500
+    lineHeight: 1.34
+    letterSpacing: 0em
+  claim-wide:
+    fontFamily: Libre Franklin
+    fontSize: 22px
+    fontWeight: 500
+    lineHeight: 1.34
+    letterSpacing: 0em
+  verdict-min:
+    fontFamily: Libre Franklin
+    fontSize: 30px
     fontWeight: 900
     lineHeight: 0.98
     letterSpacing: -0.035em
-  claim-wide:
+  verdict:
     fontFamily: Libre Franklin
-    fontSize: 36px
+    fontSize: 40px
     fontWeight: 900
-    lineHeight: 1.08
-    letterSpacing: -0.03em
+    lineHeight: 0.98
+    letterSpacing: -0.035em
   verdict-wide:
     fontFamily: Libre Franklin
-    fontSize: 38px
+    fontSize: 46px
     fontWeight: 900
     lineHeight: 0.98
     letterSpacing: -0.035em
@@ -315,12 +332,38 @@ weight is the grammar:
 Nothing is rounded, but zero radius is a consequence of the panel, not
 the signature. The signature is the rule weight.
 
-## The evidence bar
+## The evidence chart
 
-Study design drawn as fill density, never hue: solid ink for strong,
-mid grey for moderate, white with an inked edge for weak, and a 135
-degree hatch for retracted. It survives greyscale, printing and colour
-blindness, and it cannot be mistaken for a verdict.
+One bar per study, in the order of the list of studies, under a line that
+says in words what the chart says in marks: "Based on 8 studies, 3 used
+for this verdict, 2 strong".
+
+**Height is the kind of study and nothing else.** Three fixed tiers off a
+2px baseline, named down the left in 9.5px caps against 1px gridlines:
+Strong 100%, Moderate 64%, Weak 34%. A withdrawn paper is drawn at the
+weak height whatever it was published as, because a retraction is not
+thin evidence, it is no evidence. The same set of studies therefore
+always draws the same chart, and the chart cannot drift with the verdict.
+
+**Fill is whether the verdict leaned on it.** Solid ink for used,
+paper with a 1.5px inked edge for read but not used, a 135 degree hatch
+for retracted. Density, never hue: it survives greyscale, printing and
+colour blindness, and it cannot be mistaken for a verdict.
+
+Under each bar its study number, 01 to 08, the same number the prose
+points at and the list carries. The columns tile edge to edge, so no part
+of the plot is dead to a finger: the gap between bars is padding inside
+the button, not space between buttons. Eight equal columns cannot each be
+44px wide on a 375px screen, so the target takes its size the other way,
+the full 94px of the plot (110px on a wide screen).
+
+A bar is a `<button>`. Pressing one rings the bar, reverses its number out
+of ink, opens the matching study and scrolls to it with a 3px inset rule
+on the row. Hover and focus open a small ink tip above the bar with the
+study type and year; the chart's top margin is that tip's room, so it
+never lands on the summary line. Arrow left and right walk the bars. A
+screen reader gets the counts in a sentence rather than eight anonymous
+marks, and under the chart a key in 11px says what the marks mean.
 
 ## Structure
 
@@ -350,26 +393,33 @@ blindness, and it cannot be mistaken for a verdict.
   thing the visitor came for, and carries the medical disclaimer like
   every other screen.
 - **The field:** the report's head and the front page's hero, both on
-  `#0b1226`. The report's field carries the case line, the claim at 34px,
-  the verdict at 32px, and **the evidence field**: one mark per study,
-  height by study design (strong full, moderate 62%, weak 34%, retracted
-  hatched at 46%), filled when the verdict leaned on it and outlined when
-  it did not. Drawn from PubMed's publication types, classified once on
-  the server so both renderers agree, and identical whatever the verdict
-  says.
+  `#0b1226`. The report's field carries the case line, then the claim
+  under a 10px caps label, "The claim you checked", set in curly quotes at
+  20px/500 in the secondary ink and wrapped for as long as it needs to be,
+  never truncated, then a 2px rule, then the label "Verdict" and the
+  verdict itself at up to 40px/900 (46px wide). The claim's largest size
+  sits below the verdict's smallest, so on no screen can the claim be read
+  as the answer.
 - **The report:** back, then the field, then **the panel**, which lifts
   onto the field by 14px with the only shadow in the design, then the
-  reasoning in prose, then the actions, then the sources. The field and
+  deeper layer, then the actions, then the sources. The field and
   the panel bleed to the same edge and are therefore the same width. On a
   wide screen the report is two columns, the field and the panel in the
   first and the sources in the second, and both columns open on the same
   line; while a check is still running there is nothing to put in the
   second column, so checking stays one.
-- **The panel:** head ("Evidence facts" plus the count) over an 8px rule,
-  the verdict at 30px/900 over a 4px rule, the takeaway, the counted
-  figures one per line, the bar and its key, and "Still open" under a
-  final 4px rule. The verdict lives inside the panel because it is a
-  reported fact, not a banner over one.
+- **The panel:** read top to bottom it answers, then explains, then shows
+  its working. "The short answer" with the takeaway at up to 26px/700,
+  closed by the 8px rule because it is the panel's head. "What the
+  research says", never folded: three to five sentences at 15.5px, each
+  one already through the same gate as the breakdown and each carrying the
+  study numbers it rests on. "Still open". Then "The evidence": the
+  summary line, the chart, its key, the counted figures on one line
+  (pooled analyses, trials, registrations, retractions, the years), and
+  the record sentence. Each group is closed by a 4px rule. Someone who
+  reads only the claim, the verdict and the short answer has a complete
+  answer; everything below it is the working, in the order a reader would
+  ask for it.
 - **The deeper layer:** `Read the full breakdown`, a third `<details>` in
   the same fold grammar as the source groups, closed on arrival and opened
   by the reader, under a 4px rule between the reasoning and the actions.
@@ -499,11 +549,16 @@ outside a sheet or a text field, with the previous claim selected.
 
 ## Motion
 
-Two moments in the page, plus the sheet:
+Three moments in the page, plus the sheet:
 
 1. **The rules under cited sources** draw left to right, staggered 120ms.
 2. **The wire** prints one line per stage while a check runs, a pulsing
    square against the live line.
+3. **The evidence chart** grows its bars up from the baseline, 250ms each,
+   staggered 20ms, under 400ms for eight studies. Transform and opacity
+   only, once, on a result the reader just ran: a chart that was restored
+   from the cache or from history draws already standing, because the
+   reveal is the drawing of the chart and not an entrance for the section.
 
 The sheet rises 40px and fades in over 260ms, and **it leaves the way it
 arrived**: the closed state sits on the base rule, `@starting-style`

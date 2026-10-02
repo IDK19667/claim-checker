@@ -470,6 +470,9 @@ def _study_payload(s: dict, cited: set) -> dict:
         # publication types, so both renderers draw the same evidence field
         # instead of each deciding for itself.
         "tier": evidence.classify(s["publication_types"]),
+        # The most informative type name, for the one line the evidence
+        # chart shows on hover and focus. Same reason as the tier.
+        "type_label": evidence.strongest_label(s["publication_types"]),
         # The narrow group this study was run in, or null for a general
         # population. Classified on the server for the same reason as the
         # tier: it is a fact about the record, and both renderers need it.

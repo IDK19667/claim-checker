@@ -95,6 +95,10 @@ NO_STUDY_FOR_PART = "No study in this set tests this part of the claim."
 # where the answer went instead.
 PART_BELOW = "What these studies found about this is in the paragraphs below."
 
+# How the translated figure opens, written in ground() and looked for in
+# says(). One string, so the two cannot drift apart.
+TRANSLATION_LEAD = "That is "
+
 # A figure a reader can picture. Used to tell an effect-size line that
 # already translates its ratio from one that only quotes it.
 _PERCENT = re.compile(r"\d+(?:\.\d+)?\s?(?:%|per ?cent)")
@@ -1102,7 +1106,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
         where = f" ({cite.group(0)})" if cite else ""
         said = (sized["plain"] if labelled
                 else f"{sized['plain']}, a {sized['label']} effect")
-        effect = f"{effect.rstrip().rstrip('.')}. That is {said}{where}."
+        effect = (f"{effect.rstrip().rstrip('.')}. "
+                  f"{TRANSLATION_LEAD}{said}{where}.")
     sized = sized or next(
         (e for e in (evidence.effect_size(t) for t in paragraphs) if e), None)
 
@@ -1139,6 +1144,77 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
     # reading grade the surviving prose came out at.
     out["rests_on"] = len(cited_pmids(out, studies))
     out["grade"] = reading_grade(flatten(out), claim_terms(claim))
+    return out
+
+
+# ---------------------------------------------------------------------
+# What the research says
+#
+# The block between the takeaway and the still-open line, always visible.
+# Three to five sentences, and not one of them is new: every sentence here
+# has already passed the gate, either as part of the explanation or as part
+# of the breakdown below. They are picked, not written, so this costs no
+# model call and cannot say anything the deeper layer does not.
+#
+# The order is the order a reader asks in: what the studies found, how big
+# the effect was in plain words, and who it was found in.
+# ---------------------------------------------------------------------
+
+SAYS_MIN = 3
+SAYS_MAX = 5
+
+
+def says(explanation: str, bd: dict, studies: list[dict]) -> list[str]:
+    count = len(studies or [])
+    if not count or not isinstance(bd, dict):
+        return []
+    known = corpus(studies)
+    out, seen = [], set()
+
+    def take(text, most, gated=True):
+        # `gated` text has already been through keep_sentences on its way out
+        # of ground(), so it is not put through again. That matters for one
+        # sentence: the translated effect size is arithmetic this code did on
+        # a figure that is in an abstract, and its own percentage is not, so
+        # re-gating it would delete the plainest sentence in the block. What
+        # is still required of it is a citation, which is also what keeps the
+        # code-authored lines ("No study in this set tests this part") out.
+        got = 0
+        source = (str(text or "") if gated
+                  else keep_sentences(str(text or ""), count, known))
+        for sentence in sentences(source):
+            if got >= most or len(out) >= SAYS_MAX:
+                return
+            if not refs(sentence, count):
+                continue
+            # The same sentence can reach here twice, because a paragraph of
+            # the breakdown and the explanation often make the same point.
+            key = re.sub(r"[^a-z0-9]+", "", sentence.lower())[:60]
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(sentence)
+            got += 1
+
+    take(explanation, 2, gated=False)
+    # The effect size takes two, because the figure and the plain words for it
+    # are two sentences and the second one is the point. They are picked as a
+    # pair rather than as the first two: the translation is written last in the
+    # field, and the figure it was computed from is named in bd["effect"], so a
+    # second unrelated figure in between must not come between them.
+    said = sentences(str(bd.get("effect_size") or ""))
+    figure = re.search(r"\d+(?:\.\d+)?",
+                       ((bd.get("effect") or {}).get("figure") or ""))
+    pair = [line for line in said if figure and figure.group(0) in line][:1]
+    pair += [line for line in said if line.startswith(TRANSLATION_LEAD)][:1]
+    take(" ".join(pair) if pair else bd.get("effect_size"), 2)
+    take(bd.get("applies_to"), 1)
+    # Still thin: the explanation was mostly dropped, or there was no effect
+    # size to report. The paragraphs underneath are the same material.
+    for para in bd.get("evidence") or []:
+        if len(out) >= SAYS_MIN:
+            break
+        take(para, 2)
     return out
 
 

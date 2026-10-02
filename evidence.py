@@ -509,18 +509,75 @@ def snapshot(studies, cited_pmids=()) -> dict:
                  if strongest_label(s.get("publication_types"))
                  in ("Randomized Controlled Trial", "Controlled Clinical Trial",
                      "Clinical Trial"))
-    return {
+    bars = mix(studies)
+    snap = {
         "read": len(studies),
         "relied_on": sum(1 for s in studies if str(s.get("pmid")) in cited),
         "pooled": pooled,
         "trials": trials,
         "registered": sum(1 for s in studies if s.get("data_banks")),
+        "strong": sum(1 for s in studies
+                      if classify(s.get("publication_types")) == "strong"),
         "retracted": sum(1 for s in studies
                          if classify(s.get("publication_types")) == "retracted"),
         "year_from": years[0] if years else None,
         "year_to": years[-1] if years else None,
-        "mix": mix(studies),
+        "mix": bars,
     }
+    snap.update(_chart_words(snap))
+    return snap
+
+
+# ---------------------------------------------------------------------------
+# The chart's own words
+#
+# The evidence chart prints three sentences the reader can check: what it is
+# based on, what else is true of the set, and, for a screen reader, the counts
+# the bars are drawn from. All three are built here, once, so the server
+# rendered page and a streamed check cannot word them differently.
+# ---------------------------------------------------------------------------
+
+def _n_things(count: int, singular: str, plural: str) -> str:
+    return f"{count} {singular if count == 1 else plural}"
+
+
+def _chart_words(snap: dict) -> dict:
+    read = snap["read"]
+    if not read:
+        return {"summary": "", "facts": "", "described": ""}
+
+    used = snap["relied_on"]
+    summary = [f"Based on {_n_things(read, 'study', 'studies')}",
+               f"{used} used for this verdict" if used
+               else "none used for this verdict"]
+    if snap["strong"]:
+        summary.append(f"{snap['strong']} strong")
+
+    facts = []
+    if snap["pooled"]:
+        facts.append(_n_things(snap["pooled"], "pooled analysis", "pooled analyses"))
+    if snap["trials"]:
+        facts.append(_n_things(snap["trials"], "trial", "trials"))
+    if snap["registered"]:
+        facts.append(f"{snap['registered']} registered in advance")
+    if snap["retracted"]:
+        facts.append(_n_things(snap["retracted"], "retracted paper", "retracted papers"))
+    if snap["year_from"]:
+        span = (str(snap["year_from"]) if snap["year_from"] == snap["year_to"]
+                else f"{snap['year_from']} to {snap['year_to']}")
+        facts.append(f"published {span}")
+
+    described = [f"{_n_things(read, 'study', 'studies')} read, "
+                 f"{used} used for this verdict."]
+    if snap["mix"]:
+        described.append("By study design: "
+                         + ", ".join(f"{m['count']} {m['label']}"
+                                     for m in snap["mix"]) + ".")
+    described.append("One bar per study, in the order of the list of studies, "
+                     "taller for a stronger kind of study.")
+    return {"summary": " \u00b7 ".join(summary),
+            "facts": " \u00b7 ".join(facts),
+            "described": " ".join(described)}
 
 
 # ---------------------------------------------------------------------------

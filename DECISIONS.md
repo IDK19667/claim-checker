@@ -4,7 +4,72 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-02 (latest): The answer has to read the abstracts as carefully as the search found them
+## 2026-10-02 (latest): The claim is labelled, the answer comes first, and the evidence is a chart
+
+Three things on the result screen were being misread, and all three were
+read for the reader rather than guessed at.
+
+**The claim was being read as the answer.** It sat at the top of the field
+at 34px/900, which is the loudest thing a page can say, and the thing it
+said was the sentence we were checking, not our finding on it. It now sits
+under a small caps label, "The claim you checked", in curly quotes at
+20px/500 in the secondary ink, and the verdict has the field's weight at up
+to 46px. The claim's largest size is below the verdict's smallest, so there
+is no width at which the two can swap places; a test extracts both clamps
+from the stylesheet and asserts it. Long claims still wrap for as long as
+they need to. A claim is the reader's own words and truncating them to make
+a layout work is a lie about what was checked.
+
+**The panel now answers, then explains, then shows its working.** The order
+is the claim, the verdict, "The short answer", "What the research says",
+"Still open", the evidence, the breakdown, the studies. The new block is
+the explanation the result always had, but never visible without opening a
+fold: three to five sentences, never collapsed.
+
+**It costs no extra call, because the sentences are picked and not
+written.** A second model call for a second summary would double the cost
+of a check and invent a second place for the evidence to drift. Instead
+`breakdown.says()` selects from prose that has already been through the
+gate: the explanation, the sentence carrying the effect size, our own
+translation of it, who it applies to, then the evidence paragraphs, in that
+order, keeping only sentences that cite a study. The one sentence allowed
+past the digit gate is the one the code wrote itself, our arithmetic on a
+ratio that is in an abstract, and it still carries its citation. So the
+block cannot outrun the evidence, and it cannot say anything the breakdown
+does not already say.
+
+**The evidence marks became a chart that can be read without being
+explained.** The old row of bars had no axis, no labels and no numbers, and
+readers could not tell what the heights meant. It now has three named tiers
+off a 2px baseline (Strong, Moderate, Weak), a line above it that says the
+same thing in words ("Based on 8 studies, 3 used for this verdict, 2
+strong"), the study number under each bar, a key under that, and a sentence
+for screen readers carrying the real counts. Height is still the kind of
+study and fill is still whether the verdict leaned on it, so the chart is
+the same for a set of studies whatever the verdict says.
+
+**Each bar is a button, and the 44px target is taken vertically.** Eight
+equal columns cannot each be 44px wide on a 375px screen. Rather than
+scroll the chart or drop studies, the columns tile edge to edge, the gap
+between bars is padding inside the button, and the target takes its size
+the other way: the full height of the plot, 94px on a phone. Pressing a bar
+rings it, reverses its number out of ink, opens the matching study and
+scrolls to it. Arrow keys walk the bars.
+
+**A third animated moment, on purpose.** DESIGN.md said two moments in the
+page. The bars now grow from the baseline, 250ms each, staggered 20ms,
+transform and opacity only, and only on a check that just ran: a cached or
+restored result draws its chart already standing. A chart drawing itself is
+the chart being drawn, not an entrance for a section, which is the thing
+the two-moment rule exists to prevent. DESIGN.md now says three, because a
+rule that is quietly broken is worse than a rule that is changed.
+
+**What the screenshots do not show.** Both live claims we checked returned
+sets of strong and moderate papers only, so no weak or retracted bar
+appears in any shipped screenshot. Those two states exist in the stylesheet
+and are covered by tests, but they have not been seen on a real result.
+
+## 2026-10-02: The answer has to read the abstracts as carefully as the search found them
 
 Search was finding the right papers; the answers were misreading them.
 Five claims exposed six separate faults, and the fix for each one lives in

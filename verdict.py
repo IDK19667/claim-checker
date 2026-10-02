@@ -800,6 +800,10 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # "Who this applies to", where a reader is asking exactly this.
     if deeper is not None:
         deeper["populations"] = narrow
+        # "What the research says" on the result screen: three to five
+        # sentences picked from prose that has already passed the gate, so
+        # the block costs no extra call and cannot outrun the evidence.
+        deeper["says"] = breakdown.says(explanation, deeper, studies)
 
     return {
         "verdict": verdict,

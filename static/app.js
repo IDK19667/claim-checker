@@ -365,35 +365,73 @@ function fmtDate(iso) {
   catch { return ""; }
 }
 
-// Mirrors the snapshot markup in templates/index.html. The numbers are
-// computed server-side in evidence.py so a streamed check and a cached page
-// can never disagree about what was read.
-function renderSnapshot(ev) {
-  const wrap = $("snapshot");
-  if (!wrap) return;
-  if (!ev || !ev.read) { wrap.hidden = true; return; }
-  wrap.hidden = false;
+// Mirrors the evidence chart in templates/index.html. Every count and every
+// word of its three lines is computed server-side in evidence.py, so a
+// streamed check and the page a shared link renders can never word the same
+// set of studies differently.
+// (d) on the result screen. The sentences are picked server-side in
+// breakdown.says from prose that has already passed the gate; a result
+// cached before the block existed falls back to the explanation, which is
+// what that reader was shown at the time.
+function renderSays(data) {
+  const sec = $("says-sec"), wrap = $("says");
+  if (!sec || !wrap) return;
+  const bd = data.breakdown || {};
+  const lines = (bd.says && bd.says.length ? bd.says : [data.explanation])
+    .filter((t) => String(t || "").trim());
+  sec.hidden = !lines.length;
+  wrap.innerHTML = lines
+    .map((t) => `<p class="says-p">${linkStudyRefs(t, data.studies.length)}</p>`)
+    .join("");
+}
 
-  const mix = ev.mix || [];
-  const bar = $("snapshot-bar");
-  bar.innerHTML = mix.map((m) => `<i class="seg seg-${m.tier}" style="width:${m.percent}%"></i>`).join("");
-  bar.setAttribute("aria-label", mix.map((m) => `${m.count} ${m.label}`).join(", "));
+function renderChart(data) {
+  const sec = $("chart-sec");
+  if (!sec) return;
+  const ev = data.evidence;
+  if (!ev || !ev.read) { sec.hidden = true; return; }
+  sec.hidden = false;
+  $("chart-sum").textContent = ev.summary || "";
+  $("chart-facts").textContent = ev.facts || "";
+  $("chart-desc").textContent = ev.described || "";
 
-  const figs = [["Studies read", ev.read], ["Relied on for this verdict", ev.relied_on]];
-  if (ev.pooled) figs.push(["Pooled analyses", ev.pooled]);
-  if (ev.trials) figs.push(["Trials", ev.trials]);
-  if (ev.registered) figs.push(["Registered", ev.registered]);
-  if (ev.retracted) figs.push(["Retracted", ev.retracted, "fig-warn"]);
-  if (ev.year_from) {
-    figs.push(["Published between", ev.year_from === ev.year_to ? `${ev.year_from}` : `${ev.year_from} to ${ev.year_to}`, "fig-span"]);
+  const bars = $("chart-bars");
+  bars.classList.remove("reveal");
+  bars.innerHTML = data.studies.map((s, i) => {
+    const tip = [s.type_label, s.year].filter(Boolean).join(" \u00b7 ");
+    const said = [`Study ${i + 1}`, (s.type_label || "").toLowerCase(), s.year,
+                  s.cited_in_verdict ? "used for this verdict" : "read but not used"]
+      .filter(Boolean).join(", ");
+    return `<button type="button" class="barcol${s.cited_in_verdict ? " is-used" : ""}" data-i="${i}" style="--i:${i}"` +
+      ` aria-label="${escapeHtml(said)}. Go to it in the list of studies.">` +
+      `<span class="barcol-track"><span class="barcol-bar h-${escapeHtml(s.tier || "moderate")}"></span></span>` +
+      `<span class="barcol-no">${String(i + 1).padStart(2, "0")}</span>` +
+      (tip ? `<span class="barcol-tip" aria-hidden="true">${escapeHtml(tip)}</span>` : "") +
+      "</button>";
+  }).join("");
+  // The one new moment in the page, and only on a check that just happened:
+  // a cached result is not news and does not announce itself.
+  if (!data.cached && !data.restored) {
+    requestAnimationFrame(() => bars.classList.add("reveal"));
   }
-  $("snapshot-figs").innerHTML = figs
-    .map(([k, v, cls]) => `<div${cls ? ` class="${cls}"` : ""}><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd></div>`)
-    .join("");
+}
 
-  $("snapshot-key").innerHTML = mix
-    .map((m) => `<span class="key-item"><i class="seg seg-${m.tier}"></i>${m.count} ${escapeHtml(m.label)}</span>`)
-    .join("");
+// A bar is a way into the study it stands for: mark the bar, unfold the group
+// the row sits in, put the row in view and give it the focus, so a reader on
+// a keyboard lands where a finger would have.
+function showStudy(i) {
+  for (const b of document.querySelectorAll("#chart-bars .barcol")) {
+    b.classList.toggle("is-on", Number(b.dataset.i) === i);
+  }
+  const li = document.querySelector(`#sources .study[data-i="${i}"]`);
+  if (!li) return;
+  const group = li.closest("details");
+  if (group) group.open = true;
+  for (const el of document.querySelectorAll("#sources .study.target")) el.classList.remove("target");
+  li.classList.add("target");
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  li.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
+  li.focus({ preventScroll: true });
 }
 
 // Shown only when a check came back without usable evidence. Everything
@@ -518,7 +556,7 @@ function renderResult(data) {
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
   $("tldr").textContent = data.tldr || "";
-  $("explanation").innerHTML = linkStudyRefs(data.explanation, data.studies.length);
+  renderSays(data);
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
   renderBreakdown(data.breakdown, data.studies.length);
@@ -534,24 +572,8 @@ function renderResult(data) {
     ? "From your history on this device."
     : `Result from a check on ${fmtDate(data.cached_at)}. Claims are re-checked after a day.`;
 
-  renderSnapshot(data.evidence);
+  renderChart(data);
   renderNextSteps(data.next_steps, data.claim);
-  const sub = $("panel-sub");
-  if (sub) sub.textContent = n ? `${n} stud${n === 1 ? "y" : "ies"} read from PubMed` : "Nothing matched on PubMed";
-
-  // The evidence field: one mark per study, height by tier, filled when the
-  // verdict leaned on it. The tier is classified once on the server.
-  const field = $("field"), cap = $("field-cap");
-  if (field && cap) {
-    field.hidden = cap.hidden = !n;
-    if (n) {
-      field.innerHTML = data.studies
-        .map((s) => `<i class="fb fb-${escapeHtml(s.tier || "moderate")}${s.cited_in_verdict ? " fb-used" : ""}"></i>`)
-        .join("");
-      field.setAttribute("aria-label", `${n} stud${n === 1 ? "y" : "ies"} read, ${cited} relied on`);
-      cap.innerHTML = `<span>${n} read</span><span>${cited} relied on</span>`;
-    }
-  }
 
   $("evidence-label").textContent = n ? `Studies checked (${n})` : "Studies checked";
   const studyRow = (s, i) => {
@@ -617,9 +639,12 @@ function renderPending(claim) {
   const t = document.querySelector(".ticket");
   t.classList.add("pending");
   resultSection.classList.add("checking");
-  const f = $("field"), fc = $("field-cap");
-  if (f) { f.hidden = true; f.innerHTML = ""; }
-  if (fc) { fc.hidden = true; fc.innerHTML = ""; }
+  const chart = $("chart-sec");
+  if (chart) chart.hidden = true;
+  const bars = $("chart-bars");
+  if (bars) { bars.classList.remove("reveal"); bars.innerHTML = ""; }
+  const says = $("says-sec");
+  if (says) says.hidden = true;
   document.querySelector(".verdict-block").dataset.verdict = "";
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
@@ -1375,12 +1400,29 @@ $("sources").addEventListener("keydown", (e) => {
 });
 // A study number is a tap target wherever it appears: in the reasoning under
 // the panel, and in every sentence of the breakdown under that.
-for (const id of ["explanation", "deeper-body"]) {
+for (const id of ["says", "deeper-body"]) {
   $(id)?.addEventListener("click", (e) => {
     const ref = e.target.closest(".ref");
     if (ref) openStudy(Number(ref.dataset.i));
   });
 }
+
+// A bar goes to its study. Enter and space come free with the button; the
+// arrows walk the row the way they walk the source column below it.
+$("chart-bars")?.addEventListener("click", (e) => {
+  const col = e.target.closest(".barcol");
+  if (col) showStudy(Number(col.dataset.i));
+});
+$("chart-bars")?.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const cols = [...$("chart-bars").querySelectorAll(".barcol")];
+  const here = cols.indexOf(e.target.closest(".barcol"));
+  if (here === -1) return;
+  const next = cols[here + (e.key === "ArrowRight" ? 1 : -1)];
+  if (!next) return;
+  e.preventDefault();
+  next.focus();
+});
 
 // Arrow keys walk the source column, the way a finger runs down a printed one.
 $("sources").addEventListener("keydown", (e) => {

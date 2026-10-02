@@ -433,8 +433,10 @@ t("the front page lists recent checks with their evidence",
 t("the front page never says '1 studies'", "1 studies read" not in _html)
 
 _res = c.get("/?q=streamed%20claim").data.decode()
-t("a rendered result carries the evidence snapshot",
-  'id="snapshot"' in _res and "snapshot-figs" in _res and "seg-" in _res)
+t("a rendered result carries the evidence chart",
+  'id="chart-sec"' in _res and 'class="barcol' in _res
+  and "barcol-bar h-moderate" in _res and "Based on 3 studies" in _res
+  and 'id="chart-desc"' in _res and "Each bar is one study." in _res)
 
 # ---- type-ahead over checked claims ----------------------------------------------
 import suggest as suggest_mod  # noqa: E402
@@ -1158,6 +1160,138 @@ t("the browser's renderer runs every sentence through the same ref linking",
 t("nothing in the breakdown is a card, and nothing in it is colour coded",
   "border-radius" not in (ROOT / "static" / "style.css").read_text()
   .split("---- The deeper layer")[1].split("---- Sticky share bar")[0])
+
+# ---- the result screen: a labelled claim, an answer, then the evidence -----------
+#
+# The order is the product: a reader who stops after the short answer has an
+# answer, and the claim they typed can never be mistaken for it.
+
+_css = (ROOT / "static" / "style.css").read_text()
+_ord = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+
+
+def _at(needle):
+    return _ord.index(needle)
+
+
+t("the result reads claim, verdict, answer, research, still open, evidence, then sources",
+  _at("The claim you checked") < _at('id="stamp"') < _at("The short answer")
+  < _at("What the research says") < _at(">Still open<") < _at('id="chart-sec"')
+  < _at("Read the full breakdown") < _at("Studies checked"))
+t("  the claim carries its label and is never cut short",
+  "The claim you checked" in _ord
+  and "Vitamin D supplements in winter cut colds</h2>" in _ord)
+t("  its quotation marks come from the stylesheet, so the text stays the text",
+  ".claim-echo::before" in _css and "\\201C" in _css)
+# The verdict has to be the most prominent text on the screen. Sizes are
+# compared rather than eyeballed: the claim's largest is below the verdict's
+# smallest, at every width.
+_claim_px = [float(n) for n in re.findall(
+    r"\.claim-echo \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)",
+    _css, re.S)[0]]
+_stamp_px = [float(n) for n in re.findall(
+    r"\.stamp \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)",
+    _css, re.S)[0]]
+t("  and the verdict is set larger than the claim at every width",
+  _claim_px[1] < _stamp_px[0], f"claim {_claim_px} stamp {_stamp_px}")
+
+# (d) What the research says: never folded, every sentence already gated.
+_says = _vd["breakdown"]["says"]
+t("what the research says is three to five sentences, every one of them cited",
+  3 <= len(_says) <= breakdown.SAYS_MAX
+  and all(breakdown.refs(line, 2) for line in _says), _says)
+t("  and carries no figure the abstracts do not have",
+  not any("47%" in line for line in _says), _says)
+t("  it is in the payload, server rendered, and outside the fold",
+  "What the research says" in _ord and _at("What the research says") < _at("deeper")
+  and all(line in _ord for line in _says))
+# The figure and the plain words for it are one pair. The translation is
+# written last in the field, so picking the first two sentences would print a
+# ratio and leave its translation behind.
+_PAIR_BD = {"evidence": ["A pooled review found fewer infections (Study 1)."],
+            "effect_size": "The odds ratio for everyone was 0.88 (Study 1). "
+                           "Below 25 nmol/L the odds ratio was 0.30 (Study 1). "
+                           "That is about 70% lower odds, a large effect (Study 1).",
+            "effect": {"figure": "odds ratio 0.30", "label": "large",
+                       "plain": "about 70% lower odds"},
+            "applies_to": "Adults aged 18 to 67 were studied (Study 2)."}
+_pair = breakdown.says("", _PAIR_BD, _BD_STUDIES)
+t("  the figure and its plain words are picked as a pair",
+  any(line.startswith(breakdown.TRANSLATION_LEAD) for line in _pair)
+  and any("0.30" in line for line in _pair)
+  and not any("0.88" in line for line in _pair), _pair)
+t("  a sentence the gate rejects never reaches it",
+  breakdown.says("Colds fell by 47% (Study 1). This one cites nothing.",
+                 _vd["breakdown"], _BD_STUDIES)[:1]
+  != ["Colds fell by 47% (Study 1)."])
+# Picked, not written: nothing is asked of the model for this block, and
+# every sentence in it is already somewhere else in the same answer.
+_elsewhere = " ".join([_vd["explanation"], breakdown.flatten(_vd["breakdown"])])
+t("  and it costs no extra call: every sentence is already in the answer",
+  "says" not in verdict.VERDICT_SCHEMA["properties"]
+  and all(line in _elsewhere for line in _says), _says)
+
+# (f) The evidence chart. Everything it says in words is counted on the
+# server, so the streamed check and the shared link cannot disagree.
+_w = evidence.snapshot(_BD_STUDIES, ["D1"])
+t("the chart says what it is based on, in words, from the counts",
+  _w["summary"] == "Based on 2 studies \u00b7 1 used for this verdict \u00b7 2 strong",
+  _w["summary"])
+t("  the rest of the record goes on one line under it",
+  _w["facts"] == "1 pooled analysis \u00b7 1 trial \u00b7 published 2017", _w["facts"])
+t("  a screen reader gets the real counts, not the drawing",
+  _w["described"].startswith("2 studies read, 1 used for this verdict.")
+  and "2 strong designs" in _w["described"], _w["described"])
+_one = evidence.snapshot(_BD_STUDIES[:1], [])
+t("  one study is 'study', and nothing used says so",
+  _one["summary"] == "Based on 1 study \u00b7 none used for this verdict \u00b7 1 strong",
+  _one["summary"])
+t("  an empty set draws no chart and claims nothing",
+  evidence.snapshot([])["summary"] == "" and evidence.snapshot([])["described"] == "")
+
+t("every study carries the type name the chart shows on hover",
+  _vd["studies"][0]["type_label"] == "Meta-Analysis"
+  and _vd["studies"][1]["type_label"] == "Randomized Controlled Trial")
+t("the bars are drawn in the order of the list, numbered the same way",
+  _ord.index('data-i="0"') < _ord.index('data-i="1"')
+  and ">01<" in _ord and ">02<" in _ord)
+t("height is the kind of study and fill is whether the verdict used it",
+  'class="barcol is-used" data-i="0"' in _ord and "barcol-bar h-strong" in _ord)
+t("each bar names itself for a screen reader and says where it goes",
+  'aria-label="Study 1, meta-analysis, 2017, used for this verdict. '
+  'Go to it in the list of studies."' in _ord)
+
+# The chart is drawn twice, by Jinja for a shared link and by renderChart for
+# a live check. Two renderers for one drawing is how they start to diverge.
+_bar_tpl = _tpl[_tpl.index("{% macro barcol"):]
+_bar_tpl = _bar_tpl[:_bar_tpl.index("{% endmacro %}")]
+_bar_js = _js[_js.index("function renderChart"):]
+_bar_js = _bar_js[:_bar_js.index("function showStudy")]
+t("the server and the browser draw the same bar",
+  all(piece in _bar_tpl and piece in _bar_js
+      for piece in ("barcol-track", "barcol-bar h-", "barcol-no", "barcol-tip",
+                    "is-used", "Go to it in the list of studies")))
+t("  and read the chart's words off the same server counts",
+  all(f"ev.{k}" in _bar_js or f"ev.{k}" in _tpl for k in ("summary", "facts", "described")))
+
+_chart_css = _css.split("---- The evidence chart")[1].split("/* The study the reader")[0]
+t("the chart is ink only: no hue reaches a drawing of the evidence",
+  not re.search(r"#[0-9a-f]{3}|rgb\(|hsl\(", _chart_css, re.I), _chart_css[:200])
+t("a bar is at least a finger tall, and the columns leave no dead space",
+  int(re.search(r"--plot-h: (\d+)px", _chart_css).group(1)) >= 44
+  and "padding: 0 3px" in _chart_css)
+_grow = _css.split("@keyframes bar-grow")[1].split("}")[0]
+t("the reveal moves transform and opacity only",
+  "transform" in _grow and "opacity" in _grow
+  and not re.search(r"\b(height|width|margin|top|left)\b", _grow), _grow)
+t("  under 400ms end to end, and nothing at all under reduced motion",
+  "250ms" in _chart_css and "* 20ms" in _chart_css
+  and ".chart-bars.reveal .barcol-bar { animation: none; }"
+  in _css.split("@media (prefers-reduced-motion: reduce)")[1])
+t("a bar is a button, so the keyboard reaches it, and it marks what it opens",
+  'type="button" class="barcol' in _ord and "showStudy(Number(col.dataset.i))" in _js
+  and "scrollIntoView" in _js[_js.index("function showStudy"):]
+  and ".barcol.is-on .barcol-bar" in _css)
 
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 

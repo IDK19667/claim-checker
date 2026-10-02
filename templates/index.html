@@ -233,61 +233,82 @@
         <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
       </button>
 
-      <!-- The head is a field, not a headline: the claim, the verdict, and the
-           evidence the verdict rests on, drawn at the size they deserve. The
-           ground is identical on every verdict, so nothing here is colour coded. -->
+      <!-- The head is a field, not a headline. What was typed is labelled as
+           what was typed and set quietly; the verdict is the biggest thing on
+           the screen. The ground is identical on every verdict, so nothing
+           here is colour coded. -->
       <div class="report-head">
         <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
-        <h2 class="claim-echo loud" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
+        <p class="field-label">The claim you checked</p>
+        <h2 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
         <ol class="reading" id="reading" hidden aria-live="polite"></ol>
-        <div class="stamp-wrap"><span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span></div>
-        <div class="field" id="field"{% if not (result and result.studies) %} hidden{% endif %} role="img"
-             aria-label="{% if result %}{{ result.studies | length }} studies read, {{ result.studies | selectattr('cited_in_verdict') | list | length }} relied on{% endif %}">
-          {% if result %}{% for s in result.studies %}<i class="fb fb-{{ s.tier }}{% if s.cited_in_verdict %} fb-used{% endif %}"></i>{% endfor %}{% endif %}
+        <div class="stamp-wrap">
+          <p class="field-label">Verdict</p>
+          <span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span>
         </div>
-        <p class="field-cap" id="field-cap"{% if not (result and result.studies) %} hidden{% endif %}>
-          {% if result %}<span>{{ result.studies | length }} read</span><span>{{ result.studies | selectattr('cited_in_verdict') | list | length }} relied on</span>{% endif %}
-        </p>
       </div>
+
+      {# One bar per study: height is the kind of study, fill is whether the
+         verdict leaned on it, and the number under it is the number the list
+         of studies and every sentence of the prose use. #}
+      {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else 'read but not used' }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }}"></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year]|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
 
       <div class="verdict-block"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
         <article class="ticket" aria-labelledby="claim-echo">
-          <div class="panel-head">
-            <p class="panel-title">Evidence facts</p>
-            <p class="panel-sub" id="panel-sub">{% if result %}{{ result.studies | length }} stud{{ "y" if result.studies | length == 1 else "ies" }} read from PubMed{% endif %}</p>
-          </div>
-          <p class="tldr" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
+          {# The panel reads top to bottom: the short answer, the research
+             behind it, what is still open, then the evidence all three were
+             drawn from. A reader who stops after the first block still has an
+             answer; a reader who keeps going gets the reasoning. #}
+          <section class="answer">
+            <p class="section-label">The short answer</p>
+            <p class="tldr" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
+          </section>
 
-          <div class="snapshot" id="snapshot"{% if not (result and result.evidence and result.evidence.read) %} hidden{% endif %}>
-            {# These three always exist, filled or empty. A live check renders
-               into them from the browser, so guarding them behind `result`
-               left renderSnapshot writing to null on every streamed check. #}
-            {% set ev = result.evidence if result else None %}
-            <dl class="snapshot-figs" id="snapshot-figs">
-              {% if ev %}
-              <div><dt>Studies read</dt><dd>{{ ev.read }}</dd></div>
-              <div><dt>Relied on for this verdict</dt><dd>{{ ev.relied_on }}</dd></div>
-              {% if ev.pooled %}<div><dt>Pooled analyses</dt><dd>{{ ev.pooled }}</dd></div>{% endif %}
-              {% if ev.trials %}<div><dt>Trials</dt><dd>{{ ev.trials }}</dd></div>{% endif %}
-              {% if ev.registered %}<div><dt>Registered</dt><dd>{{ ev.registered }}</dd></div>{% endif %}
-              {% if ev.retracted %}<div class="fig-warn"><dt>Retracted</dt><dd>{{ ev.retracted }}</dd></div>{% endif %}
-              {% if ev.year_from %}<div class="fig-span"><dt>Published between</dt><dd>{% if ev.year_from == ev.year_to %}{{ ev.year_from }}{% else %}{{ ev.year_from }} to {{ ev.year_to }}{% endif %}</dd></div>{% endif %}
-              {% endif %}
-            </dl>
-            <span class="bar" id="snapshot-bar" role="img"
-                  aria-label="{% if ev %}{% for m in ev.mix %}{{ m.count }} {{ m.label }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}">
-              {% if ev %}{% for m in ev.mix %}<i class="seg seg-{{ m.tier }}" style="width:{{ m.percent }}%"></i>{% endfor %}{% endif %}
-            </span>
-            <p class="snapshot-key" id="snapshot-key">{% if ev %}{% for m in ev.mix %}<span class="key-item"><i class="seg seg-{{ m.tier }}"></i>{{ m.count }} {{ m.label }}</span>{% endfor %}{% endif %}</p>
-          </div>
+          {# Always visible, never folded. Every sentence here has already
+             passed the breakdown's gate: it names the studies it rests on,
+             carries no figure the abstracts do not have, and is short enough
+             to read. Picked in breakdown.says from prose that already
+             exists, so the block costs no extra model call. #}
+          <section class="says-sec" id="says-sec"{% if not result %} hidden{% endif %}>
+            <p class="section-label">What the research says</p>
+            <div class="says" id="says">
+              {%- if result %}
+              {%- for line in (result.breakdown.says if result.breakdown and result.breakdown.says else [result.explanation]) %}
+              <p class="says-p">{{ line }}</p>
+              {%- endfor %}
+              {%- endif %}
+            </div>
+          </section>
 
           <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><b>Still open</b><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
+
+          {# The evidence, as a chart rather than a row of marks. Heights are
+             the three tiers and nothing else, so two charts of the same set
+             are always the same drawing. Counted on the server in
+             evidence.snapshot, including the three lines of words, so a
+             streamed check and a cached page cannot word them differently. #}
+          {% set ev = result.evidence if result else None %}
+          <section class="chart-sec" id="chart-sec"{% if not (ev and ev.read) %} hidden{% endif %}>
+            <p class="section-label">The evidence</p>
+            <p class="chart-sum" id="chart-sum">{% if ev %}{{ ev.summary }}{% endif %}</p>
+            <figure class="chart">
+              <div class="chart-plot">
+                <div class="chart-axis" aria-hidden="true"><span class="ax ax-strong">Strong</span><span class="ax ax-moderate">Moderate</span><span class="ax ax-weak">Weak</span></div>
+                <i class="grid g-strong" aria-hidden="true"></i>
+                <i class="grid g-moderate" aria-hidden="true"></i>
+                <i class="grid g-weak" aria-hidden="true"></i>
+                <i class="chart-base" aria-hidden="true"></i>
+                <div class="chart-bars" id="chart-bars" role="group" aria-label="The studies, by kind of study" aria-describedby="chart-desc">{% if result %}{% for s in result.studies %}{{ barcol(s, loop.index0) }}{% endfor %}{% endif %}</div>
+              </div>
+              <figcaption class="chart-key">Each bar is one study. Taller = stronger kind of study. Solid = used for this verdict. Striped = retracted.</figcaption>
+            </figure>
+            <p class="sr-only" id="chart-desc">{% if ev %}{{ ev.described }}{% endif %}</p>
+            <p class="chart-facts" id="chart-facts">{% if ev %}{{ ev.facts }}{% endif %}</p>
+            <p class="record" id="record"></p>
+          </section>
           <p class="cached-note" id="cached-note" hidden></p>
         </article>
       </div>
-
-      <p class="explanation" id="explanation">{% if result %}{{ result.explanation }}{% endif %}</p>
-      <p class="record" id="record"></p>
 
       {# ===== The deeper layer =====
          Collapsed, always. The three lines above it are the answer; this is

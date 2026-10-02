@@ -325,10 +325,22 @@ body.view-ask #ask .primary {
 }
 .report-head .case { color: var(--on-deep-2); }
 .case { font-size: 10px; color: var(--ink-3); margin: 0; }
-.claim-echo {
-  margin: 10px 0 0; font-size: 34px; line-height: 1.04; font-weight: 900;
-  letter-spacing: -0.035em;
+
+/* The claim is labelled as the claim and set as a quotation, two steps down
+   from the verdict in size, weight and ink. It was being read as the answer
+   at 34px/900, which is the one thing on this screen it must never be. It
+   wraps for as long as it needs to: a claim is never truncated. */
+.field-label {
+  margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  color: var(--on-deep-2);
 }
+.claim-echo {
+  margin: 7px 0 0; font-size: clamp(17px, 4.6vw, 20px); line-height: 1.34;
+  font-weight: 500; letter-spacing: 0; color: var(--on-deep-2);
+  max-width: 34em; overflow-wrap: break-word;
+}
+.claim-echo::before { content: "\201C"; }
+.claim-echo::after { content: "\201D"; }
 
 /* While a check runs, the work prints under the claim. */
 .reading { list-style: none; margin: 20px 0 0; padding: 0; font-size: 13px; font-weight: 600; color: var(--on-deep); }
@@ -342,41 +354,20 @@ body.view-ask #ask .primary {
 @keyframes line-in { from { opacity: 0; transform: translateY(3px); } }
 
 /* ---- THE PANEL: the signature ------------------------------------------- *
-   Rule weight is the hierarchy. 8px closes the head, 4px separates a group,
+   Rule weight is the hierarchy. 8px closes the answer, 4px separates a group,
    1px separates a line. Every row reports a number that was counted, never
-   estimated. The verdict sits inside it, in the same ink as everything else. */
+   estimated. The verdict sits on the field above it, the largest thing on the
+   screen, in the same ink whatever it says. */
 
 .ticket { margin: 0; }
 
-.panel-head { padding: 9px 12px 7px; border-bottom: 8px solid var(--ink); }
-.panel-title { margin: 0; font-size: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.03em; line-height: 1; }
-.panel-sub { margin: 3px 0 0; font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
-
-.stamp-wrap { margin-top: 22px; padding-top: 18px; border-top: 2px solid var(--deep-2); }
-.stamp-wrap::before {
-  content: "Verdict"; display: block;
-  font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--on-deep-2);
-}
+.stamp-wrap { margin-top: 20px; padding-top: 16px; border-top: 2px solid var(--deep-2); }
+.stamp-wrap .field-label { color: var(--on-deep-2); }
 .stamp {
-  display: block; margin-top: 6px; font-size: 32px; line-height: 0.98;
-  font-weight: 900; text-transform: uppercase; letter-spacing: -0.035em; color: var(--on-deep);
+  display: block; margin-top: 5px; font-size: clamp(30px, 8.4vw, 40px);
+  line-height: 0.98; font-weight: 900; text-transform: uppercase;
+  letter-spacing: -0.035em; color: var(--on-deep);
 }
-
-/* One mark per study: height is the study design, a filled mark is one the
-   verdict actually leaned on. Drawn from PubMed's types, never the model's
-   opinion, and identical whatever the verdict says. */
-.field { display: flex; align-items: flex-end; gap: 5px; height: 76px; margin-top: 26px; }
-.fb { flex: 1; min-width: 0; border: 2px solid var(--on-deep-2); background: transparent; }
-.fb-strong { height: 100%; }
-.fb-moderate { height: 62%; }
-.fb-weak { height: 34%; }
-.fb-retracted { height: 46%; background: repeating-linear-gradient(135deg, var(--on-deep-2) 0 3px, transparent 3px 6px); }
-.fb-used { background: var(--on-deep); border-color: var(--on-deep); }
-.field-cap {
-  display: flex; justify-content: space-between; margin: 12px 0 0;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--on-deep-2);
-}
-.field-cap span:last-child { color: var(--on-deep); }
 
 /* The panel lifts off the field onto the page. The shadow is the only depth
    in the design and it exists to say "this is the part you keep".
@@ -391,35 +382,156 @@ body.view-ask #ask .primary {
 }
 .verdict-block.pending .stamp { color: var(--ink-3); }
 
+/* (c) The short answer. The panel's head, so the 8px rule closes it. */
+.answer { padding: 12px 12px 14px; border-bottom: 8px solid var(--ink); }
 .tldr {
-  margin: 0; padding: 14px 12px; border-bottom: 1px solid var(--ink);
-  font-size: clamp(19px, 5vw, 23px); line-height: 1.26; font-weight: 700;
-  letter-spacing: -0.015em;
+  margin: 6px 0 0; font-size: clamp(21px, 5.6vw, 26px); line-height: 1.22;
+  font-weight: 700; letter-spacing: -0.02em;
 }
 
-.snapshot { display: block; }
-.snapshot-figs { margin: 0; padding: 0; }
-.snapshot-figs > div {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-  padding: 7px 12px; border-bottom: 1px solid var(--rule);
-}
-.snapshot-figs > div:first-child { border-bottom: 4px solid var(--ink); }
-.snapshot-figs dt { font-size: 12.5px; color: var(--ink-2); }
-.snapshot-figs dd {
-  margin: 0; font-size: 26px; line-height: 1; font-weight: 900;
-  letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
-}
-.snapshot-figs .fig-warn dt, .snapshot-figs .fig-warn dd { font-weight: 900; }
-/* A span of years is context, not a count, so it does not take the big size. */
-.snapshot-figs .fig-span dd { font-size: 16px; letter-spacing: -0.01em; }
+/* (d) What the research says. Never folded: three to five sentences, each one
+   already gated, between the answer and what is still open. */
+.says-sec { padding: 11px 12px 13px; border-bottom: 4px solid var(--ink); }
+.says { margin-top: 6px; }
+.says-p { margin: 0 0 8px; font-size: 15.5px; line-height: 1.5; }
+.says-p:last-child { margin-bottom: 0; }
 
-/* The bar carries the panel's own padding, so its height lives on the marks
-   rather than on the box: width 100% plus side padding would overflow. */
-#snapshot-bar.bar { width: auto; height: auto; gap: 4px; margin: 0; padding: 11px 12px 8px; }
-#snapshot-bar .seg { height: 22px; box-shadow: inset 0 0 0 2px var(--ink); }
-.snapshot-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0 12px 11px; font-size: 10.5px; font-weight: 600; }
-.key-item { display: inline-flex; align-items: center; gap: 5px; }
-.key-item .seg { width: 12px; height: 12px; flex: none; box-shadow: inset 0 0 0 2px var(--ink); }
+.still-open {
+  margin: 0; padding: 12px; border-bottom: 4px solid var(--ink);
+  font-size: 15px; line-height: 1.45;
+}
+.still-open b {
+  display: block; font-size: 11px; font-weight: 900; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--ink); margin-bottom: 5px;
+}
+
+/* ---- The evidence chart -------------------------------------------------- *
+   One bar per study, in the order of the list of studies. Height is the kind
+   of study and nothing else, so the same set always draws the same chart;
+   fill is whether the verdict leaned on it. Three gridlines and a 2px
+   baseline do the work a box would otherwise do. Ink only: a chart of what
+   the evidence is may not be coloured, for the same reason a verdict may
+   not be. */
+.chart-sec { padding: 11px 12px 14px; }
+.chart-sum {
+  margin: 6px 0 0; font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chart {
+  --plot-h: 94px; --num-h: 24px; --axis-w: 54px; --axis-gap: 8px;
+  /* The top margin is the tip's room. A study's type and year open upward
+     out of the bar, so the plot starts far enough below the summary line
+     that the tip never lands on top of it. */
+  margin: 28px 0 0;
+}
+.chart-plot { position: relative; display: flex; gap: var(--axis-gap); }
+.chart-axis {
+  position: relative; flex: none; width: var(--axis-w);
+  height: calc(var(--plot-h) + var(--num-h));
+}
+.ax {
+  position: absolute; right: 0; transform: translateY(50%);
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: var(--ink-3);
+}
+.grid, .chart-base {
+  position: absolute; left: calc(var(--axis-w) + var(--axis-gap)); right: 0;
+  height: 1px; background: var(--rule);
+}
+.chart-base { bottom: var(--num-h); height: 2px; background: var(--ink); }
+.ax-strong, .g-strong { bottom: calc(var(--num-h) + var(--plot-h)); }
+.ax-moderate, .g-moderate { bottom: calc(var(--num-h) + var(--plot-h) * 0.64); }
+.ax-weak, .g-weak { bottom: calc(var(--num-h) + var(--plot-h) * 0.34); }
+
+/* The columns tile edge to edge so no part of the chart is dead to a finger:
+   the gap between the bars is padding inside the button, not space between
+   them. Eight equal columns cannot each be 44px wide on a 375px screen, so
+   the target takes its size the other way, the full height of the plot. */
+.chart-bars { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; }
+.barcol {
+  flex: 1 1 0; min-width: 0; height: calc(var(--plot-h) + var(--num-h));
+  display: flex; flex-direction: column; position: relative;
+  padding: 0; border: 0; background: none; font: inherit; color: inherit;
+  cursor: pointer;
+}
+.barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 3px; }
+.barcol-bar {
+  width: 100%; transform-origin: bottom;
+  background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--ink-2);
+}
+.h-strong { height: 100%; }
+.h-moderate { height: 64%; }
+.h-weak { height: 34%; }
+/* A withdrawn paper is not thin evidence, it is no evidence, so it is drawn
+   at the weak height and hatched whether the verdict cited it or not. */
+.h-retracted {
+  height: 34%;
+  background: repeating-linear-gradient(135deg, var(--ink) 0 3px, var(--paper) 3px 6px);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.is-used .barcol-bar { background: var(--ink); box-shadow: none; }
+.is-used .h-retracted {
+  background: repeating-linear-gradient(135deg, var(--ink) 0 3px, var(--paper) 3px 6px);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.barcol-no {
+  height: var(--num-h); margin: 0 3px; display: flex;
+  align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.is-used .barcol-no { color: var(--ink); }
+.barcol:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+/* The chosen bar: a ring on the mark and its number reversed out, the way a
+   row is marked on a printout. No tint, because there is no colour to tint
+   with and a grey wash would read as disabled. */
+.barcol.is-on .barcol-bar {
+  box-shadow: inset 0 0 0 1.5px var(--ink-2),
+              0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
+}
+/* A solid bar is already ink, so the ring needs the paper gap to be seen at
+   all. It is drawn inside the column's own padding and never touches the
+   bar next door. */
+.barcol.is-used.is-on .barcol-bar {
+  box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
+}
+.barcol.is-on .h-retracted {
+  box-shadow: inset 0 0 0 1.5px var(--ink),
+              0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
+}
+.barcol.is-on .barcol-no { background: var(--ink); color: var(--paper); }
+
+.barcol-tip {
+  position: absolute; bottom: calc(var(--num-h) + var(--plot-h) + 4px);
+  left: 50%; transform: translateX(-50%); z-index: 2;
+  padding: 3px 6px; background: var(--ink); color: var(--paper);
+  font-size: 10px; font-weight: 700; white-space: nowrap;
+  opacity: 0; pointer-events: none;
+}
+/* The end columns anchor to their own edge: centred, the first and last tips
+   would hang off the panel. */
+.barcol:first-child .barcol-tip { left: 0; transform: none; }
+.barcol:last-child .barcol-tip { left: auto; right: 0; transform: none; }
+.barcol:hover .barcol-tip, .barcol:focus-visible .barcol-tip, .barcol.is-on .barcol-tip { opacity: 1; }
+
+.chart-key { margin: 13px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+.chart-facts {
+  margin: 9px 0 0; font-size: 11.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.chart-sec .record { margin: 9px 0 0; font-size: 13px; }
+
+/* The one new moment in the page: the bars grow off the baseline, 20ms apart,
+   under 400ms end to end. Transform and opacity only, and nothing at all
+   under prefers-reduced-motion. */
+@keyframes bar-grow { from { transform: scaleY(0.04); opacity: 0; } }
+.chart-bars.reveal .barcol-bar {
+  animation: bar-grow 250ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 20ms);
+}
+
+/* The study the reader jumped to from the chart, marked for as long as the
+   result is on screen. */
+.study.target { box-shadow: inset 3px 0 0 var(--ink); }
 
 .still-open {
   margin: 0; padding: 13px 12px; border-top: 4px solid var(--ink);
@@ -435,15 +547,11 @@ body.view-ask #ask .primary {
 /* While a check runs nothing has been counted yet, so the panel is not drawn:
    the claim and the printing wire are the whole screen. */
 #result.checking .verdict-block,
-#result.checking .explanation,
 #result.checking .deeper,
-#result.checking .record,
 #result.checking .actions,
 #result.checking .toast,
 #result.checking .feedback { display: none; }
 
-/* Reasoning sits outside the panel: the panel reports, the prose explains. */
-.explanation { margin: 16px 0 0; font-size: 15.5px; line-height: 1.5; }
 .ref {
   display: inline-block; min-width: 18px; padding: 0 2px; cursor: pointer;
   background: none; border: 0; border-bottom: 2px solid var(--ink);
@@ -757,6 +865,7 @@ body.live-check main.wrap { animation: sheet-rise 420ms cubic-bezier(0.2, 0.9, 0
   body.live-check .film, body.live-check main.wrap { animation: none; }
   .sweep .study.cited .title span { animation: none; background-size: 100% 2px; }
   .reading li { animation: none; }
+  .chart-bars.reveal .barcol-bar { animation: none; }
   dialog.sheet, dialog.sheet::backdrop { transition: none; }
   .status.working::before, .mic.listening { animation: none; }
   .primary, .secondary, .ghost, .chip, .thumb { transition: none; }
@@ -778,8 +887,10 @@ body.live-check main.wrap { animation: sheet-rise 420ms cubic-bezier(0.2, 0.9, 0
   body.has-bar { padding-bottom: 0; }
   .hero { font-size: 52px; }
   .hero .small, .hero em { font-size: 32px; }
-  .claim-echo { font-size: 36px; }
-  .stamp { font-size: 38px; }
+  .claim-echo { font-size: 22px; }
+  .stamp { font-size: 46px; }
+  /* More width to spend: a taller plot reads the tiers more clearly. */
+  .chart { --plot-h: 110px; --axis-w: 58px; }
   /* Cinema proportions once there is height to spend on them. */
   .film { height: 42vh; min-height: 230px; max-height: 440px; }
   [data-screen] main.wrap { margin-top: -48px; padding-top: 20px; }
