@@ -333,10 +333,17 @@
             <p class="deeper-p">{{ bd.strength }}</p>
           </section>
           {%- endif %}
-          {%- if bd.applies_to or bd.not_applies_to %}
+          {%- if bd.applies_to or bd.not_applies_to or bd.populations %}
           <section class="deeper-sec">
             <p class="section-label">Who this applies to</p>
             {%- if bd.applies_to %}<p class="deeper-p">{{ bd.applies_to }}</p>{% endif %}
+            {#- Read off the records, not written by the model: these are the
+                narrow groups the cited studies were actually run in. #}
+            {%- if bd.populations %}
+            <p class="deeper-p narrow">Some of this evidence comes from studies
+              of one group only: {{ bd.populations|join(", ") }}. A result found
+              in one group may not hold for everyone.</p>
+            {%- endif %}
             {%- if bd.not_applies_to %}
             <p class="section-label label-2">And who it does not</p>
             <p class="deeper-p">{{ bd.not_applies_to }}</p>

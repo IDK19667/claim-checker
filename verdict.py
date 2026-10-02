@@ -23,6 +23,8 @@ import os
 import re
 
 import breakdown
+import evidence
+import pubmed
 
 VALID_VERDICTS = ("true", "false", "complicated")
 
@@ -286,18 +288,51 @@ def extract_search_terms(claim: str) -> str:
     prompt = (
         "A student typed this health claim into a fact-checking "
         f'tool: "{claim}"\n\n'
-        "Write the best PubMed search query to find studies "
-        "relevant to this claim. Use 2-4 key terms joined with AND. "
-        "Keep the specific food, product, or substance named in the "
-        "claim as one term, using its common name (e.g. \"celery\", "
-        "\"apple cider vinegar\"), since that is how study titles "
-        "refer to it. For the condition or outcome, prefer standard "
-        "medical terminology (the kind used in MeSH headings) over "
-        "slang or abbreviations that PubMed might map to something "
-        "unrelated. Respond with ONLY the search query string, "
-        "nothing else. No quotes, no explanation."
+        "Write the best PubMed search query to find studies relevant to "
+        "this claim.\n\n"
+        "Structure: exactly 2 bracketed groups joined with one AND. The "
+        "first group is the thing being taken or done, the second is the "
+        "outcome it is supposed to affect. Inside each group, list the "
+        "synonyms and near-synonyms for that one idea, joined with OR. AND "
+        "narrows and OR widens, so every term that means roughly the same "
+        "thing belongs in the same bracket. Putting two synonyms either "
+        "side of an AND asks for papers that use both words, which throws "
+        "away most of the good evidence.\n\n"
+        "Never add a third group. A claim often carries a condition (\"but "
+        "only if you are deficient\", \"in older adults\", \"over 12 "
+        "weeks\"). That condition is something to judge from the evidence, "
+        "not something to search for: AND-ing it excludes the very trials "
+        "that would settle whether it is true. Leave it out of the query.\n\n"
+        "Example for \"vitamin D stops you catching colds\":\n"
+        "(vitamin D OR cholecalciferol) AND (respiratory tract infection OR "
+        "common cold OR influenza OR acute respiratory infection)\n\n"
+        "Keep the specific food, product, or substance named in the claim "
+        "in the first group, using its common name (e.g. \"celery\", "
+        "\"apple cider vinegar\"), since that is how study titles refer to "
+        "it, and add its scientific or trade name as an OR if it has a "
+        "well known one. For the condition or outcome, give the standard "
+        "medical term (the kind used in MeSH headings) and the everyday "
+        "word for it as ORs, so papers are found whichever one they use.\n\n"
+        "Do not add a study-design filter: the tool runs that as a second "
+        "search of its own.\n\n"
+        "Respond with ONLY the search query string, nothing else. "
+        "No quotes, no explanation."
     )
-    return _clean_query(_complete_text(prompt, max_tokens=256), claim)
+    return _two_groups(_clean_query(_complete_text(prompt, max_tokens=256), claim))
+
+
+def _two_groups(query: str) -> str:
+    """
+    Keep the first two AND-groups and drop the rest.
+
+    The prompt asks for two; this is what happens when it gets three. A
+    third group is almost always the claim's condition ("only if you are
+    deficient"), and AND-ing it removes the trials that would answer it:
+    the landmark vitamin D meta-analyses disappear from the results of a
+    query that insists every paper also say "deficiency".
+    """
+    parts = pubmed.split_and(query)
+    return " AND ".join(parts[:2]) if len(parts) > 2 else query
 
 
 # ---------------------------------------------------------------------
@@ -310,10 +345,17 @@ def _format_study_for_prompt(i: int, study: dict) -> str:
     # Trim very long abstracts so the prompt stays a reasonable size.
     if len(abstract) > 1500:
         abstract = abstract[:1500] + "..."
+    # Who was enrolled, read off the record rather than left for the model
+    # to notice. A trial in one narrow group is strong evidence about that
+    # group and weak evidence about everyone else, and saying so here is
+    # what lets the prompt below insist the answer names them.
+    pop = evidence.population(study)
+    who = f"NARROW POPULATION: {pop} only" if pop else "Population: general"
     return (
         f"[Study {i}] \"{study.get('title')}\"\n"
         f"Journal: {study.get('journal') or 'unknown'} ({study.get('year') or 'unknown'})\n"
         f"Publication type: {pub_types}\n"
+        f"{who}\n"
         f"Abstract: {abstract}\n"
     )
 
@@ -437,7 +479,7 @@ def weigh_evidence(claim: str, studies: list[dict]) -> dict:
     )
     raw, stop_note = _complete_json(weigh_prompt(claim, studies_block),
                                     VERDICT_SCHEMA, max_tokens=12000)
-    return _read_verdict(raw, stop_note, studies)
+    return _read_verdict(raw, stop_note, studies, claim)
 
 
 def weigh_prompt(claim: str, studies_block: str) -> str:
@@ -475,6 +517,14 @@ words in the claim. Only cite a study if it genuinely bears on this
 claim. If none of these studies are actually about the claim, say so
 plainly, give the verdict "complicated", and cite no studies.
 
+Some studies above are marked NARROW POPULATION. They were run in one
+particular group, and they are strong evidence about that group only.
+Never answer a general claim from narrow-population studies alone: if
+those are all you have, the verdict is "complicated" and the answer
+says who the evidence covers. Whenever you lean on one, name its group
+in the sentence that cites it, so "it cuts infections (Study 7)" reads
+"in people with prediabetes it cut infections (Study 7)".
+
 Write for someone scanning a phone. Answer first, details after.
 Plain words, no throat-clearing ("It's important to note", "Overall").
 No dashes as punctuation; use commas and full stops. When an abstract
@@ -487,7 +537,7 @@ write it in digits: "60 adults", not "sixty adults".
 Respond with JSON in this exact shape:
 {{
   "verdict": "true" | "false" | "complicated",
-  "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no",
+  "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. Say it the way you would say it out loud to a friend: a real sentence with a real verb, not a headline and not a research summary. 'Vitamin D links to colds and flu' is wrong, it is not how anyone speaks; 'Vitamin D probably will not stop you catching a cold, unless you are low on it' is right. Do not start with a noun phrase and the word 'links'. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no",
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
   "cited_study_numbers": [1, 2],
@@ -495,7 +545,7 @@ Respond with JSON in this exact shape:
 }}"""
 
 
-def _read_verdict(raw, stop_note, studies: list[dict]) -> dict:
+def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     """Everything after the call: parse, map citations, gate every string."""
     if stop_note:
         return _fallback(
@@ -539,13 +589,13 @@ def _read_verdict(raw, stop_note, studies: list[dict]) -> dict:
                 if pmid not in cited_pmids:
                     cited_pmids.append(pmid)
 
-    explanation = breakdown.soften(
-        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))
+    explanation = breakdown.plain(breakdown.soften(
+        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX)))
     still_open = tidy_prose(str(parsed.get("still_open") or ""), STILL_OPEN_MAX)
 
     # The deeper layer, gated. Everything it could not tie back to these
     # abstracts has already been dropped by the time this returns.
-    deeper = breakdown.ground(parsed, studies, tidy_prose)
+    deeper = breakdown.ground(parsed, studies, tidy_prose, claim)
 
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or
@@ -563,9 +613,23 @@ def _read_verdict(raw, stop_note, studies: list[dict]) -> dict:
         # the evidence shows. The deeper layer goes with the verdict.
         deeper = None
 
+    # The same backstop, one step along: every study behind this verdict was
+    # run in one narrow group. That is a real answer about those people and
+    # no answer at all about the reader, who did not say they were any of
+    # them. Downgrade rather than drop, and say whose evidence it is.
+    narrow = evidence.narrow_populations(studies, cited_pmids)
+    if not forced and verdict != "complicated" and evidence.narrow_only(studies, cited_pmids):
+        verdict = "complicated"
+        forced_narrow = ", ".join(narrow)
+        explanation = (explanation.rstrip() + f" Every study behind this was run in "
+                       f"one group ({forced_narrow}), so it answers the claim for "
+                       f"them and not for people in general.").strip()
+
     # The takeaway is held to the same rule as the breakdown: words that
     # claim more than this evidence can carry are rewritten weaker.
-    tldr = breakdown.soften(tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX))
+    tldr = breakdown.natural(
+        breakdown.plain(breakdown.soften(
+            tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX))))
     if forced:
         tldr = "The studies found don't actually test this claim, so it's unproven either way."
         if not still_open:
@@ -573,6 +637,12 @@ def _read_verdict(raw, stop_note, studies: list[dict]) -> dict:
     if not tldr:
         # First sentence of the explanation is a serviceable one-liner.
         tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
+
+    # Who the evidence was actually collected in, read off the records
+    # rather than taken from the prose. The breakdown prints it under
+    # "Who this applies to", where a reader is asking exactly this.
+    if deeper is not None:
+        deeper["populations"] = narrow
 
     return {
         "verdict": verdict,

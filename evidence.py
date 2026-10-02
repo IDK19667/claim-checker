@@ -12,6 +12,8 @@ curated metadata, so the evidence mix on screen is a fact about the
 record, not an opinion about it.
 """
 
+import re
+
 # Ordered: the first match wins, so a paper tagged both "Meta-Analysis"
 # and "Journal Article" reads as the meta-analysis it is.
 TYPES = [
@@ -76,6 +78,90 @@ def strongest_label(publication_types) -> str:
         if hit:
             return label
     return kept[0] if kept else ""
+
+
+# ---------------------------------------------------------------------------
+# Who was actually studied
+#
+# A trial in 511 people with prediabetes is real evidence about people with
+# prediabetes and thin evidence about everyone else. PubMed does not tag this,
+# so it is read off the title and the opening of the abstract, where trials
+# state who they enrolled. Ordered: the first match wins, and the label is the
+# plain words a reader would use, because it is printed on the page.
+# ---------------------------------------------------------------------------
+
+POPULATIONS = [
+    (r"\bcritically ill|\bintensive care|\bICU\b", "people in intensive care"),
+    (r"\bpreterm|\bneonat|\binfants?\b", "newborn babies"),
+    (r"\bpregnan|\bpostpartum", "pregnant women"),
+    (r"\bprediabet", "people with prediabetes"),
+    (r"\btype [12] diabet|\bdiabetic", "people with diabetes"),
+    (r"\bdialysis|\bchronic kidney|\brenal failure", "people with kidney failure"),
+    (r"\bHIV\b|\bAIDS\b", "people with HIV"),
+    (r"\btuberculosis\b", "people with tuberculosis"),
+    (r"\bcystic fibrosis\b", "people with cystic fibrosis"),
+    (r"\bchemotherapy|\bcancer patients|\boncolog", "people treated for cancer"),
+    (r"\basthma\b|\bCOPD\b|\bchronic obstructive", "people with asthma or COPD"),
+    (r"\bpostmenopausal", "women after menopause"),
+    (r"\bnursing home|\bcare home|\blong.term care", "care home residents"),
+    (r"\bolder adults?\b|\belderly\b|\baged 6[5-9]|\baged 7[0-9]", "older adults"),
+    (r"\bathletes?\b|\belite sport|\bmarathon", "athletes"),
+    (r"\bchildren\b|\bpaediatric|\bpediatric|\badolescen|\bschoolchild",
+     "children"),
+    (r"\bmen\b(?!tal)|\bmales? only", "men only"),
+    (r"\bwomen\b|\bfemales? only", "women only"),
+]
+
+_POOLED = ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review")
+
+
+def population(study) -> str | None:
+    """
+    The narrow group a study was run in, in plain words, or None when it
+    looks like a general population.
+
+    The title counts wherever it matches. The abstract counts only for
+    papers that are not pooled evidence: a meta-analysis of 25 trials
+    mentions children in a subgroup line without being a study of
+    children, and mislabelling the broadest paper in the set as the
+    narrowest would invert the whole point of the flag.
+    """
+    study = study or {}
+    title = str(study.get("title") or "")
+    pooled = strongest_label(study.get("publication_types")) in _POOLED
+    # Trials state who they enrolled early, in Background or Methods.
+    body = "" if pooled else str(study.get("abstract") or "")[:700]
+    for pattern, label in POPULATIONS:
+        if re.search(pattern, title, re.IGNORECASE):
+            return label
+        if body and re.search(pattern, body, re.IGNORECASE):
+            return label
+    return None
+
+
+def narrow_populations(studies, cited_pmids=()) -> list[str]:
+    """The distinct narrow groups among the studies a verdict leaned on."""
+    cited = {str(p) for p in (cited_pmids or ())}
+    seen = []
+    for s in studies or []:
+        if cited and str(s.get("pmid")) not in cited:
+            continue
+        label = population(s)
+        if label and label not in seen:
+            seen.append(label)
+    return seen
+
+
+def narrow_only(studies, cited_pmids=()) -> bool:
+    """
+    True when every study a verdict leaned on was run in a narrow group.
+    A general claim answered only from these is not answered: the honest
+    verdict is that it depends who you are.
+    """
+    cited = {str(p) for p in (cited_pmids or ())}
+    used = [s for s in (studies or [])
+            if not cited or str(s.get("pmid")) in cited]
+    return bool(used) and all(population(s) for s in used)
 
 
 def mix(studies) -> list[dict]:

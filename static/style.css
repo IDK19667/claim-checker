@@ -481,6 +481,15 @@ mark, .key-mark { background: none; color: var(--ink); font-weight: 900; }
 .deeper-p { margin: 8px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
 .deeper-p .ref { color: var(--ink); }
 
+/* Who the studies were actually run in. A fact about the records rather than
+   a finding from them, so it reads as an aside: indented off a 2px rule, the
+   way a footnote to the paragraph above it would be set. */
+.deeper-p.narrow {
+  margin-top: 10px; padding-left: 12px;
+  border-left: 2px solid var(--rule);
+  font-size: 14px;
+}
+
 /* Each part of the claim is quoted, then answered. The quote carries the
    weight because it is the reader's own sentence; the answer sits under it in
    the body ink, the way a marked-up printout reads. */

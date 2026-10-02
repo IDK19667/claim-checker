@@ -384,6 +384,15 @@ blindness, and it cannot be mistaken for a verdict.
   so. The short answer above it does not move, shrink or change: the layer
   is additive, and a result that has no breakdown renders without it rather
   than with an empty fold.
+- **Who it applies to, narrowed:** when the evidence the verdict leans on
+  was run in one group only, `Who this applies to` carries a second
+  paragraph naming the groups, set as an aside: 14px, indented 12px off a
+  2px `--rule` on its left edge, the way a footnote to the paragraph above
+  it would be set. It is drawn from the records' own titles and publication
+  types, not from the model's prose, so it is a fact about the evidence
+  rather than a finding from it, and it is absent when every cited study
+  was general. No new token: the left rule is the same `--rule` the folds
+  use.
 - **The sources:** two folded groups, `Relied on for the verdict` open and
   `Read, not relied on` closed, each a `<details>` with its count. Every
   study stays in the HTML in both states, for crawlers and for a reader

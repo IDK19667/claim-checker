@@ -185,14 +185,16 @@ calls = []
 
 def _fb(q, max_results=8):
     calls.append(q)
-    return [] if q.count(" AND ") == 2 else STUDIES
+    return [] if " AND " in q else STUDIES
 
 
 pubmed.search_and_fetch = _fb
-fg.models.script = [Resp("a AND b AND c"), Resp(VJ("true", [1]))]
+# The model is held to two groups, so a query that finds nothing is broadened
+# from two to one, not from three to two.
+fg.models.script = [Resp("a AND b"), Resp(VJ("true", [1]))]
 d = P("broaden me", ip="7.7.7.7").get_json()
-t("broadened search used & flagged", d["search_broadened"] is True and d["search_query_used"] == "a AND b"
-  and calls == ["a AND b AND c", "a AND b"], d)
+t("broadened search used & flagged", d["search_broadened"] is True and d["search_query_used"] == "a"
+  and calls == ["a AND b", "a"], d)
 pubmed.search_and_fetch = lambda q, max_results=8: STUDIES
 
 # ---- SSE stream -------------------------------------------------------------
@@ -594,8 +596,11 @@ t("grounding: the layer never reaches past the records the verdict was shown",
   set(breakdown.cited_pmids(_bd, _BD_STUDIES)) <= {"D1", "D2"}
   and _bd["rests_on"] == 2, _bd["rests_on"])
 t("grounding: a medical term is explained once, on its first appearance",
-  _ev.count("the results of many studies pooled into one") == 1
-  and "randomized controlled trial (people were put in groups at random" in _bd["strength"])
+  "randomized controlled trial (people were put in groups at random" in _bd["strength"])
+t("grounding: a design with a plain name is renamed, and named once in brackets",
+  "pooled review (meta-analysis)" in _ev
+  and breakdown.flatten(_bd).count("(meta-analysis)") == 1
+  and "pooled review" in _bd["strength"], breakdown.flatten(_bd))
 t("grounding: the prose lands at about an 8th-grade reading level",
   _bd["grade"] <= 10, _bd["grade"])
 # The length rule is measured on the sentence the reader is handed, so the
@@ -617,10 +622,22 @@ t("grounding: no dashes in the deeper layer either",
 _no_fig = breakdown.ground(
     dict(_BD_RAW, effect_size="The effect was large and meaningful (Study 1)."),
     _BD_STUDIES, verdict.tidy_prose)
-t("grounding: no figure in the abstracts is said plainly, not described",
-  _no_fig["effect_size"] == breakdown.NO_EFFECT_SIZE, _no_fig["effect_size"])
+t("grounding: an effect size that is described, not quoted, does not survive",
+  "large and meaningful" not in _no_fig["effect_size"], _no_fig["effect_size"])
+t("  and it points at the figures that did survive, rather than denying them",
+  _no_fig["effect_size"] == breakdown.EFFECT_SIZE_ABOVE
+  and "0.88" in " ".join(_no_fig["evidence"]), _no_fig["effect_size"])
+_no_num = breakdown.ground(
+    {"parts": [], "evidence": ["Vitamin D helped a little (Study 1)."],
+     "effect_size": "The effect was large (Study 1).", "strength": "",
+     "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _BD_STUDIES, verdict.tidy_prose)
+t("  with no figure anywhere on the page, the abstracts are said to carry none",
+  _no_num["effect_size"] == breakdown.NO_EFFECT_SIZE, _no_num["effect_size"])
 t("  and a figure that is in them is quoted as it stands",
-  "was 0.88, and 0.30 in the most deficient (Study 1)." in _bd["effect_size"],
+  # "most deficient" is printed as "lowest": the figures are untouched,
+  # which is the thing this test is actually about.
+  "was 0.88, and 0.30 in the lowest (Study 1)." in _bd["effect_size"],
   _bd["effect_size"])
 
 t("grounding: softening only ever weakens a claim",
@@ -637,6 +654,160 @@ t("grounding: reading grade is measured, not asserted",
   and breakdown.reading_grade(
       "Supplementation attenuated incident respiratory morbidity irrespective of "
       "antecedent concentrations, notwithstanding considerable heterogeneity.") > 12)
+
+# ---- searching wide, then ranking by design ---------------------------------------
+# AND between two synonyms asks for papers using both words, which is how the
+# landmark meta-analysis on a claim gets missed. A synonym group is one idea
+# and has to survive broadening whole.
+t("search: a bracketed OR group is one term, not four",
+  pubmed.split_and("(a OR b) AND (c OR d)") == ["(a OR b)", "(c OR d)"],
+  pubmed.split_and("(a OR b) AND (c OR d)"))
+t("  broadening drops a whole group, never half of one",
+  pubmed.broaden_query("(vitamin D OR cholecalciferol) AND (cold OR flu) AND winter")
+  == "(vitamin D OR cholecalciferol) AND (cold OR flu)")
+t("  a query with one group cannot be broadened further",
+  pubmed.broaden_query("(vitamin D OR cholecalciferol)") is None)
+t("  the second search asks PubMed for the designs that settle claims",
+  pubmed.best_evidence_query("x") ==
+  "(x) AND (systematic review[pt] OR meta-analysis[pt] OR "
+  "randomized controlled trial[pt])", pubmed.best_evidence_query("x"))
+
+_seen = []
+def _fake_search(q, max_results=8):
+    _seen.append(q)
+    return ["REVIEW1", "REVIEW2"] if "[pt]" in q else ["POPULAR", "REVIEW1", "TAIL"]
+_real_search = pubmed.search_pubmed
+pubmed.search_pubmed = _fake_search
+_merged = pubmed.search_merged("q", max_results=8)
+pubmed.search_pubmed = _real_search
+t("  strong designs take the front of the merged list, with no duplicates",
+  _merged == ["REVIEW1", "REVIEW2", "POPULAR", "TAIL"], _merged)
+t("  and both searches really ran, the filtered one first",
+  len(_seen) == 2 and "[pt]" in _seen[0] and "[pt]" not in _seen[1])
+t("  a third AND group is dropped, whatever the prompt asked for",
+  verdict._two_groups("(vitamin D OR cholecalciferol) AND (cold OR flu) "
+                      "AND (deficiency OR insufficiency)")
+  == "(vitamin D OR cholecalciferol) AND (cold OR flu)",
+  verdict._two_groups("(vitamin D OR cholecalciferol) AND (cold OR flu) "
+                      "AND (deficiency OR insufficiency)"))
+t("  two groups are left exactly as they are",
+  verdict._two_groups("(a OR b) AND (c OR d)") == "(a OR b) AND (c OR d)")
+t("  a record with no abstract cannot ground a sentence, so it is dropped",
+  [s["pmid"] for s in pubmed.usable(
+      [{"pmid": "1", "abstract": "text"}, {"pmid": "2", "abstract": None},
+       {"pmid": "3", "abstract": "   "}])] == ["1"])
+
+# ---- who was actually studied -----------------------------------------------------
+t("population: a trial names its group in the title",
+  evidence.population({"title": "Vitamin D in Young Healthy Children",
+                       "publication_types": ["Randomized Controlled Trial"]})
+  == "children")
+t("  or in the opening of its abstract",
+  evidence.population({"title": "Vitamin D and infection", "abstract":
+                       "We enrolled 511 subjects with prediabetes.",
+                       "publication_types": ["Randomized Controlled Trial"]})
+  == "people with prediabetes")
+t("  a pooled review is not narrowed by a subgroup line in its abstract",
+  evidence.population({"title": "Vitamin D to prevent infections: a meta-analysis",
+                       "abstract": "Subgroup analysis in children showed no effect.",
+                       "publication_types": ["Meta-Analysis"]}) is None)
+t("  a general trial is not labelled at all",
+  evidence.population({"title": "Vitamin D in adults", "abstract": "We enrolled adults.",
+                       "publication_types": ["Randomized Controlled Trial"]}) is None)
+
+def _study(pmid, title, **kw):
+    """A PubMed record with every field the payload expects."""
+    return {"pmid": pmid, "title": title, "abstract": kw.get("abstract", "a"),
+            "journal": "J", "year": "2020", "authors": ["A B"], "data_banks": None,
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+            "publication_types": kw.get("types", ["Randomized Controlled Trial"])}
+
+
+_NARROW = [_study("N1", "Vitamin D in children"),
+           _study("N2", "Vitamin D in pregnancy")]
+t("  narrow groups are listed in the order they were read",
+  evidence.narrow_populations(_NARROW, ["N1", "N2"]) == ["children", "pregnant women"])
+t("  evidence drawn only from narrow groups is flagged as such",
+  evidence.narrow_only(_NARROW, ["N1", "N2"]) is True)
+t("  one general study among them clears the flag",
+  evidence.narrow_only(_NARROW + [_study("G", "Vitamin D in adults", types=[])],
+                       ["N1", "G"]) is False)
+
+# A general claim answered only from narrow groups is not answered. This is the
+# same backstop as "no citations means complicated", one step along.
+fg.models.script = [Resp("vitamin d AND children"),
+                    Resp(VJ("true", [1, 2], tldr="Vitamin D stops colds.",
+                            explanation="It works.", still_open="Nothing."))]
+pubmed.search_and_fetch = lambda q, max_results=8: _NARROW
+_nr = P("Vitamin D stops you catching colds", ip="7.7.7.7").get_json()
+t("narrow evidence cannot carry a true verdict",
+  _nr["verdict"] == "complicated", _nr["verdict"])
+t("  and the result says whose evidence it was",
+  "children, pregnant women" in _nr["explanation"], _nr["explanation"])
+
+# ---- plain words ------------------------------------------------------------------
+t("plain: a compound noun is rewritten as the thing you do",
+  breakdown.plain("Vitamin D supplementation lowers risk.", set())
+  == "Vitamin D supplement use lowers risk.")
+t("  and 'supplementation with X' becomes 'taking X'",
+  breakdown.plain("Supplementation with vitamin D helped.", set())
+  == "Taking vitamin D helped.")
+t("  a term that reads differently after 'the ... of' gets the noun, not the clause",
+  breakdown.plain("The efficacy of vitamin D and the incidence of flu.", set())
+  == "The effect of vitamin D and the rate of flu.")
+t("  but standing alone it gets the plain clause",
+  breakdown.plain("Efficacy was not reported.", set())
+  == "How well it works was not reported.")
+t("  a deficiency is low levels of the thing, in that order",
+  breakdown.plain("Vitamin D deficiency was common.", set())
+  == "Low vitamin D (deficiency) was common.")
+t("  a superlative is not left as 'most low'",
+  breakdown.plain("Those most deficient improved.", set()) == "Those lowest improved.")
+t("  the term parked in brackets is not then rewritten by a later rule",
+  breakdown.plain("Androgenetic alopecia was measured.", set())
+  == "Pattern hair loss (androgenetic alopecia) was measured.")
+t("  the medical term is kept once, not on every appearance",
+  breakdown.plain("Respiratory infections and more respiratory infections.", set())
+  == "Chest and throat infections (respiratory tract infection) and more chest "
+     "and throat infections.")
+t("  an article follows the word that replaced the one after it",
+  breakdown.plain("There was an elevated count.", set())
+  == "There was a raised count.")
+t("  an adjective before a noun is rebuilt, not just swapped",
+  breakdown.plain("It helped deficient people most.", set())
+  == "It helped people with low levels most.")
+t("  softening 'stops' leaves 'stops working' alone, which claims nothing",
+  breakdown.soften("Where it stops providing protection.")
+  == "Where it stops providing protection."
+  and breakdown.soften("It stops colds.") == "It reduces colds.")
+t("  the two design labels together are one pooled review, named once",
+  breakdown.plain("A systematic review and meta-analysis of 25 trials.", set())
+  == "A pooled review (systematic review and meta-analysis) of 25 trials.")
+t("  a long word with a short twin loses nothing, so it is swapped silently",
+  breakdown.plain("The association was a substantial reduction in serum "
+                  "concentrations across populations.", set())
+  == "The link was a large drop in serum levels across groups.")
+
+t("natural: the takeaway is a sentence someone would say out loud",
+  breakdown.natural("Vitamin D links to colds and flu.")
+  == "Vitamin D is linked to colds and flu.")
+t("  and research grammar is turned back into speech",
+  breakdown.natural("Creatine is associated with hair loss.")
+  == "Creatine is linked to hair loss.")
+
+t("grade: the claim's own words are not counted against the prose",
+  breakdown.claim_terms("Taking vitamin D supplements in winter cuts your risk of flu")
+  == {"vitamin", "supplements", "winter", "flu"},
+  breakdown.claim_terms("Taking vitamin D supplements in winter cuts your risk of flu"))
+_long_word = "Supplementation reduced infections. Supplementation reduced infections."
+t("  excluding them lowers the measured grade of the same sentence",
+  breakdown.reading_grade(_long_word, {"supplementation"})
+  < breakdown.reading_grade(_long_word))
+t("  the breakdown reports its own measured grade, never an asserted one",
+  isinstance(_bd["grade"], float)
+  and _bd["grade"] == breakdown.reading_grade(breakdown.flatten(_bd)), _bd["grade"])
+t("  and short prose about these trials comes in at the target or below",
+  _bd["grade"] <= breakdown.TARGET_GRADE, _bd["grade"])
 
 # ---- the deeper layer through the whole app ---------------------------------------
 pubmed.search_and_fetch = lambda q, max_results=8: _BD_STUDIES

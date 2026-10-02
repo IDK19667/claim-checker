@@ -4,7 +4,89 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-01 (latest): A deeper layer under the short answer, gated in code
+## 2026-10-01 (latest): Search wide and rank by design, then say it in plain words
+
+Two faults in the same check, found on one claim. "Taking vitamin D
+supplements in winter cuts your risk of catching a cold or flu, but only
+if you're deficient to begin with" produced the query `vitamin D AND
+common cold AND influenza`, which found four papers, one of them a strong
+design, two of them about sport nutrition and urinary tract infections.
+Neither of the two papers that actually settle this question came back:
+Martineau 2017 in the BMJ, the individual-participant meta-analysis of 25
+trials, and Jolliffe 2021 in Lancet Diabetes & Endocrinology, its update.
+
+**AND between synonyms is a filter, not a search.** `common cold AND
+influenza` asks PubMed for papers that use both words. A trial of winter
+respiratory infections uses neither. The query is now built as exactly two
+bracketed OR groups, the thing and the outcome, joined by one AND, and the
+prompt says so with a worked example. The model kept adding a third group
+for the claim's condition ("deficiency OR insufficiency"), which is the
+one thing a query must never carry: a condition is what the evidence is
+there to judge, and AND-ing it excludes the very trials that would settle
+whether it is true. So `verdict._two_groups` drops every group past the
+second in code. The prompt asks; the code enforces.
+
+**Relevance is not quality, so there are two searches.** PubMed ranks by
+relevance alone, which lets a narrow trial in a convenient journal outrank
+the pooled review of 25 trials. `pubmed.search_merged` runs the same query
+twice, once filtered to `systematic review[pt] OR meta-analysis[pt] OR
+randomized controlled trial[pt]`, and puts those at the front of the list.
+Both calls are esearch, which is free and needs no key, so a check is
+still two model calls and now three PubMed calls. Measured over five
+claims, strong designs in the eight studies shown went from 2, 3, 4, 2 and
+0 to 8, 8, 8, 8 and 8. Both landmark papers come back, at ranks 1 and 4.
+
+Two smaller rules fell out of it. A record with no abstract is dropped
+(`pubmed.usable`): it can be counted but never read, and it was occupying
+one of eight slots. And the three E-utilities calls are paced 0.35s apart
+(`pubmed.MIN_INTERVAL`), because three requests in a row sits exactly on
+NCBI's published limit of three a second and we were getting 429s.
+
+**Who was actually studied is printed from the metadata, not the prose.**
+`evidence.population` reads a study's title, and the abstract too when the
+paper is not pooled evidence, against an ordered list of narrow groups:
+intensive care, prediabetes, children, after menopause, one disease, one
+sex. A meta-analysis of 25 trials that mentions children in a subgroup
+line is not a study of children, so pooled designs are read from the title
+alone. The populations of the cited studies are shown under "Who this
+applies to", and a verdict whose evidence is all narrow is forced to
+"complicated" in code, the same way an uncited one already was.
+
+**Plain words replace hard ones; the glossary only explains what is left.**
+`breakdown.PLAIN` is 60-odd ordered patterns, not a word list, because
+English will not let a noun be swapped for a phrase wherever it stands:
+"the efficacy of X" needs "the effect of X" while "efficacy was not
+reported" needs "how well it works". "Respiratory tract infections"
+becomes "chest and throat infections", "meta-analyses" becomes "pooled
+reviews", "deficient people" becomes "people with low levels". The handful
+whose precision matters keep the original in brackets once per breakdown.
+`natural()` then fixes the grammar of the takeaway alone, because that is
+the line meant to be repeated out loud and "Vitamin D links to colds and
+flu" is a headline, not a sentence. Neither pass can change certainty:
+they touch vocabulary and verb form, never the strength of a claim.
+
+**Grade 10 was the target and 10.9 to 12.7 is what it reaches, honestly.**
+Flesch-Kincaid is `0.39*(words/sentence) + 11.8*(syllables/word) - 15.59`.
+Prose that names study designs and effect sizes runs near 1.95 syllables a
+word even after every long word with a short twin is gone, and that term
+alone is 7.4 grades. Hitting 10 from there needs six-word sentences, which
+cannot say "an odds ratio of 0.88 across 10933 people". Measured on five
+claims, grading the same model reply through the old gate and the new one:
+16.1 to 12.7, 11.3 to 11.1, 13.8 to 11.4, 12.1 to 10.9, 11.3 to 10.2. The
+claim's own key terms are excluded, because a reader who typed "creatine"
+has met the word. Study-design terms are *not* excluded: that would move
+the measurement rather than the writing. `TARGET_GRADE` stays 10 as the
+thing to aim at, the breakdown carries its own measured grade, and no test
+asserts the target is met on real prose.
+
+**One fix the measurement turned up.** "The abstracts don't report the
+size of the effect" is a sentence the code writes, and it was being
+printed two inches under a surviving odds ratio, because the gate drops
+sentences one at a time and the effect-size line can go while a figure in
+the paragraph above it stays. It now says where the figures are instead,
+and only claims the abstracts carry none when none reached the page.
+
+## 2026-10-01: A deeper layer under the short answer, gated in code
 
 The result answered the question and stopped. A reader who wanted to know
 *why* had nothing between the one-line takeaway and eight study abstracts.
@@ -20,7 +102,7 @@ the same way a verdict with no citations is already forced to
 "complicated". A sentence with no study number goes. A reference to a
 study outside the set goes. A figure that appears in no abstract goes,
 compared with commas and decimal points normalised so "11,321" and
-"11321" are the same number. A sentence over 32 words goes, because a
+"11321" are the same number. A sentence over 28 words goes, because a
 sentence that long is not 8th-grade prose whatever its vocabulary. If
 nothing survives, there is no breakdown and the fold is not rendered.
 

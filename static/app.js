@@ -476,9 +476,15 @@ function renderBreakdown(bd, count) {
       `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bd.effect_size || "", count)}</span></p>`));
   }
   if (bd.strength) out.push(sec("Why the verdict is what it is", prose(bd.strength)));
-  if (bd.applies_to || bd.not_applies_to) {
+  // The narrow groups come off the PubMed records on the server, so this
+  // prints a list rather than prose: no refs to link, nothing to gate.
+  const groups = bd.populations || [];
+  if (bd.applies_to || bd.not_applies_to || groups.length) {
     out.push(sec("Who this applies to",
       (bd.applies_to ? prose(bd.applies_to) : "") +
+      (groups.length
+        ? `<p class="deeper-p narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(groups.join(", "))}. A result found in one group may not hold for everyone.</p>`
+        : "") +
       (bd.not_applies_to
         ? `<p class="section-label label-2">And who it does not</p>${prose(bd.not_applies_to)}`
         : "")));

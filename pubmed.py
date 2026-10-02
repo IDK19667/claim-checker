@@ -15,12 +15,36 @@ than a small preliminary study.
 """
 
 import os
+import re
+import threading
+import time
 import xml.etree.ElementTree as ET
 
 import requests
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 TIMEOUT = 15
+
+# NCBI allows 3 requests a second without a key, and answers 429 past it.
+# One check is now three calls in a row (two searches and a fetch), which
+# sits exactly on the limit, so they are spaced instead of raced. A lock,
+# because Flask serves checks on threads and the limit is per client.
+MIN_INTERVAL = 0.35
+_last_call = 0.0
+_pace = threading.Lock()
+
+
+def _get(endpoint: str, params: dict):
+    """One E-utilities call, no faster than NCBI's published rate."""
+    global _last_call
+    with _pace:
+        wait = MIN_INTERVAL - (time.monotonic() - _last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _last_call = time.monotonic()
+    resp = requests.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
+    resp.raise_for_status()
+    return resp
 
 
 def _tool_params():
@@ -41,9 +65,7 @@ def search_pubmed(query: str, max_results: int = 8) -> list[str]:
         "sort": "relevance",
         **_tool_params(),
     }
-    resp = requests.get(f"{EUTILS_BASE}/esearch.fcgi", params=params, timeout=TIMEOUT)
-    resp.raise_for_status()
-    data = resp.json()
+    data = _get("esearch.fcgi", params).json()
     return data.get("esearchresult", {}).get("idlist", [])
 
 
@@ -144,10 +166,7 @@ def fetch_details(pmids: list[str]) -> list[dict]:
         "retmode": "xml",
         **_tool_params(),
     }
-    resp = requests.get(f"{EUTILS_BASE}/efetch.fcgi", params=params, timeout=TIMEOUT)
-    resp.raise_for_status()
-
-    root = ET.fromstring(resp.content)
+    root = ET.fromstring(_get("efetch.fcgi", params).content)
     records = []
     for article_el in root.findall("PubmedArticle"):
         try:
@@ -159,21 +178,89 @@ def fetch_details(pmids: list[str]) -> list[dict]:
 
 
 def search_and_fetch(query: str, max_results: int = 8) -> list[dict]:
-    """Convenience wrapper: search, then immediately fetch full details."""
-    pmids = search_pubmed(query, max_results=max_results)
-    return fetch_details(pmids)
+    """
+    One query in, the studies worth reading out. Runs the two searches
+    below, fetches the merged list, and drops the records with nothing in
+    them to read. The single seam between this module and the rest of the
+    app, so everything that wants evidence goes through the same filter.
+    """
+    pmids = search_merged(query, max_results=max_results)
+    return usable(fetch_details(pmids))[:max_results]
+
+
+def split_and(query: str) -> list[str]:
+    """
+    Split a query on its top-level ANDs, leaving bracketed groups whole.
+    "(a OR b) AND (c OR d)" is two terms, not four: a synonym group is one
+    idea, and chopping into it would turn a broadening into a rewrite.
+    """
+    parts, depth, current = [], 0, []
+    tokens = re.split(r"(\s+AND\s+|\(|\))", query)
+    for token in tokens:
+        if token == "(":
+            depth += 1
+        elif token == ")":
+            depth = max(0, depth - 1)
+        elif depth == 0 and re.fullmatch(r"\s+AND\s+", token or ""):
+            parts.append("".join(current).strip())
+            current = []
+            continue
+        current.append(token or "")
+    parts.append("".join(current).strip())
+    return [p for p in parts if p]
 
 
 def broaden_query(query: str) -> str | None:
     """
-    Drop the last AND-term from a query ("a AND b AND c" -> "a AND b").
+    Drop the last top-level AND-term ("a AND b AND c" -> "a AND b").
     Returns None when there's nothing left to drop. Used once, when a
     search comes back empty: the model sometimes over-specifies.
     """
-    parts = [p.strip() for p in query.split(" AND ") if p.strip()]
+    parts = split_and(query)
     if len(parts) < 2:
         return None
     return " AND ".join(parts[:-1])
+
+
+# The designs that answer a general health claim: pooled evidence first,
+# then trials. PubMed's [pt] filter reads its own curated tags, so this
+# asks the index a question rather than guessing from a title.
+BEST_EVIDENCE_PT = ("systematic review[pt]", "meta-analysis[pt]",
+                    "randomized controlled trial[pt]")
+
+
+def best_evidence_query(query: str) -> str:
+    """The same search, restricted to the designs worth weighing most."""
+    return f"({query}) AND ({' OR '.join(BEST_EVIDENCE_PT)})"
+
+
+def search_merged(query: str, max_results: int = 8) -> list[str]:
+    """
+    Two searches, one list. PubMed ranks by relevance alone, so a narrow
+    trial in a convenient journal can crowd out the meta-analysis that
+    actually settles the question. The second search asks the index for
+    the strong designs only, and those take the front of the list.
+
+    Both calls are esearch, which is free and needs no key, so this costs
+    a check nothing but a few hundred milliseconds. Twice the asked-for
+    number comes back, because the next step throws away the records that
+    have nothing in them to read.
+    """
+    want = max_results * 2
+    best = search_pubmed(best_evidence_query(query), max_results=want)
+    general = search_pubmed(query, max_results=want)
+    return list(dict.fromkeys(best + general))[:want]
+
+
+def usable(studies: list[dict]) -> list[dict]:
+    """
+    Drop records with no abstract. Every sentence this tool prints has to
+    name a study it came from, and a paper with no abstract gives the
+    verdict nothing to stand on: it cannot supply a figure, a population
+    or a finding. Leaving one in spends a slot out of eight on a record
+    that can only ever be counted, never read.
+    """
+    return [s for s in studies or [] if (s.get("abstract") or "").strip()]
 
 
 def search_with_fallback(query: str, max_results: int = 8) -> tuple[list[dict], str, bool]:
@@ -210,9 +297,7 @@ def _elink(linkname: str, pmid: str, db: str = "pubmed") -> list[str]:
     """Return the linked ids for one linkname, or [] if there are none."""
     params = {"dbfrom": "pubmed", "db": db, "linkname": linkname,
               "id": str(pmid), "retmode": "json", **_tool_params()}
-    r = requests.get(f"{EUTILS_BASE}/elink.fcgi", params=params, timeout=TIMEOUT)
-    r.raise_for_status()
-    linksets = r.json().get("linksets") or [{}]
+    linksets = _get("elink.fcgi", params).json().get("linksets") or [{}]
     for group in linksets[0].get("linksetdbs") or []:
         if group.get("linkname") == linkname:
             return [str(i) for i in group.get("links") or []]
