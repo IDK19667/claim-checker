@@ -6,6 +6,126 @@ replaced the generated-footage plan recorded lower down in this file, and
 the later 2026-09-29 entry for why round 2's three-clip build was itself
 replaced by round 3's four-clip "noise to clarity" concept, recorded here.
 
+## Round 10: the band behind checking and the verdict (2026-10-01)
+
+The checking screen used to replay the scroll fly-through (phone, library,
+lab) behind a panel. It no longer does. The fly-through is the home page and
+stays exactly as it was; checking, a verdict, an error and a check that found
+nothing now share one screen: a band of footage across the top, and the
+report on a sheet below it. The fly-through stands down while a check owns
+the screen (`window.EvidentFlight.park()`).
+
+Three new clips, built by `scripts/build_footage.py` into
+`static/footage/`. They never scrub, so they ship as ordinary looping video
+rather than a frame sequence: 0.9MB of MP4 and 0.6MB of WebM for all three,
+against 23MB for the fly-through's frames.
+
+### Sources and licences
+
+All three are Pexels License: free for commercial use, no attribution
+legally required (credited here anyway). No account, subscription or payment
+was used. Raw downloads live in `media/clips/`, gitignored.
+
+| Shot | Clip | Source spec | What it is |
+|---|---|---|---|
+| Searching | [pexels.com/video/6651088](https://www.pexels.com/video/6651088/) | 4096x2160, 25fps, 8.48s | Hands turning the pages of a thick book, shallow focus |
+| Weighing | [pexels.com/video/7710592](https://www.pexels.com/video/7710592/) | 4096x2160, 25fps, 20.44s | A hand drawing a highlighter across lines of a printed page |
+| Verdict | [pexels.com/video/8325856](https://www.pexels.com/video/8325856/) | 3840x2160, 30fps, slow push | A microscope and a rack of test tubes, high key, slow dolly in |
+
+The 4K tier is not linked from a Pexels page and has to be fetched from the
+guessable `*-uhd_4096_2160_25fps.mp4` path. The download a "4K" button gives
+is 1440p; both of the 4096-wide clips above had to be re-fetched.
+
+### What was asked for, and what was picked
+
+The brief wanted three candidates each for searching (hands sorting printed
+papers), weighing (a hand highlighting a printed page) and the verdict (a
+microscope coming into focus, or daylight moving across papers). The picks
+were A2, B1, C1. A2 was then dropped: it was a desk shot whose script pages
+were legible at band size at every crop tested, and cropping inward only
+magnified them. A1, the book shot, replaced it by owner decision.
+
+### Geometry
+
+All three are 1920x600, which is 3.2:1. The band is 42vh of a full-width
+page: 3.4:1 on a 1440x900 laptop, 4.3:1 on a 1920x1080 desktop, about 1.5:1
+on a phone. The first cut was 2.5:1, and `object-fit: cover` then threw away
+a third of the height on every desktop. At 3.2:1 a desktop keeps nearly the
+whole frame, and a phone crops the sides of shots composed across the width.
+
+| Shot | Crop from source | Loop | Crossfade | `object-position` |
+|---|---|---|---|---|
+| Searching | `4096:1280:0:620` | 2.52s, 5.0s long | 0.8s | `45% 50%` |
+| Weighing | `4096:1280:0:300` | 9.0s, 5.0s long | 0.9s | `30% 50%` |
+| Verdict | `3840:1200:0:330` | 0.0s, 4.0s long | 0.8s | `70% 50%` |
+
+Every crop keeps the full source width. Cropping inward magnifies print, and
+the first cut got two of the three opening rows wrong: the book shot opened
+880 rows down and lost the hand, leaving a page edge and a cover, and the
+highlighter shot opened at row 0 and lost the marker, leaving a fingernail.
+
+Each `object-position` was picked by cropping the clip to 390x253 and
+looking: the book's spine and the page it is turning, the marker's tip
+rather than the knuckles behind it, the microscope rather than the rack.
+
+### Grade
+
+One grade for all three, `hue=s=0.22,eq=contrast=1.06:brightness=0.008`, and
+one colour pulled after it: `selectivecolor=magentas=0.35 -1.0 0.60 0` on
+the weighing clip, for the highlighter.
+
+The site has no accent colour and never colour-codes a verdict, so the
+footage must not smuggle one in. Two of these three arrive with one: a
+saturated orange book cover and a magenta highlighter. A mild desaturation
+(s=0.72) plus a per-clip pull of the offending range was tried first and
+does not survive contact with skin, which is made of the same reds as the
+cover; the hand in the weighing shot went jaundiced. Taking every clip to
+about a fifth of its saturation settles it. Only the highlighter survives
+that, so only the highlighter is pulled. Two ranges are left alone
+deliberately: the whites, which turn the weighing clip's paper acid green,
+and the yellows, which do the same to the searching clip's cover.
+
+### The weighing clip's defocus
+
+This clip, and only this clip, is run through a `maskedmerge` defocus. Its
+lens holds the whole page sharp, and the body type reads at band size: a
+column about office leasing, which is both legible and about the wrong
+subject. No loop window avoids it and no crop escapes it.
+
+The mask is the larger of two linear ramps, rows 250 to 340 and columns 1150
+to 1380 of the 1920x600 output, against a `gblur=sigma=11` copy. Sharp above
+and left of them, soft past them. That is the hand and the marker sharp, and
+everywhere the page is soft. Verified by looking at the output at 1440x450
+and at 390x253: the mark reads as a mark, and no word on the page does.
+
+Two ffmpeg notes, both of which cost time. All three streams into
+`maskedmerge` must be `gbrp`. The `color=` source that carries the mask
+needs an explicit `r` and `d`, or it never ends and neither does the output.
+
+### Loops
+
+Every loop closes with a crossfade, not a cut and not a ping-pong:
+`xfade=transition=fade:duration=F:offset=0` fed `[tail][head]`, which makes
+output frame 0 the same picture as the source at `start + length`. A
+ping-pong would double the frames and make the verdict clip's slow push
+breathe in and out. Measured seam error, the mean absolute luma difference
+between the last frame and the first, is 3.14, 1.32 and 1.51 out of 255.
+
+### Output
+
+| File | MP4 | WebM | Still |
+|---|---|---|---|
+| searching | 510KB | 288KB | 21KB |
+| weighing | 363KB | 130KB | 14KB |
+| verdict | 445KB | 295KB | 27KB |
+
+MP4 is `libx264 -preset slow -crf 25`, WebM is `libvpx-vp9 -crf 36 -b:v 0`.
+The still beside each pair is the loop's own first frame, so the poster and
+the first painted video frame are the same picture. It is what a reader sees
+under `prefers-reduced-motion` or Save-Data, and `verdict.webp` is also what
+a cold shared link renders instead of loading any video at all. WebP is
+written by Pillow: this ffmpeg build has no libwebp.
+
 ## Round 4: "Inside the evidence" — candidate sourcing (2026-09-30, checkpoint, not yet built)
 
 Round 3's "noise to clarity" landscape concept was rejected: it has no
