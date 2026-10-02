@@ -562,13 +562,14 @@ def _run_check(claim: str, client_ip: str, base_url: str):
     # 3. The real thing, stage by stage.
     try:
         yield {"stage": "search"}
-        search_query = verdict.extract_search_terms(claim)
+        search_query, surrogate = verdict.extract_search_terms(claim)
         yield {"stage": "query", "query": search_query}
-        studies, query_used, broadened = pubmed.search_with_fallback(search_query, max_results=8)
+        studies, query_used, broadened = pubmed.search_with_fallback(
+            search_query, max_results=8, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
         if studies:
             yield {"stage": "weigh"}
-        result = verdict.weigh_evidence(claim, studies)
+        result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
     except RuntimeError as e:
         # Missing/misconfigured API key -> tell the operator plainly, don't 500.
         yield {"stage": "error", "status": 500, "error": str(e)}

@@ -164,6 +164,314 @@ def narrow_only(studies, cited_pmids=()) -> bool:
     return bool(used) and all(population(s) for s in used)
 
 
+# ---------------------------------------------------------------------------
+# The claim's condition, and whether the abstracts answer it
+#
+# A health claim often carries a condition: "but only if you're deficient",
+# "if you have diabetes", "in children". The condition is the part a reader
+# most wants settled, and it is also the part a model is quickest to wave
+# away as untested, because answering it means reading the subgroup lines
+# rather than the headline result.
+#
+# So the subgroup lines are found here, in code, and handed to the prompt as
+# quoted sentences with their study numbers. A condition that an abstract
+# reports on can then never be called untested: the sentence that reports on
+# it is in the prompt, and `breakdown.contradictions` checks the answer
+# against the same finding afterwards.
+# ---------------------------------------------------------------------------
+
+# (pattern on the claim, plain label, pattern on the abstract). The abstract
+# side is wider than the claim side: a claim says "deficient" where a paper
+# says "baseline 25(OH)D concentration".
+CONDITIONS = [
+    (r"\bdeficien\w*|\binsufficien\w*|\blow (?:levels?|status|in)\b",
+     "people who start with low levels",
+     r"baseline|25\(OH\)D|25-hydroxy|serum concentration|deficien|insufficien|"
+     r"\bnmol/[lL]\b|\bng/m[lL]\b|low status"),
+    (r"\bprediabet\w*", "people with prediabetes", r"prediabet"),
+    (r"\btype [12] diabet|\bdiabet\w*", "people with diabetes", r"diabet|glycaem|glycem|HbA1c"),
+    (r"\bobes\w*|\boverweight\b", "people who are overweight", r"obes|overweight|\bBMI\b"),
+    (r"\bolder (?:adults?|people)\b|\belderly\b|\bover (?:the age of )?\d\d\b",
+     "older adults", r"older adults|elderly|\baged \d\d|age subgroup|by age"),
+    (r"\bpregnan\w*", "pregnant women", r"pregnan"),
+    (r"\bchildren\b|\bkids\b|\bteenagers?\b",
+     "children", r"children|paediatric|pediatric|adolescen|\bage\b"),
+    (r"\bathletes?\b|\bresistance training\b|\bweight training\b|\bgym\b",
+     "people who train", r"athlet|resistance training|trained|exercis"),
+    (r"\bsmok\w*", "smokers", r"smok"),
+    (r"\bwinter\b|\bseasonal\b", "winter", r"winter|season|latitude|sunlight"),
+]
+
+_CONDITIONS = [(re.compile(c, re.IGNORECASE), label, re.compile(a, re.IGNORECASE))
+               for c, label, a in CONDITIONS]
+
+# A sentence that reports on a subgroup rather than on everyone. "baseline"
+# counts because that is how a trial names the status someone started in,
+# which is exactly the shape of "only if you're deficient".
+_SUBGROUP = re.compile(
+    r"subgroup|stratifi|interaction|effect modif|\bbaseline\b|\bamong (?:those|"
+    r"participants|people|patients)\b|\bin (?:those|participants|patients|people) "
+    r"with\b|restricted to|confined to|greatest in|strongest in|larger in|"
+    r"\bonly in\b|did not differ|no difference (?:by|between)|\bby age\b|"
+    r"\bwhereas\b.*\bthose\b", re.IGNORECASE)
+
+
+def conditions(claim: str) -> list[str]:
+    """The conditions this claim carries, in plain words. Often empty."""
+    found = []
+    for pattern, label, _ in _CONDITIONS:
+        if pattern.search(claim or "") and label not in found:
+            found.append(label)
+    return found
+
+
+def _sentences(text: str) -> list[str]:
+    """Abstract sentences. Rough on purpose: this is a search, not a render."""
+    return [s.strip() for s in re.split(r"(?<=[.;])\s+(?=[A-Z0-9])", text or "")
+            if s.strip()]
+
+
+def subgroup_findings(studies, claim: str, limit: int = 6) -> list[dict]:
+    """
+    The sentences in these abstracts that report on a condition the claim
+    carries. Each is {"study": n, "condition": label, "sentence": text}.
+
+    Both halves have to be present in the same sentence: a subgroup marker
+    and one of the condition's own words. "Protective effects were stronger
+    in those with baseline 25(OH)D below 25 nmol/L" is a finding on the
+    claim's condition; "25 trials were included" is not.
+    """
+    wanted = conditions(claim)
+    if not wanted:
+        return []
+    out = []
+    for i, study in enumerate(studies or [], 1):
+        for sentence in _sentences(str(study.get("abstract") or "")):
+            if not _SUBGROUP.search(sentence):
+                continue
+            for pattern, label, abstract_side in _CONDITIONS:
+                if label not in wanted or not abstract_side.search(sentence):
+                    continue
+                out.append({"study": i, "condition": label,
+                            "sentence": re.sub(r"\s+", " ", sentence)[:320]})
+                break
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def conditions_reported(studies, claim: str) -> list[str]:
+    """Which of the claim's conditions the abstracts actually report on."""
+    seen = []
+    for hit in subgroup_findings(studies, claim, limit=40):
+        if hit["condition"] not in seen:
+            seen.append(hit["condition"])
+    return seen
+
+
+# ---------------------------------------------------------------------------
+# How big is the effect, in words
+#
+# A verdict that prints "odds ratio 0.88" has told a reader who already knew
+# what an odds ratio is. The number is the evidence, so it stays; this turns
+# it into the sentence a person would say, and gives it a size label.
+#
+# The thresholds are here, in code, and they are relative change: how much
+# the ratio moves away from 1. A ratio of 0.88 moves 12%, which is small; a
+# ratio of 0.5 or 2.0 moves 50%, which is large. Epidemiology often calls a
+# risk ratio under 1.5 "weak", which is the same judgement in other words.
+# Fixed numbers rather than the model's adjective, so "small" means the same
+# thing on every claim.
+# ---------------------------------------------------------------------------
+
+SMALL_BELOW = 0.20     # under 20% change either way
+MODERATE_BELOW = 0.50  # 20% to 50%; at or above 50% is large
+
+# Standardised mean differences are not ratios and have their own convention
+# (Cohen): 0.2 small, 0.5 moderate, 0.8 large.
+SMD_SMALL_BELOW = 0.5
+SMD_MODERATE_BELOW = 0.8
+
+# What the ratio is a ratio of, and the word a reader uses for it.
+_RATIO_WORDS = [
+    (r"odds ratios?|\bORs?\b|\baORs?\b", "odds"),
+    (r"hazard ratios?|\bHRs?\b|\baHRs?\b", "risk over time"),
+    (r"risk ratios?|relative risks?|\bRRs?\b|\baRRs?\b", "risk"),
+    (r"incidence rate ratios?|\bIRRs?\b", "rate"),
+    (r"rate ratios?", "rate"),
+]
+
+# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)".
+_RATIO = re.compile(
+    r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
+    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
+    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+
+# The same figure with the outcome named in between: "the hazard ratio for
+# heart and blood vessel deaths for each more 50 g of egg was 1.09". The gap
+# may not carry a negation, a percent sign or a second ratio name, so "the
+# hazard ratio was not given, but mortality was 1.09" does not match and the
+# figure is always read against the nearest ratio it belongs to.
+_RATIO_WAS = re.compile(
+    r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
+    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
+    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
+    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+
+_SMD = re.compile(
+    r"\b(?:standardi[sz]ed mean difference|SMD|Cohen's d)\s*"
+    r"(?:was\s+|of\s+)?[,:=]?\s*(-?\d+(?:\.\d+)?)\b", re.IGNORECASE)
+
+# "reduced infections by 12%", "a 47% reduction", "12% lower".
+_PERCENT_CHANGE = re.compile(
+    r"\b(?:reduc\w+|lower\w*|decreas\w+|increas\w+|rais\w+|higher|greater|fell|fall\w*|"
+    r"drop\w*|rose|rise\w*|cut)\b[^.%]{0,30}?"
+    r"(\d+(?:\.\d+)?)\s?%|\b(\d+(?:\.\d+)?)\s?%\s+(?:reduction|increase|lower|higher|"
+    r"decrease|fewer|more)\b", re.IGNORECASE)
+
+# "95%" in "95% confidence interval" is the interval's width, not an effect.
+_INTERVAL = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval", re.IGNORECASE)
+
+
+def size_label(change: float) -> str:
+    """small / moderate / large, from a relative change like 0.12."""
+    change = abs(change)
+    if change < SMALL_BELOW:
+        return "small"
+    if change < MODERATE_BELOW:
+        return "moderate"
+    return "large"
+
+
+def _smd_label(d: float) -> str:
+    d = abs(d)
+    if d < SMD_SMALL_BELOW:
+        return "small"
+    if d < SMD_MODERATE_BELOW:
+        return "moderate"
+    return "large"
+
+
+_RATIO_NAMES = [(r"a?ORs?", "odds ratio"), (r"a?HRs?", "hazard ratio"),
+                (r"a?RRs?", "risk ratio"), (r"IRRs?", "incidence rate ratio")]
+
+
+def _ratio_name(name: str) -> str:
+    """"aOR" reads back as "odds ratio"; a spelled-out name is left as it is."""
+    for pattern, full in _RATIO_NAMES:
+        if re.fullmatch(pattern, name, re.IGNORECASE):
+            return full
+    return name.lower()
+
+
+def _ratio_word(name: str) -> str:
+    for pattern, word in _RATIO_WORDS:
+        if re.fullmatch(pattern, name, re.IGNORECASE):
+            return word
+    return "risk"
+
+
+def effect_size(text: str) -> dict | None:
+    """
+    The first effect this text reports, read as a size rather than a number.
+
+    Returns {"label": "small"|"moderate"|"large", "plain": "about 12% lower
+    odds", "figure": "odds ratio 0.88"} or None when there is no figure to
+    read. Ratios first, because they are what these abstracts report; a bare
+    percentage only counts when it is attached to a word like "reduced", so
+    "95% confidence interval" and "25% of participants" are not read as
+    effects.
+    """
+    t = str(text or "")
+
+    m = _RATIO.search(t) or _RATIO_WAS.search(t)
+    if m:
+        name, value = m.group(1), float(m.group(2))
+        # A ratio of exactly 1 is no effect; 0 is a parse accident.
+        if value > 0 and abs(value - 1.0) > 1e-9:
+            word = _ratio_word(name)
+            change = (1 - value) if value < 1 else (value - 1)
+            direction = "lower" if value < 1 else "higher"
+            pct = round(change * 100)
+            return {"label": size_label(change),
+                    "plain": f"about {pct}% {direction} {word}",
+                    "figure": f"{_ratio_name(name)} {m.group(2)}"}
+
+    m = _SMD.search(t)
+    if m:
+        d = float(m.group(1))
+        if abs(d) > 1e-9:
+            return {"label": _smd_label(d),
+                    "plain": f"a difference of {abs(d):g} standard deviations",
+                    "figure": f"standardised mean difference {m.group(1)}"}
+
+    m = _PERCENT_CHANGE.search(t)
+    if m and not _INTERVAL.search(t[m.end():m.end() + 24]):
+        pct = float(m.group(1) or m.group(2))
+        if 0 < pct < 100:
+            direction = ("lower" if re.search(
+                r"reduc|lower|decreas|fewer|fell|fall|drop|\bcut\b",
+                m.group(0), re.IGNORECASE) else "higher")
+            return {"label": size_label(pct / 100),
+                    "plain": f"about {round(pct)}% {direction}",
+                    "figure": f"{m.group(1) or m.group(2)}%"}
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Indirect evidence
+#
+# Some claims have no study that measures the thing claimed. "Creatine causes
+# hair loss" is one: the nearest evidence is a trial that measured DHT, a
+# hormone linked to pattern baldness, in 20 rugby players. That is worth
+# showing and worth labelling, because a reader who is told "creatine raises
+# DHT" has not been told that creatine causes hair loss.
+# ---------------------------------------------------------------------------
+
+# How much of an abstract counts as "what this paper is about". A study states
+# what it gave people and what it measured in its title, background, objective
+# and methods. Further down are results and safety tables, where a word can
+# appear for an unrelated reason: a trial of baricitinib for alopecia reports
+# creatine phosphokinase among its lab values, and reading that as a study of
+# creatine is how a paper about something else ends up in an answer.
+SUBJECT_WINDOW = 700
+
+
+def measures(study, terms_group: str) -> bool:
+    """
+    True when this paper is about the thing `terms_group` names: an OR-group
+    from the query, matched against the title and the opening of the abstract.
+    """
+    terms = [t for t in re.split(r"\s+OR\s+", (terms_group or "").strip("() "))
+             if len(t.strip()) > 2]
+    if not terms:
+        return True
+    study = study or {}
+    body = (f"{study.get('title') or ''}  "
+            f"{str(study.get('abstract') or '')[:SUBJECT_WINDOW]}")
+    return any(re.search(r"\b" + re.escape(t.strip()) + r"\b", body, re.IGNORECASE)
+               for t in terms)
+
+
+def indirect(study, outcome: str, surrogate: str) -> str | None:
+    """
+    The surrogate this study measured instead of the claim's outcome, or None
+    when it measured the outcome itself. `surrogate` is the OR-group the
+    query step named as the indirect route, so the label is the term the
+    paper actually uses rather than a guess.
+    """
+    if not surrogate or measures(study, outcome):
+        return None
+    body = f"{study.get('title') or ''} {study.get('abstract') or ''}"
+    for term in re.split(r"\s+OR\s+", surrogate.strip("() ")):
+        term = term.strip()
+        if len(term) > 2 and re.search(re.escape(term), body, re.IGNORECASE):
+            return term
+    return None
+
+
 def mix(studies) -> list[dict]:
     """
     The evidence bar: one segment per tier that actually occurs, with the
@@ -213,3 +521,71 @@ def snapshot(studies, cited_pmids=()) -> dict:
         "year_to": years[-1] if years else None,
         "mix": mix(studies),
     }
+
+
+# ---------------------------------------------------------------------------
+# Numbers an abstract spells out
+#
+# "Forty-five resistance-trained males (ages 18-40 years)" is where the
+# figure 45 comes from, and a verdict that writes "45 people" is quoting
+# that abstract rather than inventing a number. The grounding rule compares
+# digits to digits, so without this it deleted the true sentence and left
+# the breakdown's "who was studied" line blank. Methods sections spell the
+# count that opens a sentence, which is exactly the count worth printing.
+# ---------------------------------------------------------------------------
+
+_NUM_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90,
+}
+_SCALES = {"hundred": 100, "thousand": 1000}
+
+
+def _fold(words: list[str]) -> int:
+    """"forty", "five" -> 45. "two", "hundred", "and", "ten" -> 210."""
+    total = part = 0
+    for word in words:
+        if word == "and":
+            continue
+        if word == "hundred":
+            part = (part or 1) * 100
+        elif word == "thousand":
+            total += (part or 1) * 1000
+            part = 0
+        else:
+            part += _NUM_WORDS[word]
+    return total + part
+
+
+def written_numbers(text) -> set[str]:
+    """
+    Every number this text spells in words, as digits.
+
+    Only the whole run counts: "forty-five" yields 45 and not 40 or 5, so
+    reading this set as permission never widens into permission to write a
+    number the abstract does not claim. "and" continues a run only after a
+    scale word, where it is part of the number rather than a conjunction.
+    """
+    found, run = set(), []
+
+    def close():
+        if run:
+            value = _fold(run)
+            if value:
+                found.add(str(value))
+        run.clear()
+
+    for word in re.findall(r"[A-Za-z]+", str(text or "")):
+        word = word.lower()
+        if word in _NUM_WORDS or word in _SCALES:
+            run.append(word)
+        elif word == "and" and run and run[-1] in _SCALES:
+            run.append(word)
+        else:
+            close()
+    close()
+    return found

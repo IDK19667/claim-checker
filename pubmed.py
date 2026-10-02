@@ -22,6 +22,11 @@ import xml.etree.ElementTree as ET
 
 import requests
 
+# One way only: evidence.py reads records, it never fetches them. `measures`
+# is a pure text predicate and is wanted here because whether a record names
+# the claim's subject decides whether it is worth a slot at all.
+import evidence
+
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 TIMEOUT = 15
 
@@ -177,15 +182,94 @@ def fetch_details(pmids: list[str]) -> list[dict]:
     return records
 
 
-def search_and_fetch(query: str, max_results: int = 8) -> list[dict]:
+def search_and_fetch(query: str, max_results: int = 8,
+                     surrogate: str = "") -> list[dict]:
     """
-    One query in, the studies worth reading out. Runs the two searches
-    below, fetches the merged list, and drops the records with nothing in
-    them to read. The single seam between this module and the rest of the
-    app, so everything that wants evidence goes through the same filter.
+    One query in, the studies worth reading out. Runs the searches below,
+    fetches the merged list, and drops the records with nothing in them to
+    read. The single seam between this module and the rest of the app, so
+    everything that wants evidence goes through the same filter.
+
+    `surrogate` is an optional OR-group naming the indirect route to the
+    claim's outcome: "dihydrotestosterone OR DHT" for a claim about hair
+    loss. When it is given, the last INDIRECT_SLOTS of the list are kept for
+    papers found that way, because some claims have no study that measures
+    the thing claimed and the nearest evidence is worth showing, labelled.
     """
-    pmids = search_merged(query, max_results=max_results)
-    return usable(fetch_details(pmids))[:max_results]
+    keep = INDIRECT_SLOTS if surrogate else 0
+    pmids = search_merged(query, max_results=max_results)[:max_results * 2]
+    if surrogate:
+        for pmid in search_surrogate(query, surrogate, max_results=keep + 1):
+            if pmid not in pmids:
+                pmids.append(pmid)
+    return prioritise(usable(fetch_details(pmids)), query, surrogate)[:max_results]
+
+
+# The fewest studies worth narrowing to. Below this, dropping the papers that
+# only half-match would trade noise for nothing, so they stay and the prompt's
+# own instruction not to cite an irrelevant study has to carry it.
+MIN_ON_TOPIC = 3
+
+
+def prioritise(studies: list[dict], query: str, surrogate: str = "") -> list[dict]:
+    """
+    The studies that are about this claim, first, and the ones that are about
+    neither half of it dropped.
+
+    PubMed ranks on the words it matched, and when little matches both halves
+    of a query it will happily return papers that match one. A search for
+    creatine and hair loss comes back with trials of baricitinib for alopecia
+    areata and with chemotherapy trials that mention creatinine clearance:
+    real papers, about neither creatine nor what the claim asks. That is how a
+    hair-lotion trial ends up quoted in an answer about creatine, and how the
+    one paper actually titled "Does creatine cause hair loss?" gets crowded
+    out of eight slots.
+
+    Three bands, stable within each so PubMed's own relevance order survives:
+    both halves named, the subject only, neither. A paper found through the
+    surrogate search counts as on-outcome, because measuring the indirect
+    route is the whole reason it is here.
+    """
+    groups = split_and(query or "")
+    if not groups:
+        return list(studies or [])
+    subject, outcome = groups[0], (groups[1] if len(groups) > 1 else "")
+
+    def band(study) -> int:
+        if not evidence.measures(study, subject):
+            return 0
+        if not outcome or evidence.measures(study, outcome):
+            return 2
+        return 2 if evidence.indirect(study, outcome, surrogate) else 1
+
+    bands = {2: [], 1: [], 0: []}
+    for study in studies or []:
+        bands[band(study)].append(study)
+    on_topic = bands[2] + bands[1]
+    return on_topic if len(on_topic) >= MIN_ON_TOPIC else on_topic + bands[0]
+
+
+# How many of the slots an indirect search may take. Two: enough to show the
+# mechanism evidence exists, few enough that it can never crowd out the
+# studies that measure the claim itself.
+INDIRECT_SLOTS = 2
+
+
+def search_surrogate(query: str, surrogate: str, max_results: int = 4) -> list[str]:
+    """
+    The same first group, searched against the surrogate outcome instead of
+    the claim's own. "(creatine OR creatine monohydrate) AND (hair loss OR
+    alopecia)" becomes "(creatine OR creatine monohydrate) AND
+    (dihydrotestosterone OR DHT)", which is how the 2009 trial that measured
+    DHT in rugby players is reached at all: it never says "hair loss".
+    """
+    groups = split_and(query)
+    if not groups or not surrogate.strip():
+        return []
+    group = surrogate.strip()
+    if not group.startswith("("):
+        group = f"({group})"
+    return search_pubmed(f"{groups[0]} AND {group}", max_results=max_results)
 
 
 def split_and(query: str) -> list[str]:
@@ -263,18 +347,19 @@ def usable(studies: list[dict]) -> list[dict]:
     return [s for s in studies or [] if (s.get("abstract") or "").strip()]
 
 
-def search_with_fallback(query: str, max_results: int = 8) -> tuple[list[dict], str, bool]:
+def search_with_fallback(query: str, max_results: int = 8,
+                         surrogate: str = "") -> tuple[list[dict], str, bool]:
     """
     search_and_fetch, retried once with a broader query if nothing matched.
     Returns (studies, query_actually_used, was_broadened).
     """
-    studies = search_and_fetch(query, max_results=max_results)
+    studies = search_and_fetch(query, max_results=max_results, surrogate=surrogate)
     if studies:
         return studies, query, False
     broader = broaden_query(query)
     if not broader:
         return [], query, False
-    studies = search_and_fetch(broader, max_results=max_results)
+    studies = search_and_fetch(broader, max_results=max_results, surrogate=surrogate)
     return studies, broader, bool(studies)
 
 

@@ -46,10 +46,15 @@ from __future__ import annotations
 
 import re
 
+import evidence
+
 # Caps, in characters, applied through verdict.tidy_prose. Longer than the
 # ticket's, because this layer is the long read; still short enough that no
 # single field can run away with the page.
 ASSESSMENT_MAX = 260
+# The most paragraphs "What the studies found" may run to, matching the five
+# things the prompt asks each one to cover, plus one.
+PARAGRAPHS_MAX = 6
 PARAGRAPH_MAX = 520
 FIELD_MAX = 460
 
@@ -84,6 +89,15 @@ NO_EFFECT_SIZE = "The abstracts don't report the size of the effect."
 # inches under the number it denies. This points at the figures instead.
 EFFECT_SIZE_ABOVE = "The figures these studies report are in the paragraphs above."
 NO_STUDY_FOR_PART = "No study in this set tests this part of the claim."
+# The same distinction one step along. When the model did write a judgement
+# on the only part there is and the gate dropped it, "no study tests this"
+# is a false sentence printed above paragraphs of studies that do. This says
+# where the answer went instead.
+PART_BELOW = "What these studies found about this is in the paragraphs below."
+
+# A figure a reader can picture. Used to tell an effect-size line that
+# already translates its ratio from one that only quotes it.
+_PERCENT = re.compile(r"\d+(?:\.\d+)?\s?(?:%|per ?cent)")
 
 # ---------------------------------------------------------------------
 # Plain words
@@ -191,7 +205,12 @@ PLAIN = [
     (r"\b(?:the |its )prevalence of\b", "the rate of", None),
     (r"\bprevalence\b", "how common it is", None),
     (r"\b(?:the |its )duration of\b", "the length of", None),
-    (r"\bduration\b", "how long it lasted", None),
+    # "duration" sits in too many grammatical slots for a clause to replace
+    # it. "The studies were of short duration" became "of short how long it
+    # lasted", and "the duration was 12 weeks" became "the how long it
+    # lasted was". One plain noun fits every slot, and reads shorter.
+    (r"\bof (short|long|longer|shorter) duration\b", r"\1", None),
+    (r"\bduration\b", "length", None),
     (r"\b(?:the |its )administration of\b", "the use of", None),
     (r"\b(?:the |its )initiation of\b", "the start of", None),
     (r"\b(?:the |its )pathogenesis of\b", "the development of", None),
@@ -246,6 +265,11 @@ PLAIN = [
 
 _PLAIN = [(re.compile(p, re.IGNORECASE), r, keep) for p, r, keep in PLAIN]
 
+# Every term plain() can park in brackets beside its translation. Handing
+# this in as the already-printed set turns the parking off, which is how a
+# sentence the brackets alone pushed past the length rule gets a second try.
+PARKED_TERMS = {keep for _, _, keep in PLAIN if keep}
+
 # ---------------------------------------------------------------------
 # What the model is asked for, and the shape it must come back in.
 # These are merged into the single verdict call in verdict.py.
@@ -290,8 +314,11 @@ Hard rules for everything in the breakdown:
     third. Copy the figure. A sentence containing a number that is not
     in the abstracts is deleted.
   * Write at about an 8th-grade reading level. Short sentences, common
-    words. Keep every sentence under 25 words; a sentence over 28 is
-    deleted, brackets and all, so a long one is wasted work.
+    words. Keep every sentence under 18 words. The tool rewrites medical
+    vocabulary into everyday words and sometimes keeps the original in
+    brackets, which makes your sentence longer than you wrote it, and a
+    sentence over 28 words after that is deleted, brackets and all. One
+    fact per sentence. Two facts are two sentences.
   * Say "people with low levels", never "deficient people". Name a group
     by what is true of it in ordinary words.
   * Match the words to the size of the effect. Never "prevents",
@@ -302,18 +329,45 @@ Hard rules for everything in the breakdown:
 "parts": split the claim into the things it actually asserts, in the
 order it asserts them, and judge each separately. A claim with a
 condition in it ("but only if you are deficient") has that condition as
-its own part. Quote the part in the reader's own words, shortened; put
-your judgement in "assessment". One to four parts. A claim that asserts
-one thing gets one part.
+its own part. Quote the part in the reader's own words, shortened, with
+their verb exactly as they wrote it: "Taking vitamin D supplements in
+winter", never "Takes vitamin D supplements in winter". Put your
+judgement in "assessment". One to four parts. A claim that asserts one
+thing gets one part.
 
-"evidence": 3 to 5 short paragraphs, each 2 or 3 sentences, on what the
-strongest studies found. Say how big the effect was in the abstracts'
-own numbers, and who was studied: how many people, their ages, whether
-they were healthy or ill, the dose, and how long it ran.
+When a block headed SUBGROUP FINDINGS appears above, those sentences are
+the abstracts' own answer to the claim's condition, and the part that
+quotes that condition must be answered from them. Never write that a
+condition is untested when a sentence in that block tests it. If two of
+those sentences disagree, say both and say which paper is which: "the
+2017 pooled review found the effect was larger in people starting below
+25 nmol/L (Study 1), while the 2021 update found no clear effect in any
+baseline group (Study 4)" is the answer, not "this was not tested".
+
+"evidence": 4 to 6 short paragraphs, each 2 or 3 sentences. Give one
+paragraph to each of these, in this order, and leave out any that these
+abstracts cannot support rather than padding it:
+
+  1. What the single biggest or strongest study found.
+  2. Whether the other studies agree with it, and where they disagree.
+     Name the disagreement; two studies that found opposite things is
+     the most useful thing a reader can be told.
+  3. How big the effect was, in the abstracts' own figures. Copy the
+     ratio or percentage they print. Do not work out a percentage of
+     your own: a number that is not in an abstract deletes the sentence
+     it is in, and the tool adds the plain-words translation itself.
+  4. Who was studied: how many people, their ages, whether they were
+     healthy or ill, the dose, and how long it ran.
+  5. Any indirect evidence, said to be indirect, with what it does and
+     does not show.
 
 "effect_size": one or two sentences giving the size of the effect in the
-abstracts' own figures. If no abstract reports how large the effect was,
-write exactly: "The abstracts don't report the size of the effect."
+abstracts' own figures, copied exactly: "the adjusted odds ratio was
+0.88 (Study 1)". You may call the effect small, moderate or large. Do
+not convert the ratio into a percentage: the tool does that arithmetic
+itself, to fixed thresholds, and adds it to this line. If no abstract
+reports how large the effect was, write exactly: "The abstracts don't
+report the size of the effect."
 
 "strength": 2 to 4 sentences on why the verdict is what it is. Name the
 study types, whether they agree with each other, how many people were in
@@ -329,13 +383,13 @@ the long version of "still_open", so it can name study numbers where
 that one cannot.
 """.strip()
 
-PROMPT_SHAPE = """  "parts": [{"part": "a piece of the claim, in the reader's words", "assessment": "what the studies say about that piece, ending in (Study N)"}],
-  "evidence": ["paragraph, every sentence ending in (Study N)", "..."],
-  "effect_size": "the size of the effect in the abstracts' own numbers, ending in (Study N)",
-  "strength": "why this verdict, ending in (Study N)",
-  "applies_to": "who was studied, ending in (Study N)",
-  "not_applies_to": "who was not, ending in (Study N)",
-  "unknowns": "what these studies leave open, ending in (Study N)","""
+PROMPT_SHAPE = """  "parts": [{"part": "a piece of the claim, in the reader's words", "assessment": "what the studies say about that piece, under 18 words, ending in (Study N)"}],
+  "evidence": ["paragraph of 2 or 3 sentences, each under 18 words, each ending in (Study N)", "..."],
+  "effect_size": "the size of the effect in the abstracts' own numbers, under 18 words a sentence, ending in (Study N)",
+  "strength": "why this verdict, under 18 words a sentence, ending in (Study N)",
+  "applies_to": "who was studied, under 18 words a sentence, ending in (Study N)",
+  "not_applies_to": "who was not, under 18 words a sentence, ending in (Study N)",
+  "unknowns": "what these studies leave open, under 18 words a sentence, ending in (Study N)","""
 
 # ---------------------------------------------------------------------
 # Rule 4: the wording may not outrun the evidence.
@@ -366,7 +420,11 @@ SOFTEN = [
     (r"\bproves\b", "suggests"),
     (r"\bprove\b", "suggest"),
     (r"\bproven\b", "supported"),
-    (r"\bblocks\b", "reduces"),
+    # Not "blocks" the noun: "no evidence that blue blocks stop eye strain"
+    # became "no evidence that reduces stop eye strain". A verb straight
+    # after it is the tell that the word was a thing, not an action.
+    (r"\bblocks\b(?!\s+(?:stop|prevent|reduce|lower|help|work|do|does|did|"
+     r"are|is|was|were)\b)", "reduces"),
     # Not "stops X-ing": "where it stops working" is a question about where
     # the effect ends, not a claim that it prevents anything, and "reduces
     # providing protection" is not a sentence.
@@ -374,6 +432,164 @@ SOFTEN = [
 ]
 
 _SOFTEN = [(re.compile(p, re.IGNORECASE), r) for p, r in SOFTEN]
+
+# ---------------------------------------------------------------------
+# Rule 5: the words match the size of the effect.
+#
+# `evidence.effect_size` reads the figure out of the prose and labels it
+# small, moderate or large against thresholds fixed in code. This is what
+# the label is then allowed to buy: a small effect may not be announced
+# with a verb that sounds like a cure. Like soften(), every substitution
+# here is weaker than what it replaces, so it can only ever pull a
+# sentence back towards the evidence, never push it past it. A large
+# effect is left exactly as the model wrote it: nothing here strengthens.
+# ---------------------------------------------------------------------
+
+HEDGE = {
+    "small": "slightly ",
+    "moderate": "",      # the plain verb is already the right strength
+    "large": "",
+}
+
+# Verbs that assert a change, and which of them already carry their own
+# hedge, so "slightly" is never doubled or stacked on "may".
+_CHANGE_VERB = re.compile(
+    r"\b(cuts?|lowers?|reduces?|raises?|increases?|improves?|worsens?|boosts?|"
+    r"helps?|protects?|speeds?|slows?)\b", re.IGNORECASE)
+_ALREADY_HEDGED = re.compile(
+    r"\b(may|might|could|slightly|a little|somewhat|marginally|probably|"
+    r"barely|hardly|no |not |never)\b", re.IGNORECASE)
+
+
+def match_effect(text: str, label: str | None) -> str:
+    """
+    Pull a sentence back to the size of the effect behind it.
+
+    "Vitamin D reduces colds and flu" is the wrong sentence for an odds
+    ratio of 0.88: 12% lower odds is a small effect, and the reader is
+    owed "slightly lowers". Only the first change verb in a sentence is
+    hedged, and only when the sentence does not hedge itself already.
+    """
+    hedge = HEDGE.get(label or "", "")
+    if not hedge or not text:
+        return text or ""
+    out = []
+    for sentence in sentences(text):
+        if not _ALREADY_HEDGED.search(sentence):
+            sentence = _CHANGE_VERB.sub(
+                lambda m: hedge + _weaker(m.group(1)), sentence, count=1)
+        out.append(sentence)
+    return " ".join(out)
+
+
+# A hedged verb reads better in its plainest form: "slightly cuts" is
+# clumsy where "slightly lowers" is not, and the two say the same thing.
+_PLAINER_VERB = {"cuts": "lowers", "cut": "lower", "reduces": "lowers",
+                 "reduce": "lower", "boosts": "raises", "boost": "raise",
+                 "protects": "helps", "protect": "help"}
+
+
+def _weaker(verb: str) -> str:
+    plainer = _PLAINER_VERB.get(verb.lower(), verb.lower())
+    return plainer.capitalize() if verb[:1].isupper() else plainer
+
+
+# ---------------------------------------------------------------------
+# Rule 6: the four strings must not contradict each other.
+#
+# The takeaway, the explanation, the still-open line and the breakdown are
+# written in one call but are four separate pieces of prose, and a model
+# will happily say a condition is untested in one and report the test in
+# another. A reader who notices that cannot trust either.
+#
+# Each row is two patterns that cannot both be true of the same check.
+# `contradictions` returns the ones it finds, in words a prompt can use,
+# and verdict.py spends one more call to ask for a consistent answer. It
+# fixes nothing itself: a contradiction means the answer is wrong, and
+# rewriting half of it in code would just hide which half.
+# ---------------------------------------------------------------------
+
+UNTESTED = (r"\b(?:not|never|n't|no study|none of these|nothing here)\b[^.]{0,40}"
+            r"\b(?:test(?:ed|s)?|measur(?:ed|es)|address(?:ed|es)?|examin(?:ed|es)|"
+            r"isolat(?:ed|es)|report(?:ed|s)?)\b")
+
+CONTRADICTIONS = [
+    (UNTESTED, r"\b(?:stronger|larger|greater|weaker|smaller|no clear effect|"
+               r"no significant effect|only in|varied|depend(?:ed|s)?)\b[^.]{0,60}"
+               r"\b(?:baseline|low levels|subgroup|those with|deficien)\b",
+     "one line says the claim's condition was not tested and another reports "
+     "what the studies found about it"),
+    (r"\bno (?:clear |consistent )?(?:effect|benefit|link|association)\b",
+     r"\b(?:cuts?|lowers?|reduces?|raises?|increases?) (?:the )?(?:risk|odds|rate)\b",
+     "one line says there is no effect and another says there is one"),
+    (r"\bonly (?:if|in|for|when)\b",
+     r"\b(?:even|also) (?:for|in|among) (?:those|people) (?:who are )?not\b",
+     "one line says the effect happens only under a condition and another "
+     "says it happens without it"),
+    # "the studies found" is also how English says "the studies we found",
+    # so this half only counts when a finding follows the verb.
+    (r"\bunproven\b|\bno published stud\w+\b",
+     r"\b(?:trials?|studies|reviews?) (?:show(?:ed)?|found|report(?:ed)?)\s+"
+     r"(?:a |an |that |some |significant|clear|benefit|lower|higher|reduc|improv)",
+     "one line says the claim is unstudied and another cites what studies found"),
+]
+
+_CONTRADICTIONS = [(re.compile(a, re.IGNORECASE), re.compile(b, re.IGNORECASE), why)
+                   for a, b, why in CONTRADICTIONS]
+
+
+def contradictions(*texts, reported: list[str] | None = None) -> list[str]:
+    """
+    What this answer says twice, both ways. Empty when it is consistent.
+
+    `reported` is the list of the claim's conditions that the abstracts do
+    report on, from `evidence.conditions_reported`. Calling one of those
+    untested is a contradiction with the record rather than with another
+    sentence, and it is the one this whole check exists for.
+    """
+    blob = " ".join(t for t in texts if t)
+    found = []
+    for first, second, why in _CONTRADICTIONS:
+        if first.search(blob) and second.search(blob) and why not in found:
+            found.append(why)
+    if reported and re.search(UNTESTED, blob, re.IGNORECASE):
+        found.append(
+            "the answer calls something untested, but these abstracts do report "
+            f"on {', '.join(reported)}")
+    return found
+
+
+# ---------------------------------------------------------------------
+# Rule 7: the answer is about the claim that was typed.
+#
+# A search for screen light and eye damage returns trials of blue-light
+# filtering spectacles, and an answer built from those tells a reader
+# whether the glasses work rather than whether screens harm eyes. Both are
+# real questions; only one of them was asked.
+# ---------------------------------------------------------------------
+
+# Nouns that name a product rather than the thing a claim is usually about.
+# Introducing one the claim never mentioned is the signature of answering a
+# neighbouring question.
+PRODUCT_NOUNS = (r"glasses|spectacles|lenses|lens|goggles|filters?|screen "
+                 r"protectors?|lotions?|shampoos?|creams?|serums?|gels?|"
+                 r"ointments?|sprays?|patches|implants?")
+
+_PRODUCT = re.compile(rf"\b({PRODUCT_NOUNS})\b", re.IGNORECASE)
+
+
+def off_claim(tldr: str, claim: str) -> list[str]:
+    """
+    Product nouns the answer introduces that the claim never named.
+
+    Mechanical and narrow on purpose: it catches the two failures actually
+    seen, a blue-light claim answered about filtering glasses and a
+    creatine claim answered about a hair lotion, without trying to judge
+    relevance in general. The prompt carries the rest.
+    """
+    asked = {m.group(1).lower() for m in _PRODUCT.finditer(claim or "")}
+    return sorted({m.group(1).lower() for m in _PRODUCT.finditer(tldr or "")}
+                  - asked - {w.rstrip("es") for w in asked})
 
 
 def soften(text: str) -> str:
@@ -635,6 +851,11 @@ def corpus(studies: list[dict]) -> set:
                 continue
             for m in _NUMERAL.finditer(str(v)):
                 bag.add(_canon(m.group(0)))
+            # A count an abstract spells out is still a figure the abstract
+            # reports. Without this the gate deleted "the 45 people were
+            # healthy young males" because the methods section opened with
+            # "Forty-five resistance-trained males".
+            bag |= evidence.written_numbers(v)
     return bag
 
 
@@ -735,6 +956,11 @@ def keep_sentences(text: str, count: int, known: set) -> str:
     for s in sentences(text):
         if not refs(s, count):
             continue
+        # A citation on its own is not a sentence. "(Studies 3, 8)." passes
+        # every rule below it and prints a section heading with a bracket
+        # under it, which reads as a bug and tells the reader nothing.
+        if len(re.findall(r"\S+", _REF.sub(" ", s).strip(" ().,"))) < 4:
+            continue
         if ungrounded_numbers(s, known):
             continue
         if len(re.findall(r"\S+", s)) > MAX_SENTENCE_WORDS:
@@ -786,8 +1012,22 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
     kept_terms = set()
 
     def clean(value, limit):
-        said = plain(soften(tidy(str(value or ""), limit)), kept_terms)
-        return keep_sentences(said, count, known)
+        said = soften(tidy(str(value or ""), limit))
+        before = set(kept_terms)
+        out = keep_sentences(plain(said, kept_terms), count, known)
+        if out:
+            return out
+        # Nothing survived. The commonest reason is the length rule, and the
+        # commonest reason for that is plain() putting the original term in
+        # brackets beside the plain words: "chest and throat infections
+        # (acute respiratory infection)" costs four words a reader did not
+        # need. The brackets are a courtesy; the sentence is the content. So
+        # try once more without them rather than lose the field. The kept set
+        # is rewound first, or the term would count as printed on a line the
+        # reader never got.
+        kept_terms.clear()
+        kept_terms.update(before)
+        return keep_sentences(plain(said, set(PARKED_TERMS)), count, known)
 
     parts = []
     for item in (raw.get("parts") or [])[:4]:
@@ -804,18 +1044,33 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
             "part": piece,
             "assessment": assessment or NO_STUDY_FOR_PART,
             "studies": cites,
+            # Whether the model judged this part and the gate took the
+            # judgement away, as against never judging it at all. Read once,
+            # below, then dropped: it is bookkeeping, not content.
+            "_dropped": bool(str(item.get("assessment") or "").strip())
+                        and not assessment,
         })
 
-    # Up to five paragraphs that survive the gate, not the first five the
+    # Up to six paragraphs that survive the gate, not the first six the
     # model wrote. Capping before the gate would let three dropped sentences
-    # cost the reader three good ones.
+    # cost the reader three good ones. Six because the prompt asks for one
+    # paragraph each on the biggest study, where the studies disagree, the
+    # effect size in plain words, who was studied, and any indirect evidence.
     paragraphs = []
     for para in (raw.get("evidence") or [])[:12]:
         text = clean(para, PARAGRAPH_MAX)
         if text:
             paragraphs.append(text)
-        if len(paragraphs) == 5:
+        if len(paragraphs) == PARAGRAPHS_MAX:
             break
+
+    # Only now can the dropped judgement be answered honestly, and only when
+    # the part is the whole claim: with one part, the paragraphs below are
+    # about it by definition. With four, part three could be the one thing
+    # nothing here touches, and pointing at the paragraphs would be a guess.
+    for p in parts:
+        if p.pop("_dropped") and len(parts) == 1 and paragraphs:
+            p["assessment"] = PART_BELOW
 
     effect = clean(raw.get("effect_size"), FIELD_MAX)
     # By here the gate has checked every figure in it against the abstracts.
@@ -830,6 +1085,27 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
                   if any(_NUMERAL.search(_REF.sub(" ", t)) for t in said)
                   else NO_EFFECT_SIZE)
 
+    # The figure, read as a size. The translation is only ever written beside
+    # the figure it came from: a ratio in this line translated and parked
+    # under a different ratio in that line is a wrong number, not a plainer
+    # one. The label for the takeaway may come from a paragraph instead,
+    # because a label only ever weakens wording and cannot mis-state a
+    # figure the reader never sees.
+    sized = evidence.effect_size(effect)
+    labelled = bool(sized) and sized["label"] in effect.lower()
+    if (sized and sized["plain"] not in effect
+            and not (labelled and _PERCENT.search(effect))):
+        # Arithmetic on a figure that is already cited, so it carries that
+        # figure's citation rather than arriving unsourced. Whichever half
+        # the model already wrote is not written twice.
+        cite = _REF.search(effect)
+        where = f" ({cite.group(0)})" if cite else ""
+        said = (sized["plain"] if labelled
+                else f"{sized['plain']}, a {sized['label']} effect")
+        effect = f"{effect.rstrip().rstrip('.')}. That is {said}{where}."
+    sized = sized or next(
+        (e for e in (evidence.effect_size(t) for t in paragraphs) if e), None)
+
     out = {
         "parts": parts,
         "evidence": paragraphs,
@@ -838,6 +1114,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
         "applies_to": clean(raw.get("applies_to"), FIELD_MAX),
         "not_applies_to": clean(raw.get("not_applies_to"), FIELD_MAX),
         "unknowns": clean(raw.get("unknowns"), FIELD_MAX),
+        # Not rendered. The takeaway is held to this label upstream.
+        "effect": sized,
     }
 
     # A breakdown with no paragraphs and no judged parts is a heading with
@@ -849,7 +1127,7 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
     for key in FIELDS:
         if key == "parts":
             for p in out["parts"]:
-                if p["assessment"] != NO_STUDY_FOR_PART:
+                if p["assessment"] not in (NO_STUDY_FOR_PART, PART_BELOW):
                     p["assessment"] = gloss_once(p["assessment"], done)
         elif key == "evidence":
             out["evidence"] = [gloss_once(p, done) for p in out["evidence"]]

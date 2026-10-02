@@ -283,8 +283,16 @@ def _clean_query(raw: str, claim: str) -> str:
     return claim
 
 
-def extract_search_terms(claim: str) -> str:
-    """Turn a casual claim into a decent PubMed search query."""
+def extract_search_terms(claim: str) -> tuple[str, str]:
+    """
+    Turn a casual claim into a decent PubMed search query.
+
+    Returns (query, surrogate). The surrogate is the OR-group of measurable
+    stand-ins for an outcome nobody measures directly, empty when trials
+    measure the outcome itself. It never enters the query: it runs as a
+    search of its own in pubmed.search_and_fetch, so a claim about hair
+    loss can still reach the trials that measured the hormone.
+    """
     prompt = (
         "A student typed this health claim into a fact-checking "
         f'tool: "{claim}"\n\n'
@@ -315,10 +323,45 @@ def extract_search_terms(claim: str) -> str:
         "word for it as ORs, so papers are found whichever one they use.\n\n"
         "Do not add a study-design filter: the tool runs that as a second "
         "search of its own.\n\n"
-        "Respond with ONLY the search query string, nothing else. "
-        "No quotes, no explanation."
+        "Then, and only if nobody measures the claim's outcome directly, add "
+        "a second line beginning \"Surrogate: \" with an OR group of the "
+        "measurable stand-ins for it: the things a trial would measure "
+        "instead. For \"creatine makes you lose your hair\" that line is "
+        "\"Surrogate: dihydrotestosterone OR DHT OR testosterone\", because "
+        "the trials measured the hormone and counted nobody's hair. Leave the "
+        "line out when trials measure the outcome itself, and never move the "
+        "surrogate into the query: it runs as a search of its own.\n\n"
+        "Respond with the search query on the first line and nothing else "
+        "except that optional second line. No quotes, no explanation."
     )
-    return _two_groups(_clean_query(_complete_text(prompt, max_tokens=256), claim))
+    raw = _complete_text(prompt, max_tokens=256)
+    return _two_groups(_clean_query(raw, claim)), _surrogate(raw)
+
+
+# A surrogate long enough to be prose is not an OR group.
+SURROGATE_MAX = 120
+
+
+def _surrogate(raw: str) -> str:
+    """
+    The optional "Surrogate:" line, or "".
+
+    The label is required rather than inferred from position. An unlabelled
+    second line is as likely to be the model explaining itself as naming a
+    stand-in, and a stray sentence pushed into a PubMed query would quietly
+    cost a check one of its eight slots.
+    """
+    for line in str(raw or "").splitlines():
+        line = line.strip().strip("`")
+        if not re.match(r"(?i)^(surrogate|indirect|proxy)\s*:", line):
+            continue
+        group = line.split(":", 1)[1].strip().strip("()\"' ")
+        if (not group or len(group) > SURROGATE_MAX or " AND " in group.upper()
+                or "[" in group
+                or re.fullmatch(r"(?i)\s*(none|n/?a|-+)\s*", group)):
+            return ""
+        return group
+    return ""
 
 
 def _two_groups(query: str) -> str:
@@ -339,7 +382,8 @@ def _two_groups(query: str) -> str:
 # Call 2: studies -> verdict
 # ---------------------------------------------------------------------
 
-def _format_study_for_prompt(i: int, study: dict) -> str:
+def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
+                             surrogate: str = "") -> str:
     pub_types = ", ".join(study.get("publication_types") or []) or "not specified"
     abstract = (study.get("abstract") or "(no abstract available)").strip()
     # Trim very long abstracts so the prompt stays a reasonable size.
@@ -351,13 +395,39 @@ def _format_study_for_prompt(i: int, study: dict) -> str:
     # what lets the prompt below insist the answer names them.
     pop = evidence.population(study)
     who = f"NARROW POPULATION: {pop} only" if pop else "Population: general"
-    return (
-        f"[Study {i}] \"{study.get('title')}\"\n"
-        f"Journal: {study.get('journal') or 'unknown'} ({study.get('year') or 'unknown'})\n"
-        f"Publication type: {pub_types}\n"
-        f"{who}\n"
-        f"Abstract: {abstract}\n"
-    )
+    # Whether this record measured the claim's outcome or a stand-in for it,
+    # read off the title and abstract rather than left to the model. A trial
+    # that measured a hormone has not measured hair loss, and the answer is
+    # only allowed to use it if it says which one it measured.
+    stand_in = evidence.indirect(study, outcome, surrogate)
+    lines = [
+        f"[Study {i}] \"{study.get('title')}\"",
+        f"Journal: {study.get('journal') or 'unknown'} ({study.get('year') or 'unknown'})",
+        f"Publication type: {pub_types}",
+        who,
+    ]
+    if stand_in:
+        lines.append(f"INDIRECT: measures {stand_in}, not the outcome in the claim")
+    lines.append(f"Abstract: {abstract}\n")
+    return "\n".join(lines)
+
+
+def _subgroup_block(studies: list[dict], claim: str) -> str:
+    """
+    The sentences in these abstracts that answer the claim's own condition.
+
+    Pulled out of the abstracts in code and handed to the model as its own
+    block, because the failure this fixes is a reading failure: the model
+    had these sentences in front of it and still wrote that the condition
+    was never tested.
+    """
+    hits = evidence.subgroup_findings(studies, claim)
+    if not hits:
+        return ""
+    lines = [f"- Study {h['study']}, on {h['condition']}: \"{h['sentence']}\""
+             for h in hits]
+    return ("SUBGROUP FINDINGS the abstracts above report on the claim's own "
+            "condition:\n" + "\n".join(lines))
 
 
 # The model is constrained to emit exactly this shape. "verdict" is an
@@ -452,7 +522,8 @@ def tidy_prose(text: str, limit: int) -> str:
     return _cap(t, limit)
 
 
-def weigh_evidence(claim: str, studies: list[dict]) -> dict:
+def weigh_evidence(claim: str, studies: list[dict], query: str = "",
+                   surrogate: str = "") -> dict:
     """
     Ask the model to weigh study quality and produce a verdict.
 
@@ -464,6 +535,12 @@ def weigh_evidence(claim: str, studies: list[dict]) -> dict:
     "breakdown" is the deeper layer, gated by breakdown.py, or None when
     nothing in it survived the gate. It costs no extra call: its fields
     ride on this one.
+
+    `query` and `surrogate` come from the search step. They are what lets
+    this step tell a study that measured the claim's outcome from one that
+    measured a stand-in. Normally one call; a second only when the answer
+    contradicts itself or wanders off the claim, which the consistency
+    check below catches before a reader sees it.
     """
     if not studies:
         return _fallback(
@@ -474,15 +551,60 @@ def weigh_evidence(claim: str, studies: list[dict]) -> dict:
             still_open="Whether anyone has tested this claim directly. PubMed found nothing that does.",
         )
 
+    groups = pubmed.split_and(query or "")
+    outcome = groups[1] if len(groups) > 1 else ""
     studies_block = "\n\n".join(
-        _format_study_for_prompt(i + 1, s) for i, s in enumerate(studies)
+        _format_study_for_prompt(i + 1, s, outcome, surrogate)
+        for i, s in enumerate(studies)
     )
-    raw, stop_note = _complete_json(weigh_prompt(claim, studies_block),
-                                    VERDICT_SCHEMA, max_tokens=12000)
-    return _read_verdict(raw, stop_note, studies, claim)
+    prompt = weigh_prompt(claim, studies_block,
+                          _subgroup_block(studies, claim))
+    reported = evidence.conditions_reported(studies, claim)
+
+    raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000)
+    result = _read_verdict(raw, stop_note, studies, claim)
+
+    # One retry, and only when the answer disagrees with itself. Dropping a
+    # contradictory sentence is not an option here: the two halves are both
+    # claims about the evidence, and code cannot tell which one is the true
+    # one. Asking again is the cheapest honest move, and if the second
+    # answer is no better the first one stands.
+    faults = _faults(result, claim, reported)
+    if faults:
+        raw, stop_note = _complete_json(prompt + _redo_note(faults),
+                                        VERDICT_SCHEMA, max_tokens=12000)
+        again = _read_verdict(raw, stop_note, studies, claim)
+        if again.get("breakdown") and len(_faults(again, claim, reported)) < len(faults):
+            return again
+    return result
 
 
-def weigh_prompt(claim: str, studies_block: str) -> str:
+def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
+    """Everything this answer says twice or says about something else."""
+    bd = result.get("breakdown") or {}
+    texts = [result.get("tldr"), result.get("explanation"), result.get("still_open")]
+    texts += list(bd.get("evidence") or [])
+    texts += [p.get("assessment") for p in (bd.get("parts") or [])]
+    texts += [bd.get(k) for k in ("effect_size", "strength", "applies_to",
+                                  "not_applies_to", "unknowns")]
+    found = breakdown.contradictions(*[t for t in texts if t], reported=reported)
+    stray = breakdown.off_claim(result.get("tldr") or "", claim)
+    if stray:
+        found.append("the takeaway answers for " + ", ".join(stray)
+                     + ", which the claim never mentions")
+    return found
+
+
+def _redo_note(faults: list[str]) -> str:
+    """The one thing added to the prompt on the retry: what went wrong."""
+    return ("\n\nA first attempt at this answer was rejected, because "
+            + "; and ".join(faults)
+            + ". Write the whole answer again with that fixed, keeping every "
+              "rule above. Decide which of the two readings the abstracts "
+              "actually support and say only that one.")
+
+
+def weigh_prompt(claim: str, studies_block: str, subgroup_block: str = "") -> str:
     """
     The one prompt behind every verdict. A function rather than an f-string
     inside weigh_evidence so scripts/token_delta.py can price it without
@@ -493,6 +615,7 @@ def weigh_prompt(claim: str, studies_block: str) -> str:
 Here are the top matching studies from PubMed:
 
 {studies_block}
+{subgroup_block}
 
 Weigh these studies by quality before forming a verdict. A large
 randomized controlled trial or meta-analysis should count for much
@@ -525,6 +648,33 @@ says who the evidence covers. Whenever you lean on one, name its group
 in the sentence that cites it, so "it cuts infections (Study 7)" reads
 "in people with prediabetes it cut infections (Study 7)".
 
+Answer the claim that was typed. Its subject and its outcome are both
+fixed by the words in it, and the answer has to be about those two
+things. A search for one of them drags in neighbours: a claim about
+screen light returns trials of blue-light filtering glasses, a claim
+about a supplement returns trials of a lotion. A product that filters
+or blocks the thing in the claim is evidence about that product, not
+about the thing. If that is all the evidence there is, the verdict is
+"complicated" and the answer says the claim's own question was not
+tested. Never answer the neighbouring question as though it were this
+one, and leave out details that belong only to it.
+
+Some studies above are marked INDIRECT. They measured a stand-in rather
+than the outcome in the claim: a hormone instead of hair, a blood marker
+instead of an illness. Say so in the sentence that cites one, call it
+indirect evidence, and say what it does and does not show, as in "it
+raised the hormone linked to hair loss (Study 4), which is a reason to
+look and not a finding that anyone lost hair". Indirect evidence alone
+never supports "true" or "false".
+
+If a SUBGROUP FINDINGS block appears above, those sentences are the
+answer to the condition the claim carries ("only if you are low",
+"in children", "if you have diabetes"). Report what they found,
+including when two of them disagree, which is itself the finding. Never
+write that the condition was not tested when a sentence there reports on
+it. If no such block appears, the abstracts are silent on the condition
+and saying so is correct.
+
 Write for someone scanning a phone. Answer first, details after.
 Plain words, no throat-clearing ("It's important to note", "Overall").
 No dashes as punctuation; use commas and full stops. When an abstract
@@ -537,7 +687,7 @@ write it in digits: "60 adults", not "sixty adults".
 Respond with JSON in this exact shape:
 {{
   "verdict": "true" | "false" | "complicated",
-  "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. Say it the way you would say it out loud to a friend: a real sentence with a real verb, not a headline and not a research summary. 'Vitamin D links to colds and flu' is wrong, it is not how anyone speaks; 'Vitamin D probably will not stop you catching a cold, unless you are low on it' is right. Do not start with a noun phrase and the word 'links'. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no",
+  "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. Say it the way you would say it out loud to a friend: a real sentence with a real verb, not a headline and not a research summary. 'Vitamin D links to colds and flu' is wrong, it is not how anyone speaks; 'Vitamin D probably will not stop you catching a cold, unless you are low on it' is right. Do not start with a noun phrase and the word 'links'. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no. Its subject is the claim's own subject: start with the thing the claim is about, not with the product the trials happened to test. 'Nothing here tests whether screen light harms eyes, only whether filtering glasses help' is right; 'Blue light glasses do not help your eyes' answers a question nobody asked",
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
   "cited_study_numbers": [1, 2],
@@ -630,6 +780,13 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     tldr = breakdown.natural(
         breakdown.plain(breakdown.soften(
             tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX))))
+    # And to the size of it. "Reduces colds and flu" is the wrong sentence
+    # for an odds ratio of 0.88, whatever else is right about it. The label
+    # is measured from the prose the breakdown is actually printing, so the
+    # two layers cannot disagree about how big the effect was.
+    sized = (deeper or {}).get("effect") or {}
+    if sized.get("label"):
+        tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
     if forced:
         tldr = "The studies found don't actually test this claim, so it's unproven either way."
         if not still_open:

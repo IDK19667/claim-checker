@@ -4,7 +4,92 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-01 (latest): Search wide and rank by design, then say it in plain words
+## 2026-10-02 (latest): The answer has to read the abstracts as carefully as the search found them
+
+Search was finding the right papers; the answers were misreading them.
+Five claims exposed six separate faults, and the fix for each one lives in
+code rather than in the prompt, because a rule a model is asked to follow
+is a rule it sometimes doesn't.
+
+**Facts about the record belong in a module that cannot ask a model.**
+`evidence.py` is new: it imports `re` and nothing else. It reads the
+conditions out of a claim, finds the sentences in an abstract that report
+on a subgroup, reads an effect size out of a ratio, decides whether a
+study measures the outcome or a stand-in for it, and spells written
+numbers. `pubmed.py` and `breakdown.py` import it; it imports neither.
+Anything that is true of the fetched text, and not a judgement about it,
+goes there.
+
+**A condition in the claim is a question the abstracts usually answer.**
+"Only if you're deficient" was coming back as "this was not tested" while
+the abstract of Martineau 2017 reports protective effects by baseline
+25(OH)D. The subgroup sentences are now extracted in code and handed to
+the model as a labelled block, and the answer is checked against the list
+of conditions actually reported on. The honest answer to this claim turned
+out to be that the two landmark papers disagree: the 2017 analysis found
+the effect concentrated below 25 nmol/L, and the 2021 update found no
+significant effect modification by baseline status. The shipped answer
+says exactly that.
+
+**The code does the arithmetic, because a model's percentage is
+ungrounded by construction.** The gate deletes any number that is not in
+an abstract. "Odds ratio 0.88" is in the abstract; "12% lower odds" is
+not, so every sentence the model derived was deleted the moment it was
+written. The prompt now forbids the model computing a percentage, and
+`evidence.effect_size()` does the division afterwards, appending the
+translation to the sentence that carried the ratio and reusing that
+sentence's own citation. Small, moderate and large are fixed thresholds in
+code (under 20 percent relative change either way is small, 20 to 50
+percent moderate, 50 percent or more large; standardised mean differences
+keep Cohen's own 0.5 and 0.8), not adjectives the model picks, and the
+takeaway is weakened to match the label through `match_effect()`, which
+only ever weakens. "Reduces colds and flu" became "slightly lowers the
+risk of colds".
+
+**One retry, only for self-contradiction.** A check is two model calls.
+When the takeaway, the explanation, the still-open line and the breakdown
+contradict each other on the same point ("not tested" against "works even
+for those not low"), or when the takeaway answers a question nobody asked,
+the whole answer is asked for again once with the faults named, and the
+second answer is kept only if it has strictly fewer faults. That is the
+only path to a third call, and it fired on 2 of the 5 claims in the final
+run.
+
+**Indirect evidence is retrieved on purpose and labelled as such.**
+`extract_search_terms` may now return a second line naming a surrogate
+(for creatine and hair loss: dihydrotestosterone), two of the eight result
+slots are reserved for it, and those studies are marked `INDIRECT:
+measures X, not the outcome in the claim` in the prompt. The answer now
+says a rugby-player trial found DHT rose 56 percent after loading, and
+says plainly that this is a hormone and not hair.
+
+**Deliberately not added:** an `indirect` field on `_study_payload` and in
+the two renderers. The label belongs in the prose that explains what the
+study does and does not show; a badge on a source card would invite
+readers to discount a study without reading why.
+
+**Four small repairs to the plain-words gate, each from a sentence that
+shipped wrong.** `duration` now rewrites to the noun "length", because the
+old clause produced "the studies were often of short how long it lasted".
+The SOFTEN rule for `blocks` is guarded by a lookahead, because it was
+rewriting the noun: "no evidence that reduces stop eye strain". A sentence
+with fewer than four words of its own is dropped, because `strength` once
+shipped as the bare string "(Studies 3, 8)." And `written_numbers()`
+exists because the gate was deleting a true sentence: the model wrote "45
+people" where the abstract says "Forty-five resistance-trained males".
+
+**When the gate empties a field, say so instead of hiding it.** Two
+stated lines are code-authored and exempt from the plain-words rules:
+`NO_STUDY_FOR_PART` when nothing tests a part of the claim, and the new
+`PART_BELOW` when the only judged part lost its sentence but the
+paragraphs underneath still carry the finding. `ground()` also retries a
+field once without the parked bracket glosses before giving up, because
+the glosses are what pushed those sentences over the 28-word limit. Four
+fields are still empty in the final run (vitamin D's strength; eggs'
+strength, who-it-doesn't-apply-to and unknowns). That is the cost of
+"drop, never repair", and it is reported rather than patched.
+
+## 2026-10-01: Search wide and rank by design, then say it in plain words
 
 Two faults in the same check, found on one claim. "Taking vitamin D
 supplements in winter cuts your risk of catching a cold or flu, but only

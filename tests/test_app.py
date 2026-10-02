@@ -122,7 +122,7 @@ verdict._gemini_client = fg
 STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", "year": "2020",
             "publication_types": ["Journal Article"], "authors": ["A B"], "data_banks": None, "url": f"u{i}"}
            for i in range(1, 4)]
-pubmed.search_and_fetch = lambda q, max_results=8: STUDIES
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 
 def VJ(v, nums, tldr="Short take.", still_open="", **extra):
@@ -183,7 +183,7 @@ ratelimit.PER_USER = ratelimit.SlidingWindow(100, 600)
 calls = []
 
 
-def _fb(q, max_results=8):
+def _fb(q, max_results=8, surrogate=''):
     calls.append(q)
     return [] if " AND " in q else STUDIES
 
@@ -195,7 +195,7 @@ fg.models.script = [Resp("a AND b"), Resp(VJ("true", [1]))]
 d = P("broaden me", ip="7.7.7.7").get_json()
 t("broadened search used & flagged", d["search_broadened"] is True and d["search_query_used"] == "a"
   and calls == ["a AND b", "a"], d)
-pubmed.search_and_fetch = lambda q, max_results=8: STUDIES
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # ---- SSE stream -------------------------------------------------------------
 fg.models.script = [Resp("q"), Resp(VJ("false", [2]))]
@@ -224,11 +224,11 @@ fg.models.script = [Resp("q"), Resp("not json")]
 t("non-JSON -> complicated", P("err d").get_json()["verdict"] == "complicated")
 fg.models.script = [Resp("q"), Resp("", "FinishReason.MAX_TOKENS")]
 t("truncated -> complicated", "ran out of room" in P("err e").get_json()["explanation"])
-pubmed.search_and_fetch = lambda q, max_results=8: (_ for _ in ()).throw(requests.ConnectionError("down"))
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': (_ for _ in ()).throw(requests.ConnectionError("down"))
 fg.models.script = [Resp("q")]
 r = P("err f"); t("PubMed down -> 502", r.status_code == 502 and "PubMed" in r.get_json()["error"])
 t("failed checks not cached", all(db.get_cached_verdict(x, 24) is None for x in ("err a", "err b", "err c", "err f")))
-pubmed.search_and_fetch = lambda q, max_results=8: STUDIES
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # ---- trending -----------------------------------------------------------------
 for _ in range(2):
@@ -738,12 +738,252 @@ t("  one general study among them clears the flag",
 fg.models.script = [Resp("vitamin d AND children"),
                     Resp(VJ("true", [1, 2], tldr="Vitamin D stops colds.",
                             explanation="It works.", still_open="Nothing."))]
-pubmed.search_and_fetch = lambda q, max_results=8: _NARROW
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _NARROW
 _nr = P("Vitamin D stops you catching colds", ip="7.7.7.7").get_json()
 t("narrow evidence cannot carry a true verdict",
   _nr["verdict"] == "complicated", _nr["verdict"])
 t("  and the result says whose evidence it was",
   "children, pregnant women" in _nr["explanation"], _nr["explanation"])
+
+# ---- the claim's own condition ----------------------------------------------------
+# The failure this covers: the answer said the condition was never tested while
+# the abstract in front of it reported on exactly that condition.
+t("conditions: a claim's condition is read off its own words",
+  evidence.conditions("Vitamin D cuts colds, but only if you are deficient")
+  == ["people who start with low levels"],
+  evidence.conditions("Vitamin D cuts colds, but only if you are deficient"))
+t("  a claim with no condition asks for no subgroup search",
+  evidence.conditions("Celery juice cures cancer") == [])
+
+_SUB = [_study("S1", "Vitamin D to prevent acute respiratory infection", abstract=(
+    "We pooled 25 trials. Protective effects were stronger among those with "
+    "baseline 25(OH)D below 25 nmol/L (adjusted odds ratio 0.30). A total of "
+    "11321 participants were included.")),
+        _study("S2", "Vitamin D and respiratory infection: an update", abstract=(
+            "No significant effect was seen for any of the subgroups defined by "
+            "baseline 25(OH)D concentration."))]
+_hits = evidence.subgroup_findings(_SUB, "Vitamin D cuts colds if you are deficient")
+t("  a subgroup sentence on that condition is pulled out of the abstract",
+  [h["study"] for h in _hits] == [1, 2]
+  and all(h["condition"] == "people who start with low levels" for h in _hits), _hits)
+t("  and a counting sentence is not mistaken for a finding",
+  all("11321 participants" not in h["sentence"] for h in _hits), _hits)
+t("  two abstracts disagreeing is itself what gets reported",
+  "stronger" in _hits[0]["sentence"] and "No significant effect" in _hits[1]["sentence"])
+t("  the conditions these abstracts do report on are named for the prompt",
+  evidence.conditions_reported(_SUB, "Vitamin D cuts colds if you are deficient")
+  == ["people who start with low levels"])
+t("  and the model is handed those sentences, with their study numbers",
+  "SUBGROUP FINDINGS" in verdict._subgroup_block(
+      _SUB, "Vitamin D cuts colds if you are deficient")
+  and "Study 2" in verdict._subgroup_block(
+      _SUB, "Vitamin D cuts colds if you are deficient"))
+t("  no condition in the claim means no block at all",
+  verdict._subgroup_block(_SUB, "Celery juice cures cancer") == "")
+
+# ---- how big the effect is, in words ----------------------------------------------
+t("effect size: thresholds are fixed in code, not left to the prose",
+  (evidence.size_label(0.12), evidence.size_label(0.20), evidence.size_label(0.60))
+  == ("small", "moderate", "large"))
+_or = evidence.effect_size("The pooled odds ratio was 0.88 (Study 1).")
+t("  a ratio becomes a percentage a reader can picture",
+  _or == {"label": "small", "plain": "about 12% lower odds",
+          "figure": "odds ratio 0.88"}, _or)
+t("  a ratio with its outcome named in between is still read",
+  evidence.effect_size("The hazard ratio for heart deaths for each more 50 g "
+                       "of egg eaten daily was 1.09 (Study 4).")["figure"]
+  == "hazard ratio 1.09")
+t("  but a figure the sentence does not pin to that ratio is left alone",
+  evidence.effect_size("The hazard ratio was not given, but mortality was 1.09.")
+  is None)
+t("  a ratio above 1 reads as an increase",
+  evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
+  evidence.effect_size("hazard ratio 1.80"))
+t("  a standardised mean difference uses Cohen's own thresholds",
+  evidence.effect_size("The SMD was -0.21.")["label"] == "small"
+  and evidence.effect_size("Cohen's d of 0.9")["label"] == "large")
+t("  a percentage drop is a drop, not a rise",
+  evidence.effect_size("Infections fell by 12%")["plain"] == "about 12% lower",
+  evidence.effect_size("Infections fell by 12%"))
+t("  a confidence interval is not read as an effect",
+  evidence.effect_size("The effect was unclear (95% confidence interval 0.7 to 1.3).")
+  is None, evidence.effect_size("The effect was unclear (95% CI 0.7 to 1.3)."))
+t("  prose with no figure in it has no size",
+  evidence.effect_size("The trials disagreed.") is None)
+
+t("  the takeaway is pulled back to the size behind it",
+  breakdown.match_effect("Vitamin D reduces colds and flu.", "small")
+  == "Vitamin D slightly lowers colds and flu.",
+  breakdown.match_effect("Vitamin D reduces colds and flu.", "small"))
+t("  a large effect is left to speak for itself",
+  breakdown.match_effect("Vitamin D reduces colds.", "large")
+  == "Vitamin D reduces colds.")
+t("  a sentence that hedges itself is not hedged twice",
+  breakdown.match_effect("Vitamin D may reduce colds.", "small")
+  == "Vitamin D may reduce colds.")
+t("  and a negative sentence is left alone",
+  breakdown.match_effect("Vitamin D does not reduce colds.", "small")
+  == "Vitamin D does not reduce colds.")
+t("  the breakdown's effect line carries the translation and its citation",
+  "about 12% lower odds, a small effect (Study 1)" in _bd["effect_size"],
+  _bd["effect_size"])
+t("  and the size label travels with it for the takeaway",
+  _bd["effect"]["label"] == "small", _bd["effect"])
+
+# ---- indirect evidence ------------------------------------------------------------
+_DHT = _study("I1", "Creatine supplementation raises dihydrotestosterone in rugby players",
+              abstract="Serum dihydrotestosterone rose after loading.")
+_HAIR = _study("I2", "Creatine and hair loss: a 12-week randomized controlled trial",
+               abstract="We counted hair loss in 40 men.")
+t("indirect: a study that measured the outcome is not called indirect",
+  evidence.indirect(_HAIR, "(hair loss OR alopecia)", "dihydrotestosterone OR DHT")
+  is None)
+t("  one that measured a stand-in is labelled with the term it used",
+  evidence.indirect(_DHT, "(hair loss OR alopecia)", "dihydrotestosterone OR DHT")
+  == "dihydrotestosterone")
+t("  with no surrogate named, nothing is called indirect",
+  evidence.indirect(_DHT, "(hair loss OR alopecia)", "") is None)
+t("  the subject filter reads the title and the abstract's opening only",
+  evidence.measures(_HAIR, "(creatine)") is True
+  and evidence.measures(_study("X", "Baricitinib safety", abstract="x " * 400
+                               + "creatine kinase was normal"), "(creatine)") is False)
+t("  and the prompt tells the model which study measured a stand-in",
+  "INDIRECT: measures dihydrotestosterone" in verdict._format_study_for_prompt(
+      1, _DHT, "(hair loss OR alopecia)", "dihydrotestosterone OR DHT"))
+
+_ranked = pubmed.prioritise([_study("OFF", "Topical lotion for alopecia",
+                                    abstract="A lotion trial in 60 women."),
+                             _DHT, _HAIR],
+                            "(creatine) AND (hair loss OR alopecia)",
+                            "dihydrotestosterone OR DHT")
+t("  a paper that never mentions the claim's subject sinks under the ones that do",
+  [s["pmid"] for s in _ranked] == ["I1", "I2", "OFF"], [s["pmid"] for s in _ranked])
+t("  the surrogate search asks for the subject plus the stand-in, never the outcome",
+  pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
+                          max_results=2) is not None)
+
+# ---- the answer must not contradict itself ----------------------------------------
+t("consistency: calling a reported condition untested is caught",
+  breakdown.contradictions("The studies do not test whether you need to be low.",
+                           reported=["people who start with low levels"]),
+  breakdown.contradictions("The studies do not test whether you need to be low.",
+                           reported=["people who start with low levels"]))
+t("  two lines saying opposite things about the same effect are caught",
+  breakdown.contradictions("There is no clear benefit.",
+                           "It lowers the risk of infection."))
+t("  an answer that agrees with itself raises nothing",
+  breakdown.contradictions("It lowers the odds a little.",
+                           "The effect is small.", reported=[]) == [])
+t("  'the studies found' is not read as a finding, so nothing fires",
+  breakdown.contradictions("This is unproven either way.",
+                           "None of the studies found directly test this claim.") == [])
+t("off claim: a product the claim never named is flagged",
+  breakdown.off_claim("Blue light glasses do not help your eyes.",
+                      "Screen light damages your eyes") == ["glasses"])
+t("  a claim about the product itself keeps it",
+  breakdown.off_claim("Blue light glasses do not help.",
+                      "Do blue light glasses work?") == [])
+
+# ---- what the gate says when it has taken a sentence away --------------------------
+# "No study tests this part" is true when the model judged nothing. When it did
+# judge and the judgement failed the check, the same line sits above paragraphs
+# of studies that do test it, and contradicts them.
+_DROPPED_PART = breakdown.ground(
+    {"parts": [{"part": "Vitamin D cures colds",
+                "assessment": "Infections fell by 47% in the pooled trials (Study 1)."}],
+     "evidence": ["The effect was larger below 25 nmol/L (Study 1)."],
+     "effect_size": "", "strength": "", "applies_to": "", "not_applies_to": "",
+     "unknowns": ""},
+    _BD_STUDIES, verdict.tidy_prose)
+t("a judgement the gate took away does not become 'no study tests this'",
+  _DROPPED_PART["parts"][0]["assessment"] == breakdown.PART_BELOW,
+  _DROPPED_PART["parts"][0])
+t("  while a part the model never judged still says so",
+  _bd["parts"][2]["assessment"] == breakdown.NO_STUDY_FOR_PART)
+t("  and the bookkeeping flag never reaches the payload",
+  "_dropped" not in _DROPPED_PART["parts"][0])
+
+# A sentence is not lost because plain() put the original term in brackets
+# beside the plain words. The brackets go; the sentence stays.
+_LONG_TERM = breakdown.ground(
+    {"parts": [], "evidence": ["The effect was larger below 25 nmol/L (Study 1)."],
+     "strength": "One pooled review of 25 trials in 11321 people reported a lower rate "
+                 "of acute respiratory tract infection in the people who took it "
+                 "(Study 1).",
+     "effect_size": "", "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _BD_STUDIES, verdict.tidy_prose)
+t("a sentence the brackets alone made too long keeps the sentence, not the brackets",
+  _LONG_TERM and "chest and throat" in _LONG_TERM["strength"]
+  and "(respiratory tract infection" not in _LONG_TERM["strength"],
+  (_LONG_TERM or {}).get("strength"))
+
+# The model quotes the figure; code does the arithmetic. A size word the model
+# already chose is not repeated when the percentage is added beside it.
+_SIZED = breakdown.ground(
+    {"parts": [], "evidence": ["The effect was larger below 25 nmol/L (Study 1)."],
+     "effect_size": "The odds ratio was 0.88, a small effect (Study 1).",
+     "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _BD_STUDIES, verdict.tidy_prose)
+t("  the percentage is added to a quoted ratio, with its citation",
+  "That is about 12% lower odds (Study 1)." in _SIZED["effect_size"], _SIZED["effect_size"])
+t("  and a size word the model already chose is not repeated",
+  _SIZED["effect_size"].count("small") == 1, _SIZED["effect_size"])
+
+# A translation belongs beside the figure it came from. Taking a ratio out of a
+# paragraph and parking its percentage under a different ratio prints a wrong
+# number in plainer words, which is worse than printing no translation.
+_MIXED = breakdown.ground(
+    {"parts": [], "evidence": ["The effect was larger below 25 nmol/L, at 0.30 (Study 1)."],
+     "effect_size": "The hazard ratio was 0.99 (Study 2).",
+     "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _BD_STUDIES, verdict.tidy_prose)
+t("  a figure from one line is never translated under another",
+  "0.30" not in _MIXED["effect_size"] and "70%" not in _MIXED["effect_size"]
+  and "about 1% lower risk over time" in _MIXED["effect_size"], _MIXED["effect_size"])
+
+t("soften: 'blocks' the thing is not rewritten as 'reduces'",
+  breakdown.soften("No evidence that blue blocks stop eye strain.")
+  == "No evidence that blue blocks stop eye strain."
+  and breakdown.soften("It blocks the virus.") == "It reduces the virus.",
+  breakdown.soften("No evidence that blue blocks stop eye strain."))
+
+t("a bracket on its own is not a sentence, so it never becomes a section",
+  breakdown.keep_sentences("(Studies 3, 8).", 8, set()) == ""
+  and breakdown.keep_sentences("Both reviews agree on this (Studies 3, 8).", 8, set())
+  != "")
+
+t("a count the abstract spells out is a count the verdict may write",
+  evidence.written_numbers("Forty-five males were recruited. Thirty-eight finished.")
+  == {"45", "38"}, evidence.written_numbers("Forty-five males. Thirty-eight finished."))
+t("  and only the whole run counts, so 'forty-five' never permits 40 or 5",
+  evidence.written_numbers("Forty-five") == {"45"})
+t("  a scale word and its 'and' are part of the number",
+  evidence.written_numbers("Two hundred and ten adults") == {"210"})
+t("  so a sentence quoting a spelled count is not deleted as invented",
+  "45 people" in breakdown.ground(
+      {"parts": [], "evidence": ["The 45 people were healthy young males (Study 1)."],
+       "effect_size": "", "strength": "", "applies_to": "", "not_applies_to": "",
+       "unknowns": ""},
+      [dict(_BD_STUDIES[0], abstract="Forty-five healthy young males took part.")],
+      verdict.tidy_prose)["evidence"][0])
+
+t("plain: 'duration' is replaced by a word that fits every slot it sits in",
+  breakdown.plain("The studies were often of short duration.")
+  == "The studies were often short."
+  and breakdown.plain("The duration was 12 weeks.") == "The length was 12 weeks."
+  and breakdown.plain("Treatment duration was 12 weeks.")
+  == "Treatment length was 12 weeks."
+  and breakdown.plain("The duration of therapy was 12 weeks.")
+  == "The length of therapy was 12 weeks.",
+  breakdown.plain("The duration was 12 weeks."))
+
+t("surrogate: the second line is read only when it is labelled",
+  verdict._surrogate("(creatine) AND (hair loss)\nSurrogate: DHT OR dihydrotestosterone")
+  == "DHT OR dihydrotestosterone")
+t("  an unlabelled second line is not a surrogate",
+  verdict._surrogate("(creatine) AND (hair loss)\nThis finds the hormone trials.") == "")
+t("  and 'none' means none",
+  verdict._surrogate("(a) AND (b)\nSurrogate: none") == "")
 
 # ---- plain words ------------------------------------------------------------------
 t("plain: a compound noun is rewritten as the thing you do",
@@ -810,7 +1050,7 @@ t("  and short prose about these trials comes in at the target or below",
   _bd["grade"] <= breakdown.TARGET_GRADE, _bd["grade"])
 
 # ---- the deeper layer through the whole app ---------------------------------------
-pubmed.search_and_fetch = lambda q, max_results=8: _BD_STUDIES
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
 fg.models.script = [Resp("vitamin d AND respiratory infection"),
                     Resp(VJ("complicated", [1, 2], tldr="Vitamin D prevents colds.",
                             still_open="Whether it helps people who are not deficient.",
@@ -820,13 +1060,48 @@ _vd = P("Vitamin D supplements in winter cut colds", ip="9.9.9.9").get_json()
 t("the breakdown rides on the verdict call: still 2 calls per check",
   fg.models.calls - _before == 2, fg.models.calls - _before)
 t("  the takeaway is held to the same rule as the breakdown",
-  _vd["tldr"] == "Vitamin D lowers the risk of colds.", _vd["tldr"])
+  _vd["tldr"] == "Vitamin D slightly lowers the risk of colds.", _vd["tldr"])
 t("  the breakdown is in the API payload, gated",
   _vd["breakdown"]["rests_on"] == 2 and len(_vd["breakdown"]["evidence"]) == 3
   and "47%" not in json.dumps(_vd["breakdown"]), _vd["breakdown"])
 _vd2 = P("vitamin d supplements in winter cut colds.", ip="4.4.4.4").get_json()
 t("  it survives the cache round trip", _vd2["cached"] is True
   and _vd2["breakdown"] == _vd["breakdown"])
+
+# An answer that calls the claim's condition untested while the abstract in
+# front of it reports on that condition is asked again, once. Three calls, not
+# two, and only on this path: the check above is still two.
+_RETRY_BD = {
+    "parts": [{"part": "vitamin D cuts colds", "studies": [1],
+               "assessment": "Pooled trials found fewer infections (Study 1)."}],
+    "evidence": ["Protective effects were stronger in people who began with low "
+                 "levels (Study 1).",
+                 "The update found no effect in any baseline subgroup (Study 2)."],
+    "effect_size": "The odds ratio was 0.30 in the lowest group (Study 1).",
+    "strength": "One pooled review and one update disagree (Studies 1, 2).",
+    "applies_to": "Adults in 25 pooled trials (Study 1).",
+    "not_applies_to": "Children do not appear in either review (Study 2).",
+    "unknowns": "Whether a winter dose helps people who are not low (Studies 1, 2).",
+}
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _SUB
+fg.models.script = [
+    Resp("(vitamin d) AND (respiratory infection)"),
+    Resp(VJ("complicated", [1, 2], tldr="Vitamin D may help a little.",
+            explanation="These studies do not test whether you need to be low.",
+            still_open="Whether it helps anyone else.", **_RETRY_BD)),
+    Resp(VJ("complicated", [1, 2], tldr="Vitamin D may help, mostly if you are low.",
+            explanation="The pooled review saw a bigger effect in people who began "
+                        "low (Study 1), and the update saw none (Study 2).",
+            still_open="Whether a winter dose helps anyone else.", **_RETRY_BD)),
+]
+_cbefore = fg.models.calls
+_cr = P("Vitamin D cuts colds but only if you are deficient", ip="8.8.8.8").get_json()
+t("a self contradicting answer costs one more call, and only then",
+  fg.models.calls - _cbefore == 3, fg.models.calls - _cbefore)
+t("  and the answer the reader gets is the consistent one",
+  "do not test" not in _cr["explanation"] and "bigger effect" in _cr["explanation"],
+  _cr["explanation"])
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
 
 _html = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
 t("the breakdown is server rendered, so a shared link carries it",
@@ -884,7 +1159,7 @@ t("nothing in the breakdown is a card, and nothing in it is colour coded",
   "border-radius" not in (ROOT / "static" / "style.css").read_text()
   .split("---- The deeper layer")[1].split("---- Sticky share bar")[0])
 
-pubmed.search_and_fetch = lambda q, max_results=8: STUDIES
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 _r = c.get("/?q=streamed%20claim")
 t("a result that rests on evidence carries no next_steps in its payload",

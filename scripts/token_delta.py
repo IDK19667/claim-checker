@@ -70,8 +70,9 @@ def run(prompt: str, schema: dict) -> dict:
 
 
 def main() -> None:
-    query = verdict.extract_search_terms(CLAIM)
-    studies, used, broadened = pubmed.search_with_fallback(query, max_results=8)
+    query, surrogate = verdict.extract_search_terms(CLAIM)
+    studies, used, broadened = pubmed.search_with_fallback(
+        query, max_results=8, surrogate=surrogate)
     print(f"claim:   {CLAIM}")
     print(f"search:  {used}{' (broadened)' if broadened else ''}")
     print(f"studies: {len(studies)}\n")

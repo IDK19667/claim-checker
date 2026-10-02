@@ -70,15 +70,19 @@ def old_grade(parsed, studies) -> float | None:
 def run(claim: str) -> dict:
     old_q = verdict._clean_query(
         verdict._complete_text(OLD_SEARCH.format(claim=claim), max_tokens=256), claim)
-    new_q = verdict.extract_search_terms(claim)
+    new_q, surrogate = verdict.extract_search_terms(claim)
 
     old_ids = pubmed.search_pubmed(old_q, max_results=8)
-    studies, used, _ = pubmed.search_with_fallback(new_q, max_results=8)
+    studies, used, _ = pubmed.search_with_fallback(new_q, max_results=8,
+                                                  surrogate=surrogate)
 
-    block = "\n\n".join(verdict._format_study_for_prompt(i + 1, s)
+    groups = pubmed.split_and(used or "")
+    outcome = groups[1] if len(groups) > 1 else ""
+    block = "\n\n".join(verdict._format_study_for_prompt(i + 1, s, outcome, surrogate)
                         for i, s in enumerate(studies))
-    raw, stop = verdict._complete_json(verdict.weigh_prompt(claim, block),
-                                       verdict.VERDICT_SCHEMA, max_tokens=12000)
+    raw, stop = verdict._complete_json(
+        verdict.weigh_prompt(claim, block, verdict._subgroup_block(studies, claim)),
+        verdict.VERDICT_SCHEMA, max_tokens=12000)
     import json
     parsed = json.loads(raw.replace("```json", "").replace("```", "").strip())
 
