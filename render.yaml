@@ -9,7 +9,7 @@
 
 services:
   - type: web
-    name: claim-checker
+    name: evident
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -28,6 +28,12 @@ services:
         sync: false
       - key: FLASK_DEBUG
         value: "0"
+      # Signs Flask's session cookie. Nothing in the app uses a session or a
+      # flash message today, so this is hygiene and not a fix: Render makes
+      # the value itself, so it never exists in the repo or in a dashboard
+      # field anyone has to handle.
+      - key: FLASK_SECRET_KEY
+        generateValue: true
       - key: NCBI_EMAIL
         sync: false
       - key: PYTHON_VERSION

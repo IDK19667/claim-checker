@@ -47,9 +47,14 @@ password: <https://github.com/settings/tokens>
      it is a courtesy, not a requirement.
    - `PUBLIC_URL` — leave blank for now, you do not know the URL yet.
 4. Deploy. The first build takes a few minutes.
-5. When it is live, copy the URL (something like
-   `https://claim-checker.onrender.com`), then go to **Environment**, set
-   `PUBLIC_URL` to exactly that, and let it redeploy.
+5. When it is live, copy the URL Render shows you, then go to
+   **Environment**, set `PUBLIC_URL` to exactly that, and let it redeploy.
+
+   The blueprint names the service `evident`, but both
+   `evident.onrender.com` and `claim-checker.onrender.com` are already
+   registered to other people's services, so Render will hand you the name
+   with a suffix on it, something like `evident-a1b2.onrender.com`. Copy
+   what it actually gives you rather than what you expected.
 
 `PUBLIC_URL` matters more than it looks: share links, link-preview cards
 and the ClaimReview markup all build absolute URLs from it. Left blank,
