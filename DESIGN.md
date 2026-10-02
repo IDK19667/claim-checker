@@ -359,7 +359,12 @@ blindness, and it cannot be mistaken for a verdict.
   says.
 - **The report:** back, then the field, then **the panel**, which lifts
   onto the field by 14px with the only shadow in the design, then the
-  reasoning in prose, then the actions, then the sources.
+  reasoning in prose, then the actions, then the sources. The field and
+  the panel bleed to the same edge and are therefore the same width. On a
+  wide screen the report is two columns, the field and the panel in the
+  first and the sources in the second, and both columns open on the same
+  line; while a check is still running there is nothing to put in the
+  second column, so checking stays one.
 - **The panel:** head ("Evidence facts" plus the count) over an 8px rule,
   the verdict at 30px/900 over a 4px rule, the takeaway, the counted
   figures one per line, the bar and its key, and "Still open" under a
@@ -388,54 +393,80 @@ It is not a mood film and not a generated hero. It is a recording of the
 thing the page does, which is why it is not covered by the ban on
 generated imagery and video below.
 
-**The footage does not stop when a check starts.** Submit a claim and the
-clip keeps playing, driven now by the stream instead of the scroll: the
-search being built, PubMed being searched, the studies being read, the
-evidence being weighed, the verdict. It is one continuous experience from
-the first screen to the verdict, not a film that cuts to a form. There is
-no plain-paper checking screen and no plain-paper result screen on `/`
-any more.
+**The footage does not follow a check.** Submit a claim and the fly-through
+stands down: it is five screens of scroll belonging to a page the reader
+has just left, and keeping it running means decoding frames for a canvas
+nobody can see. What replaces it is **the band**.
+
+### The band and the sheet
+
+Checking, a verdict, an error and a check that found nothing are one
+screen, at every width and on every route:
+
+- **A band of footage across the top**, full bleed, 42vh on a desktop and
+  30vh on a phone, under the masthead and above everything else. It is
+  `aria-hidden` and carries nothing readable.
+- **A sheet below it**, the same centred column the rest of the paper
+  uses, lifted 48px into the foot of the band so the two overlap rather
+  than butt, with a 3px ink edge along its top and the page ground showing
+  on both sides of it. Everything the reader came for is on the sheet: the
+  claim, "Check another claim", the live step lines, the verdict, the
+  studies.
+
+An earlier round ran the footage *behind* the report instead. At this
+column width that left it visible only as two narrow strips at the edges,
+a window frame on one side and half a bookshelf on the other, and no way
+to read either as a picture. A band is the shape a cinematic still wants;
+a background is not.
+
+**Three clips, one per stage of the work.** Searching plays while the
+search is built and run, weighing once studies have come back, and the
+verdict shot is what the result rests on. Each is 1920x600 and crops with
+a chosen `object-position`, never a default one: the book's spine and the
+page it is turning, the marker's tip rather than the knuckles behind it,
+the microscope rather than the rack beside it. See `media/PRODUCTION.md`
+round 10.
 
 Four rules hold it together:
 
-- **Every step is an event, never a timer.** A label appears because the
-  server said that thing happened. If a step outlasts its stretch of
-  clip, the clip holds, then breathes backwards over nine seconds and
-  returns. It never runs on to footage of work that has not happened.
-- **Text never sits on moving pictures.** The live panel and the verdict
-  sheet are solid paper in the same corner and the same geometry the
-  replay's own panels use, cross faded with them. Full WCAG AA contrast,
-  and **no backdrop blur anywhere**: a panel earns its legibility by
-  being opaque, not by smearing the picture behind it.
-- **The footage stays at full brightness** around the panel. It is not
-  dimmed, scrimmed or desaturated to make room for the words. The words
-  make their own room.
-- **The verdict rests on the brightest still frame of the clip**, frame
-  243 of the library, measured rather than chosen by eye. The verdict is
-  a **cut** to that frame, not a move: it sits earlier in the sequence
-  than the weighing and the writing, and footage rewinding under a
-  verdict reads as a fault. A cut is also what a cached verdict deserves,
-  since none of the work in between actually ran. Verdicts are not colour
-  coded here either: the stamp on the sheet is ink on paper, exactly as
-  it is on `/checks`.
+- **Every clip change is an event, never a timer.** A clip changes because
+  the server said that thing happened. The band never runs on to footage
+  of work that has not happened.
+- **Text never sits on moving pictures.** Nothing readable is on the band
+  at all, which is the strongest form of the rule: no panel has to buy its
+  contrast back, and so there is **no backdrop blur, no scrim and no tint
+  anywhere**.
+- **The footage stays at full brightness.** It is not dimmed or darkened
+  to make room for the words. The words have their own room.
+- **The verdict is not colour coded here either.** The stamp on the sheet
+  is ink on paper, exactly as it is on `/checks`.
+
+**The dark field and the panel under it are the same width**, and so share
+a left edge. Inside the gutters the panel was a gutter narrower on each
+side, which read as a misprint.
 
 **Transitions between the three states** (claim, checking, verdict) are
 `transform` and `opacity` only, 300 to 500ms, measured CLS 0. No layout
-jump, no white flash.
+jump, no white flash. The band and the sheet arrive once, when a live
+check starts, and do not re-animate when the verdict lands.
 
 **Reduced motion, Save-Data and a slow connection get the same screens
-with nothing playing**: the stage holds its poster still, the same panel
-arrives with the same copy in the same order, and the same way out. Not a
-degraded flow, the same flow without the motion.
+with nothing playing**: the band shows each clip's own first frame as a
+still, the same sheet arrives with the same copy in the same order, and
+the same way out. Not a degraded flow, the same flow without the motion.
 
-**A shared result link opens cold on paper**, not on film. It gets the
-closing still as a decorative header image, about 14KB where the sequence
-is 23MB, above the verdict it was shared for.
+**A shared result link opens cold on one still**, server rendered, 27KB,
+and loads no video at all. Same band, same sheet, same everything, and no
+entrance: nothing moved, the reader navigated there, and a fade-in would
+read as something still loading.
 
-**"Skip to the checker"** is visible on the first screen and stays through
-checking, where it cancels the check in flight. It steps aside once a
-verdict or an error is on screen, because the sheet carries its own way
-out and a floating link over it is a second, worse one.
+**The clips are never in the way of the first screen.** They are fetched
+once the reader presses Check, or in idle time after the home page has
+gone interactive, whichever comes first.
+
+**"Skip to the checker"** is visible on the first screen of the
+fly-through throughout. It belongs to the fly-through, which is the only
+place it has anything to skip.
 
 ## The keyboard
 
@@ -460,9 +491,9 @@ Nothing else in the page animates. No entrances on sections, no parallax,
 no cursor effects, no scroll hijacking, no animated backgrounds. All of it
 collapses under `prefers-reduced-motion`.
 
-The fly-through on `/` is the one exception, and it is footage rather than
-animation: see **The footage** above for what it is allowed to do and what
-it is not.
+The fly-through on `/` and the band over the sheet are the exceptions, and
+both are footage rather than animation: see **The footage** above for what
+they are allowed to do and what they are not.
 
 ## Copy
 

@@ -315,22 +315,6 @@ body.view-ask #ask .primary {
   padding: 13px 0; cursor: pointer; font-family: inherit;
   font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink);
 }
-/* A shared result opens cold, with no footage. One still of the fly-through's
-   last stage stands in for it: the same world, 14KB, and it ends at the top of
-   the report rather than playing. It bleeds to the column edge like the field
-   under it, and the two meet with no gap, so they read as one header. */
-.result-still {
-  margin: 14px calc(-1 * var(--gutter)) 0;
-  background: var(--deep);
-}
-/* A band, not a picture: capped so the verdict is still what you land on, and
-   cropped rather than letterboxed so the cap costs no empty space. */
-.result-still img {
-  display: block; width: 100%; height: auto;
-  max-height: 34vh; object-fit: cover;
-}
-.result-still + .report-head { margin-top: 0; }
-
 /* The field: a dark ground carrying the claim, the verdict and the evidence
    the verdict rests on. Bleeds to the edge of the column, not the viewport,
    so it can never introduce a horizontal scrollbar. */
@@ -352,6 +336,9 @@ body.view-ask #ask .primary {
 .reading li::before { content: ""; width: 9px; height: 2px; margin-top: 9px; background: var(--on-deep-2); flex: none; }
 .reading li.live::before { width: 8px; height: 8px; margin-top: 6px; background: var(--on-deep); animation: pulse 1s ease-in-out infinite; }
 .reading li.cancel-row::before { display: none; }
+/* The work prints on the dark field now, not on a panel of its own, so the
+   one control inside it has to be the field's ink and not the page's. */
+.reading .link-btn { color: var(--on-deep); border-bottom-color: var(--on-deep-2); }
 @keyframes line-in { from { opacity: 0; transform: translateY(3px); } }
 
 /* ---- THE PANEL: the signature ------------------------------------------- *
@@ -392,9 +379,14 @@ body.view-ask #ask .primary {
 .field-cap span:last-child { color: var(--on-deep); }
 
 /* The panel lifts off the field onto the page. The shadow is the only depth
-   in the design and it exists to say "this is the part you keep". */
+   in the design and it exists to say "this is the part you keep".
+
+   It takes the same bleed as the field above it. Inside the gutters it was a
+   gutter narrower on each side, which read as a misprint: two stacked blocks
+   whose left edges missed each other by 16px. */
 .verdict-block {
-  margin: -14px 0 0; border: 0; background: var(--paper);
+  margin: -14px calc(-1 * var(--gutter)) 0;
+  border: 0; background: var(--paper);
   box-shadow: 0 2px 0 var(--ink), 0 14px 34px var(--shadow-sheet);
 }
 .verdict-block.pending .stamp { color: var(--ink-3); }
@@ -637,12 +629,75 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .band { margin: 0; padding: 0; }
 body:not(.view-ask) .band .wrap { display: none; }
 body.view-ask .band .wrap { padding-bottom: 6px; }
-.foot { margin: 30px 0 0; padding: 16px 0 26px; border-top: 2px solid var(--ink); font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
+/* Carries `wrap` in the markup so the rule above it ends where every other
+   rule on the page ends, instead of running the full width of the viewport. */
+.foot { margin: 30px auto 0; padding: 16px var(--gutter) 26px; border-top: 2px solid var(--ink); font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
 .foot b { color: var(--ink); }
+
+/* ---- The band and the sheet ---------------------------------------------- *
+   Checking, a verdict, an error and a check that found nothing are one screen:
+   a strip of footage across the head of the page, and the report on a sheet
+   that rises into the foot of it.
+
+   The band is full bleed and the sheet is the same centred column the rest of
+   the paper uses, so the page ground shows on both sides of it. An earlier
+   round ran the footage behind the report, which at this column width left it
+   visible only as two narrow strips at the edges: a window frame on one side,
+   half a bookshelf on the other, and no way to read either as a picture.
+
+   Nothing legible ever sits on the footage. The claim, the step lines and the
+   whole verdict are text on the sheet, so no panel has to buy its contrast
+   back with a scrim, a tint or a blur, and there are none anywhere here. */
+
+.film {
+  position: relative;
+  height: 30vh; min-height: 148px; max-height: 300px;
+  overflow: hidden;
+  background: var(--deep);
+}
+
+/* The clips are stacked and cross-faded, so a stage change costs opacity and
+   nothing else: no reflow, no second load, no flash of dark between two. */
+.film-shot {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 420ms linear;
+}
+.film-shot[data-on="1"] { opacity: 1; }
+
+/* Each crop is chosen, not defaulted. The band runs wider than the 3.2:1
+   source on most desktops and much narrower on a phone, where `cover` keeps
+   less than half the width: these say which half. The book's spine and the
+   page it is turning, the marker's tip rather than the knuckles behind it,
+   and the microscope rather than the rack beside it. Picked by looking at
+   each clip cropped to 390x253. See scripts/build_footage.py. */
+.film-shot[data-shot="searching"] { object-position: 45% 50%; }
+.film-shot[data-shot="weighing"] { object-position: 30% 50%; }
+.film-shot[data-shot="verdict"] { object-position: 70% 50%; }
+
+[data-screen] main.wrap {
+  position: relative; z-index: 1;
+  margin-top: -44px;
+  padding-top: 16px; padding-bottom: 34px;
+  background: var(--paper);
+  box-shadow: 0 -3px 0 var(--ink), 0 -16px 44px var(--shadow-sheet);
+}
+
+/* The entrance belongs to the live transition, not to a cold load: a shared
+   link is a page the reader navigated to, and it has no business fading in.
+   app.js carries the class for as long as a check owns the screen. */
+body.live-check .film { animation: band-in 300ms ease-out both; }
+body.live-check main.wrap { animation: sheet-rise 420ms cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes band-in { from { opacity: 0; } }
+@keyframes sheet-rise { from { opacity: 0; transform: translateY(18px); } }
 
 /* ---- Motion -------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
+  .film-shot { transition: none; }
+  body.live-check .film, body.live-check main.wrap { animation: none; }
   .sweep .study.cited .title span { animation: none; background-size: 100% 2px; }
   .reading li { animation: none; }
   dialog.sheet, dialog.sheet::backdrop { transition: none; }
@@ -668,6 +723,9 @@ body.view-ask .band .wrap { padding-bottom: 6px; }
   .hero .small, .hero em { font-size: 32px; }
   .claim-echo { font-size: 36px; }
   .stamp { font-size: 38px; }
+  /* Cinema proportions once there is height to spend on them. */
+  .film { height: 42vh; min-height: 230px; max-height: 440px; }
+  [data-screen] main.wrap { margin-top: -48px; padding-top: 20px; }
 }
 
 @media (min-width: 1024px) {
@@ -678,15 +736,23 @@ body.view-ask .band .wrap { padding-bottom: 6px; }
   body.view-ask #ask .hero-block { grid-column: 1; }
   body.view-ask #ask .claim-form { grid-column: 2; padding-top: 34px; }
   body.view-ask .nudge { grid-column: 1 / -1; }
-  body:not(.view-ask) #result {
+  /* Two columns once there is a verdict to put in the second one. While the
+     check is still running there is nothing to fill it with, and the grid
+     left the claim and the work printing in a half width column beside an
+     empty one. Checking stays a single column and keeps its bleed. */
+  body:not(.view-ask) #result:not(.checking) {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     column-gap: 40px; align-items: start;
   }
-  body:not(.view-ask) #result > .back { grid-column: 1 / -1; }
-  /* The still heads the verdict column, not the whole grid. The studies
-     column below is pinned from row 2 all the way down, so a band spanning
-     both columns has no row to sit in and gets placed underneath the lot. */
-  body:not(.view-ask) #result > .result-still { grid-column: 1; margin-inline: 0; }
-  body:not(.view-ask) #result > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 0; }
+  body:not(.view-ask) #result:not(.checking) > .back { grid-column: 1 / -1; }
+  body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 0; }
+  /* In two columns there is no column edge to bleed to: a negative inline
+     margin here would hang the field and the panel out over the gutter
+     between the columns. They keep their shared width by both giving it up. */
+  body:not(.view-ask) #result:not(.checking) .report-head,
+  body:not(.view-ask) #result:not(.checking) .verdict-block { margin-inline: 0; }
+  /* Both columns open on the row's own top edge, so the field and the rule
+     over the studies start on the same line. */
+  body:not(.view-ask) #result:not(.checking) > .report-head { margin-top: 0; }
   .study { margin-inline: 0; padding-inline: 0; }
 }

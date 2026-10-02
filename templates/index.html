@@ -1,5 +1,10 @@
 <!doctype html>
-<html lang="en">
+{# `data-screen` is what turns the page into a band over a sheet. A result
+   that came off a shared link is already one when it arrives, so the server
+   sets it: waiting for app.js would mean one painted frame of the home page's
+   layout before the sheet took its place. app.js sets it for the other two
+   screens, checking and error, and clears it on the way back out. #}
+<html lang="en"{% if result %} data-screen="result"{% endif %}>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -146,6 +151,24 @@
     </div>
   </div>
 
+  {# The band. A strip of footage at the head of every screen that is not the
+     home page's first one: checking, the verdict, an error, a check that
+     found nothing. A live check swaps the clip on real stream events, and
+     loads them only once Check has been pressed (static/app.js). A link
+     opened cold gets one still of the verdict shot, 28KB, server rendered,
+     and loads no video at all. Decorative throughout: the claim, every step
+     line and the whole verdict are text on the sheet below it, never on the
+     picture. #}
+  <div class="film" id="film" aria-hidden="true"
+       data-footage="{{ url_for('static', filename='footage') }}"
+       {%- if not (result and band_still) %} hidden{% endif %}>
+    {%- if result and band_still %}
+    <img class="film-shot" data-shot="verdict" data-on="1"
+         src="{{ url_for('static', filename='footage/' + band_still) }}"
+         width="1920" height="600" alt="" decoding="async" fetchpriority="high">
+    {%- endif %}
+  </div>
+
   <main class="wrap">
     <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>
       {% if latest %}
@@ -209,19 +232,6 @@
       <button class="back" id="back-btn" type="button">
         <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
       </button>
-
-      {# A shared link opens cold, with no frame sequence: one 14KB still of the
-         last stage carries the same world the home page's footage does, in
-         place of 23MB nobody asked for. Decorative, so alt is empty: it says
-         nothing about the verdict, and the verdict is what a reader is here
-         for. Dimensions are on the tag, so it reserves its box and shifts
-         nothing when it lands. #}
-      {% if header_still %}
-      <div class="result-still">
-        <img src="{{ url_for('static', filename='flight/' + header_still) }}"
-             width="960" height="540" alt="" decoding="async">
-      </div>
-      {% endif %}
 
       <!-- The head is a field, not a headline: the claim, the verdict, and the
            evidence the verdict rests on, drawn at the size they deserve. The
@@ -425,7 +435,7 @@
     </div>
   </dialog>
 
-  <footer class="foot">
+  <footer class="foot wrap">
     <p>
       <strong>Not medical advice.</strong> This summarizes published research
       and can be wrong. For your own health, talk to a clinician.

@@ -37,6 +37,7 @@ def t(label, cond, extra=""):
 
 
 FLIGHT = ROOT / "static" / "flight"
+FOOTAGE = ROOT / "static" / "footage"
 
 # ---- manifest.json ----------------------------------------------------------
 
@@ -315,137 +316,173 @@ if check_path.exists():
     t("a shared result link does not load the frame sequence",
       b'id="flight-canvas"' not in r.data)
     # A link opened cold is a page about one claim, not a film. It gets the
-    # closing still as a header image, roughly 14KB where the sequence is 23MB.
-    last_still = _app._FLIGHT_STILLS[-1]["file"]
-    t("a shared result link carries the closing still as a header image",
-      b'class="result-still"' in r.data and last_still.encode() in r.data,
-      last_still)
-    t("the header still is decorative, so a screen reader skips it",
-      b'alt=""' in r.data.split(b'class="result-still"')[1][:300])
-    t("the header still is small enough to be a header image",
-      (FLIGHT / last_still).stat().st_size < 60_000,
-      (FLIGHT / last_still).stat().st_size)
+    # verdict shot's own still at the head of the band, and no video at all.
+    t("a shared result link carries one still at the head of the band",
+      b'class="film-shot" data-shot="verdict"' in r.data
+      and b'footage/' + _app.BAND_STILL.encode() in r.data,
+      _app.BAND_STILL)
+    # ".webmanifest" is not a clip: match the extension at the end of a name.
+    t("a shared result link loads no video",
+      b".mp4" not in r.data and b".webm\"" not in r.data
+      and b".webm'" not in r.data)
+    t("the band is decorative, so a screen reader skips the whole of it",
+      b'class="film" id="film" aria-hidden="true"' in r.data
+      and b'alt=""' in r.data.split(b'class="film-shot"')[1][:300])
+    t("the band still is small enough to head a page that must stay fast",
+      (FOOTAGE / _app.BAND_STILL).stat().st_size <= 100_000,
+      (FOOTAGE / _app.BAND_STILL).stat().st_size)
+    t("the server names the screen on the html element, so a shared link "
+      "never paints the home layout first",
+      b'data-screen="result"' in r.data)
 else:
     print("SKIP check.json / /flight route checks: static/flight/check.json "
           "not exported yet (run scripts/export_flight_check.py)")
 
-# ---- the footage keeps running through checking and the result ---------------
-# Part 3: a check does not cut away to a paper screen. The clip stays on, the
-# live panel takes the replay panel's place, and the verdict lands on a solid
-# sheet over the last lit frame. These tests hold the rules that make that
-# honest (every label comes from a stream event) and legible (a solid panel,
-# no blur, no colour-coded verdict).
+# ---- the band and the sheet -------------------------------------------------
+# Part 3: checking, a verdict, an error and a check that found nothing are one
+# screen. A strip of footage across the top, and the report on a sheet below
+# it. These tests hold the rules that make that honest (every stage change
+# comes from a stream event) and legible (nothing readable on the picture, no
+# blur, no colour-coded verdict, no layout animated).
 
 import re  # noqa: E402
 
 app_js = (ROOT / "static" / "app.js").read_text()
 flight_css = (ROOT / "static" / "flight.css").read_text()
 style_css = (ROOT / "static" / "style.css").read_text()
+index_tpl = (ROOT / "templates" / "index.html").read_text()
 
-_m = re.search(r"var CINEMA_REST_SECOND = ([\d.]+);", flight_js)
-_rest_second = float(_m.group(1)) if _m else None
-beats_master_seconds = (
-    json.loads(beats_path.read_text())["masterSeconds"] if beats_path.exists() else 23.0)
-
-t("the live check has its own panel on the stage",
-  'id="cinema-chip"' in flight_tpl and 'id="cinema-claim"' in flight_tpl
-  and 'id="cinema-steps"' in flight_tpl)
+t("the band lives on the page itself, not on the fly-through, so a cold "
+  "shared link and /checks get it too",
+  'class="film" id="film"' in index_tpl and "film" not in flight_tpl)
+t("the band is decorative throughout",
+  'aria-hidden="true"' in index_tpl.split('class="film" id="film"')[1][:120])
+t("the fly-through no longer carries a checking panel of its own",
+  "cinema-chip" not in flight_tpl and "cinema-steps" not in flight_tpl
+  and "cinema" not in flight_css)
+t("the claim and the work print on the sheet, inside the report",
+  'id="claim-echo"' in index_tpl and 'id="reading"' in index_tpl)
 t("arriving steps are announced to a screen reader",
-  'id="cinema-steps"' in flight_tpl
-  and 'aria-live="polite"' in flight_tpl.split('id="cinema-steps"')[1][:120])
-t("the live panel carries 'Not medical advice', because the replay's own "
-  "note is faded out while a check runs",
-  "Not medical advice." in flight_tpl.split('class="cinema-note"')[1][:200])
-t("the live panel is shown by a data attribute, never by the hidden "
-  "attribute, so it cross-fades instead of popping",
-  'id="cinema-chip" data-on="0"' in flight_tpl
-  or 'data-on="0"' in flight_tpl.split('id="cinema-chip"')[1][:60])
+  'aria-live="polite"' in index_tpl.split('id="reading"')[1][:160]
+  or 'aria-live="polite"' in index_tpl.split('id="reading"')[0][-160:])
 
-t("the page can drive the footage without a scroll",
+# The fly-through is five screens of scroll belonging to a page the reader has
+# left. While a check owns the screen it stands down rather than decoding
+# frames for a canvas nobody can see.
+t("the fly-through exposes only stand down and stand up",
   "window.EvidentFlight" in flight_js
-  and all(k in flight_js.split("window.EvidentFlight")[1][:900]
-          for k in ("enter:", "stage:", "leave:")))
-t("the verdict rests on a frame the beats actually cover, not on the fade "
-  "to black at the end of the sequence",
-  "function cinemaRestPx(" in flight_js and "var CINEMA_REST_SECOND = " in flight_js
-  and _rest_second is not None and _rest_second < beats_master_seconds)
-t("the rest frame is the brightest still frame of the clip, measured",
-  _rest_second is not None and abs(_rest_second - 243 / 24) < 1 / 24)
-t("the verdict is a cut, so the footage never rewinds under it and a cached "
-  "verdict never swoops through work that never ran",
-  "cinema.pos = cinema.target;" in flight_js.split('name === "end"')[1][:900])
+  and set(re.findall(r"(\w+): function",
+                     flight_js.split("window.EvidentFlight")[1][:400]))
+  == {"park", "resume"})
+t("a parked fly-through decodes nothing",
+  "if (parked)" in flight_js.split("function tick(")[1][:400])
+t("a page that opens on a check never starts the fly-through at all",
+  "document.documentElement.dataset.screen" in flight_js)
+t("nothing cinema-shaped survives in the fly-through engine",
+  "CINEMA" not in flight_js and "cinemaRestPx" not in flight_js)
 
-# Every footage step is an event off the stream. A timer would be a progress
+# Every clip change is an event off the stream. A timer would be a progress
 # bar that lies: the one thing this screen must not be.
-stream_stages = {m for m in ("search", "query", "found", "weigh", "done")}
-_map = re.search(r"const CINEMA_STAGES = \{(.*?)\n\};", app_js, re.S)
-t("the footage-stage map exists", bool(_map))
+stream_stages = {"search", "query", "found", "weigh", "done"}
+_map = re.search(r"const FILM_STAGES = \{(.*?)\n\};", app_js, re.S)
+t("the stage-to-clip map exists", bool(_map))
 if _map:
     pairs = re.findall(r"(\w+):\s*\"(\w+)\"", _map.group(1))
     keys, vals = {k for k, _ in pairs}, {v for _, v in pairs}
-    t("every step the footage follows is a real stream stage, plus the "
+    t("every step the band follows is a real stream stage, plus the "
       "synthetic 'start' fired when the claim is submitted",
       keys <= stream_stages | {"start"}, keys - stream_stages - {"start"})
-    t("every stage the footage is sent to is a real beat, or the end",
-      vals <= {"claim", "transition", "archive", "weighing", "write",
-               "publish", "horizon", "end"}, vals)
-_cinema_obj = app_js.split("const cinema = {")[1].split("\n};")[0]
-t("nothing in the cinema controller runs on a timer",
-  "setTimeout" not in _cinema_obj and "setInterval" not in _cinema_obj)
-t("the live panel is revealed synchronously, so a fast check cannot leave "
-  "the checking panel sitting on top of the verdict",
-  "requestAnimationFrame" not in _cinema_obj)
+    t("every clip the band is sent to is one that was built",
+      vals <= {"searching", "weighing", "verdict"}, vals)
+    t("searching plays while the search is built and run, weighing once "
+      "studies have come back",
+      dict(pairs).get("start") == "searching"
+      and dict(pairs).get("query") == "searching"
+      and dict(pairs).get("found") == "weighing"
+      and dict(pairs).get("done") == "verdict", pairs)
+_film_obj = app_js.split("const film = {")[1].split("\n};")[0]
+t("nothing in the band controller runs on a timer",
+  "setTimeout" not in _film_obj and "setInterval" not in _film_obj)
+_screen_obj = app_js.split("const screenState = {")[1].split("\n};")[0]
+t("nothing in the screen controller runs on a timer",
+  "setTimeout" not in _screen_obj and "setInterval" not in _screen_obj)
 _stage_fn = app_js.split("function handleStage(")[1].split("\n}")[0]
-t("step labels are written from the stream event, never from a clock",
+t("step labels and clip changes are written from the stream event, never "
+  "from a clock",
   "setTimeout" not in _stage_fn and "setInterval" not in _stage_fn
-  and "cinema.at(ev.stage)" in _stage_fn)
-t("a long step holds or loops the clip rather than running past the work",
-  "CINEMA_LOOP_SECONDS" in flight_js and "Math.cos" in flight_js)
+  and "screenState.at(ev.stage)" in _stage_fn)
+t("the clips are only fetched once the reader has asked for a check, or "
+  "once the home page has gone quiet",
+  'el.preload = "none"' in _film_obj
+  and "requestIdleCallback" in app_js and 'film.warm("searching")' in app_js)
+t("reduced motion and Save-Data get a still instead of a clip",
+  "prefers-reduced-motion" in _film_obj and "saveData" in _film_obj)
 
-# Legibility. The panel is solid: footage stays at full brightness around it,
-# but nothing readable sits on moving pictures.
+# Every clip the map can ask for has actually been built, in both codecs,
+# with a still beside it.
+for _shot in ("searching", "weighing", "verdict"):
+    _files = [FOOTAGE / f"{_shot}.{ext}" for ext in ("mp4", "webm", "webp")]
+    t(f"the {_shot} clip ships as mp4, webm and a still",
+      all(f.exists() for f in _files),
+      [f.name for f in _files if not f.exists()])
+    if all(f.exists() for f in _files):
+        t(f"the {_shot} clip is under 3MB in both codecs",
+          all(f.stat().st_size < 3_000_000 for f in _files[:2]),
+          [f"{f.name} {f.stat().st_size // 1024}KB" for f in _files[:2]])
+
+# Legibility. Nothing readable sits on the footage, so no panel has to buy
+# its contrast back.
 t("no backdrop blur anywhere in the shipped stylesheets",
   "backdrop-filter:" not in flight_css and "backdrop-filter:" not in style_css)
-t("the verdict sheet is opaque paper, not a tint over the footage",
+t("the sheet is opaque paper over the foot of the band, not a tint on it",
   "background: var(--paper)" in
-  flight_css.split('[data-cinema="result"] #result,')[1][:600])
-t("the verdict is never colour-coded, in cinema as anywhere else",
-  "[data-verdict" not in flight_css)
+  style_css.split("[data-screen] main.wrap {")[1][:400])
+t("the sheet overlaps the band rather than butting against it",
+  "margin-top: -" in style_css.split("[data-screen] main.wrap {")[1][:400])
+t("the verdict is never colour-coded, on the band screens as anywhere else",
+  "[data-verdict" not in style_css and "[data-verdict" not in flight_css)
+t("the dark field and the panel under it are the same width, and so share "
+  "a left edge",
+  "margin: -14px calc(-1 * var(--gutter)) 0" in
+  style_css.split(".verdict-block {")[1][:200])
 
 # Motion. Only transform and opacity, so a transition cannot shift layout.
 _props = set()
-for decl in re.findall(r"transition:\s*([^;]+);", flight_css, re.S):
-    # cubic-bezier(.22,.61,.36,1) has commas of its own, and they are not
-    # property separators.
-    decl = re.sub(r"\([^)]*\)", "", decl)
-    for part in decl.split(","):
-        word = part.strip().split()[0] if part.strip() else ""
-        if word and not word[0].isdigit():
-            _props.add(word)
+for _css in (flight_css, style_css):
+    for decl in re.findall(r"transition:\s*([^;]+);", _css, re.S):
+        # cubic-bezier(.22,.61,.36,1) has commas of its own, and they are
+        # not property separators.
+        decl = re.sub(r"\([^)]*\)", "", decl)
+        for part in decl.split(","):
+            word = part.strip().split()[0] if part.strip() else ""
+            if word and not word[0].isdigit():
+                _props.add(word)
 t("transitions animate opacity and transform only",
-  _props <= {"opacity", "transform", "visibility", "none"}, sorted(_props))
-_sheet = re.search(r"@keyframes sheet-in \{(.*?)\n\}", flight_css, re.S)
-t("the sheet arrives on opacity and transform, with no layout property",
-  bool(_sheet) and set(re.findall(r"(\w[\w-]*):", _sheet.group(1)))
-  <= {"opacity", "transform"},
-  _sheet.group(1) if _sheet else "missing")
+  _props <= {"opacity", "transform", "visibility", "none", "overlay",
+             "display", "color", "background", "border-color"},
+  sorted(_props))
+for _name in ("band-in", "sheet-rise"):
+    _kf = re.search(r"@keyframes " + _name + r" \{(.*?)\}\s*\}", style_css, re.S)
+    t(f"the {_name} entrance moves opacity and transform, nothing that lays out",
+      bool(_kf) and set(re.findall(r"(\w[\w-]*):", _kf.group(1)))
+      <= {"opacity", "transform"},
+      _kf.group(1) if _kf else "missing")
+t("the entrance belongs to a live check, so a cold shared link does not "
+  "fade in a page the reader navigated to",
+  "body.live-check main.wrap" in style_css
+  and 'classList.add("live-check")' in app_js
+  and 'classList.remove("live-check")' in app_js)
 
-# Reduced motion: the same panel, the same copy, the same flow, nothing plays.
-_rm = flight_css.split("@media (prefers-reduced-motion: reduce)")[1]
-t("reduced motion stills the live panel and the replay overlay",
-  ".cinema-chip" in _rm and ".flight-overlay" in _rm)
-t("reduced motion lands the verdict sheet without an entrance",
-  'animation: none' in _rm and '[data-cinema="result"]' in _rm)
-t("reduced motion keeps a picture behind the panel rather than a blank "
-  "stage: the stage still paints its poster",
-  "--poster" in flight_css.split("[data-cinema] .flight-stage")[1][:400])
-
-t("the skip link stays through checking and steps aside for the verdict, "
-  "which carries its own way out",
-  '[data-cinema="result"] .skip-checker' in flight_css
-  and '[data-cinema="error"] .skip-checker' in flight_css)
-t("an error lands on the same sheet as a verdict, with the same way out",
-  '[data-cinema="error"] #error' in flight_css)
+# Reduced motion: the same band, the same sheet, the same copy, nothing plays.
+_rm = style_css.split("@media (prefers-reduced-motion: reduce)")[1]
+t("reduced motion cuts between clips rather than cross-fading",
+  ".film-shot { transition: none; }" in _rm)
+t("reduced motion lands the band and the sheet without an entrance",
+  "body.live-check .film, body.live-check main.wrap { animation: none; }" in _rm)
+t("the fly-through's own reduced-motion rules survived the trim",
+  "@media (prefers-reduced-motion: reduce)" in flight_css
+  and ".flight-overlay" in
+  flight_css.split("@media (prefers-reduced-motion: reduce)")[1][:400])
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

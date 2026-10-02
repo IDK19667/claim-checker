@@ -239,19 +239,19 @@ def _render_home(with_flight: bool):
     # page: a shared link loaded cold gets a still header rather than a 23MB
     # frame sequence it did not ask for.
     flight = _flight_context() if (with_flight and not cached) else None
-    # The still that stands in for the footage on a result page: the last
-    # stage of the fly-through, 14KB, instead of the sequence. Only if it has
-    # actually been built, so a fresh checkout renders a result page with no
-    # header image rather than a broken one.
-    header_still = None
-    if cached:
-        last = _FLIGHT_STILLS[-1]["file"]
-        if os.path.exists(os.path.join(app.static_folder, "flight", last)):
-            header_still = last
+    # The band's picture on a result page: one still of the verdict shot,
+    # 28KB, where a live check plays the clip itself. A cold link gets the
+    # same layout and none of the video. Only if it has actually been built,
+    # so a fresh checkout renders a result page with no band rather than a
+    # broken one.
+    band_still = None
+    if cached and os.path.exists(
+            os.path.join(app.static_folder, "footage", BAND_STILL)):
+        band_still = BAND_STILL
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
                            ledger=ledger, latest=latest, flight=flight,
-                           header_still=header_still,
+                           band_still=band_still,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 
@@ -437,6 +437,11 @@ _FLIGHT_STILLS = [
 # this is empty in practice, but flight.html still renders it when present
 # rather than assuming it will always stay empty.
 _FLIGHT_CREDITS = []
+
+# The band's still on a result page. It is the first frame of the same loop
+# a live check ends on (scripts/build_footage.py), so a shared link and a
+# check that just finished show the same picture.
+BAND_STILL = "verdict.webp"
 
 
 # ---------------------------------------------------------------------

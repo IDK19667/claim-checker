@@ -5,7 +5,7 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v45";
+const CACHE = "evident-v46";
 const SHELL = [
   "/",
   "/checks",
@@ -18,6 +18,9 @@ const SHELL = [
      underneath working as it always has. */
   "/static/flight.css",
   "/static/flight.js",
+  /* The one frame a shared link needs before any script runs: the still that
+     heads the result. 28KB. The looping clips are not shell (see below). */
+  "/static/footage/verdict.webp",
   "/privacy",
   "/manifest.webmanifest",
   "/static/fonts/woff2/librefranklin-normal-400-900.woff2",
@@ -75,6 +78,10 @@ self.addEventListener("fetch", (event) => {
   // would spend a reader's storage quota on footage rather than on the shell
   // that has to work offline. Left to the network.
   if (url.pathname.startsWith("/static/flight/")) return;
+  // The band's clips are streamed, so the browser asks for ranges and the
+  // reply is a 206, which a Cache cannot hold. They are not shell either: a
+  // check needs a connection anyway, and the stills already cover offline.
+  if (/\.(mp4|webm)$/.test(url.pathname)) return;
   // Fonts are immutable files: serve from cache once seen.
   if (url.pathname.startsWith("/static/fonts/")) {
     event.respondWith(cacheFirst(req));

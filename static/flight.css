@@ -494,203 +494,15 @@
   margin-top: 12px;
 }
 
-/* ---- cinema: the check and its result, still inside the footage ----------
-   One continuous shot. Submitting a claim does not leave the fly-through for
-   a paper page: the stage lifts off the scroll and becomes fixed over the
-   viewport, the replay's own overlay fades out, the live check's panel fades
-   in over the same footage, and the verdict arrives on a solid sheet in the
-   middle of it.
+/* ---- while a check is running ------------------------------------------- */
+/* A check takes the reader off this page. `[data-screen]` on <html> is the
+   band over the sheet (static/style.css), and this section, five screens of
+   scroll belonging to a page nobody is on, is not part of it. flight.js is
+   parked at the same moment, so nothing is being decoded behind this either. */
 
-   Three rules hold throughout. The footage is never dimmed, filtered or
-   blurred: there is no backdrop-filter anywhere here, and every panel earns
-   its contrast by being solid paper on ink, the pair the rest of the site is
-   built from, which passes AA against whatever frame happens to be behind
-   it. Every transition is opacity and transform only. And no verdict is
-   tinted, here least of all. */
+[data-screen] .flight { display: none; }
 
-[data-cinema] .flight { height: 0; }
-
-[data-cinema] .flight-stage {
-  position: fixed;
-  inset: 0;
-  height: 100%;
-  overflow: hidden;
-  /* Under reduced motion, Save-Data, or a sequence that never loaded there is
-     no canvas drawing into this: the poster is the still frame the panel sits
-     on. Same content, same flow, nothing playing. */
-  background-image: var(--poster, none);
-}
-
-[data-cinema] .band,
-[data-cinema] .stills,
-[data-cinema] .flight-progress { display: none; }
-
-/* The replay's three panels belong to the replay. While a real check runs they
-   cross-fade out as one, and the live panel takes the same corner. */
-.flight-overlay { transition: opacity 320ms linear; }
-[data-cinema] .flight-overlay {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-/* Once there is a verdict on screen, the panel's own "Check another claim" is
-   the way out and this would float on top of it. It is on the fly-through and
-   on every frame of the checking shot, which is where it means something. */
-[data-cinema="result"] .skip-checker,
-[data-cinema="error"] .skip-checker { display: none; }
-
-/* ---- the checking panel ------------------------------------------------- */
-
-.cinema-chip {
-  left: 16px;
-  bottom: 16px;
-  width: min(420px, calc(100% - 32px));
-  max-height: calc(100% - 140px);
-  overflow-y: auto;
-  z-index: 4;
-  display: grid;
-  gap: 12px;
-  align-content: start;
-  padding: 18px;
-  /* Off, this is invisible rather than absent: its field cannot be tabbed into
-     and a screen reader does not read it, and it costs no reflow either way.
-     The visibility flip waits for the fade so the panel does not vanish
-     mid-cross-fade. */
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(10px);
-  transition: opacity 320ms linear,
-              transform 400ms cubic-bezier(.22,.61,.36,1),
-              visibility 0s linear 320ms;
-}
-
-.cinema-chip[data-on="1"] {
-  opacity: 1;
-  transform: none;
-  visibility: visible;
-  transition-delay: 0s;
-}
-
-.cinema-claim {
-  margin: 0;
-  border-top: 2px solid var(--ink);
-  padding-top: 12px;
-  font-size: clamp(19px, 3.2vw, 26px);
-  line-height: 1.18;
-  letter-spacing: -0.02em;
-  font-weight: 900;
-}
-
-/* Every line here arrives on an event off the stream, so the list cannot know
-   its length in advance. It holds the height of the longest run from the
-   start, the way the study stack holds all eight of its rows: a step landing
-   then moves nothing that is already on screen. */
-.cinema-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  min-height: 150px;
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  font-size: 14px;
-  line-height: 1.35;
-  color: var(--ink-2);
-}
-
-.cinema-steps li { display: flex; gap: 9px; align-items: baseline; }
-
-.cinema-steps li::before {
-  content: "";
-  flex: none;
-  width: 9px;
-  height: 2px;
-  margin-top: 9px;
-  background: var(--rule-2);
-}
-
-.cinema-steps li.live { color: var(--ink); font-weight: 700; }
-.cinema-steps li.live::before { background: var(--ink); }
-.cinema-steps .cancel-row { margin-top: 2px; }
-.cinema-steps .cancel-row::before { display: none; }
-
-.cinema-note {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--ink-3);
-}
-
-/* ---- the verdict, and anything that went wrong -------------------------- */
-
-/* Two chips, not one sheet: the report and the standing line each carry their
-   own border, with footage between them, which is the shape every other panel
-   on the footage already uses. */
-[data-cinema="result"],
-[data-cinema="error"] { --sheet: 640px; }
-
-/* The column stops being the sheet and the panel inside it becomes one, so the
-   reveal animation belongs to the thing that is actually revealed: it runs when
-   the panel stops being display:none, which is the moment it appears. */
-[data-cinema="result"] main.wrap,
-[data-cinema="error"] main.wrap {
-  width: auto;
-  max-width: none;
-  padding-inline: 0;
-}
-
-[data-cinema="result"] #result,
-[data-cinema="error"] #error,
-[data-cinema="result"] .foot,
-[data-cinema="error"] .foot {
-  position: relative;
-  z-index: 1;
-  width: calc(100% - 24px);
-  max-width: var(--sheet);
-  margin-inline: auto;
-  background: var(--paper);
-  color: var(--ink);
-  border: 1px solid var(--rule-2);
-  box-shadow: 0 2px 24px rgba(11, 18, 38, 0.3);
-  animation: sheet-in 420ms cubic-bezier(.22, .61, .36, 1) both;
-}
-
-[data-cinema="result"] #result,
-[data-cinema="error"] #error {
-  margin-top: 40px;
-  padding: 2px var(--gutter) 24px;
-}
-
-[data-cinema="result"] .foot,
-[data-cinema="error"] .foot {
-  margin: 14px auto 40px;
-  padding: 16px var(--gutter) 20px;
-  animation-delay: 70ms;
-}
-
-/* While the check is running the footage is the whole screen: the standing
-   line rides the checking panel instead, so "not medical advice" is on screen
-   there too without a second chip competing with it. */
-[data-cinema="checking"] .foot { display: none; }
-
-/* On a phone this is a full-width bar pinned over the footage, and the same
-   two controls are already in the panel a thumb is holding. With it gone, the
-   room the page reserves for it is footage instead of blank space. */
-[data-cinema] .bar-sticky { display: none; }
-[data-cinema] body.has-bar { padding-bottom: 0; }
-
-@keyframes sheet-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: none; }
-}
-
-/* The report goes two columns at this width (style.css), so the sheet follows
-   the same width the result page uses when it is not over footage. */
-@media (min-width: 1024px) {
-  [data-cinema="result"],
-  [data-cinema="error"] { --sheet: 960px; }
-}
+/* ---- reduced motion, on this page --------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
   .chapter,
@@ -699,18 +511,10 @@
   .evidence-bar,
   .work-layer,
   .still-open,
-  .cinema-chip,
-  .flight-overlay,
-  .hdr { transition: none; }
-  [data-cinema="result"] #result,
-  [data-cinema="error"] #error,
-  [data-cinema="result"] .foot,
-  [data-cinema="error"] .foot { animation: none; }
+  .flight-overlay { transition: none; }
 }
 
 @media (max-width: 640px) {
-  .hdr { top: 10px; left: 12px; right: 12px; }
-  .hdr a { padding: 7px 11px; }
   .chapter-zone { top: 64px; left: 12px; min-height: 48px; width: calc(100% - 24px); }
   .chapter p { font-size: 17px; }             /* entry-claim, DESIGN.md */
   /* Keep the footage visible on phones: the deck starts at the halfway mark,
@@ -730,23 +534,4 @@
   .flight-note { padding-right: 156px; }
   .skip-checker { right: 12px; bottom: 12px; font-size: 12px; padding: 10px 12px; }
   .flight-progress { top: 64px; font-size: 10px; padding: 5px 10px; }
-
-  /* Clear of the skip button in the same corner: it sits at bottom 12 and is
-     44 tall, so the panel stops above it rather than under it. */
-  .cinema-chip {
-    left: 12px;
-    right: 12px;
-    width: auto;
-    bottom: 68px;
-    max-height: calc(100% - 160px);
-    gap: 10px;
-    padding: 12px;
-  }
-  .cinema-claim { padding-top: 10px; }
-  .cinema-steps { font-size: 13px; min-height: 132px; }
-
-  [data-cinema="result"] #result,
-  [data-cinema="error"] #error { margin-top: 22px; }
-  [data-cinema="result"] .foot,
-  [data-cinema="error"] .foot { margin-bottom: 22px; }
 }

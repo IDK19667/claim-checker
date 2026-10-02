@@ -4,7 +4,63 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-01 (latest): The footage keeps running through checking and the verdict
+## 2026-10-01 (latest): A band of footage on top, the report on a sheet below
+
+The previous entry kept the fly-through running underneath the check. It
+read well on the first screen and badly everywhere after it. The report
+sits in a 640px column on a 1440px page, so the clip behind it was visible
+only as two narrow strips at the edges: half a window on one side, half a
+bookshelf and a parked car on the other. It looked like an uncropped photo
+that had been dropped behind the page by mistake, which in effect it had.
+
+**The footage moved to a band.** Checking, a verdict, an error and a check
+that found nothing now share one layout: a full-bleed strip of footage
+across the top, 42vh on a desktop and 30vh on a phone, and under it a
+sheet, the same centred column as the rest of the paper, lifted 48px into
+the foot of the band with the page ground showing on both sides. No
+footage beside the sheet, no text on the footage, and the same screen on
+`/`, on `/checks` and on a cold shared link.
+
+**The fly-through stands down while a check runs.** It is five screens of
+scroll belonging to a page the reader has left. `window.EvidentFlight` is
+now two methods, `park` and `resume`, and a parked fly-through decodes
+nothing. A page that opens straight onto a result never starts it at all.
+
+**The checking panel is gone, and the report is the checking screen.** The
+fly-through used to carry its own panel with its own copy of the claim and
+its own step list, which meant two writers for one set of lines and
+nothing at all on the routes where the fly-through is not included. The
+report's own dark field does the job: the claim where the claim already
+goes, the step lines under it, and the verdict replacing them in place.
+One screen, one writer, every route.
+
+**New footage, because the old footage was about a building.** Three
+clips, one per stage of the work: hands turning the pages of a book while
+the search runs, a hand drawing a highlighter across a printed page once
+studies have come back, and a microscope and a rack of tubes for the
+verdict to rest on. All Pexels License, graded near monochrome because the
+site has no accent colour and two of the three arrived with one.
+`media/PRODUCTION.md` round 10 has the crops, the grade, the loops and the
+defocus the highlighter clip needs to stop its page being readable.
+
+**The entrance belongs to a live check only.** The band and the sheet rise
+once, on `transform` and `opacity`, when the reader presses Check. A
+shared link gets the same layout with no entrance: nothing moved, the
+reader navigated there, and a page that fades itself in reads as a page
+that has not finished loading.
+
+**Two alignment bugs went with it.** The panel under the dark field was
+inside the gutters while the field bled past them, so the two were 16px
+apart on each side and their left edges missed each other. Both bleed now,
+and on a wide screen both give the bleed up together. The footer rule ran
+the full width of the viewport while everything above it respected the
+column; the footer is now in the column.
+
+## 2026-10-01: The footage keeps running through checking and the verdict
+
+**Superseded the same day by the entry above.** The band replaced the clip
+behind the checking panel; what survives from this entry is the rule that
+every stage change is a stream event and never a timer.
 
 The fly-through used to end where the product began. Submitting a claim
 tore the film down and dropped the reader onto the plain paper checking

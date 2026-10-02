@@ -95,84 +95,205 @@ function setTitle(result) {
     : DEFAULT_TITLE;
 }
 const flightSection = $("flight");
+const root = document.documentElement;
 
-/* ---- cinema: the footage runs through the check and under the verdict ------
- * On the home page a check does not leave the fly-through for a paper page.
- * The stage lifts off the scroll and is fixed over the viewport, the live
- * check's panel takes the corner the replay's panels had, and the verdict
- * arrives on a sheet over the final frame. flight.css does the staging off
- * `data-cinema` on <html>; flight.js moves the footage.
+/* ---- the band: three looping shots, moved only by the stream ---------------
+ * Checking, the verdict and an error are one layout: a strip of footage across
+ * the top and the report on a sheet below it. The strip is this. Three clips,
+ * about half a megabyte each, cross-faded by opacity: the pages being gone
+ * through while the search runs, the marker on the page once studies have come
+ * back, the microscope under the verdict.
  *
- * Every move of the footage is a step of the real check. `STAGES` maps the
- * stages the stream already emits onto the stages of the footage, and each one
- * is set when its event lands, never on a timer: if a step takes a long time,
- * flight.js holds its clip and breathes inside it rather than running on into
- * footage of work that has not happened.
+ * Nothing here is on a clock. `FILM_STAGES` maps the stages the stream already
+ * emits onto the three shots, and a shot changes when its event lands. A step
+ * that takes twenty seconds simply loops its own clip: a strip that moved on
+ * by itself would be a progress bar that lies, which is the one thing this
+ * screen must not be.
  *
- * `/checks` carries no footage, so `phase` stays null there and the paper flow
- * underneath is exactly what it has always been. So is a shared result link,
- * which opens cold with a still header instead of a sequence.
+ * Nothing loads until it is wanted either. The home page's first screen is a
+ * claim field and the fly-through's own poster; these clips are fetched when
+ * the page has been idle after becoming interactive, or when Check is pressed,
+ * whichever comes first.
  */
-const cinemaChip = $("cinema-chip");
-const CINEMA_STAGES = {
-  start: "claim",     // the claim is in, the search is being built
-  query: "archive",   // searching PubMed
-  found: "weighing",  // reading what came back
-  weigh: "write",     // weighing it
-  done: "end",        // the verdict: the last frame, and it stays there
+const filmBand = $("film");
+const FILM_SHOTS = ["searching", "weighing", "verdict"];
+const FILM_STAGES = {
+  start: "searching",   // the claim is in, the search is being built
+  query: "searching",   // searching PubMed
+  found: "weighing",    // studies came back, and are being read
+  weigh: "weighing",    // weighing them
+  done: "verdict",      // the verdict: the shot it rests on
 };
-const cinema = {
-  phase: null,                       // null | "checking" | "result" | "error"
-  can() { return !!(flightSection && cinemaChip); },
-  rig() { return window.EvidentFlight || null; },
-  // A stage the map does not know is ignored rather than guessed at: guessing
-  // would mean rewinding the footage on a stream event added later.
-  at(step) {
-    const name = CINEMA_STAGES[step];
-    const f = name && this.phase ? this.rig() : null;
-    if (f) f.stage(name);
+
+const film = {
+  shot: null,
+  built: false,
+  // No video for a reader who asked for no motion, or who is paying for
+  // bytes: the same three pictures arrive as stills, in the same band, under
+  // the same sheet. Nothing else about the screen changes.
+  still: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    || !!(navigator.connection || {}).saveData,
+
+  src(name, ext) { return `${filmBand.dataset.footage}/${name}.${ext}`; },
+
+  layer(name) {
+    return filmBand.querySelector(`.film-shot[data-shot="${name}"]`);
   },
-  enter(claim) {
-    if (!this.can()) return false;
-    const f = this.rig();
-    // No rig means reduced motion, Save-Data or a sequence that never loaded.
-    // Cinema still runs: the stage holds its poster, and the panel, the copy
-    // and the flow are identical. Nothing plays.
-    if (f) f.enter();
+
+  // Built once, on the first call that needs a picture. The server may have
+  // put the verdict shot here already (a shared link opens on it), and that
+  // still is kept rather than replaced: it is the same frame.
+  build() {
+    if (this.built || !filmBand) return;
+    this.built = true;
+    for (const name of FILM_SHOTS) {
+      if (this.layer(name)) continue;
+      let el;
+      if (this.still) {
+        el = document.createElement("img");
+        el.src = this.src(name, "webp");
+        el.alt = "";
+        el.decoding = "async";
+      } else {
+        el = document.createElement("video");
+        el.muted = true;
+        el.loop = true;
+        el.playsInline = true;
+        el.setAttribute("playsinline", "");
+        el.preload = "none";
+        el.poster = this.src(name, "webp");
+        for (const [ext, type] of [["webm", "video/webm"], ["mp4", "video/mp4"]]) {
+          const s = document.createElement("source");
+          s.src = this.src(name, ext);
+          s.type = type;
+          el.appendChild(s);
+        }
+        // The clip that just faded out stops when the fade is over, not when
+        // the stage changed: pausing it at the change would freeze it halfway
+        // through its own cross-fade, in full view.
+        el.addEventListener("transitionend", () => {
+          if (el.dataset.on === "0") el.pause();
+        });
+      }
+      el.className = "film-shot";
+      el.dataset.shot = name;
+      el.dataset.on = "0";
+      filmBand.appendChild(el);
+    }
+  },
+
+  // A page that opened on a shared result has the verdict shot as a still,
+  // which is all a cold link should ever load. Once a live check starts, the
+  // reader is going to watch the band for the length of a check, so the still
+  // gives way to the clip it is the first frame of.
+  upgrade() {
+    if (this.still) return;
+    const el = this.layer("verdict");
+    if (!el || el.tagName !== "IMG") return;
+    el.remove();
+    this.built = false;
+    this.build();
+  },
+
+  // Fetch a clip before it is needed. Idle time on the home page takes the
+  // searching shot, which is the one every check opens on; the rest are asked
+  // for as the check reaches them.
+  warm(name) {
+    this.build();
+    const el = this.layer(name);
+    if (!el || el.tagName !== "VIDEO" || el.preload === "auto") return;
+    el.preload = "auto";
+    el.load();
+  },
+
+  show(name) {
+    if (!filmBand) return;
+    this.build();
+    if (this.shot === name) return;
+    this.shot = name;
+    filmBand.hidden = false;
+    for (const el of filmBand.querySelectorAll(".film-shot")) {
+      const on = el.dataset.shot === name;
+      el.dataset.on = on ? "1" : "0";
+      if (el.tagName !== "VIDEO") continue;
+      if (on) {
+        el.preload = "auto";
+        // Autoplay can be refused (a data saver, a locked-down profile). The
+        // poster is the clip's own first frame, so a refusal is a still band,
+        // not an empty one.
+        const p = el.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+    }
+    // The next shot is usually the one after this: ask for it now so the
+    // cross-fade has something to fade to.
+    const next = FILM_SHOTS[FILM_SHOTS.indexOf(name) + 1];
+    if (next) this.warm(next);
+  },
+
+  stop() {
+    if (!filmBand) return;
+    this.shot = null;
+    filmBand.hidden = true;
+    for (const el of filmBand.querySelectorAll(".film-shot")) {
+      el.dataset.on = "0";
+      if (el.tagName === "VIDEO") el.pause();
+    }
+  },
+};
+
+/* The screen the reader is on. `null` is the home page: the fly-through, or
+ * the checker on its own at /checks. Everything else is the band over the
+ * sheet, and the attribute on <html> is what styles it. */
+const screenState = {
+  phase: $("server-result") ? "result" : null,
+  at(step) {
+    const shot = FILM_STAGES[step];
+    // A stage the map does not know is ignored rather than guessed at.
+    if (shot && this.phase) film.show(shot);
+  },
+  enter() {
     this.phase = "checking";
-    document.documentElement.dataset.cinema = "checking";
-    $("cinema-claim").textContent = claim;
-    $("cinema-steps").innerHTML = "";
+    root.dataset.screen = "checking";
+    // The band and the sheet arrive once, here. A shared link opens on the
+    // same layout but must not animate into it: nothing moved, the reader
+    // navigated there, and a fade-in would read as something still loading.
+    document.body.classList.add("live-check");
+    parkFlight();
+    film.upgrade();
+    film.show("searching");
     window.scrollTo(0, 0);
-    // Straight away, not on the next animation frame. The panel is never
-    // display:none, so its faded-out state is already the computed one and the
-    // transition has two ends to run between. A frame's wait also loses the
-    // race against a check that finishes first: a backgrounded tab does not
-    // run animation frames, so the callback would land after the verdict and
-    // bring the checking panel back on top of it.
-    cinemaChip.setAttribute("data-on", "1");
-    return true;
   },
   settle(phase) {
-    if (!this.phase) return;
     this.phase = phase;
-    cinemaChip.setAttribute("data-on", "0");
-    // Set before the panel is revealed: the panel's own reveal animation is
-    // what plays when it stops being display:none, so the styling has to be
-    // in place first or the sheet appears bare for a frame.
-    document.documentElement.dataset.cinema = phase;
+    root.dataset.screen = phase;
+    parkFlight();
+    film.show("verdict");
   },
   leave() {
     if (!this.phase) return;
     this.phase = null;
-    cinemaChip.setAttribute("data-on", "0");
-    delete document.documentElement.dataset.cinema;
-    const f = this.rig();
-    if (f) f.leave();
+    delete root.dataset.screen;
+    document.body.classList.remove("live-check");
+    film.stop();
+    resumeFlight();
     window.scrollTo(0, 0);
-    window.dispatchEvent(new Event("resize"));
   },
 };
+
+// While the band is on screen the fly-through is not: it is five screens of
+// scroll belonging to a page the reader has left. Standing it down stops it
+// decoding frames for a canvas nobody can see, and the resize is what makes it
+// remeasure the page it comes back to.
+function parkFlight() {
+  const f = window.EvidentFlight;
+  if (f) f.park();
+}
+function resumeFlight() {
+  const f = window.EvidentFlight;
+  if (f) f.resume();
+  window.dispatchEvent(new Event("resize"));
+}
 
 // The claim field the reader can actually see: the fly-through's own, when the
 // footage is on screen, and the checker's textarea otherwise.
@@ -185,12 +306,10 @@ function focusClaim() {
 function show(section) {
   for (const s of [askSection, resultSection, errorSection]) s.hidden = s !== section;
   askMore.hidden = section !== askSection;
-  // The fly-through belongs to the home page's resting state, and to cinema:
-  // through checking and the result it is the thing behind the panel. Outside
-  // cinema a result replaces it rather than sitting five screens below it, and
-  // the resize tells flight.js to recompute its scroll map for the page's new
+  // The fly-through belongs to the home page's resting state and nowhere else.
+  // The resize tells flight.js to recompute its scroll map for the page's new
   // height rather than keeping offsets from a layout that no longer exists.
-  const keepFlight = section === askSection || cinema.phase !== null;
+  const keepFlight = section === askSection;
   if (flightSection && flightSection.hidden === keepFlight) {
     flightSection.hidden = !keepFlight;
     window.dispatchEvent(new Event("resize"));
@@ -199,7 +318,7 @@ function show(section) {
   if (section !== resultSection) { $("bar-sticky").hidden = true; document.body.classList.remove("has-bar"); }
   window.scrollTo(0, 0);
 }
-if (!document.getElementById("server-result")) document.body.classList.add("view-ask");
+if (!$("server-result")) document.body.classList.add("view-ask");
 
 function setStatus(text, working) {
   statusEl.textContent = text || "";
@@ -415,9 +534,10 @@ function renderResult(data) {
   $("bar-sticky").hidden = false;
   document.body.classList.add("has-bar");
   setTitle(data);
-  // The verdict lands on a sheet over the last frame of the footage, with the
-  // footage at full brightness around it. Set before the reveal: see settle().
-  cinema.settle("result");
+  // The band goes to the verdict shot and the report lands on the sheet under
+  // it. Set before the reveal, so the sheet is never painted as a bare column
+  // for a frame on its way to being a sheet.
+  screenState.settle("result");
   show(resultSection);
 }
 
@@ -443,27 +563,19 @@ function renderPending(claim) {
   $("bar-sticky").hidden = true; document.body.classList.remove("has-bar");
   for (const sec of [askSection, errorSection]) sec.hidden = true;
   askMore.hidden = true;
-  // With footage, the work happens on the footage: the report stays out of the
-  // way until there is a verdict to put on it. Without footage the report is
-  // the checking screen, as it has always been.
-  if (!cinema.enter(claim)) {
-    resultSection.hidden = false;
-    document.body.classList.remove("view-ask");
-    window.scrollTo(0, 0);
-  }
+  // Checking is the same screen as the verdict, minus the verdict: the band
+  // on top, the claim and the work printing on the sheet below it. The
+  // report is shown here rather than through show(), which would scroll and
+  // re-lay-out the page a second time on the way to the same place.
+  screenState.enter();
+  resultSection.hidden = false;
+  document.body.classList.remove("view-ask");
   logLine("Building the search", true);
-  cinema.at("start");
-}
-
-// The step list the reader is looking at: the cinema panel's while the footage
-// is carrying the check, the report's own otherwise. One writer either way, so
-// the lines, the live marker and the cancel row cannot drift apart.
-function activeLog() {
-  return cinema.phase === "checking" ? $("cinema-steps") : $("reading");
+  screenState.at("start");
 }
 
 function logLine(text, live) {
-  const log = activeLog();
+  const log = $("reading");
   log.querySelector(".cancel-row")?.remove();
   log.querySelectorAll("li.live").forEach((li) => li.classList.remove("live"));
   const li = document.createElement("li");
@@ -487,9 +599,9 @@ function endPending() {
 
 let countdownTimer = null;
 function renderError(message, retryAfter) {
-  // Nothing found, rate limited, provider down: same world, same way out. The
-  // footage holds wherever the check stopped and the panel says what happened.
-  cinema.settle("error");
+  // Nothing found, rate limited, provider down: same band, same sheet, same
+  // way out. Only what the sheet says changes.
+  screenState.settle("error");
   $("error-msg").textContent = message;
   const cd = $("countdown");
   const back = $("error-back");
@@ -525,7 +637,7 @@ function handleStage(ev) {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
     else { logLine(`Found ${ev.count} ${ev.count === 1 ? "study" : "studies"}${ev.broadened ? " after widening the search" : ""}`); logLine("Reading the studies", true); }
   } else if (ev.stage === "weigh") logLine("Weighing the evidence", true);
-  cinema.at(ev.stage);
+  screenState.at(ev.stage);
 }
 
 async function checkStreamed(claim) {
@@ -599,7 +711,7 @@ async function check(claim) {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays
       // there, which is the frame the panel is about to appear over.
-      cinema.at("done");
+      screenState.at("done");
       // The verdict arrived. A fault from here on is ours, not the
       // network's, and must not be reported as "couldn't reach the
       // server": that sends the reader to check their wifi over our bug.
@@ -616,7 +728,7 @@ async function check(claim) {
     }
   } catch (err) {
     endPending();
-    if (err && err.name === "AbortError") { cinema.leave(); show(askSection); focusClaim(); }
+    if (err && err.name === "AbortError") { screenState.leave(); show(askSection); focusClaim(); }
     else renderError("Couldn't reach the server. Check your connection and try again.");
   } finally {
     inFlight = false;
@@ -752,13 +864,17 @@ input.addEventListener("keydown", (e) => {
 
 function goHome() {
   setTitle(null);
-  // Out of cinema first, so the footage goes back to being scrolled and the
-  // page goes back to being a page before anything is shown.
-  cinema.leave();
+  // Out of the band screen first, so the fly-through goes back to being
+  // scrolled and the page goes back to being a page before anything is shown.
+  screenState.leave();
   show(askSection); maybeNudge();
   input.focus({ preventScroll: true }); input.select();
 }
+// The same control sits above the claim while a check is running, where it is
+// the way out of one. It cancels the check it is interrupting rather than
+// leaving it running unseen.
 $("back-btn").addEventListener("click", () => {
+  if (controller) { controller.abort(); return; }
   if (history.state && history.state.view === "result") history.back(); else { history.replaceState({ view: "ask" }, "", "/"); goHome(); }
 });
 window.addEventListener("popstate", () => {
@@ -766,20 +882,8 @@ window.addEventListener("popstate", () => {
   goHome();
 });
 $("error-back").addEventListener("click", () => {
-  setTitle(null); cinema.leave(); show(askSection); focusClaim();
+  setTitle(null); screenState.leave(); show(askSection); focusClaim();
 });
-
-// On the fly-through this is an ordinary anchor to the checker below. Inside
-// cinema there is nothing below: it is the way back out, and it cancels the
-// check it is interrupting rather than leaving it running unseen.
-for (const a of document.querySelectorAll(".skip-checker")) {
-  a.addEventListener("click", (e) => {
-    if (!cinema.phase) return;
-    e.preventDefault();
-    if (controller) { controller.abort(); return; }
-    cinema.leave(); show(askSection); focusClaim();
-  });
-}
 
 // ---- Examples & trending --------------------------------------------------
 
@@ -1342,6 +1446,16 @@ else if (params.get("focus")) input.focus();
 renderRecent();
 loadTrending();
 maybeNudge();
+
+// The band's first clip, fetched once the page has gone quiet. Never ahead of
+// the first screen, which is a claim field and one poster, and never on a
+// result page, where the reader came to read rather than to check.
+if (!screenState.phase && filmBand) {
+  const idle = window.requestIdleCallback
+    ? window.requestIdleCallback.bind(window)
+    : (cb) => setTimeout(cb, 1500);
+  window.addEventListener("load", () => idle(() => film.warm("searching")), { once: true });
+}
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
