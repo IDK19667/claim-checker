@@ -436,6 +436,7 @@ body.view-ask #ask .primary {
    the claim and the printing wire are the whole screen. */
 #result.checking .verdict-block,
 #result.checking .explanation,
+#result.checking .deeper,
 #result.checking .record,
 #result.checking .actions,
 #result.checking .toast,
@@ -455,6 +456,53 @@ body.view-ask #ask .primary {
    marked word is marked by weight instead. */
 mark, .key-mark { background: none; color: var(--ink); font-weight: 900; }
 .perf { display: none; }
+
+/* ---- The deeper layer ---------------------------------------------------- *
+   Closed, under the answer. The three lines above it (verdict, takeaway, what
+   is still open) are the result; this is the reading behind them, and it opens
+   in place rather than on a page of its own. It borrows the source column's
+   fold, chevron and rule weights, because a reader has already learned them
+   twenty rows further down. Its own rules are one step quieter so the fold
+   reads as part of the report, not as a second report. */
+
+.deeper { margin: 22px 0 0; border-top: 4px solid var(--ink); }
+.deeper-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 0; cursor: pointer; list-style: none;
+  font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.01em;
+}
+.deeper-head::-webkit-details-marker { display: none; }
+.deeper[open] .deeper-head { border-bottom: 1px solid var(--rule); }
+.deeper[open] .group-name::before { transform: rotate(45deg); margin-top: -6px; }
+.deeper-body { padding-top: 4px; }
+.deeper-sec { padding: 14px 0 0; }
+.deeper-sec + .deeper-sec { margin-top: 14px; border-top: 1px solid var(--rule); }
+.deeper-sec .label-2 { margin-top: 16px; }
+.deeper-p { margin: 8px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+.deeper-p .ref { color: var(--ink); }
+
+/* Each part of the claim is quoted, then answered. The quote carries the
+   weight because it is the reader's own sentence; the answer sits under it in
+   the body ink, the way a marked-up printout reads. */
+.parts { list-style: none; margin: 10px 0 0; padding: 0; }
+.part { padding: 11px 0; border-bottom: 1px solid var(--rule); }
+.part:last-child { border-bottom: 0; }
+.part-claim {
+  margin: 0; font-size: 14.5px; line-height: 1.35; font-weight: 900;
+  letter-spacing: -0.015em;
+}
+.part-claim::before { content: "“"; }
+.part-claim::after { content: "”"; }
+.part-take { margin: 5px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
+.part-take .ref { color: var(--ink); }
+
+/* The one figure a reader came for, given its own line and its own rule. The
+   text in it is copied out of an abstract or it says there is no figure. */
+.effect { margin: 14px 0 0; padding: 11px 0 0; border-top: 2px solid var(--ink); font-size: 15px; line-height: 1.5; }
+.effect b {
+  display: block; font-size: 11px; font-weight: 900; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--ink); margin-bottom: 4px;
+}
 
 .actions { display: flex; gap: 8px; margin: 18px 0 0; }
 .actions .secondary { flex: 1; }

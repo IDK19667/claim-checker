@@ -22,6 +22,8 @@ import json
 import os
 import re
 
+import breakdown
+
 VALID_VERDICTS = ("true", "false", "complicated")
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
@@ -319,6 +321,11 @@ def _format_study_for_prompt(i: int, study: dict) -> str:
 # The model is constrained to emit exactly this shape. "verdict" is an
 # enum so the UI never sees a value it can't render, and study numbers
 # are integers so the PMID mapping below can't blow up on a string.
+#
+# The deeper layer's fields (breakdown.SCHEMA_PROPERTIES) are merged in
+# here rather than asked for separately: the model has already read these
+# abstracts in this call, and a second call would double the cost of a
+# check to re-read them. See breakdown.py.
 VERDICT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -327,8 +334,10 @@ VERDICT_SCHEMA = {
         "explanation": {"type": "string"},
         "still_open": {"type": "string"},
         "cited_study_numbers": {"type": "array", "items": {"type": "integer"}},
+        **breakdown.SCHEMA_PROPERTIES,
     },
-    "required": ["verdict", "tldr", "explanation", "still_open", "cited_study_numbers"],
+    "required": ["verdict", "tldr", "explanation", "still_open", "cited_study_numbers"]
+                + breakdown.SCHEMA_REQUIRED,
     "additionalProperties": False,
 }
 
@@ -336,7 +345,7 @@ VERDICT_SCHEMA = {
 def _fallback(explanation: str, tldr: str = "Couldn't reach a verdict from the evidence found.",
               still_open: str = "") -> dict:
     return {"verdict": "complicated", "tldr": tldr, "explanation": explanation,
-            "still_open": still_open, "cited_studies": []}
+            "still_open": still_open, "cited_studies": [], "breakdown": None}
 
 
 # ---------------------------------------------------------------------
@@ -406,8 +415,13 @@ def weigh_evidence(claim: str, studies: list[dict]) -> dict:
     Ask the model to weigh study quality and produce a verdict.
 
     Returns a dict: {"verdict": "true"|"false"|"complicated",
-                      "explanation": str,
-                      "cited_studies": [pmid, ...]}
+                      "tldr": str, "explanation": str, "still_open": str,
+                      "cited_studies": [pmid, ...],
+                      "breakdown": dict | None}
+
+    "breakdown" is the deeper layer, gated by breakdown.py, or None when
+    nothing in it survived the gate. It costs no extra call: its fields
+    ride on this one.
     """
     if not studies:
         return _fallback(
@@ -421,8 +435,18 @@ def weigh_evidence(claim: str, studies: list[dict]) -> dict:
     studies_block = "\n\n".join(
         _format_study_for_prompt(i + 1, s) for i, s in enumerate(studies)
     )
+    raw, stop_note = _complete_json(weigh_prompt(claim, studies_block),
+                                    VERDICT_SCHEMA, max_tokens=12000)
+    return _read_verdict(raw, stop_note, studies)
 
-    prompt = f"""A student is checking this health claim: "{claim}"
+
+def weigh_prompt(claim: str, studies_block: str) -> str:
+    """
+    The one prompt behind every verdict. A function rather than an f-string
+    inside weigh_evidence so scripts/token_delta.py can price it without
+    spending a call to see it.
+    """
+    return f"""A student is checking this health claim: "{claim}"
 
 Here are the top matching studies from PubMed:
 
@@ -458,16 +482,21 @@ gives a number that matters (how many people, how large the effect,
 how long it was measured), use the number instead of an adjective, and
 write it in digits: "60 adults", not "sixty adults".
 
+{breakdown.PROMPT}
+
 Respond with JSON in this exact shape:
 {{
   "verdict": "true" | "false" | "complicated",
   "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no",
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
-  "cited_study_numbers": [1, 2]
+  "cited_study_numbers": [1, 2],
+{breakdown.PROMPT_SHAPE}
 }}"""
 
-    raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=8000)
+
+def _read_verdict(raw, stop_note, studies: list[dict]) -> dict:
+    """Everything after the call: parse, map citations, gate every string."""
     if stop_note:
         return _fallback(
             f"The evidence-weighing step {stop_note}. "
@@ -510,8 +539,13 @@ Respond with JSON in this exact shape:
                 if pmid not in cited_pmids:
                     cited_pmids.append(pmid)
 
-    explanation = tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX)
+    explanation = breakdown.soften(
+        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))
     still_open = tidy_prose(str(parsed.get("still_open") or ""), STILL_OPEN_MAX)
+
+    # The deeper layer, gated. Everything it could not tie back to these
+    # abstracts has already been dropped by the time this returns.
+    deeper = breakdown.ground(parsed, studies, tidy_prose)
 
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or
@@ -525,8 +559,13 @@ Respond with JSON in this exact shape:
         explanation = (explanation.rstrip() + " None of the studies found directly "
                        "test this claim, so it can't be rated true or false from "
                        "this evidence.").strip()
+        # A verdict with nothing behind it cannot have a breakdown of what
+        # the evidence shows. The deeper layer goes with the verdict.
+        deeper = None
 
-    tldr = tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX)
+    # The takeaway is held to the same rule as the breakdown: words that
+    # claim more than this evidence can carry are rewritten weaker.
+    tldr = breakdown.soften(tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX))
     if forced:
         tldr = "The studies found don't actually test this claim, so it's unproven either way."
         if not still_open:
@@ -541,4 +580,5 @@ Respond with JSON in this exact shape:
         "explanation": explanation,
         "still_open": still_open,
         "cited_studies": cited_pmids,
+        "breakdown": deeper,
     }

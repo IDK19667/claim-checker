@@ -4,7 +4,81 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-01 (latest): A band of footage on top, the report on a sheet below
+## 2026-10-01 (latest): A deeper layer under the short answer, gated in code
+
+The result answered the question and stopped. A reader who wanted to know
+*why* had nothing between the one-line takeaway and eight study abstracts.
+`Read the full breakdown` is a closed `<details>` under the reasoning that
+splits the claim into its parts, says what the strongest studies found and
+how big the effect was, why the verdict is what it is, who it covers, and
+what is still unknown. The short answer above it is untouched: same words,
+same place, same size. Anyone who wanted one line still gets one line.
+
+**The grounding rules are code, not prompt.** `breakdown.py` re-reads
+every sentence the model produced and drops what it cannot stand behind,
+the same way a verdict with no citations is already forced to
+"complicated". A sentence with no study number goes. A reference to a
+study outside the set goes. A figure that appears in no abstract goes,
+compared with commas and decimal points normalised so "11,321" and
+"11321" are the same number. A sentence over 32 words goes, because a
+sentence that long is not 8th-grade prose whatever its vocabulary. If
+nothing survives, there is no breakdown and the fold is not rendered.
+
+**The gate drops, it does not repair.** Rewriting a sentence to make it
+pass would mean this file, not the abstracts, deciding what the evidence
+says. There are exactly three exceptions, and all three are code-authored
+sentences rather than edits to a model's: "No study in this set tests this
+part of the claim", "The abstracts don't report the size of the effect",
+and the softening list.
+
+**Softening can only ever weaken.** 22 ordered substitutions turn "wards
+off" and "prevents" into "lowers the risk of", "cures" into "helps with",
+"proves" into "suggests". Every pair moves one way. Nothing in the table
+can raise a claim's certainty, which is what keeps non-negotiable #1 true
+while a machine edits the prose. The same pass runs on the one-line
+takeaway, so the summary cannot be more confident than the detail. The
+reader's own claim is never softened: it is quoted in the breakdown
+exactly as typed, so a claim that says "cures" still reads "cures".
+
+**One explanation per sentence, and it has to fit.** Medical terms are
+glossed in brackets on first appearance from a list owned by this file,
+never by the model. Capped at one per sentence, because two parentheses
+in one noun phrase costs more reading than the terms explain. A gloss that
+would push its sentence past the 32-word cap is not inserted at all and
+the term waits for a shorter sentence: the length rule is about the
+sentence the reader is handed, so it has to count the brackets too.
+
+**The reading grade is measured and stored, and it does not reach 8.** On
+the live vitamin D check it is 16.1. That is a real miss against the brief
+and worth stating plainly rather than tuning away. Flesch-Kincaid is
+`0.39 x words-per-sentence + 11.8 x syllables-per-word - 15.59`, and this
+prose runs at 1.98 syllables per word: "respiratory", "supplementation",
+"meta-analysis", "deficiency". That term alone contributes 7.7 grades
+before a single sentence is measured, so even 8-word sentences would land
+at 10.9. Grade 8 is not reachable without replacing the words the claim is
+actually about. What is reachable is short sentences and explained terms,
+which is what the gate enforces; `grade` is kept on the payload so the
+number stays honest and visible instead of being asserted.
+
+**It rides on the verdict call.** The fields were added to the existing
+`weigh_evidence` schema rather than asked for separately, so a check is
+still two model calls. Measured on the vitamin D claim with
+`scripts/token_delta.py`: 3,387 to 4,733 tokens, +1,346 (+40%), of which
++796 is the longer prompt and +550 the longer reply. A second call would
+have cost roughly double. Cached claims stay free, and results cached
+before the column existed render as a result with no breakdown rather than
+an empty one.
+
+**No PDF flow was touched, because there is none.** The brief asked for
+the breakdown in "the PDF/share flows where relevant". Sharing is three
+things here: `shareText()`, the canvas share card, and `og.py`'s 1200x630
+link preview. A text message and a 630px-tall image cannot carry five
+paragraphs, and padding them would bury the one line that makes someone
+tap. All three stay short. The shared *link* opens the server-rendered
+page, which carries the full breakdown, collapsed, in the HTML before any
+JavaScript runs.
+
+## 2026-10-01: A band of footage on top, the report on a sheet below
 
 The previous entry kept the fly-through running underneath the check. It
 read well on the first screen and badly everywhere after it. The report

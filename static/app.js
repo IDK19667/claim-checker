@@ -435,6 +435,66 @@ function renderNextSteps(ns, claim) {
   }
 }
 
+// ---- The deeper layer -------------------------------------------------------
+// Mirrors the <details> in templates/index.html exactly: a cold shared link is
+// server rendered and a live check is rendered here, and the two must be the
+// same page. Nothing is computed from the text: every sentence that reaches
+// this point has already been through the gate in breakdown.py, which dropped
+// anything without a study number and anything carrying a figure the abstracts
+// do not have. This only lays it out.
+function renderBreakdown(bd, count) {
+  const wrap = $("deeper");
+  if (!wrap) return;
+  const body = $("deeper-body");
+  if (!bd) {
+    // A result cached before the breakdown existed has none. The section
+    // disappears rather than opening onto an apology.
+    wrap.hidden = true;
+    wrap.open = false;
+    body.innerHTML = "";
+    return;
+  }
+  wrap.hidden = false;
+  // Collapsed on every new result, including one reopened from history.
+  wrap.open = false;
+
+  const prose = (text) => `<p class="deeper-p">${linkStudyRefs(text, count)}</p>`;
+  const sec = (label, inner) =>
+    `<section class="deeper-sec"><p class="section-label">${escapeHtml(label)}</p>${inner}</section>`;
+
+  const out = [];
+  if ((bd.parts || []).length) {
+    out.push(sec("The claim, part by part", `<ol class="parts">${bd.parts.map((p) => `
+      <li class="part">
+        <p class="part-claim">${escapeHtml(p.part)}</p>
+        <p class="part-take">${linkStudyRefs(p.assessment, count)}</p>
+      </li>`).join("")}</ol>`));
+  }
+  if ((bd.evidence || []).length) {
+    out.push(sec("What the evidence shows",
+      bd.evidence.map(prose).join("") +
+      `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bd.effect_size || "", count)}</span></p>`));
+  }
+  if (bd.strength) out.push(sec("Why the verdict is what it is", prose(bd.strength)));
+  if (bd.applies_to || bd.not_applies_to) {
+    out.push(sec("Who this applies to",
+      (bd.applies_to ? prose(bd.applies_to) : "") +
+      (bd.not_applies_to
+        ? `<p class="section-label label-2">And who it does not</p>${prose(bd.not_applies_to)}`
+        : "")));
+  }
+  if (bd.unknowns) out.push(sec("What is still unknown", prose(bd.unknowns)));
+  out.push(`<p class="fine">Every sentence above names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>`);
+  body.innerHTML = out.join("");
+
+  const head = wrap.querySelector(".deeper-head .group-count");
+  if (head) {
+    head.textContent = bd.rests_on
+      ? `${bd.rests_on} ${bd.rests_on === 1 ? "study" : "studies"}`
+      : "";
+  }
+}
+
 function renderResult(data) {
   currentResult = data;
   $("claim-echo").textContent = data.claim;
@@ -455,6 +515,7 @@ function renderResult(data) {
   $("explanation").innerHTML = linkStudyRefs(data.explanation, data.studies.length);
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
+  renderBreakdown(data.breakdown, data.studies.length);
 
   const n = data.studies.length;
   const cited = data.studies.filter((s) => s.cited_in_verdict).length;
@@ -560,6 +621,7 @@ function renderPending(claim) {
   document.querySelector(".evidence").hidden = true;
   $("cached-note").hidden = true;
   $("still-open").hidden = true;
+  renderBreakdown(null, 0);
   $("bar-sticky").hidden = true; document.body.classList.remove("has-bar");
   for (const sec of [askSection, errorSection]) sec.hidden = true;
   askMore.hidden = true;
@@ -1305,10 +1367,14 @@ $("sources").addEventListener("keydown", (e) => {
   const li = e.target.closest(".study");
   if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openStudy(Number(li.dataset.i)); }
 });
-$("explanation").addEventListener("click", (e) => {
-  const ref = e.target.closest(".ref");
-  if (ref) openStudy(Number(ref.dataset.i));
-});
+// A study number is a tap target wherever it appears: in the reasoning under
+// the panel, and in every sentence of the breakdown under that.
+for (const id of ["explanation", "deeper-body"]) {
+  $(id)?.addEventListener("click", (e) => {
+    const ref = e.target.closest(".ref");
+    if (ref) openStudy(Number(ref.dataset.i));
+  });
+}
 
 // Arrow keys walk the source column, the way a finger runs down a printed one.
 $("sources").addEventListener("keydown", (e) => {

@@ -518,6 +518,203 @@ t("the claim itself is never offered as its own related claim",
 t("a single-word claim gets no wider search rather than a useless one",
   nextsteps.build("tinnitus", "q", [], [], _cl)["wider_url"] is None)
 
+# ---- the deeper layer, and the gate under it --------------------------------------
+# Everything here is about one rule: a sentence the reader is shown has to be
+# traceable to a record that was actually fetched. The gate is in breakdown.py
+# and it drops, never repairs: an uncited sentence, an out-of-range study, an
+# invented figure and a sentence too long to read all leave the page entirely.
+import breakdown  # noqa: E402
+
+_BD_STUDIES = [
+    {"pmid": "D1", "title": "Vitamin D and acute respiratory tract infection",
+     "abstract": "In 25 trials with 11321 participants, supplementation reduced acute "
+                 "respiratory tract infection (odds ratio 0.88, 95% CI 0.81 to 0.96). "
+                 "The effect was larger below 25 nmol/L (odds ratio 0.30).",
+     "journal": "BMJ", "year": "2017", "publication_types": ["Meta-Analysis"],
+     "authors": ["A B"], "data_banks": None, "url": "uD1"},
+    {"pmid": "D2", "title": "Monthly high dose vitamin D",
+     "abstract": "5110 adults aged 18 to 67 took 100000 IU monthly for 3.3 years with "
+                 "no change in infection rates (hazard ratio 0.99).",
+     "journal": "JAMA", "year": "2017",
+     "publication_types": ["Randomized Controlled Trial"],
+     "authors": ["C D"], "data_banks": None, "url": "uD2"},
+]
+
+_BD_RAW = {
+    "parts": [
+        {"part": "Vitamin D in winter cures colds",
+         "assessment": "Pooled trials found a small drop in infections (Study 1)."},
+        {"part": "only if you are deficient to begin with",
+         "assessment": "The drop was largest below 25 nmol/L (Study 1)."},
+        {"part": "a part no study here touches",
+         "assessment": "This sentence names no study at all."},
+    ],
+    "evidence": [
+        "A meta-analysis of 25 trials with 11,321 people found an odds ratio of 0.88 (Study 1).",
+        "It wards off colds in every group (Study 1).",
+        "Colds fell by 47% in the pooled trials (Study 1).",
+        "A monthly 100000 IU dose in 5110 adults aged 18 to 67 changed nothing (Study 2).",
+        "This paragraph cites nothing.",
+        "This one points at a study that was never fetched (Study 9).",
+        "This sentence is far too long to read comfortably on a phone and it just keeps "
+        "going and going past any reasonable length for one single breath of prose, "
+        "which is exactly the kind of sentence that pushes a page to a reading grade "
+        "no ordinary reader should have to work through (Study 1).",
+    ],
+    "effect_size": "The odds ratio was 0.88, and 0.30 in the most deficient (Study 1).",
+    "strength": "One meta-analysis and one randomized controlled trial disagree (Studies 1, 2).",
+    "applies_to": "Adults aged 18 to 67 were studied (Study 2).",
+    "not_applies_to": "Children were not in either trial (Study 2).",
+    "unknowns": "Whether a daily winter dose helps people who are not deficient (Studies 1, 2).",
+}
+
+_bd = breakdown.ground(_BD_RAW, _BD_STUDIES, verdict.tidy_prose)
+_ev = " ".join(_bd["evidence"])
+t("grounding: an uncited sentence never reaches the page",
+  "cites nothing" not in breakdown.flatten(_bd))
+t("grounding: a study number out of range is not a citation",
+  "never fetched" not in _ev)
+t("grounding: a figure that is in no abstract takes its sentence with it",
+  "47%" not in _ev and "fell by" not in _ev)
+t("grounding: a figure that is in an abstract survives, comma or no comma",
+  "11,321" in _ev and "0.88" in _ev)
+t("grounding: a sentence too long to read is dropped",
+  "keeps going" not in _ev and len(_bd["evidence"]) == 3, _bd["evidence"])
+t("grounding: the wording is pulled back to what the evidence carries",
+  "wards off" not in _ev and "lowers the risk of colds" in _ev)
+t("grounding: the reader's own claim is quoted, not softened",
+  _bd["parts"][0]["part"] == "Vitamin D in winter cures colds", _bd["parts"][0])
+t("grounding: a part with no study gets a stated fact, not the model's prose",
+  _bd["parts"][2]["assessment"] == breakdown.NO_STUDY_FOR_PART
+  and _bd["parts"][2]["studies"] == [], _bd["parts"][2])
+t("grounding: every surviving sentence carries a study number",
+  all(breakdown.refs(s, 2) for s in breakdown.sentences(breakdown.flatten(_bd))
+      if s != breakdown.NO_STUDY_FOR_PART))
+t("grounding: the layer never reaches past the records the verdict was shown",
+  set(breakdown.cited_pmids(_bd, _BD_STUDIES)) <= {"D1", "D2"}
+  and _bd["rests_on"] == 2, _bd["rests_on"])
+t("grounding: a medical term is explained once, on its first appearance",
+  _ev.count("the results of many studies pooled into one") == 1
+  and "randomized controlled trial (people were put in groups at random" in _bd["strength"])
+t("grounding: the prose lands at about an 8th-grade reading level",
+  _bd["grade"] <= 10, _bd["grade"])
+# The length rule is measured on the sentence the reader is handed, so the
+# brackets an explanation adds have to fit inside the budget too. Gating before
+# glossing would ship a sentence at the cap plus a ten word parenthetical.
+_long = max(breakdown.sentences(breakdown.flatten(_bd)),
+            key=lambda s: len(s.split()))
+t("grounding: a sentence is capped after its explanations go in, not before",
+  len(_long.split()) <= breakdown.MAX_SENTENCE_WORDS, len(_long.split()))
+t("  so a term skipped for length is still explained further down",
+  "(" in breakdown.gloss_once(
+      "A systematic review of " + "many trials " * 12 + "ran for years. "
+      "A systematic review found less illness.", set()))
+t("grounding: no dashes in the deeper layer either",
+  "—" not in breakdown.flatten(_bd) and "–" not in breakdown.flatten(_bd))
+
+# An effect size is only ever quoted. When nothing in the abstracts gives one,
+# the page says so in those words rather than reaching for an adjective.
+_no_fig = breakdown.ground(
+    dict(_BD_RAW, effect_size="The effect was large and meaningful (Study 1)."),
+    _BD_STUDIES, verdict.tidy_prose)
+t("grounding: no figure in the abstracts is said plainly, not described",
+  _no_fig["effect_size"] == breakdown.NO_EFFECT_SIZE, _no_fig["effect_size"])
+t("  and a figure that is in them is quoted as it stands",
+  "was 0.88, and 0.30 in the most deficient (Study 1)." in _bd["effect_size"],
+  _bd["effect_size"])
+
+t("grounding: softening only ever weakens a claim",
+  breakdown.soften("It prevents flu and cures colds.")
+  == "It lowers the risk of flu and helps with colds.")
+t("grounding: a breakdown with nothing left in it is no breakdown at all",
+  breakdown.ground({"parts": [], "evidence": ["no citation here"], "effect_size": "",
+                    "strength": "", "applies_to": "", "not_applies_to": "",
+                    "unknowns": ""}, _BD_STUDIES, verdict.tidy_prose) is None)
+t("grounding: a check with no studies has nothing to ground against",
+  breakdown.ground(_BD_RAW, [], verdict.tidy_prose) is None)
+t("grounding: reading grade is measured, not asserted",
+  breakdown.reading_grade("The cat sat on the mat. It was fine.") < 4
+  and breakdown.reading_grade(
+      "Supplementation attenuated incident respiratory morbidity irrespective of "
+      "antecedent concentrations, notwithstanding considerable heterogeneity.") > 12)
+
+# ---- the deeper layer through the whole app ---------------------------------------
+pubmed.search_and_fetch = lambda q, max_results=8: _BD_STUDIES
+fg.models.script = [Resp("vitamin d AND respiratory infection"),
+                    Resp(VJ("complicated", [1, 2], tldr="Vitamin D prevents colds.",
+                            still_open="Whether it helps people who are not deficient.",
+                            **_BD_RAW))]
+_before = fg.models.calls
+_vd = P("Vitamin D supplements in winter cut colds", ip="9.9.9.9").get_json()
+t("the breakdown rides on the verdict call: still 2 calls per check",
+  fg.models.calls - _before == 2, fg.models.calls - _before)
+t("  the takeaway is held to the same rule as the breakdown",
+  _vd["tldr"] == "Vitamin D lowers the risk of colds.", _vd["tldr"])
+t("  the breakdown is in the API payload, gated",
+  _vd["breakdown"]["rests_on"] == 2 and len(_vd["breakdown"]["evidence"]) == 3
+  and "47%" not in json.dumps(_vd["breakdown"]), _vd["breakdown"])
+_vd2 = P("vitamin d supplements in winter cut colds.", ip="4.4.4.4").get_json()
+t("  it survives the cache round trip", _vd2["cached"] is True
+  and _vd2["breakdown"] == _vd["breakdown"])
+
+_html = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+t("the breakdown is server rendered, so a shared link carries it",
+  "Read the full breakdown" in _html and "The claim, part by part" in _html
+  and "11,321 people found an odds ratio" in _html
+  and "only if you are deficient" in _html)
+t("  it is collapsed by default, on the server and in the markup",
+  '<details class="deeper" id="deeper">' in _html
+  and '<details class="deeper" id="deeper" open' not in _html)
+t("  the summary says how many studies it rests on",
+  '<span class="group-count">2 studies</span>' in _html)
+t("  what was gated out is not in the page either",
+  "47%" not in _html and "cites nothing" not in _html and "wards off" not in _html)
+t("  the effect size gets its own line",
+  "How big the effect is" in _html and "was 0.88, and 0.30" in _html)
+t("  and every section of the layer is there",
+  all(s in _html for s in ("What the evidence shows", "Why the verdict is what it is",
+                           "Who this applies to", "And who it does not",
+                           "What is still unknown")))
+
+# A verdict with nothing cited cannot have a breakdown of what the evidence
+# shows: the deeper layer goes wherever the verdict goes.
+fg.models.script = [Resp("q"), Resp(VJ("true", [], **_BD_RAW))]
+_un = P("uncited with a breakdown", ip="9.9.9.9").get_json()
+t("a forced complicated verdict carries no breakdown",
+  _un["verdict"] == "complicated" and _un["breakdown"] is None, _un["breakdown"])
+
+# A row cached before this column existed has no breakdown. It must render as a
+# result without one, not as a broken one.
+db.put_cached_verdict("old row with no breakdown", "q", "complicated", "Because.",
+                      ["D1"], _BD_STUDIES, tldr="Short take.", still_open="Open.")
+_old = c.get("/?q=old+row+with+no+breakdown").data.decode()
+t("a result cached before the breakdown existed renders cleanly",
+  "Short take." in _old and '<details class="deeper" id="deeper" hidden>' in _old
+  and "Read the full breakdown" in _old)
+_oldj = P("old row with no breakdown", ip="4.4.4.4").get_json()
+t("  and reports no breakdown rather than an empty one",
+  _oldj["breakdown"] is None and _oldj["cached"] is True)
+
+# The Jinja and renderBreakdown draw the same section. Two renderers for one
+# layout is how a cold shared link and a live check start disagreeing, so the
+# headings are compared rather than trusted.
+_tpl = (ROOT / "templates" / "index.html").read_text()
+_js = (ROOT / "static" / "app.js").read_text()
+_deeper_tpl = _tpl[_tpl.find('<details class="deeper"'):]
+_deeper_tpl = _deeper_tpl[:_deeper_tpl.find("</details>")]
+_tpl_labels = set(re.findall(r'class="section-label[^"]*">([^<]+)<', _deeper_tpl))
+_js_labels = set(re.findall(r'sec\("([^"]+)"', _js)) | set(
+    re.findall(r'class="section-label label-2">([^<]+)<', _js))
+t("the server and the browser render the same breakdown headings",
+  _tpl_labels == _js_labels, sorted(_tpl_labels ^ _js_labels))
+t("the browser's renderer runs every sentence through the same ref linking",
+  "renderBreakdown(data.breakdown" in _js and "linkStudyRefs(p.assessment" in _js)
+t("nothing in the breakdown is a card, and nothing in it is colour coded",
+  "border-radius" not in (ROOT / "static" / "style.css").read_text()
+  .split("---- The deeper layer")[1].split("---- Sticky share bar")[0])
+
+pubmed.search_and_fetch = lambda q, max_results=8: STUDIES
+
 _r = c.get("/?q=streamed%20claim")
 t("a result that rests on evidence carries no next_steps in its payload",
   '"next_steps": null' in _r.data.decode() or '"next_steps":null' in _r.data.decode()

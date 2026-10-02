@@ -224,7 +224,8 @@ def _render_home(with_flight: bool):
             cached = _check_response(
                 cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
-                _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""))
+                _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
+                breakdown=cached.get("breakdown"))
     # The front page carries the work instead of describing it: real counts
     # and the most recent verdicts with the evidence behind each. Both are
     # best-effort; an empty database must still render a usable page.
@@ -486,7 +487,7 @@ def _next_steps_safe(claim, query_used, studies, cited):
 
 
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
-                    base_url, cached_at=None, broadened=False, still_open=""):
+                    base_url, cached_at=None, broadened=False, still_open="", breakdown=None):
     cited = set(cited_studies or [])
     return {
         "claim": claim,
@@ -496,6 +497,9 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         "tldr": tldr,
         "explanation": explanation,
         "still_open": still_open or "",
+        # The deeper layer, or None. Collapsed wherever it is rendered, and
+        # absent on results cached before it existed.
+        "breakdown": breakdown,
         "cached": cached_at is not None,
         "cached_at": cached_at,
         "share_url": f"{base_url}/?q={quote(claim)}",
@@ -542,7 +546,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
         yield {"stage": "done", "result": _check_response(
             claim, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
             cached["cited_studies"], cached["studies"], base_url, cached_at=cached["cached_at"],
-            still_open=cached.get("still_open", ""))}
+            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"))}
         return
 
     # 2. Rate limit only the checks that will actually hit the AI provider.
@@ -584,12 +588,13 @@ def _run_check(claim: str, client_ip: str, base_url: str):
 
     db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
                           result["cited_studies"], studies, tldr=result["tldr"],
-                          still_open=result.get("still_open", ""))
+                          still_open=result.get("still_open", ""),
+                          breakdown=result.get("breakdown"))
     _log_check_safe(claim, result["verdict"], result["explanation"], studies)
     yield {"stage": "done", "result": _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
-        still_open=result.get("still_open", ""))}
+        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"))}
 
 
 def _claim_from_body() -> str:

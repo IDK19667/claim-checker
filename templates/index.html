@@ -289,6 +289,71 @@
       <p class="explanation" id="explanation">{% if result %}{{ result.explanation }}{% endif %}</p>
       <p class="record" id="record"></p>
 
+      {# ===== The deeper layer =====
+         Collapsed, always. The three lines above it are the answer; this is
+         for the reader who wants to understand it, and it must never push
+         them down the page to get there. Server rendered so a shared link
+         and a crawler get the whole thing with no JavaScript, and rebuilt
+         identically by renderBreakdown in static/app.js after a live check.
+         Every sentence in here cites a study number and carries no figure
+         that is not in one of the abstracts: breakdown.py drops the rest
+         before it is ever written out. #}
+      <details class="deeper" id="deeper"{% if not (result and result.breakdown) %} hidden{% endif %}>
+        <summary class="deeper-head">
+          <span class="group-name">Read the full breakdown</span>
+          <span class="group-count">{% if result and result.breakdown and result.breakdown.rests_on %}{{ result.breakdown.rests_on }} stud{{ "y" if result.breakdown.rests_on == 1 else "ies" }}{% endif %}</span>
+        </summary>
+        <div class="deeper-body" id="deeper-body">
+          {%- if result and result.breakdown %}{% set bd = result.breakdown %}
+          {%- if bd.parts %}
+          <section class="deeper-sec">
+            <p class="section-label">The claim, part by part</p>
+            <ol class="parts">
+              {%- for p in bd.parts %}
+              <li class="part">
+                <p class="part-claim">{{ p.part }}</p>
+                <p class="part-take">{{ p.assessment }}</p>
+              </li>
+              {%- endfor %}
+            </ol>
+          </section>
+          {%- endif %}
+          {%- if bd.evidence %}
+          <section class="deeper-sec">
+            <p class="section-label">What the evidence shows</p>
+            {%- for para in bd.evidence %}
+            <p class="deeper-p">{{ para }}</p>
+            {%- endfor %}
+            <p class="effect"><b>How big the effect is</b><span>{{ bd.effect_size }}</span></p>
+          </section>
+          {%- endif %}
+          {%- if bd.strength %}
+          <section class="deeper-sec">
+            <p class="section-label">Why the verdict is what it is</p>
+            <p class="deeper-p">{{ bd.strength }}</p>
+          </section>
+          {%- endif %}
+          {%- if bd.applies_to or bd.not_applies_to %}
+          <section class="deeper-sec">
+            <p class="section-label">Who this applies to</p>
+            {%- if bd.applies_to %}<p class="deeper-p">{{ bd.applies_to }}</p>{% endif %}
+            {%- if bd.not_applies_to %}
+            <p class="section-label label-2">And who it does not</p>
+            <p class="deeper-p">{{ bd.not_applies_to }}</p>
+            {%- endif %}
+          </section>
+          {%- endif %}
+          {%- if bd.unknowns %}
+          <section class="deeper-sec">
+            <p class="section-label">What is still unknown</p>
+            <p class="deeper-p">{{ bd.unknowns }}</p>
+          </section>
+          {%- endif %}
+          <p class="fine">Every sentence above names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>
+          {%- endif %}
+        </div>
+      </details>
+
       <div class="actions">
         <button class="secondary" id="share-btn" type="button">
           <svg width="20" height="20" aria-hidden="true"><use href="#i-share"/></svg>Share this verdict

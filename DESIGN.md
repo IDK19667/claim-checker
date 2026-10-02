@@ -370,6 +370,20 @@ blindness, and it cannot be mistaken for a verdict.
   figures one per line, the bar and its key, and "Still open" under a
   final 4px rule. The verdict lives inside the panel because it is a
   reported fact, not a banner over one.
+- **The deeper layer:** `Read the full breakdown`, a third `<details>` in
+  the same fold grammar as the source groups, closed on arrival and opened
+  by the reader, under a 4px rule between the reasoning and the actions.
+  Its count is the number of studies the breakdown actually rests on, which
+  is smaller than the number read and is not the same as the panel's
+  "relied on". Inside, five sections separated by 1px rules: the claim
+  split into its parts, each quoted in curly quotes exactly as the reader
+  wrote it, then the evidence in short paragraphs, the effect size under
+  its own 2px rule, why the verdict is what it is, who it covers and who it
+  does not, and what is still unknown. Every sentence carries the study
+  numbers it rests on as tap targets, and a closing line in fine print says
+  so. The short answer above it does not move, shrink or change: the layer
+  is additive, and a result that has no breakdown renders without it rather
+  than with an empty fold.
 - **The sources:** two folded groups, `Relied on for the verdict` open and
   `Read, not relied on` closed, each a `<details>` with its count. Every
   study stays in the HTML in both states, for crawlers and for a reader

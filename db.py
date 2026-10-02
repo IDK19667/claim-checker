@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS verdict_cache (
     tldr TEXT,
     explanation TEXT,
     still_open TEXT,
+    -- The deeper layer, as the gate left it. Null on rows cached before it
+    -- existed, which render as a result with no breakdown rather than an
+    -- empty one; they get one when the claim is next re-checked.
+    breakdown_json TEXT,
     cited_json TEXT,
     studies_json TEXT,
     created_at TEXT NOT NULL
@@ -85,6 +89,8 @@ def init_db():
             conn.execute("ALTER TABLE verdict_cache ADD COLUMN tldr TEXT")
         if "still_open" not in vcols:
             conn.execute("ALTER TABLE verdict_cache ADD COLUMN still_open TEXT")
+        if "breakdown_json" not in vcols:
+            conn.execute("ALTER TABLE verdict_cache ADD COLUMN breakdown_json TEXT")
         conn.execute(
             "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
         )
@@ -125,10 +131,30 @@ def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
         "tldr": row["tldr"] or "",
         "explanation": row["explanation"],
         "still_open": row["still_open"] or "",
+        "breakdown": _breakdown(row),
         "cited_studies": json.loads(row["cited_json"] or "[]"),
         "studies": json.loads(row["studies_json"] or "[]"),
         "cached_at": row["created_at"],
     }
+
+
+def _breakdown(row) -> dict | None:
+    """
+    The deeper layer off a cache row. A row from before the column existed,
+    or one holding something unreadable, gives None: a result with no
+    breakdown renders cleanly, and that is a better answer than a half one.
+    """
+    try:
+        raw = row["breakdown_json"]
+    except (IndexError, KeyError):
+        return None
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def put_cached_verdict(
@@ -140,13 +166,14 @@ def put_cached_verdict(
     studies: list[dict],
     tldr: str = "",
     still_open: str = "",
+    breakdown: dict | None = None,
 ):
     with get_conn() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO verdict_cache
                (claim_key, claim_text, search_query, verdict, tldr, explanation, still_open,
-                cited_json, studies_json, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                breakdown_json, cited_json, studies_json, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 normalize_claim(claim),
                 claim,
@@ -155,6 +182,7 @@ def put_cached_verdict(
                 tldr,
                 explanation,
                 still_open,
+                json.dumps(breakdown) if breakdown else None,
                 json.dumps(cited_studies),
                 json.dumps(studies),
                 _now(),
@@ -223,6 +251,7 @@ def get_cached_by_key(claim_key: str) -> dict | None:
         "tldr": row["tldr"] or "",
         "explanation": row["explanation"],
         "still_open": row["still_open"] or "",
+        "breakdown": _breakdown(row),
         "cited_studies": json.loads(row["cited_json"] or "[]"),
         "studies": json.loads(row["studies_json"] or "[]"),
         "cached_at": row["created_at"],
