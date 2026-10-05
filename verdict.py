@@ -793,8 +793,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
                 if pmid not in cited_pmids:
                     cited_pmids.append(pmid)
 
-    explanation = breakdown.plain(breakdown.soften(
-        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX)))
+    explanation = breakdown.tell_straight(breakdown.plain(breakdown.soften(
+        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))), studies)
     still_open = tidy_prose(str(parsed.get("still_open") or ""), STILL_OPEN_MAX)
 
     # The deeper layer, gated. Everything it could not tie back to these

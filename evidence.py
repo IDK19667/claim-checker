@@ -411,6 +411,101 @@ _PERCENT_CHANGE = re.compile(
 _INTERVAL = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval", re.IGNORECASE)
 
 
+# ---------------------------------------------------------------------------
+# Whether a figure is a difference at all
+#
+# "An odds ratio of 0.99" is not "1% lower odds, a small effect" when its 95%
+# interval runs from 0.92 to 1.06: the interval includes no effect at all, and
+# the honest words are "no clear difference". The audit found exactly that
+# sentence under "vaccines cause autism". So before a figure is sized, its
+# interval is read, from the prose if the prose kept it and otherwise from the
+# abstract the figure was copied from.
+# ---------------------------------------------------------------------------
+
+_NUM = r"[-\u2212]?\d+(?:\.\d+)?"
+_SEP = r"\s*(?:to|\u2013|-|,|;)\s*"
+_CI_PAIR = re.compile(r"(?:C\.?I\.?|confidence interval|credible interval)\]?"
+                      r"[\s,:=]*(?:of\s+|was\s+|from\s+)?[\(\[]?\s*(" + _NUM + ")" + _SEP
+                      + "(" + _NUM + ")", re.IGNORECASE)
+_BARE_PAIR = re.compile(r"^\s*[\(\[]\s*(" + _NUM + ")" + _SEP + "(" + _NUM + r")\s*[\)\]]")
+_P_VALUE = re.compile(r"\bP\s*(=|>|\u2265|<|\u2264)\s*(0?\.\d+|1(?:\.0+)?)\b", re.IGNORECASE)
+NOT_SIGNIFICANT = re.compile(
+    r"\bnot (?:statistically )?significant(?:ly)?\b|\bnon-?significant\b|"
+    r"\bno (?:statistically )?significant\b|\bdid not (?:significantly )?differ\b|"
+    r"\bno (?:clear |significant |real )?difference\b|\bcould be chance\b", re.IGNORECASE)
+_RATIO_BEFORE = re.compile(r"\b(?:a?ORs?|a?HRs?|a?RRs?|IRRs?|odds ratios?|hazard ratios?|"
+                           r"risk ratios?|relative risks?|rate ratios?)\b", re.IGNORECASE)
+_DIFF_BEFORE = re.compile(r"\b(?:W?MDs?|SMDs?|mean difference|difference|net|"
+                          r"standardi[sz]ed mean difference|Hedges'? g|Cohen'?s d)\b",
+                          re.IGNORECASE)
+
+
+def _num(text: str) -> float:
+    return float(text.replace("\u2212", "-"))
+
+
+def _interval_after(text: str, start: int):
+    """The (low, high) interval printed straight after a figure, or None."""
+    window = text[start:start + 90]
+    m = _BARE_PAIR.match(window) or _CI_PAIR.search(window)
+    if not m:
+        return None
+    # The interval has to belong to this figure: another number in between
+    # ("OR 0.88 and RR 1.2 (95% CI ...)") means it belongs to that one.
+    between = re.sub(r"\b9[059]\s?%", "", window[:m.start(1)])
+    if re.search(r"\d", re.sub(r"(?:C\.?I\.?|confidence interval).*", "", between,
+                                flags=re.IGNORECASE | re.DOTALL)):
+        return None
+    return _num(m.group(1)), _num(m.group(2))
+
+
+def _crosses(pair, null: float) -> bool:
+    lo, hi = min(pair), max(pair)
+    return lo <= null <= hi
+
+
+def significance(text: str, figure: str) -> str | None:
+    """
+    "null" when this text reports the figure as no clear difference (its
+    interval includes no effect, its p value is 0.05 or more, or its sentence
+    says it was not significant), "clear" when its interval or p value rules
+    that out, None when the text does not say or the figure is not a
+    comparison. Only ratios and differences are judged: a group's own average
+    has an interval too, and it says nothing about whether two groups differ.
+    """
+    t = str(text or "")
+    bare = str(figure or "").lstrip("-\u2212")
+    if not bare:
+        return None
+    for m in re.finditer(r"(?<![\d.])[-\u2212]?" + re.escape(bare) + r"(?![\d])", t):
+        before = t[max(0, m.start() - 60):m.start()]
+        if _RATIO_BEFORE.search(before):
+            null = 1.0
+        elif _DIFF_BEFORE.search(before):
+            null = 0.0
+        else:
+            continue
+        pair = _interval_after(t, m.end())
+        if pair:
+            return "null" if _crosses(pair, null) else "clear"
+        pv = _P_VALUE.search(t[m.end():m.end() + 80])
+        if pv:
+            op, val = pv.group(1), float(pv.group(2))
+            if op in ("=", ">", "\u2265") and val >= 0.05:
+                return "null"
+            if (op in ("<", "\u2264") and val <= 0.05) or (op == "=" and val < 0.05):
+                return "clear"
+        start = max(t.rfind(".", 0, m.start()), t.rfind("\n", 0, m.start())) + 1
+        end = t.find(". ", m.end())
+        if NOT_SIGNIFICANT.search(t[start:end if end > 0 else len(t)]):
+            return "null"
+    return None
+
+
+NULL_EFFECT = {"label": "none", "plain": "no clear difference between the groups",
+               "null": True}
+
+
 def size_label(change: float) -> str:
     """small / moderate / large, from a relative change like 0.12."""
     change = abs(change)
@@ -465,6 +560,9 @@ def effect_size(text: str) -> dict | None:
     m = _RATIO.search(t) or _RATIO_WAS.search(t)
     if m:
         name, value = m.group(1), float(m.group(2))
+        pair = _interval_after(t, m.end())
+        if value > 0 and pair and _crosses(pair, 1.0):
+            return dict(NULL_EFFECT, figure=f"{_ratio_name(name)} {m.group(2)}")
         # A ratio of exactly 1 is no effect; 0 is a parse accident.
         if value > 0 and abs(value - 1.0) > 1e-9:
             word = _ratio_word(name)
@@ -478,6 +576,9 @@ def effect_size(text: str) -> dict | None:
     m = _SMD.search(t)
     if m:
         d = float(m.group(1))
+        pair = _interval_after(t, m.end())
+        if pair and _crosses(pair, 0.0):
+            return dict(NULL_EFFECT, figure=f"standardised mean difference {m.group(1)}")
         if abs(d) > 1e-9:
             return {"label": _smd_label(d),
                     "plain": f"a difference of {abs(d):g} standard deviations",

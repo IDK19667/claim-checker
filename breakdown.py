@@ -329,6 +329,14 @@ Hard rules for everything in the breakdown:
     "cures", "wards off", "stops" or "proves" for an effect that is
     small, inconsistent, or measured in one trial. Say what changed and
     by how much.
+  * A figure for one group is half a result. Give the other group's
+    figure beside it: "1.7 episodes a year with extra water against 3.2
+    without (Study 4)", never "1.7 episodes compared to controls".
+  * When an abstract says a difference was not statistically
+    significant, or its confidence interval includes no effect at all (a
+    ratio whose interval runs past 1, a difference whose interval runs
+    past 0), the finding is "no clear difference", and the sentence says
+    so. Never call it a small effect.
 
 "parts": split the claim into the things it actually asserts, in the
 order it asserts them, and judge each separately. A claim with a
@@ -366,8 +374,11 @@ abstracts cannot support rather than padding it:
      does not show.
 
 "effect_size": one or two sentences giving the size of the effect in the
-abstracts' own figures, copied exactly: "the adjusted odds ratio was
-0.88 (Study 1)". You may call the effect small, moderate or large. Do
+abstracts' own figures, copied exactly, with the confidence interval
+when the abstract prints one: "the adjusted odds ratio was 0.88 (95% CI
+0.81 to 0.96) (Study 1)". You may call the effect small, moderate or
+large, unless the interval includes no effect, which is no clear
+difference and not a small effect. Do
 not convert the ratio into a percentage: the tool does that arithmetic
 itself, to fixed thresholds, and adds it to this line. If no abstract
 reports how large the effect was, write exactly: "The abstracts don't
@@ -936,6 +947,11 @@ def gloss_once(text: str, done: set) -> str:
             m = re.search(r"\b" + re.escape(key) + r"s?\b", sentence, re.IGNORECASE)
             if not m:
                 continue
+            # "Not statistically significant (unlikely to be chance alone)"
+            # reads as the opposite of the finding. A negated term goes
+            # unglossed, and stays open for a later, positive use.
+            if re.search(r"\b(?:not|no|non)[\s-]+$", sentence[:m.start()]):
+                continue
             # A term the model already explained in its own brackets is left alone.
             if sentence[m.end():m.end() + 2].startswith(" ("):
                 done.add(key)
@@ -1160,6 +1176,140 @@ def label(text: str, limit: int = 120) -> str:
     return t
 
 
+# ---------------------------------------------------------------------
+# Rule 9: a null result is said as one, and a figure keeps its comparison.
+#
+# The audit printed "an odds ratio of 0.99. That is about 1% lower odds, a
+# small effect" for a study whose interval ran from 0.92 to 1.06, which is
+# no difference at all; "the net weight difference was -1.8 kg" for a trial
+# whose abstract says, in the same sentence, that it was not significant;
+# and "1.7 cystitis episodes compared to controls" where the controls had
+# 3.2. Each of the three is copied from an abstract and passes the number
+# gate. Each tells the reader something the abstract does not.
+#
+# All three are read back from the abstract the sentence cites, so nothing
+# here can introduce a figure or a finding that is not on the page.
+# ---------------------------------------------------------------------
+
+NOT_SIGNIFICANT_SAID = "That difference was not statistically significant ({ref})."
+NULL_SAID = ("no clear difference between the groups, because the result was "
+             "not statistically significant")
+_SIZE_SAID = re.compile(
+    r"\b(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)\s+"
+    r"(?:effect|benefit|reduction|increase|improvement|difference)\b", re.IGNORECASE)
+_FIGURE = re.compile(r"(?<![\w.])[-\u2212]?\d+(?:\.\d+)?(?![\w.]*\d)")
+_SAID_NULL = re.compile(r"\bno clear difference\b|\bnot (?:statistically )?significant",
+                        re.IGNORECASE)
+
+
+def _cited_abstracts(sentence: str, studies: list[dict]) -> list[tuple[str, str]]:
+    """(the citation as written, that study's abstract) for each study cited."""
+    out = []
+    for m in _REF.finditer(sentence):
+        for n in re.findall(r"\d+", m.group(1)):
+            i = int(n)
+            if 0 < i <= len(studies or []):
+                out.append((f"Study {i}", str(studies[i - 1].get("abstract") or "")))
+    return out
+
+
+def _figures(sentence: str) -> list[str]:
+    bare = _REF.sub(" ", sentence)
+    return [f for f in _FIGURE.findall(bare)
+            if not re.fullmatch(r"(?:19|20)\d\d", f.lstrip("-"))]
+
+
+def null_figure(sentence: str, studies: list[dict]) -> str | None:
+    """
+    The citation behind a figure in this sentence that its own abstract
+    reports as no clear difference, or None. The sentence is read first, in
+    case the model kept the interval; then the abstract it cites.
+    """
+    for fig in _figures(sentence):
+        if evidence.significance(sentence, fig) == "null":
+            ref = _REF.search(sentence)
+            return ref.group(0) if ref else ""
+        for ref, abstract in _cited_abstracts(sentence, studies):
+            if evidence.significance(abstract, fig) == "null":
+                return ref
+    return None
+
+
+def say_nulls(text: str, studies: list[dict]) -> str:
+    """
+    Every sentence whose figure its abstract calls no clear difference says
+    so: a size word for it ("a small effect") becomes "no clear difference",
+    and a sentence that does not already say it is followed by one that
+    does, carrying the same citation.
+    """
+    out = []
+    for sentence in sentences(text or ""):
+        ref = null_figure(sentence, studies)
+        if ref is None or _SAID_NULL.search(sentence):
+            out.append(sentence)
+            continue
+        if _SIZE_SAID.search(sentence):
+            sentence = _SIZE_SAID.sub("no clear difference", sentence)
+            out.append(sentence)
+            continue
+        out.append(sentence)
+        if ref:
+            out.append(NOT_SIGNIFICANT_SAID.format(ref=ref))
+    return " ".join(out)
+
+
+_ONE_SIDED = re.compile(
+    r"(?P<x>(?<![\w.])\d+(?:\.\d+)?)(?P<between>(?:\s+[A-Za-z%][\w%-]*){0,4}?)\s+"
+    r"(?P<verb>compared (?:to|with)|versus|vs\.?|relative to)\s+"
+    r"(?P<grp>(?:the\s+|those\s+in\s+the\s+)?(?:controls?|control group|placebo(?: group)?|"
+    r"usual care|comparison group|the other group|those who did not))\b",
+    re.IGNORECASE)
+_COMPARATOR = re.compile(
+    r"^[^.\d]{0,80}?\b(?:compared (?:with|to)|versus|vs\.?|against)\s+"
+    r"(?:\w+\s+){0,2}?(?P<y>\d+(?:\.\d+)?)\b", re.IGNORECASE)
+
+
+def _other_side(abstract: str, x: str) -> str | None:
+    """The comparison group's figure printed straight after x in the abstract."""
+    for m in re.finditer(r"(?<![\d.])" + re.escape(x) + r"(?![\d])", abstract):
+        after = abstract[m.end():m.end() + 200]
+        after = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", after)   # intervals, p values
+        found = _COMPARATOR.match(after)
+        if found and found.group("y") != x:
+            return found.group("y")
+    return None
+
+
+def keep_comparison(text: str, studies: list[dict]) -> str:
+    """
+    "1.7 episodes compared to controls" becomes "1.7 episodes compared with
+    3.2 in controls" when the abstract it cites prints the controls' figure
+    beside the 1.7. Only that one shape is rewritten, and only from the
+    cited abstract: a sentence that already names both figures, or whose
+    abstract does not pair them, is left as it was.
+    """
+    out = []
+    for sentence in sentences(text or ""):
+        m = _ONE_SIDED.search(sentence)
+        if m:
+            for _, abstract in _cited_abstracts(sentence, studies):
+                y = _other_side(abstract, m.group("x"))
+                if y:
+                    grp = re.sub(r"^(?:the|those in the)\s+", "", m.group("grp"),
+                                 flags=re.IGNORECASE)
+                    sentence = (sentence[:m.start("verb")] + f"compared with {y} in "
+                                f"{'the ' if 'group' in grp.lower() else ''}{grp}"
+                                + sentence[m.end("grp"):])
+                    break
+        out.append(sentence)
+    return " ".join(out)
+
+
+def tell_straight(text: str, studies: list[dict]) -> str:
+    """Rule 9, both halves, for any gated prose."""
+    return say_nulls(keep_comparison(text, studies), studies)
+
+
 def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
     """
     Gate whatever the model returned into a breakdown the page can render,
@@ -1187,7 +1337,7 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
         before = set(kept_terms)
         out = keep_sentences(plain(said, kept_terms), count, known)
         if out:
-            return out
+            return tell_straight(out, studies)
         # Nothing survived. The commonest reason is the length rule, and the
         # commonest reason for that is plain() putting the original term in
         # brackets beside the plain words: "chest and throat infections
@@ -1198,7 +1348,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
         # reader never got.
         kept_terms.clear()
         kept_terms.update(before)
-        return keep_sentences(plain(said, set(PARKED_TERMS)), count, known)
+        return tell_straight(
+            keep_sentences(plain(said, set(PARKED_TERMS)), count, known), studies)
 
     parts = []
     for item in (raw.get("parts") or [])[:4]:
@@ -1263,8 +1414,20 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
     # because a label only ever weakens wording and cannot mis-state a
     # figure the reader never sees.
     sized = evidence.effect_size(effect)
+    # A figure its own abstract reports as no clear difference is sized as
+    # none, whatever its distance from 1. The sentence say_nulls added under
+    # it becomes the translation, so it is picked as one by says().
+    null_ref = next((r for r in (null_figure(t, studies) for t in sentences(effect))
+                     if r is not None), None)
+    if null_ref is not None or (sized and _SAID_NULL.search(effect)):
+        sized = dict(evidence.NULL_EFFECT, figure=(sized or {}).get("figure", ""))
+        if null_ref:
+            effect = effect.replace(NOT_SIGNIFICANT_SAID.format(ref=null_ref),
+                                    f"{TRANSLATION_LEAD}{NULL_SAID} ({null_ref}).")
     labelled = bool(sized) and sized["label"] in effect.lower()
-    if (sized and sized["plain"] not in effect
+    if sized and sized.get("null"):
+        pass    # said above, or by the model; never sized as small
+    elif (sized and sized["plain"] not in effect
             and not (labelled and _PERCENT.search(effect))):
         # Arithmetic on a figure that is already cited, so it carries that
         # figure's citation rather than arriving unsourced. Whichever half

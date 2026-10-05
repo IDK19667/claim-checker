@@ -1406,5 +1406,73 @@ t("  and the prompt marks those studies as the claim's own group, not narrow",
   "the group this claim is about" in verdict._format_study_for_prompt(
       1, _MEASLES[0], claim="Vaccines reduce the risk of severe measles"))
 
+
+# 3. Null results are said as null, and a figure keeps its comparison. The
+# three abstracts below are the audit's own, cut to the sentence that matters.
+_NULLS = [
+    _study("N1", "Vaccines are not associated with autism: a meta-analysis",
+           abstract="The cohort data revealed no relationship between vaccination and "
+                    "autism (OR: 0.99; 95% CI: 0.92 to 1.06) or ASD (OR: 0.91; 95% CI: "
+                    "0.68 to 1.20).", types=["Meta-Analysis"]),
+    _study("N2", "Effect of increased daily water intake on recurrent cystitis",
+           abstract="The mean number of cystitis episodes was 1.7 (95% CI, 1.5-1.8) in "
+                    "the water group compared with 3.2 (95% CI, 3.0-3.4) in the control "
+                    "group (difference in means, -1.5; 95% CI, -1.68 to -1.32; P < .001).",
+           types=["Randomized Controlled Trial"]),
+    _study("N3", "Calorie restriction with or without time-restricted eating",
+           abstract="Changes in weight were not significantly different in the two groups "
+                    "at the 12-month assessment (net difference, -1.8 kg; 95% CI, -4.0 to "
+                    "0.4; P = 0.11).", types=["Randomized Controlled Trial"]),
+]
+t("an interval that crosses no effect is read as no clear difference",
+  evidence.significance(_NULLS[0]["abstract"], "0.99") == "null"
+  and evidence.significance("pooled OR 0.88 (95% CI 0.81 to 0.96)", "0.88") == "clear"
+  and evidence.effect_size("an odds ratio of 0.99 (95% CI 0.92 to 1.06)")["label"] == "none")
+t("  and a p value of 0.05 or more, or 'not significantly different', reads the same",
+  evidence.significance(_NULLS[2]["abstract"], "-1.8") == "null"
+  and evidence.significance("the net difference was 2.1 kg (P = .03)", "2.1") == "clear")
+t("  a group's own average is not a comparison and is never judged",
+  evidence.significance(_NULLS[1]["abstract"], "1.7") is None)
+_bd = breakdown.ground({"parts": [{"part": "Vaccines cause autism",
+                                   "assessment": "Vaccination was not linked to autism (Study 1)."}],
+                        "evidence": ["The pooled review found an odds ratio of 0.99 for autism (Study 1)."],
+                        "effect_size": "The odds ratio for autism was 0.99 (Study 1)."},
+                       _NULLS, verdict.tidy_prose, "Vaccines cause autism")
+t("OR 0.99 with an interval of 0.92 to 1.06 is 'no clear difference', never 'a small effect'",
+  "no clear difference" in _bd["effect_size"] and "small" not in _bd["effect_size"]
+  and _bd["effect"]["label"] == "none", _bd["effect_size"])
+t("  and the deeper paragraphs say it was not statistically significant",
+  "not statistically significant (Study 1)" in " ".join(_bd["evidence"]), _bd["evidence"])
+t("  the translation is still the line 'What the research says' picks",
+  any("no clear difference" in line for line in _bd["says"]) if "says" in _bd
+  else any("no clear difference" in line
+           for line in breakdown.says("", _bd, _NULLS)))
+t("  a size word on a null figure becomes 'no clear difference'",
+  breakdown.tell_straight("Vaccination had an odds ratio of 0.99, a small effect (Study 1).",
+                          _NULLS) == "Vaccination had an odds ratio of 0.99, no clear difference (Study 1).")
+t("a difference the abstract calls not significant is said to be not significant",
+  breakdown.tell_straight("The net weight difference was -1.8 kg (Study 3).", _NULLS)
+  == "The net weight difference was -1.8 kg (Study 3). "
+     "That difference was not statistically significant (Study 3).")
+t("a figure keeps its comparison: 1.7 against 3.2 episodes, not 1.7 episodes",
+  breakdown.tell_straight("Extra water led to 1.7 cystitis episodes compared to controls (Study 2).",
+                          _NULLS)
+  == "Extra water led to 1.7 cystitis episodes compared with 3.2 in controls (Study 2).")
+t("  a sentence that already gives both sides is left alone",
+  breakdown.tell_straight("Episodes fell to 1.7 from 3.2 (Study 2).", _NULLS)
+  == "Episodes fell to 1.7 from 3.2 (Study 2).")
+t("'not statistically significant' is never glossed as 'unlikely to be chance alone'",
+  "unlikely to be chance" not in breakdown.gloss_once(
+      "The change was not statistically significant (Study 3).", set()))
+fg.models.script = [Resp(VJ("false", [1], tldr="Vaccines do not cause autism.",
+                            explanation="The pooled review found an odds ratio of 0.99 for autism (Study 1).",
+                            evidence=["Vaccination was not linked to autism (Study 1)."]))]
+_v = verdict.weigh_evidence("Vaccines cause autism", _NULLS[:1], "(vaccine) AND (autism)")
+t("  the explanation is held to the same rule",
+  "not statistically significant (Study 1)" in _v["explanation"], _v["explanation"])
+t("the prompt asks for both groups' figures and for 'no clear difference'",
+  "never \"1.7 episodes compared to controls\"" in verdict.weigh_prompt("c", "s")
+  and "no clear difference" in verdict.weigh_prompt("c", "s"))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
