@@ -575,8 +575,8 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                                         VERDICT_SCHEMA, max_tokens=12000)
         again = _read_verdict(raw, stop_note, studies, claim)
         if again.get("breakdown") and len(_faults(again, claim, reported)) < len(faults):
-            return again
-    return result
+            result = again
+    return _align_stamp(result, claim)
 
 
 def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
@@ -592,7 +592,44 @@ def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
     if stray:
         found.append("the takeaway answers for " + ", ".join(stray)
                      + ", which the claim never mentions")
+    clash = breakdown.stamp_conflict(result.get("verdict") or "", result.get("tldr") or "",
+                                     result.get("explanation") or "", claim)
+    if clash:
+        found.append(clash)
     return found
+
+
+# What the takeaway becomes when the stamp and the words still disagree after
+# the one retry. Every line here says less than either half did, so the
+# fallback can only ever lower the certainty of an answer, never raise it.
+LEAN_TLDR = {
+    "yes": "Some of these studies point towards yes, but together they don't settle it.",
+    "no": "Some of these studies point towards no, but together they don't settle it.",
+}
+UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
+
+
+def _align_stamp(result: dict, claim: str) -> dict:
+    """
+    The last word on a stamp the words still contradict. Code cannot tell
+    which half was right, so it keeps the less certain one: a plain verdict
+    over hedged words drops to "complicated", and hedged stamp over plain
+    words keeps its stamp and loses the plain words.
+    """
+    verdict = result.get("verdict") or ""
+    tldr = result.get("tldr") or ""
+    if not breakdown.stamp_conflict(verdict, tldr, result.get("explanation") or "", claim):
+        return result
+    said = breakdown.stance(tldr, claim)
+    out = dict(result)
+    if verdict in ("true", "false"):
+        out["verdict"] = "complicated"
+        out["tldr"] = LEAN_TLDR.get(said) or LEAN_TLDR["yes" if verdict == "true" else "no"]
+    elif verdict == "complicated":
+        out["tldr"] = LEAN_TLDR.get(said, tldr)
+    else:
+        out["tldr"] = UNTESTED_TLDR
+    return out
 
 
 def _redo_note(faults: list[str]) -> str:
@@ -633,7 +670,18 @@ lab studies, or mechanism papers rather than human trials.
 Use "false" only when the cited studies actively contradict the
 claim. A claim that simply hasn't been studied, or that these
 studies don't address, is "complicated", not "false". Absence of
-evidence is not evidence of absence.
+evidence is not evidence of absence. A comparison is contradicted
+when the studies tested it and found no difference: "X is better
+than Y" is false when trials of X against Y found they work about
+the same.
+
+The verdict and the takeaway are one answer said twice, and they must
+agree. If your takeaway would tell a friend a plain "no" ("sugar does
+not make children hyperactive", "it works no better than ordinary
+dieting"), the verdict is "false". If it says a plain "yes", the verdict
+is "true". "complicated" is for an answer that really is "partly" or "it
+depends", and its takeaway holds both sides. Never stamp "complicated"
+over a takeaway that says plainly yes or plainly no.
 
 PubMed's search can return studies that only superficially match the
 words in the claim. Only cite a study if it genuinely bears on this
@@ -768,6 +816,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # no answer at all about the reader, who did not say they were any of
     # them. Downgrade rather than drop, and say whose evidence it is.
     narrow = evidence.narrow_populations(studies, cited_pmids)
+    forced_narrow = ""
     if not forced and verdict != "complicated" and evidence.narrow_only(studies, cited_pmids):
         verdict = "complicated"
         forced_narrow = ", ".join(narrow)
@@ -787,6 +836,12 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     sized = (deeper or {}).get("effect") or {}
     if sized.get("label"):
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
+    # A downgrade made here, in code, leaves the model's takeaway answering
+    # the question the stamp no longer answers. The takeaway follows the
+    # stamp, so the two never disagree on the reader's screen.
+    if forced_narrow and breakdown.stamp_conflict(verdict, tldr, "", claim):
+        tldr = _cap(f"The studies found were all in {forced_narrow}, so they answer "
+                    f"this for them and not for people in general.", TLDR_MAX)
     if forced:
         tldr = "The studies found don't actually test this claim, so it's unproven either way."
         if not still_open:

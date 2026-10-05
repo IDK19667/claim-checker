@@ -1308,5 +1308,71 @@ t("a result that rests on evidence carries no next_steps in its payload",
 # different shapes for the same file, so this one moved rather than stayed
 # stale beside its replacement.
 
+
+# ---- accuracy round 2 (the 20-claim audit) ------------------------------------
+# 1. The stamp and the words are one answer. These are the audit's own
+# takeaways: the five it stamped over with a contradicting verdict, and the
+# fifteen it did not, which must stay unflagged.
+_AUDIT_TAKEAWAYS = [
+    ("complicated", "Vaccines reduce the risk of severe measles", "Vaccines reduce the risk of severe measles in children.", True),
+    ("complicated", "Sugar makes children hyperactive", "Studies show mixed links between sugar and ADHD, but controlled tests show sugar does not make children hyperactive.", True),
+    ("complicated", "Detox teas remove toxins from the body", "Detox teas do not remove toxins, and they can cause severe liver injury and low sodium.", True),
+    ("complicated", "Intermittent fasting is better for weight loss than regular dieting", "Fast-style diets work for weight loss, but they work about as well as standard calorie limits.", True),
+    ("complicated", "Red wine is good for the heart", "Red wine has no supported heart benefits here, and alcohol can raise blood pressure.", True),
+    ("true", "Exercise lowers the risk of depression", "Exercise lowers depression symptoms across many large trials.", False),
+    ("true", "Smoking causes lung cancer", "Smoking causes lung cancer, and people who smoke face a much higher risk.", False),
+    ("false", "Vaccines cause autism", "Studies show that vaccines do not cause autism.", False),
+    ("false", "Cracking your knuckles causes arthritis", "Cracking your knuckles does not cause arthritis, according to the available studies.", False),
+    ("complicated", "Eggs raise heart disease risk", "Some large reviews link higher egg intake to more risk, but other large studies find no link at all.", False),
+    ("complicated", "Cold showers boost immunity", "Cold showers boost certain immune cells, but it is not clear if this lowers the risk of actual illness.", False),
+    ("complicated", "Melatonin helps people fall asleep faster", "Melatonin helps some people fall asleep faster, but results vary a lot by age and health.", False),
+    ("complicated", "You need to drink 8 glasses of water a day", "Drinking 8 glasses of water a day is a common rule, but fluid needs vary by person and activity level.", False),
+    ("true", "Standing desks reduce back pain", "Standing desks can help reduce low back pain, though some workers still get sore.", False),
+    ("complicated", "Magnesium supplements improve sleep quality", "Magnesium may help you fall asleep a bit faster, but the proof is weak and mixed.", False),
+]
+_flagged = [(cl, bool(breakdown.stamp_conflict(v, tl, "", cl)) == want)
+            for v, cl, tl, want in _AUDIT_TAKEAWAYS]
+t("the stamp check flags the audit's five contradictions and none of the rest",
+  all(ok for _, ok in _flagged), [cl for cl, ok in _flagged if not ok])
+t("  'no study tests this' is not a 'no', so it can sit under an unsure stamp",
+  breakdown.stance("The studies found don't actually test this claim, so it's unproven either way.",
+                   "Detox teas remove toxins") == "untested")
+t("  an explanation that rules on the claim counts, a single finding does not",
+  breakdown.stamp_conflict("complicated", "It helps some people, but not all.",
+                           "The trials contradict the claim (Study 1).", "X helps")
+  and not breakdown.stamp_conflict("complicated", "It helps some people, but not all.",
+                                   "The evidence does not support the claim (Study 1).", "X helps"))
+
+_SUGAR = [{"pmid": f"S{i}", "title": "Sugar and hyperactivity: a meta-analysis", "abstract": "a",
+           "journal": "J", "year": "2020", "publication_types": ["Meta-Analysis"],
+           "authors": [], "data_banks": None, "url": "u"} for i in (1, 2)]
+_NO_TLDR = "Controlled tests show sugar does not make children hyperactive."
+fg.models.calls = 0
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR,
+                            evidence=["Sugar did not change behaviour (Study 1)."])),
+                    Resp(VJ("false", [1, 2], tldr=_NO_TLDR,
+                            evidence=["Sugar did not change behaviour (Study 1)."]))]
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("a stamp that contradicts its takeaway is asked again, once, and the agreeing answer wins",
+  _v["verdict"] == "false" and fg.models.calls == 2, (_v["verdict"], fg.models.calls))
+fg.models.calls = 0
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR,
+                            evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("  if the retry still contradicts, the stamp stays and the plain words go",
+  _v["verdict"] == "complicated" and _v["tldr"] == verdict.LEAN_TLDR["no"]
+  and fg.models.calls == 2, _v)
+t("  and that fallback never contradicts its own stamp",
+  not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], _v["explanation"],
+                               "Sugar makes children hyperactive"))
+fg.models.calls = 0
+fg.models.script = [Resp(VJ("true", [1, 2], tldr=_NO_TLDR,
+                            evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("  a confident stamp over opposite words drops to complicated, never the other way",
+  _v["verdict"] == "complicated" and _v["tldr"] == verdict.LEAN_TLDR["no"], _v)
+t("the prompt says the verdict and the takeaway are one answer",
+  "one answer said twice" in verdict.weigh_prompt("c", "s"))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -564,6 +564,173 @@ def contradictions(*texts, reported: list[str] | None = None) -> list[str]:
 
 
 # ---------------------------------------------------------------------
+# Rule 8: the stamp and the words agree.
+#
+# The audit's most visible failure: "It's complicated" stamped over a
+# takeaway that says "controlled tests show sugar does not make children
+# hyperactive". Either half can be the wrong one, and code cannot tell
+# which, so this only reads what the words commit to and verdict.py asks
+# again when the stamp says something else.
+#
+# A takeaway often holds two clauses. The one that carries its answer is
+# the one after "but" (or before "though"), and it only counts as a plain
+# yes or no when it is about the claim's own words and carries no hedge.
+# "Some reviews link eggs to risk, but other studies find no link" answers
+# nothing plainly: its "no" is about a link the sentence itself disputes.
+# ---------------------------------------------------------------------
+
+STANCES = ("yes", "no", "untested", "mixed")
+
+# Words that make a clause a qualified answer rather than a plain one.
+_HEDGED = re.compile(
+    r"\b(?:may|might|could|can|some|slightly|a little|a bit|somewhat|mixed|"
+    r"vary|varies|varied|unclear|not clear|uncertain|depends?|partly|limited|"
+    r"weak|small|modest|possibly|probably|unknown|inconsistent|only|unless|"
+    r"low.certainty|lean|leans|suggests?|appears?|seems?|if you|in people "
+    r"(?:who|with)|for people (?:who|with)|for some|in some)\b", re.IGNORECASE)
+
+# The claim was never put to a test. Checked before the plain "no", because
+# "no study tests this" is a negative sentence that is not a "no".
+_UNTESTED_SAID = re.compile(
+    r"\b(?:no (?:study|studies|trials?|good evidence|evidence|published|human)|"
+    r"nothing (?:here |found )?(?:tests?|shows?|measures?)|not (?:been )?(?:tested|"
+    r"studied)|untested|unproven|(?:do|does|did)(?:n't| not) (?:actually )?test)\b",
+    re.IGNORECASE)
+
+_NEGATED = re.compile(
+    r"\b(?:does not|do not|did not|doesn't|don't|didn't|is not|isn't|are not|"
+    r"aren't|was not|were not|cannot|can't|won't|will not|never|no (?:more|"
+    r"better)|not (?:better|more effective|any better)|(?:about|just|roughly) as "
+    r"(?:well|good|effective) as|no (?:\w+ ){0,2}(?:benefits?|effect|link|"
+    r"difference|advantage|change)|myth)\b", re.IGNORECASE)
+
+# A claim that compares two things is answered by the clause that compares.
+_COMPARATIVE_CLAIM = re.compile(
+    r"\b(?:better|worse|more|less|faster|slower|healthier|stronger|superior|"
+    r"inferior)\b[^.]{0,60}\bthan\b", re.IGNORECASE)
+_COMPARES_SAME = re.compile(
+    r"\b(?:about|just|roughly|nearly|much) as (?:well|good|effective|much) as|"
+    r"\bno (?:better|worse|more|less)\b|\bnot (?:any )?(?:better|worse|more "
+    r"effective)\b|\b(?:similar|same|equal(?:ly)?|comparable|no difference)\b",
+    re.IGNORECASE)
+_COMPARES_MORE = re.compile(r"\b(?:better|more|faster|superior|outperform\w*)\b"
+                            r"[^.]{0,40}\bthan\b", re.IGNORECASE)
+
+# Where a sentence turns. After "but" the answer follows the turn; after
+# "though" the answer came before it.
+_TURN_AFTER = re.compile(r",?\s+\b(?:but|yet|however)\b,?\s+", re.IGNORECASE)
+_TURN_BEFORE = re.compile(r",?\s+\b(?:though|although|even though|while|whereas)\b\s+",
+                          re.IGNORECASE)
+_AND_CLAUSE = re.compile(r",\s+(?:and|so)\s+|;\s+", re.IGNORECASE)
+
+
+def _stem(word: str) -> str:
+    w = word.lower()
+    for end in ("ing", "ed", "es", "s"):
+        if len(w) > len(end) + 2 and w.endswith(end):
+            return w[:-len(end)]
+    return w
+
+
+def _echoes(clause: str, claim: str) -> bool:
+    """True when the clause is about the claim's own words, not a neighbour's."""
+    terms = {_stem(t) for t in claim_terms(claim)}
+    if not terms:
+        return False
+    words = {_stem(w) for w in re.findall(r"[A-Za-z][A-Za-z'-]*", clause or "")}
+    hits = {t for t in terms
+            if any(w == t or (len(w) >= 5 and len(t) >= 5 and w[:5] == t[:5])
+                   for w in words)}
+    return len(hits) >= min(2, len(terms))
+
+
+def _polarity(clause: str) -> str:
+    if _UNTESTED_SAID.search(clause):
+        return "untested"
+    if _HEDGED.search(clause):
+        return "mixed"
+    return "no" if _NEGATED.search(clause) else "yes"
+
+
+def stance(text: str, claim: str) -> str:
+    """
+    What a takeaway commits to about the claim: "yes", "no", "untested" or
+    "mixed". Only the first sentence is read: the takeaway is one sentence,
+    and an explanation's first sentence is where it states its answer.
+    """
+    first = (sentences(text or "") or [""])[0].strip().rstrip(".")
+    if not first:
+        return "mixed"
+    if _UNTESTED_SAID.search(first) and not _TURN_AFTER.search(first):
+        return "untested"
+    if _COMPARATIVE_CLAIM.search(claim or ""):
+        if _COMPARES_SAME.search(first):
+            return "mixed" if _HEDGED.search(first.split(",")[-1]) else "no"
+        if _COMPARES_MORE.search(first):
+            return "mixed" if _HEDGED.search(first) else "yes"
+        return "mixed"
+    parts = _TURN_AFTER.split(first, maxsplit=1)
+    if len(parts) == 2:
+        answer = parts[1]
+    else:
+        parts = _TURN_BEFORE.split(first, maxsplit=1)
+        answer = parts[0] if len(parts) == 2 else None
+    if answer is not None:
+        return _polarity(answer) if _echoes(answer, claim) else "mixed"
+    for clause in _AND_CLAUSE.split(first):
+        if _echoes(clause, claim):
+            return _polarity(clause)
+    return "mixed"
+
+
+# What an explanation says outright about the claim as a whole. Narrow on
+# purpose: an explanation is full of findings about single studies, and only
+# a sentence that rules on the claim itself can contradict a stamp.
+_RULES_NO = re.compile(r"\b(?:contradicts?|refutes?) (?:the|this) claim\b|"
+                       r"\bthe claim is (?:false|untrue|not true|a myth|wrong)\b",
+                       re.IGNORECASE)
+_RULES_YES = re.compile(r"\bthe claim is (?:true|correct|accurate|well supported)\b|"
+                        r"\b(?<!not )(?<!n't )(?:clearly |strongly )?supports? the claim\b",
+                        re.IGNORECASE)
+
+# Which stances each stamp can stand beside. "complicated" holds both sides,
+# so a plain yes or a plain no under it is the contradiction; "insufficient"
+# means nothing tested the claim, so any plain answer under it is one too.
+_AGREES = {
+    "true": {"yes", "mixed"},
+    "false": {"no", "mixed"},
+    "complicated": {"mixed", "untested"},
+    "insufficient": {"untested", "mixed"},
+}
+
+_SAYS = {"yes": "a plain yes", "no": "a plain no",
+         "untested": "that nothing here tests the claim"}
+
+
+def stamp_conflict(verdict: str, tldr: str, explanation: str, claim: str) -> str | None:
+    """
+    Why the stamp and the words disagree, in words a retry prompt can use,
+    or None when they agree.
+    """
+    said = stance(tldr, claim)
+    where = "the takeaway"
+    if said in _AGREES.get(verdict, set()):
+        said, where = None, ""
+        exp = explanation or ""
+        if _RULES_NO.search(exp):
+            said, where = "no", "the explanation"
+        elif _RULES_YES.search(exp):
+            said, where = "yes", "the explanation"
+        if said in _AGREES.get(verdict, set()):
+            said = None
+    if not said:
+        return None
+    return (f"the verdict is \"{verdict}\" but {where} says {_SAYS[said]}. If the "
+            f"studies really show {_SAYS[said]}, the verdict must say so; if they do "
+            f"not, the takeaway must say no more than the verdict does")
+
+
+# ---------------------------------------------------------------------
 # Rule 7: the answer is about the claim that was typed.
 #
 # A search for screen light and eye damage returns trials of blue-light
