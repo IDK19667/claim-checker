@@ -411,6 +411,19 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
     ]
     if stand_in:
         lines.append(f"INDIRECT: measures {stand_in}, not the outcome in the claim")
+    # How much weight this one record can bear, read off the record. The
+    # model was calling a trial of two ways to use a desk "randomised
+    # evidence" that desks help; a trial with nobody who went without
+    # cannot say that, and the line here is what lets the prompt insist.
+    caveats = evidence.trial_caveats(study)
+    if "no untreated comparison group" in caveats:
+        lines.append("NO UNTREATED COMPARISON GROUP: everyone got some version of "
+                     "the treatment, so this cannot show it beats doing nothing")
+        caveats.remove("no untreated comparison group")
+    if caveats:
+        lines.append("LIMITED: " + "; ".join(caveats))
+    if evidence.is_review(study) and evidence.low_certainty(study):
+        lines.append("LOW CERTAINTY: this review rates its own evidence as low certainty")
     lines.append(f"Abstract: {abstract}\n")
     return "\n".join(lines)
 
@@ -609,6 +622,8 @@ LEAN_TLDR = {
     "yes": "Some of these studies point towards yes, but together they don't settle it.",
     "no": "Some of these studies point towards no, but together they don't settle it.",
 }
+LOW_CERTAINTY_TLDR = ("The studies found point towards yes, but the certainty of "
+                      "that evidence is low.")
 UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
 
 
@@ -712,6 +727,14 @@ about the thing. If that is all the evidence there is, the verdict is
 "complicated" and the answer says the claim's own question was not
 tested. Never answer the neighbouring question as though it were this
 one, and leave out details that belong only to it.
+
+"true" needs evidence that can carry it. Studies marked LIMITED (small,
+pilot or feasibility, funded by the maker) or LOW CERTAINTY can make an
+answer lean, never settle it: if they are all you have, the verdict is
+"complicated" and the answer says the certainty is low. A study marked NO
+UNTREATED COMPARISON GROUP is not randomised evidence that the treatment
+works, whatever its design is called; say what it compared ("two ways of
+using the desk"), never "a randomised trial found desks help".
 
 Some studies above are marked INDIRECT. They measured a stand-in rather
 than the outcome in the claim: a hormone instead of hair, a blood marker
@@ -831,6 +854,19 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
                        f"one group ({forced_narrow}), so it answers the claim for "
                        f"them and not for people in general.").strip()
 
+    # And one more: the evidence behind a "true" has to be able to carry it.
+    # A review that grades its own certainty low, or a stack of small and
+    # pilot trials, makes an answer lean; it does not make it likely true.
+    forced_low = ""
+    if not forced and verdict == "true":
+        forced_low = evidence.certainty_cap(
+            studies, cited_pmids, bool(breakdown._COMPARATIVE_CLAIM.search(claim))) or ""
+        if forced_low:
+            verdict = "complicated"
+            explanation = (explanation.rstrip() + f" The certainty of this evidence is "
+                           f"low, because {forced_low}, so it can't be rated likely "
+                           f"true.").strip()
+
     # The takeaway is held to the same rule as the breakdown: words that
     # claim more than this evidence can carry are rewritten weaker.
     tldr = breakdown.natural(
@@ -849,6 +885,11 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     if forced_narrow and breakdown.stamp_conflict(verdict, tldr, "", claim):
         tldr = _cap(f"The studies found were all in {forced_narrow}, so they answer "
                     f"this for them and not for people in general.", TLDR_MAX)
+    if forced_low:
+        leaned = f"{tldr.rstrip().rstrip('.')}, but the certainty of that evidence is low."
+        tldr = (leaned if len(leaned) <= TLDR_MAX and tldr
+                and not breakdown.stamp_conflict(verdict, leaned, "", claim)
+                else LOW_CERTAINTY_TLDR)
     if forced:
         tldr = "The studies found don't actually test this claim, so it's unproven either way."
         if not still_open:

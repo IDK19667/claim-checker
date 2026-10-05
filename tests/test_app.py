@@ -1474,5 +1474,66 @@ t("the prompt asks for both groups' figures and for 'no clear difference'",
   "never \"1.7 episodes compared to controls\"" in verdict.weigh_prompt("c", "s")
   and "no clear difference" in verdict.weigh_prompt("c", "s"))
 
+
+# 4. "Likely true" is capped by how sure the evidence is. The abstracts are
+# the audit's own: the ashwagandha review that grades itself low, and the
+# standing-desk trials of 27 to 56 office workers.
+_ASHWA = [_study("A1", "Does Ashwagandha supplementation have a beneficial effect on anxiety and stress?",
+                 abstract="Ashwagandha reduced stress compared to the placebo. Finally, we identified "
+                          "that the certainty of the evidence was low for both outcomes.",
+                 types=["Meta-Analysis", "Systematic Review"]),
+          _study("A2", "Ashwagandha in stressed adults",
+                 abstract="Sixty adults were randomly allocated to take either a placebo or 240 mg "
+                          "of ashwagandha extract.")]
+_DESKS = [_study("D1", "Impact of a Sit-Stand Workstation on Chronic Low Back Pain",
+                 abstract="Participants were randomized to receive a SSW at the beginning or at the "
+                          "end of a 3-month study period. Forty-six university employees with "
+                          "self-reported chronic LBP were enrolled."),
+          _study("D2", "Do fixed or personalised sit-stand desk ratios improve lower back pain?",
+                 abstract="Fifty-six desk-based workers with LBP were randomised to either a fixed "
+                          "ratio or a personalised ratio."),
+          _study("D3", "Reducing sedentary behaviour to decrease chronic low back pain: the stand back randomised trial",
+                 abstract="The Stand Back study evaluated the feasibility of a multicomponent "
+                          "intervention in 27 desk workers.")]
+t("sizes are read in digits and in words",
+  evidence.sample_size(_DESKS[0]) == 46 and evidence.sample_size(_ASHWA[1]) == 60
+  and evidence.sample_size(_study("S", "t", abstract="In 1,234 adults aged 40 years")) == 1234)
+t("  two versions of the treatment and nobody without is no untreated comparison",
+  evidence.uncontrolled(_DESKS[1]) and not evidence.uncontrolled(_DESKS[0])
+  and evidence.uncontrolled(_study("S", "A single-arm trial of X", abstract="Placebo was not used.")))
+t("  a review that grades its evidence low is low certainty, one that says moderate is not",
+  evidence.low_certainty(_ASHWA[0])
+  and not evidence.low_certainty(_study("R", "r", abstract="Moderate certainty evidence showed a benefit.",
+                                        types=["Meta-Analysis"])))
+t("a low-certainty review caps 'true'",
+  evidence.certainty_cap(_ASHWA, ["A1", "A2"]) is not None)
+t("  and so does a stack of small, pilot and uncontrolled trials",
+  evidence.certainty_cap(_DESKS, ["D1", "D2", "D3"]) is not None)
+t("  one trial of 400 people with a control group is enough to lift it",
+  evidence.certainty_cap(_DESKS + [_study("D4", "Desks and back pain",
+                                         abstract="We randomised 400 workers to a desk or usual care.")],
+                         ["D1", "D2", "D3", "D4"]) is None)
+t("  a study that says nothing about its size or design is never the reason to cap",
+  evidence.certainty_cap([_study("U", "u", types=["Journal Article"])], ["U"]) is None)
+t("  a comparative claim is not capped for comparing two treatments",
+  evidence.certainty_cap([_study("C", "c", abstract="We randomised 300 adults to diet A or diet B.")],
+                         ["C"], comparative=True) is None)
+fg.models.script = [Resp(VJ("true", [1, 2], tldr="Ashwagandha reduces stress.",
+                            evidence=["Ashwagandha reduced stress (Study 1)."]))]
+_v = verdict.weigh_evidence("Ashwagandha reduces stress", _ASHWA, "(ashwagandha) AND (stress)")
+t("ashwagandha is 'It's complicated', and the takeaway says the certainty is low",
+  _v["verdict"] == "complicated" and "certainty of that evidence is low" in _v["tldr"]
+  and "certainty of this evidence is low" in _v["explanation"], _v)
+fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Standing desks reduce back pain.",
+                            evidence=["Back pain fell with a desk (Study 1)."]))]
+_v = verdict.weigh_evidence("Standing desks reduce back pain", _DESKS, "(desk) AND (back pain)")
+t("  so are standing desks", _v["verdict"] == "complicated"
+  and "low" in _v["tldr"], _v)
+t("the prompt marks a trial with nobody untreated, and never calls it randomised evidence",
+  "NO UNTREATED COMPARISON GROUP" in verdict._format_study_for_prompt(2, _DESKS[1])
+  and "LIMITED: small, 46 people" in verdict._format_study_for_prompt(1, _DESKS[0])
+  and "LOW CERTAINTY" in verdict._format_study_for_prompt(1, _ASHWA[0])
+  and "not randomised evidence" in verdict.weigh_prompt("c", "s"))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

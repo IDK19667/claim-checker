@@ -823,3 +823,165 @@ def written_numbers(text) -> set[str]:
             close()
     close()
     return found
+
+
+# ---------------------------------------------------------------------------
+# How sure the evidence is
+#
+# "Likely true" is a claim about the evidence as much as about the answer.
+# The audit stamped it on ashwagandha from a review whose own abstract says
+# "the certainty of the evidence was low", and on standing desks from trials
+# of 27 to 56 office workers, two of them feasibility studies and one that
+# compared two ways of using the desk with no group that went without. Each
+# of those papers is real and each is cited correctly. None of them, or all
+# of them together, can carry a confident yes. These read that off the
+# records, so the cap does not depend on the model noticing it.
+# ---------------------------------------------------------------------------
+
+SMALL_TRIAL = 100
+
+_PEOPLE = (r"(?:participants|adults|patients|subjects|individuals|people|persons|men|"
+           r"women|children|adolescents|employees|workers|volunteers|students|athletes|"
+           r"infants|smokers|residents|veterans|respondents|nurses|pairs|couples)")
+_SKIP_BETWEEN = re.compile(r"\b(?:years?|months?|weeks?|days?|hours?|minutes?|mg|kg|g|ml|"
+                           r"percent|times)\b", re.IGNORECASE)
+_DIGIT_PEOPLE = re.compile(r"(?<![\d.,])(\d{1,3}(?:,\d{3})+|\d+)\s+((?:[A-Za-z-]+\s+){0,3}?)"
+                           + _PEOPLE + r"\b", re.IGNORECASE)
+_WORD_PEOPLE = re.compile(r"\b((?:(?:" + "|".join(sorted(_NUM_WORDS, key=len, reverse=True))
+                          + r"|hundred|thousand|and)[\s-]+)+)((?:[A-Za-z-]+\s+){0,3}?)"
+                          + _PEOPLE + r"\b", re.IGNORECASE)
+_N_EQUALS = re.compile(r"\b[nN]\s*=\s*(\d{1,3}(?:,\d{3})+|\d+)")
+REVIEW_TYPES = ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review")
+TRIAL_TYPES = ("Randomized Controlled Trial", "Controlled Clinical Trial", "Clinical Trial")
+
+
+def _text(study) -> str:
+    return f"{study.get('title') or ''}. {study.get('abstract') or ''}"
+
+
+def is_review(study) -> bool:
+    return any(t.startswith(REVIEW_TYPES) for t in study.get("publication_types") or [])
+
+
+def is_trial(study) -> bool:
+    if is_review(study):
+        return False
+    return (any(t.startswith(TRIAL_TYPES) for t in study.get("publication_types") or [])
+            or bool(re.search(r"\brandomi[sz]ed\b|\btrial\b", _text(study), re.IGNORECASE)))
+
+
+def sample_size(study) -> int | None:
+    """The most people this record says it enrolled, or None if it never says."""
+    text = _text(study)
+    found = []
+    for m in _DIGIT_PEOPLE.finditer(text):
+        if not _SKIP_BETWEEN.search(m.group(2)):
+            found.append(int(m.group(1).replace(",", "")))
+    for m in _WORD_PEOPLE.finditer(text):
+        if not _SKIP_BETWEEN.search(m.group(2)):
+            # "two groups of adults" is not a sample; nobody spells a
+            # sample of under ten in words, so a small one is a count of
+            # something else.
+            found += [int(v) for v in written_numbers(m.group(1)) if int(v) >= 10]
+    found += [int(n.replace(",", "")) for n in _N_EQUALS.findall(text)]
+    return max(found) if found else None
+
+
+_PILOT = re.compile(r"\bpilot\b|\bfeasibility\b|\bproof[- ]of[- ]concept\b", re.IGNORECASE)
+_NO_CONTROL_SAID = re.compile(
+    r"\bsingle[- ](?:arm|group)\b|\bone[- ]group\b|\bpre[- ]?(?:and[- ])?post\b|"
+    r"\bpre-?test[- /]post-?test\b|\bbefore[- ]and[- ]after\b|\buncontrolled\b|"
+    r"\bwithout (?:a )?control group\b|\bno control group\b", re.IGNORECASE)
+_CONTROL_SAID = re.compile(
+    r"\bcontrol|\bplacebo|\bsham\b|\busual care\b|\bstandard (?:care|practice|working)|"
+    r"\bwait[- ]?(?:ing[- ])?list|\bno[- ](?:intervention|treatment|supplement)|"
+    r"\buntreated\b|\bdelayed\b|\bat the end of\b|\bcross-?over\b|\bcomparison group\b|"
+    r"\bvehicle\b|\bdummy\b|\bnothing\b|\bnon-?users?\b", re.IGNORECASE)
+_LOW_CERTAINTY = re.compile(
+    r"\b(?:very[- ])?low(?:[- ]to[- ](?:moderate|very[- ]low))?[- ](?:certainty|quality)"
+    r"(?: of)?(?: the)? evidence\b|"
+    r"\b(?:certainty|quality) of (?:the )?evidence (?:was|is|were|ranged from) "
+    r"(?:rated |judged |graded )?(?:as )?(?:very )?low\b|"
+    r"\bevidence (?:was|is) of (?:very )?low (?:certainty|quality)\b", re.IGNORECASE)
+_HIGHER_CERTAINTY = re.compile(
+    r"\b(?:moderate|high)[- ](?:certainty|quality)(?: of)?(?: the)? evidence\b|"
+    r"\b(?:certainty|quality) of (?:the )?evidence (?:was|is|were) (?:rated |judged |graded )?"
+    r"(?:as )?(?:moderate|high)\b", re.IGNORECASE)
+_INDUSTRY = re.compile(
+    r"\bindustry[- ](?:funded|sponsored)\b|\b(?:funded|sponsored|supported) by\b[^.]{0,80}?"
+    r"\b(?:Ltd|Inc|Pvt|GmbH|LLC|Pharma\w*|Laborator(?:y|ies)|Corporation|Co\.)", re.IGNORECASE)
+
+
+def uncontrolled(study) -> bool:
+    """
+    A trial in which nobody went without the thing being tested: one group
+    measured before and after, or two versions of the treatment compared
+    with each other. It can show the versions differ; it cannot show the
+    treatment beats doing nothing, which is what a randomised trial is
+    usually taken to mean.
+    """
+    if not is_trial(study):
+        return False
+    text = _text(study)
+    if _NO_CONTROL_SAID.search(text):
+        return True
+    return not _CONTROL_SAID.search(text)
+
+
+def low_certainty(study) -> bool:
+    """A review that grades its own evidence as low, and nowhere higher."""
+    text = _text(study)
+    return bool(_LOW_CERTAINTY.search(text)) and not _HIGHER_CERTAINTY.search(text)
+
+
+def trial_caveats(study) -> list[str]:
+    """What keeps one primary study from carrying a confident answer alone."""
+    if is_review(study):
+        return []
+    out = []
+    n = sample_size(study)
+    if _PILOT.search(_text(study)):
+        out.append("a pilot or feasibility study")
+    elif n is not None and n < SMALL_TRIAL:
+        out.append(f"small, {n} people")
+    if uncontrolled(study):
+        out.append("no untreated comparison group")
+    if _INDUSTRY.search(_text(study)):
+        out.append("funded by the maker")
+    return out
+
+
+def certainty_cap(studies, cited_pmids=(), comparative: bool = False) -> str | None:
+    """
+    Why the evidence behind a "true" cannot carry it, in words for the
+    reader, or None when it can. Two ways to fail: the review it leans on
+    rates its own certainty low and no cited review rates it higher; or
+    there is no cited review and every cited study is small, a pilot,
+    funded by the maker, or (for a claim that something works, as against
+    one that compares two things) has nobody who went without.
+    """
+    cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
+    if not cited:
+        return None
+    reviews = [s for s in cited if is_review(s)]
+    if reviews:
+        if any(low_certainty(s) for s in reviews) and not any(
+                _HIGHER_CERTAINTY.search(_text(s)) for s in reviews):
+            return "the review behind it rates the certainty of its own evidence as low"
+        return None
+    solid, limited = [], []
+    for s in cited:
+        caveats = [c for c in trial_caveats(s)
+                   if not (comparative and c == "no untreated comparison group")]
+        # A study that says neither its size nor its design is not evidence
+        # of weakness, and not evidence of strength either: it cannot carry
+        # the answer, and it cannot be the reason to cap it.
+        labelled = any(not t.startswith(IGNORE_PREFIXES)
+                       for t in s.get("publication_types") or [])
+        if caveats:
+            limited.append(s)
+        elif sample_size(s) is not None or labelled:
+            solid.append(s)
+    if solid or not limited:
+        return None
+    return "it rests on small, pilot or uncontrolled studies"
