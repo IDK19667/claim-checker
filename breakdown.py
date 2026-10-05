@@ -236,7 +236,11 @@ PLAIN = [
     (r"\bparticipants\b|\bsubjects\b|\bindividuals\b", "people", None),
     (r"\belevated\b", "raised", None),
     (r"\bglycaemic control\b|\bglycemic control\b", "blood sugar control", None),
-    (r"\bcognitive function\b", "thinking and memory", None),
+    # "Memory and cognitive function" is not "memory and thinking and
+    # memory": where the sentence already names memory, thinking is the
+    # half that is left to say.
+    (r"\bcognitive function\b", lambda m: "thinking" if re.search(
+        r"\bmemory\b", _sentence_around(m)) else "thinking and memory", None),
     (r"\bimmunomodulatory\b", "immune system", None),
     (r"\bcardiovascular\b", "heart and blood vessel", None),
     (r"\bgastrointestinal\b", "stomach and gut", None),
@@ -844,6 +848,25 @@ def _recase(original: str, replacement: str) -> str:
     return replacement
 
 
+def _sentence_around(m) -> str:
+    """The sentence a match sits in, without the match itself."""
+    text = m.string
+    start = max(text.rfind(". ", 0, m.start()), -1) + 1
+    end = text.find(". ", m.end())
+    end = len(text) if end < 0 else end
+    return text[start:m.start()] + " " + text[m.end():end]
+
+
+# The same phrase twice across an "and" or "or", which the swaps above can
+# produce from two different words ("memory and overall thinking and memory").
+_REPEATED = re.compile(r"\b((?:\w+\s+){1,3}\w+)(\s+(?:and|or)\s+(?:overall\s+|general\s+)?)"
+                       r"\1(?=\s*(?:[.,;:)]|$))", re.IGNORECASE)
+
+
+def _no_repeats(text: str) -> str:
+    return _REPEATED.sub(lambda m: m.group(1), text)
+
+
 def plain(text: str, kept: set | None = None) -> str:
     """
     Swap medical vocabulary for the everyday words that mean the same.
@@ -884,7 +907,7 @@ def plain(text: str, kept: set | None = None) -> str:
         out = pattern.sub(swap, out)
 
     out = re.sub(r"\x00(\d+)\x00", lambda m: parked[int(m.group(1))], out)
-    return _fix_articles(out)
+    return _fix_articles(_no_repeats(out))
 
 
 # ---------------------------------------------------------------------

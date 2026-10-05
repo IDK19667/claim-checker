@@ -1655,5 +1655,25 @@ t("the server-rendered page stamps 'Not enough evidence'",
 t("  and the link-preview card draws it",
   c.get("/og/" + db.normalize_claim("not enough render") + ".png").status_code == 200)
 
+
+# 7. Small cleanups: a PubMed date range is one year, and no phrase twice.
+t("a MedlineDate range is read as its year: '1995 Nov 22-29' is 1995",
+  pubmed.year_of("1995 Nov 22-29") == "1995" and pubmed.year_of("1998-1999 Winter") == "1998"
+  and pubmed.year_of("2020") == "2020" and pubmed.year_of(None) is None)
+t("  including on rows cached before the fix",
+  appmod._study_payload(dict(_study("Y", "t"), year="1995 Nov 22-29"), set())["year"] == "1995"
+  and evidence.snapshot([dict(_study("Y", "t"), year="1995 Nov 22-29")])["year_from"] == 1995)
+t("'memory and cognitive function' is not 'memory and thinking and memory'",
+  breakdown.plain("Sleep loss impairs memory and overall cognitive function.")
+  == "Sleep loss impairs memory and overall thinking."
+  and breakdown.plain("Creatine improved cognitive function.") == "Creatine improved thinking and memory.")
+t("  a whole phrase said twice across 'and' is said once",
+  breakdown.plain("It helped thinking and memory and overall thinking and memory.")
+  == "It helped thinking and memory.")
+t("  and ordinary prose is left alone",
+  all(breakdown.plain(x) == x for x in (
+      "The development of autism or autism spectrum disorder.",
+      "Rates rose more and more.", "It improved sleep quality and quality of life.")))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

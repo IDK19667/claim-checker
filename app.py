@@ -175,8 +175,8 @@ def _citation(s: dict, relied_on: bool) -> dict:
         "identifier": f"PMID:{s.get('pmid')}",
         "isBasedOn": relied_on,
     }
-    if s.get("year"):
-        c["datePublished"] = str(s["year"])
+    if pubmed.year_of(s.get("year")):
+        c["datePublished"] = pubmed.year_of(s.get("year"))
     if s.get("journal"):
         c["isPartOf"] = {"@type": "Periodical", "name": s["journal"]}
     return c
@@ -468,7 +468,8 @@ def _study_payload(s: dict, cited: set) -> dict:
         "pmid": s["pmid"],
         "title": s["title"],
         "journal": s["journal"],
-        "year": s["year"],
+        # Normalised here too, for rows cached before pubmed.year_of existed.
+        "year": pubmed.year_of(s.get("year")),
         "authors": s.get("authors") or [],
         "publication_types": s["publication_types"],
         # The study's tier, classified once on the server from PubMed's own

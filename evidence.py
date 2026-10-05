@@ -677,8 +677,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
     """
     studies = studies or []
     cited = {str(p) for p in (cited_pmids or ())}
-    years = sorted(int(s["year"]) for s in studies
-                   if str(s.get("year") or "").isdigit())
+    years = sorted(int(y) for y in (re.search(r"\b(?:1[89]|20)\d\d\b", str(s.get("year") or ""))
+                                    for s in studies) if y for y in [y.group(0)])
     pooled = sum(1 for s in studies
                  if strongest_label(s.get("publication_types"))
                  in ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review"))

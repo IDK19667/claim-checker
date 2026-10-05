@@ -78,6 +78,12 @@ def _text_or_none(el):
     return el.text if el is not None else None
 
 
+def year_of(value) -> str | None:
+    """The first four-digit year in a PubMed date, or None. "1995 Nov 22-29" is 1995."""
+    m = re.search(r"\b(1[89]\d\d|20\d\d)\b", str(value or ""))
+    return m.group(1) if m else None
+
+
 def _parse_article(article_el) -> dict:
     """Pull the fields we care about out of one <PubmedArticle> element."""
     medline = article_el.find("MedlineCitation")
@@ -101,7 +107,8 @@ def _parse_article(article_el) -> dict:
                 abstract_parts.append(f"{label}: {text}" if label else text)
     abstract = "\n".join(abstract_parts) if abstract_parts else None
 
-    # Journal + year
+    # Journal + year. A record with no plain year carries a MedlineDate
+    # instead, which is free text: "1995 Nov 22-29", "1998-1999 Winter".
     journal_el = article.find("Journal")
     journal_title = None
     year = None
@@ -109,9 +116,9 @@ def _parse_article(article_el) -> dict:
         journal_title = _text_or_none(journal_el.find("Title"))
         pub_date = journal_el.find("JournalIssue/PubDate")
         if pub_date is not None:
-            year = _text_or_none(pub_date.find("Year")) or _text_or_none(
+            year = year_of(_text_or_none(pub_date.find("Year")) or _text_or_none(
                 pub_date.find("MedlineDate")
-            )
+            ))
 
     # Authors
     authors = []
