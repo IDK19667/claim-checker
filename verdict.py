@@ -26,7 +26,10 @@ import breakdown
 import evidence
 import pubmed
 
-VALID_VERDICTS = ("true", "false", "complicated")
+# "insufficient" is "Not enough evidence": nothing found tests the claim.
+# It is not a softer "complicated", which is for real evidence that is
+# mixed, partial, narrow or uncertain. See DECISIONS.md.
+VALID_VERDICTS = ("true", "false", "complicated", "insufficient")
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
@@ -489,8 +492,8 @@ VERDICT_SCHEMA = {
 
 
 def _fallback(explanation: str, tldr: str = "Couldn't reach a verdict from the evidence found.",
-              still_open: str = "") -> dict:
-    return {"verdict": "complicated", "tldr": tldr, "explanation": explanation,
+              still_open: str = "", verdict: str = "complicated") -> dict:
+    return {"verdict": verdict, "tldr": tldr, "explanation": explanation,
             "still_open": still_open, "cited_studies": [], "breakdown": None}
 
 
@@ -583,6 +586,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             "well studied yet, or the search terms need refining.",
             tldr="No published studies on this yet. Unproven, not disproven.",
             still_open="Whether anyone has tested this claim directly. PubMed found nothing that does.",
+            verdict="insufficient",
         )
 
     groups = pubmed.split_and(query or "")
@@ -608,7 +612,12 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
                                         VERDICT_SCHEMA, max_tokens=12000)
         again = _read_verdict(raw, stop_note, studies, claim)
-        if again.get("breakdown") and len(_faults(again, claim, reported)) < len(faults):
+        # A retry that failed outright has no breakdown and is not an answer.
+        # One that says nothing here tests the claim may have none either,
+        # and is one.
+        answered = again.get("breakdown") or (again.get("verdict") == "insufficient"
+                                              and again.get("tldr"))
+        if answered and len(_faults(again, claim, reported)) < len(faults):
             result = again
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
@@ -704,17 +713,27 @@ more than a small preliminary study, an animal study, or a single
 case report. Note if the evidence is mixed, weak, or preliminary
 rather than settled.
 
-"complicated" is a legitimate, correct verdict. Use it when the
-evidence is mixed, weak, preliminary, or when the studies address
-something narrower or different from what the claim actually says
-(for example, "slightly lowers blood sugar" is not "cures diabetes").
-Use it too when the support comes mainly from reviews, animal or
-lab studies, or mechanism papers rather than human trials.
+There are four verdicts, and two of them are honest ways of not
+saying yes or no.
+
+"complicated" is a legitimate, correct verdict. Use it when human
+studies do test the claim and what they show is mixed, weak,
+preliminary, low certainty, true only for one group, or narrower than
+the claim (for example, "slightly lowers blood sugar" is not "cures
+diabetes").
+
+"insufficient" means not enough evidence: nothing here actually tests
+the claim. Use it when the only papers are case reports about single
+patients, animal or lab studies, mechanism papers, indirect evidence
+alone, or studies about something else. A claim that simply hasn't been
+studied is "insufficient", not "false" and not "complicated". A case
+report of someone harmed is a reason for caution, never evidence that
+the thing does not work. Its takeaway says plainly that it hasn't been
+tested: "No study has tested whether detox teas remove toxins; the only
+reports are of people made ill by them."
 
 Use "false" only when the cited studies actively contradict the
-claim. A claim that simply hasn't been studied, or that these
-studies don't address, is "complicated", not "false". Absence of
-evidence is not evidence of absence. A comparison is contradicted
+claim. Absence of evidence is not evidence of absence. A comparison is contradicted
 when the studies tested it and found no difference: "X is better
 than Y" is false when trials of X against Y found they work about
 the same.
@@ -738,7 +757,7 @@ review of fasting and sports performance is not evidence about fasting
 and weight loss. Judge every study on both in "relevance", and cite only
 the ones that match both. Studies marked OFF TOPIC are never cited. If
 none of these studies are actually about the claim, say so plainly,
-give the verdict "complicated", and cite no studies.
+give the verdict "insufficient", and cite no studies.
 
 Some studies above are marked NARROW POPULATION. They were run in one
 particular group, and they are strong evidence about that group only.
@@ -758,7 +777,7 @@ screen light returns trials of blue-light filtering glasses, a claim
 about a supplement returns trials of a lotion. A product that filters
 or blocks the thing in the claim is evidence about that product, not
 about the thing. If that is all the evidence there is, the verdict is
-"complicated" and the answer says the claim's own question was not
+"insufficient" and the answer says the claim's own question was not
 tested. Never answer the neighbouring question as though it were this
 one, and leave out details that belong only to it.
 
@@ -776,7 +795,8 @@ instead of an illness. Say so in the sentence that cites one, call it
 indirect evidence, and say what it does and does not show, as in "it
 raised the hormone linked to hair loss (Study 4), which is a reason to
 look and not a finding that anyone lost hair". Indirect evidence alone
-never supports "true" or "false".
+never supports "true" or "false"; if it is all there is, the verdict is
+"insufficient".
 
 If a SUBGROUP FINDINGS block appears above, those sentences are the
 answer to the condition the claim carries ("only if you are low",
@@ -797,8 +817,8 @@ write it in digits: "60 adults", not "sixty adults".
 
 Respond with JSON in this exact shape:
 {{
-  "verdict": "true" | "false" | "complicated",
-  "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. Say it the way you would say it out loud to a friend: a real sentence with a real verb, not a headline and not a research summary. 'Vitamin D links to colds and flu' is wrong, it is not how anyone speaks; 'Vitamin D probably will not stop you catching a cold, unless you are low on it' is right. Do not start with a noun phrase and the word 'links'. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no. Its subject is the claim's own subject: start with the thing the claim is about, not with the product the trials happened to test. 'Nothing here tests whether screen light harms eyes, only whether filtering glasses help' is right; 'Blue light glasses do not help your eyes' answers a question nobody asked",
+  "verdict": "true" | "false" | "complicated" | "insufficient",
+  "tldr": "one plain sentence, under 120 characters, that someone could text back to whoever posted the claim. No study numbers. Say it the way you would say it out loud to a friend: a real sentence with a real verb, not a headline and not a research summary. 'Vitamin D links to colds and flu' is wrong, it is not how anyone speaks; 'Vitamin D probably will not stop you catching a cold, unless you are low on it' is right. Do not start with a noun phrase and the word 'links'. If the verdict is complicated, the sentence must hold both sides, e.g. 'X does Y a little, but nothing shows it does Z', never a flat yes or no. If it is insufficient, the sentence says nothing has tested it, and never says it does not work. Its subject is the claim's own subject: start with the thing the claim is about, not with the product the trials happened to test. 'Nothing here tests whether screen light harms eyes, only whether filtering glasses help' is right; 'Blue light glasses do not help your eyes' answers a question nobody asked",
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
   "cited_study_numbers": [1, 2],
@@ -874,12 +894,11 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # rule #1 (never claim more certainty than the evidence supports)
     # if the model ignores the prompt.
     forced = False
-    if verdict != "complicated" and not cited_pmids:
-        verdict = "complicated"
+    if verdict != "insufficient" and not cited_pmids:
+        verdict = "insufficient"
         forced = True
         explanation = (explanation.rstrip() + " None of the studies found directly "
-                       "test this claim, so it can't be rated true or false from "
-                       "this evidence.").strip()
+                       "test this claim, so there isn't enough evidence to rate it.").strip()
         # A verdict with nothing behind it cannot have a breakdown of what
         # the evidence shows. The deeper layer goes with the verdict.
         deeper = None
@@ -890,7 +909,25 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # them. Downgrade rather than drop, and say whose evidence it is.
     narrow = evidence.narrow_populations(studies, cited_pmids)
     forced_narrow = ""
-    if (not forced and verdict != "complicated"
+    # Next: everything cited is a single case, an animal or a dish. That is
+    # not a test of the claim in people, whatever the model stamped on it,
+    # and a report of one person harmed never makes "does not work".
+    thin = ""
+    if not forced and verdict != "insufficient":
+        thin = evidence.untested_in_people(studies, cited_pmids)
+        if thin:
+            was = verdict
+            verdict = "insufficient"
+            explanation = (explanation.rstrip() + f" Nothing here tests this claim in "
+                           f"people, only {thin}, so there isn't enough evidence to "
+                           f"rate it.").strip()
+            if was == "false" and "single patients" in thin:
+                explanation += (" A report of someone harmed is a reason for caution, "
+                                "not evidence that it does not work.")
+    elif verdict == "insufficient" and cited_pmids:
+        thin = evidence.untested_in_people(studies, cited_pmids)
+
+    if (not forced and verdict in ("true", "false")
             and evidence.narrow_only(studies, cited_pmids, claim)):
         verdict = "complicated"
         forced_narrow = ", ".join(narrow)
@@ -934,8 +971,11 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
         tldr = (leaned if len(leaned) <= TLDR_MAX and tldr
                 and not breakdown.stamp_conflict(verdict, leaned, "", claim)
                 else LOW_CERTAINTY_TLDR)
+    if thin and breakdown.stamp_conflict(verdict, tldr, "", claim):
+        tldr = _cap(f"Nothing has tested this in people yet. The only papers are {thin}.",
+                    TLDR_MAX)
     if forced:
-        tldr = "The studies found don't actually test this claim, so it's unproven either way."
+        tldr = UNTESTED_TLDR
         if not still_open:
             still_open = "Whether any study has tested this claim directly."
     if not tldr:

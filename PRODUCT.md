@@ -66,7 +66,8 @@ either share it onward or type their own claim.
 ## What it must never do
 
 1. Never claim more certainty than the evidence supports. "It's
-   complicated" is a correct, common answer.
+   complicated" is a correct, common answer, and so is "Not enough
+   evidence" when nothing found tests the claim.
 2. Never cite a study the model wasn't shown, and never render a
    confident verdict with nothing cited (enforced in code).
 3. Never fail silently: every failure path returns a real message and a

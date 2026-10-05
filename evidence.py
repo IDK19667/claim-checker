@@ -1053,3 +1053,53 @@ def off_topic(study, claim: str) -> str | None:
     if _DRINK_CLAIM.search(claim) and _PROCEDURE.search(opening):
         return "uses alcohol as a medical procedure, not as a drink"
     return None
+
+
+# ---------------------------------------------------------------------------
+# Not tested in people
+#
+# "Not enough evidence" is its own verdict, and the commonest way to reach it
+# is a search that finds papers, just not tests. Detox teas return three case
+# reports of liver and salt-balance emergencies; cold showers return a lab
+# measurement of lymphocytes. Each is a real paper. None of them asks whether
+# the claim is true, and a report of one person harmed is no evidence that a
+# thing does not work.
+# ---------------------------------------------------------------------------
+
+_PRECLINICAL = re.compile(
+    r"\b(?:mice|mouse|murine|rats?|rodents?|zebrafish|rabbits?|piglets?|canine|"
+    r"in vitro|cell lines?|cultured cells|animal models?|ex vivo)\b", re.IGNORECASE)
+_HUMANS = re.compile(r"\b(?:participants|patients|volunteers|adults|children|women|men|"
+                     r"humans?|people|subjects|individuals)\b", re.IGNORECASE)
+
+
+def single_case(study) -> bool:
+    return any(t.startswith("Case Reports") for t in study.get("publication_types") or [])
+
+
+def preclinical(study) -> bool:
+    """An animal or lab study: it says so, and never mentions people."""
+    text = _text(study)
+    return bool(_PRECLINICAL.search(text)) and not _HUMANS.search(text)
+
+
+def untested_in_people(studies, cited_pmids=()) -> str:
+    """
+    What the cited evidence is, in words, when none of it tests anything in
+    people: "reports of single patients", "animal or lab studies", or both.
+    "" when at least one cited study is a test in people.
+    """
+    cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
+    if not cited:
+        return ""
+    kinds = set()
+    for s in cited:
+        if single_case(s) or classify(s.get("publication_types")) == "weak":
+            kinds.add("reports of single patients" if single_case(s) else "opinion pieces")
+        elif preclinical(s):
+            kinds.add("animal or lab studies")
+        else:
+            return ""
+    order = ["reports of single patients", "animal or lab studies", "opinion pieces"]
+    said = [k for k in order if k in kinds]
+    return " and ".join(said)

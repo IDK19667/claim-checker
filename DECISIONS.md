@@ -4,7 +4,37 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-02 (latest): The claim is labelled, the answer comes first, and the evidence is a chart
+## 2026-10-04 (latest): A fourth verdict, "Not enough evidence"
+
+The 20-claim audit found "It's complicated" doing two jobs. On vitamin D
+and eggs it meant what it says: real human studies that disagree, or
+help a little, or only in one group. On detox teas it meant something
+else entirely: PubMed returned three case reports of people made ill,
+and nothing that asks whether the tea removes toxins. The same stamp on
+both told a reader that detox teas were contested science. They are
+untested.
+
+So "insufficient" is now a verdict, labelled "Not enough evidence". It
+is used when there are no studies, when nothing cited tests the claim,
+or when everything cited is a case report, an opinion piece, or an
+animal or lab study. "It's complicated" is kept for evidence that exists
+and is mixed, partial, narrow or low certainty.
+
+Code enforces it, the same way it enforced the old rule: a verdict with
+nothing cited is forced to "insufficient" (it used to be forced to
+"complicated"; CLAUDE.md non-negotiable #2 is updated to match), and so
+is any verdict whose cited studies are all single cases or lab work. A
+case report of harm is never allowed to stand as "does not work": the
+explanation says it is a reason for caution, not evidence of failure.
+
+Drawn like every other verdict: same ink, same stamp, no colour, no icon
+(DESIGN.md). ClaimReview has one five-point scale and no "unrated"
+value that crawlers agree on, so it gets the middle rating, 3, the same
+as "It's complicated"; `alternateName` carries the label that tells them
+apart. Cached rows keep the verdict they were given; nothing is
+rewritten in place.
+
+## 2026-10-02: The claim is labelled, the answer comes first, and the evidence is a chart
 
 Three things on the result screen were being misread, and all three were
 read for the reader rather than guessed at.

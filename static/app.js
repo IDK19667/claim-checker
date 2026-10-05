@@ -15,6 +15,7 @@ const VERDICT_LABELS = {
   true: "Likely true",
   false: "Likely false",
   complicated: "It's complicated",
+  insufficient: "Not enough evidence",
 };
 
 // Claims people actually paste in. Tapping one runs it.
@@ -552,7 +553,7 @@ function renderResult(data) {
   const stamp = $("stamp");
   const fresh = stamp.cloneNode(false);
   fresh.textContent = VERDICT_LABELS[data.verdict] || data.verdict;
-  fresh.style.setProperty("--tilt", ({ true: "-5deg", false: "-7deg", complicated: "-4deg" })[data.verdict] || "-6deg");
+  fresh.style.setProperty("--tilt", ({ true: "-5deg", false: "-7deg", complicated: "-4deg", insufficient: "-3deg" })[data.verdict] || "-6deg");
   stamp.replaceWith(fresh);
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 

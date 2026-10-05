@@ -57,7 +57,7 @@ cards), `templates/`, `static/app.js`, `static/style.css`, `static/sw.js`.
    parameters. Fetch up to 8 studies with title, abstract, journal, year,
    authors, publication types and data-bank registrations.
 4. A second model call weighs those studies and returns schema-constrained
-   JSON: `verdict` (`true` | `false` | `complicated`), `tldr`,
+   JSON: `verdict` (`true` | `false` | `complicated` | `insufficient`), `tldr`,
    `explanation`, `still_open`, and `cited_study_numbers`.
 5. Map the cited numbers back to PMIDs. Cache the result in SQLite for 24
    hours, keyed on a normalised claim, and log the check anonymously with
@@ -72,7 +72,8 @@ cards), `templates/`, `static/app.js`, `static/style.css`, `static/sw.js`.
    complicated" is a correct and common answer. No prompt tuning may push
    toward confident true/false.
 2. **A verdict cites only studies the model was actually shown.** A
-   verdict with no citations is forced to "complicated" **in code**, not
+   verdict with no citations is forced to "insufficient" (not enough
+   evidence) **in code**, not
    by asking the model nicely. Keep both halves.
 3. **Every verdict says what is still open.** `still_open` is required in
    the schema and rendered on the page, the share card and the shared

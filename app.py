@@ -40,7 +40,8 @@ PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
 
 MAX_CLAIM_CHARS = 500
 
-VERDICT_LABELS = {"true": "Likely true", "false": "Likely false", "complicated": "It's complicated"}
+VERDICT_LABELS = {"true": "Likely true", "false": "Likely false", "complicated": "It's complicated",
+                  "insufficient": "Not enough evidence"}
 
 
 # ---------------------------------------------------------------------
@@ -125,7 +126,9 @@ def _claim_from_query_args() -> str:
     return ""
 
 
-RATING = {"true": 5, "false": 1, "complicated": 3}
+# ClaimReview has one scale. "Not enough evidence" sits in the middle with
+# "It's complicated"; the alternateName is what tells the two apart.
+RATING = {"true": 5, "false": 1, "complicated": 3, "insufficient": 3}
 
 
 def _claim_review_jsonld(cached: dict, url: str) -> dict:
@@ -329,9 +332,11 @@ def llms_txt():
         "",
         "Verdicts are written by an AI model that reads the abstracts of up to 8 "
         "PubMed records. A verdict may only cite studies the model was shown, and "
-        "a verdict with no citations is forced to \"it's complicated\" in code. "
+        "a verdict with no citations is forced to \"not enough evidence\" in code. "
         "\"Likely false\" requires studies that contradict the claim; an unstudied "
-        "claim is \"complicated\", never false. This is not medical advice.",
+        "claim, or one with only case reports or lab studies, is \"not enough "
+        "evidence\", never false. \"It's complicated\" is for real evidence that is "
+        "mixed, partial or uncertain. This is not medical advice.",
         "",
         "## How to read a result page",
         "",

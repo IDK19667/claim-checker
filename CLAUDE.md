@@ -32,7 +32,9 @@ build step is a feature: anyone can read the shipped file.
    confident true/false.
 2. A verdict cites only studies the model was actually shown
    (`cited_study_numbers` → PMID mapping in `verdict.py`). A verdict with
-   no citations is forced to "complicated" in code. Keep both.
+   no citations is forced to "insufficient" ("Not enough evidence") in
+   code, and so is one resting only on case reports or animal and lab
+   studies. Keep both.
 3. Every verdict says what is still open. The `still_open` field is
    required in the schema and rendered on the ticket, the share card and
    the shared text.

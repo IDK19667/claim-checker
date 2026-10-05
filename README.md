@@ -8,7 +8,8 @@ visual system), `DECISIONS.md` (why), `CLAUDE.md` (how to work on it).
 Paste a health claim you saw online. Evident searches real medical
 studies on PubMed, weighs how strong they are (a large clinical trial
 outranks a single small pilot), and gives you a straight answer
-(**likely true / likely false / it's complicated**) with the studies it
+(**likely true / likely false / it's complicated / not enough evidence**)
+with the studies it
 actually used highlighted, plus one line on what's still open.
 
 It's a mobile-first web app that installs on iPhone and Android from the
@@ -113,13 +114,15 @@ see Google's terms).
 5. The model weighs them (publication type is the main quality signal)
    and answers in a fixed JSON shape: verdict enum, a one-line takeaway,
    the explanation, one line on what's **still open**, and which study
-   numbers it used. The prompt says "complicated" is a correct answer,
+   numbers it used. The prompt says "complicated" and "insufficient" (not
+   enough evidence) are correct answers,
    that "false" needs studies that *contradict* the claim, that studies
    which merely match the words must not be cited, and that concrete
    numbers from the abstracts beat adjectives.
 6. Code enforces the rest: study numbers map back to the PMIDs the model
    was shown (so it can only cite what it read), any verdict with no
-   citations is forced to "complicated", any malformed/refused/truncated
+   citations, or only case reports and lab studies, is forced to
+   "insufficient", any malformed/refused/truncated
    model response degrades to "complicated" rather than an error, and
    `verdict.tidy_prose` strips filler openers and dashes and caps each
    field at a sentence boundary.

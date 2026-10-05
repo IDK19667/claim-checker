@@ -312,8 +312,10 @@ of them may ever touch a verdict**:
   deep dive control and outbound links. Never on evidence, never on a
   verdict, never as a surface.
 
-True, false and complicated are drawn identically, in the same ink, at
-the same weight. A tool whose only product is credibility does not get
+True, false, complicated and not enough evidence are drawn identically,
+in the same ink, at the same weight. "Not enough evidence" is the longest
+label and wraps inside the same stamp; it gets no icon, no tint and no
+special treatment. A tool whose only product is credibility does not get
 to colour its own answers, and green for true would imply a certainty
 the studies do not support.
 

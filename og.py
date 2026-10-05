@@ -26,7 +26,8 @@ ON_DEEP_2 = "#a9b3cb"
 INK_2 = "#3a4256"
 INK_3 = "#666e85"
 RULE = "#d3d8e2"
-LABELS = {"true": "LIKELY TRUE", "false": "LIKELY FALSE", "complicated": "IT'S COMPLICATED"}
+LABELS = {"true": "LIKELY TRUE", "false": "LIKELY FALSE", "complicated": "IT'S COMPLICATED",
+          "insufficient": "NOT ENOUGH EVIDENCE"}
 
 
 def _f(size: int, weight: int = 400) -> ImageFont.FreeTypeFont:

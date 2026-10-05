@@ -21,6 +21,7 @@ import dotenv  # noqa: E402
 dotenv.load_dotenv = lambda *a, **k: None  # keep the developer's .env out of the tests
 
 import app as appmod  # noqa: E402
+import og  # noqa: E402
 import db  # noqa: E402
 import pubmed  # noqa: E402
 import ratelimit  # noqa: E402
@@ -153,10 +154,10 @@ with db.get_conn() as conn:
     row = conn.execute("select studies_json from checks order by id limit 1").fetchone()
 t("log keeps full study metadata", json.loads(row["studies_json"])[0]["authors"] == ["A B"])
 
-# ---- guard: false with no citations -> complicated ---------------------------
+# ---- guard: false with no citations -> not enough evidence -------------------
 fg.models.script = [Resp("q"), Resp(VJ("false", []))]
 d = P("uncited false claim").get_json()
-t("uncited false -> complicated + honest tldr", d["verdict"] == "complicated" and "can't be rated" in d["explanation"] and "unproven" in d["tldr"], d)
+t("uncited false -> not enough evidence + honest tldr", d["verdict"] == "insufficient" and "isn't enough evidence" in d["explanation"] and "unproven" in d["tldr"], d)
 
 # ---- per-ip limit (1.1.1.1 has used 2 of 2) ---------------------------------
 fg.models.script = [Resp("q"), Resp(VJ("true", [1]))]
@@ -1128,8 +1129,8 @@ t("  and every section of the layer is there",
 # shows: the deeper layer goes wherever the verdict goes.
 fg.models.script = [Resp("q"), Resp(VJ("true", [], **_BD_RAW))]
 _un = P("uncited with a breakdown", ip="9.9.9.9").get_json()
-t("a forced complicated verdict carries no breakdown",
-  _un["verdict"] == "complicated" and _un["breakdown"] is None, _un["breakdown"])
+t("a forced 'not enough evidence' verdict carries no breakdown",
+  _un["verdict"] == "insufficient" and _un["breakdown"] is None, _un["breakdown"])
 
 # A row cached before this column existed has no breakdown. It must render as a
 # result without one, not as a broken one.
@@ -1602,6 +1603,57 @@ db.put_cached_verdict("off topic render", "q", "true", "Because (Study 1).", ["L
 _html = c.get("/?q=off%20topic%20render").data.decode()
 t("the server-rendered chart says which bars are off topic",
   "read, off topic" in _html and "3 off topic" in _html)
+
+
+# 6. A fourth verdict, "Not enough evidence", for when nothing tests the claim.
+_DETOX = [_study("T1", "Yogi Detox Tea: A Potential Cause of Acute Liver Failure.",
+                 abstract="We report a woman who developed acute liver failure after drinking a detox tea.",
+                 types=["Case Reports", "Journal Article"]),
+          _study("T2", "Acute Severe Hyponatremia Following Use of Detox Tea.",
+                 abstract="A patient presented with hyponatremia.", types=["Case Reports"])]
+t("'insufficient' is a verdict the schema allows",
+  "insufficient" in verdict.VALID_VERDICTS
+  and "insufficient" in verdict.VERDICT_SCHEMA["properties"]["verdict"]["enum"])
+t("  and it has its own label everywhere a verdict is drawn",
+  appmod.VERDICT_LABELS["insufficient"] == "Not enough evidence"
+  and og.LABELS["insufficient"] == "NOT ENOUGH EVIDENCE"
+  and 'insufficient: "Not enough evidence"' in open("static/app.js").read()
+  and 'insufficient: "-3deg"' in open("static/app.js").read())
+t("no studies at all is not enough evidence, not 'complicated'",
+  verdict.weigh_evidence("Detox teas remove toxins", [])["verdict"] == "insufficient")
+t("only case reports are not a test of the claim",
+  evidence.untested_in_people(_DETOX, ["T1", "T2"]) == "reports of single patients"
+  and evidence.untested_in_people(_DETOX + _ASHWA, ["T1", "A1"]) == "")
+t("  nor are animal and lab studies",
+  evidence.untested_in_people([_study("M", "Cold exposure in mice", abstract="Mice were cooled.",
+                                      types=["Journal Article"])], ["M"]) == "animal or lab studies")
+fg.models.script = [Resp(VJ("false", [1, 2], tldr="Detox teas don't remove toxins and can hurt your liver.",
+                            explanation="Two patients were harmed (Studies 1, 2).",
+                            evidence=["A woman had liver failure after a detox tea (Study 1)."]))]
+_v = verdict.weigh_evidence("Detox teas remove toxins from the body", _DETOX, "(detox tea) AND (toxins)")
+t("a case report of harm never makes 'does not work': the stamp is not enough evidence",
+  _v["verdict"] == "insufficient", _v)
+t("  the explanation says harm is a reason for caution, not evidence it fails",
+  "reason for caution, not evidence that it does not work" in _v["explanation"], _v["explanation"])
+t("  and the takeaway no longer says it doesn't work",
+  "don't remove" not in _v["tldr"] and "tested" in _v["tldr"]
+  and not breakdown.stamp_conflict("insufficient", _v["tldr"], "", "Detox teas remove toxins from the body"),
+  _v["tldr"])
+fg.models.script = [Resp(VJ("insufficient", [], tldr="No study has tested whether detox teas remove toxins."))]
+_v = verdict.weigh_evidence("Detox teas remove toxins from the body", _DETOX, "(detox tea) AND (toxins)")
+t("the model's own 'insufficient' keeps its takeaway",
+  _v["verdict"] == "insufficient" and _v["tldr"] == "No study has tested whether detox teas remove toxins.", _v)
+t("the prompt defines all four, and says a harm report is not 'does not work'",
+  '"insufficient" means not enough evidence' in verdict.weigh_prompt("c", "s")
+  and "never evidence that\nthe thing does not work" in verdict.weigh_prompt("c", "s"))
+db.put_cached_verdict("not enough render", "q", "insufficient", "Nothing tests it.", [], _DETOX,
+                      tldr="No study has tested this.")
+_html = c.get("/?q=not%20enough%20render").data.decode()
+t("the server-rendered page stamps 'Not enough evidence'",
+  "Not enough evidence" in _html and '"alternateName": "Not enough evidence"' in _html
+  and '"ratingValue": 3' in _html, _html[:0])
+t("  and the link-preview card draws it",
+  c.get("/og/" + db.normalize_claim("not enough render") + ".png").status_code == 200)
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

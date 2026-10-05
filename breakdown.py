@@ -632,7 +632,11 @@ _COMPARES_MORE = re.compile(r"\b(?:better|more|faster|superior|outperform\w*)\b"
 _TURN_AFTER = re.compile(r",?\s+\b(?:but|yet|however)\b,?\s+", re.IGNORECASE)
 _TURN_BEFORE = re.compile(r",?\s+\b(?:though|although|even though|while|whereas)\b\s+",
                           re.IGNORECASE)
-_AND_CLAUSE = re.compile(r",\s+(?:and|so)\s+|;\s+", re.IGNORECASE)
+# A second clause starts at ", and", ", so", ";", or a bare "and" that
+# opens a new verb ("don't remove toxins and can hurt your liver"), whose
+# hedge belongs to it and not to the answer before it.
+_AND_CLAUSE = re.compile(r",\s+(?:and|so)\s+|;\s+|\s+and\s+(?=(?:can|could|may|might|"
+                         r"will|may|is|are|was|were|has|have|cause|causes)\b)", re.IGNORECASE)
 
 
 def _stem(word: str) -> str:
