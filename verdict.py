@@ -422,6 +422,9 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
         caveats.remove("no untreated comparison group")
     if caveats:
         lines.append("LIMITED: " + "; ".join(caveats))
+    why_off = evidence.off_topic(study, claim)
+    if why_off:
+        lines.append(f"OFF TOPIC: {why_off}. Do not cite it")
     if evidence.is_review(study) and evidence.low_certainty(study):
         lines.append("LOW CERTAINTY: this review rates its own evidence as low certainty")
     lines.append(f"Abstract: {abstract}\n")
@@ -462,10 +465,25 @@ VERDICT_SCHEMA = {
         "explanation": {"type": "string"},
         "still_open": {"type": "string"},
         "cited_study_numbers": {"type": "array", "items": {"type": "integer"}},
+        # One judgement per study, on the two things a study has to match to
+        # be evidence for this claim. Read by _relevance below.
+        "relevance": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "study": {"type": "integer"},
+                    "subject": {"type": "boolean"},
+                    "outcome": {"type": "boolean"},
+                },
+                "required": ["study", "subject", "outcome"],
+                "additionalProperties": False,
+            },
+        },
         **breakdown.SCHEMA_PROPERTIES,
     },
-    "required": ["verdict", "tldr", "explanation", "still_open", "cited_study_numbers"]
-                + breakdown.SCHEMA_REQUIRED,
+    "required": ["verdict", "tldr", "explanation", "still_open", "cited_study_numbers",
+                 "relevance"] + breakdown.SCHEMA_REQUIRED,
     "additionalProperties": False,
 }
 
@@ -592,6 +610,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         again = _read_verdict(raw, stop_note, studies, claim)
         if again.get("breakdown") and len(_faults(again, claim, reported)) < len(faults):
             result = again
+    # Which studies were off topic is a fact about this answer, so it is
+    # written onto the records the answer is shown and cached with: the
+    # chart leaves them out of its strong count, and says why.
+    off = result.pop("off_topic", None) or {}
+    for s in studies:
+        s.pop("off_topic", None)
+        if s["pmid"] in off:
+            s["off_topic"] = off[s["pmid"]]
     return _align_stamp(result, claim)
 
 
@@ -702,9 +728,17 @@ depends", and its takeaway holds both sides. Never stamp "complicated"
 over a takeaway that says plainly yes or plainly no.
 
 PubMed's search can return studies that only superficially match the
-words in the claim. Only cite a study if it genuinely bears on this
-claim. If none of these studies are actually about the claim, say so
-plainly, give the verdict "complicated", and cite no studies.
+words in the claim. A study is evidence for this claim only when it
+matches both halves of it: it tests the claim's own subject (not a
+neighbour, a different drug given to the same people, or the same
+substance used another way) and it measures the claim's own outcome
+(or, when marked INDIRECT, its stand-in). A drug-dose trial in smokers
+with lung cancer is not evidence that smoking causes lung cancer; a
+review of fasting and sports performance is not evidence about fasting
+and weight loss. Judge every study on both in "relevance", and cite only
+the ones that match both. Studies marked OFF TOPIC are never cited. If
+none of these studies are actually about the claim, say so plainly,
+give the verdict "complicated", and cite no studies.
 
 Some studies above are marked NARROW POPULATION. They were run in one
 particular group, and they are strong evidence about that group only.
@@ -768,6 +802,7 @@ Respond with JSON in this exact shape:
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
   "cited_study_numbers": [1, 2],
+  "relevance": [{{"study": 1, "subject": true, "outcome": true}}, {{"study": 2, "subject": true, "outcome": false}}],
 {breakdown.PROMPT_SHAPE}
 }}"""
 
@@ -816,13 +851,22 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
                 if pmid not in cited_pmids:
                     cited_pmids.append(pmid)
 
-    explanation = breakdown.tell_straight(breakdown.plain(breakdown.soften(
-        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))), studies)
+    # The relevance gate. A study the code knows cannot bear on this claim,
+    # or that the model itself judged to miss its subject or its outcome, is
+    # not used, whatever the model put in its cited list, and no sentence
+    # that leans on it alone reaches the reader.
+    off = _relevance(parsed, studies, claim)
+    off_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in off}
+    cited_pmids = [p for p in cited_pmids if p not in off]
+
+    explanation = breakdown.drop_citing(breakdown.tell_straight(breakdown.plain(breakdown.soften(
+        tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))), studies),
+        off_numbers, len(studies))
     still_open = tidy_prose(str(parsed.get("still_open") or ""), STILL_OPEN_MAX)
 
     # The deeper layer, gated. Everything it could not tie back to these
     # abstracts has already been dropped by the time this returns.
-    deeper = breakdown.ground(parsed, studies, tidy_prose, claim)
+    deeper = breakdown.ground(parsed, studies, tidy_prose, claim, skip=off_numbers)
 
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or
@@ -915,4 +959,37 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
         "still_open": still_open,
         "cited_studies": cited_pmids,
         "breakdown": deeper,
+        "off_topic": off,
     }
+
+
+OFF_SUBJECT = "tests something other than what this claim is about"
+OFF_OUTCOME = "measures a different outcome from the one this claim names"
+
+
+def _relevance(parsed: dict, studies: list[dict], claim: str) -> dict:
+    """
+    {pmid: why} for every study that is not evidence for this claim: the
+    ones code can rule out on sight, then the ones the model judged to miss
+    the claim's subject or its outcome. A missing or malformed judgement
+    rules nothing out; the gate only ever removes on a clear "no".
+    """
+    off = {}
+    for s in studies:
+        why = evidence.off_topic(s, claim)
+        if why:
+            off[s["pmid"]] = why
+    for item in parsed.get("relevance") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            n = int(item.get("study"))
+        except (TypeError, ValueError):
+            continue
+        if not 0 < n <= len(studies) or studies[n - 1]["pmid"] in off:
+            continue
+        if item.get("subject") is False:
+            off[studies[n - 1]["pmid"]] = OFF_SUBJECT
+        elif item.get("outcome") is False:
+            off[studies[n - 1]["pmid"]] = OFF_OUTCOME
+    return off

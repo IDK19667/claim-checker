@@ -1535,5 +1535,73 @@ t("the prompt marks a trial with nobody untreated, and never calls it randomised
   and "LOW CERTAINTY" in verdict._format_study_for_prompt(1, _ASHWA[0])
   and "not randomised evidence" in verdict.weigh_prompt("c", "s"))
 
+
+# 5. A study is used only when it matches the claim's subject and its outcome.
+_SMOKE = [_study("L1", "Cigarette Smoking Reduction and Health Risks: A Systematic Review and Meta-analysis.",
+                 types=["Meta-Analysis"]),
+          _study("L2", "Overcoming CYP1A1/1A2 mediated induction of metabolism by escalating erlotinib dose in current smokers.",
+                 abstract="This study aimed to determine the maximum tolerated dose of erlotinib in "
+                          "advanced non-small-cell lung cancer (NSCLC) patients who smoke."),
+          _study("L3", "Risk-Based lung cancer screening: A systematic review.", types=["Systematic Review"]),
+          _study("L4", "Perceived Health Risks of Snus and Medicinal Nicotine Products."),
+          _study("L5", "Smoking and lung cancer in a prospective cohort",
+                 abstract="We followed 50,000 adults without cancer for 20 years.",
+                 types=["Observational Study"])]
+t("a drug-dose trial in smokers with lung cancer is off topic for 'smoking causes lung cancer'",
+  "already have lung cancer" in (evidence.off_topic(_SMOKE[1], "Smoking causes lung cancer") or ""))
+t("  so are screening and a survey of beliefs, and the cohort and the review are not",
+  evidence.off_topic(_SMOKE[2], "Smoking causes lung cancer")
+  and evidence.off_topic(_SMOKE[3], "Smoking causes lung cancer")
+  and not evidence.off_topic(_SMOKE[0], "Smoking causes lung cancer")
+  and not evidence.off_topic(_SMOKE[4], "Smoking causes lung cancer"))
+t("  ethanol injected in heart surgery is off topic for red wine",
+  evidence.off_topic(_study("W", "Effect of Catheter Ablation With Vein of Marshall Ethanol Infusion",
+                            abstract="a"), "Red wine is good for the heart")
+  and not evidence.off_topic(_study("W2", "Red wine and coronary events", abstract="a"),
+                             "Red wine is good for the heart"))
+t("  a treatment trial is not ruled out in code for a claim that is not about causes",
+  evidence.off_topic(_SMOKE[1], "Erlotinib helps smokers with lung cancer") is None)
+fg.models.script = [Resp(VJ("true", [1, 2, 3, 4, 5], tldr="Smoking causes lung cancer.",
+                            explanation="Smoking raised risk (Study 5). Erlotinib dose was raised in smokers (Study 2).",
+                            relevance=[{"study": i, "subject": True, "outcome": True} for i in range(1, 6)],
+                            evidence=["Erlotinib needed a higher dose in smokers (Study 2).",
+                                      "Smokers had far more lung cancer (Study 5)."]))]
+_v = verdict.weigh_evidence("Smoking causes lung cancer", _SMOKE, "(smoking) AND (lung cancer)")
+t("the code gate removes off-topic studies from what was used, whatever the model cited",
+  _v["cited_studies"] == ["L1", "L5"], _v["cited_studies"])
+t("  and drops every sentence that leaned on them alone",
+  "Erlotinib" not in _v["explanation"] and "Smoking raised risk" in _v["explanation"]
+  and not any("Erlotinib" in p for p in (_v["breakdown"] or {}).get("evidence", [])), _v)
+t("  and writes the reason onto the record it is cached with",
+  "already have lung cancer" in (_SMOKE[1].get("off_topic") or "")
+  and not _SMOKE[0].get("off_topic"))
+_snap = evidence.snapshot(_SMOKE, _v["cited_studies"])
+t("  an off-topic strong design is not counted as strong evidence",
+  _snap["strong"] == 1 and _snap["off_topic"] == 3 and "3 off topic" in _snap["facts"], _snap)
+_IF = [_study("F1", "Intermittent fasting versus continuous calorie restriction for weight loss",
+              abstract="We randomised 300 adults to fasting or daily restriction.", types=["Meta-Analysis"]),
+       _study("F2", "Intermittent Fasting: Does It Affect Sports Performance? A Systematic Review.",
+              types=["Systematic Review"])]
+fg.models.script = [Resp(VJ("false", [1, 2], tldr="Intermittent fasting works no better than ordinary dieting.",
+                            relevance=[{"study": 1, "subject": True, "outcome": True},
+                                       {"study": 2, "subject": True, "outcome": False}],
+                            evidence=["Weight loss was the same (Study 1).",
+                                      "Fasting did not change sports performance (Study 2)."]))]
+_v = verdict.weigh_evidence("Intermittent fasting is better for weight loss than regular dieting", _IF,
+                            "(fasting) AND (weight)")
+t("the model's own 'wrong outcome' judgement removes the sports review from what was used",
+  _v["cited_studies"] == ["F1"] and _IF[1].get("off_topic") == verdict.OFF_OUTCOME
+  and not any("sports" in p for p in (_v["breakdown"] or {}).get("evidence", [])), _v)
+t("  a judgement left out rules nothing out",
+  verdict._relevance({"relevance": [{"study": 1}]}, _IF, "c") == {})
+t("the prompt asks for subject and outcome for every study, and marks OFF TOPIC",
+  '"relevance"' in verdict.weigh_prompt("c", "s") and "relevance" in verdict.VERDICT_SCHEMA["required"]
+  and "OFF TOPIC" in verdict._format_study_for_prompt(2, _SMOKE[1], claim="Smoking causes lung cancer"))
+db.put_cached_verdict("off topic render", "q", "true", "Because (Study 1).", ["L1"], _SMOKE,
+                      tldr="Smoking causes lung cancer.")
+_html = c.get("/?q=off%20topic%20render").data.decode()
+t("the server-rendered chart says which bars are off topic",
+  "read, off topic" in _html and "3 off topic" in _html)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

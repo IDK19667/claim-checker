@@ -481,6 +481,9 @@ def _study_payload(s: dict, cited: set) -> dict:
         "data_banks": s.get("data_banks"),
         "url": s["url"],
         "cited_in_verdict": s["pmid"] in cited,
+        # Why this record is not evidence for the claim, or null. Set by
+        # the relevance gate in verdict.py and cached with the record.
+        "off_topic": s.get("off_topic"),
     }
 
 

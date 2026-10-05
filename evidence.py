@@ -693,8 +693,11 @@ def snapshot(studies, cited_pmids=()) -> dict:
         "pooled": pooled,
         "trials": trials,
         "registered": sum(1 for s in studies if s.get("data_banks")),
+        # A strong design about something else is not strong evidence here.
         "strong": sum(1 for s in studies
-                      if classify(s.get("publication_types")) == "strong"),
+                      if classify(s.get("publication_types")) == "strong"
+                      and not s.get("off_topic")),
+        "off_topic": sum(1 for s in studies if s.get("off_topic")),
         "retracted": sum(1 for s in studies
                          if classify(s.get("publication_types")) == "retracted"),
         "year_from": years[0] if years else None,
@@ -739,6 +742,8 @@ def _chart_words(snap: dict) -> dict:
         facts.append(f"{snap['registered']} registered in advance")
     if snap["retracted"]:
         facts.append(_n_things(snap["retracted"], "retracted paper", "retracted papers"))
+    if snap.get("off_topic"):
+        facts.append(f"{snap['off_topic']} off topic")
     if snap["year_from"]:
         span = (str(snap["year_from"]) if snap["year_from"] == snap["year_to"]
                 else f"{snap['year_from']} to {snap['year_to']}")
@@ -746,6 +751,8 @@ def _chart_words(snap: dict) -> dict:
 
     described = [f"{_n_things(read, 'study', 'studies')} read, "
                  f"{used} used for this verdict."]
+    if snap.get("off_topic"):
+        described.append(f"{snap['off_topic']} of them off topic for this claim.")
     if snap["mix"]:
         described.append("By study design: "
                          + ", ".join(f"{m['count']} {m['label']}"
@@ -985,3 +992,64 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False) -> str | N
     if solid or not limited:
         return None
     return "it rests on small, pilot or uncontrolled studies"
+
+
+# ---------------------------------------------------------------------------
+# Off topic
+#
+# A study is evidence for a claim when it tests the claim's subject and
+# measures the claim's outcome. PubMed matches words, so a search for
+# "smoking AND lung cancer" returns a drug-dose trial in smokers who already
+# have lung cancer, and "red wine AND heart" returns heart surgery that
+# injects ethanol into a vein. The model is asked to judge every study on
+# both counts; these are the cases that need no judgement, caught in code so
+# they are never cited whatever the model decides.
+# ---------------------------------------------------------------------------
+
+CAUSE_CLAIM = re.compile(
+    r"\b(?:causes?|caused|causing|leads? to|gives? you|triggers?|"
+    r"(?:raises?|increases?) (?:the |your )?risk of)\s+(?:the\s+)?(?:risk of\s+)?"
+    r"(?P<outcome>[a-z0-9' -]{3,40}?)\s*(?:risk)?\s*$", re.IGNORECASE)
+_SICK_WITH = (r"\b(?:patients|people|persons|adults|individuals|survivors|cases|men|women|"
+              r"children)\s+(?:\w+\s+){{0,2}}?(?:with|having|diagnosed with|treated for)\s+"
+              r"(?:[\w-]+\s+){{0,3}}?{core}\b")
+_SICK_NOUN = r"\b{core}(?:\s*\([^)]{{1,12}}\))?\s+(?:patients|survivors|cases)\b"
+_ABBREV_PATIENTS = {"lung cancer": r"\b(?:NSCLC|SCLC)\b"}
+_DRINK_CLAIM = re.compile(r"\b(?:wine|alcohol|beer|spirits|liquor|drinking|ethanol)\b",
+                          re.IGNORECASE)
+_PROCEDURE = re.compile(
+    r"\bethanol (?:infusion|injection|ablation)\b|\balcohol septal ablation\b|"
+    r"\b(?:infusion|injection) of (?:dehydrated )?(?:ethanol|alcohol)\b|\bablation\b",
+    re.IGNORECASE)
+_SURVEY = re.compile(
+    r"\bperceived (?:health )?risks?\b|\bperceptions? of\b|\battitudes? (?:to|towards|about)\b|"
+    r"\bbeliefs? about\b|\bawareness of\b|\bknowledge,? attitudes?\b", re.IGNORECASE)
+
+
+def caused_outcome(claim: str) -> str:
+    """'lung cancer' for 'Smoking causes lung cancer'; '' for other claims."""
+    m = CAUSE_CLAIM.search(str(claim or "").strip().rstrip(".!?"))
+    return m.group("outcome").strip().lower() if m else ""
+
+
+def off_topic(study, claim: str) -> str | None:
+    """Why this record cannot be evidence for this claim, or None."""
+    claim = str(claim or "")
+    title = str(study.get("title") or "")
+    opening = f"{title}. {str(study.get('abstract') or '')[:SUBJECT_WINDOW]}"
+    outcome = caused_outcome(claim)
+    if outcome:
+        core = re.escape(outcome).replace(r"\ ", r"[\s-]+")
+        sick = [_SICK_WITH.format(core=core), _SICK_NOUN.format(core=core)]
+        if outcome in _ABBREV_PATIENTS:
+            sick.append(_ABBREV_PATIENTS[outcome])
+        if any(re.search(p, opening, re.IGNORECASE) for p in sick):
+            return f"run in people who already have {outcome}, so it cannot show what causes it"
+    if (outcome or RISK_CLAIM.search(claim)) and re.search(r"\bscreening\b", title, re.IGNORECASE) \
+            and not re.search(r"\bscreening\b", claim, re.IGNORECASE):
+        return "about finding the disease early, not about what causes it"
+    if _SURVEY.search(title) and not _SURVEY.search(claim):
+        return "measures what people believe, not what happens to them"
+    if _DRINK_CLAIM.search(claim) and _PROCEDURE.search(opening):
+        return "uses alcohol as a medical procedure, not as a drink"
+    return None

@@ -1310,7 +1310,15 @@ def tell_straight(text: str, studies: list[dict]) -> str:
     return say_nulls(keep_comparison(text, studies), studies)
 
 
-def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
+def drop_citing(text: str, skip, count: int) -> str:
+    """Every sentence of text except those resting only on studies in skip."""
+    if not skip:
+        return text or ""
+    return " ".join(sentence for sentence in sentences(text or "")
+                    if not (refs(sentence, count) and set(refs(sentence, count)) <= set(skip)))
+
+
+def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | None:
     """
     Gate whatever the model returned into a breakdown the page can render,
     or None if too little survived to be worth opening.
@@ -1335,7 +1343,7 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
     def clean(value, limit):
         said = soften(tidy(str(value or ""), limit))
         before = set(kept_terms)
-        out = keep_sentences(plain(said, kept_terms), count, known)
+        out = drop_citing(keep_sentences(plain(said, kept_terms), count, known), skip, count)
         if out:
             return tell_straight(out, studies)
         # Nothing survived. The commonest reason is the length rule, and the
@@ -1348,8 +1356,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "") -> dict | None:
         # reader never got.
         kept_terms.clear()
         kept_terms.update(before)
-        return tell_straight(
-            keep_sentences(plain(said, set(PARKED_TERMS)), count, known), studies)
+        return tell_straight(drop_citing(
+            keep_sentences(plain(said, set(PARKED_TERMS)), count, known), skip, count), studies)
 
     parts = []
     for item in (raw.get("parts") or [])[:4]:

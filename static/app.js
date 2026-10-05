@@ -398,9 +398,10 @@ function renderChart(data) {
   const bars = $("chart-bars");
   bars.classList.remove("reveal");
   bars.innerHTML = data.studies.map((s, i) => {
-    const tip = [s.type_label, s.year].filter(Boolean).join(" \u00b7 ");
+    const tip = [s.type_label, s.year, s.off_topic ? "off topic" : ""].filter(Boolean).join(" \u00b7 ");
     const said = [`Study ${i + 1}`, (s.type_label || "").toLowerCase(), s.year,
-                  s.cited_in_verdict ? "used for this verdict" : "read but not used"]
+                  s.cited_in_verdict ? "used for this verdict"
+                    : s.off_topic ? "read, off topic" : "read but not used"]
       .filter(Boolean).join(", ");
     return `<button type="button" class="barcol${s.cited_in_verdict ? " is-used" : ""}" data-i="${i}" style="--i:${i}"` +
       ` aria-label="${escapeHtml(said)}. Go to it in the list of studies.">` +
@@ -1350,7 +1351,7 @@ function openStudy(i) {
   const s = currentResult && currentResult.studies[i];
   if (!s) return;
   const ti = typeInfo(s.publication_types);
-  $("sheet-meta").innerHTML = `${escapeHtml(ti.label)}${s.year ? " · " + escapeHtml(s.year) : ""}${s.cited_in_verdict ? " · <span style='color:var(--ink)'>used for the verdict</span>" : ""}`;
+  $("sheet-meta").innerHTML = `${escapeHtml(ti.label)}${s.year ? " · " + escapeHtml(s.year) : ""}${s.cited_in_verdict ? " · <span style='color:var(--ink)'>used for the verdict</span>" : ""}${s.off_topic ? " · off topic: " + escapeHtml(s.off_topic) : ""}`;
   $("sheet-title").textContent = s.title;
   $("sheet-src").textContent = [s.journal, `PMID ${s.pmid}`].filter(Boolean).join(" · ");
   const tc = $("sheet-type");
