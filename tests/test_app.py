@@ -1374,5 +1374,37 @@ t("  a confident stamp over opposite words drops to complicated, never the other
 t("the prompt says the verdict and the takeaway are one answer",
   "one answer said twice" in verdict.weigh_prompt("c", "s"))
 
+
+# 2. The one-group downgrade reads the claim. Measles vaccines are given to
+# children, so the Cochrane review in children answers the claim as asked.
+_MEASLES = [_study("M1", "Vaccines for measles, mumps, rubella, and varicella in children.",
+                   types=["Systematic Review"]),
+            _study("M2", "Measles vaccine effectiveness in children: a meta-analysis",
+                   types=["Meta-Analysis"])]
+t("the claim's own group is not narrow for that claim",
+  evidence.narrow_only(_MEASLES, ["M1", "M2"], "Vaccines reduce the risk of severe measles")
+  is False)
+t("  a claim that names its group counts the same",
+  evidence.narrow_only(_MEASLES, ["M1", "M2"], "Sugar makes children hyperactive") is False)
+t("  and a general claim answered only in children is still downgraded",
+  evidence.narrow_only(_MEASLES, ["M1", "M2"], "Vitamin D stops colds") is True)
+t("  a risk claim is never answered by people who already have the disease",
+  "people with diabetes" not in evidence.claim_groups(
+      "Regular physical activity reduces the risk of type 2 diabetes")
+  and "people with diabetes" in evidence.claim_groups(
+      "Cinnamon lowers blood sugar in type 2 diabetes"))
+t("  'women and men' is everyone, not 'men only'",
+  evidence.population(_study("WM", "Time-Restricted Eating in Women and Men With Overweight"))
+  is None)
+fg.models.script = [Resp(VJ("true", [1, 2], tldr="Vaccines cut severe measles in children.",
+                            evidence=["The vaccine cut measles cases (Study 1)."]))]
+_v = verdict.weigh_evidence("Vaccines reduce the risk of severe measles", _MEASLES,
+                            "(vaccine) AND (measles)")
+t("  so measles stays 'Likely true' and its takeaway stands",
+  _v["verdict"] == "true" and "Every study behind this" not in _v["explanation"], _v)
+t("  and the prompt marks those studies as the claim's own group, not narrow",
+  "the group this claim is about" in verdict._format_study_for_prompt(
+      1, _MEASLES[0], claim="Vaccines reduce the risk of severe measles"))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

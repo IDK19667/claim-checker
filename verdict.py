@@ -383,7 +383,7 @@ def _two_groups(query: str) -> str:
 # ---------------------------------------------------------------------
 
 def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
-                             surrogate: str = "") -> str:
+                             surrogate: str = "", claim: str = "") -> str:
     pub_types = ", ".join(study.get("publication_types") or []) or "not specified"
     abstract = (study.get("abstract") or "(no abstract available)").strip()
     # Trim very long abstracts so the prompt stays a reasonable size.
@@ -394,7 +394,10 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
     # group and weak evidence about everyone else, and saying so here is
     # what lets the prompt below insist the answer names them.
     pop = evidence.population(study)
-    who = f"NARROW POPULATION: {pop} only" if pop else "Population: general"
+    if pop and pop in evidence.claim_groups(claim):
+        who = f"Population: {pop}, the group this claim is about"
+    else:
+        who = f"NARROW POPULATION: {pop} only" if pop else "Population: general"
     # Whether this record measured the claim's outcome or a stand-in for it,
     # read off the title and abstract rather than left to the model. A trial
     # that measured a hormone has not measured hair loss, and the answer is
@@ -554,7 +557,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     groups = pubmed.split_and(query or "")
     outcome = groups[1] if len(groups) > 1 else ""
     studies_block = "\n\n".join(
-        _format_study_for_prompt(i + 1, s, outcome, surrogate)
+        _format_study_for_prompt(i + 1, s, outcome, surrogate, claim)
         for i, s in enumerate(studies)
     )
     prompt = weigh_prompt(claim, studies_block,
@@ -694,7 +697,10 @@ Never answer a general claim from narrow-population studies alone: if
 those are all you have, the verdict is "complicated" and the answer
 says who the evidence covers. Whenever you lean on one, name its group
 in the sentence that cites it, so "it cuts infections (Study 7)" reads
-"in people with prediabetes it cut infections (Study 7)".
+"in people with prediabetes it cut infections (Study 7)". A claim that
+names a group, or is about something that happens to one group (measles
+vaccines and children, menopause and women), is not a general claim:
+studies marked as the group this claim is about answer it as asked.
 
 Answer the claim that was typed. Its subject and its outcome are both
 fixed by the words in it, and the answer has to be about those two
@@ -817,7 +823,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # them. Downgrade rather than drop, and say whose evidence it is.
     narrow = evidence.narrow_populations(studies, cited_pmids)
     forced_narrow = ""
-    if not forced and verdict != "complicated" and evidence.narrow_only(studies, cited_pmids):
+    if (not forced and verdict != "complicated"
+            and evidence.narrow_only(studies, cited_pmids, claim)):
         verdict = "complicated"
         forced_narrow = ", ".join(narrow)
         explanation = (explanation.rstrip() + f" Every study behind this was run in "

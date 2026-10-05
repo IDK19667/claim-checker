@@ -114,6 +114,14 @@ POPULATIONS = [
 
 _POOLED = ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review")
 
+# "Women and men with overweight" is everyone, not one sex. Read before the
+# table above, because "men" is matched first and the audit found a mixed
+# trial labelled "men only".
+_BOTH_SEXES = re.compile(r"\bwomen\b.{0,40}\bmen\b(?!tal)|\bmen\b(?!tal).{0,40}\bwomen\b|"
+                         r"\bmales? and females?\b|\bfemales? and males?\b|\bboth sexes\b",
+                         re.IGNORECASE)
+_SEX_LABELS = ("men only", "women only")
+
 
 def population(study) -> str | None:
     """
@@ -131,12 +139,78 @@ def population(study) -> str | None:
     pooled = strongest_label(study.get("publication_types")) in _POOLED
     # Trials state who they enrolled early, in Background or Methods.
     body = "" if pooled else str(study.get("abstract") or "")[:700]
+    mixed_sex = bool(_BOTH_SEXES.search(title) or (body and _BOTH_SEXES.search(body)))
     for pattern, label in POPULATIONS:
+        if mixed_sex and label in _SEX_LABELS:
+            continue
         if re.search(pattern, title, re.IGNORECASE):
             return label
         if body and re.search(pattern, body, re.IGNORECASE):
             return label
     return None
+
+
+# ---------------------------------------------------------------------------
+# Whose claim it is
+#
+# The downgrade below exists for a general claim answered from one group's
+# studies. A claim about one group is not that: "vaccines reduce the risk of
+# severe measles" is a claim about children, because children are who get
+# measles vaccines, and the Cochrane review in children is its best answer.
+# The audit stamped it "It's complicated" for being answered in children.
+# ---------------------------------------------------------------------------
+
+# (pattern on the claim, groups whose studies answer it). The groups a claim is
+# about without saying so.
+NATURAL_GROUPS = [
+    (r"\bmeasles|\bmumps|\brubella|\bchicken ?pox|\bvaricella|\bwhooping cough|"
+     r"\bpertussis|\bpolio|\brotavirus|\bchildhood|\bADHD\b|\bhyperactiv|\bcolic\b|"
+     r"\bteething|\bschool", ("children", "newborn babies")),
+    (r"\bautis[mt]", ("children",)),
+    (r"\bbreast.?fe|\bbab(?:y|ies)\b|\binfants?\b|\bnewborns?\b", ("newborn babies",)),
+    (r"\bpregnan|\bmorning sickness|\bpre.?eclampsia|\bgestational", ("pregnant women",)),
+    (r"\bmenopaus|\bhot (?:flash|flush)", ("women after menopause",)),
+    (r"\bosteoporosis", ("women after menopause", "older adults")),
+    (r"\bperiod pain|\bmenstrua|\bPCOS\b|\bpolycystic ovar", ("women only",)),
+    (r"\bprostate|\berectile", ("men only",)),
+    (r"\bdementia|\balzheimer|\bsarcopenia|\bfrailty", ("older adults",)),
+    (r"\bsports? performance|\bathletic|\bendurance\b|\bsprint", ("athletes",)),
+    # Trials of preventing type 2 diabetes enrol the people at risk of it.
+    (r"\btype (?:2|II) diabet", ("people with prediabetes",)),
+]
+_NATURAL_GROUPS = [(re.compile(p, re.IGNORECASE), groups) for p, groups in NATURAL_GROUPS]
+
+# Groups defined by having a disease. A claim about the risk of that disease
+# is not answered by studies of people who already have it, so naming the
+# disease in a risk claim does not make those people the claim's group.
+DISEASE_GROUPS = ("people with prediabetes", "people with diabetes",
+                  "people with kidney failure", "people with HIV",
+                  "people with tuberculosis", "people with cystic fibrosis",
+                  "people treated for cancer", "people with asthma or COPD")
+
+RISK_CLAIM = re.compile(
+    r"\b(?:risk|risks|chance|odds|prevents?|prevention|causes?|caused|causing|"
+    r"gives? you|leads? to|protects? against|wards? off|incidence)\b", re.IGNORECASE)
+
+
+def claim_groups(claim: str) -> set:
+    """
+    The groups whose studies answer this claim as asked: the ones it names
+    ("children" in "sugar makes children hyperactive") and the ones it is
+    about without naming (children for measles vaccines).
+    """
+    claim = claim or ""
+    risk = bool(RISK_CLAIM.search(claim))
+    found = set()
+    for pattern, label in POPULATIONS:
+        if re.search(pattern, claim, re.IGNORECASE):
+            if risk and label in DISEASE_GROUPS:
+                continue
+            found.add(label)
+    for pattern, groups in _NATURAL_GROUPS:
+        if pattern.search(claim):
+            found.update(groups)
+    return found
 
 
 def narrow_populations(studies, cited_pmids=()) -> list[str]:
@@ -152,16 +226,18 @@ def narrow_populations(studies, cited_pmids=()) -> list[str]:
     return seen
 
 
-def narrow_only(studies, cited_pmids=()) -> bool:
+def narrow_only(studies, cited_pmids=(), claim: str = "") -> bool:
     """
-    True when every study a verdict leaned on was run in a narrow group.
-    A general claim answered only from these is not answered: the honest
-    verdict is that it depends who you are.
+    True when every study a verdict leaned on was run in a narrow group
+    other than the claim's own. A general claim answered only from these is
+    not answered: the honest verdict is that it depends who you are. A study
+    in the group the claim is about is not narrow for that claim.
     """
     cited = {str(p) for p in (cited_pmids or ())}
+    own = claim_groups(claim)
     used = [s for s in (studies or [])
             if not cited or str(s.get("pmid")) in cited]
-    return bool(used) and all(population(s) for s in used)
+    return bool(used) and all(population(s) and population(s) not in own for s in used)
 
 
 # ---------------------------------------------------------------------------
