@@ -1,0 +1,25 @@
+{
+  "about": "The 20-claim accuracy audit of 2026-10-04. 'expected' is the verdict Cochrane, WHO, NIH and the major reviews support. 'also_ok' lists a verdict that is defensible but less precise; it does not count as a match. Re-run with: .venv/bin/python scripts/regression.py (needs a key, about 20 minutes, uses free-tier quota).",
+  "claims": [
+    {"n": 1,  "kind": "supported",     "claim": "Exercise lowers the risk of depression", "expected": "true"},
+    {"n": 2,  "kind": "supported",     "claim": "Smoking causes lung cancer", "expected": "true"},
+    {"n": 3,  "kind": "supported",     "claim": "Vaccines reduce the risk of severe measles", "expected": "true"},
+    {"n": 4,  "kind": "supported",     "claim": "Regular physical activity reduces the risk of type 2 diabetes", "expected": "true"},
+    {"n": 5,  "kind": "supported",     "claim": "Sleep deprivation impairs memory", "expected": "true"},
+    {"n": 6,  "kind": "not-supported", "claim": "Vaccines cause autism", "expected": "false"},
+    {"n": 7,  "kind": "not-supported", "claim": "Cracking your knuckles causes arthritis", "expected": "false"},
+    {"n": 8,  "kind": "not-supported", "claim": "Sugar makes children hyperactive", "expected": "false"},
+    {"n": 9,  "kind": "not-supported", "claim": "You need to drink 8 glasses of water a day", "expected": "false", "also_ok": ["insufficient"]},
+    {"n": 10, "kind": "not-supported", "claim": "Detox teas remove toxins from the body", "expected": "insufficient"},
+    {"n": 11, "kind": "mixed",         "claim": "Vitamin D supplements prevent winter infections", "expected": "complicated"},
+    {"n": 12, "kind": "mixed",         "claim": "Eggs raise heart disease risk", "expected": "complicated"},
+    {"n": 13, "kind": "mixed",         "claim": "Intermittent fasting is better for weight loss than regular dieting", "expected": "false"},
+    {"n": 14, "kind": "mixed",         "claim": "Red wine is good for the heart", "expected": "false", "also_ok": ["complicated"]},
+    {"n": 15, "kind": "mixed",         "claim": "Creatine improves cognitive performance", "expected": "complicated"},
+    {"n": 16, "kind": "thin",          "claim": "Melatonin helps people fall asleep faster", "expected": "true", "also_ok": ["complicated"]},
+    {"n": 17, "kind": "thin",          "claim": "Cold showers boost immunity", "expected": "insufficient", "also_ok": ["complicated"]},
+    {"n": 18, "kind": "thin",          "claim": "Magnesium supplements improve sleep quality", "expected": "complicated"},
+    {"n": 19, "kind": "thin",          "claim": "Standing desks reduce back pain", "expected": "complicated"},
+    {"n": 20, "kind": "thin",          "claim": "Ashwagandha reduces stress", "expected": "complicated"}
+  ]
+}
