@@ -1681,6 +1681,45 @@ t("  and ordinary prose is left alone",
   all(breakdown.plain(x) == x for x in (
       "The development of autism or autism spectrum disorder.",
       "Rates rose more and more.", "It improved sleep quality and quality of life.")))
+
+# ---- spelling: a misspelled claim is checked as it was meant -----------------
+_FIXES = [
+    ("smokng causs lung cancr", "Smoking causes lung cancer", True),
+    ("dose apple cider vinigaer cure diabaties", "Does apple cider vinegar cure diabetes", True),
+    ("redwine is good for the hart", "Red wine is good for the heart", True),
+    ("melatonen makes u fall asleep fastr", "Melatonin makes you fall asleep faster", True),
+    ("vacines dont cause autisim", "Vaccines don't cause autism", True),
+    ("vacines dont cause autisim", "vaccines dont cause autism", True),
+    # Rewrites, not spelling fixes: the reader keeps their own words.
+    ("vacines dont cause autisim", "Vaccines cause autism", False),
+    ("creatine causes hair loss", "Creatine prevents hair loss", False),
+    ("sugar makes kids hyper", "Sugar makes children hyperactive", False),
+    ("eggs bad", "Eating eggs every day raises your risk of heart disease", False),
+]
+_wrong = [(a, b) for a, b, want in _FIXES if (verdict.spelling_fix(a, b) != a) != want]
+t("a spelling fix is taken, a rewrite or a flipped 'not' is refused", not _wrong, _wrong)
+t("  the Claim: line is never read as the search query",
+  verdict._clean_query("Claim: Smoking causes lung cancer\n(smoking) AND (lung cancer)", "x")
+  == "(smoking) AND (lung cancer)")
+
+fg.models.script = [Resp("(smoking) AND (lung cancer)\nClaim: Smoking causes lung cancer"),
+                    Resp(VJ("true", [1], tldr="Smoking causes lung cancer."))]
+r = P("smokng causs lung cancr", ip="7.7.7.71"); d = r.get_json()
+t("  the check runs on the corrected claim and says what was typed",
+  r.status_code == 200 and d["claim"] == "Smoking causes lung cancer"
+  and d["typed"] == "smokng causs lung cancr" and "Smoking%20causes" in d["share_url"], d)
+fg.models.script = [Resp("(smoking) AND (lung cancer)\nClaim: Smoking causes lung cancer")]
+r = P("smoking causs lung cancr", ip="7.7.7.72"); d = r.get_json()
+t("  a misspelling of a claim already checked is answered from the cache",
+  r.status_code == 200 and d["cached"] and d["typed"] == "smoking causs lung cancr"
+  and fg.models.calls and not fg.models.script, d)
+fg.models.script = [Resp("(eggs) AND (heart disease)"), Resp(VJ("complicated", [1]))]
+d = P("Eggs raise heart disease risk spelled right", ip="7.7.7.73").get_json()
+t("  a claim spelled right carries no typed note", d.get("typed") is None, d)
+_page = c.get("/").data.decode()
+t("  the page has the note, hidden until a check fills it",
+  'id="typed-note" hidden' in _page)
+
 # ---- prevention claims and comparisons said in other words -------------------
 _T2D = "Regular physical activity reduces the risk of type 2 diabetes"
 _offt = lambda title: evidence.off_topic({"title": title, "abstract": ""}, _T2D)
@@ -1702,6 +1741,10 @@ t("  a risk claim's own disease is its outcome, not a narrow group",
                        "publication_types": ["Meta-Analysis"]}, _T2D) is None
   and evidence.population({"title": "Exercise in adults with type 2 diabetes",
                            "publication_types": ["Randomized Controlled Trial"]}) == "people with diabetes")
+
+t("  a fixed claim gets its apostrophe and a capital",
+  verdict.spelling_fix("vacines dont cause autisim", "vaccines dont cause autism") == "Vaccines don't cause autism"
+  and verdict.spelling_fix("vacines dont cause autisim", "Vaccines do cause autism") == "vacines dont cause autisim")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

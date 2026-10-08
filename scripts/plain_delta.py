@@ -70,7 +70,7 @@ def old_grade(parsed, studies) -> float | None:
 def run(claim: str) -> dict:
     old_q = verdict._clean_query(
         verdict._complete_text(OLD_SEARCH.format(claim=claim), max_tokens=256), claim)
-    new_q, surrogate = verdict.extract_search_terms(claim)
+    new_q, surrogate, _ = verdict.extract_search_terms(claim)
 
     old_ids = pubmed.search_pubmed(old_q, max_results=8)
     studies, used, _ = pubmed.search_with_fallback(new_q, max_results=8,

@@ -241,6 +241,9 @@
         <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
         <p class="field-label">The claim you checked</p>
         <h2 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
+        {# Only a live check fills this: a shared or saved link already
+           carries the corrected claim, so there is nothing to explain. #}
+        <p class="typed-note" id="typed-note" hidden></p>
         <ol class="reading" id="reading" hidden aria-live="polite"></ol>
         <div class="stamp-wrap">
           <p class="field-label">Verdict</p>

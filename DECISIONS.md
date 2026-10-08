@@ -4,7 +4,42 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-04 (latest): A fourth verdict, "Not enough evidence"
+## 2026-10-07 (latest): A misspelled claim is checked as it was meant
+
+People type claims fast, on phones, from half-remembered videos:
+"smokng causs lung cancr". The search step already guessed the right
+words for PubMed, but everything after it ran on the typo: the claim the
+verdict was asked about, the code's own checks (which match the claim's
+words), the cache and the share link. A typo could quietly get a worse
+answer than the same claim spelled right.
+
+The search call now also writes the claim back with its spelling fixed,
+as an optional `Claim:` line, so it costs no extra call. Code then checks
+the fix is only a fix: the two versions must stay close letter for
+letter, every word of the fix must be a word that was typed, a
+misspelling of one, texting shorthand ("u") or half of two words run
+together ("redwine"), and "not" must appear the same number of times. A
+model that turned "vacines dont cause autisim" into "Vaccines cause
+autism", or "causes" into "prevents", has changed the question, and the
+reader gets their own words back instead. When the fix is taken, the
+check runs on the corrected claim, a cached check of it answers at once,
+and the page says so under the claim: "Spelling fixed. You typed ...".
+A shared link carries the corrected claim, so it needs no note.
+
+Rejected: a spelling library. It would be a dependency, it doesn't know
+"ashwagandha" or "melatonin", and the model is already reading the claim.
+
+Same round, from the 20-claim regression set (`tests/regression_claims.json`):
+a claim about lowering the risk of something is now searched as getting
+it, not living with it, and a study run in people who already have it is
+set aside as off topic, because a treatment trial cannot show prevention.
+For a claim that one thing causes another, the prompt now says that
+controlled trials which find no effect outrank an observational link.
+That is the study-quality weighing the app has always claimed to do, said
+for the case it was getting wrong (sugar and hyperactivity), not a push
+toward confident answers.
+
+## 2026-10-04: A fourth verdict, "Not enough evidence"
 
 The 20-claim audit found "It's complicated" doing two jobs. On vitamin D
 and eggs it meant what it says: real human studies that disagree, or

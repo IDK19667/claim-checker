@@ -544,6 +544,7 @@ function renderBreakdown(bd, count) {
 function renderResult(data) {
   currentResult = data;
   $("claim-echo").textContent = data.claim;
+  showTyped(data.typed);
   $("case-line").textContent = `PubMed · ${fmtDate(data.cached_at)}`;
 
   const block = document.querySelector(".verdict-block");
@@ -637,6 +638,7 @@ function renderResult(data) {
 function renderPending(claim) {
   currentResult = null;
   $("claim-echo").textContent = claim;
+  showTyped(null);
   $("case-line").textContent = "PubMed · checking";
   const t = document.querySelector(".ticket");
   t.classList.add("pending");
@@ -667,6 +669,14 @@ function renderPending(claim) {
   document.body.classList.remove("view-ask");
   logLine("Building the search", true);
   screenState.at("start");
+}
+
+// A misspelled claim is checked as it was meant. Say so, and show what was
+// typed, so the reader can tell the answer is to their question.
+function showTyped(typed) {
+  const note = $("typed-note");
+  note.hidden = !typed;
+  note.textContent = typed ? `Spelling fixed. You typed \u201c${typed}\u201d.` : "";
 }
 
 function logLine(text, live) {
@@ -727,6 +737,11 @@ let controller = null;
 // One event, one line, one move of the footage. Short labels: the picture is
 // carrying the story and the panel only has to name the step.
 function handleStage(ev) {
+  if (ev.stage === "query" && ev.claim) {
+    const typed = $("claim-echo").textContent;
+    $("claim-echo").textContent = ev.claim;
+    showTyped(typed);
+  }
   if (ev.stage === "query") logLine(ev.query ? `Searching PubMed for “${ev.query}”` : "Searching PubMed", true);
   else if (ev.stage === "found") {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);

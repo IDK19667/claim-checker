@@ -503,10 +503,14 @@ def _next_steps_safe(claim, query_used, studies, cited):
 
 
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
-                    base_url, cached_at=None, broadened=False, still_open="", breakdown=None):
+                    base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
+                    typed=None):
     cited = set(cited_studies or [])
     return {
         "claim": claim,
+        # What the reader typed, present only when its spelling was fixed
+        # and the check ran on the corrected claim, so the page can say so.
+        "typed": typed,
         "search_query_used": search_query,
         "search_broadened": broadened,
         "verdict": verdict_value,
@@ -554,15 +558,18 @@ def _run_check(claim: str, client_ip: str, base_url: str):
                "error": f"That's a long one. Trim the claim to under {MAX_CLAIM_CHARS} characters."}
         return
 
+    def from_cache(cached, typed=None):
+        _log_check_safe(claim, cached["verdict"], cached["explanation"], cached["studies"], cached=True)
+        return {"stage": "done", "result": _check_response(
+            claim, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
+            cached["cited_studies"], cached["studies"], base_url, cached_at=cached["cached_at"],
+            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"), typed=typed)}
+
     # 1. Cache first: a repeat of a recent claim costs nothing and is
     #    never rate-limited. Viral claims get checked by many people.
     cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
     if cached:
-        _log_check_safe(claim, cached["verdict"], cached["explanation"], cached["studies"], cached=True)
-        yield {"stage": "done", "result": _check_response(
-            claim, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
-            cached["cited_studies"], cached["studies"], base_url, cached_at=cached["cached_at"],
-            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"))}
+        yield from_cache(cached)
         return
 
     # 2. Rate limit only the checks that will actually hit the AI provider.
@@ -574,8 +581,18 @@ def _run_check(claim: str, client_ip: str, base_url: str):
     # 3. The real thing, stage by stage.
     try:
         yield {"stage": "search"}
-        search_query, surrogate = verdict.extract_search_terms(claim)
-        yield {"stage": "query", "query": search_query}
+        search_query, surrogate, understood = verdict.extract_search_terms(claim)
+        typed = None
+        if understood != claim:
+            # Misspelled. Everything from here runs on the claim as meant:
+            # the verdict, the code's own checks, the cache and the share
+            # link. A correctly spelled check of it may already be cached.
+            typed, claim = claim, understood
+            cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
+            if cached:
+                yield from_cache(cached, typed)
+                return
+        yield {"stage": "query", "query": search_query, "claim": claim if typed else None}
         studies, query_used, broadened = pubmed.search_with_fallback(
             search_query, max_results=8, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
@@ -611,7 +628,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
     yield {"stage": "done", "result": _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
-        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"))}
+        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed)}
 
 
 def _claim_from_body() -> str:

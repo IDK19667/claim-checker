@@ -1,7 +1,8 @@
 """
 Two small AI calls that sit around the PubMed lookup:
 
-  1. extract_search_terms(claim) -> a good PubMed search string for the claim
+  1. extract_search_terms(claim) -> a good PubMed search string for the claim,
+     and the claim itself with its spelling fixed
   2. weigh_evidence(claim, studies) -> a verdict + plain-English explanation
      that actually weighs study quality (a large clinical trial should
      outrank a single small preliminary study), instead of treating
@@ -18,6 +19,7 @@ used to improve their products. The paid tier does not. Worth knowing
 before pointing a classroom at it.
 """
 
+import difflib
 import json
 import os
 import re
@@ -277,6 +279,8 @@ def _clean_query(raw: str, claim: str) -> str:
     """
     for line in raw.splitlines():
         line = line.strip().strip("`")
+        if _LABELLED.match(line):
+            continue
         if line.startswith(("Query:", "query:")):
             line = line.split(":", 1)[1].strip()
         if len(line) >= 2 and line[0] == line[-1] and line[0] in "\"'":
@@ -286,11 +290,14 @@ def _clean_query(raw: str, claim: str) -> str:
     return claim
 
 
-def extract_search_terms(claim: str) -> tuple[str, str]:
+def extract_search_terms(claim: str) -> tuple[str, str, str]:
     """
     Turn a casual claim into a decent PubMed search query.
 
-    Returns (query, surrogate). The surrogate is the OR-group of measurable
+    Returns (query, surrogate, understood). `understood` is the claim with
+    its spelling fixed, or the claim exactly as typed when nothing needed
+    fixing or the fix went further than spelling (see spelling_fix).
+    The surrogate is the OR-group of measurable
     stand-ins for an outcome nobody measures directly, empty when trials
     measure the outcome itself. It never enters the query: it runs as a
     search of its own in pubmed.search_and_fetch, so a claim about hair
@@ -347,11 +354,100 @@ def extract_search_terms(claim: str) -> tuple[str, str]:
         "the trials measured the hormone and counted nobody's hair. Leave the "
         "line out when trials measure the outcome itself, and never move the "
         "surrogate into the query: it runs as a search of its own.\n\n"
+        "People type fast and misspell. Search with the words they meant: "
+        "\"vacines cause autisim\" is a claim about vaccines and autism. "
+        "Then, only if the claim has spelling mistakes or typos, add a last "
+        "line beginning \"Claim: \" with the claim as they meant to type "
+        "it: the spelling fixed and nothing else changed. Keep their words, "
+        "their order and their meaning, including any \"not\". Leave the "
+        "line out when the spelling is already right.\n\n"
         "Respond with the search query on the first line and nothing else "
-        "except that optional second line. No quotes, no explanation."
+        "except those optional lines. No quotes, no explanation."
     )
     raw = _complete_text(prompt, max_tokens=256)
-    return _two_groups(_clean_query(raw, claim)), _surrogate(raw)
+    return _two_groups(_clean_query(raw, claim)), _surrogate(raw), spelling_fix(claim, _claim_line(raw))
+
+
+# Lines after the query that carry something else, never the query itself.
+_LABELLED = re.compile(r"(?i)^(surrogate|indirect|proxy|claim)\s*:")
+
+
+def _claim_line(raw: str) -> str:
+    """The optional "Claim:" line, or ""."""
+    for line in str(raw or "").splitlines():
+        line = line.strip().strip("`")
+        if re.match(r"(?i)^claim\s*:", line):
+            return line.split(":", 1)[1].strip().strip("\"'\u201c\u201d ")
+    return ""
+
+
+# How alike the typed and corrected claims must be, letter for letter, for
+# the change to count as a spelling fix rather than a rewrite.
+SPELLING_SIMILARITY = 0.72
+# "dont", "doesnt": the commonest typo of all, and it carries the "not".
+_APOSTROPHE = re.compile(r"\b(do|does|did|is|are|was|were|ca|wo|could|should|would|has|have)nt\b",
+                         re.IGNORECASE)
+_NEGATION = re.compile(r"\b(?:not|no|never|none|nothing|cannot|without|\w+n't)\b",
+                       re.IGNORECASE)
+
+
+def _letters(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", "", (text or "").lower())).strip()
+
+
+def spelling_fix(typed: str, fixed: str) -> str:
+    """
+    The corrected claim, or the claim as typed.
+
+    The model is asked to fix spelling and nothing else, and this checks it
+    did: the two must stay close letter for letter, keep about the same
+    number of words, and say "not" the same number of times. A model that
+    tidied "vacines dont cause autisim" into "vaccines cause autism" has
+    changed the question, and the reader gets their own words back instead.
+    """
+    typed = (typed or "").strip()
+    fixed = re.sub(r"\s+", " ", (fixed or "").strip())
+    if not fixed or len(fixed) > len(typed) * 1.5 + 10:
+        return typed
+    a, b = _letters(typed), _letters(fixed)
+    if not b or a == b:
+        return typed
+    if abs(len(a.split()) - len(b.split())) > 2:
+        return typed
+    fixed = _APOSTROPHE.sub(lambda m: m.group(1) + "n't", fixed)
+    if len(_NEGATION.findall(_APOSTROPHE.sub(lambda m: m.group(1) + "n't", typed))) \
+            != len(_NEGATION.findall(fixed)):
+        return typed
+    if difflib.SequenceMatcher(None, a, b).ratio() < SPELLING_SIMILARITY:
+        return typed
+    typed_words = a.split()
+    if not all(_misspelled_from(w, typed_words) for w in b.split()):
+        return typed
+    return fixed[:1].upper() + fixed[1:]
+
+
+# Texting shorthand a corrected claim may spell out in full.
+_SHORTHAND = {"u": "you", "ur": "your", "r": "are", "n": "and", "2": "to", "4": "for",
+              "b4": "before", "bc": "because", "cuz": "because", "w": "with", "thru": "through"}
+
+
+def _misspelled_from(word: str, typed_words: list[str]) -> bool:
+    """
+    True when this word of the corrected claim is one the reader typed, a
+    misspelling of one, shorthand for one, or half of two run together
+    ("redwine"). "causes" is none of those for "prevents", so a fix that
+    swaps one for the other is a rewrite, not a spelling fix.
+    """
+    w = word.replace("'", "")
+    for t in typed_words:
+        t = t.replace("'", "")
+        if w == t or _SHORTHAND.get(t) == w:
+            return True
+        if len(w) >= 3 and len(t) > len(w) and w in t:
+            return True
+        if difflib.SequenceMatcher(None, w, t).ratio() >= 0.6:
+            return True
+    return False
 
 
 # A surrogate long enough to be prose is not an OR group.

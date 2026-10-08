@@ -341,6 +341,12 @@ body.view-ask #ask .primary {
 }
 .claim-echo::before { content: "\201C"; }
 .claim-echo::after { content: "\201D"; }
+/* Under the claim, when its spelling was fixed: what was actually typed.
+   Quieter than the claim, so the claim stays the thing that was checked. */
+.typed-note {
+  margin: 8px 0 0; font-size: 13px; line-height: 1.45; font-weight: 500;
+  color: var(--on-deep-2); max-width: 34em; overflow-wrap: break-word;
+}
 
 /* While a check runs, the work prints under the claim. */
 .reading { list-style: none; margin: 20px 0 0; padding: 0; font-size: 13px; font-weight: 600; color: var(--on-deep); }
