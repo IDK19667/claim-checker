@@ -91,7 +91,8 @@ build step is a feature: anyone can read the shipped file.
   that matters.
 - Verdict quality on real claims: `scripts/live_batch.py` (needs a key,
   costs free-tier quota). Re-run after any prompt change and read the
-  `open` lines, not just the verdicts.
+  `open` lines, not just the verdicts. Score it with
+  `scripts/regression.py` (the 20 claims in `tests/regression_claims.json`).
 - Service worker: bump `CACHE` in `static/sw.js` when shell files change,
   and add new shell files to `SHELL`.
 - A result page is server-rendered: the verdict, the reasoning and the

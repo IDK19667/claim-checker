@@ -123,10 +123,15 @@ _BOTH_SEXES = re.compile(r"\bwomen\b.{0,40}\bmen\b(?!tal)|\bmen\b(?!tal).{0,40}\
 _SEX_LABELS = ("men only", "women only")
 
 
-def population(study) -> str | None:
+def population(study, claim: str = "") -> str | None:
     """
     The narrow group a study was run in, in plain words, or None when it
     looks like a general population.
+
+    For a claim about the risk of a disease, that disease is the outcome:
+    "physical activity and incident type 2 diabetes" is a study of who gets
+    diabetes, run in people who don't have it yet, not a study of people
+    with diabetes.
 
     The title counts wherever it matches. The abstract counts only for
     papers that are not pooled evidence: a meta-analysis of 25 trials
@@ -140,8 +145,11 @@ def population(study) -> str | None:
     # Trials state who they enrolled early, in Background or Methods.
     body = "" if pooled else str(study.get("abstract") or "")[:700]
     mixed_sex = bool(_BOTH_SEXES.search(title) or (body and _BOTH_SEXES.search(body)))
+    risk = bool(claim and RISK_CLAIM.search(claim))
     for pattern, label in POPULATIONS:
         if mixed_sex and label in _SEX_LABELS:
+            continue
+        if risk and label in DISEASE_GROUPS and re.search(pattern, claim, re.IGNORECASE):
             continue
         if re.search(pattern, title, re.IGNORECASE):
             return label
@@ -237,7 +245,8 @@ def narrow_only(studies, cited_pmids=(), claim: str = "") -> bool:
     own = claim_groups(claim)
     used = [s for s in (studies or [])
             if not cited or str(s.get("pmid")) in cited]
-    return bool(used) and all(population(s) and population(s) not in own for s in used)
+    return bool(used) and all(population(s, claim) and population(s, claim) not in own
+                              for s in used)
 
 
 # ---------------------------------------------------------------------------
@@ -1013,6 +1022,9 @@ CAUSE_CLAIM = re.compile(
 _SICK_WITH = (r"\b(?:patients|people|persons|adults|individuals|survivors|cases|men|women|"
               r"children)\s+(?:\w+\s+){{0,2}}?(?:with|having|diagnosed with|treated for)\s+"
               r"(?:[\w-]+\s+){{0,3}}?{core}\b")
+# "Exercise and insulin resistance in type 2 diabetes": a title that puts the
+# whole study inside the disease. Read from the title only.
+_SICK_IN = r"\b(?:in|among)\s+(?:adults\s+|older\s+adults\s+|children\s+)?{core}\b"
 _SICK_NOUN = r"\b{core}(?:\s*\([^)]{{1,12}}\))?\s+(?:patients|survivors|cases)\b"
 _ABBREV_PATIENTS = {"lung cancer": r"\b(?:NSCLC|SCLC)\b"}
 _DRINK_CLAIM = re.compile(r"\b(?:wine|alcohol|beer|spirits|liquor|drinking|ethanol)\b",
@@ -1032,19 +1044,39 @@ def caused_outcome(claim: str) -> str:
     return m.group("outcome").strip().lower() if m else ""
 
 
+# "Exercise lowers the risk of depression" is about who gets depressed, and a
+# trial of exercise as a treatment for people already depressed cannot answer
+# it, however good the trial. Same for "prevents".
+PREVENT_CLAIM = re.compile(
+    r"\b(?:prevents?|prevented|preventing|protects? (?:you )?(?:against|from)|wards? off|"
+    r"(?:reduces?|lowers?|cuts?|decreases?) (?:the |your )?(?:risk|chance|odds) of)\s+"
+    r"(?:the\s+)?(?:risk of\s+)?(?:getting\s+|developing\s+)?"
+    r"(?P<outcome>[a-z0-9' -]{3,40}?)\s*(?:risk)?\s*$", re.IGNORECASE)
+
+
+def prevented_outcome(claim: str) -> str:
+    """'depression' for 'Exercise lowers the risk of depression'; '' otherwise."""
+    m = PREVENT_CLAIM.search(str(claim or "").strip().rstrip(".!?"))
+    return m.group("outcome").strip().lower() if m else ""
+
+
 def off_topic(study, claim: str) -> str | None:
     """Why this record cannot be evidence for this claim, or None."""
     claim = str(claim or "")
     title = str(study.get("title") or "")
     opening = f"{title}. {str(study.get('abstract') or '')[:SUBJECT_WINDOW]}"
     outcome = caused_outcome(claim)
-    if outcome:
-        core = re.escape(outcome).replace(r"\ ", r"[\s-]+")
+    prevented = "" if outcome else prevented_outcome(claim)
+    for named, does in ((outcome, "causes"), (prevented, "prevents")):
+        if not named:
+            continue
+        core = re.escape(named).replace(r"\ ", r"[\s-]+")
         sick = [_SICK_WITH.format(core=core), _SICK_NOUN.format(core=core)]
-        if outcome in _ABBREV_PATIENTS:
-            sick.append(_ABBREV_PATIENTS[outcome])
-        if any(re.search(p, opening, re.IGNORECASE) for p in sick):
-            return f"run in people who already have {outcome}, so it cannot show what causes it"
+        if named in _ABBREV_PATIENTS:
+            sick.append(_ABBREV_PATIENTS[named])
+        if any(re.search(p, opening, re.IGNORECASE) for p in sick) \
+                or re.search(_SICK_IN.format(core=core), title, re.IGNORECASE):
+            return f"run in people who already have {named}, so it cannot show what {does} it"
     if (outcome or RISK_CLAIM.search(claim)) and re.search(r"\bscreening\b", title, re.IGNORECASE) \
             and not re.search(r"\bscreening\b", claim, re.IGNORECASE):
         return "about finding the disease early, not about what causes it"

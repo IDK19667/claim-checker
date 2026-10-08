@@ -1335,6 +1335,13 @@ _flagged = [(cl, bool(breakdown.stamp_conflict(v, tl, "", cl)) == want)
             for v, cl, tl, want in _AUDIT_TAKEAWAYS]
 t("the stamp check flags the audit's five contradictions and none of the rest",
   all(ok for _, ok in _flagged), [cl for cl, ok in _flagged if not ok])
+t("  a 'but' that turns to a side note leaves the plain answer standing",
+  breakdown.stamp_conflict("complicated", "Smoking causes lung cancer, but reducing the amount you smoke can lower your risk.",
+                           "", "Smoking causes lung cancer")
+  and not breakdown.stamp_conflict("complicated", "Exercise lowers the risk of depression, but the effect is small.",
+                                   "", "Exercise lowers the risk of depression")
+  and not breakdown.stamp_conflict("true", "Smoking causes lung cancer, but reducing the amount you smoke can lower your risk.",
+                                   "", "Smoking causes lung cancer"))
 t("  'no study tests this' is not a 'no', so it can sit under an unsure stamp",
   breakdown.stance("The studies found don't actually test this claim, so it's unproven either way.",
                    "Detox teas remove toxins") == "untested")
@@ -1674,6 +1681,27 @@ t("  and ordinary prose is left alone",
   all(breakdown.plain(x) == x for x in (
       "The development of autism or autism spectrum disorder.",
       "Rates rose more and more.", "It improved sleep quality and quality of life.")))
+# ---- prevention claims and comparisons said in other words -------------------
+_T2D = "Regular physical activity reduces the risk of type 2 diabetes"
+_offt = lambda title: evidence.off_topic({"title": title, "abstract": ""}, _T2D)
+t("a treatment trial in people who already have the disease cannot show prevention",
+  "cannot show what prevents it" in (_offt("Effect of resistance training on HbA1c in adults with type 2 diabetes mellitus") or "")
+  and "prevents" in (_offt("Exercise and insulin resistance in type 2 diabetes mellitus: a systematic review") or ""))
+t("  a prevention study of the same disease stays on topic",
+  _offt("Physical activity and incident type 2 diabetes: a meta-analysis of prospective cohorts") is None
+  and _offt("Prevention of type 2 diabetes by lifestyle intervention in people with impaired glucose tolerance") is None
+  and evidence.prevented_outcome("Exercise lowers the risk of depression") == "depression")
+t("  'about as well for weight loss as' is a plain no, whatever a later clause hedges",
+  breakdown.stance("Intermittent fasting works about as well for weight loss as ordinary dieting, though some methods show equal results.",
+                   "Intermittent fasting is better for weight loss than regular dieting") == "no"
+  and breakdown.stance("Intermittent fasting may work about as well as dieting.",
+                       "Intermittent fasting is better for weight loss than regular dieting") == "mixed")
+
+t("  a risk claim's own disease is its outcome, not a narrow group",
+  evidence.population({"title": "Physical activity and incident type 2 diabetes mellitus: a dose-response meta-analysis",
+                       "publication_types": ["Meta-Analysis"]}, _T2D) is None
+  and evidence.population({"title": "Exercise in adults with type 2 diabetes",
+                           "publication_types": ["Randomized Controlled Trial"]}) == "people with diabetes")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

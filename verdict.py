@@ -324,6 +324,19 @@ def extract_search_terms(claim: str) -> tuple[str, str]:
         "well known one. For the condition or outcome, give the standard "
         "medical term (the kind used in MeSH headings) and the everyday "
         "word for it as ORs, so papers are found whichever one they use.\n\n"
+        "For a drink, name the drinking, not the chemical in it: \"red wine "
+        "is good for the heart\" starts (red wine OR wine OR alcohol drinking "
+        "OR alcohol consumption OR moderate drinking). Never use \"ethanol\" "
+        "or a compound such as \"polyphenols\" or \"resveratrol\" for a "
+        "drink: they find ethanol injected during heart surgery and cocoa "
+        "supplements, not people drinking it.\n\n"
+        "When the claim is about lowering the risk of something or "
+        "preventing it, the outcome is getting it, not living with it, so "
+        "the outcome group asks for new cases: for \"exercise lowers the "
+        "risk of depression\" it is (incident depression OR depression "
+        "prevention OR risk of depression OR depressive symptoms onset). "
+        "Otherwise the search returns treatment trials in people who already "
+        "have it, which cannot answer the claim.\n\n"
         "Do not add a study-design filter: the tool runs that as a second "
         "search of its own.\n\n"
         "Then, and only if nobody measures the claim's outcome directly, add "
@@ -396,7 +409,7 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
     # to notice. A trial in one narrow group is strong evidence about that
     # group and weak evidence about everyone else, and saying so here is
     # what lets the prompt below insist the answer names them.
-    pop = evidence.population(study)
+    pop = evidence.population(study, claim)
     if pop and pop in evidence.claim_groups(claim):
         who = f"Population: {pop}, the group this claim is about"
     else:
@@ -732,6 +745,14 @@ the thing does not work. Its takeaway says plainly that it hasn't been
 tested: "No study has tested whether detox teas remove toxins; the only
 reports are of people made ill by them."
 
+For a claim that one thing causes or changes another, a controlled
+trial that gave people the thing and measured the claim's outcome
+outranks an observational link, because people who differ in one habit
+differ in many others. When controlled trials of the claim find no
+effect and only observational studies find a link, the trials answer
+it: the verdict is "false", and the answer says the link was seen only
+in observational data.
+
 Use "false" only when the cited studies actively contradict the
 claim. Absence of evidence is not evidence of absence. A comparison is contradicted
 when the studies tested it and found no difference: "X is better
@@ -753,8 +774,9 @@ neighbour, a different drug given to the same people, or the same
 substance used another way) and it measures the claim's own outcome
 (or, when marked INDIRECT, its stand-in). A drug-dose trial in smokers
 with lung cancer is not evidence that smoking causes lung cancer; a
-review of fasting and sports performance is not evidence about fasting
-and weight loss. Judge every study on both in "relevance", and cite only
+trial of exercise as a treatment for people who already have diabetes is
+not evidence that exercise prevents diabetes; a review of fasting and
+sports performance is not evidence about fasting and weight loss. Judge every study on both in "relevance", and cite only
 the ones that match both. Studies marked OFF TOPIC are never cited. If
 none of these studies are actually about the claim, say so plainly,
 give the verdict "insufficient", and cite no studies.

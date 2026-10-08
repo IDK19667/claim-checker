@@ -624,10 +624,13 @@ _COMPARATIVE_CLAIM = re.compile(
     r"\b(?:better|worse|more|less|faster|slower|healthier|stronger|superior|"
     r"inferior)\b[^.]{0,60}\bthan\b", re.IGNORECASE)
 _COMPARES_SAME = re.compile(
-    r"\b(?:about|just|roughly|nearly|much) as (?:well|good|effective|much) as|"
+    r"\b(?:about|just|roughly|nearly|much) as (?:well|good|effective|much) "
+    r"(?:(?:for|at|in) [\w -]{1,30}? )?as\b|"
     r"\bno (?:better|worse|more|less)\b|\bnot (?:any )?(?:better|worse|more "
     r"effective)\b|\b(?:similar|same|equal(?:ly)?|comparable|no difference)\b",
     re.IGNORECASE)
+_CLAUSE_EDGE = re.compile(r",|;|\b(?:but|yet|however|though|although|while|whereas)\b",
+                          re.IGNORECASE)
 _COMPARES_MORE = re.compile(r"\b(?:better|more|faster|superior|outperform\w*)\b"
                             r"[^.]{0,40}\bthan\b", re.IGNORECASE)
 
@@ -641,6 +644,15 @@ _TURN_BEFORE = re.compile(r",?\s+\b(?:though|although|even though|while|whereas)
 # hedge belongs to it and not to the answer before it.
 _AND_CLAUSE = re.compile(r",\s+(?:and|so)\s+|;\s+|\s+and\s+(?=(?:can|could|may|might|"
                          r"will|may|is|are|was|were|has|have|cause|causes)\b)", re.IGNORECASE)
+
+# Words in a "but" clause that weigh on the answer itself: how big, how sure,
+# for whom. Anything else after the turn is a side note.
+_QUALIFIES = re.compile(
+    r"\b(?:effects?|evidence|results?|stud(?:y|ies)|trials?|benefits?|certainty|"
+    r"data|findings|proof|research|small|modest|limited|unclear|not clear|mixed|"
+    r"inconsistent|var(?:y|ies|ied)|only|some|few|weak|uncertain|unknown|"
+    r"not (?:all|everyone|always|proven)|people (?:who|with)|depends?)\b",
+    re.IGNORECASE)
 
 
 def _stem(word: str) -> str:
@@ -683,14 +695,27 @@ def stance(text: str, claim: str) -> str:
     if _UNTESTED_SAID.search(first) and not _TURN_AFTER.search(first):
         return "untested"
     if _COMPARATIVE_CLAIM.search(claim or ""):
-        if _COMPARES_SAME.search(first):
-            return "mixed" if _HEDGED.search(first.split(",")[-1]) else "no"
+        same = _COMPARES_SAME.search(first)
+        if same:
+            # Judge the hedge in the clause that compares, not in a trailing
+            # one: "about as well as dieting, though some methods show equal
+            # results" is still a plain "no better".
+            start = max([0] + [m.end() for m in _CLAUSE_EDGE.finditer(first, 0, same.start())])
+            end = next((m.start() for m in _CLAUSE_EDGE.finditer(first, same.end())), len(first))
+            return "mixed" if _HEDGED.search(first[start:end]) else "no"
         if _COMPARES_MORE.search(first):
             return "mixed" if _HEDGED.search(first) else "yes"
         return "mixed"
     parts = _TURN_AFTER.split(first, maxsplit=1)
     if len(parts) == 2:
         answer = parts[1]
+        # "Smoking causes lung cancer, but cutting down lowers the risk": the
+        # turn is a side note about something else, so the answer is the
+        # plain one before it. A turn that qualifies the answer ("but the
+        # effect is small") still makes it mixed.
+        if (not _echoes(answer, claim) and _echoes(parts[0], claim)
+                and not _QUALIFIES.search(answer)):
+            answer = parts[0]
     else:
         parts = _TURN_BEFORE.split(first, maxsplit=1)
         answer = parts[0] if len(parts) == 2 else None

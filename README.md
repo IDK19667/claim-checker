@@ -171,6 +171,7 @@ static/           style.css, app.js, sw.js, manifest.webmanifest, icons/,
                   tex/ (paper grain, stamp ink),
                   fonts/ (Caslon + Archivo TTFs for og.py; woff2/ for browsers)
 scripts/          live_batch.py: run 14 real claims and eyeball verdicts
+                  regression.py: score the 20 audit claims against their expected verdicts
                   qa.mjs: browser design QA (contrast, tap areas, tokens)
 tests/            test_app.py: 63 integration tests, no network needed
 ```
@@ -211,7 +212,10 @@ an `llms.txt` stating the verdict rules in plain language.
   nudge, deep links, service worker (network-first, offline fallback).
 
 Re-run `scripts/live_batch.py` after any prompt change. Verdict quality
-on real claims is the one thing tests can't cover.
+on real claims is the one thing tests can't cover. For a score, run
+`scripts/regression.py`: the 20 audit claims in
+`tests/regression_claims.json`, each against the verdict it should get,
+30 seconds apart (about 15 minutes of free-tier quota).
 
 ## Not medical advice
 
