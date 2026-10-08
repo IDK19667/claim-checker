@@ -872,7 +872,10 @@ substance used another way) and it measures the claim's own outcome
 with lung cancer is not evidence that smoking causes lung cancer; a
 trial of exercise as a treatment for people who already have diabetes is
 not evidence that exercise prevents diabetes; a review of fasting and
-sports performance is not evidence about fasting and weight loss. Judge every study on both in "relevance", and cite only
+sports performance is not evidence about fasting and weight loss. The
+other way round is a match: a review showing a vaccine prevents measles
+at all does measure a claim that it reduces severe measles, because an
+illness that never starts cannot become severe. Judge every study on both in "relevance", and cite only
 the ones that match both. Studies marked OFF TOPIC are never cited. If
 none of these studies are actually about the claim, say so plainly,
 give the verdict "insufficient", and cite no studies.
