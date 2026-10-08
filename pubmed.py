@@ -325,6 +325,33 @@ def best_evidence_query(query: str) -> str:
     return f"({query}) AND ({' OR '.join(BEST_EVIDENCE_PT)})"
 
 
+def phrase_query(query: str) -> str | None:
+    """
+    The claim's own subject, searched as written: the first term of the first
+    group, quoted, against the whole outcome group with its multi-word terms
+    quoted too. None when that would be the same search again.
+
+    The search step lists the claim's own words first and its synonyms after.
+    The synonyms widen the net, and a loose one widens it too far: "joint
+    cracking" and "joint popping" match every paper on noisy knees, and push
+    "Knuckle cracking and hand osteoarthritis" down to sixteenth, out of
+    reach. "knuckle cracking" alone, as a phrase, puts it sixth.
+    """
+    groups = split_and(query or "")
+    if not groups or any(re.search(r"[\[\]\"]", g) for g in groups):
+        return None
+    split = []
+    for g in groups:
+        terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
+        if not terms or any("(" in t or ")" in t for t in terms):
+            return None
+        split.append([f'"{t}"' if " " in t else t for t in terms])
+    head = split[0][:1]
+    if len(split[0]) == 1 and not any(t.startswith('"') for g in split for t in g):
+        return None
+    return " AND ".join("(" + " OR ".join(g) + ")" for g in [head] + split[1:])
+
+
 def search_merged(query: str, max_results: int = 8) -> list[str]:
     """
     Two searches, one list. PubMed ranks by relevance alone, so a narrow
@@ -339,8 +366,12 @@ def search_merged(query: str, max_results: int = 8) -> list[str]:
     """
     want = max_results * 2
     best = search_pubmed(best_evidence_query(query), max_results=want)
+    # The phrase search sits between the two: it can only find papers that
+    # name a term as written, so what it finds is about the claim.
+    phrased = phrase_query(query)
+    exact = search_pubmed(phrased, max_results=max_results) if phrased else []
     general = search_pubmed(query, max_results=want)
-    return list(dict.fromkeys(best + general))[:want]
+    return list(dict.fromkeys(best[:max_results] + exact + best[max_results:] + general))[:want]
 
 
 def usable(studies: list[dict]) -> list[dict]:

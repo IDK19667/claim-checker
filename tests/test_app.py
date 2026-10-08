@@ -1746,5 +1746,25 @@ t("  a fixed claim gets its apostrophe and a capital",
   verdict.spelling_fix("vacines dont cause autisim", "vaccines dont cause autism") == "Vaccines don't cause autism"
   and verdict.spelling_fix("vacines dont cause autisim", "Vaccines do cause autism") == "vacines dont cause autisim")
 
+# ---- a loose synonym cannot flood the search -------------------------------
+_KQ = "(knuckle cracking OR joint popping) AND (arthritis OR joint degeneration)"
+t("the claim's own subject is also searched alone, as a phrase",
+  pubmed.phrase_query(_KQ) == '("knuckle cracking") AND (arthritis OR "joint degeneration")'
+  and pubmed.phrase_query("(a OR b) AND (c)") == "(a) AND (c)"
+  and pubmed.phrase_query("(a) AND (c OR d)") is None
+  and pubmed.phrase_query('("x y") AND (z)') is None, pubmed.phrase_query(_KQ))
+_seen = []
+def _fake_search(q, max_results=8):
+    _seen.append(q)
+    if "[pt]" in q:
+        return [f"OA{i}" for i in range(16)]
+    return ["KNUCKLE1", "KNUCKLE2"] if '"knuckle cracking"' in q else [f"JOINT{i}" for i in range(16)]
+_real_search = pubmed.search_pubmed
+pubmed.search_pubmed = _fake_search
+_merged = pubmed.search_merged(_KQ, max_results=8)
+pubmed.search_pubmed = _real_search
+t("  and what the phrase search finds is always among the studies read",
+  "KNUCKLE1" in _merged and "KNUCKLE2" in _merged and len(_merged) == 16 and len(_seen) == 3, _merged)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
