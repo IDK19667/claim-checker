@@ -36,6 +36,10 @@ is ready in about 4s on a phone and 6s on a desktop, from about 31s.
 What this does not fix: a free Render instance sleeps after 15 minutes
 without a visitor, and the first request after that waits for it to wake.
 Only an always-on instance fixes that.
+A GitHub Actions schedule (`.github/workflows/keep-awake.yml`) now visits
+`/healthz` every 10 minutes, so the instance rarely goes idle. It is free
+and best-effort: GitHub can start a scheduled run late, and pauses
+schedules after 60 days without a commit. A paid instance replaces it.
 
 ## 2026-10-07: A misspelled claim is checked as it was meant
 
