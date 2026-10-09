@@ -178,7 +178,8 @@ t("the fly-through's stylesheet and script are shell files now that it is "
   "the home page",
   '"/static/flight.css"' in sw and '"/static/flight.js"' in sw)
 t("the frames themselves are never cached by the service worker",
-  'url.pathname.startsWith("/static/flight/")' in sw)
+  'url.pathname.startsWith("/static/flight/")' in sw
+  and 'url.pathname.startsWith("/footage/")' in sw)
 
 # ---- beats.json --------------------------------------------------------------
 
@@ -483,6 +484,27 @@ t("the fly-through's own reduced-motion rules survived the trim",
   "@media (prefers-reduced-motion: reduce)" in flight_css
   and ".flight-overlay" in
   flight_css.split("@media (prefers-reduced-motion: reduce)")[1][:400])
+
+# ---- the footage is kept, not asked for again on every visit ------------------
+
+if (FLIGHT / "manifest.json").exists():
+    _c = _app.app.test_client()
+    _home = _c.get("/").get_data(as_text=True)
+    _base = f"/footage/{_app._footage_version()}"
+    t("the home page asks for the footage under its fingerprinted path",
+      f'data-frames="{_base}"' in _home and f'href="{_base}/frame-0000.avif"' in _home
+      and "/static/flight/frame-" not in _home, _base)
+    _r = _c.get(f"{_base}/lores/frame-0001.avif")
+    t("  and a frame there is kept for a year, unchanged",
+      _r.status_code == 200 and _r.data == (FLIGHT / "lores" / "frame-0001.avif").read_bytes()
+      and "immutable" in _r.headers.get("Cache-Control", "")
+      and "max-age=31536000" in _r.headers.get("Cache-Control", ""),
+      _r.headers.get("Cache-Control"))
+    t("  and a path outside the footage is refused",
+      _c.get(f"{_base}/../../app.py").status_code == 404)
+    _old = _app._footage_version()
+    _app._footage_version_memo.clear()
+    t("  and the fingerprint is stable across a restart", _app._footage_version() == _old)
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

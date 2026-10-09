@@ -5,7 +5,7 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v52";
+const CACHE = "evident-v53";
 const SHELL = [
   "/",
   "/checks",
@@ -77,7 +77,7 @@ self.addEventListener("fetch", (event) => {
   // cache already handles it, and copying it into the service worker's cache
   // would spend a reader's storage quota on footage rather than on the shell
   // that has to work offline. Left to the network.
-  if (url.pathname.startsWith("/static/flight/")) return;
+  if (url.pathname.startsWith("/static/flight/") || url.pathname.startsWith("/footage/")) return;
   // The band's clips are streamed, so the browser asks for ranges and the
   // reply is a 206, which a Cache cannot hold. They are not shell either: a
   // check needs a connection anyway, and the stills already cover offline.

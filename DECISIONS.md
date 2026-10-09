@@ -4,7 +4,27 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-07 (latest): A misspelled claim is checked as it was meant
+## 2026-10-09 (latest): The footage is kept, not fetched again every visit
+
+The fly-through is 552 frames per size, and Flask serves static files
+with "no-cache", so every visit asked the server about every frame again.
+On the free instance that is about 0.2s a frame, and a reader watched
+"Loading footage" sit at 34% after eight seconds. The service worker
+already left the frames to the HTTP cache, but there was nothing in it.
+
+The frames, their manifests and the stills are now served from
+`/footage/<fingerprint>/`, with a year-long, immutable cache. The
+fingerprint is a hash of the footage's own JSON files, which a rebuild
+rewrites, so new footage gets a new path and nobody sees old frames under
+a new check. `/static/flight/` still works for any page cached before
+this. A returning reader gets the footage from their own disk; the CDN in
+front of Render may keep it too, which is what would help a first visit.
+
+What this does not fix: a free Render instance sleeps after 15 minutes
+without a visitor, and the first request after that waits for it to wake.
+Only an always-on instance fixes that.
+
+## 2026-10-07: A misspelled claim is checked as it was meant
 
 People type claims fast, on phones, from half-remembered videos:
 "smokng causs lung cancr". The search step already guessed the right

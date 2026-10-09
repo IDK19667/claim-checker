@@ -10,12 +10,12 @@
   still header instead of a 23MB frame sequence.
 #}
 <section class="flight" id="flight"
-         data-frames="{{ url_for('static', filename='flight') }}"
-         data-beats="{{ url_for('static', filename='flight/beats.json') }}"
+         data-frames="{{ flight.base }}"
+         data-beats="{{ flight.base }}/beats.json"
          data-decoder="{{ url_for('static', filename='flight-decoder.js') }}">
   {# The poster is the first screen's picture until the first frame is decoded:
      17KB, preloaded in the head, painted before any script runs. #}
-  <div class="flight-stage" style="--poster: url('{{ url_for('static', filename='flight/' + flight.poster) }}')">
+  <div class="flight-stage" style="--poster: url('{{ flight.base }}/{{ flight.poster }}')">
     <canvas id="flight-canvas" aria-hidden="true"></canvas>
 
     <p class="flight-chip flight-progress" id="flight-progress" hidden>Loading footage &hellip;</p>
@@ -117,7 +117,7 @@
       <div class="after"><div class="inner">
         {% for still in flight.stills %}
         <figure>
-          <img src="{{ url_for('static', filename='flight/' + still.file) }}"
+          <img src="{{ flight.base }}/{{ still.file }}"
                width="960" height="540" alt="{{ still.alt }}" loading="lazy" decoding="async">
           <figcaption>{{ still.caption }}</figcaption>
         </figure>

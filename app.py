@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import secrets
@@ -182,6 +183,39 @@ def _citation(s: dict, relied_on: bool) -> dict:
     return c
 
 
+# The footage is 552 frames per size, and Flask serves static files with
+# "no-cache", so every visit asked the server about every frame again: on a
+# free instance at about 0.2s each, the fly-through sat on "Loading footage"
+# for most of a minute. The frames are served instead from a path that
+# carries a fingerprint of the footage's own manifests, with a year-long,
+# immutable cache. The browser keeps them, and so can the CDN in front of
+# Render. Rebuilding the footage rewrites its manifests (frame sizes, byte
+# totals), which changes the fingerprint, so a returning reader never sees
+# old frames under a new check.
+FOOTAGE_MAX_AGE = 365 * 24 * 3600
+_footage_version_memo: list[str] = []
+
+
+def _footage_version() -> str:
+    if not _footage_version_memo:
+        base = os.path.join(app.static_folder, "flight")
+        h = hashlib.sha256()
+        for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            if name.endswith(".json"):
+                with open(os.path.join(base, name), "rb") as f:
+                    h.update(name.encode() + b"\0" + f.read())
+        _footage_version_memo.append(h.hexdigest()[:10])
+    return _footage_version_memo[0]
+
+
+@app.route("/footage/<ver>/<path:filename>")
+def footage(ver: str, filename: str):
+    resp = send_from_directory(os.path.join(app.static_folder, "flight"), filename,
+                               max_age=FOOTAGE_MAX_AGE)
+    resp.headers["Cache-Control"] = f"public, max-age={FOOTAGE_MAX_AGE}, immutable"
+    return resp
+
+
 def _flight_context():
     """
     The fly-through's own data, or None if it is not built.
@@ -204,7 +238,8 @@ def _flight_context():
     d = datetime.fromisoformat(check["checkedAt"])
     check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
     return {"check": check, "chapters": beats["chapters"], "stills": _FLIGHT_STILLS,
-            "credits": _FLIGHT_CREDITS, "poster": poster}
+            "credits": _FLIGHT_CREDITS, "poster": poster,
+            "base": f"/footage/{_footage_version()}"}
 
 
 def _render_home(with_flight: bool):

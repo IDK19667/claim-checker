@@ -54,7 +54,7 @@
   <!-- One image, 17KB, is the whole of the first paint's imagery. The frame
        sequence is 23MB and does not start loading until the page is
        interactive, so it can never be what the reader is waiting for. -->
-  <link rel="preload" as="image" href="{{ url_for('static', filename='flight/' + flight.poster) }}" fetchpriority="high" />
+  <link rel="preload" as="image" href="{{ flight.base }}/{{ flight.poster }}" fetchpriority="high" />
   <link rel="stylesheet" href="{{ url_for('static', filename='flight.css') }}" />
   {% endif %}
 </head>
