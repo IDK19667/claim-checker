@@ -364,11 +364,15 @@
     return best;
   };
 
-  TierStore.prototype.preloadBytes = function () {
-    var self = this, next = 0, inFlight = 0;
+  // `only`, when given, is the list of frames still missing after a bundle
+  // failed part-way; the rest of the tier is already in.
+  TierStore.prototype.preloadBytes = function (only) {
+    var self = this, todo = only || null, next = 0, inFlight = 0;
+    var total = todo ? todo.length : manifest.count, settled = 0;
     return new Promise(function (resolve) {
+      if (!total) { resolve(); return; }
       function step() {
-        while (inFlight < BYTES_CONCURRENCY && next < manifest.count) {
+        while (inFlight < BYTES_CONCURRENCY && next < total) {
           (function (idx) {
             inFlight++;
             fetch(self.url(idx)).then(function (r) { return r.blob(); })
@@ -376,18 +380,86 @@
               .catch(function () { self.broken[idx] = 1; })
               .then(function () {
                 inFlight--;
+                settled++;
                 self.countLoaded++;
                 updateProgress();
-                if (self.countLoaded >= manifest.count) resolve();
+                if (settled >= total) resolve();
                 else step();
               });
-          })(next);
+          })(todo ? todo[next] : next);
           next++;
         }
       }
       step();
     });
   };
+
+  // The same tier in one request, when the manifest has a bundle for it.
+  TierStore.prototype.preload = function (bundle, offsets) {
+    var self = this;
+    if (!bundle || !offsets) return this.preloadBytes();
+    return streamBundle(bundle, offsets, function (idx, blob) {
+      self.blobs[idx] = blob;
+      self.bytesLoaded += blob.size;
+      self.countLoaded++;
+      updateProgress();
+    }).then(function (missing) {
+      if (missing.length) return self.preloadBytes(missing);
+    });
+  };
+
+  /* ---- bundles: a whole tier in one request -------------------------------- */
+
+  // Reads one bundle as it streams in and hands each frame over the moment
+  // its last byte arrives, so the first frames are on screen long before the
+  // file is finished. Resolves with the frames it could not deliver (all of
+  // them if the request failed outright), for the per-frame path to fetch.
+  function streamBundle(name, offsets, onFrame) {
+    var count = offsets.length - 1, nextFrame = 0, received = 0;
+    var chunks = [], chunkStart = [];
+    function frameBlob(a, b) {
+      var parts = [];
+      for (var c = 0; c < chunks.length; c++) {
+        var s0 = chunkStart[c], s1 = s0 + chunks[c].length;
+        if (s1 <= a) continue;
+        if (s0 >= b) break;
+        parts.push(chunks[c].subarray(Math.max(a, s0) - s0, Math.min(b, s1) - s0));
+      }
+      return new Blob(parts, { type: "image/avif" });
+    }
+    function release() {
+      // Chunks wholly before the next frame are no longer needed.
+      while (chunks.length && chunkStart[0] + chunks[0].length <= offsets[nextFrame]) {
+        chunks.shift(); chunkStart.shift();
+      }
+    }
+    function deliver() {
+      while (nextFrame < count && offsets[nextFrame + 1] <= received) {
+        onFrame(nextFrame, frameBlob(offsets[nextFrame], offsets[nextFrame + 1]));
+        nextFrame++;
+      }
+      release();
+    }
+    function missing() {
+      var left = [];
+      for (var i = nextFrame; i < count; i++) left.push(i);
+      return left;
+    }
+    return fetch(section.dataset.frames + "/" + name).then(function (r) {
+      if (!r.ok || !r.body || !r.body.getReader) throw new Error("no stream");
+      var reader = r.body.getReader();
+      function pump() {
+        return reader.read().then(function (step) {
+          if (step.done) { deliver(); return missing(); }
+          chunks.push(step.value); chunkStart.push(received);
+          received += step.value.length;
+          deliver();
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function () { return missing(); });
+  }
 
   var motionStore = new TierStore("motion", "motion/frame-%04d.avif");
   var hiresStore = new TierStore("hires", "frame-%04d.avif");
@@ -422,9 +494,34 @@
   var loresLoaded = 0;
 
   function loadLores() {
-    var next = 0, inFlight = 0;
+    if (manifest.loresBundle && manifest.loresOffsets) {
+      // Decoded a few at a time, as the frames stream in, the way the
+      // per-frame path below paces itself with its fetches.
+      var waiting = [], decoding = 0;
+      var pump = function () {
+        while (decoding < LORES_CONCURRENCY && waiting.length) {
+          (function (job) {
+            decoding++;
+            createImageBitmap(job.blob)
+              .then(function (bmp) { lores[job.idx] = bmp; })
+              .catch(function () { /* that slot just stays empty */ })
+              .then(function () { decoding--; loresLoaded++; updateProgress(); pump(); });
+          })(waiting.shift());
+        }
+      };
+      streamBundle(manifest.loresBundle, manifest.loresOffsets, function (idx, blob) {
+        waiting.push({ idx: idx, blob: blob });
+        pump();
+      }).then(function (left) { if (left.length) loadLoresFrames(left); });
+      return;
+    }
+    loadLoresFrames(null);
+  }
+
+  function loadLoresFrames(only) {
+    var next = 0, inFlight = 0, total = only ? only.length : manifest.count;
     function step() {
-      while (inFlight < LORES_CONCURRENCY && next < manifest.count) {
+      while (inFlight < LORES_CONCURRENCY && next < total) {
         (function (idx) {
           inFlight++;
           fetch(section.dataset.frames + "/" + manifest.loresPattern.replace("%04d", pad4(idx)))
@@ -433,7 +530,7 @@
             .then(function (bmp) { lores[idx] = bmp; })
             .catch(function () { /* a missing low-res frame just leaves that slot empty */ })
             .then(function () { inFlight--; loresLoaded++; updateProgress(); step(); });
-        })(next);
+        })(only ? only[next] : next);
         next++;
       }
     }
@@ -463,8 +560,12 @@
     progressScheduled = true;
     requestAnimationFrame(function () {
       progressScheduled = false;
-      var frac = (loresLoaded + motionStore.countLoaded + hiresStore.countLoaded) /
-        (manifest.count * 3);
+      // Counts what a scroll needs, not the sharpest copy. Once lores and the
+      // motion tier are in, the footage plays at any speed; the hi-res tier
+      // then fills in quietly for the reader who stops. Counting it too kept
+      // the label up for most of a first visit, and on a slow network, where
+      // hi-res is never fetched, it stuck at 67% for good.
+      var frac = (loresLoaded + motionStore.countLoaded) / (manifest.count * 2);
       if (frac >= 0.999) { progressEl.hidden = true; return; }
       progressEl.hidden = false;
       progressEl.textContent = "Loading footage … " + Math.round(frac * 100) + "%";
@@ -1174,7 +1275,7 @@
     // head), so there is something on screen throughout.
     whenInteractive(function () {
       loadLores();
-      motionStore.preloadBytes().then(function () {
+      motionStore.preload(manifest.motionBundle, manifest.motionOffsets).then(function () {
         scheduleIdlePredecode();
         if (!slowNetwork) return hiresStore.preloadBytes();
       });

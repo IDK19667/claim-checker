@@ -425,3 +425,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    # One file per lores and motion tier, so a first visit is two requests
+    # rather than 1,104. See scripts/bundle_flight.py.
+    import bundle_flight
+    bundle_flight.main()

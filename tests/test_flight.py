@@ -506,5 +506,31 @@ if (FLIGHT / "manifest.json").exists():
     _app._footage_version_memo.clear()
     t("  and the fingerprint is stable across a restart", _app._footage_version() == _old)
 
+_fj = (ROOT / "static" / "flight.js").read_text()
+_prog = _fj.split("function updateProgress()")[1].split("/* ----")[0]
+t("the loading label waits for playable footage only, not the hi-res copy "
+  "(which a slow network never fetches)",
+  "motionStore.countLoaded" in _prog and "hiresStore.countLoaded" not in _prog
+  and "manifest.count * 2" in _prog)
+
+# ---- a first visit is two requests, not 1,104 --------------------------------
+
+for _m in ("manifest.json", "manifest-2560.json", "manifest-phone.json"):
+    if not (FLIGHT / _m).exists():
+        continue
+    _man = json.loads((FLIGHT / _m).read_text())
+    for _tier in ("lores", "motion"):
+        _name, _offs = _man.get(f"{_tier}Bundle"), _man.get(f"{_tier}Offsets")
+        _ok = bool(_name) and len(_offs or []) == _man["count"] + 1
+        if _ok:
+            _data = (FLIGHT / _name).read_bytes()
+            _pat = _man[f"{_tier}Pattern"]
+            _ok = len(_data) == _offs[-1] and all(
+                _data[_offs[i]:_offs[i + 1]] == (FLIGHT / _pat.replace("%04d", f"{i:04d}")).read_bytes()
+                for i in (0, 1, _man["count"] // 2, _man["count"] - 1))
+        t(f"{_m}: the {_tier} tier is one bundle whose offsets cut out the very frames", _ok, _name)
+t("the page falls back to single frames if a bundle fails part-way",
+  "self.preloadBytes(missing)" in _fj and "loadLoresFrames(left)" in _fj)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

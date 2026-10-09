@@ -4,7 +4,7 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-09 (latest): The footage is kept, not fetched again every visit
+## 2026-10-09 (latest): The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files
 with "no-cache", so every visit asked the server about every frame again.
@@ -19,6 +19,19 @@ rewrites, so new footage gets a new path and nobody sees old frames under
 a new check. `/static/flight/` still works for any page cached before
 this. A returning reader gets the footage from their own disk; the CDN in
 front of Render may keep it too, which is what would help a first visit.
+
+That helped a returning reader (about 20s down to 4s) but not a first
+visit, and the reason was the request count, not the bytes: the footage
+cannot play until its lores and motion tiers are in, and that was 1,104
+separate files from an instance that answers a handful at a time. Each of
+those tiers is now one file (`scripts/bundle_flight.py`, with offsets in
+the manifests), read as it streams in, so frames still arrive in order
+from the first second. The single frames stay as the fallback for a
+bundle that fails part-way. The "Loading footage" label also now counts
+only what a scroll needs; the hi-res copy fills in quietly afterwards, and
+on a slow network, where it is never fetched, the label no longer sticks
+at 67%. On a connection slowed to the free instance's speed, the footage
+is ready in about 4s on a phone and 6s on a desktop, from about 31s.
 
 What this does not fix: a free Render instance sleeps after 15 minutes
 without a visitor, and the first request after that waits for it to wake.
