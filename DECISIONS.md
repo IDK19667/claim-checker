@@ -70,6 +70,21 @@ its side and back, and opens a phone on its side then turns it upright,
 checking each time that the canvas has a picture on it, or that the
 stills and the claim box are showing.
 
+**Nothing plays for a reader who cannot see it.** A tab in the background
+was still running the band's clip and every looping animation. While the
+tab is hidden, `body.paused` now freezes every CSS animation (with
+`!important`, because each looping rule sets the animation shorthand,
+which resets the play state) and the clip holds its frame. The clip also
+holds when the band is scrolled out of view while the reader goes through
+the studies, and the three looping dots (the mic while it listens, the
+live line of the reading list, the working status) hold when they are off
+screen. Whether a clip runs is now decided in one place, `film.sync()`,
+which knows all of it, so a stage change cannot start a clip nobody can
+see. Reduced motion switched on during a check stops the clip where it
+is; switched off, it plays again, and stills built while it was on become
+clips. A shared result's verdict still is left alone either way: a cold
+link loads one picture.
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

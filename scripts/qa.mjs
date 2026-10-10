@@ -352,6 +352,84 @@ for (const v of VIEWS) {
   console.log("live gates: reduced motion on and off, tablet rotation, phone on its side and upright: ran");
 }
 
+// ---- pausing what nobody can see --------------------------------------------
+// The band's clip plays only while someone can see it, and a hidden tab
+// freezes every CSS animation. Driven through the page's own controllers, so
+// it needs no check (and no model) to run.
+{
+  const where = "pause when unseen";
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(`${base}/`, { waitUntil: "load" });
+  const setHidden = (h) => page.evaluate((h) => {
+    Object.defineProperty(document, "hidden", { value: h, configurable: true });
+    Object.defineProperty(document, "visibilityState", { value: h ? "hidden" : "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, h);
+
+  // The looping status dot, on the home page: running in view, held out of it.
+  // After the fly-through has sized itself, which moves everything below it.
+  await page.waitForFunction(() => window.__flightStats && window.__flightStats.frameCount > 0, null, { timeout: 20000 });
+  await page.waitForTimeout(300);
+  const dot = () => page.evaluate(() => getComputedStyle(document.getElementById("status"), "::before").animationPlayState);
+  await page.evaluate(() => {
+    const st = document.getElementById("status");
+    st.classList.add("working");
+    st.scrollIntoView({ block: "center" });
+  });
+  await page.waitForTimeout(400);
+  if (await dot() !== "running") note(where, "loop", "the working dot does not run in view");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(400);
+  if (await dot() !== "paused") note(where, "loop", "the working dot kept looping out of view");
+  await page.evaluate(() => { window.scrollTo(0, 0); document.getElementById("status").classList.remove("working"); });
+
+  // The band, on a check screen with no check behind it, made tall enough to
+  // scroll the band away.
+  await page.evaluate(() => { screenState.enter(); document.querySelector("main.wrap").style.minHeight = "3000px"; });
+  const playing = () => page.evaluate(() => {
+    const v = document.querySelector('#film video.film-shot[data-on="1"]');
+    return v ? !v.paused : null;
+  });
+  const started = await page.waitForFunction(() => {
+    const v = document.querySelector('#film video.film-shot[data-on="1"]');
+    return v && !v.paused && v.currentTime > 0;
+  }, null, { timeout: 15000 }).then(() => true, () => false);
+  if (!started) note(where, "band", "the clip never started");
+  else {
+    await setHidden(true);
+    const hid = await page.evaluate(() => ({
+      body: document.body.classList.contains("paused"),
+      clip: document.querySelector('#film video.film-shot[data-on="1"]').paused,
+      sheet: getComputedStyle(document.querySelector("main.wrap")).animationPlayState,
+    }));
+    if (!hid.body) note(where, "tab hidden", "body.paused was not set");
+    if (!hid.clip) note(where, "tab hidden", "the clip kept playing");
+    if (hid.sheet !== "paused") note(where, "tab hidden", `the sheet's animation is ${hid.sheet}`);
+    await setHidden(false);
+    await page.waitForTimeout(300);
+    if (!(await playing())) note(where, "tab shown", "the clip did not resume");
+    await page.evaluate(() => window.scrollTo(0, 2000));
+    await page.waitForTimeout(400);
+    if (await playing()) note(where, "scrolled away", "the clip kept playing out of view");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(400);
+    if (!(await playing())) note(where, "scrolled back", "the clip did not resume");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.waitForTimeout(300);
+    if (await playing()) note(where, "reduced motion on", "the clip kept playing");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.waitForTimeout(400);
+    if (!(await playing())) note(where, "reduced motion off", "the clip did not come back");
+  }
+  errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+  await ctx.close();
+  console.log("pause when unseen: hidden tab, band scrolled away, looping dot out of view, reduced motion: ran");
+}
+
 await browser.close();
 
 tokenDrift().forEach((d) => note("tokens", "design system drift", d));

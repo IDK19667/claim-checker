@@ -418,6 +418,25 @@ t("the clips are only fetched once the reader has asked for a check, or "
   and "requestIdleCallback" in app_js and 'film.warm("searching")' in app_js)
 t("reduced motion and Save-Data get a still instead of a clip",
   "prefers-reduced-motion" in _film_obj and "saveData" in _film_obj)
+# Nothing plays for a reader who cannot see it.
+t("a hidden tab freezes every CSS animation on the page",
+  "body.paused *, body.paused *::before, body.paused *::after { animation-play-state: paused !important; }" in style_css
+  and 'document.addEventListener("visibilitychange", onTabVisibility)' in app_js
+  and 'document.body.classList.toggle("paused", document.hidden)' in app_js)
+t("  the band's clips start in one place only, which knows who is watching",
+  _film_obj.count(".play()") == 1
+  and "const run = !this.still && !this.tabHidden && !this.away;" in _film_obj
+  and "this.sync();" in _film_obj.split("show(name) {")[1])
+t("  the band holds its frame scrolled out of view",
+  "film.away = !entries[entries.length - 1].isIntersecting;" in app_js
+  and ".observe(filmBand)" in app_js)
+t("  and so do the looping dots",
+  '["mic-btn", "reading", "status"]' in app_js
+  and ".offscreen, .offscreen *, .offscreen::before" in style_css
+  and "animation-play-state: paused !important" in style_css.split(".offscreen, .offscreen *")[1][:120])
+t("  reduced motion is followed mid-visit by the band too",
+  'motion.addEventListener("change", onMotion)' in app_js
+  and "film.still = motion.matches" in app_js)
 
 # Every clip the map can ask for has actually been built, in both codecs,
 # with a still beside it.

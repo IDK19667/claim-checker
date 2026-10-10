@@ -134,6 +134,31 @@ const film = {
   // the same sheet. Nothing else about the screen changes.
   still: window.matchMedia("(prefers-reduced-motion: reduce)").matches
     || !!(navigator.connection || {}).saveData,
+  // Nobody is watching: the tab is in the background, or the band has been
+  // scrolled out of view while the reader goes through the studies. A clip
+  // playing then is decoding video for no one.
+  tabHidden: document.hidden,
+  away: true,
+
+  // The one place that decides whether a clip runs: the shot that is on plays
+  // while someone can see it and motion is wanted, and every clip holds its
+  // frame otherwise. A clip that is fading out is left to finish its fade,
+  // and the transitionend below stops it.
+  sync() {
+    if (!filmBand) return;
+    const run = !this.still && !this.tabHidden && !this.away;
+    for (const el of filmBand.querySelectorAll("video.film-shot")) {
+      if (run && this.shot && el.dataset.on === "1") {
+        // Autoplay can be refused (a data saver, a locked-down profile). The
+        // poster is the clip's own first frame, so a refusal is a still band,
+        // not an empty one.
+        const p = el.play();
+        if (p && p.catch) p.catch(() => {});
+      } else if (!run || el.dataset.on === "1") {
+        el.pause();
+      }
+    }
+  },
 
   src(name, ext) { return `${filmBand.dataset.footage}/${name}.${ext}`; },
 
@@ -186,14 +211,18 @@ const film = {
   // A page that opened on a shared result has the verdict shot as a still,
   // which is all a cold link should ever load. Once a live check starts, the
   // reader is going to watch the band for the length of a check, so the still
-  // gives way to the clip it is the first frame of.
+  // gives way to the clip it is the first frame of. So do stills built while
+  // reduced motion was on, once it has been switched off.
   upgrade() {
-    if (this.still) return;
-    const el = this.layer("verdict");
-    if (!el || el.tagName !== "IMG") return;
-    el.remove();
+    if (this.still || !filmBand) return;
+    const stills = filmBand.querySelectorAll("img.film-shot");
+    if (!stills.length) return;
+    stills.forEach((el) => el.remove());
     this.built = false;
     this.build();
+    // Mid-check, the shot on screen comes straight back as its clip.
+    const shot = this.shot;
+    if (shot) { this.shot = null; this.show(shot); }
   },
 
   // Fetch a clip before it is needed. Idle time on the home page takes the
@@ -216,16 +245,9 @@ const film = {
     for (const el of filmBand.querySelectorAll(".film-shot")) {
       const on = el.dataset.shot === name;
       el.dataset.on = on ? "1" : "0";
-      if (el.tagName !== "VIDEO") continue;
-      if (on) {
-        el.preload = "auto";
-        // Autoplay can be refused (a data saver, a locked-down profile). The
-        // poster is the clip's own first frame, so a refusal is a still band,
-        // not an empty one.
-        const p = el.play();
-        if (p && p.catch) p.catch(() => {});
-      }
+      if (on && el.tagName === "VIDEO") el.preload = "auto";
     }
+    this.sync();
     // The next shot is usually the one after this: ask for it now so the
     // cross-fade has something to fade to.
     const next = FILM_SHOTS[FILM_SHOTS.indexOf(name) + 1];
@@ -242,6 +264,48 @@ const film = {
     }
   },
 };
+
+/* Pausing what nobody can see. A tab in the background is still asked to run
+ * every animation on it, and a part of the page scrolled away is still asked
+ * to loop. While the tab is hidden, body.paused freezes every CSS animation
+ * and the band's clip holds its frame. Scrolled out of view, the band's clip
+ * holds too, and so do the looping dots: the mic while it listens, the live
+ * line of the reading list, the working status. Reduced motion switched on
+ * mid-visit stops the clip where it is; switched off during a check, the
+ * stills become clips again. */
+function onTabVisibility() {
+  document.body.classList.toggle("paused", document.hidden);
+  film.tabHidden = document.hidden;
+  film.sync();
+}
+document.addEventListener("visibilitychange", onTabVisibility);
+onTabVisibility();
+
+if ("IntersectionObserver" in window) {
+  if (filmBand) {
+    new IntersectionObserver((entries) => {
+      film.away = !entries[entries.length - 1].isIntersecting;
+      film.sync();
+    }).observe(filmBand);
+  }
+  const loops = new IntersectionObserver((entries) => {
+    for (const e of entries) e.target.classList.toggle("offscreen", !e.isIntersecting);
+  });
+  for (const id of ["mic-btn", "reading", "status"]) if ($(id)) loops.observe($(id));
+} else {
+  film.away = false;
+}
+
+{
+  const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const onMotion = () => {
+    film.still = motion.matches || !!(navigator.connection || {}).saveData;
+    if (document.body.classList.contains("live-check")) film.upgrade();
+    film.sync();
+  };
+  if (motion.addEventListener) motion.addEventListener("change", onMotion);
+  else if (motion.addListener) motion.addListener(onMotion);   // Safari before 14
+}
 
 /* The screen the reader is on. `null` is the home page: the fly-through, or
  * the checker on its own at /checks. Everything else is the band over the
