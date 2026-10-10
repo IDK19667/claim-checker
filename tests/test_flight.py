@@ -360,12 +360,11 @@ t("the footage carries two panels, the headline and the work: the standing "
   "line is that panel's bottom row, not a chip of its own",
   'class="flight-chip flight-note"' not in flight_tpl
   and ".flight-foot {" in flight_css)
-_grade = style_css.split("--grade:")[1].split(";")[0]
-t("every frame of footage carries one grade, and it moves colour only: the "
-  "canvas, the poster, the stills and the result band's clips, never darkened",
-  flight_css.count("filter: var(--grade);") == 3
-  and "filter: var(--grade);" in style_css.split(".film-shot {")[1].split("}")[0]
-  and not re.search(r"brightness|contrast|opacity", _grade), _grade)
+t("the footage plays in its own colour: no filter on the canvas, the poster, "
+  "the stills or the result band's clips (a toned grade read as black and white)",
+  "filter:" not in flight_css
+  and "--grade" not in style_css
+  and "filter" not in style_css.split(".film-shot {")[1].split("}")[0])
 index_tpl = (ROOT / "templates" / "index.html").read_text()
 
 t("the band lives on the page itself, not on the fly-through, so a cold "

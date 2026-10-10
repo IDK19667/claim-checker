@@ -85,12 +85,6 @@
   /* One shape scale: controls 3px, panels 4px. */
   --r-control: 3px;
   --r-panel: 4px;
-
-  /* One grade for every frame of footage: a toned monochrome carrying the
-     night's faint green, so stock clips stop bringing their own colour (a
-     cyan phone glow, a blue lab stand) into a room that has none. It moves
-     colour only: the footage keeps its own exposure, never darkened. */
-  --grade: grayscale(1) sepia(0.2) hue-rotate(100deg);
 }
 
 * { box-sizing: border-box; }
@@ -909,7 +903,6 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
   object-fit: cover;
   opacity: 0;
   transition: opacity 420ms linear;
-  filter: var(--grade);
 }
 .film-shot[data-on="1"] { opacity: 1; }
 
