@@ -933,6 +933,36 @@ async function checkPlain(claim) {
   return { stage: "done", result: data };
 }
 
+// The verdict lands where the work was printing, so the screen looks much as
+// it did while checking, and a reader can take the verdict for the whole page.
+// Once it has landed, the page moves down a little on its own: the claim and
+// its verdict at the top, the short answer and the reasoning under them, so
+// there is plainly more to read. Only after a check the reader ran here, once,
+// and never against them: a scroll, tap or key first and it stays put. Under
+// reduced motion it is a jump, not a glide. A tab in the background cannot
+// glide, so a reader who looked away while it checked sees it on coming back.
+const NUDGE_AFTER_MS = 900;
+function nudgeToAnswer() {
+  const head = document.querySelector("#result .thread");
+  if (!head) return;
+  let touched = false;
+  const stop = () => { touched = true; };
+  const inputs = ["wheel", "touchstart", "pointerdown", "keydown"];
+  for (const ev of inputs) addEventListener(ev, stop, { passive: true });
+  const go = () => {
+    for (const ev of inputs) removeEventListener(ev, stop);
+    if (touched || resultSection.hidden) return;
+    const top = Math.round(head.getBoundingClientRect().top + scrollY - 16);
+    if (top <= scrollY + 24) return;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollTo({ top, behavior: still ? "auto" : "smooth" });
+  };
+  setTimeout(() => {
+    if (document.hidden) document.addEventListener("visibilitychange", go, { once: true });
+    else go();
+  }, NUDGE_AFTER_MS);
+}
+
 async function check(claim) {
   claim = (claim || "").trim();
   if (inFlight) return;
@@ -977,6 +1007,7 @@ async function check(claim) {
       }
       if (location.search.includes("q=")) history.replaceState({ view: "result" }, "", "/?q=" + encodeURIComponent(claim));
       else history.pushState({ view: "result" }, "", "/?q=" + encodeURIComponent(claim));
+      nudgeToAnswer();
     }
   } catch (err) {
     endPending();

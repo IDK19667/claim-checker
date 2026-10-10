@@ -1288,6 +1288,19 @@ t("  and the head says what is inside before it is opened",
 t("  the browser draws the same quotes, never linking inside them",
   "What each study concluded" in _js and "escapeHtml(c.said)" in _js)
 
+# After a check the reader ran, the page moves down a little so the answer is
+# not mistaken for the whole result. Once, never on a shared link, never against
+# a reader who is already scrolling, and a jump rather than a glide for anyone
+# who asked for less motion.
+_nudge = _js[_js.find("function nudgeToAnswer"):]
+_nudge = _nudge[:_nudge.find("\n}\n")]
+_check_fn = _js[_js.find("async function check"):]
+t("after a check the page moves to the answer, once",
+  _js.count("nudgeToAnswer();") == 1 and "nudgeToAnswer();" in _check_fn)
+t("  any touch, wheel or key from the reader cancels it",
+  all(e in _nudge for e in ('"wheel"', '"touchstart"', '"pointerdown"', '"keydown"')))
+t("  it honours reduced motion and waits for a hidden tab",
+  "prefers-reduced-motion: reduce" in _nudge and "visibilitychange" in _nudge)
 
 # ---- the result screen: a labelled claim, an answer, then the evidence -----------
 #
