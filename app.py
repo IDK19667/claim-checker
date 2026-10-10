@@ -288,7 +288,8 @@ def _render_home(with_flight: bool):
     # best-effort; an empty database must still render a usable page.
     try:
         ledger = db.ledger()
-        latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]))
+        latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
+                       shelf=evidence.shelf(v["studies"], v["cited"]))
                   for v in db.recent_verdicts(10)]
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
@@ -535,6 +536,9 @@ def _study_payload(s: dict, cited: set) -> dict:
         # The most informative type name, for the one line the evidence
         # chart shows on hover and focus. Same reason as the tier.
         "type_label": evidence.strongest_label(s["publication_types"]),
+        # The spine's cloth on the shelf: who or what the study was run on,
+        # and whether it counts at all. Height is the tier; this is the rest.
+        "kind": evidence.kind(s),
         # The narrow group this study was run in, or null for a general
         # population. Classified on the server for the same reason as the
         # tier: it is a fact about the record, and both renderers need it.

@@ -1135,3 +1135,37 @@ def untested_in_people(studies, cited_pmids=()) -> str:
     order = ["reports of single patients", "animal or lab studies", "opinion pieces"]
     said = [k for k in order if k in kinds]
     return " and ".join(said)
+
+
+# ---------------------------------------------------------------------------
+# The shelf
+#
+# Every study is drawn as a book. Its height is its tier, the strength of the
+# design. Its cloth is its kind: who or what the study was run on, and whether
+# it counts at all. Both are read off the record, never off the verdict, so a
+# shelf can say what the evidence is and never what the answer was.
+# ---------------------------------------------------------------------------
+
+# Legend order, strongest first, and the order a mini shelf is stood in.
+KINDS = ("strong", "human", "lab", "weak", "retracted")
+
+
+def kind(study) -> str:
+    """The cloth for one study's spine."""
+    tier = classify(study.get("publication_types"))
+    if tier in ("weak", "retracted"):
+        return tier
+    if preclinical(study):
+        return "lab"
+    return "strong" if tier == "strong" else "human"
+
+
+def shelf(studies, cited_pmids=()) -> list[dict]:
+    """
+    A mini shelf for a check in a list: one spine per study, stood in kind
+    order so two shelves of the same set are always the same drawing.
+    """
+    cited = {str(p) for p in (cited_pmids or ())}
+    books = [{"kind": kind(s), "tier": classify(s.get("publication_types")),
+              "used": str(s.get("pmid")) in cited} for s in studies or []]
+    return sorted(books, key=lambda b: KINDS.index(b["kind"]))

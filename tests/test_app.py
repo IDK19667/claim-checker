@@ -1296,6 +1296,28 @@ t("  one study is 'study', and nothing used says so",
 t("  an empty set draws no chart and claims nothing",
   evidence.snapshot([])["summary"] == "" and evidence.snapshot([])["described"] == "")
 
+# The shelf. Height is the tier and cloth is the kind, both off the record.
+_K = lambda types, title="Vitamin D in adults", abstract="": evidence.kind(
+    {"publication_types": types, "title": title, "abstract": abstract})
+t("a study's cloth is what it was run on, read off the record",
+  _K(["Meta-Analysis"]) == "strong" and _K(["Randomized Controlled Trial"]) == "strong"
+  and _K(["Observational Study"]) == "human" and _K(["Journal Article"]) == "human"
+  and _K(["Journal Article"], "Vinegar lowers glucose in diabetic rats",
+         "Male Wistar rats were fed vinegar for 8 weeks.") == "lab"
+  and _K(["Case Reports"]) == "weak" and _K(["Retracted Publication"]) == "retracted")
+t("  an animal study is lab cloth even when it is pooled, and the height still says pooled",
+  _K(["Meta-Analysis"], "Vinegar in rodent models: a meta-analysis",
+     "Studies in rats and mice were pooled.") == "lab"
+  and evidence.classify(["Meta-Analysis"]) == "strong")
+t("every study in the payload carries its cloth",
+  all(s.get("kind") in evidence.KINDS for s in _vd["studies"]), [s.get("kind") for s in _vd["studies"]])
+_shelf = evidence.shelf([{"pmid": "1", "publication_types": ["Case Reports"]},
+                         {"pmid": "2", "publication_types": ["Meta-Analysis"]},
+                         {"pmid": "3", "publication_types": ["Observational Study"]}], ["3"])
+t("a mini shelf stands its books in kind order and marks the ones relied on",
+  [b["kind"] for b in _shelf] == ["strong", "human", "weak"]
+  and [b["used"] for b in _shelf] == [False, True, False], _shelf)
+
 t("every study carries the type name the chart shows on hover",
   _vd["studies"][0]["type_label"] == "Meta-Analysis"
   and _vd["studies"][1]["type_label"] == "Randomized Controlled Trial")
