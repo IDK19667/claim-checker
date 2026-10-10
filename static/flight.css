@@ -140,8 +140,8 @@
   transition: opacity 220ms linear;
 }
 
-/* Before flight.js runs, the first stage's panel is the one on screen: the
-   claim and its field are usable on the first screen with no script at all. */
+/* Before flight.js runs, the first stage's panel is the one on screen, with
+   no script at all. */
 .work-layer[data-layer="claim"] { opacity: 1; visibility: visible; }
 
 
@@ -162,8 +162,22 @@
   letter-spacing: -0.015em;
 }
 
-/* Scoped to the fly-through's own two forms: the checker's form further down
-   the page shares the class name and none of this layout. */
+/* The first screen's only instruction: the footage is a check that plays as
+   you scroll. Set like every other label a reader scans. */
+.scroll-cue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 500 12px/1.4 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+.scroll-cue span { font: 600 15px/1 var(--body); }
+
+/* Scoped to the fly-through's own form at the end of the footage: the
+   checker's form further down the page shares the class name and none of
+   this layout. */
 .flight-ask {
   display: flex;
   gap: 8px;

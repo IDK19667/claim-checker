@@ -126,9 +126,16 @@ if decoder.exists():
 flight_tpl = (ROOT / "templates" / "_flythrough.html").read_text()
 t("the page tells flight.js where the decode worker lives",
   'data-decoder=' in flight_tpl)
-t("the fly-through's own claim fields are real forms, so they work without JS",
-  flight_tpl.count('class="claim-form flight-ask') == 2
-  and flight_tpl.count('action="/" method="get"') == 2)
+t("the fly-through's claim field, at the end of the footage, is a real form, "
+  "so it works without JS",
+  flight_tpl.count('class="claim-form flight-ask') == 1
+  and flight_tpl.count('action="/" method="get"') == 1)
+_claim_layer = flight_tpl.split('data-layer="claim"')[1].split('data-layer="work"')[0]
+t("the first screen of the footage has no field to type in, only the claim "
+  "and a line saying to scroll, so nobody stops at a box before the check plays",
+  "<input" not in _claim_layer and "<form" not in _claim_layer
+  and 'class="scroll-cue"' in _claim_layer
+  and "Scroll down to see it checked" in _claim_layer)
 t("the poster is set on the stage, so the first screen has a picture "
   "before any frame is decoded",
   "--poster:" in flight_tpl)

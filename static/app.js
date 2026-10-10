@@ -361,12 +361,12 @@ function resumeFlight() {
   window.dispatchEvent(new Event("resize"));
 }
 
-// The claim field the reader can actually see: the fly-through's own, when the
-// footage is on screen, and the checker's textarea otherwise.
+// Back to the claim box. The fly-through's first screen has no field of its
+// own, so a reader coming back from a check to try another is taken past the
+// footage to the checker, the same place "Skip to the checker" goes.
 function focusClaim() {
-  const q = $("flight-q");
-  if (q && flightSection && !flightSection.hidden) q.focus({ preventScroll: true });
-  else input.focus({ preventScroll: true });
+  if (flightSection && !flightSection.hidden) askSection.scrollIntoView({ block: "start" });
+  input.focus({ preventScroll: true });
 }
 
 // Every answer under "Before you trust a verdict" ends at the claim box. The

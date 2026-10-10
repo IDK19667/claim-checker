@@ -43,15 +43,12 @@
               <q>{{ flight.check.claim }}</q>
             </div>
 
-            {# Action and method are real, so this works with no JavaScript at
-               all. With JavaScript, app.js intercepts it and runs the same
-               streamed check the main form runs. #}
-            <form class="claim-form flight-ask" action="/" method="get">
-              <label class="sr-only" for="flight-q">Paste a health claim</label>
-              <input type="text" id="flight-q" name="q" maxlength="500"
-                     placeholder="Paste a health claim" autocomplete="off">
-              <button type="submit">Check it</button>
-            </form>
+            {# No claim field on the first screen. A box to type in reads as
+               the whole page, and a reader who uses it never scrolls to see
+               a check happen. The field is at the end of the footage ("Now
+               check yours") and under it (the checker); the bottom row's
+               link goes straight there. #}
+            <p class="scroll-cue">Scroll down to see it checked<span aria-hidden="true">&darr;</span></p>
           </div>
 
           <div class="work-layer flight-chip" data-layer="work">
