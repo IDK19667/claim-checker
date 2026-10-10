@@ -74,6 +74,7 @@
   --film-top: rgba(15, 18, 17, 0.35);
   --scrim: rgba(8, 10, 9, 0.55);
   --shadow: rgba(8, 10, 9, 0.22);
+  --shadow-near: rgba(8, 10, 9, 0.08);
   --focus: #2c5848;
 
   --display: "Bricolage Grotesque", system-ui, sans-serif;
@@ -454,7 +455,18 @@ body {
 
 /* ---- By day: the reading behind the verdict ------------------------------- */
 
-.verdict-block { padding-top: 44px; }
+/* The answer is a sheet laid on the desk: a shade lighter than the page,
+   edged in a fine rule, lifted onto the night head and casting a soft
+   shadow, so the part the reader came for sits above everything else. With
+   the study sheet, the only shadows in the design. */
+.verdict-block {
+  position: relative; z-index: 1;
+  margin: -24px -8px 0;
+  padding: 28px 20px 24px;
+  background: var(--panel);
+  border: 1px solid var(--rule); border-radius: var(--r-panel);
+  box-shadow: 0 1px 2px var(--shadow-near), 0 24px 48px -20px var(--shadow);
+}
 .answer { padding: 0; }
 .tldr { margin: 10px 0 0; font-size: 21px; line-height: 1.45; font-weight: 400; letter-spacing: -0.005em; }
 .says-sec { margin-top: 40px; }
@@ -549,7 +561,7 @@ body {
    of study; solid or outlined says whether the verdict leaned on it. Never
    faded with opacity, which would let a strong study pass for a weak one. */
 .barcol:not(.is-used) .barcol-bar:not(.h-retracted) {
-  background-color: color-mix(in oklab, var(--k, var(--ink-3)) 18%, var(--paper));
+  background-color: color-mix(in oklab, var(--k, var(--ink-3)) 18%, var(--panel));
   background-image: none;
   border: 2px solid var(--k, var(--ink-3)); border-bottom: 0;
   color: var(--k, var(--ink-3));
@@ -579,9 +591,9 @@ body {
 /* The chosen book: a ring round its spine and its number reversed out, the
    way a book is pulled half out of a row. */
 .barcol.is-on .barcol-bar {
-  box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--ink);
 }
-.barcol.is-on .barcol-no { background: var(--ink); color: var(--paper); border-radius: var(--r-control); }
+.barcol.is-on .barcol-no { background: var(--ink); color: var(--panel); border-radius: var(--r-control); }
 
 .barcol-tip {
   position: absolute; bottom: calc(var(--num-h) + var(--ledge) + var(--plot-h) + 8px);
@@ -1053,6 +1065,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   }
   body:not(.view-ask) #result:not(.checking) > .report-head { grid-column: 1 / -1; }
   body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 44px; }
+  .verdict-block { margin: -32px 0 0; padding: 36px 36px 30px; }
   .report-head { padding-bottom: 64px; }
   .stamp { font-size: 64px; }
   .study { margin-inline: 0; padding-left: 16px; padding-right: 0; background-position: 0 16px; }

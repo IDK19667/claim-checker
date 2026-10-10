@@ -4,7 +4,30 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-10 (last): The first screen is only the footage
+## 2026-10-10 (final): The answer floats again, and a fixed spelling stays fixed
+
+**The answer sheet.** The user pointed at an older version where the
+reading column sat on a lifted panel with a soft shadow and asked for
+that floating look back. Everything from "The short answer" to the
+shelf is now one sheet of `--panel` with a fine `--rule` edge, lifted
+onto the night head and casting a soft shadow. It reverses the "no
+shadows for depth" line in `DESIGN.md` for this one surface, on
+purpose: it is the part the reader came for, and the lift is what
+separates it from the sources beside it. The study sheet keeps its
+shadow; nothing else gets one. The outlined books and the chosen-book
+ring now mix with `--panel` rather than `--paper`, since the shelf
+stands on the sheet.
+
+**Spelling.** The heading already showed the corrected claim, but the
+address bar kept what was typed, so a reload or a copied link brought
+the typo back. The address now carries the claim as checked. Testing
+ten misspelled claims against the live model, nine were fixed; the
+tenth ("red wine is gud for ur hart") was refused by the guard because
+"gud" is not close enough to "good" letter for letter. Common text
+spellings (gud, gr8, luv, y, da, dat, coz) now count as shorthand, the
+way u and ur already did.
+
+## 2026-10-10 (evening): The first screen is only the footage
 
 The user asked for the panel over the opening footage to go: the claim,
 "Scroll down to see it checked", the standing line and the skip link.

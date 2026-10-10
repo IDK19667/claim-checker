@@ -35,6 +35,7 @@ colors:
   film-top: "rgba(15, 18, 17, 0.35)"
   scrim: "rgba(8, 10, 9, 0.55)"
   shadow: "rgba(8, 10, 9, 0.22)"
+  shadow-near: "rgba(8, 10, 9, 0.08)"
   focus: "#2c5848"
 typography:
   label:
@@ -323,6 +324,8 @@ components:
     backgroundColor: "{colors.scrim}"
   sheet-shadow:
     backgroundColor: "{colors.shadow}"
+  answer-sheet-shadow:
+    backgroundColor: "{colors.shadow-near}"
   focus-ring:
     backgroundColor: "{colors.focus}"
 ---
@@ -503,6 +506,13 @@ the shape of the evidence before opening a check.
   runs, the ringed verdict), then by day: "The short answer" at 21px,
   "What the research says", "Still open" under an ink rule, the full
   breakdown, "The evidence" with the shelf, then the sources.
+- **The answer sheet:** everything from "The short answer" to the shelf
+  sits on one sheet of `--panel`, a shade lighter than the desk, edged in
+  a 1px `--rule` at `--r-panel`, lifted onto the night head (24px on a
+  phone, 32px wide) with a soft shadow (`--shadow-near` close in,
+  `--shadow` far out). On a phone it stands 12px in from the screen
+  edges. The sources, the share bar and the feedback row stay on the desk
+  beside and below it.
 - **The full breakdown** sits straight under "Still open", closed, so a
   reader meets it before the shelf rather than after the sources. Its
   head is a heading, not a link: a 2px ink rule over it, "Rests on N
@@ -528,8 +538,8 @@ the shape of the evidence before opening a check.
   of paper. While a countdown runs, "Try again" is drawn as an outline
   and plainly not yet open.
 - **The study sheet:** a panel that rises from the foot of the screen
-  over a scrim, `--r-panel` at its top corners, the only shadow in the
-  design.
+  over a scrim, `--r-panel` at its top corners. With the answer sheet,
+  the only shadows in the design.
 - **Documents** (privacy, the 404): the masthead, a 44px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
   again and the latest checks.
@@ -617,6 +627,7 @@ copy or model output. A test enforces it on the rendered page;
 Never reintroduce: a glowing or neon accent, cyan light cues, a navy or
 pure black night, a cream ground, a colour coded verdict, a second accent,
 gradient washes, glass or backdrop blur, pill buttons, shadows used for
-depth on ordinary content, emoji icons, stat-card rows, gauges, generated
+depth on ordinary content (the answer sheet and the study sheet are the
+two that float, and no third joins them), emoji icons, stat-card rows, gauges, generated
 hero imagery or video, animated backgrounds, cursor effects, or analytics
 of any kind.

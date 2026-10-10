@@ -1308,6 +1308,11 @@ t("  it honours reduced motion and waits for a hidden tab",
 # answer, and the claim they typed can never be mistaken for it.
 
 _css = (ROOT / "static" / "style.css").read_text()
+_sheet = _css[_css.find(".verdict-block {"):].split("}")[0]
+t("the answer is a sheet that floats: a lighter panel, a fine rule edge, lifted onto the night head, a soft shadow",
+  "background: var(--panel)" in _sheet and "border: 1px solid var(--rule)" in _sheet
+  and "margin: -24px -8px 0" in _sheet and "box-shadow:" in _sheet and "var(--shadow-near)" in _sheet
+  and "--shadow-near: rgba(8, 10, 9, 0.08);" in _css)
 _done = _js[_js.find("renderResult(final.result);"):][:900]
 t("after a check the address carries the claim as checked, so a fixed spelling stays fixed on reload",
   'encodeURIComponent(final.result.claim || claim)' in _done
