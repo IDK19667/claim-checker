@@ -29,27 +29,20 @@
         {% endfor %}
       </div>
 
-      {# Three bottom-anchored panels in one corner, cross-faded, never
+      {# Two bottom-anchored panels in one corner, cross-faded, never
          reflowed. Each stage used to add and remove rows inside a single
          growing panel, which moved whatever was already on screen: real,
          measurable layout shift (CLS 0.34 on a phone while scrubbing). Every
          stage change here is opacity and visibility only, so the measured
          CLS is 0 at load and while scrolling. See DECISIONS.md. #}
+      {# No panel on the first screen: the footage and its headline, nothing
+         else. The panel arrives when the work starts. The one thing kept is
+         a small line on the headline's plate, because "Not medical advice"
+         is on every screen. The field is at the end of the footage ("Now
+         check yours") and under it (the checker). #}
       <div class="flight-work" data-stage="claim">
+        <p class="first-note">Illustrative footage. Not medical advice.</p>
         <div class="work-deck">
-
-          <div class="work-layer flight-chip" data-layer="claim">
-            <div class="claim-card">
-              <q>{{ flight.check.claim }}</q>
-            </div>
-
-            {# No claim field on the first screen. A box to type in reads as
-               the whole page, and a reader who uses it never scrolls to see
-               a check happen. The field is at the end of the footage ("Now
-               check yours") and under it (the checker); the bottom row's
-               link goes straight there. #}
-            <p class="scroll-cue">Scroll down to see it checked<span aria-hidden="true">&darr;</span></p>
-          </div>
 
           <div class="work-layer flight-chip" data-layer="work">
             <p class="query-line">
@@ -96,7 +89,7 @@
 
         {# The standing line and the way out share the panel's bottom row, so
            the footage carries two panels, not four. Inside the pinned stage,
-           the link is on screen at every scroll position and on every stage,
+           the link is on screen at every stage after the first,
            and stops being there the moment the footage ends and the checker
            itself is what you are looking at. No script decides this: the
            stage is sticky, the link rides it. #}

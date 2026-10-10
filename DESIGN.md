@@ -550,16 +550,20 @@ a toned monochrome was tried and read as black and white, so the clips,
 the poster, the fallback stills and the result band all show the frames
 as they were shot.
 
-**Two panels over the footage, no more.** Captions sit on a plate of the
-night stock (`--plate`, 80%) top left, so they hold their contrast over
-any frame. The claim panel sits bottom left, opaque. It shows the claim
-being checked and, under it, "Scroll down to see it checked" with a down
-arrow: no field, because a box on the first screen read as the place to
-start and hid that the footage scrolls. The only box over the footage is
-"Now check yours", at its end. The panel's bottom row,
-across one hairline, carries the standing line ("Illustrative footage. A
-real check, replayed") and, as the row's last cell, "Skip to the
-checker", on screen at every stage. No glass, no backdrop blur, no glow.
+**Two panels over the footage, no more, and none on the first screen.**
+Captions sit on a plate of the night stock (`--plate`, 80%) top left, so
+they hold their contrast over any frame. The first screen is the footage
+and its caption and nothing else: no claim, no field, no instruction. The
+one exception is a small mono line on the same plate, bottom left,
+"Illustrative footage. Not medical advice.", because that line is on
+every screen. The work panel arrives bottom left, opaque, when the work
+starts, and its bottom row, across one hairline, carries the standing
+line ("Illustrative footage. A real check, replayed") and, as the row's
+last cell, "Skip to the checker", at every stage after the first. The
+only box to type in is "Now check yours", at the footage's end. Under
+reduced motion and the other still versions no panel is shown: the
+stills carry their own standing line. No glass, no backdrop blur, no
+glow.
 
 A check does not replay the fly-through. It stands down, and a band of
 footage across the top of the report (30vh on a phone) shows the stage of

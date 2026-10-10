@@ -4,7 +4,27 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-10 (latest): Colour back, no box on the first screen, and a result that shows it goes on
+## 2026-10-10 (last): The first screen is only the footage
+
+The user asked for the panel over the opening footage to go: the claim,
+"Scroll down to see it checked", the standing line and the skip link.
+The first screen is now the footage and its caption. The panel and its
+bottom row (standing line, "Skip to the checker") arrive when the work
+starts, by CSS on the stage the markup already carries, so it is right
+before any script runs and moves nothing on the page.
+
+One line stays, small, on the caption's plate, bottom left:
+"Illustrative footage. Not medical advice." Every screen carries "Not
+medical advice" (a non-negotiable in `CLAUDE.md`), and the footage says
+it is a replay in every state. If that line should go too, both rules
+have to be changed on purpose first.
+
+The still versions (reduced motion, Save-Data, a phone on its side)
+used to flatten the claim panel into the top of the stills. With no
+claim panel they show no panel at all, and the stills' own standing
+line, hidden until now, is what carries it.
+
+## 2026-10-10 (later still): Colour back, no box on the first screen, and a result that shows it goes on
 
 Five changes from the user's look at the finished pass.
 

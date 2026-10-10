@@ -140,40 +140,29 @@
   transition: opacity 220ms linear;
 }
 
-/* Before flight.js runs, the first stage's panel is the one on screen, with
-   no script at all. */
-.work-layer[data-layer="claim"] { opacity: 1; visibility: visible; }
+/* ---- stage 1: the first screen ------------------------------------------ */
+/* The footage and its headline, and no panel: the panel's bottom row (the
+   standing line and the way to the checker) waits for the work to start.
+   What stays is one small line on the headline's own plate, bottom left,
+   because "Not medical advice" is on every screen. Both are set from the
+   markup's data-stage, so this is right before flight.js runs. */
+.flight-foot, .first-note { transition: opacity 220ms linear, visibility 220ms linear; }
+.flight-work[data-stage="claim"] .flight-foot { opacity: 0; visibility: hidden; }
 
-
-/* ---- stage 1: the claim ------------------------------------------------- */
-
-.claim-card {
-  border-top: 1px solid var(--ink);
-  padding-top: 12px;
-  transform-origin: top left;
-  transition: opacity 200ms linear;
-}
-
-.claim-card q {
-  display: block;
-  quotes: none;
-  font-size: clamp(21px, 4.4vw, 32px);
-  line-height: 1.2;
-  letter-spacing: -0.015em;
-}
-
-/* The first screen's only instruction: the footage is a check that plays as
-   you scroll. Set like every other label a reader scans. */
-.scroll-cue {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.first-note {
+  position: absolute;
+  left: 0;
+  bottom: 0;
   margin: 0;
-  font: 500 12px/1.4 var(--mono);
-  letter-spacing: 0.02em;
-  color: var(--ink-2);
+  padding: 7px 10px;
+  border-radius: var(--r-control);
+  background: var(--plate);
+  color: var(--on-deep);
+  font: 500 10.5px/1.4 var(--mono);
+  opacity: 0;
+  visibility: hidden;
 }
-.scroll-cue span { font: 600 15px/1 var(--body); }
+.flight-work[data-stage="claim"] .first-note { opacity: 1; visibility: visible; }
 
 /* Scoped to the fly-through's own form at the end of the footage: the
    checker's form further down the page shares the class name and none of
@@ -368,7 +357,8 @@
 /* ---- always-there furniture -------------------------------------------- */
 
 /* The standing line sits directly under the deck, so it is on screen at every
-   stage and through every cross-fade, and no panel has to change height to
+   stage after the first (which has its own small line) and through every
+   cross-fade, and no panel has to change height to
    carry it. It is the panel's own bottom row, not a second panel: whichever
    layer is showing meets it edge to edge across one hairline, square corners
    where they join, one shadow under the whole. The way out is the row's last
@@ -448,33 +438,10 @@
 .no-flight .chapter-zone { display: none; }
 .no-flight .stills { display: block; }
 
-/* The claim field has to be on the first screen here too, so the overlay
-   does not disappear: it flattens into one ordinary block at the top of the
-   section, carrying the claim panel and nothing else. The stages that only
-   make sense while scrubbing become the stills below. */
-.no-flight .flight-overlay { position: static; pointer-events: auto; }
-.no-flight .flight-work {
-  position: static;
-  display: block;
-  width: auto;
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 48px 20px 0;
-}
-.no-flight .work-deck { position: static; }
-.no-flight .work-layer:not([data-layer="claim"]) { display: none; }
-/* The standing line comes with the panel, so the stills do not repeat it. */
-.no-flight .stills .flight-note { display: none; }
-.no-flight .work-layer[data-layer="claim"] {
-  position: static;
-  opacity: 1;
-  visibility: visible;
-  max-height: none;
-  overflow: visible;
-}
-/* With no pinned stage to ride, the panel and its bottom row are simply the
-   first thing in the section, in normal flow, and the link in that row is
-   still the way out of the stills. */
+/* The panel only makes sense while scrubbing, so it is not shown here at
+   all: the stills carry their own standing line, and the checker is the
+   next thing down the page. */
+.no-flight .flight-overlay { display: none; }
 
 .stills figure {
   margin: 0 0 40px;
@@ -558,23 +525,5 @@
   .flight-progress,
   .chapter-zone { display: none; }
   .stills { display: block; }
-  .flight-overlay { position: static; pointer-events: auto; }
-  .flight-work {
-    position: static;
-    display: block;
-    width: auto;
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 48px 20px 0;
-  }
-  .work-deck { position: static; }
-  .work-layer:not([data-layer="claim"]) { display: none; }
-  .stills .flight-note { display: none; }
-  .work-layer[data-layer="claim"] {
-    position: static;
-    opacity: 1;
-    visibility: visible;
-    max-height: none;
-    overflow: visible;
-  }
+  .flight-overlay { display: none; }
 }

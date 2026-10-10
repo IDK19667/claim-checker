@@ -130,12 +130,15 @@ t("the fly-through's claim field, at the end of the footage, is a real form, "
   "so it works without JS",
   flight_tpl.count('class="claim-form flight-ask') == 1
   and flight_tpl.count('action="/" method="get"') == 1)
-_claim_layer = flight_tpl.split('data-layer="claim"')[1].split('data-layer="work"')[0]
-t("the first screen of the footage has no field to type in, only the claim "
-  "and a line saying to scroll, so nobody stops at a box before the check plays",
-  "<input" not in _claim_layer and "<form" not in _claim_layer
-  and 'class="scroll-cue"' in _claim_layer
-  and "Scroll down to see it checked" in _claim_layer)
+_first_css = (ROOT / "static" / "flight.css").read_text()
+t("the first screen of the footage carries no panel: the footage, its "
+  "headline, and one small line that keeps 'Not medical advice' on screen",
+  'data-layer="claim"' not in flight_tpl and "scroll-cue" not in flight_tpl
+  and '<p class="first-note">Illustrative footage. Not medical advice.</p>' in flight_tpl
+  and '.flight-work[data-stage="claim"] .flight-foot { opacity: 0; visibility: hidden; }'
+  in _first_css
+  and '.flight-work[data-stage="claim"] .first-note { opacity: 1; visibility: visible; }'
+  in _first_css)
 t("the poster is set on the stage, so the first screen has a picture "
   "before any frame is decoded",
   "--poster:" in flight_tpl)
@@ -157,7 +160,7 @@ t("the freeze limit is 100ms and the stand-in radius is 2 frames",
 # geometry bring it to 0, so nothing here may go back to toggling layout.
 
 t("the work panel is three cross-faded layers, not one growing panel",
-  flight_tpl.count('class="work-layer flight-chip"') == 3
+  flight_tpl.count('class="work-layer flight-chip"') == 2
   and 'class="work-deck"' in flight_tpl)
 t("a stage change is opacity and visibility, never a row leaving the flow",
   "function setLayer(" in flight_js
@@ -622,9 +625,9 @@ t("  and flight.css applies the stills on exactly the same query strings",
   all(g in _gate_css.split("{")[0] for g in _gates))
 t("  in a block last in the file, so it outranks the phone-width rules",
   flight_css.rfind("@media (max-width: 640px)") < flight_css.find("/* ---- the still version's live gates"))
-t("  and it shows the claim panel and the stills, and hides the canvas",
+t("  and it shows the stills, and hides the canvas and the panels over it",
   ".stills { display: block; }" in _gate_css and "#flight-canvas," in _gate_css
-  and '.work-layer[data-layer="claim"] {' in _gate_css)
+  and ".flight-overlay { display: none; }" in _gate_css)
 t("  the gates are listened to, not read once",
   'm.addEventListener("change", applyGates)' in _fj and "m.addListener(applyGates)" in _fj
   and not re.search(r'matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches', _fj))
