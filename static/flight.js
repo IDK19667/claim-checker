@@ -55,6 +55,12 @@
 (function () {
   "use strict";
 
+  // A phone is held to about this much footage. Its full set (low-res,
+  // motion and hi-res, 9.8MB at the last build) is nearly twice it, so a
+  // phone gets the motion tier alone: 3MB, sharp enough at a phone's size,
+  // and none of it until the reader first scrolls. Checked against the
+  // manifest's own totals, so a lighter rebuild lifts the cap by itself.
+  var PHONE_BUDGET_BYTES = 5 * 1048576;
   var BYTES_CONCURRENCY = 6;      // parallel fetches per tier
   var LORES_CONCURRENCY = 10;
   var LORES_WINDOW_MS = 1000;     // after this, lores is never drawn again
@@ -130,6 +136,8 @@
   // the hi-res tier that a stopped reader would otherwise get is simply not
   // worth 17MB on a connection like that.
   var slowNetwork = /^(slow-2g|2g|3g)$/.test(conn.effectiveType || "");
+  // Set once the manifest is in: a touch phone whose full set is over budget.
+  var phoneBudget = false;
 
   var ctx = canvas.getContext("2d", { alpha: false });
   // Footage plays at full brightness in its own right (no scrim), so sharpness
@@ -565,7 +573,10 @@
       // then fills in quietly for the reader who stops. Counting it too kept
       // the label up for most of a first visit, and on a slow network, where
       // hi-res is never fetched, it stuck at 67% for good.
-      var frac = (loresLoaded + motionStore.countLoaded) / (manifest.count * 2);
+      // A phone on its budget loads no lores, so for it the motion tier is all.
+      var frac = phoneBudget
+        ? motionStore.countLoaded / manifest.count
+        : (loresLoaded + motionStore.countLoaded) / (manifest.count * 2);
       if (frac >= 0.999) { progressEl.hidden = true; return; }
       progressEl.hidden = false;
       progressEl.textContent = "Loading footage … " + Math.round(frac * 100) + "%";
@@ -675,6 +686,9 @@
     lastDrawn.b0 = f0.bmp;
     lastDrawn.b1 = f1 ? f1.bmp : null;
     lastDrawn.t = t;
+    // An opaque canvas is black until something is drawn on it, and it sits
+    // over the poster. It stays hidden (flight.css) until this first frame.
+    if (!hasDrawn) canvas.setAttribute("data-drawn", "");
     hasDrawn = true;
 
     stats.draws++;
@@ -813,6 +827,17 @@
     };
     if (document.readyState === "complete") go();
     else window.addEventListener("load", go, { once: true });
+  }
+
+  // A page restored part-way down (back, or a reload) has already been
+  // scrolled, so that counts as the first scroll.
+  function afterFirstScroll(fn) {
+    if (window.scrollY > 0) { fn(); return; }
+    var go = function () {
+      window.removeEventListener("scroll", go);
+      fn();
+    };
+    window.addEventListener("scroll", go, { passive: true });
   }
 
   var idleScheduled = false;
@@ -1268,18 +1293,29 @@
     onScroll();
     requestAnimationFrame(tick);
 
+    var phone = variant === "phone" && window.matchMedia("(pointer: coarse)").matches;
+    var everything = (manifest.loresTotalBytes || 0) + (manifest.motionTotalBytes || 0)
+      + (manifest.totalBytes || 0);
+    phoneBudget = phone && everything > PHONE_BUDGET_BYTES;
+    stats.phoneBudget = phoneBudget;
+
+    function loadFootage() {
+      if (!phoneBudget) loadLores();
+      motionStore.preload(manifest.motionBundle, manifest.motionOffsets).then(function () {
+        scheduleIdlePredecode();
+        if (!slowNetwork && !phoneBudget) return hiresStore.preloadBytes();
+      });
+    }
+
     // Frames start downloading only once the page is interactive. The claim
     // field is the reason anyone is here, and 23MB of footage queued ahead of
     // it would make the one control that matters wait on the one thing that
     // does not. The poster is already painted by then (17KB, preloaded in the
-    // head), so there is something on screen throughout.
-    whenInteractive(function () {
-      loadLores();
-      motionStore.preload(manifest.motionBundle, manifest.motionOffsets).then(function () {
-        scheduleIdlePredecode();
-        if (!slowNetwork) return hiresStore.preloadBytes();
-      });
-    });
+    // head), so there is something on screen throughout. A phone waits longer
+    // still, for the first scroll: someone who reads the first screen and
+    // types a claim has spent nothing on footage at all.
+    if (phoneBudget) afterFirstScroll(loadFootage);
+    else whenInteractive(loadFootage);
   }).catch(function () {
     giveUp("manifest-failed");
   });

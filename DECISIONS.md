@@ -4,7 +4,25 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
-## 2026-10-09 (latest): The footage is kept, and arrives in two requests
+## 2026-10-09 (launch polish): Ready for strangers
+
+A pass over the things a first visitor meets before they meet a verdict,
+one commit each, measured before and after.
+
+**A phone gets one tier of footage, after it scrolls.** Measured on the
+live site, a phone downloaded 10.1MB of fly-through on page load: the
+low-res pass, the motion tier and a hi-res copy, before the reader had
+touched anything. A touch phone now gets the motion tier alone (3.1MB),
+and none of it until the first scroll, so someone who reads the first
+screen and types a claim spends nothing on footage. At a phone's size the
+motion tier is already as sharp as the screen shows, so the hi-res copy
+was buying little. The cap is checked against the manifest's own totals,
+so a lighter rebuild lifts it by itself. On a simulated slow 4G phone the
+footage is playable in 9s instead of 27s. Desktop is unchanged. The canvas
+also stays hidden until its first frame, because an opaque canvas is
+black until something is drawn on it, and it sat over the poster.
+
+## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files
 with "no-cache", so every visit asked the server about every frame again.

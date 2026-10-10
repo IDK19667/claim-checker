@@ -532,5 +532,24 @@ for _m in ("manifest.json", "manifest-2560.json", "manifest-phone.json"):
 t("the page falls back to single frames if a bundle fails part-way",
   "self.preloadBytes(missing)" in _fj and "loadLoresFrames(left)" in _fj)
 
+# ---- a phone is held to a footage budget -------------------------------------
+
+_start = _fj.split("phoneBudget = phone", 1)[1] if "phoneBudget = phone" in _fj else ""
+t("a phone over the footage budget is held to it (about 5MB)",
+  "PHONE_BUDGET_BYTES = 5 * 1048576" in _fj and "> PHONE_BUDGET_BYTES" in _start)
+t("  and gets the motion tier alone: no low-res pass, never the hi-res copy",
+  "if (!phoneBudget) loadLores()" in _start and "!phoneBudget) return hiresStore.preloadBytes()" in _start)
+t("  and none of it until the reader first scrolls",
+  "if (phoneBudget) afterFirstScroll(loadFootage)" in _start and "function afterFirstScroll" in _fj)
+t("  and its loading label counts the one tier it is fetching",
+  "phoneBudget\n" in _prog and "motionStore.countLoaded / manifest.count" in _prog)
+if (FLIGHT / "manifest-phone.json").exists():
+    _mp = json.loads((FLIGHT / "manifest-phone.json").read_text())
+    t("the phone's motion bundle alone fits the budget",
+      _mp.get("motionTotalBytes", 1 << 30) <= 5 * 1048576, _mp.get("motionTotalBytes"))
+t("the stage shows the poster, not a black canvas, until a frame is drawn",
+  'canvas.setAttribute("data-drawn", "")' in _fj
+  and "#flight-canvas[data-drawn] { visibility: visible; }" in flight_css)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

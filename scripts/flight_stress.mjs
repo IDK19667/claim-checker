@@ -100,6 +100,11 @@ for (const throttle of [1, 4]) {
     // assumed, so a run that never got there is visible in the table.
     await page.waitForFunction(() => window.__flightStats && window.__flightStats.frameCount > 0,
       null, { timeout: 20000 });
+    // A touch phone holds its footage until the reader first scrolls (the
+    // phone budget in flight.js), so move the page once, the way a reader would.
+    await page.evaluate(() => window.scrollTo(0, 1));
+    await page.waitForTimeout(100);
+    await page.evaluate(() => window.scrollTo(0, 0));
     // Wait for the state the requirement is about: the motion tier pre-decoded
     // as far as it is going to go. "Unchanged between two reads" is not enough
     // on its own, because pre-decode only starts once the page goes idle and

@@ -33,7 +33,12 @@
   width: 100%;
   height: 100%;
   display: block;
+  /* An opaque canvas is black until a frame is drawn on it, and it sits over
+     the poster. flight.js sets data-drawn on the first frame. */
+  visibility: hidden;
 }
+
+#flight-canvas[data-drawn] { visibility: visible; }
 
 .flight-overlay {
   position: absolute;
