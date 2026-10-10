@@ -465,10 +465,12 @@ t("the sheet overlaps the band rather than butting against it",
   "margin-top: -" in style_css.split("[data-screen] main.wrap {")[1][:400])
 t("the verdict is never colour-coded, on the band screens as anywhere else",
   "[data-verdict" not in style_css and "[data-verdict" not in flight_css)
-t("the dark field and the panel under it are the same width, and so share "
-  "a left edge",
-  "margin: -14px calc(-1 * var(--gutter)) 0" in
-  style_css.split(".verdict-block {")[1][:200])
+_night = style_css.split(".night, .band, .report-head, .foot, #error {")[1][:200]
+t("the night head and the paper under it share a column: the dark runs to "
+  "both edges by a border image, which paints outside the box without "
+  "widening it",
+  "border-image: linear-gradient(var(--deep), var(--deep)) fill 0 / 0 / 0 100vmax" in _night
+  and "margin: 0 calc(-1" not in _night)
 
 # Motion. Only transform and opacity, so a transition cannot shift layout.
 _props = set()

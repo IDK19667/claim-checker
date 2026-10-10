@@ -476,14 +476,14 @@ pubmed.deep_dive = _real_dive
 _html = c.get("/").data.decode()
 t("the front page shows the ledger", "Studies read" in _html and "Pooled analyses" in _html)
 t("the front page lists recent checks with their evidence",
-  "Latest checks" in _html and "entry-no" in _html and 'class="bar"' in _html)
+  "Latest checks" in _html and "entry-no" in _html and 'class="mini"' in _html)
 t("the front page never says '1 studies'", "1 studies read" not in _html)
 
 _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
   'id="chart-sec"' in _res and 'class="barcol' in _res
   and "barcol-bar h-moderate" in _res and "Based on 3 studies" in _res
-  and 'id="chart-desc"' in _res and "Each bar is one study." in _res)
+  and 'id="chart-desc"' in _res and "Each bar is one study, numbered as in the list." in _res)
 
 # ---- type-ahead over checked claims ----------------------------------------------
 import suggest as suggest_mod  # noqa: E402
@@ -525,10 +525,11 @@ t("the 404 is not indexable", 'name="robots" content="noindex"' in _body)
 
 # ---- the shell advertises what it actually is ------------------------------------
 _home = c.get("/").data.decode()
-t("the page preloads the font it actually uses",
-  "librefranklin" in _home and "librecaslon" not in _home and "archivo" not in _home)
+t("the page preloads the fonts it actually uses",
+  "bricolagegrotesque" in _home and "instrumentsans" in _home
+  and "librefranklin" not in _home and "librecaslon" not in _home and "archivo" not in _home)
 t("theme colour matches the shipped ground, and no dark scheme is claimed",
-  'content="#0b1226"' in _home and 'content="light dark"' not in _home)
+  'content="#0f1211"' in _home and 'content="light dark"' not in _home)
 
 # ---- the cold page must contain everything the browser renders into ---------------
 # A streamed check renders from the front page, where no server-side result
@@ -1317,6 +1318,23 @@ _shelf = evidence.shelf([{"pmid": "1", "publication_types": ["Case Reports"]},
 t("a mini shelf stands its books in kind order and marks the ones relied on",
   [b["kind"] for b in _shelf] == ["strong", "human", "weak"]
   and [b["used"] for b in _shelf] == [False, True, False], _shelf)
+_S = lambda types, title="Vitamin D in adults", abstract="": evidence.spine(
+    {"publication_types": types, "title": title, "abstract": abstract})
+t("a spine is lettered with the design in a reader's words, and no year",
+  _S(["Meta-Analysis"]) == "Meta-analysis" and _S(["Randomized Controlled Trial"]) == "Randomized trial"
+  and _S(["Case Reports"]) == "One case" and _S(["Journal Article"]) == "Study"
+  and _S(["Retracted Publication", "Meta-Analysis"]) == "Meta-analysis")
+t("  a lab study says what it was run on, unless it is a pooled design",
+  _S(["Comparative Study"], "Vinegar lowers glucose in diabetic rats",
+     "Male Wistar rats were fed vinegar for 8 weeks.") == "Animal or lab"
+  and _S(["Meta-Analysis"], "Vinegar in rodent models: a meta-analysis",
+         "Studies in rats and mice were pooled.") == "Meta-analysis")
+t("the shelf's key lists only the cloths on the shelf, in legend order",
+  [k["kind"] for k in evidence.snapshot([{"pmid": "1", "publication_types": ["Case Reports"]},
+                                         {"pmid": "2", "publication_types": ["Meta-Analysis"]}])["kinds"]]
+  == ["strong", "weak"])
+t("every study in the payload carries the word for its spine",
+  all(isinstance(s.get("spine"), str) and s["spine"] for s in _vd["studies"]))
 
 t("every study carries the type name the chart shows on hover",
   _vd["studies"][0]["type_label"] == "Meta-Analysis"
@@ -1338,14 +1356,21 @@ _bar_js = _js[_js.index("function renderChart"):]
 _bar_js = _bar_js[:_bar_js.index("function showStudy")]
 t("the server and the browser draw the same bar",
   all(piece in _bar_tpl and piece in _bar_js
-      for piece in ("barcol-track", "barcol-bar h-", "barcol-no", "barcol-tip",
-                    "is-used", "Go to it in the list of studies")))
+      for piece in ("barcol-track", "barcol-bar h-", " k-", "barcol-spine", "barcol-no",
+                    "barcol-tip", "is-used", "Go to it in the list of studies")))
 t("  and read the chart's words off the same server counts",
   all(f"ev.{k}" in _bar_js or f"ev.{k}" in _tpl for k in ("summary", "facts", "described")))
 
 _chart_css = _css.split("---- The evidence chart")[1].split("/* The study the reader")[0]
-t("the chart is ink only: no hue reaches a drawing of the evidence",
+t("the chart draws only in named tokens: no raw colour reaches the evidence",
   not re.search(r"#[0-9a-f]{3}|rgb\(|hsl\(", _chart_css, re.I), _chart_css[:200])
+t("  the cloth says what kind of study it is, and nothing is coloured by verdict",
+  all(f".k-{k}" in _css for k in ("strong", "human", "lab", "weak"))
+  and "data-verdict" not in _css
+  and "data-verdict" not in (ROOT / "static" / "flight.css").read_text())
+t("  a spine word that cannot stand up on its book is left off, never cut",
+  "function fitSpines" in _js and "fitSpines();" in _bar_js
+  and ".h-retracted .barcol-spine { display: none; }" in _css)
 t("a bar is at least a finger tall, and the columns leave no dead space",
   int(re.search(r"--plot-h: (\d+)px", _chart_css).group(1)) >= 44
   and "padding: 0 3px" in _chart_css)
@@ -1691,9 +1716,8 @@ t("'insufficient' is a verdict the schema allows",
   and "insufficient" in verdict.VERDICT_SCHEMA["properties"]["verdict"]["enum"])
 t("  and it has its own label everywhere a verdict is drawn",
   appmod.VERDICT_LABELS["insufficient"] == "Not enough evidence"
-  and og.LABELS["insufficient"] == "NOT ENOUGH EVIDENCE"
-  and 'insufficient: "Not enough evidence"' in open("static/app.js").read()
-  and 'insufficient: "-3deg"' in open("static/app.js").read())
+  and og.LABELS["insufficient"] == "Not enough evidence"
+  and 'insufficient: "Not enough evidence"' in open("static/app.js").read())
 t("no studies at all is not enough evidence, not 'complicated'",
   verdict.weigh_evidence("Detox teas remove toxins", [])["verdict"] == "insufficient")
 t("only case reports are not a test of the claim",
@@ -1877,6 +1901,9 @@ t("  with no real check built, the section renders without inventing one",
 t("  its links put the cursor in the claim box without changing the address",
   'closest("a.to-claim")' in (ROOT / "static" / "app.js").read_text()
   and "trustSection.hidden = section !== askSection" in (ROOT / "static" / "app.js").read_text())
+_pending = (ROOT / "static" / "app.js").read_text().split("function renderPending")[1].split("\nfunction ")[0]
+t("  and a check in progress hides it, so the work is what the reader sees",
+  "if (trustSection) trustSection.hidden = true;" in _pending)
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

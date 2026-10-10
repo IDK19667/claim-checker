@@ -1,61 +1,90 @@
 /* ==========================================================================
-   Claim Checker
-   The logic of a facts panel: rule weight encodes importance, numbers carry
-   the argument, and nothing is drawn that does not report something. One
-   typeface, black on white, weight and scale do all the work. Caps are set
-   tight, never tracked out. No accent colour anywhere: nothing on this page
-   is coloured to persuade, and no verdict is tinted.
+   Evident
+   The reading room after hours. Night is where a claim arrives and where its
+   verdict is given: a charcoal with the green of the stacks in it, never
+   navy, never black. Day is the desk the evidence is laid out on: cool
+   stone, not cream. One accent, bottle green by day and sage by night, for
+   what you can act on and for the pen that rings a verdict. The studies are
+   books: their cloth says what kind of study each one is, and nothing on
+   this page is ever coloured by what the verdict was.
    ========================================================================== */
 
-/* Self-hosted latin subset (Google's own woff2 build). OFL; see
-   static/fonts/OFL-LibreFranklin.txt. */
+/* Self-hosted latin subsets, trimmed to the axes the page uses. OFL; see
+   static/fonts/OFL-*.txt. Bricolage Grotesque is pinned at its 96pt optical
+   size, because it is only ever set large. */
 @font-face {
-  font-family: "Libre Franklin"; font-style: normal; font-weight: 400 900;
-  font-display: swap; src: url("/static/fonts/woff2/librefranklin-normal-400-900.woff2") format("woff2");
+  font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 300 500;
+  font-display: swap; src: url("/static/fonts/woff2/bricolagegrotesque-opsz96-300-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Instrument Sans"; font-style: normal; font-weight: 400 600;
+  font-display: swap; src: url("/static/fonts/woff2/instrumentsans-normal-400-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500;
+  font-display: swap; src: url("/static/fonts/woff2/ibmplexmono-500.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 :root {
-  /* Paper in every light: the page has no dark stock, and the browser's
-     own furniture follows it. */
+  /* The page ground is the day stock in every light. Night is a surface the
+     page lays down on purpose, never the browser's dark mode. */
   color-scheme: light;
 
-  --paper: #fafbfc;
-  --ink: #0e1422;
-  --ink-2: #3a4256;
-  --ink-3: #666e85;
-  --rule: #d3d8e2;
-  --rule-2: #a3abbf;
-  --paper-2: #f1f3f7;
+  /* Night */
+  --deep: #0f1211;
+  --deep-2: #181c1a;
+  --deep-line: #2a302d;
+  --on-deep: #eceee9;
+  --on-deep-2: #9ea6a1;
+  --on-deep-3: #7d8580;
 
-  /* Study design, drawn as fill density. Survives greyscale and print. */
-  --ev-strong: #0e1422;
-  --ev-moderate: #a3abbf;
-  --ev-weak: #fafbfc;
+  /* Day */
+  --paper: #f1f2ee;
+  --panel: #fafaf8;
+  --ink: #121514;
+  --ink-2: #434a46;
+  --ink-3: #5d6560;
+  --rule: #d9dcd5;
+  --rule-2: #b9bfb7;
 
-  --ink-on-band: #fafbfc;
+  /* The one accent. Green by day for what you can act on; sage by night for
+     the pen; a pale tint for the highlighter. */
+  --green: #2c5848;
+  --sage: #9fc3b0;
+  --tint: #d4e4da;
 
-  /* The field's ground. Identical on every verdict, so it brands the report
-     without tinting the conclusion. */
-  --deep: #0b1226;
-  --deep-2: #18213e;
-  --on-deep: #fafbfc;
-  --on-deep-2: #a9b3cb;
-  /* Interactive only: links and controls, never a verdict, never evidence. */
-  --act: #8a4f13;
-  /* The fly-through's three surfaces. All are the deep field at different
-     opacities: the hero introduces no hue the product did not already have. */
-  --header-over: rgba(11, 18, 38, 0.78);
-  --header-solid: rgba(11, 18, 38, 0.92);
-  --flight-scrim: rgba(11, 18, 38, 0.55);
-  --focus: #0e1422;
-  --scrim: rgba(0, 0, 0, 0.55);
-  --shadow-sheet: rgba(0, 0, 0, 0.28);
+  /* Book cloth: what kind of study it is, matched in tone so the shelf reads
+     as one set. Never a verdict. */
+  --c-strong: #35594c;
+  --c-human: #3a4e6b;
+  --c-lab: #5a4760;
+  --c-weak: #7e4f3d;
+  --wood: #2b2622;
+  --on-cloth: #f1f2ee;
+  --foil: rgba(241, 242, 238, 0.45);
+  --spine-light: rgba(255, 255, 255, 0.07);
+  --spine-shade: rgba(0, 0, 0, 0.18);
 
-  --sans: "Libre Franklin", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Over the footage: a dark plate of the night stock, solid enough to carry
+     white text over any frame. */
+  --plate: rgba(15, 18, 17, 0.8);
+  --film-top: rgba(15, 18, 17, 0.35);
+  --scrim: rgba(8, 10, 9, 0.55);
+  --shadow: rgba(8, 10, 9, 0.22);
+  --focus: #2c5848;
 
-  --gutter: 16px;
+  --display: "Bricolage Grotesque", system-ui, sans-serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --gutter: 20px;
   --measure: 34em;
+  /* One shape scale: controls 3px, panels 4px. */
+  --r-control: 3px;
+  --r-panel: 4px;
 }
 
 * { box-sizing: border-box; }
@@ -70,13 +99,14 @@ html, body { overflow-x: hidden; overflow-x: clip; }
 @supports not (overflow-x: clip) { body { overflow-x: visible; } }
 * { scrollbar-width: thin; scrollbar-color: var(--rule-2) transparent; }
 
-::selection { background: var(--ink); color: var(--paper); }
+::selection { background: var(--tint); color: var(--ink); }
 a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+b, strong { font-weight: 600; }
 
 body {
   margin: 0; background: var(--paper); color: var(--ink);
-  font-family: var(--sans); font-size: 15px; line-height: 1.5;
+  font-family: var(--body); font-size: 16px; line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 .wrap { max-width: 640px; margin: 0 auto; padding: 0 var(--gutter); }
@@ -85,664 +115,631 @@ body {
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* Labels are set tight, in caps, at weight. Never letterspaced: tracked-out
-   small caps is the one mannerism this design is built to avoid. */
-.section-label, .case, .key, .meta, .btn-label, .dateline, .fine.label {
-  font-weight: 700; text-transform: uppercase; letter-spacing: 0;
+/* Labels are set in the mono, small and in sentence case. Never tracked out,
+   never in capitals: they are notes in the margin, not signage. */
+.section-label, .field-label, .case, .key, .meta, .dateline {
+  font-family: var(--mono); font-size: 11px; font-weight: 500; line-height: 1.4;
+  letter-spacing: 0; text-transform: none; color: var(--ink-3);
 }
+
+/* Night surfaces run edge to edge whatever column they sit in: a solid
+   ground of their own (so contrast is measured against it) and a border
+   image of the same colour pushed out to both edges of the viewport. It
+   paints outside the box without widening it, so it can never scroll, and
+   it has no clipped edge to leave a hairline of paper between two blocks. */
+.night, .band, .report-head, .foot, #error {
+  background-color: var(--deep); color: var(--on-deep);
+  border-image: linear-gradient(var(--deep), var(--deep)) fill 0 / 0 / 0 100vmax;
+}
+.band, .report-head, .foot { position: relative; }
+.band :focus-visible, .report-head :focus-visible, .foot :focus-visible { outline-color: var(--sage); }
 
 /* ---- Masthead ------------------------------------------------------------ */
 
 .top {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 12px; padding: 12px var(--gutter);
-  border-bottom: 2px solid var(--ink);
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 20px;
+  padding: 18px var(--gutter);
   max-width: 640px; margin: 0 auto;
 }
 /* The nameplate never breaks across two lines, at any width. */
 .wordmark {
-  font-size: 15px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase;
-  white-space: nowrap; color: var(--ink); text-decoration: none;
+  order: -1; margin-right: auto;
+  font: 500 20px/1 var(--display); letter-spacing: -0.02em;
+  white-space: nowrap; color: var(--on-deep); text-decoration: none;
 }
-.dateline { font-size: 10px; color: var(--ink-3); line-height: 1.25; }
-.top-actions { display: flex; gap: 8px; align-items: center; }
-/* In the masthead the controls are marks, not buttons: the page below has
+.dateline { color: var(--on-deep-3); white-space: nowrap; }
+@media (max-width: 419px) { .dateline { display: none; } }
+.top-actions { display: flex; gap: 16px; align-items: center; }
+/* In the masthead the controls are words, not buttons: the page below has
    the weight, and a bordered block up here competes with the nameplate. */
 .top .ghost, .top .install {
-  border: 0; padding: 0; background: none; color: var(--ink);
-  font-family: inherit; font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0; cursor: pointer; border-bottom: 2px solid var(--ink);
-  position: relative; text-align: right;
+  border: 0; padding: 0; background: none; color: var(--on-deep-2);
+  font: 500 14px/1.2 var(--body); cursor: pointer; position: relative;
 }
-.top .ghost::after, .top .install::after { content: ""; position: absolute; inset: -14px -6px; }
-.dateline { white-space: nowrap; }
-@media (max-width: 419px) { .dateline { display: none; } }
-.top-actions .link-btn { font-size: 11px; }
+.top .ghost:hover, .top .install:hover { color: var(--on-deep); }
+.top .ghost::after, .top .install::after { content: ""; position: absolute; inset: -14px -8px; }
 
 .link-btn {
   background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
-  font-family: inherit; font-size: 12px; font-weight: 700; color: var(--ink);
-  border-bottom: 2px solid var(--ink); position: relative;
+  font: 500 14px/1.4 var(--body); color: var(--green);
+  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
+  position: relative;
 }
-/* Grown hit area, invisibly: the mark stays small, the thumb target does not. */
+.link-btn:hover { color: var(--ink); }
+/* Grown hit area, invisibly: the word stays small, the thumb target does not. */
 .link-btn::after { content: ""; position: absolute; inset: -14px -8px; }
 
-/* ---- The front page ------------------------------------------------------ */
+/* ---- Buttons ------------------------------------------------------------- */
 
-.hero-block { padding: 22px 0 0; }
-.hero { margin: 0; font-size: 40px; line-height: 0.98; font-weight: 900; letter-spacing: -0.035em; }
-.hero .small, .hero em {
-  display: block; font-style: normal; font-size: 26px; font-weight: 500;
-  letter-spacing: -0.02em; margin-top: 6px;
+.primary, .secondary, .ghost, .thumb, .chip {
+  font-family: var(--body); cursor: pointer; border-radius: var(--r-control);
+  transition: transform 70ms ease;
 }
-.lede { margin: 14px 0 0; font-size: 16px; line-height: 1.45; color: var(--ink-2); max-width: 30em; }
+.primary, .secondary, .ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  font-size: 15px; font-weight: 500; line-height: 1.2;
+  padding: 15px 18px; border: 1px solid var(--ink);
+}
+.primary { width: 100%; margin-top: 8px; background: var(--ink); color: var(--panel); }
+.secondary { background: var(--ink); color: var(--panel); }
+.primary:hover, .secondary:hover { background: var(--deep-2); }
+.ghost { background: transparent; color: var(--ink); }
+.ghost:hover { background: var(--panel); }
+.primary:active, .secondary:active, .ghost:active, .thumb:active, .chip:active { transform: translateY(1px); }
+.primary.small { width: auto; padding: 11px 16px; }
+.primary:disabled, .secondary:disabled { cursor: default; transform: none; }
 
-/* The ledger: real counts, in the panel's own idiom. */
+/* ---- The ask: night ------------------------------------------------------ */
+
+.hero-block { padding: 34px 0 0; }
+.hero {
+  margin: 0; font: 350 44px/1.04 var(--display); letter-spacing: -0.04em;
+  color: inherit;
+}
+/* The second sentence is the same voice, a step quieter. */
+.hero em { font-style: normal; color: var(--on-deep-3); }
+.lede { margin: 20px 0 0; font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 34ch; }
+.band .lede { color: var(--on-deep-2); }
+
+/* The ledger: real counts, set large and light. */
 .ledger {
-  display: flex; flex-wrap: wrap; gap: 0; margin: 20px 0 0;
-  border-top: 4px solid var(--ink); border-bottom: 4px solid var(--ink);
+  display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 30px;
+  margin: 32px 0 0; padding-top: 20px; border-top: 1px solid var(--deep-line);
 }
-.ledger div {
-  flex: 1 1 33%; padding: 9px 0 10px; border-right: 1px solid var(--rule);
+.ledger dt { font: 500 10.5px/1.3 var(--mono); color: var(--on-deep-3); }
+.ledger dd {
+  margin: 6px 0 0; font: 300 30px/1 var(--display); letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; color: var(--on-deep);
 }
-.ledger div:last-child { border-right: 0; }
-.ledger dt { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3); }
-.ledger dd { margin: 2px 0 0; font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
-.claim-form { margin: 20px 0 0; }
+.claim-form { margin: 32px 0 0; }
 .claim-box {
-  position: relative; border: 2px solid var(--ink); padding: 10px 12px 12px;
+  position: relative; padding: 12px 14px 12px;
+  background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--r-panel);
 }
-.claim-box::before {
-  content: "Submit a claim"; display: block;
-  font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3);
-}
-.claim-box:focus-within { outline: 3px solid var(--ink); outline-offset: 2px; }
-.claim-box:focus-within::before { color: var(--ink); }
+.claim-box:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 #claim-input {
   display: block; width: 100%; border: 0; outline: 0; background: transparent;
-  font-family: inherit; font-size: 18px; font-weight: 600; line-height: 1.3;
-  color: var(--ink); margin-top: 6px; resize: none; min-height: 56px;
+  font: 400 18px/1.4 var(--body); color: var(--ink);
+  resize: none; min-height: 62px; padding: 0 64px 0 0;
 }
-#claim-input::placeholder { color: var(--ink-3); font-weight: 400; }
+#claim-input::placeholder { color: var(--ink-3); }
 .clear, .mic {
-  position: absolute; bottom: 8px; background: none; border: 0; cursor: pointer;
-  color: var(--ink-3); padding: 8px;
+  position: absolute; bottom: 6px; background: none; border: 0; cursor: pointer;
+  color: var(--ink-3); padding: 8px; font-family: inherit;
 }
-.clear { right: 42px; } .mic { right: 8px; }
-.mic.listening { color: var(--ink); animation: pulse 1s ease-in-out infinite; }
+.clear { right: 42px; } .mic { right: 6px; }
+.mic.listening { color: var(--green); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.25; } }
 
-.primary, .secondary, .ghost {
-  font-family: inherit; font-size: 12px; font-weight: 900; text-transform: uppercase;
-  letter-spacing: 0.01em; cursor: pointer; border: 2px solid var(--ink);
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 15px 16px; transition: transform 70ms ease;
-}
-.primary { width: 100%; margin-top: 8px; background: var(--ink); color: var(--paper); }
-.secondary { background: var(--ink); color: var(--ink-on-band); }
-.ghost { background: var(--paper); color: var(--ink); }
-.primary:active, .secondary:active, .ghost:active, .thumb:active { transform: translateY(1px); }
-.primary.small { width: auto; padding: 11px 14px; }
+/* On the night ground the box is a well in it, and the button is the light
+   shape: the one bright thing on the screen is the thing to press. */
+.band .claim-box { background: var(--deep-2); border-color: var(--deep-line); }
+.band .claim-box:focus-within { outline-color: var(--sage); }
+.band #claim-input { color: var(--on-deep); }
+.band #claim-input::placeholder { color: var(--on-deep-3); }
+.band .clear, .band .mic { color: var(--on-deep-3); }
+.band .mic.listening { color: var(--sage); }
+.band .primary { background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
+.band .primary:hover { background: var(--panel); }
 
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip {
-  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  background: var(--paper); color: var(--ink); border: 1px solid var(--ink);
-  padding: 8px 10px; transition: transform 70ms ease;
+/* ---- Type-ahead ---------------------------------------------------------- */
+
+.suggest {
+  margin: 4px 0 0; background: var(--deep-2);
+  border: 1px solid var(--deep-line); border-radius: var(--r-panel); overflow: hidden;
 }
-.chip:hover { background: var(--ink); color: var(--paper); }
+.suggest-head {
+  margin: 0; padding: 9px 14px 8px;
+  font: 500 10.5px/1.3 var(--mono); color: var(--on-deep-3);
+  border-bottom: 1px solid var(--deep-line);
+}
+.suggest-list { list-style: none; margin: 0; padding: 0; }
+.suggest-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 14px; padding: 12px 14px; cursor: pointer;
+  border-top: 1px solid var(--deep-line);
+}
+.suggest-row:first-child { border-top: 0; }
+.suggest-row:hover,
+.suggest-row[aria-selected="true"] { background: var(--deep); }
+/* The keyboard selection has to be visible without a hover, so it carries a
+   rule of its own rather than relying on the tint alone. */
+.suggest-row[aria-selected="true"] { box-shadow: inset 2px 0 0 var(--sage); }
+.suggest-claim { font-size: 15px; line-height: 1.4; color: var(--on-deep); }
+.suggest-verdict { flex: none; font: 500 10.5px/1.3 var(--mono); color: var(--on-deep-2); white-space: nowrap; }
+
+/* ---- The front page, by day ---------------------------------------------- */
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 14px; font-weight: 400; line-height: 1.3;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--rule);
+  padding: 9px 12px;
+}
+.chip:hover { border-color: var(--ink); }
 
 .section-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.section-label { font-size: 11px; color: var(--ink); margin: 0; }
-.examples, .trending, .recent, .latest, .nudge { margin-top: 26px; }
-.examples .section-label, .trending .section-label, .recent .section-label { margin-bottom: 9px; }
+.section-label { margin: 0; }
+.sec-title, .trust-title {
+  margin: 0 0 12px; font: 350 32px/1.06 var(--display); letter-spacing: -0.035em; color: var(--ink);
+}
+.latest { margin-top: 64px; }
+.examples, .trending, .recent, .nudge { margin-top: 40px; }
+.examples .section-label, .trending .section-label, .recent .section-label { margin-bottom: 12px; }
 
-.latest .section-label { padding-bottom: 8px; }
-.claim-list, .ledger-list { list-style: none; margin: 0; padding: 0; border-top: 4px solid var(--ink); }
-.entry { border-bottom: 1px solid var(--rule); }
+.claim-list, .ledger-list { list-style: none; margin: 0; padding: 0; }
+.claim-list { border-top: 1px solid var(--rule); }
+
+/* A check in a list: its number, the claim, the verdict in words (never
+   coloured), then a mini shelf of the books it was read from. */
+.entry {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: 0 14px;
+  padding: 20px 0; border-top: 1px solid var(--rule);
+}
 .entry-link {
-  display: grid; grid-template-columns: 1fr auto; gap: 1px 12px;
-  align-items: baseline; padding: 12px 0; text-decoration: none; color: var(--ink);
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px;
+  align-items: baseline; text-decoration: none; color: var(--ink);
 }
-.entry-link:hover { background: var(--paper-2); }
-.entry-no { font-size: 10px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.entry-verdict { grid-column: 2; grid-row: 1; text-align: right; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.entry-claim { grid-column: 1 / -1; font-size: 17px; font-weight: 600; line-height: 1.24; margin: 3px 0 0; letter-spacing: -0.01em; }
-.entry-meta { margin: 7px 0 0; font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.entry-link:hover .entry-claim { text-decoration: underline; text-decoration-color: var(--rule-2); }
+.entry-no { grid-column: 1 / -1; font: 500 11px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.entry-claim { font-size: 18px; line-height: 1.35; overflow-wrap: break-word; }
+.entry-verdict { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
+.entry-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .entry-years { white-space: nowrap; }
-
-/* Before you trust a verdict. The facts panel's grammar turned on the tool
-   itself: a panel head closed by the 8px rule, one question per row on 1px
-   rules, the group closed by 4px. Questions at the weight of a claim,
-   answers in the secondary ink at reading measure. The real check sits as an
-   aside off a 2px rule, the way "Who this applies to" sets one. */
-.trust { margin-top: 40px; border-bottom: 4px solid var(--ink); }
-.trust-title {
-  margin: 0; padding-bottom: 10px; border-bottom: 8px solid var(--ink);
-  font-size: 20px; font-weight: 900; line-height: 1; letter-spacing: -0.03em;
+/* The mini shelf: one spine per study, stood strongest first. Full cloth for
+   the books the verdict used, faded for the rest. */
+.mini {
+  display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 10px;
+  padding: 0 2px; border-bottom: 1.5px solid var(--wood);
 }
-.trust-row { padding: 16px 0 20px; border-bottom: 1px solid var(--rule); }
-.trust-row:last-child { border-bottom: 0; }
-.trust-q { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.24; letter-spacing: -0.01em; }
-.trust-a { margin-top: 7px; max-width: var(--measure); }
-.trust-a > p { margin: 0; color: var(--ink-2); }
-.trust .link-btn { display: inline-block; margin-top: 12px; text-decoration: none; }
-.trust-links { display: flex; flex-wrap: wrap; gap: 4px 28px; margin: 0; }
-.proof { border-left: 2px solid var(--rule); padding-left: 12px; }
-.proof-claim { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.24; letter-spacing: -0.01em; }
-.proof-verdict { margin: 8px 0 0; font-size: 20px; font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
-.proof-tldr { margin: 6px 0 0; color: var(--ink-2); }
-.proof-meta { margin: 8px 0 0; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.mini i { display: block; width: 5px; background: var(--k, var(--ink-3)); opacity: 0.45; }
+.mini i.on { opacity: 1; }
 
-/* The evidence bar: fill density, never hue. */
-.bar { display: flex; gap: 2px; height: 8px; width: 100%; margin: 8px 0 0; }
-.seg { display: block; height: 100%; }
-.seg-strong { background: var(--ev-strong); }
-.seg-moderate { background: var(--ev-moderate); }
-.seg-weak { background: var(--ev-weak); box-shadow: inset 0 0 0 1.5px var(--rule-2); }
-.seg-retracted { background: repeating-linear-gradient(135deg, var(--ink) 0 3px, var(--paper) 3px 6px); box-shadow: inset 0 0 0 1.5px var(--ink); }
+/* Before you trust a verdict: the questions a stranger asks, in rows. */
+.trust { margin-top: 72px; }
+.trust-row { padding: 22px 0; border-top: 1px solid var(--rule); }
+.trust-q { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.35; }
+.trust-a { margin-top: 8px; max-width: var(--measure); }
+.trust-a > p { margin: 0; color: var(--ink-2); font-size: 15px; }
+.trust .link-btn { display: inline-block; margin-top: 12px; }
+.trust-links { display: flex; flex-wrap: wrap; gap: 4px 28px; margin: 0; }
+.proof { border-left: 1px solid var(--ink); padding-left: 14px; margin-bottom: 4px; }
+.proof-claim { margin: 0; font-size: 17px; line-height: 1.35; }
+.proof-verdict { margin: 8px 0 0; font: 350 26px/1.1 var(--display); letter-spacing: -0.03em; }
+.proof-tldr { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; }
+.proof-meta { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
 .recent-btn, .clear { font-family: inherit; }
 .claim-list > li { border-bottom: 1px solid var(--rule); }
 .recent-btn {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline; gap: 0 14px; width: 100%;
-  background: none; border: 0; padding: 11px 0; cursor: pointer;
-  text-align: left; color: var(--ink);
+  background: none; border: 0; padding: 13px 0; cursor: pointer;
+  text-align: left; color: var(--ink); font-family: var(--body);
 }
-.recent-btn > span:first-child { font-size: 16px; line-height: 1.3; font-weight: 700; }
-.recent-btn:hover > span:first-child { text-decoration: underline; text-underline-offset: 3px; }
-.recent-btn .tag {
-  font-size: 10px; font-weight: 900; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--ink-2); white-space: nowrap;
-}
+.recent-btn > span:first-child { font-size: 16px; line-height: 1.35; }
+.recent-btn:hover > span:first-child { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rule-2); }
+.recent-btn .tag { font: 500 11px/1.3 var(--mono); color: var(--ink-3); white-space: nowrap; }
 .recent-btn:active { transform: translateY(1px); }
-.nudge { border: 2px solid var(--ink); padding: 13px; }
-.nudge-body { margin: 6px 0 12px; font-size: 14px; }
+.nudge { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-panel); padding: 16px; }
+.nudge-body { margin: 8px 0 14px; font-size: 15px; }
 .nudge-actions { display: flex; gap: 8px; }
 
-.fine { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
+.fine { font-size: 12.5px; line-height: 1.5; color: var(--ink-3); margin: 10px 0 0; }
+.band .fine { color: var(--on-deep-3); }
 .small { font-size: 13px; }
-
-/* The front page carries the same field as the report, so the first screen and
-   the answer screen are visibly the same product. The ground is decoration
-   only in the sense that a cover is: it never encodes anything. */
-body.view-ask #ask {
-  margin: 14px calc(-1 * var(--gutter)) 0;
-  padding: 26px var(--gutter) 30px;
-  background: var(--deep); color: var(--on-deep);
-}
-body.view-ask #ask .hero-block { padding-top: 0; }
-body.view-ask #ask .lede { color: var(--on-deep-2); }
-body.view-ask #ask .ledger { border-color: var(--deep-2); }
-body.view-ask #ask .ledger div { border-right-color: var(--deep-2); }
-body.view-ask #ask .ledger dt { color: var(--on-deep-2); }
-body.view-ask #ask .ledger dd { color: var(--on-deep); }
-body.view-ask #ask .claim-box { border-color: var(--on-deep-2); }
-body.view-ask #ask .claim-box::before { color: var(--on-deep-2); }
-body.view-ask #ask .claim-box:focus-within { outline-color: var(--on-deep); }
-body.view-ask #ask .claim-box:focus-within::before { color: var(--on-deep); }
-body.view-ask #ask #claim-input { color: var(--on-deep); }
-body.view-ask #ask #claim-input::placeholder { color: var(--on-deep-2); }
-body.view-ask #ask .clear, body.view-ask #ask .mic { color: var(--on-deep-2); }
-body.view-ask #ask .mic.listening { color: var(--on-deep); }
-/* Reversed out: on the field the primary control is the light shape. */
-body.view-ask #ask .primary {
-  background: var(--on-deep); color: var(--deep); border-color: var(--on-deep);
-}
 
 /* ---- Nothing found: the page still owes the reader a next step ----------- */
 
-.nosteps { margin: 18px 0 0; padding: 14px 0 0; border-top: 2px solid var(--ink); }
-.nosteps-why { margin: 6px 0 12px; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+.nosteps { margin: 24px 0 0; padding: 18px 0 0; border-top: 1px solid var(--ink); }
+.nosteps-why { margin: 8px 0 14px; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
 .nosteps-acts { list-style: none; margin: 0; padding: 0; }
-.nosteps-acts li {
-  padding: 9px 0; border-top: 1px solid var(--rule);
-  font-size: 14px; line-height: 1.5;
-}
+.nosteps-acts li { padding: 11px 0; border-top: 1px solid var(--rule); font-size: 15px; line-height: 1.5; }
 .nosteps-acts a {
-  color: var(--ink); text-decoration: underline; text-underline-offset: 3px;
+  color: var(--green); text-decoration: underline; text-underline-offset: 3px;
   display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;
 }
-.nosteps-acts code { font-size: 13px; }
-.nosteps-sub { margin-top: 16px; }
+.nosteps-acts code { font: 500 12.5px var(--mono); }
+.nosteps-sub { margin-top: 20px; }
 
-/* ---- Type-ahead ---------------------------------------------------------- */
-
-.suggest {
-  margin: 0; border: 1px solid var(--on-deep-2); border-top: 0;
-  background: var(--deep-2);
-}
-.suggest-head {
-  margin: 0; padding: 7px 14px 6px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--on-deep-2);
-  border-bottom: 1px solid var(--on-deep-2);
-}
-.suggest-list { list-style: none; margin: 0; padding: 0; }
-.suggest-row {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 14px; padding: 11px 14px; cursor: pointer;
-  border-top: 1px solid var(--rule);
-}
-.suggest-row { border-top: 1px solid var(--deep); }
-.suggest-row:hover,
-.suggest-row[aria-selected="true"] { background: var(--deep); }
-/* The keyboard selection has to be visible without a hover, so it carries a
-   rule of its own rather than relying on the tint alone. */
-.suggest-row[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--on-deep); }
-.suggest-claim { font-size: 15px; line-height: 1.35; color: var(--on-deep); }
-.suggest-verdict {
-  flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--on-deep-2); white-space: nowrap;
-}
-
-/* ---- The report ---------------------------------------------------------- */
+/* ---- The report: night --------------------------------------------------- */
 
 .back {
-  display: inline-flex; align-items: center; gap: 7px; background: none; border: 0;
-  padding: 13px 0; cursor: pointer; font-family: inherit;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink);
+  display: inline-flex; align-items: center; gap: 8px; background: none; border: 0;
+  padding: 14px 0; cursor: pointer; font: 500 14px/1.2 var(--body); color: var(--ink);
 }
-/* The field: a dark ground carrying the claim, the verdict and the evidence
-   the verdict rests on. Bleeds to the edge of the column, not the viewport,
-   so it can never introduce a horizontal scrollbar. */
-.report-head {
-  margin: 14px calc(-1 * var(--gutter)) 0;
-  padding: 26px var(--gutter) 30px;
-  background: var(--deep); color: var(--on-deep);
-}
-.report-head .case { color: var(--on-deep-2); }
-.case { font-size: 10px; color: var(--ink-3); margin: 0; }
+.report-head > .back { display: flex; width: 100%; margin-bottom: 12px; color: var(--on-deep-2); }
+.report-head > .back:hover { color: var(--on-deep); }
+.report-head { padding: 0 0 52px; }
+.case { margin: 0 0 26px; color: var(--on-deep-3); }
 
-/* The claim is labelled as the claim and set as a quotation, two steps down
-   from the verdict in size, weight and ink. It was being read as the answer
-   at 34px/900, which is the one thing on this screen it must never be. It
-   wraps for as long as it needs to: a claim is never truncated. */
-.field-label {
-  margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase;
-  color: var(--on-deep-2);
+/* The thread: a fine line from the claim down to its verdict, in the gutter,
+   with a knot at each end. It is the one line that says these two belong to
+   each other, and the work prints along it while a check runs. */
+.thread { position: relative; padding-left: 24px; }
+.thread::before {
+  content: ""; position: absolute; left: 3px; top: 8px; bottom: 0; width: 1px;
+  background: var(--deep-line);
 }
+.thread > .field-label, .stamp-wrap > .field-label { position: relative; }
+.thread > .field-label::before, .stamp-wrap > .field-label::before {
+  content: ""; position: absolute; left: -24px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px;
+  border-radius: 50%; background: var(--sage);
+}
+.field-label { margin: 0; color: var(--on-deep-3); }
+
+/* The claim is labelled as the claim and set as a quotation, plainly, well
+   below the verdict in size. It wraps for as long as it needs to: a claim is
+   never truncated. */
 .claim-echo {
-  margin: 7px 0 0; font-size: clamp(17px, 4.6vw, 20px); line-height: 1.34;
-  font-weight: 500; letter-spacing: 0; color: var(--on-deep-2);
-  max-width: 34em; overflow-wrap: break-word;
+  margin: 8px 0 0; font-size: clamp(19px, 5.4vw, 24px); line-height: 1.35;
+  font-weight: 400; letter-spacing: -0.005em; color: var(--on-deep);
+  max-width: 30em; overflow-wrap: break-word;
 }
 .claim-echo::before { content: "\201C"; }
 .claim-echo::after { content: "\201D"; }
 /* Under the claim, when its spelling was fixed: what was actually typed.
    Quieter than the claim, so the claim stays the thing that was checked. */
 .typed-note {
-  margin: 8px 0 0; font-size: 13px; line-height: 1.45; font-weight: 500;
+  margin: 10px 0 0; font-size: 13.5px; line-height: 1.45;
   color: var(--on-deep-2); max-width: 34em; overflow-wrap: break-word;
 }
 
-/* While a check runs, the work prints under the claim. */
-.reading { list-style: none; margin: 20px 0 0; padding: 0; font-size: 13px; font-weight: 600; color: var(--on-deep); }
-.reading li { display: flex; gap: 9px; padding: 3px 0; animation: line-in 240ms ease-out both; }
-.reading li::before { content: ""; width: 9px; height: 2px; margin-top: 9px; background: var(--on-deep-2); flex: none; }
-.reading li.live::before { width: 8px; height: 8px; margin-top: 6px; background: var(--on-deep); animation: pulse 1s ease-in-out infinite; }
+/* While a check runs, the work prints along the thread. */
+.reading { list-style: none; margin: 24px 0 0; padding: 0; font: 500 12.5px/1.5 var(--mono); color: var(--on-deep-2); }
+.reading li { display: flex; gap: 10px; padding: 4px 0; animation: line-in 240ms ease-out both; }
+.reading li::before { content: ""; width: 9px; height: 1px; margin-top: 9px; background: var(--on-deep-3); flex: none; }
+.reading li.live { color: var(--on-deep); }
+.reading li.live::before { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--sage); animation: pulse 1s ease-in-out infinite; }
 .reading li.cancel-row::before { display: none; }
-/* The work prints on the dark field now, not on a panel of its own, so the
-   one control inside it has to be the field's ink and not the page's. */
-.reading .link-btn { color: var(--on-deep); border-bottom-color: var(--on-deep-2); }
+.reading .link-btn { color: var(--on-deep); font-family: var(--body); }
 @keyframes line-in { from { opacity: 0; transform: translateY(3px); } }
 
-/* ---- THE PANEL: the signature ------------------------------------------- *
-   Rule weight is the hierarchy. 8px closes the answer, 4px separates a group,
-   1px separates a line. Every row reports a number that was counted, never
-   estimated. The verdict sits on the field above it, the largest thing on the
-   screen, in the same ink whatever it says. */
+/* ---- The verdict: the signature ------------------------------------------ *
+   The largest thing on the screen, in the same ink whatever it says, with a
+   pen ring drawn round it the way you would circle the answer on a page. The
+   ring is the same shape on every verdict: it marks where the answer is,
+   never what it is. */
 
 .ticket { margin: 0; }
-
-.stamp-wrap { margin-top: 20px; padding-top: 16px; border-top: 2px solid var(--deep-2); }
-.stamp-wrap .field-label { color: var(--on-deep-2); }
+.stamp-wrap { position: relative; margin-top: 34px; }
+/* Ends the thread at the verdict's knot: the line runs no further down. */
+.stamp-wrap::before {
+  content: ""; position: absolute; left: -26px; top: 12px; bottom: 0; width: 6px;
+  background: var(--deep);
+}
+.vwrap { position: relative; margin: 8px 0 0; padding: 20px 0 22px; }
+/* app.js sets --rl and --w from the words' own boxes, wide enough at the
+   shoulders that the pen never crosses a letter. */
+.ring {
+  position: absolute; left: var(--rl, -16px); top: 0; width: var(--w, calc(100% + 16px)); height: 100%;
+  overflow: visible; pointer-events: none;
+}
+.ring path { fill: none; stroke: var(--sage); stroke-width: 1.25px; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .stamp {
-  display: block; margin-top: 5px; font-size: clamp(30px, 8.4vw, 40px);
-  line-height: 0.98; font-weight: 900; text-transform: uppercase;
-  letter-spacing: -0.035em; color: var(--on-deep);
+  position: relative; display: block;
+  font-size: clamp(38px, 11.4vw, 60px); line-height: 1.04;
+  font-family: var(--display); font-weight: 350; letter-spacing: -0.04em;
+  color: var(--on-deep);
 }
+.stamp:empty + .ring, .vwrap:has(.stamp:empty) .ring { display: none; }
 
-/* The panel lifts off the field onto the page. The shadow is the only depth
-   in the design and it exists to say "this is the part you keep".
+/* ---- By day: the reading behind the verdict ------------------------------- */
 
-   It takes the same bleed as the field above it. Inside the gutters it was a
-   gutter narrower on each side, which read as a misprint: two stacked blocks
-   whose left edges missed each other by 16px. */
-.verdict-block {
-  margin: -14px calc(-1 * var(--gutter)) 0;
-  border: 0; background: var(--paper);
-  box-shadow: 0 2px 0 var(--ink), 0 14px 34px var(--shadow-sheet);
-}
-.verdict-block.pending .stamp { color: var(--ink-3); }
-
-/* (c) The short answer. The panel's head, so the 8px rule closes it. */
-.answer { padding: 12px 12px 14px; border-bottom: 8px solid var(--ink); }
-.tldr {
-  margin: 6px 0 0; font-size: clamp(21px, 5.6vw, 26px); line-height: 1.22;
-  font-weight: 700; letter-spacing: -0.02em;
-}
-
-/* (d) What the research says. Never folded: three to five sentences, each one
-   already gated, between the answer and what is still open. */
-.says-sec { padding: 11px 12px 13px; border-bottom: 4px solid var(--ink); }
-.says { margin-top: 6px; }
-.says-p { margin: 0 0 8px; font-size: 15.5px; line-height: 1.5; }
+.verdict-block { padding-top: 44px; }
+.answer { padding: 0; }
+.tldr { margin: 10px 0 0; font-size: 21px; line-height: 1.45; font-weight: 400; letter-spacing: -0.005em; }
+.says-sec { margin-top: 40px; }
+.says { margin-top: 10px; }
+.says-p { margin: 0 0 12px; font-size: 17px; line-height: 1.65; color: var(--ink-2); }
 .says-p:last-child { margin-bottom: 0; }
 
-.still-open {
-  margin: 0; padding: 12px; border-bottom: 4px solid var(--ink);
-  font-size: 15px; line-height: 1.45;
-}
-.still-open b {
-  display: block; font-size: 11px; font-weight: 900; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--ink); margin-bottom: 5px;
-}
+.still-open { margin: 36px 0 0; padding: 18px 0 0; border-top: 1px solid var(--ink); font-size: 17px; line-height: 1.55; }
+.still-open b { display: block; margin-bottom: 8px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
 
 /* ---- The evidence chart -------------------------------------------------- *
-   One bar per study, in the order of the list of studies. Height is the kind
-   of study and nothing else, so the same set always draws the same chart;
-   fill is whether the verdict leaned on it. Three gridlines and a 2px
-   baseline do the work a box would otherwise do. Ink only: a chart of what
-   the evidence is may not be coloured, for the same reason a verdict may
-   not be. */
-.chart-sec { padding: 11px 12px 14px; }
-.chart-sum {
-  margin: 6px 0 0; font-size: 13px; font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
+   The shelf. One book per study, in the order of the list of studies. Height
+   is the kind of design and nothing else, so the same set always stands the
+   same way. Cloth is what the study was run on (evidence.kind), set as a
+   token on the book's own class: no colour is written out here, and none of
+   them is ever used for what the verdict was. The books the verdict used are
+   in full cloth with a dot over them; the rest are faded. */
+.chart-sec { margin-top: 52px; }
+.chart-sum { margin: 10px 0 0; font-size: 18px; line-height: 1.45; max-width: 30ch; text-wrap: balance; font-variant-numeric: tabular-nums; }
+.k-strong { --k: var(--c-strong); }
+.k-human { --k: var(--c-human); }
+.k-lab { --k: var(--c-lab); }
+.k-weak { --k: var(--c-weak); }
+.k-retracted { --k: var(--ink-2); }
 .chart {
-  --plot-h: 94px; --num-h: 24px; --axis-w: 54px; --axis-gap: 8px;
-  /* The top margin is the tip's room. A study's type and year open upward
-     out of the bar, so the plot starts far enough below the summary line
-     that the tip never lands on top of it. */
-  margin: 28px 0 0;
+  --plot-h: 210px; --num-h: 26px; --ledge: 5px;
+  /* The top margin is the tip's room: a study's type and year open upward
+     out of the shelf, clear of the summary line above it. */
+  margin: 36px 0 0;
 }
-.chart-plot { position: relative; display: flex; gap: var(--axis-gap); }
-.chart-axis {
-  position: relative; flex: none; width: var(--axis-w);
-  height: calc(var(--plot-h) + var(--num-h));
+.chart-plot { position: relative; }
+/* The ledge the books stand on. */
+.chart-base {
+  position: absolute; left: 0; right: 0; bottom: var(--num-h);
+  height: var(--ledge); background: var(--wood);
 }
-.ax {
-  position: absolute; right: 0; transform: translateY(50%);
-  font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: var(--ink-3);
-}
-.grid, .chart-base {
-  position: absolute; left: calc(var(--axis-w) + var(--axis-gap)); right: 0;
-  height: 1px; background: var(--rule);
-}
-.chart-base { bottom: var(--num-h); height: 2px; background: var(--ink); }
-.ax-strong, .g-strong { bottom: calc(var(--num-h) + var(--plot-h)); }
-.ax-moderate, .g-moderate { bottom: calc(var(--num-h) + var(--plot-h) * 0.64); }
-.ax-weak, .g-weak { bottom: calc(var(--num-h) + var(--plot-h) * 0.34); }
 
-/* The columns tile edge to edge so no part of the chart is dead to a finger:
-   the gap between the bars is padding inside the button, not space between
-   them. Eight equal columns cannot each be 44px wide on a 375px screen, so
-   the target takes its size the other way, the full height of the plot. */
-.chart-bars { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; }
+/* The columns tile edge to edge so no part of the shelf is dead to a finger:
+   the gap between the books is padding inside the button, not space between
+   them. Eight columns cannot each be 44px wide on a 375px screen, so the
+   target takes its size the other way, the full height of the shelf. */
+.chart-bars { display: flex; align-items: flex-end; padding: 0 4px; }
 .barcol {
-  flex: 1 1 0; min-width: 0; height: calc(var(--plot-h) + var(--num-h));
+  flex: 1 1 0; min-width: 0; height: calc(var(--plot-h) + var(--ledge) + var(--num-h));
   display: flex; flex-direction: column; position: relative;
   padding: 0; border: 0; background: none; font: inherit; color: inherit;
   cursor: pointer;
 }
 .barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 3px; }
 .barcol-bar {
-  width: 100%; transform-origin: bottom;
-  background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--ink-2);
+  position: relative; width: 100%; transform-origin: bottom;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;
+  background-color: var(--k, var(--ink-3));
+  background-image: linear-gradient(90deg, var(--spine-light), transparent 30%, transparent 70%, var(--spine-shade));
+  color: var(--on-cloth); opacity: 0.45;
+}
+/* Two foil rules at the head of every spine, the way a bound volume is lettered. */
+.barcol-bar::before {
+  content: ""; position: absolute; left: 5px; right: 5px; top: 10px; height: 6px;
+  border-top: 1px solid var(--foil); border-bottom: 1px solid var(--foil);
+}
+.barcol-spine {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  max-height: calc(100% - 22px); overflow: hidden;
+  font: 500 10px/1 var(--body); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
 }
 .h-strong { height: 100%; }
-.h-moderate { height: 64%; }
-.h-weak { height: 34%; }
-/* A withdrawn paper is not thin evidence, it is no evidence, so it is drawn
-   at the weak height and hatched whether the verdict cited it or not. */
-.h-retracted {
-  height: 34%;
-  background: repeating-linear-gradient(135deg, var(--ink) 0 3px, var(--paper) 3px 6px);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+.h-moderate { height: 72%; }
+.h-weak { height: 44%; }
+/* A withdrawn paper is not thin evidence, it is no evidence: it stands at
+   the weak height, hatched, whether the verdict cited it or not. */
+.h-retracted { height: 44%; }
+.barcol-bar.h-retracted, .mini .h-retracted {
+  background-color: var(--panel);
+  background-image: repeating-linear-gradient(135deg, var(--ink-2) 0 2px, var(--panel) 2px 5px);
 }
-.is-used .barcol-bar { background: var(--ink); box-shadow: none; }
-.is-used .h-retracted {
-  background: repeating-linear-gradient(135deg, var(--ink) 0 3px, var(--paper) 3px 6px);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+/* No word stands up on a book this short: the hatch and the key say it. */
+.h-retracted .barcol-spine { display: none; }
+.is-used .barcol-bar { opacity: 1; }
+.is-used .barcol-bar::after {
+  content: ""; position: absolute; left: 50%; top: -12px; width: 5px; height: 5px; margin-left: -2.5px;
+  border-radius: 50%; background: var(--green);
 }
 .barcol-no {
-  height: var(--num-h); margin: 0 3px; display: flex;
+  height: var(--num-h); margin: var(--ledge) 3px 0; display: flex;
   align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; color: var(--ink-3);
+  font: 500 10.5px/1 var(--mono); color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
 .is-used .barcol-no { color: var(--ink); }
 .barcol:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
-/* The chosen bar: a ring on the mark and its number reversed out, the way a
-   row is marked on a printout. No tint, because there is no colour to tint
-   with and a grey wash would read as disabled. */
+/* The chosen book: a ring round its spine and its number reversed out, the
+   way a book is pulled half out of a row. */
 .barcol.is-on .barcol-bar {
-  box-shadow: inset 0 0 0 1.5px var(--ink-2),
-              0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
+  opacity: 1; box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
 }
-/* A solid bar is already ink, so the ring needs the paper gap to be seen at
-   all. It is drawn inside the column's own padding and never touches the
-   bar next door. */
-.barcol.is-used.is-on .barcol-bar {
-  box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
-}
-.barcol.is-on .h-retracted {
-  box-shadow: inset 0 0 0 1.5px var(--ink),
-              0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
-}
-.barcol.is-on .barcol-no { background: var(--ink); color: var(--paper); }
+.barcol.is-on .barcol-no { background: var(--ink); color: var(--paper); border-radius: var(--r-control); }
 
 .barcol-tip {
-  position: absolute; bottom: calc(var(--num-h) + var(--plot-h) + 4px);
+  position: absolute; bottom: calc(var(--num-h) + var(--ledge) + var(--plot-h) + 8px);
   left: 50%; transform: translateX(-50%); z-index: 2;
-  padding: 3px 6px; background: var(--ink); color: var(--paper);
-  font-size: 10px; font-weight: 700; white-space: nowrap;
+  padding: 4px 8px; background: var(--ink); color: var(--panel); border-radius: var(--r-control);
+  font: 500 10.5px/1.3 var(--mono); white-space: nowrap;
   opacity: 0; pointer-events: none;
 }
 /* The end columns anchor to their own edge: centred, the first and last tips
-   would hang off the panel. */
+   would hang off the page. */
 .barcol:first-child .barcol-tip { left: 0; transform: none; }
 .barcol:last-child .barcol-tip { left: auto; right: 0; transform: none; }
 .barcol:hover .barcol-tip, .barcol:focus-visible .barcol-tip, .barcol.is-on .barcol-tip { opacity: 1; }
 
-.chart-key { margin: 13px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
-.chart-facts {
-  margin: 9px 0 0; font-size: 11.5px; color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
+.shelf-key {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 18px 0 0; padding: 0; list-style: none;
+  font-size: 13px; line-height: 1.4; color: var(--ink-2);
 }
-.chart-sec .record { margin: 9px 0 0; font-size: 13px; }
+.shelf-key i { display: inline-block; width: 7px; height: 11px; margin-right: 7px; vertical-align: -1px; background: var(--k); }
+.shelf-key .h-retracted {
+  height: 11px; background-color: var(--panel);
+  background-image: repeating-linear-gradient(135deg, var(--ink-2) 0 2px, var(--panel) 2px 4px);
+}
+.chart-key { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
+.chart-facts { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.chart-sec .record { margin: 10px 0 0; font-size: 14px; }
 
-/* The one new moment in the page: the bars grow off the baseline, 20ms apart,
-   under 400ms end to end. Transform and opacity only, and nothing at all
-   under prefers-reduced-motion. */
+/* The books stand up off the ledge, 20ms apart, under 400ms end to end, on
+   a check that just happened. Transform and opacity only, and nothing at
+   all under prefers-reduced-motion. */
 @keyframes bar-grow { from { transform: scaleY(0.04); opacity: 0; } }
 .chart-bars.reveal .barcol-bar {
   animation: bar-grow 250ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
   animation-delay: calc(var(--i, 0) * 20ms);
 }
 
-/* The study the reader jumped to from the chart, marked for as long as the
+/* The study the reader jumped to from the shelf, marked for as long as the
    result is on screen. */
-.study.target { box-shadow: inset 3px 0 0 var(--ink); }
+.study.target { box-shadow: inset 0 0 0 1px var(--ink); }
 
-.still-open {
-  margin: 0; padding: 13px 12px; border-top: 4px solid var(--ink);
-  font-size: 15px; line-height: 1.45;
-}
-.still-open b {
-  display: block; font-size: 11px; font-weight: 900; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--ink); margin-bottom: 5px;
-}
+.cached-note { margin: 28px 0 0; padding: 10px 0 0; border-top: 1px solid var(--rule); font-size: 12.5px; color: var(--ink-3); }
 
-.cached-note { margin: 0; padding: 8px 12px; border-top: 1px solid var(--rule); font-size: 11.5px; color: var(--ink-3); }
-
-/* While a check runs nothing has been counted yet, so the panel is not drawn:
-   the claim and the printing wire are the whole screen. */
+/* While a check runs nothing has been counted yet, so nothing by day is drawn:
+   the claim and the work printing along the thread are the whole screen. */
+#result.checking .stamp-wrap,
 #result.checking .verdict-block,
 #result.checking .deeper,
 #result.checking .actions,
 #result.checking .toast,
 #result.checking .feedback { display: none; }
+#result.checking .report-head { min-height: 46vh; }
 
 .ref {
-  display: inline-block; min-width: 18px; padding: 0 2px; cursor: pointer;
-  background: none; border: 0; border-bottom: 2px solid var(--ink);
-  font-family: inherit; font-size: inherit; font-weight: 900; color: var(--ink);
+  display: inline-block; min-width: 16px; padding: 0 1px; cursor: pointer;
+  background: none; border: 0; font: inherit; font-weight: 600; color: var(--green);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px;
   position: relative;
 }
 .ref::after { content: ""; position: absolute; inset: -12px -4px; }
-.record { margin: 12px 0 0; font-size: 13px; color: var(--ink-2); }
-/* The UA paints <mark> yellow. There is no accent colour on this page, so a
-   marked word is marked by weight instead. */
-mark, .key-mark { background: none; color: var(--ink); font-weight: 900; }
+.record { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
+/* The highlighter: a pass of tint along the lower half of the line, never a
+   block. The UA's yellow <mark> is replaced by it. */
+mark, .key-mark, .hl {
+  background: linear-gradient(transparent 60%, var(--tint) 60% 94%, transparent 94%);
+  color: inherit; -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
 .perf { display: none; }
 
 /* ---- The deeper layer ---------------------------------------------------- *
-   Closed, under the answer. The three lines above it (verdict, takeaway, what
-   is still open) are the result; this is the reading behind them, and it opens
+   Closed, under the answer. The lines above it (verdict, takeaway, what is
+   still open) are the result; this is the reading behind them, and it opens
    in place rather than on a page of its own. It borrows the source column's
-   fold, chevron and rule weights, because a reader has already learned them
-   twenty rows further down. Its own rules are one step quieter so the fold
-   reads as part of the report, not as a second report. */
+   fold and chevron, because a reader has already learned them further down.
+   Nothing in it is a card and nothing in it is coloured. */
 
-.deeper { margin: 22px 0 0; border-top: 4px solid var(--ink); }
+.deeper { margin: 44px 0 0; border-top: 1px solid var(--ink); }
 .deeper-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 13px 0; cursor: pointer; list-style: none;
-  font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.01em;
+  padding: 16px 0; cursor: pointer; list-style: none;
+  font-size: 16px; font-weight: 500;
 }
 .deeper-head::-webkit-details-marker { display: none; }
+.deeper-head .group-count { font: 500 11px/1.4 var(--mono); }
 .deeper[open] .deeper-head { border-bottom: 1px solid var(--rule); }
-.deeper[open] .group-name::before { transform: rotate(45deg); margin-top: -6px; }
+.deeper[open] .group-name::before { transform: rotate(45deg); margin-top: -5px; }
 .deeper-body { padding-top: 4px; }
-.deeper-sec { padding: 14px 0 0; }
-.deeper-sec + .deeper-sec { margin-top: 14px; border-top: 1px solid var(--rule); }
-.deeper-sec .label-2 { margin-top: 16px; }
-.deeper-p { margin: 8px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
-.deeper-p .ref { color: var(--ink); }
+.deeper-sec { padding: 18px 0 0; }
+.deeper-sec + .deeper-sec { margin-top: 18px; border-top: 1px solid var(--rule); }
+.deeper-sec .label-2 { margin-top: 18px; }
+.deeper-p { margin: 8px 0 0; font-size: 16px; line-height: 1.65; color: var(--ink-2); }
 
 /* Who the studies were actually run in. A fact about the records rather than
-   a finding from them, so it reads as an aside: indented off a 2px rule, the
-   way a footnote to the paragraph above it would be set. */
-.deeper-p.narrow {
-  margin-top: 10px; padding-left: 12px;
-  border-left: 2px solid var(--rule);
-  font-size: 14px;
-}
+   a finding from them, so it reads as an aside off a rule. */
+.deeper-p.narrow { margin-top: 12px; padding-left: 14px; border-left: 1px solid var(--rule-2); font-size: 15px; }
 
-/* Each part of the claim is quoted, then answered. The quote carries the
-   weight because it is the reader's own sentence; the answer sits under it in
-   the body ink, the way a marked-up printout reads. */
+/* Each part of the claim is quoted, then answered. */
 .parts { list-style: none; margin: 10px 0 0; padding: 0; }
-.part { padding: 11px 0; border-bottom: 1px solid var(--rule); }
+.part { padding: 12px 0; border-bottom: 1px solid var(--rule); }
 .part:last-child { border-bottom: 0; }
-.part-claim {
-  margin: 0; font-size: 14.5px; line-height: 1.35; font-weight: 900;
-  letter-spacing: -0.015em;
-}
-.part-claim::before { content: "“"; }
-.part-claim::after { content: "”"; }
-.part-take { margin: 5px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
-.part-take .ref { color: var(--ink); }
+.part-claim { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 500; }
+.part-claim::before { content: "\201C"; }
+.part-claim::after { content: "\201D"; }
+.part-take { margin: 6px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--ink-2); }
 
 /* The one figure a reader came for, given its own line and its own rule. The
    text in it is copied out of an abstract or it says there is no figure. */
-.effect { margin: 14px 0 0; padding: 11px 0 0; border-top: 2px solid var(--ink); font-size: 15px; line-height: 1.5; }
-.effect b {
-  display: block; font-size: 11px; font-weight: 900; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--ink); margin-bottom: 4px;
-}
+.effect { margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--ink); font-size: 16px; line-height: 1.6; }
+.effect b { display: block; margin-bottom: 6px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
 
-.actions { display: flex; gap: 8px; margin: 18px 0 0; }
+.actions { display: flex; gap: 8px; margin: 36px 0 0; }
 .actions .secondary { flex: 1; }
 .actions .ghost { flex: 0 0 54px; padding: 15px 0; }
-.toast {
-  display: inline-block; margin: 9px 0 0; font-size: 12px; font-weight: 600; color: var(--ink-2);
-}
+.toast { display: inline-block; margin: 10px 0 0; font-size: 13px; color: var(--ink-2); }
 .toast:empty { display: none; }
 
 .feedback {
-  display: flex; align-items: center; gap: 10px; margin: 20px 0 0;
-  padding: 11px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
-  font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; gap: 10px; margin: 24px 0 0;
+  padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+  font-size: 14px;
 }
-.thumb {
-  margin-left: 0; background: var(--paper); border: 2px solid var(--ink); cursor: pointer;
-  padding: 7px 10px; color: var(--ink); transition: transform 70ms ease;
-}
+.thumb { margin-left: 0; background: transparent; border: 1px solid var(--rule-2); padding: 8px 11px; color: var(--ink); }
 .thumb:first-of-type { margin-left: auto; }
-.thumb:hover, .thumb[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.thumb:hover, .thumb[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--panel); }
 
 /* ---- The sources --------------------------------------------------------- */
 
-.evidence { margin: 26px 0 0; }
-.evidence .section-row { border-top: 8px solid var(--ink); padding-top: 12px; }
-#evidence-label { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.02em; }
-.key { font-size: 10px; color: var(--ink-3); margin: 0; }
+.evidence { margin: 56px 0 0; }
+.evidence .section-row { padding-top: 0; flex-wrap: wrap; row-gap: 6px; margin-bottom: 8px; }
+#evidence-label { margin: 0; font: 350 28px/1.1 var(--display); letter-spacing: -0.03em; color: var(--ink); }
+.key { margin: 0; white-space: nowrap; }
+.key-mark { color: var(--ink); }
 
-.sources { margin-top: 14px; }
+.sources { margin-top: 16px; }
 .studies { list-style: none; margin: 0; padding: 0; }
-.source-group { border-top: 2px solid var(--ink); }
-.source-group + .source-group { border-top-width: 1px; border-top-color: var(--rule); }
+.source-group { border-top: 1px solid var(--ink); }
+.source-group + .source-group { border-top-color: var(--rule); }
 .group-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 13px 0; cursor: pointer; list-style: none;
-  font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.01em;
+  padding: 15px 0; cursor: pointer; list-style: none;
+  font-size: 15px; font-weight: 500;
 }
 .group-head::-webkit-details-marker { display: none; }
-.group-name { display: inline-flex; align-items: center; gap: 9px; }
+.group-name { display: inline-flex; align-items: center; gap: 10px; }
 .group-name::before {
-  content: ""; width: 8px; height: 8px; flex: none; margin-top: -3px;
-  border-right: 2.5px solid var(--ink); border-bottom: 2.5px solid var(--ink);
+  content: ""; width: 7px; height: 7px; flex: none; margin-top: -3px;
+  border-right: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink);
   transform: rotate(-45deg); transition: transform 150ms ease;
 }
-.source-group[open] .group-name::before { transform: rotate(45deg); margin-top: -6px; }
-.group-count { font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.source-group[open] .group-name::before { transform: rotate(45deg); margin-top: -5px; }
+.group-count { font: 500 11px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
+/* A study row carries its book's cloth as a stripe down its edge. */
 .study {
-  border-bottom: 1px solid var(--rule);
-  margin-inline: calc(-1 * var(--gutter)); padding: 13px var(--gutter); cursor: pointer;
+  border-top: 1px solid var(--rule);
+  margin-inline: calc(-1 * var(--gutter)); padding: 16px var(--gutter) 18px calc(var(--gutter) + 16px);
+  cursor: pointer;
+  background-image: linear-gradient(var(--k), var(--k));
+  background-repeat: no-repeat; background-size: 3px calc(100% - 32px); background-position: var(--gutter) 16px;
 }
-.study:hover { background: var(--paper-2); }
-.study .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font-size: 10px; color: var(--ink-3); }
+.study:hover { background-color: var(--panel); }
+.study .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
 .study .meta .ord { color: var(--ink); font-variant-numeric: tabular-nums; }
-.study .meta .type { border: 2px solid var(--rule-2); padding: 2px 5px; color: var(--ink-3); }
-.study .meta .type.strong { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.study .meta .type.retracted { border-color: var(--ink); color: var(--ink); text-decoration: line-through; }
-.study .title { margin: 7px 0 0; font-size: 15.5px; line-height: 1.3; font-weight: 600; }
-/* Relied on: ruled underneath, the way a source is marked on a printout. */
+.study .meta .type.retracted { color: var(--ink); text-decoration: line-through; }
+.study .title { margin: 6px 0 0; font-size: 16px; line-height: 1.45; font-weight: 400; color: var(--ink-2); }
+/* Relied on: highlighted, the way you mark the source you would quote. */
+.study.cited .title { font-weight: 500; color: var(--ink); }
 .study.cited .title span {
-  background-image: linear-gradient(var(--ink), var(--ink));
-  background-repeat: no-repeat; background-position: 0 100%; background-size: 100% 2px;
-  box-decoration-break: clone; -webkit-box-decoration-break: clone; padding-bottom: 2px;
+  background-image: linear-gradient(transparent 60%, var(--tint) 60% 94%, transparent 94%);
+  background-repeat: no-repeat; background-size: 100% 100%;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
 }
 .sweep .study.cited .title span {
-  background-size: 0 2px;
-  animation: rule-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  background-size: 0 100%;
+  animation: mark-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   animation-delay: calc(460ms + var(--i, 0) * 120ms);
 }
-@keyframes rule-in { to { background-size: 100% 2px; } }
-.study .src { margin: 5px 0 0; font-size: 12px; color: var(--ink-3); }
-.study .src a { font-size: 11px; color: var(--ink-3); }
+@keyframes mark-in { to { background-size: 100% 100%; } }
+.study .src { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); }
+.study .src a { color: var(--ink-3); }
 
 .study-go {
-  display: inline-flex; align-items: center; gap: 7px; margin-top: 10px;
-  font-size: 11px; font-weight: 900; text-transform: uppercase;
-  color: var(--act); border: 2px solid var(--act); padding: 8px 11px;
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+  font-size: 13.5px; font-weight: 500; color: var(--green);
 }
-.study:hover .study-go, .study:focus-visible .study-go { background: var(--act); color: var(--paper); }
+.study:hover .study-go, .study:focus-visible .study-go { text-decoration: underline; text-underline-offset: 3px; }
 .studies.related .study-go { display: none; }
-.studies.related .study { cursor: default; }
-.studies.related .study:hover { background: transparent; }
-.studies .empty { padding: 14px 0; font-size: 15px; color: var(--ink-2); }
+.studies.related .study { cursor: default; padding-left: var(--gutter); }
+.studies.related .study:hover { background-color: transparent; }
+.studies .empty { padding: 16px 0; font-size: 15px; color: var(--ink-2); }
 
-.query { margin: 14px 0 0; font-size: 11px; color: var(--ink-3); }
-.query code { font-family: inherit; font-weight: 700; color: var(--ink-2); }
-.query a { display: inline-flex; align-items: center; gap: 4px; color: var(--act); font-weight: 700; }
+.query { margin: 18px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.query code { font: 500 12px var(--mono); color: var(--ink-2); }
+.query a { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-weight: 500; }
 
 /* ---- Sticky share bar (phones) ------------------------------------------- */
 
@@ -750,7 +747,7 @@ mark, .key-mark { background: none; color: var(--ink); font-weight: 900; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
   display: flex; gap: 8px;
   padding: 10px var(--gutter) max(12px, env(safe-area-inset-bottom));
-  background: var(--paper); border-top: 2px solid var(--ink);
+  background: var(--panel); border-top: 1px solid var(--rule);
 }
 .bar-sticky .primary { flex: 1; margin-top: 0; }
 .bar-sticky .ghost { width: 54px; flex: none; padding: 15px 0; }
@@ -763,8 +760,8 @@ dialog.sheet {
   width: 100%; max-width: 100%; max-height: 88dvh;
   position: fixed; inset: auto 0 0 0;
   background: var(--paper); color: var(--ink);
-  border-radius: 0; border-top: 4px solid var(--ink);
-  box-shadow: 0 -8px 40px var(--shadow-sheet);
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
+  box-shadow: 0 -8px 40px var(--shadow);
   overflow: auto; overscroll-behavior: contain;
   /* The sheet leaves the way it arrived: the closed state lives on the base
      rule so one transition runs in both directions. */
@@ -784,77 +781,101 @@ dialog.sheet::backdrop {
 dialog.sheet[open]::backdrop { opacity: 1; }
 @starting-style { dialog.sheet[open]::backdrop { opacity: 0; } }
 
-.sheet-handle { width: 40px; height: 3px; background: var(--rule-2); margin: 10px auto 0; }
-.sheet-body { padding: 14px var(--gutter) max(20px, env(safe-area-inset-bottom)); }
-.sheet-title { margin: 6px 0 6px; font-size: 22px; line-height: 1.18; font-weight: 900; letter-spacing: -0.025em; }
+.sheet-handle { width: 40px; height: 4px; border-radius: var(--r-control); background: var(--rule-2); margin: 10px auto 0; }
+.sheet-body { padding: 16px var(--gutter) max(24px, env(safe-area-inset-bottom)); }
+.sheet-title { margin: 8px 0 8px; font: 350 26px/1.15 var(--display); letter-spacing: -0.03em; }
 .sheet-title:focus { outline: none; }
-.sheet-src { margin: 0 0 14px; font-size: 13px; color: var(--ink-3); }
-.sheet-body .meta { margin: 8px 0 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3); }
-.sheet-section { margin-top: 18px; }
-.sheet-section p { margin: 0; font-size: 15px; }
-.sheet-section .section-label { font-size: 10px; }
-.type-card { border-top: 4px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 10px 0; font-size: 15px; }
-.type-card b { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3); }
+.sheet-src { margin: 0 0 16px; font-size: 13px; color: var(--ink-3); }
+.sheet-body .meta { margin: 8px 0 0; }
+.sheet-section { margin-top: 22px; }
+.sheet-section p { margin: 0; font-size: 15.5px; }
+.sheet-section .section-label { margin-bottom: 6px; }
+.type-card { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 12px 0; font-size: 15.5px; }
+.type-card b { display: block; margin-bottom: 4px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
 .type-card.retracted b { color: var(--ink); }
-.abstract p { margin: 0 0 10px; font-size: 15px; line-height: 1.55; }
-.abstract p b { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3); }
-.sheet-actions { display: flex; gap: 12px; align-items: center; margin-top: 22px; }
+.abstract p { margin: 0 0 12px; font-size: 15.5px; line-height: 1.65; }
+.abstract p b { display: block; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.sheet-actions { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
 .link-as-btn { text-decoration: none; flex: 1; }
-.steps { padding-left: 18px; margin: 10px 0 18px; }
-.steps li { margin-bottom: 10px; font-size: 15px; line-height: 1.5; }
-.dive-figs { display: flex; flex-wrap: wrap; gap: 0; margin: 10px 0 0; border-top: 4px solid var(--ink); border-bottom: 4px solid var(--ink); }
-.dive-figs > div { flex: 1 1 50%; padding: 9px 0; border-right: 1px solid var(--rule); }
-.dive-figs > div:last-child { border-right: 0; }
-.dive-figs dt { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3); }
-.dive-figs dd { margin: 2px 0 0; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.steps { padding-left: 20px; margin: 12px 0 20px; }
+.steps li { margin-bottom: 12px; font-size: 15.5px; line-height: 1.6; }
+.legend { padding-left: 18px; margin: 8px 0 0; font-size: 15px; line-height: 1.55; }
+.legend li { margin-bottom: 6px; }
+.dive-figs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--ink); }
+.dive-figs > div { padding: 6px 0; }
+.dive-figs dt { font: 500 10.5px/1.3 var(--mono); color: var(--ink-3); }
+.dive-figs dd { margin: 4px 0 0; font: 300 26px/1 var(--display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .dive-status { font-size: 14px; color: var(--ink-3); margin: 10px 0 0; }
-.dive-links { margin: 12px 0 0; font-size: 14px; font-weight: 700; }
-.dive-links a { display: inline-flex; align-items: center; gap: 5px; }
-.dive-sub { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--ink-3); margin: 16px 0 6px; }
+.dive-links { margin: 14px 0 0; font-size: 14.5px; font-weight: 500; }
+.dive-links a { display: inline-flex; align-items: center; gap: 5px; color: var(--green); }
+.dive-sub { margin: 18px 0 6px; }
 
 /* ---- Status, errors, the wait -------------------------------------------- */
 
-.status { font-size: 13px; font-weight: 600; color: var(--ink-3); }
-.status.working::before { content: ""; display: inline-block; width: 8px; height: 8px; background: var(--ink); margin-right: 7px; animation: pulse 1s ease-in-out infinite; vertical-align: 1px; }
-.error-msg { font-size: 17px; font-weight: 600; margin: 18px 0 0; }
+.status { font-size: 13px; color: var(--ink-3); }
+.band .status { color: var(--on-deep-2); }
+.status.working::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--sage); margin-right: 8px; animation: pulse 1s ease-in-out infinite; vertical-align: 1px; }
+.error-msg { font-size: 18px; line-height: 1.5; margin: 28px 0 0; }
 .countdown { font-size: 13px; color: var(--ink-3); margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+/* An error is the same night screen as a verdict, so the way out is the
+   light shape on it. */
+#error { padding: 8px 0 64px; }
+#error .error-msg { font: 350 26px/1.2 var(--display); letter-spacing: -0.025em; max-width: 24em; }
+#error .countdown { color: var(--on-deep-2); }
+#error .secondary { margin-top: 24px; background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
+#error .secondary:hover { background: var(--panel); }
+#error :focus-visible { outline-color: var(--sage); }
+/* While the countdown runs the way out is shown, but plainly not yet open. */
+#error .secondary:disabled { background: transparent; color: var(--on-deep-2); border-color: var(--deep-line); }
+/* An error, or a check still running, is all night: no strip of paper
+   between it and the footer, only a rule. */
+:root:is([data-screen="error"], [data-screen="checking"]) { background: var(--deep); }
+:root:is([data-screen="error"], [data-screen="checking"]) main.wrap { padding-bottom: 0; }
+:root:is([data-screen="error"], [data-screen="checking"]) .foot { margin-top: 0; }
+:root:is([data-screen="error"], [data-screen="checking"]) .foot::before { content: ""; position: absolute; top: 0; left: var(--gutter); right: var(--gutter); height: 1px; background: var(--deep-line); }
 
 /* ---- Privacy and other documents ----------------------------------------- */
 
-.page-doc { padding-bottom: 40px; }
+.page-doc { padding-bottom: 0; }
+.page-doc main.wrap { padding-top: 48px; padding-bottom: 56px; }
 .doc { max-width: var(--measure); }
-.doc h2 { font-size: 20px; font-weight: 900; letter-spacing: -0.02em; margin: 26px 0 8px; }
-.doc p { font-size: 15px; line-height: 1.55; margin: 0 0 12px; }
-/* A layout wrapper around the masthead and the ask view, not an ink band.
-   On the result and error views the masthead stands alone. */
+.doc .hero { color: var(--ink); }
+.doc h2 { margin: 36px 0 8px; }
+.doc h2.section-label { font: 350 24px/1.2 var(--display); letter-spacing: -0.025em; color: var(--ink); }
+.doc p { font-size: 16px; line-height: 1.65; margin: 0 0 12px; }
+.doc .lede { margin: 14px 0 12px; }
+.doc .ledger-list { margin-top: 12px; }
+/* A layout wrapper around the masthead and the ask view: the night ground
+   on every screen. On the result and error views the masthead stands alone
+   over the band of footage. */
 .band { margin: 0; padding: 0; }
 body:not(.view-ask) .band .wrap { display: none; }
-body.view-ask .band .wrap { padding-bottom: 6px; }
-/* Carries `wrap` in the markup so the rule above it ends where every other
-   rule on the page ends, instead of running the full width of the viewport. */
-.foot { margin: 30px auto 0; padding: 16px var(--gutter) 26px; border-top: 2px solid var(--ink); font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
-.foot b { color: var(--ink); }
+body.view-ask .band .wrap { padding-bottom: 56px; }
+/* The footer is the last of the night: the line every screen ends on. */
+.foot { margin: 72px auto 0; padding: 36px var(--gutter) 52px; font-size: 13px; line-height: 1.55; color: var(--on-deep-2); }
+.foot b, .foot strong { color: var(--on-deep); font-weight: 500; }
+.foot .fine { color: var(--on-deep-3); }
+.foot a { color: var(--on-deep-2); }
 
-/* ---- The band and the sheet ---------------------------------------------- *
+/* ---- The band of footage ------------------------------------------------- *
    Checking, a verdict, an error and a check that found nothing are one screen:
-   a strip of footage across the head of the page, and the report on a sheet
-   that rises into the foot of it.
-
-   The band is full bleed and the sheet is the same centred column the rest of
-   the paper uses, so the page ground shows on both sides of it. An earlier
-   round ran the footage behind the report, which at this column width left it
-   visible only as two narrow strips at the edges: a window frame on one side,
-   half a bookshelf on the other, and no way to read either as a picture.
+   a strip of footage across the head of the page that fades down into the
+   night ground the report is printed on, so the picture and the verdict are
+   one surface with no seam.
 
    Nothing legible ever sits on the footage. The claim, the step lines and the
-   whole verdict are text on the sheet, so no panel has to buy its contrast
-   back with a scrim, a tint or a blur, and there are none anywhere here. */
+   whole verdict are text below it, on the ground, so no panel has to buy its
+   contrast back with a tint or a blur, and there are none anywhere here. */
 
 .film {
   position: relative;
-  height: 30vh; min-height: 148px; max-height: 300px;
+  height: 26vh; min-height: 140px; max-height: 260px;
   overflow: hidden;
   background: var(--deep);
+}
+.film::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(180deg, var(--film-top), transparent 40%, var(--deep));
 }
 
 /* The clips are stacked and cross-faded, so a stage change costs opacity and
@@ -870,20 +891,23 @@ body.view-ask .band .wrap { padding-bottom: 6px; }
 
 /* Each crop is chosen, not defaulted. The band runs wider than the 3.2:1
    source on most desktops and much narrower on a phone, where `cover` keeps
-   less than half the width: these say which half. The book's spine and the
-   page it is turning, the marker's tip rather than the knuckles behind it,
-   and the microscope rather than the rack beside it. Picked by looking at
-   each clip cropped to 390x253. See scripts/build_footage.py. */
+   less than half the width: these say which half. See
+   scripts/build_footage.py. */
 .film-shot[data-shot="searching"] { object-position: 45% 50%; }
 .film-shot[data-shot="weighing"] { object-position: 30% 50%; }
 .film-shot[data-shot="verdict"] { object-position: 70% 50%; }
 
+/* The report starts on the band's own ground, tucked a pixel under it so no
+   hairline of paper can show between the two. */
 [data-screen] main.wrap {
   position: relative; z-index: 1;
-  margin-top: -44px;
-  padding-top: 16px; padding-bottom: 34px;
+  margin-top: -1px;
+  padding-top: 0; padding-bottom: 34px;
   background: var(--paper);
-  box-shadow: 0 -3px 0 var(--ink), 0 -16px 44px var(--shadow-sheet);
+  /* A strip of night under the head's top edge, so a head that starts part
+     way through a pixel never shows a hairline of paper there. */
+  background-image: linear-gradient(var(--deep), var(--deep));
+  background-size: 100% 2px; background-repeat: no-repeat;
 }
 
 /* The entrance belongs to the live transition, not to a cold load: a shared
@@ -907,11 +931,11 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 @media (prefers-reduced-motion: reduce) {
   .film-shot { transition: none; }
   body.live-check .film, body.live-check main.wrap { animation: none; }
-  .sweep .study.cited .title span { animation: none; background-size: 100% 2px; }
+  .sweep .study.cited .title span { animation: none; background-size: 100% 100%; }
   .reading li { animation: none; }
   .chart-bars.reveal .barcol-bar { animation: none; }
   dialog.sheet, dialog.sheet::backdrop { transition: none; }
-  .status.working::before, .mic.listening { animation: none; }
+  .status.working::before, .mic.listening, .reading li.live::before { animation: none; }
   .primary, .secondary, .ghost, .chip, .thumb { transition: none; }
   .group-name::before { transition: none; }
 }
@@ -919,55 +943,52 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 /* ---- Wide ---------------------------------------------------------------- */
 
 @media (min-width: 720px) {
+  :root { --gutter: 28px; }
   dialog.sheet {
     inset: 50% auto auto 50%;
     transform: translate(-50%, calc(-50% + 16px));
-    width: min(560px, calc(100% - 40px)); border: 2px solid var(--ink); max-height: 86vh;
+    width: min(580px, calc(100% - 40px)); max-height: 86vh;
+    border-radius: var(--r-panel); box-shadow: 0 24px 80px var(--shadow);
   }
   dialog.sheet[open] { transform: translate(-50%, -50%); }
   @starting-style { dialog.sheet[open] { transform: translate(-50%, calc(-50% + 16px)); } }
   .sheet-handle { display: none; }
   .bar-sticky { display: none; }
   body.has-bar { padding-bottom: 0; }
-  .hero { font-size: 52px; }
-  .hero .small, .hero em { font-size: 32px; }
-  .claim-echo { font-size: 22px; }
-  .stamp { font-size: 46px; }
-  /* More width to spend: a taller plot reads the tiers more clearly. */
-  .chart { --plot-h: 110px; --axis-w: 58px; }
-  /* Cinema proportions once there is height to spend on them. */
-  .film { height: 42vh; min-height: 230px; max-height: 440px; }
-  [data-screen] main.wrap { margin-top: -48px; padding-top: 20px; }
+  .hero { font-size: 58px; }
+  .sec-title, .trust-title { font-size: 40px; }
+  .chart { --plot-h: 240px; }
+  .film { height: 34vh; min-height: 200px; max-height: 360px; }
+  .top { padding-top: 24px; padding-bottom: 24px; }
 }
 
 @media (min-width: 1024px) {
-  body:not(.view-ask) .wrap, body:not(.view-ask) .top { max-width: 960px; }
-  body.view-ask .band .wrap, body.view-ask main.wrap, body.view-ask .top { max-width: 1060px; }
-  body.view-ask .band .wrap { padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
-  body.view-ask #ask { display: grid; grid-template-columns: 1.05fr 0.95fr; column-gap: 48px; align-items: start; }
-  body.view-ask #ask .hero-block { grid-column: 1; }
-  body.view-ask #ask .claim-form { grid-column: 2; padding-top: 34px; }
+  body:not(.view-ask) .wrap, body:not(.view-ask) .top { max-width: 1040px; }
+  body.view-ask .band .wrap, body.view-ask main.wrap, body.view-ask .top { max-width: 1200px; }
+  .foot { max-width: 1200px; }
+  .hero { font-size: 72px; }
+  body.view-ask .band .wrap { padding-bottom: 96px; }
+  body.view-ask #ask { display: grid; grid-template-columns: 1.15fr 0.85fr; column-gap: 72px; align-items: end; }
+  body.view-ask #ask .hero-block { grid-column: 1; padding-top: 56px; }
+  body.view-ask #ask .claim-form { grid-column: 2; margin-top: 0; }
   body.view-ask .nudge { grid-column: 1 / -1; }
-  /* The question and its answer side by side, like a label and its value. */
-  .trust-row { display: grid; grid-template-columns: minmax(0, 17em) minmax(0, 1fr); column-gap: 48px; align-items: baseline; }
-  .trust-a { margin-top: 0; }
-  /* Two columns once there is a verdict to put in the second one. While the
-     check is still running there is nothing to fill it with, and the grid
-     left the claim and the work printing in a half width column beside an
-     empty one. Checking stays a single column and keeps its bleed. */
+  /* By day, each section is a title on the left and its rows on the right. */
+  .latest, .trust { display: grid; grid-template-columns: 0.8fr 1.2fr; column-gap: 72px; align-items: start; }
+  .latest { margin-top: 96px; }
+  .trust { margin-top: 96px; }
+  .latest > .sec-title, .trust > .trust-title { grid-column: 1; grid-row: 1 / span 99; }
+  .latest > .ledger-list, .trust > .trust-row { grid-column: 2; }
+  .examples, .trending, .recent { max-width: calc(60% - 29px); margin-left: auto; }
+  /* The night head spans the page; by day the reading takes the left column
+     and the sources the right. While the check is still running there is
+     nothing to put in the second column, so checking stays one column. */
   body:not(.view-ask) #result:not(.checking) {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 40px; align-items: start;
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    column-gap: 64px; align-items: start;
   }
-  body:not(.view-ask) #result:not(.checking) > .back { grid-column: 1 / -1; }
-  body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 0; }
-  /* In two columns there is no column edge to bleed to: a negative inline
-     margin here would hang the field and the panel out over the gutter
-     between the columns. They keep their shared width by both giving it up. */
-  body:not(.view-ask) #result:not(.checking) .report-head,
-  body:not(.view-ask) #result:not(.checking) .verdict-block { margin-inline: 0; }
-  /* Both columns open on the row's own top edge, so the field and the rule
-     over the studies start on the same line. */
-  body:not(.view-ask) #result:not(.checking) > .report-head { margin-top: 0; }
-  .study { margin-inline: 0; padding-inline: 0; }
+  body:not(.view-ask) #result:not(.checking) > .report-head { grid-column: 1 / -1; }
+  body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 44px; }
+  .report-head { padding-bottom: 64px; }
+  .stamp { font-size: 64px; }
+  .study { margin-inline: 0; padding-left: 16px; padding-right: 0; background-position: 0 16px; }
 }

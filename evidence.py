@@ -712,6 +712,10 @@ def snapshot(studies, cited_pmids=()) -> dict:
         "year_from": years[0] if years else None,
         "year_to": years[-1] if years else None,
         "mix": bars,
+        # The shelf's key: only the cloths this set actually has, in legend
+        # order, so the key never explains a colour that is not on the shelf.
+        "kinds": [{"kind": k, "label": KIND_LABELS[k]} for k in KINDS
+                  if any(kind(s) == k for s in studies)],
     }
     snap.update(_chart_words(snap))
     return snap
@@ -1148,6 +1152,13 @@ def untested_in_people(studies, cited_pmids=()) -> str:
 
 # Legend order, strongest first, and the order a mini shelf is stood in.
 KINDS = ("strong", "human", "lab", "weak", "retracted")
+KIND_LABELS = {
+    "strong": "Strong design",
+    "human": "Human study",
+    "lab": "Animal or lab",
+    "weak": "Opinion or single case",
+    "retracted": "Retracted",
+}
 
 
 def kind(study) -> str:
@@ -1158,6 +1169,40 @@ def kind(study) -> str:
     if preclinical(study):
         return "lab"
     return "strong" if tier == "strong" else "human"
+
+
+# The word lettered on a spine: the design, in a reader's words, short
+# enough to stand on the book. No year: the tip and the list carry that.
+SPINES = {
+    "Meta-Analysis": "Meta-analysis",
+    "Network Meta-Analysis": "Network meta-analysis",
+    "Systematic Review": "Systematic review",
+    "Randomized Controlled Trial": "Randomized trial",
+    "Practice Guideline": "Guideline",
+    "Retracted Publication": "Retracted",
+    "Case Reports": "One case",
+    "Editorial": "Opinion",
+    "Comment": "Comment",
+    "Letter": "Letter",
+    "News": "News",
+    "Controlled Clinical Trial": "Trial",
+    "Clinical Trial": "Trial",
+    "Observational Study": "Observational",
+    "Multicenter Study": "Multicenter",
+    "Comparative Study": "Comparative",
+    "Review": "Review",
+}
+
+
+def spine(study) -> str:
+    """
+    The word on one study's spine. A lab study that is not a pooled design
+    says what it was run on, because that is the fact a reader needs first.
+    """
+    label = strongest_label(study.get("publication_types"))
+    if kind(study) == "lab" and classify(study.get("publication_types")) != "strong":
+        return "Animal or lab"
+    return SPINES.get(label, "Study")
 
 
 def shelf(studies, cited_pmids=()) -> list[dict]:

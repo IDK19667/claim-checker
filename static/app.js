@@ -463,6 +463,13 @@ function renderSays(data) {
     .join("");
 }
 
+// A result saved on this device before the shelf existed carries no cloth:
+// its tier stands in, so an old check still draws a whole shelf.
+const KIND_FROM_TIER = { strong: "strong", weak: "weak", retracted: "retracted" };
+const kindOf = (s) => s.kind || KIND_FROM_TIER[s.tier] || "human";
+const KIND_LABELS = { strong: "Strong design", human: "Human study", lab: "Animal or lab",
+                      weak: "Opinion or single case", retracted: "Retracted" };
+
 function renderChart(data) {
   const sec = $("chart-sec");
   if (!sec) return;
@@ -483,11 +490,19 @@ function renderChart(data) {
       .filter(Boolean).join(", ");
     return `<button type="button" class="barcol${s.cited_in_verdict ? " is-used" : ""}" data-i="${i}" style="--i:${i}"` +
       ` aria-label="${escapeHtml(said)}. Go to it in the list of studies.">` +
-      `<span class="barcol-track"><span class="barcol-bar h-${escapeHtml(s.tier || "moderate")}"></span></span>` +
+      `<span class="barcol-track"><span class="barcol-bar h-${escapeHtml(s.tier || "moderate")} k-${escapeHtml(kindOf(s))}">` +
+      `<span class="barcol-spine" aria-hidden="true">${escapeHtml(s.spine || "")}</span></span></span>` +
       `<span class="barcol-no">${String(i + 1).padStart(2, "0")}</span>` +
       (tip ? `<span class="barcol-tip" aria-hidden="true">${escapeHtml(tip)}</span>` : "") +
       "</button>";
   }).join("");
+  // The key names only the cloths on this shelf, worded once on the server.
+  const kinds = ev.kinds || Object.keys(KIND_LABELS)
+    .filter((k) => data.studies.some((s) => kindOf(s) === k))
+    .map((k) => ({ kind: k, label: KIND_LABELS[k] }));
+  $("shelf-key").innerHTML = kinds.map((k) =>
+    `<li><i class="k-${escapeHtml(k.kind)}${k.kind === "retracted" ? " h-retracted" : ""}"></i>${escapeHtml(k.label)}</li>`).join("");
+  fitSpines();
   // The one new moment in the page, and only on a check that just happened:
   // a cached result is not news and does not announce itself.
   if (!data.cached && !data.restored) {
@@ -618,6 +633,43 @@ function renderBreakdown(bd, count) {
   }
 }
 
+// The pen ring is drawn round the words, not the column, so a short verdict
+// gets a short ring. Measured off the text's own line boxes: a verdict that
+// wraps is ringed to its longest line. The ring stands a little wider than
+// the words at each end, because its shoulders curve in, and never past the
+// edge of the screen. A hidden verdict has no boxes and is measured again
+// when it shows.
+function fitRing() {
+  for (const w of document.querySelectorAll(".vwrap")) {
+    const t = w.querySelector(".stamp");
+    if (!t || !t.textContent) continue;
+    const r = document.createRange();
+    r.selectNodeContents(t);
+    const rects = [...r.getClientRects()].filter((x) => x.width);
+    if (!rects.length) continue;
+    const box = w.getBoundingClientRect();
+    const left = Math.min(...rects.map((x) => x.left)) - box.left;
+    const right = Math.max(...rects.map((x) => x.right)) - box.left;
+    const room = (right - left) * 0.07 + 12;
+    const l = Math.max(6 - box.left, left - room);
+    const rr = Math.min(document.documentElement.clientWidth - 6 - box.left, right + room);
+    w.style.setProperty("--rl", `${Math.round(l)}px`);
+    w.style.setProperty("--w", `${Math.round(rr - l)}px`);
+  }
+}
+addEventListener("resize", fitRing);
+
+// A spine is lettered only when its word fits standing up. A short book with
+// a long word shows its cloth and leaves the word to the key and the tip,
+// never a word cut off part way.
+function fitSpines() {
+  for (const s of document.querySelectorAll(".barcol-spine")) {
+    s.hidden = false;
+    s.hidden = s.scrollHeight > s.clientHeight + 1;
+  }
+}
+if (document.fonts) document.fonts.ready.then(() => { fitRing(); fitSpines(); });
+
 function renderResult(data) {
   currentResult = data;
   $("claim-echo").textContent = data.claim;
@@ -627,12 +679,8 @@ function renderResult(data) {
   const block = document.querySelector(".verdict-block");
   block.dataset.verdict = data.verdict;
 
-  // Re-trigger the stamp animation on every new result.
-  const stamp = $("stamp");
-  const fresh = stamp.cloneNode(false);
-  fresh.textContent = VERDICT_LABELS[data.verdict] || data.verdict;
-  fresh.style.setProperty("--tilt", ({ true: "-5deg", false: "-7deg", complicated: "-4deg", insufficient: "-3deg" })[data.verdict] || "-6deg");
-  stamp.replaceWith(fresh);
+  $("stamp").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
+  fitRing();
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
   $("tldr").textContent = data.tldr || "";
@@ -661,7 +709,7 @@ function renderResult(data) {
     const src = [s.journal, s.year].filter(Boolean).join(", ");
     const isDefault = ti.label === DEFAULT_TYPE[0];
     return `
-      <li class="study${s.cited_in_verdict ? " cited" : ""}" data-i="${i}" tabindex="0" role="button" aria-label="Deep dive on study ${i + 1}">
+      <li class="study k-${escapeHtml(kindOf(s))}${s.cited_in_verdict ? " cited" : ""}" data-i="${i}" tabindex="0" role="button" aria-label="Deep dive on study ${i + 1}">
         <p class="meta">
           <span class="ord">${String(i + 1).padStart(2, "0")}</span>
           ${isDefault ? "" : `<span class="type ${ti.cls}">${escapeHtml(ti.label)}</span>`}
@@ -737,6 +785,7 @@ function renderPending(claim) {
   $("bar-sticky").hidden = true; document.body.classList.remove("has-bar");
   for (const sec of [askSection, errorSection]) sec.hidden = true;
   askMore.hidden = true;
+  if (trustSection) trustSection.hidden = true;
   // Checking is the same screen as the verdict, minus the verdict: the band
   // on top, the claim and the work printing on the sheet below it. The
   // report is shown here rather than through show(), which would scroll and
@@ -774,6 +823,7 @@ function logLine(text, live) {
 function endPending() {
   document.querySelector(".ticket").classList.remove("pending");
   resultSection.classList.remove("checking");
+  fitRing();
   const log = $("reading"); log.hidden = true; log.innerHTML = "";
   $("feedback").hidden = false;
   document.querySelector(".evidence").hidden = false;
@@ -1171,7 +1221,11 @@ async function copyText(str) {
   } catch { return false; }
 }
 
-const CARD = { paper: "#fafbfc", ink: "#0e1422", ink2: "#3a4256", ink3: "#666e85", rule: "#d3d8e2" };
+const CARD = {
+  deep: "#0f1211", deepLine: "#2a302d", onDeep: "#eceee9", onDeep3: "#7d8580", sage: "#9fc3b0",
+  paper: "#f1f2ee", ink: "#121514", ink2: "#434a46", ink3: "#5d6560", rule: "#d9dcd5", wood: "#2b2622",
+  cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#434a46" },
+};
 
 function wrapLines(ctx, text, maxWidth, maxLines) {
   const words = text.split(/\s+/), lines = [];
@@ -1191,95 +1245,104 @@ function wrapLines(ctx, text, maxWidth, maxLines) {
   return lines;
 }
 
-// Caps on the card are set tight, as on the page: tracking stays at zero and
-// this only exists so the drawing code can measure a run of characters.
-function tracked(ctx, text, x, y, tracking) {
-  for (const ch of text) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + tracking; }
-  return x;
-}
-function trackedWidth(ctx, text, tracking) {
-  let w = 0; for (const ch of text) w += ctx.measureText(ch).width + tracking; return w;
+// The pen ring, the same shape as the one on the page, stretched to a box.
+const RING = "M58 9 C 150 0, 292 8, 296 40 S 210 80, 140 79 S 2 70, 4 41 S 70 4, 168 6";
+function ringPath(x, y, w, h) {
+  let i = 0;
+  return new Path2D(RING.replace(/\d+(\.\d+)?/g,
+    (n) => (i++ % 2 ? y + (n / 80) * h : x + (n / 300) * w).toFixed(1)));
 }
 
-// The shared card is the same panel: white, one ink, one heavy rule, the
-// claim, the verdict reversed out of an ink band, the source it leaned on.
+// The shared card is the page in one square: the claim and its ringed verdict
+// on the night ground, joined by the thread, then by day the short answer,
+// what is still open and the shelf it was read from.
 async function renderShareCard(r) {
-  const S = 1080, pad = 76;
+  const S = 1080, pad = 76, inset = pad + 30;
   const c = document.createElement("canvas"); c.width = S; c.height = S;
   const ctx = c.getContext("2d");
-  // One family, as on the page. Weight is the only axis that carries meaning.
-  const SER = '"Libre Franklin", system-ui, sans-serif';
-  const SAN = SER;
+  const DISPLAY = '"Bricolage Grotesque", system-ui, sans-serif';
+  const BODY = '"Instrument Sans", system-ui, sans-serif';
+  const MONO = '"IBM Plex Mono", ui-monospace, monospace';
   try {
-    await Promise.all([`900 62px ${SER}`, `600 34px ${SER}`, `400 26px ${SER}`,
-                       `700 18px ${SER}`, `900 27px ${SER}`].map((f) => document.fonts.load(f)));
+    await Promise.all([`350 96px ${DISPLAY}`, `500 36px ${DISPLAY}`, `400 40px ${BODY}`,
+                       `500 20px ${MONO}`].map((f) => document.fonts.load(f)));
   } catch {}
-
-  ctx.fillStyle = CARD.paper; ctx.fillRect(0, 0, S, S);
   ctx.textBaseline = "alphabetic";
+  const knot = (y) => { ctx.fillStyle = CARD.sage; ctx.beginPath(); ctx.arc(pad + 4, y, 5, 0, Math.PI * 2); ctx.fill(); };
 
-  // masthead
-  ctx.fillStyle = CARD.ink; ctx.font = `900 32px ${SER}`;
-  ctx.fillText("CLAIM CHECKER", pad, 74);
+  // Night: the masthead, the claim, the verdict.
   const n = r.studies.length, cited = r.studies.filter((s) => s.cited_in_verdict).length;
-  ctx.font = `700 17px ${SAN}`; ctx.fillStyle = CARD.ink3;
-  const basis = n ? `${n} READ · ${cited} RELIED ON` : "NO MATCHING STUDIES";
-  tracked(ctx, basis, S - pad - trackedWidth(ctx, basis, 0), 70, 0);
-  ctx.fillStyle = CARD.ink;
-  ctx.fillRect(pad, 96, S - pad * 2, 2); ctx.fillRect(pad, 102, S - pad * 2, 1);
+  ctx.font = `400 40px ${BODY}`;
+  const claimLines = wrapLines(ctx, `\u201c${r.claim.trim()}\u201d`, S - inset - pad, 3);
+  const label = VERDICT_LABELS[r.verdict] || r.verdict;
+  let vSize = 104;
+  ctx.font = `350 ${vSize}px ${DISPLAY}`;
+  while (vSize > 64 && ctx.measureText(label).width > S - inset - pad - 40) {
+    vSize -= 4; ctx.font = `350 ${vSize}px ${DISPLAY}`;
+  }
+  const claimTop = 196, verdictLabelY = claimTop + 34 + claimLines.length * 54 + 30;
+  const verdictY = verdictLabelY + 34 + vSize * 0.9;
+  const nightH = verdictY + 70;
 
-  // the claim as the headline
-  ctx.font = `900 60px ${SER}`;
-  const claimLines = wrapLines(ctx, r.claim.trim(), S - pad * 2, 4);
-  let y = 178;
-  for (const line of claimLines) { ctx.fillText(line, pad, y); y += 72; }
+  ctx.fillStyle = CARD.deep; ctx.fillRect(0, 0, S, nightH);
+  ctx.fillStyle = CARD.onDeep; ctx.font = `500 36px ${DISPLAY}`;
+  ctx.fillText("Evident", pad, 92);
+  ctx.font = `500 20px ${MONO}`; ctx.fillStyle = CARD.onDeep3;
+  const basis = n ? `${n} read, ${cited} relied on` : "No matching studies";
+  ctx.fillText(basis, S - pad - ctx.measureText(basis).width, 88);
 
-  // The verdict as a filled band with the words reversed out, matching the
-  // page and the link-preview card. Every verdict is drawn this way.
-  y += 6;
-  const bandH = 66;
-  ctx.fillStyle = CARD.ink;
-  ctx.fillRect(pad, y, S - pad * 2, bandH);
-  ctx.font = `900 30px ${SAN}`;
-  ctx.fillStyle = CARD.paper;
-  tracked(ctx, (VERDICT_LABELS[r.verdict] || r.verdict).toUpperCase(), pad + 18, y + 43, 0);
-  ctx.fillStyle = CARD.ink;
-  y += bandH + 46;
+  // the thread, from the claim's knot down to the verdict's
+  ctx.fillStyle = CARD.deepLine; ctx.fillRect(pad + 3.5, claimTop - 6, 1.5, verdictLabelY - claimTop);
+  knot(claimTop - 6); knot(verdictLabelY - 6);
+  ctx.font = `500 20px ${MONO}`; ctx.fillStyle = CARD.onDeep3;
+  ctx.fillText("The claim you checked", inset, claimTop);
+  ctx.fillText("Verdict", inset, verdictLabelY);
+  ctx.font = `400 40px ${BODY}`; ctx.fillStyle = CARD.onDeep;
+  let y = claimTop + 34 + 40;
+  for (const line of claimLines) { ctx.fillText(line, inset, y); y += 54; }
 
-  // the takeaway
+  ctx.font = `350 ${vSize}px ${DISPLAY}`; ctx.fillStyle = CARD.onDeep;
+  ctx.fillText(label, inset, verdictY);
+  const vw = ctx.measureText(label).width;
+  ctx.strokeStyle = CARD.sage; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+  ctx.stroke(ringPath(inset - 22, verdictY - vSize * 0.92, vw + 44, vSize * 1.22));
+
+  // Day: the short answer, what is still open, the shelf.
+  ctx.fillStyle = CARD.paper; ctx.fillRect(0, nightH, S, S - nightH);
+  y = nightH + 70;
   if (r.tldr) {
-    ctx.font = `600 34px ${SER}`; ctx.fillStyle = CARD.ink;
-    for (const line of wrapLines(ctx, r.tldr, S - pad * 2, 3)) { ctx.fillText(line, pad, y); y += 46; }
+    ctx.font = `400 32px ${BODY}`; ctx.fillStyle = CARD.ink;
+    for (const line of wrapLines(ctx, r.tldr, S - pad * 2, 3)) { ctx.fillText(line, pad, y); y += 44; }
   }
-
-  // what is still open
-  if (r.still_open) {
+  if (r.still_open && y < S - 250) {
     y += 14;
-    ctx.font = `700 15px ${SAN}`; ctx.fillStyle = CARD.ink3;
-    tracked(ctx, "STILL OPEN", pad, y, 0);
-    y += 26;
-    ctx.font = `400 26px ${SER}`; ctx.fillStyle = CARD.ink2;
-    for (const line of wrapLines(ctx, r.still_open, S - pad * 2, 2)) { ctx.fillText(line, pad, y); y += 34; }
+    ctx.fillStyle = CARD.ink; ctx.fillRect(pad, y - 22, S - pad * 2, 1.5);
+    y += 16;
+    ctx.font = `500 18px ${MONO}`; ctx.fillStyle = CARD.ink3;
+    ctx.fillText("Still open", pad, y);
+    y += 36;
+    ctx.font = `400 26px ${BODY}`; ctx.fillStyle = CARD.ink2;
+    const room = Math.max(1, Math.min(2, Math.floor((S - 190 - y) / 36) + 1));
+    for (const line of wrapLines(ctx, r.still_open, S - pad * 2, room)) { ctx.fillText(line, pad, y); y += 36; }
   }
 
-  // the source it leaned on hardest
-  const best = strongestCited(r.studies);
-  if (best) {
-    y += 20;
-    const ti = typeInfo(best.publication_types);
-    ctx.font = `700 15px ${SAN}`; ctx.fillStyle = CARD.ink3;
-    tracked(ctx, `${ti.label.toUpperCase()}${best.year ? " · " + best.year : ""}`, pad, y, 0);
-    y += 28;
-    ctx.font = `400 26px ${SER}`; ctx.fillStyle = CARD.ink2;
-    for (const line of wrapLines(ctx, best.title, S - pad * 2, 2)) { ctx.fillText(line, pad, y); y += 34; }
-  }
+  // a mini shelf of the studies read, as in Latest checks
+  const books = r.studies.map((s) => ({ kind: kindOf(s), tier: s.tier || "moderate", used: s.cited_in_verdict }))
+    .sort((a, b) => Object.keys(CARD.cloth).indexOf(a.kind) - Object.keys(CARD.cloth).indexOf(b.kind));
+  const shelfBase = S - 112, H = { strong: 56, moderate: 40, weak: 25, retracted: 25 };
+  books.forEach((b, i) => {
+    ctx.globalAlpha = b.used ? 1 : 0.45;
+    ctx.fillStyle = CARD.cloth[b.kind] || CARD.ink3;
+    ctx.fillRect(pad + 4 + i * 17, shelfBase - H[b.tier], 13, H[b.tier]);
+  });
+  ctx.globalAlpha = 1;
+  if (books.length) { ctx.fillStyle = CARD.wood; ctx.fillRect(pad, shelfBase, books.length * 17 + 4, 4); }
 
   // colophon
-  ctx.fillStyle = CARD.rule; ctx.fillRect(pad, S - 96, S - pad * 2, 1);
-  ctx.font = `700 16px ${SAN}`; ctx.fillStyle = CARD.ink3;
-  tracked(ctx, "NOT MEDICAL ADVICE", pad, S - 62, 2);
+  ctx.font = `500 18px ${MONO}`; ctx.fillStyle = CARD.ink3;
+  ctx.fillText("Not medical advice", pad, S - 52);
   const host = (() => { try { return new URL(r.share_url || location.href).host; } catch { return location.host; } })();
-  tracked(ctx, host.toUpperCase(), S - pad - trackedWidth(ctx, host.toUpperCase(), 2), S - 62, 2);
+  ctx.fillText(host, S - pad - ctx.measureText(host).width, S - 52);
 
   return new Promise((resolve) => c.toBlob((b) => resolve(b), "image/png"));
 }
@@ -1306,7 +1369,7 @@ async function shareResult() {
       let files;
       try {
         const blob = await renderShareCard(r);
-        const file = new File([blob], "claim-check.png", { type: "image/png" });
+        const file = new File([blob], "evident-check.png", { type: "image/png" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) files = [file];
       } catch { /* card failed: share text */ }
       await navigator.share(files ? { files, title: "Evident", text: `${text}\n${url}` } : { title: "Evident", text, url });

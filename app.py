@@ -539,6 +539,8 @@ def _study_payload(s: dict, cited: set) -> dict:
         # The spine's cloth on the shelf: who or what the study was run on,
         # and whether it counts at all. Height is the tier; this is the rest.
         "kind": evidence.kind(s),
+        # The word lettered on that spine.
+        "spine": evidence.spine(s),
         # The narrow group this study was run in, or null for a general
         # population. Classified on the server for the same reason as the
         # tier: it is a fact about the record, and both renderers need it.

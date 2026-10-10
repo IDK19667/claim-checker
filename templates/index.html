@@ -32,7 +32,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Evident" />
 
-  <meta name="theme-color" content="#0b1226" />
+  <meta name="theme-color" content="#0f1211" />
   <meta name="color-scheme" content="light" />
 
   <!-- PWA -->
@@ -41,14 +41,17 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="Evident" />
 
   <!-- Fonts are served from here (latin subsets): no third-party request, and they work offline. -->
-  <!-- The one face the stylesheet actually uses. Preloading a font the page
-       never asks for costs a high-priority download and delays the one it
-       does need, so this list must track @font-face exactly. -->
-  <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/librefranklin-normal-400-900.woff2') }}" as="font" type="font/woff2" crossorigin />
+  <!-- The two faces the first screen sets: the display face for the headline
+       and the body face for everything else. The mono labels are small and
+       arrive with the stylesheet's own request. Preloading a font the page
+       never asks for costs a high-priority download and delays the ones it
+       does need, so this list must track @font-face. -->
+  <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/bricolagegrotesque-opsz96-300-500.woff2') }}" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/instrumentsans-normal-400-600.woff2') }}" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   {% if flight %}
   <!-- One image, 17KB, is the whole of the first paint's imagery. The frame
@@ -173,7 +176,7 @@
     <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>
       {% if latest %}
       <div class="latest">
-        <p class="section-label">Latest checks</p>
+        <h2 class="sec-title">Latest checks</h2>
         <ol class="ledger-list">
           {% for v in latest %}
           <li class="entry">
@@ -183,9 +186,12 @@
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
             {% if v.evidence.mix %}
-            <span class="bar" role="img"
+            {# A mini shelf: one spine per study, strongest first, faded where
+               the verdict did not use it. Same heights and cloth as the shelf
+               on the result page. #}
+            <span class="mini" role="img"
                   aria-label="{% for m in v.evidence.mix %}{{ m.count }} {{ m.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
-              {% for m in v.evidence.mix %}<i class="seg seg-{{ m.tier }}" style="width:{{ m.percent }}%"></i>{% endfor %}
+              {%- for b in v.shelf %}<i class="h-{{ b.tier }} k-{{ b.kind }}{% if b.used %} on{% endif %}"></i>{% endfor -%}
             </span>
             <p class="entry-meta">
               {{ v.evidence.read }} stud{{ "y" if v.evidence.read == 1 else "ies" }} read, {{ v.evidence.relied_on }} relied on{% if v.evidence.pooled %}, {{ v.evidence.pooled }} pooled{% endif %}{% if v.evidence.year_from %}, <span class="entry-years">{% if v.evidence.year_from == v.evidence.year_to %}{{ v.evidence.year_from }}{% else %}{{ v.evidence.year_from }} to {{ v.evidence.year_to }}{% endif %}</span>{% endif %}
@@ -291,32 +297,41 @@
 
     <!-- ===== Result ===== -->
     <section id="result"{% if not result %} hidden{% endif %}>
-      <button class="back" id="back-btn" type="button">
-        <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
-      </button>
-
       <!-- The head is a field, not a headline. What was typed is labelled as
            what was typed and set quietly; the verdict is the biggest thing on
            the screen. The ground is identical on every verdict, so nothing
            here is colour coded. -->
       <div class="report-head">
+        <button class="back" id="back-btn" type="button">
+          <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
+        </button>
         <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
-        <p class="field-label">The claim you checked</p>
-        <h2 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
-        {# Only a live check fills this: a shared or saved link already
-           carries the corrected claim, so there is nothing to explain. #}
-        <p class="typed-note" id="typed-note" hidden></p>
-        <ol class="reading" id="reading" hidden aria-live="polite"></ol>
-        <div class="stamp-wrap">
-          <p class="field-label">Verdict</p>
-          <span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span>
+        {# The thread: one fine line in the gutter from the claim down to its
+           verdict, so the two read as one thing. The pen ring round the
+           verdict is the same shape whatever it says: it marks where the
+           answer is, never what it is. app.js fits it to the words. #}
+        <div class="thread">
+          <p class="field-label">The claim you checked</p>
+          <h2 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
+          {# Only a live check fills this: a shared or saved link already
+             carries the corrected claim, so there is nothing to explain. #}
+          <p class="typed-note" id="typed-note" hidden></p>
+          <ol class="reading" id="reading" hidden aria-live="polite"></ol>
+          <div class="stamp-wrap">
+            <p class="field-label">Verdict</p>
+            <div class="vwrap">
+              <span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span>
+              <svg class="ring" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M58 9 C 150 0, 292 8, 296 40 S 210 80, 140 79 S 2 70, 4 41 S 70 4, 168 6"/></svg>
+            </div>
+          </div>
         </div>
       </div>
 
-      {# One bar per study: height is the kind of study, fill is whether the
-         verdict leaned on it, and the number under it is the number the list
-         of studies and every sentence of the prose use. #}
-      {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else 'read but not used') }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }}"></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
+      {# One book per study: height is the design, cloth is what it was run
+         on, full cloth and a dot are whether the verdict leaned on it, and
+         the number under it is the number the list of studies and every
+         sentence of the prose use. #}
+      {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else 'read but not used') }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }} k-{{ s.kind }}"><span class="barcol-spine" aria-hidden="true">{{ s.spine }}</span></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
 
       <div class="verdict-block"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
         <article class="ticket" aria-labelledby="claim-echo">
@@ -358,14 +373,13 @@
             <p class="chart-sum" id="chart-sum">{% if ev %}{{ ev.summary }}{% endif %}</p>
             <figure class="chart">
               <div class="chart-plot">
-                <div class="chart-axis" aria-hidden="true"><span class="ax ax-strong">Strong</span><span class="ax ax-moderate">Moderate</span><span class="ax ax-weak">Weak</span></div>
-                <i class="grid g-strong" aria-hidden="true"></i>
-                <i class="grid g-moderate" aria-hidden="true"></i>
-                <i class="grid g-weak" aria-hidden="true"></i>
                 <i class="chart-base" aria-hidden="true"></i>
                 <div class="chart-bars" id="chart-bars" role="group" aria-label="The studies, by kind of study" aria-describedby="chart-desc">{% if result %}{% for s in result.studies %}{{ barcol(s, loop.index0) }}{% endfor %}{% endif %}</div>
               </div>
-              <figcaption class="chart-key">Each bar is one study. Taller = stronger kind of study. Solid = used for this verdict. Striped = retracted.</figcaption>
+              <figcaption>
+                <ul class="shelf-key" id="shelf-key">{% if ev %}{% for k in ev.kinds %}<li><i class="k-{{ k.kind }}{% if k.kind == 'retracted' %} h-retracted{% endif %}"></i>{{ k.label }}</li>{% endfor %}{% endif %}</ul>
+                <p class="chart-key">Each bar is one study, numbered as in the list. Taller is a stronger kind of study. A dot marks the ones this verdict used.</p>
+              </figcaption>
             </figure>
             <p class="sr-only" id="chart-desc">{% if ev %}{{ ev.described }}{% endif %}</p>
             <p class="chart-facts" id="chart-facts">{% if ev %}{{ ev.facts }}{% endif %}</p>
@@ -466,11 +480,11 @@
       <div class="evidence">
         <div class="section-row">
           <p class="section-label" id="evidence-label">Studies checked</p>
-          <p class="key"><mark class="key-mark">Ruled</mark> = relied on</p>
+          <p class="key"><mark class="key-mark">Highlighted</mark>: relied on</p>
         </div>
         <p class="fine" style="margin:0 0 8px">Open any study for its abstract, how often it has been cited, free full text where there is any, and the studies next to it.</p>
 
-        {% macro study_row(s, i) %}<li class="study{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}" tabindex="0" role="button" aria-label="Deep dive on study {{ i + 1 }}">
+        {% macro study_row(s, i) %}<li class="study k-{{ s.kind }}{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}" tabindex="0" role="button" aria-label="Deep dive on study {{ i + 1 }}">
           <p class="meta"><span class="ord">{{ "%02d"|format(i + 1) }}</span>{% if s.year %}<span>{{ s.year }}</span>{% endif %}</p>
           <p class="title"><span>{{ s.title }}</span></p>
           <p class="src">{{ s.journal }}{% if s.journal %} · {% endif %}<a href="{{ s.url }}" target="_blank" rel="noopener" data-stop>PMID {{ s.pmid }}</a></p>
@@ -602,7 +616,7 @@
       Studies from PubMed, U.S. National Library of Medicine. Verdicts written
       by an AI model that reads the abstracts. Nothing you type is tied to you.
       <a href="/privacy">Privacy</a>{% if not flight %} &middot;
-      <a href="/">See how a check works &rarr;</a>{% endif %}
+      <a href="/">See how a check works</a>{% endif %}
     </p>
   </footer>
 
