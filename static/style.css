@@ -651,23 +651,41 @@ mark, .key-mark, .hl {
 .perf { display: none; }
 
 /* ---- The deeper layer ---------------------------------------------------- *
-   Closed, under the answer. The lines above it (verdict, takeaway, what is
-   still open) are the result; this is the reading behind them, and it opens
-   in place rather than on a page of its own. It borrows the source column's
-   fold and chevron, because a reader has already learned them further down.
-   Nothing in it is a card and nothing in it is coloured. */
+   Closed, straight under what is still open and before the shelf. The lines
+   above it (verdict, takeaway, what is still open) are the result; this is
+   the reading behind them, and it opens in place rather than on a page of
+   its own. Its head is a heading, not a footnote: set in the display face,
+   with a line saying what is inside and a control that says Open, between a
+   heavy rule and a hairline. Nothing in it is a card and nothing in it is
+   coloured; the one rounded thing is the control, at the controls' radius. */
 
-.deeper { margin: 44px 0 0; border-top: 1px solid var(--ink); }
+.deeper { margin: 40px 0 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); }
 .deeper-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 16px 0; cursor: pointer; list-style: none;
-  font-size: 16px; font-weight: 500;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 18px 0 20px; cursor: pointer; list-style: none;
 }
 .deeper-head::-webkit-details-marker { display: none; }
-.deeper-head .group-count { font: 500 11px/1.4 var(--mono); }
+.deeper-head:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.deeper-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.deeper-count { font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.deeper-name { font: 350 26px/1.1 var(--display); letter-spacing: -0.03em; color: var(--ink); }
+.deeper-what { font-size: 15px; line-height: 1.5; color: var(--ink-2); max-width: 46ch; }
+.deeper-what:empty { display: none; }
+.deeper-open {
+  flex: none; display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--ink); border-radius: var(--r-control);
+  font: 600 14px/1 var(--body); color: var(--ink);
+}
+.deeper-open::after {
+  content: ""; width: 7px; height: 7px; margin-top: -4px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg);
+}
+.deeper-head:hover .deeper-open { background: var(--ink); color: var(--paper); }
+.when-open, .deeper[open] .when-shut { display: none; }
+.deeper[open] .when-open { display: inline; }
+.deeper[open] .deeper-open::after { transform: rotate(225deg); margin-top: 3px; }
 .deeper[open] .deeper-head { border-bottom: 1px solid var(--rule); }
-.deeper[open] .group-name::before { transform: rotate(45deg); margin-top: -5px; }
-.deeper-body { padding-top: 4px; }
+.deeper-body { padding: 4px 0 24px; }
 .deeper-sec { padding: 18px 0 0; }
 .deeper-sec + .deeper-sec { margin-top: 18px; border-top: 1px solid var(--rule); }
 .deeper-sec .label-2 { margin-top: 18px; }
@@ -685,6 +703,18 @@ mark, .key-mark, .hl {
 .part-claim::before { content: "\201C"; }
 .part-claim::after { content: "\201D"; }
 .part-take { margin: 6px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--ink-2); }
+
+/* Each relied-on study's conclusion, quoted: who said it in the mono a
+   reader scans, then the authors' words in quotation marks, the way the
+   parts of the claim are quoted above. */
+.concluded { list-style: none; margin: 10px 0 0; padding: 0; }
+.said { padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.said:last-child { border-bottom: 0; }
+.said-who { margin: 0; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.said-q { margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: var(--ink); }
+.said-q::before { content: "\201C"; }
+.said-q::after { content: "\201D"; }
+.said-note { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
 
 /* The one figure a reader came for, given its own line and its own rule. The
    text in it is copied out of an abstract or it says there is no figure. */

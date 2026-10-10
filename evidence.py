@@ -221,6 +221,103 @@ def claim_groups(claim: str) -> set:
     return found
 
 
+# What a study's own authors concluded. A structured abstract keeps the
+# authors' heading, so the conclusion turns up under several names, at the
+# start of a line or numbered inside one ("(4) Conclusions: ..."). An
+# abstract with headings but no conclusion heading has nothing to quote.
+_CONCLUSION_HEAD = re.compile(
+    r"(?:^|(?<=\s))(?:\(\d\)\s*)?(?i:authors'?\s+)?(?i:main\s+)?(?i:conclusions?|interpretation"
+    r"|implications?|significance|clinical relevance)(?:\s+(?:and|&)\s+[a-z]+)?\s*:\s*"
+    # The BMJ's style: a capitalised heading with no colon, straight after
+    # the full stop that ends the section before it.
+    r"|(?:^|(?<=[.]))\s*(?:Conclusions?|CONCLUSIONS?|Interpretation|INTERPRETATION)\s+(?=[A-Z])")
+_ANY_HEAD = re.compile(r"(?:^|\s)(?:\(\d\)\s*)?[A-Z][A-Za-z &/'-]{2,40}:\s")
+_NEXT_HEAD = re.compile(r"\s(?:\(\d\)\s*)?[A-Z][A-Z &/'-]{2,40}:\s|\s\(\d\)\s*[A-Z][A-Za-z ]{2,40}:\s")
+# With no headings at all, only a sentence that says it is the conclusion is
+# one. The last sentence of an abstract is as often a plan or a summary of
+# what the paper covers, so it is never taken on position alone.
+_CONCLUDING = re.compile(
+    r"^(?:in conclusion|in summary|to conclude|overall|taken together|together"
+    r"|(?:these|our|the(?: present)?|this study'?s?) (?:results|findings|data|study|trial|review"
+    r"|analysis|meta-analysis) (?:suggest|indicate|show|shows|demonstrate|demonstrates|support"
+    r"|provide|provides|found|confirm|confirms)|we conclude|this (?:study|trial|review)"
+    r" (?:suggests|indicates|shows|demonstrates|found|provides))\b", re.I)
+# Housekeeping that ends some abstracts and is not a finding.
+_TRAILER = re.compile(
+    r"(?i)(regist(?:ration|ered)|clinicaltrials\.gov|\bNCT\d|PROSPERO|ISRCTN|copyright"
+    r"|\u00a9|all rights reserved|level of evidence|funded by|conflicts? of interest)")
+_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(])")
+CONCLUSION_MAX = 420
+
+
+def _undash(text: str) -> str:
+    """The page carries no dashes: a range reads "to", any other a comma."""
+    text = re.sub(r"(?<=\d)\s*[\u2013\u2014]\s*(?=\d)", " to ", text)
+    return re.sub(r"\s*[\u2013\u2014]\s*", ", ", text)
+
+
+def _first_sentences(text: str) -> str:
+    """Whole sentences from the start of text, up to CONCLUSION_MAX."""
+    picked = []
+    for s in (s for s in _SENTENCE.split(text.strip()) if not _TRAILER.search(s)):
+        if picked and len(" ".join(picked + [s])) > CONCLUSION_MAX:
+            break
+        picked.append(s)
+    return " ".join(picked)
+
+
+def conclusion(study) -> str:
+    """
+    What a study's authors concluded, in their own words: the conclusion
+    section of a structured abstract, or, in one with no headings, the
+    sentences from the one that says it is concluding ("In conclusion",
+    "These results suggest"). Quoted, never rewritten, except that a dash
+    becomes the words or the comma the rest of the page uses. Housekeeping
+    such as a trial registration is never quoted. "" when the abstract
+    says no conclusion in so many words: a guess would be put in the
+    authors' mouths.
+    """
+    text = " ".join(ln.strip() for ln in (study.get("abstract") or "").split("\n") if ln.strip())
+    if not text:
+        return ""
+    # A heading run into the sentence before it ("quality.Conclusions") is
+    # given back its space, so sentences split where they end.
+    text = re.sub(r"(?<=[a-z0-9)][.])(?=[A-Z][a-z])", " ", text)
+    m = _CONCLUSION_HEAD.search(text)
+    if m:
+        body = text[m.end():]
+        nxt = _NEXT_HEAD.search(body)
+        said = _first_sentences(body[:nxt.start()] if nxt else body)
+    elif _ANY_HEAD.match(text):
+        return ""
+    else:
+        sents = _SENTENCE.split(text)
+        at = next((i for i in range(len(sents) - 1, -1, -1) if _CONCLUDING.match(sents[i])), None)
+        if at is None:
+            return ""
+        said = _first_sentences(" ".join(sents[at:]))
+    said = _undash(said).strip()
+    if said and said[-1] not in ".!?":
+        said += "."
+    return said if len(said.split()) >= 4 else ""
+
+
+def conclusions(studies, cited_pmids=()) -> list[dict]:
+    """
+    {"n": study number, "said": conclusion} for every study the verdict
+    leaned on that has one, in study order. Read off the records, so it
+    costs no model call and carries nothing a model wrote.
+    """
+    cited = {str(p) for p in (cited_pmids or ())}
+    out = []
+    for i, s in enumerate(studies or []):
+        if str(s.get("pmid")) in cited:
+            said = conclusion(s)
+            if said:
+                out.append({"n": i + 1, "said": said})
+    return out
+
+
 def narrow_populations(studies, cited_pmids=()) -> list[str]:
     """The distinct narrow groups among the studies a verdict leaned on."""
     cited = {str(p) for p in (cited_pmids or ())}

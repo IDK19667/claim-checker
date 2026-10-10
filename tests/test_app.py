@@ -1205,9 +1205,89 @@ t("the server and the browser render the same breakdown headings",
   _tpl_labels == _js_labels, sorted(_tpl_labels ^ _js_labels))
 t("the browser's renderer runs every sentence through the same ref linking",
   "renderBreakdown(data.breakdown" in _js and "linkStudyRefs(p.assessment" in _js)
+# The one rounded thing in the layer is its Open control, at the controls'
+# radius. Nothing that holds reading is boxed.
+_deeper_css = ((ROOT / "static" / "style.css").read_text()
+               .split("---- The deeper layer")[1].split("---- Sticky share bar")[0])
+_open_rule = re.search(r"\n\.deeper-open \{[^}]*\}", _deeper_css)
 t("nothing in the breakdown is a card, and nothing in it is colour coded",
-  "border-radius" not in (ROOT / "static" / "style.css").read_text()
-  .split("---- The deeper layer")[1].split("---- Sticky share bar")[0])
+  _open_rule is not None and "border-radius: var(--r-control)" in _open_rule.group(0)
+  and "border-radius" not in _deeper_css.replace(_open_rule.group(0), "")
+  and "data-verdict" not in _deeper_css)
+
+# ---- what each study concluded, in its authors' words ----------------------------
+#
+# Read off the abstracts, never written by the model: a labelled conclusion
+# section, or an explicit concluding sentence in an abstract with no headings.
+# Anything less certain is left out rather than guessed at.
+
+
+def _abs(text):
+    return {"pmid": "X", "abstract": text}
+
+
+t("a structured abstract's conclusion section is quoted",
+  evidence.conclusion(_abs("BACKGROUND: Colds are common. RESULTS: Fewer colds. "
+                           "CONCLUSIONS: Vitamin D modestly reduced colds."))
+  == "Vitamin D modestly reduced colds.")
+t("  an inline numbered heading counts too",
+  evidence.conclusion(_abs("(3) Results: 12 trials. (4) Conclusions: Zinc shortened "
+                           "colds by about a day."))
+  == "Zinc shortened colds by about a day.")
+t("  so does the BMJ's heading with no colon",
+  evidence.conclusion(_abs("Results were of moderate quality.Conclusions\xa0Vitamin D "
+                           "supplementation was safe and protected against infection."))
+  == "Vitamin D supplementation was safe and protected against infection.")
+t("  an unstructured abstract is quoted from its concluding sentence",
+  evidence.conclusion(_abs("We pooled six trials. Effects varied. In conclusion, "
+                           "creatine did not change hair loss in these trials."))
+  == "In conclusion, creatine did not change hair loss in these trials.")
+t("  and with no concluding sentence nothing is guessed",
+  evidence.conclusion(_abs("We pooled six trials. We also explore future work.")) == "")
+t("  a headed abstract with no conclusion heading quotes nothing",
+  evidence.conclusion(_abs("BACKGROUND: Colds. RESULTS: In conclusion, it worked.")) == "")
+t("  the registration trailer is dropped and dashes become words",
+  evidence.conclusion(_abs("CONCLUSIONS: Doses of 1000–2000 IU were safe. "
+                           "Trial registration: NCT01234567."))
+  == "Doses of 1000 to 2000 IU were safe.")
+t("  only studies the verdict used, numbered as on the shelf",
+  evidence.conclusions([_abs("CONCLUSIONS: The first trial worked well."),
+                        {**_abs("CONCLUSIONS: The second trial did not."), "pmid": "Y"}],
+                       {"Y"})
+  == [{"n": 2, "said": "The second trial did not."}])
+
+t("the breakdown's head says what is inside it",
+  breakdown.contents({"parts": [1], "concluded": [1], "effect_size": "x",
+                      "applies_to": "y", "unknowns": "z"})
+  == "The claim part by part, each study's own conclusion, how big the effect is "
+     "and who it applies to.")
+t("  and says nothing when there is nothing to say",
+  breakdown.contents({}) == "")
+
+_CON_STUDIES = [{**_BD_STUDIES[0], "pmid": "C1",
+                 "abstract": _BD_STUDIES[0]["abstract"] + " CONCLUSIONS: Vitamin D "
+                 "supplementation was safe and protected against infection overall."},
+                {**_BD_STUDIES[1], "pmid": "C2"}]
+db.put_cached_verdict("conclusions render", "q", "complicated", "Because (Study 1).",
+                      ["C1", "C2"], _CON_STUDIES, tldr="Short take.", still_open="Open.",
+                      breakdown=breakdown.ground(_BD_RAW, _CON_STUDIES, verdict.tidy_prose))
+_conj = P("conclusions render", ip="4.4.4.4").get_json()
+t("the payload carries each used study's conclusion, and the head's contents line",
+  _conj["breakdown"]["concluded"] == [
+      {"n": 1, "said": "Vitamin D supplementation was safe and protected against "
+                       "infection overall."}]
+  and "each study's own conclusion" in _conj["breakdown"]["contents"],
+  _conj["breakdown"].get("concluded"))
+_conh = c.get("/?q=conclusions+render").data.decode()
+t("  the conclusions are server rendered as quotes, labelled by study",
+  "What each study concluded" in _conh
+  and '<blockquote class="said-q">Vitamin D supplementation was safe' in _conh
+  and "Study 1 · " in _conh)
+t("  and the head says what is inside before it is opened",
+  '<span class="deeper-what" id="deeper-what">The claim part by part, each study' in _conh)
+t("  the browser draws the same quotes, never linking inside them",
+  "What each study concluded" in _js and "escapeHtml(c.said)" in _js)
+
 
 # ---- the result screen: a labelled claim, an answer, then the evidence -----------
 #
@@ -1222,10 +1302,10 @@ def _at(needle):
     return _ord.index(needle)
 
 
-t("the result reads claim, verdict, answer, research, still open, evidence, then sources",
+t("the result reads claim, verdict, answer, research, still open, breakdown, evidence, then sources",
   _at("The claim you checked") < _at('id="stamp"') < _at("The short answer")
-  < _at("What the research says") < _at(">Still open<") < _at('id="chart-sec"')
-  < _at("Read the full breakdown") < _at("Studies checked"))
+  < _at("What the research says") < _at(">Still open<") < _at("Read the full breakdown")
+  < _at('id="chart-sec"') < _at("Studies checked"))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
   and "Vitamin D supplements in winter cut colds</h2>" in _ord)

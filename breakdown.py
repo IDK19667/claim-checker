@@ -1554,6 +1554,27 @@ SAYS_MIN = 3
 SAYS_MAX = 5
 
 
+def contents(bd: dict) -> str:
+    """
+    The line under "Read the full breakdown": what is folded inside, so a
+    reader can tell it is worth opening. Names only sections this breakdown
+    has, at most four, the most particular first.
+    """
+    have = [name for name, there in (
+        ("the claim part by part", bd.get("parts")),
+        ("each study's own conclusion", bd.get("concluded")),
+        ("how big the effect is", bd.get("effect_size")),
+        ("who it applies to", bd.get("applies_to") or bd.get("not_applies_to")
+         or bd.get("populations")),
+        ("what is still unknown", bd.get("unknowns")),
+        ("why the verdict is what it is", bd.get("strength")),
+    ) if there][:4]
+    if not have:
+        return ""
+    line = have[0] if len(have) == 1 else ", ".join(have[:-1]) + " and " + have[-1]
+    return line[0].upper() + line[1:] + "."
+
+
 def says(explanation: str, bd: dict, studies: list[dict]) -> list[str]:
     count = len(studies or [])
     if not count or not isinstance(bd, dict):

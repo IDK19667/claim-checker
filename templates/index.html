@@ -362,6 +362,99 @@
 
           <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><b>Still open</b><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
 
+          {# ===== The deeper layer =====
+             Collapsed, always, and straight under what is still open, before
+             the shelf: the answer is above it, and a reader who wants the
+             reasoning meets the way in while still reading, not at the foot of
+             the page. Its head says what is folded inside, so it is worth
+             opening. Server rendered so a shared link and a crawler get the
+             whole thing with no JavaScript, and rebuilt identically by
+             renderBreakdown in static/app.js after a live check. Every sentence
+             the model wrote in here cites a study number and carries no figure
+             that is not in one of the abstracts: breakdown.py drops the rest
+             before it is ever written out. The conclusions are not the model's
+             at all: they are quoted from the abstracts, by evidence.conclusion. #}
+          <details class="deeper" id="deeper"{% if not (result and result.breakdown) %} hidden{% endif %}>
+            <summary class="deeper-head">
+              <span class="deeper-title">
+                <span class="deeper-count" id="deeper-count"{% if not (result and result.breakdown and result.breakdown.rests_on) %} hidden{% endif %}>Rests on <span class="group-count">{% if result and result.breakdown and result.breakdown.rests_on %}{{ result.breakdown.rests_on }} stud{{ "y" if result.breakdown.rests_on == 1 else "ies" }}{% endif %}</span></span>
+                <span class="deeper-name">Read the full breakdown</span>
+                <span class="deeper-what" id="deeper-what">{% if result and result.breakdown %}{{ result.breakdown.contents }}{% endif %}</span>
+              </span>
+              <span class="deeper-open" aria-hidden="true"><span class="when-shut">Open</span><span class="when-open">Close</span></span>
+            </summary>
+            <div class="deeper-body" id="deeper-body">
+              {%- if result and result.breakdown %}{% set bd = result.breakdown %}
+              {%- if bd.parts %}
+              <section class="deeper-sec">
+                <p class="section-label">The claim, part by part</p>
+                <ol class="parts">
+                  {%- for p in bd.parts %}
+                  <li class="part">
+                    <p class="part-claim">{{ p.part }}</p>
+                    <p class="part-take">{{ p.assessment }}</p>
+                  </li>
+                  {%- endfor %}
+                </ol>
+              </section>
+              {%- endif %}
+              {%- if bd.evidence %}
+              <section class="deeper-sec">
+                <p class="section-label">What the evidence shows</p>
+                {%- for para in bd.evidence %}
+                <p class="deeper-p">{{ para }}</p>
+                {%- endfor %}
+                <p class="effect"><b>How big the effect is</b><span>{{ bd.effect_size }}</span></p>
+              </section>
+              {%- endif %}
+              {%- if bd.concluded %}
+              <section class="deeper-sec">
+                <p class="section-label">What each study concluded</p>
+                <ol class="concluded">
+                  {%- for c in bd.concluded %}{% set st = result.studies[c.n - 1] %}
+                  <li class="said">
+                    <p class="said-who">Study {{ c.n }}{% if st.type_label %} · {{ st.type_label }}{% endif %}{% if st.year %} · {{ st.year }}{% endif %}</p>
+                    <blockquote class="said-q">{{ c.said }}</blockquote>
+                  </li>
+                  {%- endfor %}
+                </ol>
+                <p class="said-note">In the authors' own words, from the summary each study was published with.</p>
+              </section>
+              {%- endif %}
+              {%- if bd.strength %}
+              <section class="deeper-sec">
+                <p class="section-label">Why the verdict is what it is</p>
+                <p class="deeper-p">{{ bd.strength }}</p>
+              </section>
+              {%- endif %}
+              {%- if bd.applies_to or bd.not_applies_to or bd.populations %}
+              <section class="deeper-sec">
+                <p class="section-label">Who this applies to</p>
+                {%- if bd.applies_to %}<p class="deeper-p">{{ bd.applies_to }}</p>{% endif %}
+                {#- Read off the records, not written by the model: these are the
+                    narrow groups the cited studies were actually run in. #}
+                {%- if bd.populations %}
+                <p class="deeper-p narrow">Some of this evidence comes from studies
+                  of one group only: {{ bd.populations|join(", ") }}. A result found
+                  in one group may not hold for everyone.</p>
+                {%- endif %}
+                {%- if bd.not_applies_to %}
+                <p class="section-label label-2">And who it does not</p>
+                <p class="deeper-p">{{ bd.not_applies_to }}</p>
+                {%- endif %}
+              </section>
+              {%- endif %}
+              {%- if bd.unknowns %}
+              <section class="deeper-sec">
+                <p class="section-label">What is still unknown</p>
+                <p class="deeper-p">{{ bd.unknowns }}</p>
+              </section>
+              {%- endif %}
+              <p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>
+              {%- endif %}
+            </div>
+          </details>
+
           {# The evidence, as a chart rather than a row of marks. Heights are
              the three tiers and nothing else, so two charts of the same set
              are always the same drawing. Counted on the server in
@@ -389,77 +482,6 @@
         </article>
       </div>
 
-      {# ===== The deeper layer =====
-         Collapsed, always. The three lines above it are the answer; this is
-         for the reader who wants to understand it, and it must never push
-         them down the page to get there. Server rendered so a shared link
-         and a crawler get the whole thing with no JavaScript, and rebuilt
-         identically by renderBreakdown in static/app.js after a live check.
-         Every sentence in here cites a study number and carries no figure
-         that is not in one of the abstracts: breakdown.py drops the rest
-         before it is ever written out. #}
-      <details class="deeper" id="deeper"{% if not (result and result.breakdown) %} hidden{% endif %}>
-        <summary class="deeper-head">
-          <span class="group-name">Read the full breakdown</span>
-          <span class="group-count">{% if result and result.breakdown and result.breakdown.rests_on %}{{ result.breakdown.rests_on }} stud{{ "y" if result.breakdown.rests_on == 1 else "ies" }}{% endif %}</span>
-        </summary>
-        <div class="deeper-body" id="deeper-body">
-          {%- if result and result.breakdown %}{% set bd = result.breakdown %}
-          {%- if bd.parts %}
-          <section class="deeper-sec">
-            <p class="section-label">The claim, part by part</p>
-            <ol class="parts">
-              {%- for p in bd.parts %}
-              <li class="part">
-                <p class="part-claim">{{ p.part }}</p>
-                <p class="part-take">{{ p.assessment }}</p>
-              </li>
-              {%- endfor %}
-            </ol>
-          </section>
-          {%- endif %}
-          {%- if bd.evidence %}
-          <section class="deeper-sec">
-            <p class="section-label">What the evidence shows</p>
-            {%- for para in bd.evidence %}
-            <p class="deeper-p">{{ para }}</p>
-            {%- endfor %}
-            <p class="effect"><b>How big the effect is</b><span>{{ bd.effect_size }}</span></p>
-          </section>
-          {%- endif %}
-          {%- if bd.strength %}
-          <section class="deeper-sec">
-            <p class="section-label">Why the verdict is what it is</p>
-            <p class="deeper-p">{{ bd.strength }}</p>
-          </section>
-          {%- endif %}
-          {%- if bd.applies_to or bd.not_applies_to or bd.populations %}
-          <section class="deeper-sec">
-            <p class="section-label">Who this applies to</p>
-            {%- if bd.applies_to %}<p class="deeper-p">{{ bd.applies_to }}</p>{% endif %}
-            {#- Read off the records, not written by the model: these are the
-                narrow groups the cited studies were actually run in. #}
-            {%- if bd.populations %}
-            <p class="deeper-p narrow">Some of this evidence comes from studies
-              of one group only: {{ bd.populations|join(", ") }}. A result found
-              in one group may not hold for everyone.</p>
-            {%- endif %}
-            {%- if bd.not_applies_to %}
-            <p class="section-label label-2">And who it does not</p>
-            <p class="deeper-p">{{ bd.not_applies_to }}</p>
-            {%- endif %}
-          </section>
-          {%- endif %}
-          {%- if bd.unknowns %}
-          <section class="deeper-sec">
-            <p class="section-label">What is still unknown</p>
-            <p class="deeper-p">{{ bd.unknowns }}</p>
-          </section>
-          {%- endif %}
-          <p class="fine">Every sentence above names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>
-          {%- endif %}
-        </div>
-      </details>
 
       <div class="actions">
         <button class="secondary" id="share-btn" type="button">

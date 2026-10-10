@@ -574,7 +574,7 @@ function renderNextSteps(ns, claim) {
 // this point has already been through the gate in breakdown.py, which dropped
 // anything without a study number and anything carrying a figure the abstracts
 // do not have. This only lays it out.
-function renderBreakdown(bd, count) {
+function renderBreakdown(bd, count, studies = []) {
   const wrap = $("deeper");
   if (!wrap) return;
   const body = $("deeper-body");
@@ -607,6 +607,19 @@ function renderBreakdown(bd, count) {
       bd.evidence.map(prose).join("") +
       `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bd.effect_size || "", count)}</span></p>`));
   }
+  // Quoted from the abstracts on the server, so the quote is escaped and never
+  // linked: a "study 2" inside it is the authors' study 2, not ours.
+  if ((bd.concluded || []).length) {
+    out.push(sec("What each study concluded", `<ol class="concluded">${bd.concluded.map((c) => {
+      const st = studies[c.n - 1] || {};
+      const who = [`Study ${c.n}`, st.type_label, st.year].filter(Boolean).join(" · ");
+      return `
+      <li class="said">
+        <p class="said-who">${linkStudyRefs(who, count)}</p>
+        <blockquote class="said-q">${escapeHtml(c.said)}</blockquote>
+      </li>`;
+    }).join("")}</ol><p class="said-note">In the authors' own words, from the summary each study was published with.</p>`));
+  }
   if (bd.strength) out.push(sec("Why the verdict is what it is", prose(bd.strength)));
   // The narrow groups come off the PubMed records on the server, so this
   // prints a list rather than prose: no refs to link, nothing to gate.
@@ -622,7 +635,7 @@ function renderBreakdown(bd, count) {
         : "")));
   }
   if (bd.unknowns) out.push(sec("What is still unknown", prose(bd.unknowns)));
-  out.push(`<p class="fine">Every sentence above names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>`);
+  out.push(`<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>`);
   body.innerHTML = out.join("");
 
   const head = wrap.querySelector(".deeper-head .group-count");
@@ -631,6 +644,8 @@ function renderBreakdown(bd, count) {
       ? `${bd.rests_on} ${bd.rests_on === 1 ? "study" : "studies"}`
       : "";
   }
+  $("deeper-count").hidden = !bd.rests_on;
+  $("deeper-what").textContent = bd.contents || "";
 }
 
 // The pen ring is drawn round the words, not the column, so a short verdict
@@ -687,7 +702,7 @@ function renderResult(data) {
   renderSays(data);
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
-  renderBreakdown(data.breakdown, data.studies.length);
+  renderBreakdown(data.breakdown, data.studies.length, data.studies);
 
   const n = data.studies.length;
   const cited = data.studies.filter((s) => s.cited_in_verdict).length;

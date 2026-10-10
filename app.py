@@ -15,6 +15,7 @@ import requests
 from flask import (Flask, Response, g, jsonify, redirect, render_template, request,
                    send_from_directory)
 
+import breakdown as breakdown_mod
 import db
 import evidence
 import og
@@ -568,6 +569,12 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None):
     cited = set(cited_studies or [])
+    if breakdown:
+        # Added on the way out rather than stored, so a check cached before
+        # these existed gets them too: each relied-on study's conclusion in
+        # its authors' words, and the line saying what the fold holds.
+        breakdown = {**breakdown, "concluded": evidence.conclusions(studies, cited)}
+        breakdown["contents"] = breakdown_mod.contents(breakdown)
     return {
         "claim": claim,
         # What the reader typed, present only when its spelling was fixed
