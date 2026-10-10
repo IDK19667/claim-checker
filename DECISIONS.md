@@ -115,6 +115,32 @@ so the proof and the footage cannot disagree, and it is left out rather
 than invented if that file is missing. Every answer ends on a link back
 to the claim box, which also puts the cursor in it.
 
+**Captions hold for five notches.** Walking the fly-through one wheel
+notch (120px) at a time showed the captions were sized in screen
+heights and nothing else: "writing it up" was at full strength for 85px
+on a desktop and 56px on a phone, so a single notch could carry a reader
+straight past it, and the opening caption blinked out and back between
+its two beats. A caption now holds at full strength for at least 640px
+of scroll (five notches with room to spare) at any screen height. The
+engine stretches a beat that is too short for that, so the clip under
+it plays slower, rather than the beats being hand-tuned for one screen
+and failing on the next. The fades were tightened to the first and last
+tenth of each beat (the text-free beats after them still keep every
+crossfade clean) and the opening caption no longer fades between its
+two beats, which keeps the stretch down. The cost is length: the
+distance a reader scrolls through the section grows from about 4,500px
+to 6,700px on a 900px desktop and from 3,000px to 5,700px on an 812px
+phone. `READ_PX` in flight.js is the one number to turn if that proves
+too long. Changing beats.json also changes the footage fingerprint, so a
+returning visitor downloads the frames once more. scripts/qa.mjs now walks
+the section in 120, 240 and 360px flicks on a desktop and a touch phone
+(every caption reaches full strength at every size and holds for five
+120px flicks), measures every piece of text over the footage against
+the frame under it at each stop (worst stop at least 3.5:1), and loads
+the page with every footage URL refused (claim box, captions and the
+trust section still there, nothing stuck on "Loading", no errors but
+the refused requests).
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

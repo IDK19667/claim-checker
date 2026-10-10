@@ -804,16 +804,66 @@
     return isMobile && typeof m.vh === "number" ? m.vh : b.vh;
   }
 
+  // A sentence over the footage stays at full strength for at least this much
+  // scroll, at any screen height: five notches of a mouse wheel, with room to
+  // spare. A beat too short for that is stretched, so the clip under it plays
+  // slower, rather than the words flashing past between two notches.
+  var READ_PX = 640;
+
+  // How much of a beat its caption spends at full strength: all of it with no
+  // fade, the stretch between the fades otherwise, none without a chapter.
+  function heldShare(b) {
+    if (!b.chapter) return 0;
+    return b.fade ? b.fade.out - b.fade.in : 1;
+  }
+
+  // Beats in a row under one caption, with no fade between them, are read as
+  // one stretch, so the floor applies to the stretch, not to each beat.
+  function captionRuns() {
+    var runs = [];
+    beats.beats.forEach(function (b, i) {
+      if (!b.chapter) return;
+      var prev = beats.beats[i - 1];
+      var joins = runs.length > 0 && prev && prev.chapter === b.chapter &&
+        !(prev.fade && prev.fade.out < 1) && !(b.fade && b.fade.in > 0);
+      if (joins) runs[runs.length - 1].push(i);
+      else runs.push([i]);
+    });
+    return runs;
+  }
+
+  function beatSizes(vh) {
+    var base = beats.beats.map(function (b) { return beatVh(b) * vh; });
+    var runs = captionRuns();
+    var sizes = base.slice();
+    // The section scrolls through its height less one screen, so how far a
+    // caption holds depends on the total, which depends on the stretching. A
+    // few passes settle it.
+    for (var pass = 0; pass < 4; pass++) {
+      var sum = sizes.reduce(function (s, x) { return s + x; }, 0);
+      var travel = Math.max(0.01, (sum - window.innerHeight) / sum);
+      sizes = base.slice();
+      runs.forEach(function (run) {
+        var held = run.reduce(function (s, i) { return s + heldShare(beats.beats[i]) * base[i]; }, 0) * travel;
+        if (held > 0 && held < READ_PX) {
+          run.forEach(function (i) { sizes[i] = base[i] * READ_PX / held; });
+        }
+      });
+    }
+    return sizes;
+  }
+
   function layout() {
     isMobile = window.innerWidth < 700;
     var vh = window.innerHeight / 100;
 
-    var heightPx = beats.beats.reduce(function (sum, b) { return sum + beatVh(b) * vh; }, 0);
+    var sizes = beatSizes(vh);
+    var heightPx = sizes.reduce(function (sum, x) { return sum + x; }, 0);
     travelPx = Math.max(1, heightPx - window.innerHeight);
 
     var at = 0;
-    plan = beats.beats.map(function (b) {
-      var share = (beatVh(b) * vh) / heightPx;
+    plan = beats.beats.map(function (b, i) {
+      var share = sizes[i] / heightPx;
       var px = share * travelPx;
       var row = { b: b, start: at, end: at + px };
       at += px;

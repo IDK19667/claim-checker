@@ -430,6 +430,212 @@ for (const v of VIEWS) {
   console.log("pause when unseen: hidden tab, band scrolled away, looping dot out of view, reduced motion: ran");
 }
 
+// ---- captions under flicks, and text over the footage ------------------------
+// Walks the fly-through in flicks of 120, 240 and 360px, on a desktop and on
+// a touch phone. Every caption has to reach full strength at every flick size,
+// and at 120px (one wheel notch) stay there for at least five flicks. At each
+// 120px stop, every piece of text drawn over the footage is measured against
+// the frame actually under it, and the worst stop has to clear 3.5:1.
+const OVER_FOOTAGE = () => {
+  const c = document.getElementById("flight-canvas");
+  const cr = c.getBoundingClientRect();
+  const g = c.getContext("2d");
+  const parse = (s) => { const m = s.match(/[\d.]+/g) || ["0", "0", "0", "0"]; return [+m[0], +m[1], +m[2], m.length > 3 ? +m[3] : 1]; };
+  const lum = (p) => { const [r, gg, b] = p.slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * gg + 0.0722 * b; };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3]));
+  const mix = (a, b, o) => [0, 1, 2].map((i) => a[i] * o + b[i] * (1 - o));
+  const out = [];
+  for (const el of document.querySelectorAll("body *")) {
+    if (!el.closest(".flight-stage") && getComputedStyle(el).position !== "fixed" && !el.closest(".top")) continue;
+    const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+    if (!own) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || getComputedStyle(el).visibility !== "visible") continue;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const stack = document.elementsFromPoint(cx, cy);
+    if (!stack.length || !el.contains(stack[0]) || !stack.includes(c)) continue;
+    // The layers between the frame and the glyph: every box from the text up
+    // to the first one that also holds the canvas, each with its own
+    // background and its own opacity.
+    const chain = [];
+    for (let n = el; n && !n.contains(c); n = n.parentElement) chain.unshift(n);
+    const styles = chain.map((n) => {
+      const cs = getComputedStyle(n), b = n.getBoundingClientRect();
+      const covers = cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
+      return { o: parseFloat(cs.opacity), bg: covers ? parse(cs.backgroundColor) : [0, 0, 0, 0], color: parse(cs.color) };
+    });
+    const strength = styles.reduce((s, x) => s * x.o, 1);
+    if (strength < 0.99) continue;
+    const render = (P, k, text) => {
+      const s = styles[k];
+      const back = over(s.bg, P);
+      const inner = k === styles.length - 1 ? (text ? over(s.color, back) : back) : render(back, k + 1, text);
+      return mix(inner, P, s.o);
+    };
+    let worst = Infinity;
+    const sx = c.width / cr.width, sy = c.height / cr.height;
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) {
+      const x = Math.max(cr.left, Math.min(cr.right - 1, r.left + r.width * (i + 0.5) / 6));
+      const y = Math.max(cr.top, Math.min(cr.bottom - 1, r.top + r.height * (j + 0.5) / 3));
+      const d = g.getImageData(Math.floor((x - cr.left) * sx), Math.floor((y - cr.top) * sy), 1, 1).data;
+      const P = [d[0], d[1], d[2]];
+      worst = Math.min(worst, ratio(render(P, 0, true), render(P, 0, false)));
+    }
+    out.push({ text: el.textContent.trim().replace(/\s+/g, " ").slice(0, 30), ratio: worst });
+  }
+  return out;
+};
+const settle = (page) => page.evaluate(() => new Promise((done) => {
+  // Three refreshes: the scroll event, the tick it wakes, and the paint.
+  requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(done)));
+}));
+for (const view of [
+  { name: "desktop", opts: { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 } },
+  { name: "touch phone", opts: { viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+]) {
+  const where = `flicks, ${view.name}`;
+  const ctx = await browser.newContext(view.opts);
+  const page = await ctx.newPage();
+  const errors = [];
+  const frames = [];
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("request", (r) => { if (/\.(avif|bundle)(\?|$)/.test(r.url())) frames.push(r.url()); });
+  await page.goto(`${base}/`, { waitUntil: "load" });
+  // The claim box is usable before any footage: a phone has asked for no
+  // frame but the one still poster under the box, and a tap puts the cursor
+  // in the box.
+  if (view.opts.hasTouch) {
+    await page.waitForTimeout(800);
+    const poster = await page.evaluate(() => {
+      const m = (document.querySelector(".flight-stage")?.getAttribute("style") || "").match(/url\('([^']+)'\)/);
+      return m ? new URL(m[1], location.href).href : "";
+    });
+    const early = frames.filter((u) => u !== poster);
+    if (early.length) note(where, "phone budget", `${early.length} footage request(s) before the first scroll, e.g. ${early[0]}`);
+    await page.tap("#claim-input");
+    if (!(await page.evaluate(() => document.activeElement && document.activeElement.id === "claim-input"))) {
+      note(where, "touch", "tapping the claim box did not focus it");
+    }
+    await page.evaluate(() => document.activeElement.blur());
+  }
+  await page.evaluate(() => window.scrollTo(0, 1));
+  await page.waitForFunction(() => document.getElementById("flight-canvas").hasAttribute("data-drawn"), null, { timeout: 30000 })
+    .catch(() => note(where, "footage", "no frame drawn within 30s"));
+  await page.waitForFunction(() => { const p = document.getElementById("flight-progress"); return p && p.hidden; },
+    null, { timeout: 90000 }).catch(() => note(where, "footage", "still loading after 90s"));
+  const span = await page.evaluate(() => {
+    const f = document.getElementById("flight");
+    return { top: f.offsetTop, end: f.offsetTop + f.offsetHeight - innerHeight, ids: [...f.querySelectorAll(".chapter")].map((c) => c.id) };
+  });
+  const held = {};
+  let worst = { ratio: Infinity, text: "", y: 0 };
+  for (const step of [120, 240, 360]) {
+    const reached = new Set();
+    const run = {};
+    let last = null, streak = 0;
+    for (let y = span.top; y <= span.end + step; y += step) {
+      await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+      await settle(page);
+      const s = await page.evaluate(() => {
+        const zone = document.querySelector(".chapter-zone");
+        const on = document.querySelector(".chapter[data-on='1']");
+        return { id: on ? on.id : null, op: on && zone && zone.style.opacity !== "" ? parseFloat(zone.style.opacity) : 0 };
+      });
+      const full = s.id && s.op >= 0.99 ? s.id : null;
+      streak = full && full === last ? streak + 1 : full ? 1 : 0;
+      last = full;
+      if (full) {
+        run[full] = Math.max(run[full] || 0, streak);
+        // The first time a caption is at full strength, let its fade finish
+        // and confirm the page really draws it that way.
+        if (step === 120 && !reached.has(full)) {
+          await page.waitForTimeout(450);
+          const shown = await page.evaluate((id) => {
+            const zone = document.querySelector(".chapter-zone");
+            return parseFloat(getComputedStyle(zone).opacity) * parseFloat(getComputedStyle(document.getElementById(id)).opacity);
+          }, full);
+          if (shown < 0.99) note(where, "caption", `${full} is meant to be at full strength but draws at ${shown.toFixed(2)}`);
+        }
+        reached.add(full);
+      }
+      if (step === 120) {
+        await page.waitForFunction(() => { const st = window.__flightStats; return Math.abs(st.wanted - st.drawn) <= 2; },
+          null, { timeout: 2000 }).catch(() => {});
+        for (const t of await page.evaluate(OVER_FOOTAGE)) {
+          if (t.ratio < worst.ratio) worst = { ...t, y };
+        }
+      }
+    }
+    for (const id of span.ids) {
+      if (!reached.has(id)) note(where, "caption skipped", `${id} never reaches full strength in ${step}px flicks`);
+      if (step === 120) {
+        held[id] = run[id] || 0;
+        if ((run[id] || 0) < 5) note(where, "caption too short", `${id} holds for ${run[id] || 0} flick(s) of 120px, needs 5`);
+      }
+    }
+  }
+  if (worst.ratio < 3.5) note(where, "text over footage", `"${worst.text}" falls to ${worst.ratio.toFixed(2)}:1 at ${worst.y}px`);
+  console.log(`flicks, ${view.name}: 120px flicks each caption holds: ${span.ids.map((id) => `${id.replace("ch-", "")} ${held[id]}`).join(", ")}; ` +
+    `section ${span.end - span.top + 0}px of scroll; worst text over footage ${worst.ratio === Infinity ? "none found" : `${worst.ratio.toFixed(2)}:1 ("${worst.text}")`}`);
+  errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+  await ctx.close();
+}
+
+// ---- the page with no footage at all ------------------------------------------
+// Every footage URL refused, as a slow or filtering network might. The page
+// is still whole: the claim box works, the words are all there, nothing says
+// it is loading forever, and the only errors are the refused requests.
+for (const view of [
+  { name: "desktop", opts: { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 } },
+  { name: "touch phone", opts: { viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+]) {
+  const where = `footage blocked, ${view.name}`;
+  const ctx = await browser.newContext(view.opts);
+  await ctx.route(/\/(footage|static\/footage|static\/flight)\//, (r) => r.abort());
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(`${base}/`, { waitUntil: "load" });
+  await page.evaluate(() => window.scrollTo(0, 1));
+  await page.waitForTimeout(2500);
+  const v = await page.evaluate(() => {
+    const shown = (e) => {
+      if (!e) return false;
+      for (let n = e; n && n !== document.body; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) < 0.5) return false;
+      }
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const p = document.getElementById("flight-progress");
+    return {
+      input: shown(document.getElementById("claim-input")),
+      trust: shown(document.getElementById("trust")),
+      loading: shown(p),
+      chapters: [...document.querySelectorAll(".chapter p")].filter((n) => n.textContent.trim()).length,
+      scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
+    };
+  });
+  if (!v.input) note(where, "claim box", "not visible");
+  if (!v.trust) note(where, "trust section", "not visible");
+  if (v.chapters < 5) note(where, "captions", `${v.chapters} of 5 captions in the page`);
+  if (v.scrollW > v.innerW + 1) note(where, "horizontal scroll", `${v.scrollW} > ${v.innerW}`);
+  // Scroll to the box the way a reader would, then type into it.
+  await page.locator("#claim-input").scrollIntoViewIfNeeded();
+  if (view.opts.hasTouch) await page.tap("#claim-input"); else await page.click("#claim-input");
+  await page.keyboard.type("Vitamin C prevents colds");
+  if ((await page.inputValue("#claim-input")) !== "Vitamin C prevents colds") note(where, "claim box", "typing did not reach the box");
+  if (v.loading) note(where, "stuck loading", "the loading note is still up with no footage coming");
+  await page.screenshot({ path: `/tmp/qa-footage-blocked-${view.name.replace(/\s/g, "-")}.png` });
+  errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+  await ctx.close();
+}
+console.log("footage blocked: claim box, captions, trust section and console checked on desktop and a touch phone");
+
 await browser.close();
 
 tokenDrift().forEach((d) => note("tokens", "design system drift", d));

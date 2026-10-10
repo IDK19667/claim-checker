@@ -19,7 +19,7 @@
    "from": 0.0,
    "to": 4.2,
    "chapter": "ch-claim",
-   "fade": { "in": 0.1, "out": 0.75 },
+   "fade": { "in": 0, "out": 0.85 },
    "mobile": { "vh": 52, "focusX": 0.5 },
    "why": "The headline, the claim and the input, fading out before the crossfade so the last stretch of the claim clip plays clean."
   },
@@ -50,7 +50,7 @@
    "from": 6.5,
    "to": 10.2,
    "chapter": "ch-archive",
-   "fade": { "in": 0.12, "out": 0.8 },
+   "fade": { "in": 0.1, "out": 0.9 },
    "mobile": { "vh": 46, "focusX": 0.5 },
    "why": "Stepping back into the archive: the real PubMed query appears here, before a single study has arrived."
   },
@@ -81,7 +81,7 @@
    "from": 12.4,
    "to": 15.7,
    "chapter": "ch-weighing",
-   "fade": { "in": 0.12, "out": 0.8 },
+   "fade": { "in": 0.1, "out": 0.9 },
    "mobile": { "vh": 41, "focusX": 0.5 },
    "why": "The headline arrives as studies start stacking underneath (continuous weighing-stage progress), so the words and the visual proof appear together. This stage runs across two crossfaded sub-clips (a cropped close shot, then the wider one); the internal cut needs no transition marker of its own since nothing here is ever text over a cut."
   },
@@ -112,7 +112,7 @@
    "from": 17.7,
    "to": 18.8,
    "chapter": "ch-write",
-   "fade": { "in": 0.12, "out": 0.75 },
+   "fade": { "in": 0.1, "out": 0.9 },
    "mobile": { "vh": 14, "focusX": 0.5 },
    "why": "The shortest real clip in the sequence: a hand annotating the research notes that became this verdict. The evidence bar and the stack stay up, already graded, while this headline names what happens to them next."
   },
@@ -143,7 +143,7 @@
    "from": 20.1,
    "to": 21.9,
    "chapter": "ch-publish",
-   "fade": { "in": 0.12, "out": 0.75 },
+   "fade": { "in": 0.1, "out": 0.9 },
    "mobile": { "vh": 23, "focusX": 0.5 },
    "why": "The open-access page this whole sequence has been building toward: not a lab shot, a public record."
   },

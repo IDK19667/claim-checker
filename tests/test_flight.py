@@ -226,6 +226,10 @@ if beats_path.exists():
       all(0 <= b["fade"]["in"] < b["fade"]["out"] <= 1 for b in bs if "fade" in b))
     t("a fade window only ever appears on a beat that has a chapter to fade",
       all(b.get("chapter") for b in bs if "fade" in b))
+    t("a caption carried across two beats does not blink out between them",
+      all(not ("fade" in bs[i] and bs[i]["fade"]["out"] < 1) and not ("fade" in bs[i + 1] and bs[i + 1]["fade"]["in"] > 0)
+          for i in range(len(bs) - 1) if bs[i].get("chapter") and bs[i].get("chapter") == bs[i + 1].get("chapter")),
+      [bs[i + 1]["id"] for i in range(len(bs) - 1) if bs[i].get("chapter") and bs[i].get("chapter") == bs[i + 1].get("chapter")])
 else:
     print("SKIP beats.json checks: static/flight/beats.json is missing")
 
@@ -617,6 +621,18 @@ t("  a reader who opens with reduced motion fetches no footage until it is off",
 t("  a rotation remeasures the stage, but only while the footage shows",
   'addEventListener("resize", remeasure)' in _fj and 'addEventListener("orientationchange", remeasure)' in _fj
   and "if (!armed || !ready) return;" in _fj.split("function remeasure()")[1][:200])
+
+# A caption holds long enough to read: at least five wheel notches of 120px
+# at full strength, at any screen height (scripts/qa.mjs walks it).
+_read = re.search(r"var READ_PX = (\d+);", _fj)
+t("a caption holds at full strength for at least five 120px wheel notches",
+  bool(_read) and int(_read.group(1)) >= 5 * 120, _read and _read.group(1))
+_layout = _fj.split("function layout() {")[1].split("function stageProgress(")[0]
+t("  and the timeline is built from the stretched sizes, not the raw beat heights",
+  "var sizes = beatSizes(vh);" in _layout and "sizes[i] / heightPx" in _layout
+  and "beatVh(b) * vh" not in _layout)
+t("  the floor is measured on the whole caption, across beats that share it",
+  "function captionRuns()" in _fj and "READ_PX / held" in _fj.split("function beatSizes(")[1][:1200])
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
