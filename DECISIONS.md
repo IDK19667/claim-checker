@@ -4,6 +4,49 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-10 (later): The footage takes the room's colour, and the shelf stops fading
+
+Two refinements inside the reading room, which the user asked for
+together after a look over every screen.
+
+**Every frame of footage now carries one grade.** Round 5 dropped the
+saturation ramp and let the clips play at native colour because no story
+needed a grade. The new world gives a reason the old one lacked: the
+room has no colour of its own but a faint green, and the opening clip's
+cyan phone glow and a blue lab stand were the only cyan on the site,
+the exact cue the user had already called AI slop. `--grade` is
+`grayscale(1) sepia(0.2) hue-rotate(100deg)`, a toned monochrome, chosen
+from four variants simulated on six real frames (a desaturate left the
+blue in; a stronger tint went mint; a plain grey lost the room). It is a
+CSS filter, so the frames on disk stay ungraded and the build script's
+"no grade" stays true of the files. It moves colour only: the measured
+mean level went from 43.6 to 44.1, so the no-darkening, no-scrim rule
+holds. The canvas, the poster (moved to its own layer so the grade never
+touches the panels), the fallback stills and the result band's clips all
+carry it, so nothing switches colour between them.
+
+**Four boxes over the footage became two.** The standing note and the
+skip link were separate floating boxes at the bottom. They are now the
+bottom row of the claim panel, across a hairline, with "Skip to the
+checker" as the row's last cell, so the footage reads as one caption and
+one panel.
+
+**Nothing on the shelf is faded any more.** Read-but-not-used books stood
+back at 45%, which turned every cloth into a pale version of itself: a
+strong study that wasn't relied on looked like a weak one, and the key
+stopped matching the shelf. Now every book keeps its cloth, and a
+relied-on book carries a band of silver foil at its head (the two foil
+rules join into one), the way a library marks a volume, plus the green
+dot. Books are at most 46px wide with 2px between them, so five studies
+stand as a short row and not a bar chart, and the row ends at a wooden
+bookend. The gap lives inside each button, so no strip is dead to a
+finger.
+
+**The small shelves carry no band.** On the 20px mini shelves and the
+share card's shelf a band on a 5px spine read as the letter "i". Those
+show every book in its cloth, and the count of relied-on studies stays in
+the words beside them.
+
 ## 2026-10-10 (redesign): The reading room after hours
 
 The blue and white ticket is replaced by night and day: a charcoal night

@@ -304,7 +304,11 @@ components:
     backgroundColor: "{colors.spine-light}"
   spine-shade:
     backgroundColor: "{colors.spine-shade}"
+  spine-band:
+    backgroundColor: "{colors.on-cloth}"
   shelf:
+    backgroundColor: "{colors.wood}"
+  bookend:
     backgroundColor: "{colors.wood}"
   caption-plate:
     backgroundColor: "{colors.plate}"
@@ -446,21 +450,29 @@ in shapes: "Based on 7 studies, 2 used for this verdict, 4 strong".
   is lettered. A word that cannot stand up on its book is left off,
   never cut: `fitSpines()` hides it, and the tip and the key carry it.
   A retracted book is never lettered; the hatch and the key say it.
-- **Standing forward is whether the verdict relied on it.** Relied on is
-  full strength with a small green dot above; read but not used stands
-  back at 45%.
+- **A silver band is whether the verdict relied on it.** On a relied-on
+  book the two foil rules at the head become one band of silver foil
+  (`--on-cloth` to `--rule-2` and back), the way a library marks a volume,
+  with a small green dot above. Nothing is ever faded: every book keeps
+  its cloth, so the colour always says the kind of study and the key
+  always matches what is on the shelf.
 
 Under each book its study number, 01 to 08, the number the prose points
 at and the list carries. A book is a `<button>`: pressing one marks it,
 opens the matching study and scrolls to it. Hover and focus open a small
-ink tip with the type and year. The columns tile edge to edge so no part
-of the shelf is dead to a finger. A key under the shelf names only the
-cloths present.
+ink tip with the type and year. **A book is as wide as a book:** a column
+is 46px at most, 2px between spines, so five studies stand as a short
+row and never stretch into a bar chart. The row ends at a **bookend**, a
+9px slab of the ledge's wood half the shelf's height, and the rest of the
+ledge is empty shelf. The gap between books is padding inside each
+button, so no strip between them is dead to a finger; eight books shrink
+to fit a phone. A key under the shelf names only the cloths present.
 
-The **mini shelf** on each of the latest checks is the same shelf at
-20px: the same heights, the same cloth, the relied-on books at full
-strength. A reader can see the shape of the evidence before opening a
-check.
+The **mini shelf** on each of the latest checks, and on the share card, is
+the same shelf at 20px: the same heights, every book in its cloth. It
+carries no band: at 5px wide a band reads as a letter, not a band, so
+how many were relied on is the line of words beside it. A reader can see
+the shape of the evidence before opening a check.
 
 ## Structure
 
@@ -513,10 +525,20 @@ The home page opens on a fly-through: real footage of one real check,
 replayed, and it says so on the clip in every state. It is not a mood film
 and not a generated hero; it is a recording of the thing the page does.
 
-Captions over the footage sit on a plate of the night stock (`--plate`,
-80%) so they hold their contrast over any frame; the claim panel is an
-opaque panel. No glass, no backdrop blur, no glow. "Skip to the checker"
-is the inverted light shape, visible throughout.
+**Every frame carries one grade** (`--grade`: grayscale, then a 20% sepia
+turned 100 degrees into the night's green): a toned monochrome, so a
+stock clip never brings its own colour into the room (the opening clip's
+cyan phone glow, a blue lab stand). It moves colour only, never
+exposure: measured on real frames, the average level is unchanged. The
+canvas, the poster, the fallback stills and the result band's clips all
+carry it, so footage and stills always match.
+
+**Two panels over the footage, no more.** Captions sit on a plate of the
+night stock (`--plate`, 80%) top left, so they hold their contrast over
+any frame. The claim panel sits bottom left, opaque, and its bottom row,
+across one hairline, carries the standing line ("Illustrative footage. A
+real check, replayed") and, as the row's last cell, "Skip to the
+checker", on screen at every stage. No glass, no backdrop blur, no glow.
 
 A check does not replay the fly-through. It stands down, and a band of
 footage across the top of the report (30vh on a phone) shows the stage of

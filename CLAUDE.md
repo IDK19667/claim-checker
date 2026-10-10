@@ -86,7 +86,9 @@ build step is a feature: anyone can read the shipped file.
 - Night (`--deep`) and day (`--paper`) are the only two grounds. A night
   surface runs to the screen edges by the border-image rule at the top of
   `style.css`; never by negative margins, box shadows or clip-path, which
-  leave hairlines. No glow, no neon, no cyan.
+  leave hairlines. No glow, no neon, no cyan. Every frame of footage
+  carries `--grade` (colour only, never exposure), so a stock clip never
+  brings its own colour into the room.
 - Fonts are self-hosted in `static/fonts/woff2/`. Don't reintroduce a
   Google Fonts link: it costs a third-party connection and breaks
   offline first paint.
