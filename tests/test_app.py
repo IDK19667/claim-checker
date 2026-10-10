@@ -483,7 +483,7 @@ _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
   'id="chart-sec"' in _res and 'class="barcol' in _res
   and "barcol-bar h-moderate" in _res and "Based on 3 studies" in _res
-  and 'id="chart-desc"' in _res and "Each bar is one study, numbered as in the list." in _res)
+  and 'id="chart-desc"' in _res and "Each book is one study, numbered as in the list." in _res)
 
 # ---- type-ahead over checked claims ----------------------------------------------
 import suggest as suggest_mod  # noqa: E402
@@ -1371,9 +1371,20 @@ t("  the cloth says what kind of study it is, and nothing is coloured by verdict
 t("  a spine word that cannot stand up on its book is left off, never cut",
   "function fitSpines" in _js and "fitSpines();" in _bar_js
   and ".h-retracted .barcol-spine { display: none; }" in _css)
-t("a bar is at least a finger tall, and the columns leave no dead space",
+t("a bar is at least a finger tall, and the gap between books is inside the "
+  "button, so no strip between them is dead to a finger",
   int(re.search(r"--plot-h: (\d+)px", _chart_css).group(1)) >= 44
-  and "padding: 0 3px" in _chart_css)
+  and ".barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 1px; }" in _chart_css)
+t("a book is as wide as a book: columns stop at 46px and the row ends at a "
+  "bookend, so a short list never stretches into a bar chart",
+  "flex: 0 1 46px;" in _chart_css and ".chart-bars::after {" in _chart_css)
+t("nothing on a shelf is faded: every book keeps its cloth, and a relied-on "
+  "book is marked by a silver band at the head instead",
+  not re.search(r"barcol-bar[^{]*\{[^}]*opacity", _chart_css.split("@keyframes bar-grow")[0])
+  and "opacity" not in _css.split(".mini {")[1].split("/* Before you trust")[0]
+  and ".is-used .barcol-bar::before {" in _chart_css
+  and "globalAlpha" not in _js
+  and "A silver band and a dot mark the ones this verdict used." in (ROOT / "templates" / "index.html").read_text())
 _grow = _css.split("@keyframes bar-grow")[1].split("}")[0]
 t("the reveal moves transform and opacity only",
   "transform" in _grow and "opacity" in _grow

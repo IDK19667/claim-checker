@@ -1327,15 +1327,15 @@ async function renderShareCard(r) {
   }
 
   // a mini shelf of the studies read, as in Latest checks
-  const books = r.studies.map((s) => ({ kind: kindOf(s), tier: s.tier || "moderate", used: s.cited_in_verdict }))
+  const books = r.studies.map((s) => ({ kind: kindOf(s), tier: s.tier || "moderate" }))
     .sort((a, b) => Object.keys(CARD.cloth).indexOf(a.kind) - Object.keys(CARD.cloth).indexOf(b.kind));
   const shelfBase = S - 112, H = { strong: 56, moderate: 40, weak: 25, retracted: 25 };
+  // every book in its cloth, as in Latest checks: how many were relied on is
+  // the line at the head of the card
   books.forEach((b, i) => {
-    ctx.globalAlpha = b.used ? 1 : 0.45;
     ctx.fillStyle = CARD.cloth[b.kind] || CARD.ink3;
     ctx.fillRect(pad + 4 + i * 17, shelfBase - H[b.tier], 13, H[b.tier]);
   });
-  ctx.globalAlpha = 1;
   if (books.length) { ctx.fillStyle = CARD.wood; ctx.fillRect(pad, shelfBase, books.length * 17 + 4, 4); }
 
   // colophon

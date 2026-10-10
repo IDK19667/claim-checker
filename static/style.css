@@ -315,14 +315,14 @@ body {
 .entry-verdict { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
 .entry-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .entry-years { white-space: nowrap; }
-/* The mini shelf: one spine per study, stood strongest first. Full cloth for
-   the books the verdict used, faded for the rest. */
+/* The mini shelf: one spine per study, stood strongest first, every book in
+   its own cloth. A band at 5px wide reads as a letter, not a band, so how
+   many were relied on is the line of words beside it. */
 .mini {
   display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 10px;
   padding: 0 2px; border-bottom: 1.5px solid var(--wood);
 }
-.mini i { display: block; width: 5px; background: var(--k, var(--ink-3)); opacity: 0.45; }
-.mini i.on { opacity: 1; }
+.mini i { display: block; width: 5px; background: var(--k, var(--ink-3)); }
 
 /* Before you trust a verdict: the questions a stranger asks, in rows. */
 .trust { margin-top: 72px; }
@@ -471,8 +471,9 @@ body {
    is the kind of design and nothing else, so the same set always stands the
    same way. Cloth is what the study was run on (evidence.kind), set as a
    token on the book's own class: no colour is written out here, and none of
-   them is ever used for what the verdict was. The books the verdict used are
-   in full cloth with a dot over them; the rest are faded. */
+   them is ever used for what the verdict was. Every book keeps its cloth;
+   the ones the verdict used carry a band of silver foil at the head and a
+   dot over them. */
 .chart-sec { margin-top: 52px; }
 .chart-sum { margin: 10px 0 0; font-size: 18px; line-height: 1.45; max-width: 30ch; text-wrap: balance; font-variant-numeric: tabular-nums; }
 .k-strong { --k: var(--c-strong); }
@@ -493,24 +494,34 @@ body {
   height: var(--ledge); background: var(--wood);
 }
 
-/* The columns tile edge to edge so no part of the shelf is dead to a finger:
-   the gap between the books is padding inside the button, not space between
-   them. Eight columns cannot each be 44px wide on a 375px screen, so the
-   target takes its size the other way, the full height of the shelf. */
+/* A book is as wide as a book: a column is 46px at most, so a short list
+   stands as a short row against its bookend instead of stretching into a bar
+   chart, and the rest of the ledge is empty shelf. The gap between books is
+   padding inside the button, so the row has no dead strip between targets.
+   Eight columns cannot each be 44px wide on a 375px screen, so they shrink
+   to fit and the target takes its size the other way, the full height of
+   the shelf. */
 .chart-bars { display: flex; align-items: flex-end; padding: 0 4px; }
+/* The bookend: the row stops because the studies do. It stands on the
+   ledge, in the ledge's wood. */
+.chart-bars::after {
+  content: ""; flex: none; width: 9px; height: calc(var(--plot-h) * 0.52);
+  margin: 0 0 calc(var(--ledge) + var(--num-h)) 3px;
+  background: var(--wood); border-radius: var(--r-control) var(--r-control) 0 0;
+}
 .barcol {
-  flex: 1 1 0; min-width: 0; height: calc(var(--plot-h) + var(--ledge) + var(--num-h));
+  flex: 0 1 46px; min-width: 0; height: calc(var(--plot-h) + var(--ledge) + var(--num-h));
   display: flex; flex-direction: column; position: relative;
   padding: 0; border: 0; background: none; font: inherit; color: inherit;
   cursor: pointer;
 }
-.barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 3px; }
+.barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 1px; }
 .barcol-bar {
   position: relative; width: 100%; transform-origin: bottom;
   display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;
   background-color: var(--k, var(--ink-3));
   background-image: linear-gradient(90deg, var(--spine-light), transparent 30%, transparent 70%, var(--spine-shade));
-  color: var(--on-cloth); opacity: 0.45;
+  color: var(--on-cloth);
 }
 /* Two foil rules at the head of every spine, the way a bound volume is lettered. */
 .barcol-bar::before {
@@ -534,7 +545,13 @@ body {
 }
 /* No word stands up on a book this short: the hatch and the key say it. */
 .h-retracted .barcol-spine { display: none; }
-.is-used .barcol-bar { opacity: 1; }
+/* Relied on: the two rules at the head become one band of silver foil, the
+   way a library marks a volume. Nothing is faded, so the cloth always says
+   the kind of study, on every book. */
+.is-used .barcol-bar::before {
+  left: 0; right: 0; top: 9px; height: 8px; border: 0;
+  background: linear-gradient(180deg, var(--on-cloth), var(--rule-2) 60%, var(--on-cloth));
+}
 .is-used .barcol-bar::after {
   content: ""; position: absolute; left: 50%; top: -12px; width: 5px; height: 5px; margin-left: -2.5px;
   border-radius: 50%; background: var(--green);
@@ -550,7 +567,7 @@ body {
 /* The chosen book: a ring round its spine and its number reversed out, the
    way a book is pulled half out of a row. */
 .barcol.is-on .barcol-bar {
-  opacity: 1; box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
 }
 .barcol.is-on .barcol-no { background: var(--ink); color: var(--paper); border-radius: var(--r-control); }
 

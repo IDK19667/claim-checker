@@ -186,9 +186,9 @@
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
             {% if v.evidence.mix %}
-            {# A mini shelf: one spine per study, strongest first, faded where
-               the verdict did not use it. Same heights and cloth as the shelf
-               on the result page. #}
+            {# A mini shelf: one spine per study, strongest first, every book in
+               its cloth. Same heights and cloth as the shelf on the result
+               page; how many were relied on is the line under it. #}
             <span class="mini" role="img"
                   aria-label="{% for m in v.evidence.mix %}{{ m.count }} {{ m.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
               {%- for b in v.shelf %}<i class="h-{{ b.tier }} k-{{ b.kind }}{% if b.used %} on{% endif %}"></i>{% endfor -%}
@@ -378,7 +378,7 @@
               </div>
               <figcaption>
                 <ul class="shelf-key" id="shelf-key">{% if ev %}{% for k in ev.kinds %}<li><i class="k-{{ k.kind }}{% if k.kind == 'retracted' %} h-retracted{% endif %}"></i>{{ k.label }}</li>{% endfor %}{% endif %}</ul>
-                <p class="chart-key">Each bar is one study, numbered as in the list. Taller is a stronger kind of study. A dot marks the ones this verdict used.</p>
+                <p class="chart-key">Each book is one study, numbered as in the list. Taller is a stronger kind of study. A silver band and a dot mark the ones this verdict used.</p>
               </figcaption>
             </figure>
             <p class="sr-only" id="chart-desc">{% if ev %}{{ ev.described }}{% endif %}</p>
