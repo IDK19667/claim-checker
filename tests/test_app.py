@@ -1378,13 +1378,17 @@ t("a bar is at least a finger tall, and the gap between books is inside the "
 t("a book is as wide as a book: columns stop at 46px and the row ends at a "
   "bookend, so a short list never stretches into a bar chart",
   "flex: 0 1 46px;" in _chart_css and ".chart-bars::after {" in _chart_css)
-t("nothing on a shelf is faded: every book keeps its cloth, and a relied-on "
-  "book is marked by a silver band at the head instead",
+t("a relied-on book is solid cloth and a book read but not used is outlined "
+  "in its cloth on a pale wash, never faded, on the shelf, the mini shelves "
+  "and the share card",
   not re.search(r"barcol-bar[^{]*\{[^}]*opacity", _chart_css.split("@keyframes bar-grow")[0])
   and "opacity" not in _css.split(".mini {")[1].split("/* Before you trust")[0]
+  and ".barcol:not(.is-used) .barcol-bar:not(.h-retracted) {" in _chart_css
+  and "border: 2px solid var(--k" in _chart_css
+  and ".mini i:not(.on):not(.h-retracted) {" in _css
   and ".is-used .barcol-bar::before {" in _chart_css
-  and "globalAlpha" not in _js
-  and "A silver band and a dot mark the ones this verdict used." in (ROOT / "templates" / "index.html").read_text())
+  and "globalAlpha" not in _js and "CARD.wash" in _js and "strokeRect" in _js
+  and "Outlined books were read but not used." in (ROOT / "templates" / "index.html").read_text())
 _grow = _css.split("@keyframes bar-grow")[1].split("}")[0]
 t("the reveal moves transform and opacity only",
   "transform" in _grow and "opacity" in _grow

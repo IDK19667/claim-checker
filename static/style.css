@@ -309,14 +309,19 @@ body {
 .entry-verdict { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
 .entry-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .entry-years { white-space: nowrap; }
-/* The mini shelf: one spine per study, stood strongest first, every book in
-   its own cloth. A band at 5px wide reads as a letter, not a band, so how
-   many were relied on is the line of words beside it. */
+/* The mini shelf: one spine per study, stood strongest first. As on the
+   result page, a relied-on book is solid cloth and a book read but not used
+   is outlined in its cloth on a pale wash of it. No band: at 5px wide a band
+   reads as a letter. */
 .mini {
   display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 10px;
   padding: 0 2px; border-bottom: 1.5px solid var(--wood);
 }
 .mini i { display: block; width: 5px; background: var(--k, var(--ink-3)); }
+.mini i:not(.on):not(.h-retracted) {
+  background: color-mix(in oklab, var(--k, var(--ink-3)) 18%, var(--paper));
+  box-shadow: inset 0 0 0 1px var(--k, var(--ink-3));
+}
 
 /* Before you trust a verdict: the questions a stranger asks, in rows. */
 .trust { margin-top: 72px; }
@@ -539,9 +544,22 @@ body {
 }
 /* No word stands up on a book this short: the hatch and the key say it. */
 .h-retracted .barcol-spine { display: none; }
-/* Relied on: the two rules at the head become one band of silver foil, the
-   way a library marks a volume. Nothing is faded, so the cloth always says
-   the kind of study, on every book. */
+/* Read but not used: the same book outlined in its cloth on a pale wash of
+   it, a paperback beside the bound volumes. The colour still says the kind
+   of study; solid or outlined says whether the verdict leaned on it. Never
+   faded with opacity, which would let a strong study pass for a weak one. */
+.barcol:not(.is-used) .barcol-bar:not(.h-retracted) {
+  background-color: color-mix(in oklab, var(--k, var(--ink-3)) 18%, var(--paper));
+  background-image: none;
+  border: 2px solid var(--k, var(--ink-3)); border-bottom: 0;
+  color: var(--k, var(--ink-3));
+}
+.barcol:not(.is-used) .barcol-bar:not(.h-retracted)::before {
+  left: 3px; right: 3px; top: 8px;
+  border-color: color-mix(in oklab, var(--k, var(--ink-3)) 50%, transparent);
+}
+/* Relied on: solid cloth, and the two rules at the head become one band of
+   silver foil, the way a library marks a volume. */
 .is-used .barcol-bar::before {
   left: 0; right: 0; top: 9px; height: 8px; border: 0;
   background: linear-gradient(180deg, var(--on-cloth), var(--rule-2) 60%, var(--on-cloth));

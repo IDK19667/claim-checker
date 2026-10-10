@@ -54,7 +54,11 @@ function tokenDrift() {
 // ---- in-page audits --------------------------------------------------------
 const AUDIT = () => {
   const lum = (rgb) => { const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-  const parse = (c) => { const m = c.match(/[\d.]+/g); if (!m) return null; return { rgb: m.slice(0, 3).map(Number), a: m.length > 3 ? parseFloat(m[3]) : 1 }; };
+  // Painted through a canvas rather than read as numbers: a computed colour can
+  // come back as oklab() (from color-mix) as well as rgb(), and its numbers are
+  // not 0 to 255.
+  const cv = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  const parse = (c) => { if (!c) return null; cv.clearRect(0, 0, 1, 1); cv.fillStyle = "#000"; cv.fillStyle = c; cv.fillRect(0, 0, 1, 1); const [r, g, b, a] = cv.getImageData(0, 0, 1, 1).data; return { rgb: [r, g, b], a: a / 255 }; };
   const bgOf = (el) => { let e = el; while (e) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0.9) return c.rgb; e = e.parentElement; } return parse(getComputedStyle(document.body).backgroundColor).rgb; };
   const ratio = (f, b) => { const l1 = lum(f), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
 

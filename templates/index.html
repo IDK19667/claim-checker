@@ -186,9 +186,9 @@
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
             {% if v.evidence.mix %}
-            {# A mini shelf: one spine per study, strongest first, every book in
-               its cloth. Same heights and cloth as the shelf on the result
-               page; how many were relied on is the line under it. #}
+            {# A mini shelf: one spine per study, strongest first. Same
+               heights, cloth, and solid or outlined as the shelf on the
+               result page. #}
             <span class="mini" role="img"
                   aria-label="{% for m in v.evidence.mix %}{{ m.count }} {{ m.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
               {%- for b in v.shelf %}<i class="h-{{ b.tier }} k-{{ b.kind }}{% if b.used %} on{% endif %}"></i>{% endfor -%}
@@ -328,7 +328,7 @@
       </div>
 
       {# One book per study: height is the design, cloth is what it was run
-         on, full cloth and a dot are whether the verdict leaned on it, and
+         on, solid or outlined is whether the verdict leaned on it, and
          the number under it is the number the list of studies and every
          sentence of the prose use. #}
       {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else 'read but not used') }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }} k-{{ s.kind }}"><span class="barcol-spine" aria-hidden="true">{{ s.spine }}</span></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
@@ -378,7 +378,7 @@
               </div>
               <figcaption>
                 <ul class="shelf-key" id="shelf-key">{% if ev %}{% for k in ev.kinds %}<li><i class="k-{{ k.kind }}{% if k.kind == 'retracted' %} h-retracted{% endif %}"></i>{{ k.label }}</li>{% endfor %}{% endif %}</ul>
-                <p class="chart-key">Each book is one study, numbered as in the list. Taller is a stronger kind of study. A silver band and a dot mark the ones this verdict used.</p>
+                <p class="chart-key">Each book is one study, numbered as in the list. Taller is a stronger kind of study. Solid books, with a silver band and a dot, are the ones this verdict used. Outlined books were read but not used.</p>
               </figcaption>
             </figure>
             <p class="sr-only" id="chart-desc">{% if ev %}{{ ev.described }}{% endif %}</p>

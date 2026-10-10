@@ -1225,6 +1225,9 @@ const CARD = {
   deep: "#0f1211", deepLine: "#2a302d", onDeep: "#eceee9", onDeep3: "#7d8580", sage: "#9fc3b0",
   paper: "#f1f2ee", ink: "#121514", ink2: "#434a46", ink3: "#5d6560", rule: "#d9dcd5", wood: "#2b2622",
   cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#434a46" },
+  // each cloth at 18% on the paper, mixed in oklab as style.css mixes it: the
+  // wash inside a book that was read but not used
+  wash: { strong: "#cdd5cf", human: "#cdd2d6", lab: "#d4d1d3", weak: "#dcd3cc", retracted: "#cfd1cd" },
 };
 
 function wrapLines(ctx, text, maxWidth, maxLines) {
@@ -1327,14 +1330,22 @@ async function renderShareCard(r) {
   }
 
   // a mini shelf of the studies read, as in Latest checks
-  const books = r.studies.map((s) => ({ kind: kindOf(s), tier: s.tier || "moderate" }))
+  const books = r.studies.map((s) => ({ kind: kindOf(s), tier: s.tier || "moderate", used: !!s.cited_in_verdict }))
     .sort((a, b) => Object.keys(CARD.cloth).indexOf(a.kind) - Object.keys(CARD.cloth).indexOf(b.kind));
   const shelfBase = S - 112, H = { strong: 56, moderate: 40, weak: 25, retracted: 25 };
-  // every book in its cloth, as in Latest checks: how many were relied on is
-  // the line at the head of the card
+  // as in Latest checks: solid cloth for the books the verdict used, outlined
+  // in cloth on a pale wash for the ones read but not used
   books.forEach((b, i) => {
-    ctx.fillStyle = CARD.cloth[b.kind] || CARD.ink3;
-    ctx.fillRect(pad + 4 + i * 17, shelfBase - H[b.tier], 13, H[b.tier]);
+    const x = pad + 4 + i * 17, h = H[b.tier], cloth = CARD.cloth[b.kind] || CARD.ink3;
+    if (b.used) {
+      ctx.fillStyle = cloth;
+      ctx.fillRect(x, shelfBase - h, 13, h);
+    } else {
+      ctx.fillStyle = CARD.wash[b.kind] || CARD.rule;
+      ctx.fillRect(x, shelfBase - h, 13, h);
+      ctx.strokeStyle = cloth; ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, shelfBase - h + 1, 11, h);
+    }
   });
   if (books.length) { ctx.fillStyle = CARD.wood; ctx.fillRect(pad, shelfBase, books.length * 17 + 4, 4); }
 
