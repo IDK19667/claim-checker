@@ -1005,8 +1005,12 @@ async function check(claim) {
         renderError("The verdict came back, but this page could not draw it. Reload and try again.");
         return;
       }
-      if (location.search.includes("q=")) history.replaceState({ view: "result" }, "", "/?q=" + encodeURIComponent(claim));
-      else history.pushState({ view: "result" }, "", "/?q=" + encodeURIComponent(claim));
+      // The address carries the claim as checked: a misspelled one comes
+      // back fixed, and a reload or a copied link should not bring the
+      // typo back.
+      const asChecked = "/?q=" + encodeURIComponent(final.result.claim || claim);
+      if (location.search.includes("q=")) history.replaceState({ view: "result" }, "", asChecked);
+      else history.pushState({ view: "result" }, "", asChecked);
       nudgeToAnswer();
     }
   } catch (err) {

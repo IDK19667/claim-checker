@@ -429,7 +429,9 @@ def spelling_fix(typed: str, fixed: str) -> str:
 
 # Texting shorthand a corrected claim may spell out in full.
 _SHORTHAND = {"u": "you", "ur": "your", "r": "are", "n": "and", "2": "to", "4": "for",
-              "b4": "before", "bc": "because", "cuz": "because", "w": "with", "thru": "through"}
+              "b4": "before", "bc": "because", "cuz": "because", "coz": "because", "w": "with",
+              "thru": "through", "gud": "good", "gr8": "great", "luv": "love", "y": "why",
+              "da": "the", "dat": "that"}
 
 
 def _misspelled_from(word: str, typed_words: list[str]) -> bool:

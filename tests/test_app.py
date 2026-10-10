@@ -1308,6 +1308,10 @@ t("  it honours reduced motion and waits for a hidden tab",
 # answer, and the claim they typed can never be mistaken for it.
 
 _css = (ROOT / "static" / "style.css").read_text()
+_done = _js[_js.find("renderResult(final.result);"):][:900]
+t("after a check the address carries the claim as checked, so a fixed spelling stays fixed on reload",
+  'encodeURIComponent(final.result.claim || claim)' in _done
+  and "encodeURIComponent(claim))" not in _done)
 _ord = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
 
 
@@ -1890,6 +1894,8 @@ _FIXES = [
     ("melatonen makes u fall asleep fastr", "Melatonin makes you fall asleep faster", True),
     ("vacines dont cause autisim", "Vaccines don't cause autism", True),
     ("vacines dont cause autisim", "vaccines dont cause autism", True),
+    ("red wine is gud for ur hart", "Red wine is good for your heart", True),
+    ("y does coffe make u pee", "Why does coffee make you pee", True),
     # Rewrites, not spelling fixes: the reader keeps their own words.
     ("vacines dont cause autisim", "Vaccines cause autism", False),
     ("creatine causes hair loss", "Creatine prevents hair loss", False),
