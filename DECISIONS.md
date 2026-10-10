@@ -32,6 +32,23 @@ words and never the text, and are not rewritten: swapping a word can
 change what a sentence claims. "Elevated" is not on the list, because
 elevated blood pressure is a finding.
 
+**The fly-through stops drawing when nothing moves.** Its loop asked for
+an animation frame on every refresh for as long as the page was open:
+parked behind a check, scrolled a long way past, or sitting still. It now
+rests after three quiet refreshes (the scroll has stopped and nothing new
+was drawn), whenever the section is more than half a screen away, and
+whenever a check has parked it. A scroll, a resize, the section coming
+back into view, or a frame finishing its decode near the reader's
+position wakes it. The guarantee during a fling is unchanged, because the
+loop never rests while the position moves: the stress run holds its
+numbers (desktop 28 to 34ms longest frame at full speed, phone 20 to
+21ms). The QA gate counts animation frames over two still seconds at the
+top, inside the section, past it and parked, and it reads 0 in all four.
+Two smaller things the count found: the loading label kept asking for a
+frame after it was gone, and the residency numbers the stress test reads
+were only updated by the loop, so a resting loop reported stale ones.
+Both now read live.
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

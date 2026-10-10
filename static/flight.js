@@ -169,7 +169,7 @@
     freezeBreaks: 0,                  // times the search widened to break a hold
     longTasks: 0, longestTaskMs: 0,
     decodes: 0, decodeFails: 0, queueDepth: 0,
-    workers: 0, residentMotion: 0, residentHires: 0,
+    workers: 0,
     velocity: 0, peakVelocity: 0, tier: "-"
   };
   stats.reset = function () {
@@ -262,6 +262,7 @@
     if (d.kind === "decoded") {
       stats.decodes++;
       store.put(d.index, d.bmp);
+      nudge(d.index);
     } else {
       stats.decodeFails++;
       store.broken[d.index] = 1;
@@ -294,6 +295,7 @@
           job.store.inFlight.delete(job.index);
           stats.decodes++;
           job.store.put(job.index, bmp);
+          nudge(job.index);
           pump();
         }).catch(function () {
           mainDecodes--;
@@ -384,7 +386,7 @@
           (function (idx) {
             inFlight++;
             fetch(self.url(idx)).then(function (r) { return r.blob(); })
-              .then(function (blob) { self.blobs[idx] = blob; self.bytesLoaded += blob.size; })
+              .then(function (blob) { self.blobs[idx] = blob; self.bytesLoaded += blob.size; nudge(idx); })
               .catch(function () { self.broken[idx] = 1; })
               .then(function () {
                 inFlight--;
@@ -409,6 +411,7 @@
     return streamBundle(bundle, offsets, function (idx, blob) {
       self.blobs[idx] = blob;
       self.bytesLoaded += blob.size;
+      nudge(idx);
       self.countLoaded++;
       updateProgress();
     }).then(function (missing) {
@@ -471,6 +474,10 @@
 
   var motionStore = new TierStore("motion", "motion/frame-%04d.avif");
   var hiresStore = new TierStore("hires", "frame-%04d.avif");
+  // Read live rather than copied once a refresh: the loop rests while the
+  // idle pre-decode keeps filling these, and a copy would go stale.
+  Object.defineProperty(stats, "residentMotion", { enumerable: true, get: function () { return motionStore.bitmaps.size; } });
+  Object.defineProperty(stats, "residentHires", { enumerable: true, get: function () { return hiresStore.bitmaps.size; } });
 
   // No "pre-warm the GPU upload" step here, deliberately. An earlier version of
   // this round drew each freshly decoded bitmap into a 1x1 scratch context on
@@ -511,7 +518,7 @@
           (function (job) {
             decoding++;
             createImageBitmap(job.blob)
-              .then(function (bmp) { lores[job.idx] = bmp; })
+              .then(function (bmp) { keepLores(job.idx, bmp); })
               .catch(function () { /* that slot just stays empty */ })
               .then(function () { decoding--; loresLoaded++; updateProgress(); pump(); });
           })(waiting.shift());
@@ -535,7 +542,7 @@
           fetch(section.dataset.frames + "/" + manifest.loresPattern.replace("%04d", pad4(idx)))
             .then(function (r) { return r.blob(); })
             .then(createImageBitmap)
-            .then(function (bmp) { lores[idx] = bmp; })
+            .then(function (bmp) { keepLores(idx, bmp); })
             .catch(function () { /* a missing low-res frame just leaves that slot empty */ })
             .then(function () { inFlight--; loresLoaded++; updateProgress(); step(); });
         })(only ? only[next] : next);
@@ -559,12 +566,24 @@
     }
   }
 
+  // A lores frame that decodes after the window has closed is closed on
+  // arrival: the loop no longer runs every refresh to retire it.
+  function keepLores(idx, bmp) {
+    if (loresRetired) { if (bmp && bmp.close) bmp.close(); return; }
+    lores[idx] = bmp;
+    nudge(idx);
+  }
+
   /* ---- progress indicator ------------------------------------------------ */
 
   var progressScheduled = false;
+  // Once the label has gone it stays gone. The hi-res tier keeps arriving for
+  // a while after, and each frame of it would otherwise ask for a refresh to
+  // hide a label that is already hidden.
+  var progressDone = false;
 
   function updateProgress() {
-    if (!progressEl || progressScheduled) return;
+    if (!progressEl || progressScheduled || progressDone) return;
     progressScheduled = true;
     requestAnimationFrame(function () {
       progressScheduled = false;
@@ -577,7 +596,7 @@
       var frac = phoneBudget
         ? motionStore.countLoaded / manifest.count
         : (loresLoaded + motionStore.countLoaded) / (manifest.count * 2);
-      if (frac >= 0.999) { progressEl.hidden = true; return; }
+      if (frac >= 0.999) { progressEl.hidden = true; progressDone = true; return; }
       progressEl.hidden = false;
       progressEl.textContent = "Loading footage … " + Math.round(frac * 100) + "%";
     });
@@ -1019,7 +1038,7 @@
   var lastTickTime = null;
   var firstTick = true;
 
-  function onScroll() { scrollDirty = true; }
+  function onScroll() { scrollDirty = true; wake(); }
 
   function positionAt(local, withOverlay) {
     local = Math.max(0, Math.min(totalPx, local));
@@ -1053,17 +1072,53 @@
   // What app.js drives. Deliberately small: stand down, stand up.
   window.EvidentFlight = {
     park: function () { parked = true; },
-    resume: function () { parked = false; scrollDirty = true; }
+    resume: function () { parked = false; scrollDirty = true; wake(); }
   };
 
+  /* ---- a loop that rests --------------------------------------------------
+   * The loop runs while there is something to draw and stops when there is
+   * not: parked, scrolled out of sight, or the scroll and the frame on screen
+   * have both come to rest. A page sitting still costs no refreshes at all.
+   * Anything that can change the picture wakes it: a scroll, a resize, the
+   * section coming back into view, resume, and a frame landing near the
+   * reader. A scroll event is delivered before the refresh it belongs to, so
+   * the wake costs no frame, and a fling never rests because a fling is a
+   * scroll that has not stopped: the sharp frame on every refresh is kept.
+   */
+
+  var looping = false;
+  var onScreen = true;
+  var quietTicks = 0;
+  var REST_AFTER_TICKS = 3;     // quiet refreshes in a row before resting
+  var REST_VELOCITY = 0.5;      // footage frames per second, after smoothing
+  stats.ticks = 0;
+  stats.resting = function () { return !looping; };
+
+  function wake() {
+    if (looping || parked || !onScreen) return;
+    looping = true;
+    quietTicks = 0;
+    lastTickTime = null;
+    // Time spent asleep is not a frame held while the scroll moved.
+    drawnAt = performance.now();
+    heldWhileMoving = false;
+    requestAnimationFrame(tick);
+  }
+
+  // A frame that just became drawable matters only near the reader; the rest
+  // is the idle pre-decode filling in, which needs no picture redrawn.
+  function nudge(index) {
+    if (Math.abs(index - Math.round(wantedFrame)) <= SUB_RADIUS + 1) wake();
+  }
+
   function tick(now) {
+    stats.ticks++;
     var dt = lastTickTime == null ? 16 : Math.max(1, Math.min(200, now - lastTickTime));
     lastTickTime = now;
 
     // Parked, this section is display:none behind a check's own screen.
-    // Reading a scroll it is not in, and decoding frames for a canvas nobody
-    // can see, is work with no picture at the end of it.
-    if (parked) { requestAnimationFrame(tick); return; }
+    // Reading a scroll it is not in is work with no picture at the end of it.
+    if (parked) { looping = false; return; }
     if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
     if (firstTick) { firstTick = false; lastWantedFrame = wantedFrame; }
 
@@ -1168,12 +1223,24 @@
     // otherwise never be recorded, because the frame after it never arrives.
     if (positionMoving && now - drawnAt > stats.maxHoldMs) stats.maxHoldMs = now - drawnAt;
 
+    var drawsBefore = stats.draws;
     draw(wantedFrame, false, speed < CROSSFADE_MAX_VELOCITY, widen);
     if (!positionMoving && drawnIndex === target) heldWhileMoving = false;
 
-    stats.residentMotion = motionStore.bitmaps.size;
-    stats.residentHires = hiresStore.bitmaps.size;
+    stats.drawn = drawnIndex;
 
+    // Rest once the scroll has stopped, its momentum has died away, the frame
+    // on screen is within reach of the one wanted, and a few refreshes in a
+    // row have drawn nothing new. Out of sight it rests straight away, after
+    // this one pass has painted where the scroll left off.
+    var settled = !positionMoving && speed < REST_VELOCITY && stats.draws === drawsBefore;
+    quietTicks = settled ? quietTicks + 1 : 0;
+    if (!onScreen || quietTicks >= REST_AFTER_TICKS) {
+      looping = false;
+      signedVelocity = 0;
+      stats.velocity = 0;
+      return;
+    }
     requestAnimationFrame(tick);
   }
 
@@ -1290,8 +1357,19 @@
     // to show immediately. The motion tier comes next because it is what makes
     // a fast scroll possible at all, and it is a third the bytes of the hi-res
     // tier. Hi-res bytes load last, in parallel, for the reader who stops.
+    // Off screen (read on to the claim box, or back up past the top) the loop
+    // has nothing to draw. Half a screen of margin, so it is awake before the
+    // section shows again.
+    if (typeof IntersectionObserver === "function") {
+      new IntersectionObserver(function (entries) {
+        onScreen = entries[entries.length - 1].isIntersecting;
+        if (onScreen) { scrollDirty = true; wake(); }
+      }, { rootMargin: "50% 0px" }).observe(section);
+    }
+    // The lores window closes on a timer too, since a resting loop may not be
+    // running when it does.
+    setTimeout(retireLores, Math.max(0, startedAt + LORES_WINDOW_MS - performance.now()));
     onScroll();
-    requestAnimationFrame(tick);
 
     var phone = variant === "phone" && window.matchMedia("(pointer: coarse)").matches;
     var everything = (manifest.loresTotalBytes || 0) + (manifest.motionTotalBytes || 0)

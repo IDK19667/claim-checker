@@ -168,6 +168,62 @@ for (const v of VIEWS) {
   errors.forEach((e) => note(v.name, "console error", e.slice(0, 120)));
   await ctx.close();
 }
+// ---- the fly-through ---------------------------------------------------------
+// Its own pass, on a desktop that gets the whole thing. Every check here is
+// about behaviour over time, which a single page load never sees.
+{
+  const where = "fly-through";
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  // Counts every animation frame the page asks for, from anything on it.
+  await ctx.addInitScript(() => {
+    window.__raf = 0;
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => { window.__raf++; return raf(cb); };
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(`${base}/`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__flightStats && window.__flightStats.frameCount > 0, null, { timeout: 20000 });
+  const idle = [];
+  await page.waitForFunction(() => { const p = document.getElementById("flight-progress"); return p && p.hidden; },
+    null, { timeout: 90000 }).catch(() => note(where, "footage", "still loading after 90s"));
+
+  // A page sitting still asks for no animation frames: not at rest inside the
+  // fly-through, not scrolled past it, not parked behind a check. Momentum and
+  // a few quiet refreshes are allowed to die away first.
+  const still = async (label) => {
+    await page.waitForTimeout(1200);
+    const a = await page.evaluate(() => window.__raf);
+    await page.waitForTimeout(2000);
+    const n = (await page.evaluate(() => window.__raf)) - a;
+    idle.push(`${label} ${n}`);
+    if (n > 2) note(where, "loop never rests", `${label}: ${n} animation frames in 2s of stillness`);
+  };
+  await still("at the top");
+  await page.mouse.wheel(0, 1500);
+  await still("stopped inside it");
+  // Still asleep is fine; asleep through a scroll is not. And where the
+  // scroll stops, the frame on screen is the frame for that position.
+  const ticks = await page.evaluate(() => window.__flightStats.ticks);
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(1500);
+  const s = await page.evaluate(() => ({ ticks: window.__flightStats.ticks, wanted: window.__flightStats.wanted, drawn: window.__flightStats.drawn }));
+  if (s.ticks === ticks) note(where, "loop does not wake", "a scroll ran no refreshes");
+  if (Math.abs(s.wanted - s.drawn) > 2) note(where, "settled on the wrong frame", `drawn ${s.drawn}, wanted ${s.wanted}`);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await still("scrolled past it");
+  await page.evaluate(() => { window.scrollTo(0, 1500); window.EvidentFlight.park(); });
+  await page.mouse.wheel(0, 200);
+  await still("parked");
+  await page.evaluate(() => window.EvidentFlight.resume());
+  console.log(`fly-through: animation frames in 2s of stillness: ${idle.join(", ")}`);
+
+  errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+  await ctx.close();
+}
+
 await browser.close();
 
 tokenDrift().forEach((d) => note("tokens", "design system drift", d));

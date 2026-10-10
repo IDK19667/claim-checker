@@ -547,6 +547,18 @@ if (FLIGHT / "manifest-phone.json").exists():
     _mp = json.loads((FLIGHT / "manifest-phone.json").read_text())
     t("the phone's motion bundle alone fits the budget",
       _mp.get("motionTotalBytes", 1 << 30) <= 5 * 1048576, _mp.get("motionTotalBytes"))
+_tick = _fj.split("function tick(")[1].split("/* ----")[0]
+t("the loop rests: tick re-queues itself only when there is more to draw",
+  _fj.count("requestAnimationFrame(tick)") == 2
+  and "if (!onScreen || quietTicks >= REST_AFTER_TICKS)" in _tick
+  and "if (parked) { looping = false; return; }" in _tick)
+t("  and wakes on a scroll, on resume, on coming into view and on a frame landing nearby",
+  "function onScroll() { scrollDirty = true; wake(); }" in _fj
+  and "parked = false; scrollDirty = true; wake();" in _fj
+  and "new IntersectionObserver(" in _fj
+  and _fj.count("nudge(") >= 6)
+t("  and time asleep is not counted as a frame held mid-fling",
+  "drawnAt = performance.now();" in _fj.split("function wake()")[1][:400])
 t("the stage shows the poster, not a black canvas, until a frame is drawn",
   'canvas.setAttribute("data-drawn", "")' in _fj
   and "#flight-canvas[data-drawn] { visibility: visible; }" in flight_css)
