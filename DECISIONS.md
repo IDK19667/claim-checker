@@ -4,6 +4,57 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-10 (night): What a full test round found and fixed
+
+The user asked for every scenario to be tried: function, speed,
+accuracy. The 20-claim audit (15 exact, 4 defensible, 1 over-cautious,
+none the wrong way round), 22 edge and adversarial claims run locally
+in-process so none reached the public "latest checks", a walk of the
+live site on a desktop and a phone, a load test, and axe on both views.
+Five things were wrong, all now fixed and tested.
+
+**A claim that says "not" was read the wrong way round.** "Smoking does
+not cause lung cancer" came back "It's complicated". The model stamped
+it "false" and wrote "smoking causes lung cancer", which is right; the
+stamp check read that takeaway as a "yes" and, seeing a yes under
+"false", downgraded it. Worse, the model often judged the claim with the
+"not" taken out: "vaccines do not cause autism" was stamped "false"
+over a takeaway saying vaccines do not cause autism, and before the fix
+the check would have agreed and published "False" on a true statement.
+Now `breakdown.claim_denies` spots a claim that is itself a "no" (a
+"not" inside "people who don't sleep" does not count), `stance` turns
+the takeaway's yes and no round for it, and the prompt gets one extra
+paragraph for that claim only. Given to every claim, that paragraph's
+example primed "vaccines cause autism" into "true", so every claim
+without a "not" is sent the prompt byte for byte as before; a test in
+the round confirmed it for all 20 audit claims.
+
+**"links to" as a noun.** `natural()` turned every "links to" into "is
+linked to", so "green tea has a small links to weight loss" became "a
+small are linked to". It now changes the phrase only where it is a
+verb, not after an article, an adjective or "has".
+
+**Softening under a negation.** `soften()` weakens "cures" to "helps
+with", which makes "does not cure cancer" read "does not help with
+cancer", a stronger claim than the abstracts make. A verb with a
+negation in the four words before it is now left as written. Its
+pattern first shared a name with the one `stance` reads, which quietly
+changed how stamps were checked; it has its own name now and a test
+holds them apart.
+
+**Studies were not real buttons.** Each study row was a focusable list
+item with a role, which axe flagged as serious (nested interactive
+controls beside its PubMed link). "Deep dive" is now a real button whose
+hit area stretches over the row, so a tap anywhere still opens it, and
+the PubMed link sits above it. A book that points at its study now
+puts focus on that button.
+
+**Left as is.** The result view has no `<h1>`: the claim is an `<h2>`
+because the hidden ask heading is the page's one `<h1>` and `qa.mjs`
+holds that rule. Axe calls it moderate. The type-ahead is empty on the
+live site after each deploy because the free plan's disk is wiped;
+that is the known trade-off in `render.yaml`.
+
 ## 2026-10-10 (final): The answer floats again, and a fixed spelling stays fixed
 
 **The answer sheet.** The user pointed at an older version where the
