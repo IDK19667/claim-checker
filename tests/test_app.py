@@ -1163,6 +1163,15 @@ t("  it is collapsed by default, on the server and in the markup",
   and '<details class="deeper" id="deeper" open' not in _html)
 t("  the summary says how many studies it rests on",
   '<span class="group-count">2 studies</span>' in _html)
+# A list item with role="button" around a PubMed link is a control inside a
+# control, which screen readers cannot reach cleanly (axe: serious).
+t("  each study opens from a real button, not a list item playing one",
+  '<button type="button" class="study-go" aria-label="Deep dive on study 1">' in _html
+  and 'role="button"' not in _html.split('id="sources"', 1)[-1].split("</section>", 1)[0]
+  and '<button type="button" class="study-go" aria-label="Deep dive on study ${i + 1}">'
+      in (ROOT / "static" / "app.js").read_text()
+  and ".study-go::after { content: \"\"; position: absolute; inset: 0; }"
+      in (ROOT / "static" / "style.css").read_text())
 t("  what was gated out is not in the page either",
   "47%" not in _html and "cites nothing" not in _html and "wards off" not in _html)
 t("  the effect size gets its own line",

@@ -506,13 +506,14 @@
         </div>
         <p class="fine" style="margin:0 0 8px">Open any study for its abstract, how often it has been cited, free full text where there is any, and the studies next to it.</p>
 
-        {% macro study_row(s, i) %}<li class="study k-{{ s.kind }}{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}" tabindex="0" role="button" aria-label="Deep dive on study {{ i + 1 }}">
+        {% macro study_row(s, i) %}<li class="study k-{{ s.kind }}{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}">
           <p class="meta"><span class="ord">{{ "%02d"|format(i + 1) }}</span>{% if s.year %}<span>{{ s.year }}</span>{% endif %}</p>
           <p class="title"><span>{{ s.title }}</span></p>
           <p class="src">{{ s.journal }}{% if s.journal %} · {% endif %}<a href="{{ s.url }}" target="_blank" rel="noopener" data-stop>PMID {{ s.pmid }}</a></p>
-          <!-- The row itself is the button; this names what it opens. It is
-               aria-hidden because the row's own label already says it. -->
-          <span class="study-go" aria-hidden="true">Deep dive<svg width="15" height="15"><use href="#i-dive"/></svg></span>
+          <!-- The button opens the study, and its hit area covers the whole
+               row. The row is not itself a button: it holds the PMID link,
+               and a link inside a button is lost to a screen reader. -->
+          <button type="button" class="study-go" aria-label="Deep dive on study {{ i + 1 }}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
         </li>{% endmacro %}
         <!-- The sources fold into two groups: what the verdict leaned on, open,
              and what was read and set aside, closed. Every study stays in the

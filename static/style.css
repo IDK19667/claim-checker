@@ -777,6 +777,7 @@ mark, .key-mark, .hl {
 
 /* A study row carries its book's cloth as a stripe down its edge. */
 .study {
+  position: relative;
   border-top: 1px solid var(--rule);
   margin-inline: calc(-1 * var(--gutter)); padding: 16px var(--gutter) 18px calc(var(--gutter) + 16px);
   cursor: pointer;
@@ -802,13 +803,20 @@ mark, .key-mark, .hl {
 }
 @keyframes mark-in { to { background-size: 100% 100%; } }
 .study .src { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); }
-.study .src a { color: var(--ink-3); }
+.study .src a { position: relative; z-index: 1; color: var(--ink-3); }
 
+/* "Deep dive" is the button, and its hit area is stretched over the whole
+   row, so the row still opens its study wherever it is tapped. The PMID
+   link sits above the stretch. The focus ring is drawn round the row. */
 .study-go {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
-  font-size: 13.5px; font-weight: 500; color: var(--green);
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0;
+  border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 500;
+  color: var(--green); cursor: pointer;
 }
-.study:hover .study-go, .study:focus-visible .study-go { text-decoration: underline; text-underline-offset: 3px; }
+.study-go::after { content: ""; position: absolute; inset: 0; }
+.study-go:focus-visible { outline: none; }
+.study:has(.study-go:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.study:hover .study-go, .study-go:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .studies.related .study-go { display: none; }
 .studies.related .study { cursor: default; padding-left: var(--gutter); }
 .studies.related .study:hover { background-color: transparent; }

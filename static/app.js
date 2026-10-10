@@ -525,7 +525,7 @@ function showStudy(i) {
   li.classList.add("target");
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   li.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
-  li.focus({ preventScroll: true });
+  (li.querySelector(".study-go") || li).focus({ preventScroll: true });
 }
 
 // Shown only when a check came back without usable evidence. Everything
@@ -724,7 +724,7 @@ function renderResult(data) {
     const src = [s.journal, s.year].filter(Boolean).join(", ");
     const isDefault = ti.label === DEFAULT_TYPE[0];
     return `
-      <li class="study k-${escapeHtml(kindOf(s))}${s.cited_in_verdict ? " cited" : ""}" data-i="${i}" tabindex="0" role="button" aria-label="Deep dive on study ${i + 1}">
+      <li class="study k-${escapeHtml(kindOf(s))}${s.cited_in_verdict ? " cited" : ""}" data-i="${i}">
         <p class="meta">
           <span class="ord">${String(i + 1).padStart(2, "0")}</span>
           ${isDefault ? "" : `<span class="type ${ti.cls}">${escapeHtml(ti.label)}</span>`}
@@ -733,7 +733,7 @@ function renderResult(data) {
         </p>
         <p class="title"><span>${escapeHtml(s.title)}</span></p>
         <p class="src">${escapeHtml(src)}${src ? " · " : ""}<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" data-stop>PMID ${escapeHtml(s.pmid)}</a></p>
-        <span class="study-go" aria-hidden="true">Deep dive<svg width="15" height="15"><use href="#i-dive"/></svg></span>
+        <button type="button" class="study-go" aria-label="Deep dive on study ${i + 1}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
       </li>`;
   };
   // Two groups, matching the Jinja: what the verdict leaned on is open, what
@@ -1610,11 +1610,6 @@ $("sources").addEventListener("click", (e) => {
   if (e.target.closest("[data-stop]")) return; // the PMID link itself
   const li = e.target.closest(".study");
   if (li) openStudy(Number(li.dataset.i));
-});
-$("sources").addEventListener("keydown", (e) => {
-  if (e.target.closest("[data-stop]")) return;
-  const li = e.target.closest(".study");
-  if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openStudy(Number(li.dataset.i)); }
 });
 // A study number is a tap target wherever it appears: in the reasoning under
 // the panel, and in every sentence of the breakdown under that.
