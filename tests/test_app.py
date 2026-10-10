@@ -264,6 +264,52 @@ t("tidy: filler opener and dashes removed, sentence closed",
 t("tidy: capped at a sentence boundary",
   verdict.tidy_prose("One. Two two two two. Three three three three three three.", 24) == "One. Two two two two.")
 t("tidy: empty stays empty", verdict.tidy_prose("   ", 100) == "")
+
+# ---- the copy gate on model output -------------------------------------------
+t("tidy: an em dash before a new thought becomes a full stop",
+  verdict.tidy_prose("The trials were small \u2014 Most ran for six weeks", 700)
+  == "The trials were small. Most ran for six weeks.")
+t("tidy: a spaced hyphen used as a dash becomes a comma",
+  verdict.tidy_prose("It may lower sugar a little - but only after meals", 700)
+  == "It may lower sugar a little, but only after meals.")
+t("tidy: a dash between numbers is a range, not a list",
+  verdict.tidy_prose("Doses of 5\u201310 g a day and 20 \u2014 30 minutes", 700)
+  == "Doses of 5 to 10 g a day and 20 to 30 minutes.")
+t("tidy: a hyphenated word and a subtraction are left alone",
+  verdict.tidy_prose("A placebo-controlled trial, 5 - 2 arms", 700)
+  == "A placebo-controlled trial, 5 - 2 arms.")
+for _dash_case in ("A \u2014 b", "end \u2013", "\u2014 start", "x\u2014y\u2013z", "One -- two"):
+    _out = verdict.tidy_prose(_dash_case, 700)
+    t(f"tidy: no em or en dash survives {_dash_case!r}",
+      "\u2014" not in _out and "\u2013" not in _out and " -- " not in _out, _out)
+
+
+class _Catch(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.lines = []
+
+    def emit(self, record):
+        self.lines.append(record.getMessage())
+
+
+_copy = _Catch()
+logging.getLogger("evident.copy").addHandler(_copy)
+_txt = ("Studies delve into how vinegar can unlock a robust, seamless effect. "
+        "Leveraging this is a testament to nothing.")
+_out = verdict.tidy_prose(_txt, 700)
+t("copy gate: every banned word in model prose is flagged",
+  verdict.banned_words(_txt) == ["delve", "unlock", "robust", "seamless", "leveraging", "testament"],
+  verdict.banned_words(_txt))
+t("  and the flag is a log line naming the words, not the text",
+  len(_copy.lines) == 1 and "delve" in _copy.lines[0] and "vinegar" not in _copy.lines[0], _copy.lines)
+t("  and the words are flagged, not rewritten", _out == _txt)
+_copy.lines.clear()
+verdict.tidy_prose("Elevated blood pressure fell in two small salt solution trials.", 700)
+t("copy gate: elevated (a finding) and a single solution are not flagged", _copy.lines == [], _copy.lines)
+t("copy gate: every word on the list is caught",
+  all(verdict.banned_words(w) for w in verdict.BANNED_WORDS))
+logging.getLogger("evident.copy").removeHandler(_copy)
 fg.models.script = [Resp("q"), Resp(VJ("true", [1], tldr="Overall, it works \u2013 mostly.",
                                           still_open="Whether it lasts past 12 weeks \u2014 no trial ran longer"))]
 d = P("gate claim", ip="7.7.7.7").get_json()

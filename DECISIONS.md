@@ -22,6 +22,16 @@ footage is playable in 9s instead of 27s. Desktop is unchanged. The canvas
 also stays hidden until its first frame, because an opaque canvas is
 black until something is drawn on it, and it sat over the poster.
 
+**The model's words go through the copy rules too.** `tidy_prose` already
+turned dashes into commas and full stops. It now also reads a dash between
+numbers as a range ("5 to 10 mg", where it used to print "5, 10 mg") and
+a spaced hyphen between words as a dash. The banned words (leverage,
+seamless, empower, unlock, robust, actionable, data-driven, solutions,
+testament, landscape, delve, elevate) are flagged in the log, naming the
+words and never the text, and are not rewritten: swapping a word can
+change what a sentence claims. "Elevated" is not on the list, because
+elevated blood pressure is a finding.
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

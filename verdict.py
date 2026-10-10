@@ -21,6 +21,7 @@ before pointing a classroom at it.
 
 import difflib
 import json
+import logging
 import os
 import re
 
@@ -623,6 +624,33 @@ _FILLER = re.compile(
 )
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"\u201c(])")
 
+# Words this product never says (the copy rules in CLAUDE.md). Flagged, not
+# rewritten: swapping one word for another can change what a sentence
+# claims, and a verdict's wording is not ours to guess at. The flag is a log
+# line naming the words, never the text, so the prompt can be fixed against
+# it. "elevated" and "elevation" are left out on purpose: elevated blood
+# pressure is a finding, not a sales word.
+BANNED_WORDS = ("leverage", "seamless", "empower", "unlock", "robust",
+                "actionable", "data-driven", "solutions", "testament",
+                "landscape", "delve", "elevate")
+_BANNED = re.compile(
+    r"\b(?:leverag(?:e|es|ed|ing)|seamless(?:ly)?|empower\w*|unlock\w*|robust\w*"
+    r"|actionable|data-driven|solutions|testaments?|landscapes?"
+    r"|delv(?:e|es|ed|ing)|elevate|elevates|elevating)\b",
+    re.IGNORECASE,
+)
+_copy_log = logging.getLogger("evident.copy")
+
+
+def banned_words(text: str) -> list[str]:
+    """The banned words in `text`, lower-cased, each once, in order of first use."""
+    seen: list[str] = []
+    for m in _BANNED.finditer(text or ""):
+        w = m.group(0).lower()
+        if w not in seen:
+            seen.append(w)
+    return seen
+
 
 def _cap(text: str, limit: int) -> str:
     """Cut at the last sentence boundary that fits; else at a word boundary."""
@@ -645,10 +673,15 @@ def tidy_prose(text: str, limit: int) -> str:
     t = (text or "").strip()
     if not t:
         return ""
+    # A dash between numbers is a range: "5 to 10 mg", never "5, 10 mg".
+    t = re.sub(r"(?<=\d)\s*[\u2014\u2013]\s*(?=\d)", " to ", t)
     # Dashes used as punctuation become a comma or a full stop.
     t = re.sub(r"\s*[\u2014\u2013]\s*(?=[A-Z])", ". ", t)
     t = re.sub(r"\s*[\u2014\u2013]\s*", ", ", t)
     t = re.sub(r"\s+--\s+", ", ", t)
+    # A hyphen with a space either side, between words, is a dash too. Only
+    # between letters, so "5 - 10 mg" keeps its meaning.
+    t = re.sub(r"(?<=[A-Za-z])\s+-\s+(?=[A-Za-z])", ", ", t)
     # Filler openers, per sentence.
     parts = _SENTENCE_END.split(t)
     cleaned = []
@@ -665,6 +698,9 @@ def tidy_prose(text: str, limit: int) -> str:
     t = re.sub(r"\s+([,.;:!?])", r"\1", t)
     if t and t[-1] not in ".!?\"\u201d":
         t += "."
+    hits = banned_words(t)
+    if hits:
+        _copy_log.warning("model prose used banned words: %s", ", ".join(hits))
     return _cap(t, limit)
 
 
