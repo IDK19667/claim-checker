@@ -1968,6 +1968,19 @@ t("  'about as well for weight loss as' is a plain no, whatever a later clause h
                    "Intermittent fasting is better for weight loss than regular dieting") == "no"
   and breakdown.stance("Intermittent fasting may work about as well as dieting.",
                        "Intermittent fasting is better for weight loss than regular dieting") == "mixed")
+t("  a claim that says 'not' is answered no by a plain yes, so its 'false' stays false",
+  breakdown.stance("Smoking causes lung cancer, and it is the leading cause worldwide.",
+                   "Smoking does not cause lung cancer") == "no"
+  and breakdown.stamp_conflict("false", "Smoking does cause lung cancer.", "",
+                               "Smoking does not cause lung cancer") is None
+  and breakdown.stance("Vaccines do not cause autism.", "Vaccines have no link to autism") == "yes"
+  and breakdown.stance("Smoking may raise lung cancer risk.", "Smoking does not cause lung cancer") == "mixed")
+t("  a 'not' inside 'people who don't' is not the claim saying no",
+  breakdown.stance("People who sleep less gain more weight.",
+                   "People who do not sleep enough gain weight") == "yes"
+  and breakdown.stance("Red wine is not good for your heart.", "Red wine is good for your heart") == "no")
+t("  softening's own negation check leaves the verdict reader's alone",
+  breakdown._NEGATED.search("No, smoking is the main cause of lung cancer") is None)
 
 t("  a risk claim's own disease is its outcome, not a narrow group",
   evidence.population({"title": "Physical activity and incident type 2 diabetes mellitus: a dose-response meta-analysis",

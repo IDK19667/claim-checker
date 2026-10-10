@@ -683,12 +683,39 @@ def _polarity(clause: str) -> str:
     return "no" if _NEGATED.search(clause) else "yes"
 
 
+# Words that open a clause about someone or something rather than the
+# claim's own assertion: "people who don't sleep gain weight" asserts that
+# they gain weight, and its "don't" is not the claim saying no.
+_SUBORDINATE = frozenset("who whom whose that which if when whenever because "
+                         "unless until while".split())
+
+
+def claim_denies(claim: str) -> bool:
+    """True when the claim itself is a "no", like "smoking does not cause
+    lung cancer". A plain "smoking causes lung cancer" answers it with a
+    no, so a takeaway's yes and no swap places."""
+    for m in _NEGATED.finditer(claim or ""):
+        head = [w.lower().strip(",'\"") for w in claim[:m.start()].split()[-3:]]
+        if not _SUBORDINATE.intersection(head):
+            return True
+    return False
+
+
 def stance(text: str, claim: str) -> str:
     """
     What a takeaway commits to about the claim: "yes", "no", "untested" or
     "mixed". Only the first sentence is read: the takeaway is one sentence,
     and an explanation's first sentence is where it states its answer.
     """
+    said = _plain_stance(text, claim)
+    if said in ("yes", "no") and claim_denies(claim):
+        return "no" if said == "yes" else "yes"
+    return said
+
+
+def _plain_stance(text: str, claim: str) -> str:
+    """What the takeaway says on its own, before a claim that says no
+    turns it round."""
     first = (sentences(text or "") or [""])[0].strip().rstrip(".")
     if not first:
         return "mixed"
@@ -769,9 +796,12 @@ def stamp_conflict(verdict: str, tldr: str, explanation: str, claim: str) -> str
             said = None
     if not said:
         return None
+    turned = ("; the claim itself says no, so a takeaway agreeing that it does not "
+              "happen is a yes to it, and the verdict for that is \"true\""
+              if said in ("yes", "no") and claim_denies(claim) else "")
     return (f"the verdict is \"{verdict}\" but {where} says {_SAYS[said]}. If the "
             f"studies really show {_SAYS[said]}, the verdict must say so; if they do "
-            f"not, the takeaway must say no more than the verdict does")
+            f"not, the takeaway must say no more than the verdict does{turned}")
 
 
 # ---------------------------------------------------------------------

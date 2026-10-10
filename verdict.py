@@ -841,6 +841,24 @@ def _redo_note(faults: list[str]) -> str:
               "actually support and say only that one.")
 
 
+def _denial_note(claim: str) -> str:
+    """
+    A claim typed as a "no" ("smoking does not cause lung cancer") gets one
+    more paragraph, written about it alone. Given to every claim, its
+    example primed plain claims the other way round ("vaccines cause
+    autism" came back "true" over "vaccines do not cause autism"), so every
+    other claim is sent the prompt exactly as it was.
+    """
+    if not breakdown.claim_denies(claim):
+        return ""
+    return """
+
+This claim itself says no: it says something does not happen. Answer it
+exactly as it is written. If the studies show it does not happen, the
+claim is right: the takeaway agrees with it and the verdict is "true".
+If they show it does happen, the verdict is "false"."""
+
+
 def weigh_prompt(claim: str, studies_block: str, subgroup_block: str = "") -> str:
     """
     The one prompt behind every verdict. A function rather than an f-string
@@ -899,7 +917,7 @@ not make children hyperactive", "it works no better than ordinary
 dieting"), the verdict is "false". If it says a plain "yes", the verdict
 is "true". "complicated" is for an answer that really is "partly" or "it
 depends", and its takeaway holds both sides. Never stamp "complicated"
-over a takeaway that says plainly yes or plainly no.
+over a takeaway that says plainly yes or plainly no.{_denial_note(claim)}
 
 PubMed's search can return studies that only superficially match the
 words in the claim. A study is evidence for this claim only when it
