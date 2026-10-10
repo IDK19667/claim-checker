@@ -85,6 +85,17 @@ is; switched off, it plays again, and stills built while it was on become
 clips. A shared result's verdict still is left alone either way: a cold
 link loads one picture.
 
+**No sideways scroll, as a guard.** Measured first at 375px with touch:
+nothing on the home page (at five points through the fly-through), a
+result page, /checks or /privacy sticks out, so this fixes no live bug.
+It stops the next long word or wide table from making the whole page
+slide sideways under a thumb. `overflow-x: hidden; overflow-x: clip;` is
+on html and body. `hidden` on body would turn it into a scroll container
+and stop the fly-through's sticky stage from sticking, so in a browser
+too old for `clip` (Safari 15 and earlier) body drops back to visible and
+the guard stays on html alone. Checked in Chromium: the stage holds at
+the top through the section and leaves with its bottom edge.
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

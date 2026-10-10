@@ -582,6 +582,12 @@ t("the stage shows the poster, not a black canvas, until a frame is drawn",
   'canvas.setAttribute("data-drawn", "")' in _fj
   and "#flight-canvas[data-drawn] { visibility: visible; }" in flight_css)
 
+t("no sideways scroll: html and body clip overflow-x, with hidden as the fallback",
+  "html, body { overflow-x: hidden; overflow-x: clip; }" in style_css)
+t("  and a browser without clip keeps the sticky stage working",
+  "@supports not (overflow-x: clip) { body { overflow-x: visible; } }" in style_css
+  and "position: sticky;" in flight_css)
+
 # Live gates: the still version follows the reader's settings during the
 # visit, and the stylesheet and the script agree on when it applies.
 _gates = re.findall(r'"(\([^"]+\))"', _fj.split("var GATES = [")[1].split("];")[0])

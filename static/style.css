@@ -61,6 +61,13 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
+/* No sideways scroll on a phone, whatever a long word or a wide table does.
+   `clip` where the browser has it, which is everywhere current: `hidden` on
+   body makes it a scroll container, and the fly-through's sticky stage would
+   then stick to a box that never scrolls. So a browser without `clip` keeps
+   the guard on html only, which reaches the viewport. */
+html, body { overflow-x: hidden; overflow-x: clip; }
+@supports not (overflow-x: clip) { body { overflow-x: visible; } }
 * { scrollbar-width: thin; scrollbar-color: var(--rule-2) transparent; }
 
 ::selection { background: var(--ink); color: var(--paper); }
