@@ -4,6 +4,56 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-10 (latest): Colour back, no box on the first screen, and a result that shows it goes on
+
+Five changes from the user's look at the finished pass.
+
+**The grade is reversed.** The toned monochrome in the entry below read
+to the user as black and white, and they asked for the footage in its
+colours. Every filter is gone and the round 5 rule is back: the clips,
+the poster, the stills and the result band play as shot. The two panels
+over the footage stay.
+
+**No claim box on the first screen.** The panel over the opening
+footage carried a "Paste a claim" field. Readers took it as the place to
+start and never learned the footage scrolls into a real check. The
+panel now shows the claim and "Scroll down to see it checked" with an
+arrow. The checker is still one tap away ("Skip to the checker", and `/`),
+and the footage still ends on "Now check yours". "Check another claim"
+now lands on the checker rather than the top of the footage.
+
+**Relied-on books are solid; the rest are outlined.** Same cloth for
+both, so the colour still says the kind of study, but a book read and
+not used is a 2px outline of its cloth on an 18% wash of it, lettered in
+the cloth. The user asked for the used ones to stand out more, and a
+silver band on an otherwise identical book was not enough. Opacity was
+ruled out again for the reason in the entry below. The mini shelves and
+the share card draw the same distinction. Lettering on the wash measures
+5.2:1 and up. The QA script read `color-mix` output (`oklab()`) as RGB
+and called it 2.5:1; it now resolves every colour through a canvas.
+
+**The full breakdown moved up and got deeper.** It sat after the
+sources, where nobody found it. It now sits straight under "Still open",
+with a head that looks like a section (26px title, a line saying what is
+inside, an Open control) instead of a summary line. Inside, a new
+section quotes **what each study concluded**, in its authors' words. It
+is read off the abstracts in `evidence.conclusion`, not written by the
+model: a labelled conclusion section, or in an abstract with no headings
+an explicit concluding sentence ("In conclusion", "These results
+suggest"). Anything less certain is left out; quoting the last sentence
+of an abstract put things like "We also explore" in the authors' mouths.
+It covers 90 of 171 cached abstracts, costs no model call, and the quote
+is never ref-linked, since "study 2" in it is the authors' study 2.
+
+**The page moves down once after a check.** The verdict lands in the
+same place the searching happened, so a reader could take the verdict
+for the whole result. 900ms after a check the reader ran, the page
+scrolls so the thread sits near the top and the short answer shows
+under the verdict. It is the one exception to "no scroll hijacking", so
+it is held to rules: never on a shared link, cancelled by any touch,
+wheel or key, deferred while the tab is hidden, a jump under reduced
+motion.
+
 ## 2026-10-10 (later): The footage takes the room's colour, and the shelf stops fading
 
 Two refinements inside the reading room, which the user asked for

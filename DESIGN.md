@@ -306,6 +306,10 @@ components:
     backgroundColor: "{colors.spine-shade}"
   spine-band:
     backgroundColor: "{colors.on-cloth}"
+  breakdown-open:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.control}"
   shelf:
     backgroundColor: "{colors.wood}"
   bookend:
@@ -450,12 +454,15 @@ in shapes: "Based on 7 studies, 2 used for this verdict, 4 strong".
   is lettered. A word that cannot stand up on its book is left off,
   never cut: `fitSpines()` hides it, and the tip and the key carry it.
   A retracted book is never lettered; the hatch and the key say it.
-- **A silver band is whether the verdict relied on it.** On a relied-on
-  book the two foil rules at the head become one band of silver foil
-  (`--on-cloth` to `--rule-2` and back), the way a library marks a volume,
-  with a small green dot above. Nothing is ever faded: every book keeps
-  its cloth, so the colour always says the kind of study and the key
-  always matches what is on the shelf.
+- **Solid or outlined is whether the verdict relied on it.** A relied-on
+  book is solid cloth, and the two foil rules at its head become one band
+  of silver foil (`--on-cloth` to `--rule-2` and back), the way a library
+  marks a volume, with a small green dot above. A book read but not
+  relied on is the same book outlined: a 2px edge of its cloth on a pale
+  wash of it (18% cloth into `--paper`), lettered in the cloth, like a
+  paperback beside the bound volumes. Nothing is ever faded with opacity,
+  which would let a strong study pass for a weak one: the colour always
+  says the kind of study, and the key always matches the shelf.
 
 Under each book its study number, 01 to 08, the number the prose points
 at and the list carries. A book is a `<button>`: pressing one marks it,
@@ -469,9 +476,9 @@ button, so no strip between them is dead to a finger; eight books shrink
 to fit a phone. A key under the shelf names only the cloths present.
 
 The **mini shelf** on each of the latest checks, and on the share card, is
-the same shelf at 20px: the same heights, every book in its cloth. It
-carries no band: at 5px wide a band reads as a letter, not a band, so
-how many were relied on is the line of words beside it. A reader can see
+the same shelf at 20px: the same heights, relied-on books solid and the
+rest outlined on their wash, as on the big shelf. It carries no band: at
+5px wide a band reads as a letter, not a band. A reader can see
 the shape of the evidence before opening a check.
 
 ## Structure
@@ -494,8 +501,21 @@ the shape of the evidence before opening a check.
 - **The report:** a band of footage, then the night head (back, the case
   line, the thread, the claim in curly quotes, the reading log while it
   runs, the ringed verdict), then by day: "The short answer" at 21px,
-  "What the research says", "Still open" under an ink rule, "The
-  evidence" with the shelf, then the sources. On a wide screen the head
+  "What the research says", "Still open" under an ink rule, the full
+  breakdown, "The evidence" with the shelf, then the sources.
+- **The full breakdown** sits straight under "Still open", closed, so a
+  reader meets it before the shelf rather than after the sources. Its
+  head is a heading, not a link: a 2px ink rule over it, "Rests on N
+  studies" in mono, "Read the full breakdown" in 26px Bricolage, a line
+  of what is inside ("The claim part by part, each study's own
+  conclusion, how big the effect is and who it applies to."), and at the
+  right an Open control, the layer's one rounded thing, at
+  `--r-control`, that inverts on hover and reads Close when open.
+  Inside: the claim part by part, what the evidence shows, **what each
+  study concluded** (each relied-on study's conclusion quoted from its
+  abstract, under "Study N · type · year", in curly quotes from the
+  stylesheet), why the verdict is what it is, who it applies to, and what
+  is still unknown. No cards, no colour by verdict. On a wide screen the head
   spans the page, the reading takes the left column and the sources the
   right.
 - **The sources:** two folds, "Relied on for the verdict" open and "Read,
@@ -525,17 +545,18 @@ The home page opens on a fly-through: real footage of one real check,
 replayed, and it says so on the clip in every state. It is not a mood film
 and not a generated hero; it is a recording of the thing the page does.
 
-**Every frame carries one grade** (`--grade`: grayscale, then a 20% sepia
-turned 100 degrees into the night's green): a toned monochrome, so a
-stock clip never brings its own colour into the room (the opening clip's
-cyan phone glow, a blue lab stand). It moves colour only, never
-exposure: measured on real frames, the average level is unchanged. The
-canvas, the poster, the fallback stills and the result band's clips all
-carry it, so footage and stills always match.
+**The footage plays in its own colour.** No grade, no filter, no scrim:
+a toned monochrome was tried and read as black and white, so the clips,
+the poster, the fallback stills and the result band all show the frames
+as they were shot.
 
 **Two panels over the footage, no more.** Captions sit on a plate of the
 night stock (`--plate`, 80%) top left, so they hold their contrast over
-any frame. The claim panel sits bottom left, opaque, and its bottom row,
+any frame. The claim panel sits bottom left, opaque. It shows the claim
+being checked and, under it, "Scroll down to see it checked" with a down
+arrow: no field, because a box on the first screen read as the place to
+start and hid that the footage scrolls. The only box over the footage is
+"Now check yours", at its end. The panel's bottom row,
 across one hairline, carries the standing line ("Illustrative footage. A
 real check, replayed") and, as the row's last cell, "Skip to the
 checker", on screen at every stage. No glass, no backdrop blur, no glow.
@@ -565,9 +586,16 @@ Two moments in the reading, and the live check:
 3. **A live check:** the band and the sheet arrive once when the check
    starts, each line of the reading log prints as its stage happens, and
    the live line's dot pulses.
+4. **The nudge:** 900ms after a check the reader just ran comes back,
+   the page moves down once so the thread sits near the top and the short
+   answer and the start of the reading show under the verdict. It is the
+   one time the page scrolls itself. It never runs on a shared link, any
+   touch, wheel or key from the reader cancels it, it waits for a hidden
+   tab to come back, and under reduced motion it jumps rather than glides.
 
 The ring does not draw itself. Nothing else animates: no entrances on
-sections, no parallax, no cursor effects, no scroll hijacking, no animated
+sections, no parallax, no cursor effects, no scroll hijacking (the nudge
+is one move the reader can cancel, not a hijack), no animated
 backgrounds. All of it collapses under `prefers-reduced-motion`.
 
 ## Copy
