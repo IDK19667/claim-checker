@@ -1,9 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- A masthead: newsprint, a double rule, the paper's initial. -->
-  <rect width="512" height="512" fill="#FAF9F6"/>
-  <rect x="64" y="96" width="384" height="14" fill="#14140F"/>
-  <rect x="64" y="128" width="384" height="6" fill="#14140F"/>
-  <text x="256" y="366" text-anchor="middle" font-family="Libre Caslon Text, Georgia, serif"
-        font-weight="700" font-size="230" fill="#14140F">C</text>
-  <rect x="64" y="404" width="384" height="6" fill="#14140F"/>
+  <!-- A short shelf on the night ground: each book's cloth is a kind of
+       study, and the sage dot marks the one a verdict relied on. -->
+  <rect width="512" height="512" fill="#0f1211"/>
+  <rect x="71" y="420" width="370" height="16" fill="#eceee9"/>
+  <rect x="91" y="204" width="72" height="216" fill="#3a4e6b"/>
+  <rect x="101" y="222" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <rect x="101" y="234" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <rect x="177" y="120" width="72" height="300" fill="#35594c"/>
+  <rect x="187" y="138" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <rect x="187" y="150" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <circle cx="213" cy="86" r="12" fill="#9fc3b0"/>
+  <rect x="263" y="288" width="72" height="132" fill="#7e4f3d"/>
+  <rect x="273" y="306" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <rect x="273" y="318" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <rect x="349" y="204" width="72" height="216" fill="#5a4760"/>
+  <rect x="359" y="222" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
+  <rect x="359" y="234" width="52" height="3" fill="#f1f2ee" fill-opacity="0.45"/>
 </svg>
