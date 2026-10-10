@@ -1812,5 +1812,49 @@ pubmed.search_pubmed = _real_search
 t("  and what the phrase search finds is always among the studies read",
   "KNUCKLE1" in _merged and "KNUCKLE2" in _merged and len(_merged) == 16 and len(_seen) == 3, _merged)
 
+# ---- Before you trust a verdict: the home page's plain answers -----------
+import html as _html
+import inspect as _inspect
+import re as _re
+_home = c.get("/").get_data(as_text=True)
+_trust = _home.split('<section id="trust"')[1].split("</section>")[0] if '<section id="trust"' in _home else ""
+_rows = _trust.split('<div class="trust-row">')[1:]
+_qs = [_html.unescape(_re.sub(r"<[^>]+>", "", r.split("</h3>")[0])).strip() for r in _rows]
+t("trust: the home page answers the five questions a stranger asks, and shows a real one",
+  _qs[:5] == ["Where do the studies come from?", "Is an AI making this up?",
+              "Is it biased? Who made it?", "Is it free?", "Is this medical advice?"]
+  and "Can I see a real one?" in _qs, _qs)
+t("  every answer ends pointing back to the claim box",
+  len(_rows) >= 6 and all(_re.findall(r'<a [^>]*href="([^"]+)"', r)[-1:] == ["#claim-input"] for r in _rows))
+_trust_text = _html.unescape(_re.sub(r"<[^>]+>", " ", _trust))
+t("  in plain words: no dashes, none of the banned words",
+  "\u2014" not in _trust_text and "\u2013" not in _trust_text and not verdict.banned_words(_trust_text),
+  verdict.banned_words(_trust_text))
+t("  the study count it states is the one PubMed is asked for",
+  "up to 8 of the closest" in _trust_text
+  and _inspect.signature(pubmed.search_with_fallback).parameters["max_results"].default == 8)
+t("  and it names the labels the code actually forces",
+  f"“{appmod.VERDICT_LABELS['insufficient']}”" in _trust_text and f"“{appmod.VERDICT_LABELS['complicated']}”" in _trust_text)
+_ex = appmod._trust_example()
+t("  the real check is the one the fly-through replays, linked as a result page",
+  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=Apple%20cider%20vinegar%20cures%20diabetes"
+  and "The footage at the top of this page is this check" in _trust_text, _ex)
+_checks_page = c.get("/checks").get_data(as_text=True)
+t("  /checks carries it too, without pointing at footage it does not show",
+  '<section id="trust"' in _checks_page and "The footage at the top" not in _checks_page)
+_ex_res = c.get(_ex["href"] if _ex else "/").get_data(as_text=True)
+t("  and a result page renders it hidden, so the verdict owns that screen",
+  ('<section id="trust" class="trust" aria-labelledby="trust-heading" hidden>' in _ex_res)
+  or ('id="server-result"' not in _ex_res))
+_orig_example = appmod._trust_example
+appmod._trust_example = lambda: None
+_bare = c.get("/").get_data(as_text=True)
+appmod._trust_example = _orig_example
+t("  with no real check built, the section renders without inventing one",
+  '<section id="trust"' in _bare and "Can I see a real one?" not in _bare)
+t("  its links put the cursor in the claim box without changing the address",
+  'closest("a.to-claim")' in (ROOT / "static" / "app.js").read_text()
+  and "trustSection.hidden = section !== askSection" in (ROOT / "static" / "app.js").read_text())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

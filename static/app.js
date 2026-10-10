@@ -86,6 +86,7 @@ function escapeHtml(str) {
 // ---- Views -----------------------------------------------------------------
 
 const askMore = $("ask-more");
+const trustSection = $("trust");
 // The tab title follows the view, so history entries and open tabs are
 // tellable apart. The server sets the result title; this keeps it honest
 // when the view changes without a page load.
@@ -368,9 +369,21 @@ function focusClaim() {
   else input.focus({ preventScroll: true });
 }
 
+// Every answer under "Before you trust a verdict" ends at the claim box. The
+// link works without this, as #claim-input; this also puts the cursor in it,
+// and keeps the fragment out of the address bar and any link shared from it.
+document.addEventListener("click", (e) => {
+  const to = e.target.closest && e.target.closest("a.to-claim");
+  if (!to) return;
+  e.preventDefault();
+  input.scrollIntoView({ block: "center" });
+  input.focus({ preventScroll: true });
+});
+
 function show(section) {
   for (const s of [askSection, resultSection, errorSection]) s.hidden = s !== section;
   askMore.hidden = section !== askSection;
+  if (trustSection) trustSection.hidden = section !== askSection;
   // The fly-through belongs to the home page's resting state and nowhere else.
   // The resize tells flight.js to recompute its scroll map for the page's new
   // height rather than keeping offsets from a layout that no longer exists.

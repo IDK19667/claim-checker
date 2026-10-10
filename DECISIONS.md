@@ -96,6 +96,25 @@ too old for `clip` (Safari 15 and earlier) body drops back to visible and
 the guard stays on html alone. Checked in Chromium: the stage holds at
 the top through the section and leaves with its bottom edge.
 
+**Plain answers before the first check.** A stranger arriving from a
+shared link has five questions before they trust a verdict: where the
+studies come from, whether an AI is making it up, whether it is biased
+and who made it, whether it is free, and whether it is medical advice.
+The front page now ends with those answers, under the latest checks, set
+as a facts panel about the tool itself rather than another list of
+checks. Every sentence is something the code or the privacy page makes
+true, and the tests tie the facts that could drift to their source: the
+study count to pubmed.py, the two verdict labels to VERDICT_LABELS. The
+answer about cost also says what the privacy page already says, that
+Google's free tier may use the text a reader pastes, because a page about
+trust that left that out would be the wrong kind of page. "Who made it"
+says only that Evident is an independent project with no ads, nothing for
+sale and no accounts; a name or a team is the owner's to add. The last
+row is the real check the fly-through replays, read from the same file,
+so the proof and the footage cannot disagree, and it is left out rather
+than invented if that file is missing. Every answer ends on a link back
+to the claim box, which also puts the cursor in it.
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

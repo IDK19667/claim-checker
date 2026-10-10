@@ -380,6 +380,17 @@ marks, and under the chart a key in 11px says what the marks mean.
 - **The front page:** the question as a 40px headline, the lede, then the
   ledger of real counts between two 4px rules, then the claim box and the
   primary button, then the latest checks.
+- **Before you trust a verdict:** the last thing on the front page, under
+  the latest checks. The facts panel's grammar turned on the tool itself:
+  a 20px/900 head closed by the 8px rule, one question per row on 1px
+  rules, the group closed by 4px. The question is set like a claim
+  (17px/600), the answer in the secondary ink at reading measure, and on a
+  wide screen the two sit side by side like a label and its value. Every
+  answer ends on a link back to the claim box, in the `link-btn` mark. The
+  last row is a real check, the one the fly-through replays, set as an
+  aside off a 2px `--rule`: the claim in curly quotes, the verdict at
+  20px/900 in ink like every verdict, the short answer, and when it was
+  checked. Plain answers only; nothing on it is coloured.
 - **Type-ahead:** a panel hung directly under the claim box, inside the
   field, so it uses the on-deep ink rather than the white-ground tokens.
   A heading in small caps says which kind of list it is, "Already checked"

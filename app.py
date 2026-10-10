@@ -242,6 +242,25 @@ def _flight_context():
             "base": f"/footage/{_footage_version()}"}
 
 
+def _trust_example():
+    """
+    The real check the trust section offers as proof: the one the fly-through
+    replays, read from the same file, so the two can never disagree. None if
+    it is not built, and the section renders without it rather than with an
+    invented example.
+    """
+    try:
+        with open(os.path.join(app.static_folder, "flight", "check.json")) as f:
+            check = json.load(f)
+        d = datetime.fromisoformat(check["checkedAt"])
+        return {"claim": check["claim"], "verdict": check["verdict"], "tldr": check["tldr"],
+                "checked": f"{d.day} {d.strftime('%B %Y')}",
+                "read": len(check.get("studies") or []),
+                "href": "/?q=" + quote(check["claim"])}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def _render_home(with_flight: bool):
     claim = _claim_from_query_args()
     preview = None
@@ -291,6 +310,8 @@ def _render_home(with_flight: bool):
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
                            ledger=ledger, latest=latest, flight=flight,
                            band_still=band_still,
+                           example=None if cached else _trust_example(),
+                           provider=verdict.provider_label(),
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 

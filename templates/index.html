@@ -227,6 +227,68 @@
       </div>
     </section>
 
+    <!-- ===== Before you trust a verdict =====
+         The questions a stranger asks before believing anything here, in
+         plain words, each answer ending back at the claim box. Every
+         sentence is something the code or the privacy page makes true: the
+         study count is pubmed.py's, the two labels are VERDICT_LABELS, and
+         the real check is the one the fly-through replays. -->
+    <section id="trust" class="trust" aria-labelledby="trust-heading"{% if result %} hidden{% endif %}>
+      <h2 class="trust-title" id="trust-heading">Before you trust a verdict</h2>
+      <div class="trust-row">
+        <h3 class="trust-q">Where do the studies come from?</h3>
+        <div class="trust-a">
+          <p>From PubMed, the U.S. National Library of Medicine's index of medical research, with more than 37 million records. A new check searches it and reads the abstracts of up to 8 of the closest matches. Every study it read is listed under the verdict, with a link to its PubMed page.</p>
+          <a class="link-btn to-claim" href="#claim-input">Check a claim and see what it finds</a>
+        </div>
+      </div>
+      <div class="trust-row">
+        <h3 class="trust-q">Is an AI making this up?</h3>
+        <div class="trust-a">
+          <p>An AI model ({{ provider }}) reads those abstracts and writes the verdict. It can only cite studies it was shown: the code checks every citation against that list. A verdict with no citations, or one resting only on case reports or animal and lab studies, is turned into “{{ labels.insufficient }}” before you see it. It can still misread an abstract, which is why every study it used is one tap away.</p>
+          <a class="link-btn to-claim" href="#claim-input">Check a claim and read the studies yourself</a>
+        </div>
+      </div>
+      <div class="trust-row">
+        <h3 class="trust-q">Is it biased? Who made it?</h3>
+        <div class="trust-a">
+          <p>Evident is an independent project. It shows no ads, sells nothing and has no accounts, so no verdict makes it money. Its rules lean towards caution: “{{ labels.complicated }}” and “{{ labels.insufficient }}” are ordinary answers here, and a confident one needs studies behind it. Research has blind spots of its own, so every verdict also says what is still open.</p>
+          <a class="link-btn to-claim" href="#claim-input">Check something you already believe</a>
+        </div>
+      </div>
+      <div class="trust-row">
+        <h3 class="trust-q">Is it free?</h3>
+        <div class="trust-a">
+          <p>Yes. No account, no paywall and no ads. It runs on the free tier of an AI service, so on a busy day it can reach its limit, and the page then says so and when to try again. A claim someone has already checked opens straight away. On that free tier, Google's terms let it use the text you paste to improve its products, so leave out anything personal.</p>
+          <a class="link-btn to-claim" href="#claim-input">Check a claim now</a>
+        </div>
+      </div>
+      <div class="trust-row">
+        <h3 class="trust-q">Is this medical advice?</h3>
+        <div class="trust-a">
+          <p>No. It tells you what published research says about a claim, which is not the same as what is right for you. Take what you find to a doctor or pharmacist who knows your history.</p>
+          <a class="link-btn to-claim" href="#claim-input">Check a claim to take with you</a>
+        </div>
+      </div>
+      {% if example %}
+      <div class="trust-row">
+        <h3 class="trust-q">Can I see a real one?</h3>
+        <div class="trust-a">
+          <div class="proof">
+            <p class="proof-claim">“{{ example.claim }}”</p>
+            <p class="proof-verdict">{{ labels.get(example.verdict, example.verdict) }}</p>
+            <p class="proof-tldr">{{ example.tldr }}</p>
+            <p class="proof-meta">Checked {{ example.checked }}. {{ example.read }} studies read.{% if flight %} The footage at the top of this page is this check, replayed.{% endif %}</p>
+          </div>
+          <p class="trust-links">
+            <a class="link-btn" href="{{ example.href }}">Read the whole check</a>
+            <a class="link-btn to-claim" href="#claim-input">Check your own claim</a>
+          </p>
+        </div>
+      </div>
+      {% endif %}
+    </section>
+
     <!-- ===== Result ===== -->
     <section id="result"{% if not result %} hidden{% endif %}>
       <button class="back" id="back-btn" type="button">
