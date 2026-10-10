@@ -693,6 +693,14 @@ t("  and a figure that is in them is quoted as it stands",
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
+t("  and under a 'not' it leaves the verb alone, since weakening it there would strengthen the sentence",
+  breakdown.soften("Vitamin C does not cure cancer.") == "Vitamin C does not cure cancer."
+  and breakdown.soften("Garlic doesn't cure HIV.") == "Garlic doesn't cure HIV."
+  and breakdown.soften("There is no evidence that it prevents colds.") == "There is no evidence that it prevents colds."
+  and breakdown.soften("It helps some cancers. It cures none.") == "It helps some cancers. It helps with none."
+  and breakdown.soften("Zinc never prevents colds, but it cures boredom.")
+  == "Zinc never prevents colds, but it helps with boredom.",
+  breakdown.soften("Zinc never prevents colds, but it cures boredom."))
 t("grounding: a breakdown with nothing left in it is no breakdown at all",
   breakdown.ground({"parts": [], "evidence": ["no citation here"], "effect_size": "",
                     "strength": "", "applies_to": "", "not_applies_to": "",
@@ -1084,6 +1092,11 @@ t("natural: the takeaway is a sentence someone would say out loud",
 t("  and research grammar is turned back into speech",
   breakdown.natural("Creatine is associated with hair loss.")
   == "Creatine is linked to hair loss.")
+t("  and 'link' used as a thing is left alone, never 'a small are linked to'",
+  breakdown.natural("Green tea has a small link to weight loss.") == "Green tea has a small link to weight loss."
+  and breakdown.natural("Coffee has links to lower risk.") == "Coffee has links to lower risk."
+  and breakdown.natural("Studies found no link to cancer.") == "Studies found no link to cancer."
+  and breakdown.natural("Sugary drinks link to diabetes.") == "Sugary drinks are linked to diabetes.")
 
 t("grade: the claim's own words are not counted against the prose",
   breakdown.claim_terms("Taking vitamin D supplements in winter cuts your risk of flu")

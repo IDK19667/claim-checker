@@ -807,11 +807,30 @@ def off_claim(tldr: str, claim: str) -> list[str]:
                   - asked - {w.rstrip("es") for w in asked})
 
 
+# Weakening a verb only weakens the sentence when the sentence asserts it.
+# Under a "not" it does the opposite: "does not cure cancer" became "does
+# not help with cancer", a stronger claim than the abstracts make, and one
+# that contradicted "helps with some cancers" in the same takeaway. So a
+# verb with a negation in the few words before it is left as written, the
+# same way match_effect() leaves a sentence with "no" or "not" in it alone.
+_NEGATION_BEFORE = re.compile(r"\b(?:not|never|no|nothing|neither|nor|cannot|without|"
+                              r"fails?|failed)\b|n't\b", re.IGNORECASE)
+
+
+def _soften_unless_negated(weaker):
+    def swap(m: re.Match) -> str:
+        head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
+        if _NEGATION_BEFORE.search(" ".join(head.split()[-4:])):
+            return m.group(0)
+        return m.expand(weaker)
+    return swap
+
+
 def soften(text: str) -> str:
     """Rewrite certainty the evidence here can never support."""
     t = text or ""
     for pattern, weaker in _SOFTEN:
-        t = pattern.sub(weaker, t)
+        t = pattern.sub(_soften_unless_negated(weaker), t)
     # A substitution at the head of a sentence must not leave it lowercase.
     return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
                   lambda m: m.group(1) + m.group(2).upper(), t)
@@ -824,8 +843,6 @@ def soften(text: str) -> str:
 # to another person, and "Vitamin D links to colds" is not a sentence
 # anyone would say.
 NATURAL = [
-    (r"\b[Ll]inks to\b", "is linked to"),
-    (r"\b[Ll]ink to\b", "are linked to"),
     (r"\bassociates with\b", "is linked to"),
     (r"\bassociate with\b", "are linked to"),
     (r"\bis associated with\b", "is linked to"),
@@ -839,6 +856,25 @@ NATURAL = [
 
 _NATURAL = [(re.compile(p), r) for p, r in NATURAL]
 
+# "link" is a thing as often as something done. "Vitamin D links to colds"
+# wants its verb fixed; "a small link to weight loss" and "has links to"
+# are already English, and swapping the verb in there left "a small are
+# linked to". After one of these words, "link" is the noun and stays.
+_LINK = re.compile(r"\b([Ll]inks?) to\b")
+_LINK_NOUN_AFTER = frozenset("""a an the no any some this that its their one
+    small weak strong clear possible modest direct causal slight consistent
+    plausible real significant definite firm limited tenuous potential likely
+    known proven little inverse positive negative statistical close
+    has have had with of found find finds show shows showed suggest suggests
+    suggested report reports reported""".split())
+
+
+def _link_as_verb(m: re.Match) -> str:
+    before = re.findall(r"[A-Za-z']+", m.string[:m.start()])
+    if before and before[-1].lower() in _LINK_NOUN_AFTER:
+        return m.group(0)
+    return "is linked to" if m.group(1).lower() == "links" else "are linked to"
+
 
 def natural(text: str) -> str:
     """
@@ -849,7 +885,7 @@ def natural(text: str) -> str:
     the verb is touched; nothing here changes what is being claimed or how
     strongly, so it composes safely with soften().
     """
-    t = text or ""
+    t = _LINK.sub(_link_as_verb, text or "")
     for pattern, fixed in _NATURAL:
         t = pattern.sub(fixed, t)
     # "Vitamin D is linked to" needs its capital back if it opened the line.
