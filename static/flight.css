@@ -19,12 +19,19 @@
   top: 0;
   height: 100svh;
   overflow: hidden;
-  /* The poster, set per page from the manifest. It is what the first screen
-     shows until the first frame is decoded, and what a reader on a connection
-     that never finishes the sequence keeps. Full brightness, no scrim. */
-  background-image: var(--poster, none);
-  background-size: cover;
-  background-position: center;
+}
+
+/* The poster, set per page from the manifest. It is what the first screen
+   shows until the first frame is decoded, and what a reader on a connection
+   that never finishes the sequence keeps. Full brightness, no scrim. It is a
+   layer of its own so it can carry the footage grade (--grade, style.css)
+   without the panels over it being graded too. */
+.flight-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--poster, none) center / cover;
+  filter: var(--grade);
 }
 
 #flight-canvas {
@@ -33,6 +40,7 @@
   width: 100%;
   height: 100%;
   display: block;
+  filter: var(--grade);
   /* An opaque canvas is black until a frame is drawn on it, and it sits over
      the poster. flight.js sets data-drawn on the first frame. */
   visibility: hidden;
@@ -353,17 +361,32 @@
 
 /* ---- always-there furniture -------------------------------------------- */
 
-/* The standing line sits directly under the deck in its own paper chip, so it
-   is on screen at every stage and through every cross-fade, and so that no
-   panel has to change height to carry it. Borders meet rather than double:
-   this chip's top edge is the rule under whichever panel is showing. */
-.flight-note {
+/* The standing line sits directly under the deck, so it is on screen at every
+   stage and through every cross-fade, and no panel has to change height to
+   carry it. It is the panel's own bottom row, not a second panel: whichever
+   layer is showing meets it edge to edge across one hairline, square corners
+   where they join, one shadow under the whole. The way out is the row's last
+   cell, so the footage carries two panels, the headline and this one. */
+.work-layer.flight-chip { border-radius: var(--r-panel) var(--r-panel) 0 0; }
+
+.flight-foot {
   position: relative;
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--rule);
+  border-radius: 0 0 var(--r-panel) var(--r-panel);
+  /* Below the row only: a shadow cast upward would fall on the panel it
+     belongs to. */
+  box-shadow: 0 16px 24px -8px var(--shadow);
+  pointer-events: auto;
+}
+
+.flight-note {
+  flex: 1;
   margin: 0;
   padding: 10px 18px 12px;
   font: 500 10.5px/1.45 var(--mono);
   color: var(--ink-3);
-  pointer-events: auto;
 }
 
 /* The preload progress indicator. Small, top-centre, gone once loaded. */
@@ -377,24 +400,19 @@
 }
 
 .skip-checker {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 3;
+  flex: none;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  padding: 10px 16px;
-  font: 500 13px/1.2 var(--body);
-  color: var(--deep);
-  background: var(--on-deep);
-  border: 1px solid var(--on-deep);
-  border-radius: var(--r-control);
+  padding: 0 18px;
+  border-left: 1px solid var(--rule);
+  font: 600 13px/1.2 var(--body);
+  color: var(--ink);
   text-decoration: none;
 }
 
-.skip-checker:hover { background: var(--panel); }
-.skip-checker:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
+.skip-checker:hover { text-decoration: underline; text-underline-offset: 3px; }
+.skip-checker:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--r-control); }
 
 /* ---- after the flight --------------------------------------------------- */
 
@@ -417,8 +435,8 @@
   position: static;
   height: auto;
   overflow: visible;
-  background-image: none;      /* no poster behind a page in normal flow */
 }
+.no-flight .flight-stage::before { display: none; }  /* no poster behind a page in normal flow */
 .no-flight #flight-canvas,
 .no-flight .flight-progress,
 .no-flight .chapter-zone { display: none; }
@@ -448,14 +466,9 @@
   max-height: none;
   overflow: visible;
 }
-/* With no pinned stage to ride, the link is simply the first thing in the
-   section, in normal flow, where it is still the way out of the stills. */
-.no-flight .skip-checker {
-  position: static;
-  display: flex;
-  width: max-content;
-  margin: 20px auto 0;
-}
+/* With no pinned stage to ride, the panel and its bottom row are simply the
+   first thing in the section, in normal flow, and the link in that row is
+   still the way out of the stills. */
 
 .stills figure {
   margin: 0 0 40px;
@@ -467,6 +480,7 @@
   width: 100%;
   height: auto;
   background: var(--deep);
+  filter: var(--grade);
 }
 
 .stills figcaption {
@@ -510,15 +524,11 @@
   .flight-work { left: 12px; bottom: 12px; top: 50svh; width: calc(100% - 24px); }
   .work-layer { gap: 10px; padding: 12px; }
   .flight-note { padding: 8px 12px 10px; }
+  .skip-checker { font-size: 12px; padding: 0 12px; }
   .stack { gap: 4px; }
   .stack li { font-size: 13px; padding: 7px 10px; line-height: 1.25; }
   .stack .g { font-size: 11px; }
   .evidence-bar { height: 18px; }
-  /* The panel runs edge to edge at this width, which would otherwise tuck
-     its last line under the fixed skip-checker button sitting in the same
-     corner: reserve that corner's width so the note wraps clear of it. */
-  .flight-note { padding-right: 156px; }
-  .skip-checker { right: 12px; bottom: 12px; font-size: 12px; padding: 10px 12px; }
   .flight-progress { top: 64px; font-size: 10px; padding: 5px 10px; }
 }
 
@@ -537,8 +547,8 @@
     position: static;
     height: auto;
     overflow: visible;
-    background-image: none;
   }
+  .flight-stage::before { display: none; }
   #flight-canvas,
   .flight-progress,
   .chapter-zone { display: none; }
@@ -561,11 +571,5 @@
     visibility: visible;
     max-height: none;
     overflow: visible;
-  }
-  .skip-checker {
-    position: static;
-    display: flex;
-    width: max-content;
-    margin: 20px auto 0;
   }
 }

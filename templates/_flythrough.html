@@ -97,19 +97,22 @@
 
         </div>
 
-        <p class="flight-chip flight-note">
-          Illustrative footage. A real check, replayed,
-          {{ flight.check.checkedAt_long }}. Not medical advice.
-          {% if flight.credits %}{% for c in flight.credits %}{{ c.credit }} {% endfor %}{% endif %}
-        </p>
+        {# The standing line and the way out share the panel's bottom row, so
+           the footage carries two panels, not four. Inside the pinned stage,
+           the link is on screen at every scroll position and on every stage,
+           and stops being there the moment the footage ends and the checker
+           itself is what you are looking at. No script decides this: the
+           stage is sticky, the link rides it. #}
+        <div class="flight-chip flight-foot">
+          <p class="flight-note">
+            Illustrative footage. A real check, replayed,
+            {{ flight.check.checkedAt_long }}. Not medical advice.
+            {% if flight.credits %}{% for c in flight.credits %}{{ c.credit }} {% endfor %}{% endif %}
+          </p>
+          <a class="skip-checker" href="#ask">Skip to the checker</a>
+        </div>
       </div>
     </div>
-
-    {# Inside the pinned stage, so it is on screen at every scroll position
-       and on every stage of the footage, and stops being there the moment
-       the footage ends and the checker itself is what you are looking at.
-       No script decides this: the stage is sticky, the link rides it. #}
-    <a class="skip-checker" href="#ask">Skip to the checker</a>
 
     {# Shown instead of the canvas under reduced motion, Save-Data, or a
        failed sequence. The four stages, in normal page flow. #}

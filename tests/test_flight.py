@@ -160,9 +160,10 @@ t("nothing in the work panel is hidden with the hidden attribute",
   "still-open\" data-on" in flight_tpl
   and 'class="claim-form flight-ask again" data-on' in flight_tpl)
 t("the skip link rides the pinned stage rather than floating over the "
-  "whole page",
-  flight_tpl.index('class="skip-checker"') > flight_tpl.index('class="flight-stage"')
-  and "position: absolute" in (ROOT / "static" / "flight.css").read_text()
+  "whole page: it is the last cell of the panel's bottom row",
+  flight_tpl.index('class="flight-stage"') < flight_tpl.index('class="flight-chip flight-foot"')
+  < flight_tpl.index('class="skip-checker"') < flight_tpl.index('class="stills"')
+  and "position: fixed" not in (ROOT / "static" / "flight.css").read_text()
       .split(".skip-checker {")[1].split("}")[0])
 
 # ---- the fallback stills exist -----------------------------------------------
@@ -355,6 +356,16 @@ import re  # noqa: E402
 app_js = (ROOT / "static" / "app.js").read_text()
 flight_css = (ROOT / "static" / "flight.css").read_text()
 style_css = (ROOT / "static" / "style.css").read_text()
+t("the footage carries two panels, the headline and the work: the standing "
+  "line is that panel's bottom row, not a chip of its own",
+  'class="flight-chip flight-note"' not in flight_tpl
+  and ".flight-foot {" in flight_css)
+_grade = style_css.split("--grade:")[1].split(";")[0]
+t("every frame of footage carries one grade, and it moves colour only: the "
+  "canvas, the poster, the stills and the result band's clips, never darkened",
+  flight_css.count("filter: var(--grade);") == 3
+  and "filter: var(--grade);" in style_css.split(".film-shot {")[1].split("}")[0]
+  and not re.search(r"brightness|contrast|opacity", _grade), _grade)
 index_tpl = (ROOT / "templates" / "index.html").read_text()
 
 t("the band lives on the page itself, not on the fly-through, so a cold "
