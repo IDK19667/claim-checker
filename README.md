@@ -131,27 +131,17 @@ see Google's terms).
 
 ## Design
 
-A page from a paper of record that carries its own work. The front page is
-a small nameplate, one very large headline with the claim field beside it,
-a ledger of real counts (studies read, claims checked, pooled analyses),
-and the latest checks with the evidence behind each one: an ink bar showing
-the mix of study designs, and the real figures. The claim is set as a
-headline, the verdict
-is a banner between two rules, the takeaway takes a drop cap, and the
-sources run in a column with a rule under the ones the verdict relied on.
-Two faces (Libre Caslon Text and Archivo), one ink, no accent colour, and
-verdicts are deliberately not colour-coded. This world was chosen by
-building four complete versions of the app and comparing them side by
-side, and the front page was chosen from three the same way;
-`DECISIONS.md` records what the others were and why these won.
-`DESIGN.md` is the system as shipped, with its tokens in Google's
-design.md format so they can be linted against the stylesheet. On a wide
-screen the report sits beside its sources. Fonts are self-hosted, so the
-page makes no third-party request and looks right offline. `CLAUDE.md`
-and `AGENTS.md` hold the working rules. The UI was reviewed with the
-Impeccable critique flow (design-director review + mechanical anti-
-pattern scan); the scan is clean and the review's priority issues are
-fixed. Re-run the scan after UI edits (command in `CLAUDE.md`).
+The reading room after hours. A claim arrives at night, on a charcoal
+ground, and the verdict is given there, ringed in pen; then the evidence
+is laid out by day on cool stone. The front page opens on a fly-through of
+one real check, then the claim field, a ledger of real counts (studies
+read, claims checked, pooled analyses) and the latest checks, each with a
+small shelf showing the studies behind it. On a result the studies stand
+as a shelf of books: height is the strength of the design, the cloth is
+the kind of study, and the ones the verdict relied on stand forward and
+are highlighted in the list. Three faces (Bricolage Grotesque, Instrument
+Sans, IBM Plex Mono), one accent, and verdicts are deliberately not
+colour-coded. See `DESIGN.md` for the system and `DECISIONS.md` for why.
 
 ## Files
 
@@ -169,10 +159,11 @@ templates/        index.html (the single page + two bottom sheets),
                   privacy.html
 static/           style.css, app.js, sw.js, manifest.webmanifest, icons/,
                   tex/ (paper grain, stamp ink),
-                  fonts/ (Caslon + Archivo TTFs for og.py; woff2/ for browsers)
+                  fonts/ (Bricolage, Instrument Sans, Plex Mono TTFs for og.py; woff2/ for browsers)
 scripts/          live_batch.py: run 14 real claims and eyeball verdicts
                   regression.py: score the 20 audit claims against their expected verdicts
                   qa.mjs: browser design QA (contrast, tap areas, tokens)
+                  make_icons.py: draw the app icon (SVG and PNGs) from one shelf
 tests/            test_app.py: 63 integration tests, no network needed
 ```
 

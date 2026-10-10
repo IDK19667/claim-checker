@@ -1,259 +1,322 @@
 ---
 version: alpha
 name: Evident
-description: The logic of a facts panel. One typeface, near-black on off-white with every neutral mixed from the deep field, weight and scale doing all the work. Rule weight encodes importance, numbers carry the argument, caps are set tight and never tracked out. No accent colour anywhere and no verdict is tinted.
+description: The reading room after hours. Night, a charcoal with the green of the stacks in it, is where a claim arrives and where its verdict is ringed in pen. Day, cool stone, is the desk the evidence is laid out on, and the studies stand on it as a shelf of books whose cloth says what kind of study each one is. Three faces, one accent, and nothing ever coloured by what the verdict was.
 colors:
-  primary: "#0e1422"
-  secondary: "#fafbfc"
-  tertiary: "#666e85"
-  ink: "{colors.primary}"
-  ink-2: "#3a4256"
-  ink-3: "{colors.tertiary}"
-  paper: "{colors.secondary}"
-  paper-2: "#f1f3f7"
-  rule: "#d3d8e2"
-  rule-2: "#a3abbf"
-  ev-strong: "{colors.primary}"
-  ev-moderate: "{colors.rule-2}"
-  ev-weak: "{colors.secondary}"
-  ink-on-band: "{colors.secondary}"
-  deep: "#0b1226"
-  deep-2: "#18213e"
-  on-deep: "{colors.secondary}"
-  on-deep-2: "#a9b3cb"
-  act: "#8a4f13"
-  focus: "{colors.primary}"
-  header-over: "rgba(11, 18, 38, 0.78)"
-  header-solid: "rgba(11, 18, 38, 0.92)"
-  flight-scrim: "rgba(11, 18, 38, 0.55)"
-  scrim: "rgba(0, 0, 0, 0.55)"
-  shadow-sheet: "rgba(0, 0, 0, 0.28)"
+  primary: "#121514"
+  secondary: "#f1f2ee"
+  tertiary: "#2c5848"
+  deep: "#0f1211"
+  deep-2: "#181c1a"
+  deep-line: "#2a302d"
+  on-deep: "#eceee9"
+  on-deep-2: "#9ea6a1"
+  on-deep-3: "#7d8580"
+  paper: "#f1f2ee"
+  panel: "#fafaf8"
+  ink: "#121514"
+  ink-2: "#434a46"
+  ink-3: "#5d6560"
+  rule: "#d9dcd5"
+  rule-2: "#b9bfb7"
+  green: "#2c5848"
+  sage: "#9fc3b0"
+  tint: "#d4e4da"
+  c-strong: "#35594c"
+  c-human: "#3a4e6b"
+  c-lab: "#5a4760"
+  c-weak: "#7e4f3d"
+  wood: "#2b2622"
+  on-cloth: "#f1f2ee"
+  foil: "rgba(241, 242, 238, 0.45)"
+  spine-light: "rgba(255, 255, 255, 0.07)"
+  spine-shade: "rgba(0, 0, 0, 0.18)"
+  plate: "rgba(15, 18, 17, 0.8)"
+  film-top: "rgba(15, 18, 17, 0.35)"
+  scrim: "rgba(8, 10, 9, 0.55)"
+  shadow: "rgba(8, 10, 9, 0.22)"
+  focus: "#2c5848"
 typography:
   label:
-    fontFamily: Libre Franklin
-    fontSize: 10px
-    fontWeight: 700
-  label-lg:
-    fontFamily: Libre Franklin
-    fontSize: 10.5px
-    fontWeight: 600
-  label-strong:
-    fontFamily: Libre Franklin
+    fontFamily: IBM Plex Mono
     fontSize: 11px
-    fontWeight: 700
-  caption-sm:
-    fontFamily: Libre Franklin
-    fontSize: 11.5px
-    fontWeight: 400
-  caption:
-    fontFamily: Libre Franklin
+    fontWeight: 500
+    lineHeight: 1.4
+  label-sm:
+    fontFamily: IBM Plex Mono
+    fontSize: 10.5px
+    fontWeight: 500
+    lineHeight: 1.3
+  label-xs:
+    fontFamily: IBM Plex Mono
+    fontSize: 10px
+    fontWeight: 500
+    lineHeight: 1.4
+  code:
+    fontFamily: IBM Plex Mono
+    fontSize: 12.5px
+    fontWeight: 500
+    lineHeight: 1.5
+  code-sm:
+    fontFamily: IBM Plex Mono
     fontSize: 12px
-    fontWeight: 400
-  caption-lg:
-    fontFamily: Libre Franklin
+    fontWeight: 500
+  spine:
+    fontFamily: Instrument Sans
+    fontSize: 10px
+    fontWeight: 500
+    lineHeight: 1
+    letterSpacing: 0.06em
+  caption-xs:
+    fontFamily: Instrument Sans
+    fontSize: 12px
+    fontWeight: 500
+  caption:
+    fontFamily: Instrument Sans
     fontSize: 12.5px
     fontWeight: 400
-  body-sm:
-    fontFamily: Libre Franklin
+  caption-md:
+    fontFamily: Instrument Sans
     fontSize: 13px
     fontWeight: 400
-  body-note:
-    fontFamily: Libre Franklin
+  note:
+    fontFamily: Instrument Sans
     fontSize: 13.5px
     fontWeight: 400
-  body-compact:
-    fontFamily: Libre Franklin
+  small:
+    fontFamily: Instrument Sans
     fontSize: 14px
+    fontWeight: 500
+  small-lg:
+    fontFamily: Instrument Sans
+    fontSize: 14.5px
     fontWeight: 400
-  body:
-    fontFamily: Libre Franklin
+  body-sm:
+    fontFamily: Instrument Sans
     fontSize: 15px
     fontWeight: 400
-    lineHeight: 1.5
-  body-lead:
-    fontFamily: Libre Franklin
+    lineHeight: 1.55
+  body-read:
+    fontFamily: Instrument Sans
     fontSize: 15.5px
     fontWeight: 400
-    lineHeight: 1.5
-  lede:
-    fontFamily: Libre Franklin
+    lineHeight: 1.6
+  body:
+    fontFamily: Instrument Sans
     fontSize: 16px
     fontWeight: 400
-    lineHeight: 1.45
-  takeaway:
-    fontFamily: Libre Franklin
-    fontSize: 26px
-    fontWeight: 700
-    lineHeight: 1.22
-    letterSpacing: -0.02em
-  takeaway-min:
-    fontFamily: Libre Franklin
+    lineHeight: 1.6
+  lede:
+    fontFamily: Instrument Sans
+    fontSize: 17px
+    fontWeight: 400
+    lineHeight: 1.55
+  claim-input:
+    fontFamily: Instrument Sans
+    fontSize: 18px
+    fontWeight: 400
+    lineHeight: 1.4
+  claim-min:
+    fontFamily: Instrument Sans
+    fontSize: 19px
+    fontWeight: 400
+    lineHeight: 1.35
+  tldr:
+    fontFamily: Instrument Sans
     fontSize: 21px
-    fontWeight: 700
-    lineHeight: 1.22
+    fontWeight: 400
+    lineHeight: 1.45
+  claim-max:
+    fontFamily: Instrument Sans
+    fontSize: 24px
+    fontWeight: 400
+    lineHeight: 1.35
+  wordmark:
+    fontFamily: Bricolage Grotesque
+    fontSize: 20px
+    fontWeight: 500
+    lineHeight: 1
     letterSpacing: -0.02em
-  figure-xl:
-    fontFamily: Libre Franklin
+  chapter-sm:
+    fontFamily: Bricolage Grotesque
+    fontSize: 22px
+    fontWeight: 350
+    lineHeight: 1.15
+    letterSpacing: -0.025em
+  doc-head:
+    fontFamily: Bricolage Grotesque
+    fontSize: 24px
+    fontWeight: 350
+    lineHeight: 1.2
+    letterSpacing: -0.025em
+  title:
+    fontFamily: Bricolage Grotesque
     fontSize: 26px
-    fontWeight: 900
+    fontWeight: 350
+    lineHeight: 1.15
+    letterSpacing: -0.03em
+  section-sm:
+    fontFamily: Bricolage Grotesque
+    fontSize: 28px
+    fontWeight: 350
+    lineHeight: 1.1
+    letterSpacing: -0.03em
+  figure:
+    fontFamily: Bricolage Grotesque
+    fontSize: 30px
+    fontWeight: 300
     lineHeight: 1
     letterSpacing: -0.03em
     fontFeature: "'tnum' 1"
-  entry-claim:
-    fontFamily: Libre Franklin
-    fontSize: 17px
-    fontWeight: 600
-    letterSpacing: -0.01em
-  claim-input:
-    fontFamily: Libre Franklin
-    fontSize: 18px
-    fontWeight: 600
-  panel-title:
-    fontFamily: Libre Franklin
-    fontSize: 20px
-    fontWeight: 900
-    lineHeight: 1.0
-    letterSpacing: -0.03em
-  sheet-title:
-    fontFamily: Libre Franklin
-    fontSize: 22px
-    fontWeight: 900
-    lineHeight: 1.18
-    letterSpacing: -0.025em
-  hero-sub:
-    fontFamily: Libre Franklin
-    fontSize: 26px
-    fontWeight: 600
-    letterSpacing: -0.02em
-  flight-claim:
-    fontFamily: Libre Franklin
-    fontSize: 36px
-    fontWeight: 400
-    lineHeight: 1.16
-    letterSpacing: -0.02em
-  hero-sub-wide:
-    fontFamily: Libre Franklin
+  section:
+    fontFamily: Bricolage Grotesque
     fontSize: 32px
-    fontWeight: 500
-    letterSpacing: -0.02em
-  claim-min:
-    fontFamily: Libre Franklin
-    fontSize: 17px
-    fontWeight: 500
-    lineHeight: 1.34
-    letterSpacing: 0em
-  claim:
-    fontFamily: Libre Franklin
-    fontSize: 20px
-    fontWeight: 500
-    lineHeight: 1.34
-    letterSpacing: 0em
-  claim-wide:
-    fontFamily: Libre Franklin
-    fontSize: 22px
-    fontWeight: 500
-    lineHeight: 1.34
-    letterSpacing: 0em
+    fontWeight: 350
+    lineHeight: 1.06
+    letterSpacing: -0.035em
+  flight-verdict-min:
+    fontFamily: Bricolage Grotesque
+    fontSize: 34px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
   verdict-min:
-    fontFamily: Libre Franklin
-    fontSize: 30px
-    fontWeight: 900
-    lineHeight: 0.98
-    letterSpacing: -0.035em
-  verdict:
-    fontFamily: Libre Franklin
+    fontFamily: Bricolage Grotesque
+    fontSize: 38px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
+  section-wide:
+    fontFamily: Bricolage Grotesque
     fontSize: 40px
-    fontWeight: 900
-    lineHeight: 0.98
-    letterSpacing: -0.035em
-  verdict-wide:
-    fontFamily: Libre Franklin
-    fontSize: 46px
-    fontWeight: 900
-    lineHeight: 0.98
+    fontWeight: 350
+    lineHeight: 1.06
     letterSpacing: -0.035em
   hero:
-    fontFamily: Libre Franklin
-    fontSize: 40px
-    fontWeight: 900
-    lineHeight: 0.98
-    letterSpacing: -0.035em
+    fontFamily: Bricolage Grotesque
+    fontSize: 44px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
+  flight-verdict-max:
+    fontFamily: Bricolage Grotesque
+    fontSize: 54px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
+  hero-mid:
+    fontFamily: Bricolage Grotesque
+    fontSize: 58px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
+  verdict:
+    fontFamily: Bricolage Grotesque
+    fontSize: 60px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
+  verdict-wide:
+    fontFamily: Bricolage Grotesque
+    fontSize: 64px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
   hero-wide:
-    fontFamily: Libre Franklin
-    fontSize: 52px
-    fontWeight: 900
-    lineHeight: 0.98
-    letterSpacing: -0.035em
+    fontFamily: Bricolage Grotesque
+    fontSize: 72px
+    fontWeight: 350
+    lineHeight: 1.04
+    letterSpacing: -0.04em
 spacing:
-  gutter: 16px
-  row: 7px
-  block: 18px
-  section: 26px
-  page: 40px
+  gutter: 20px
+  row: 8px
+  block: 24px
+  group: 36px
+  section: 72px
 rounded:
-  none: 0px
+  control: 3px
+  panel: 4px
 components:
-  panel:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-  panel-head:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-  band:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.ink-on-band}"
-  evidence-field:
+  night:
     backgroundColor: "{colors.deep}"
     textColor: "{colors.on-deep}"
-  field-rule:
-    backgroundColor: "{colors.deep-2}"
-  field-caption:
+  night-quiet:
     backgroundColor: "{colors.deep}"
     textColor: "{colors.on-deep-2}"
-  action:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.act}"
-  button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.paper}"
-  button-ghost:
+  night-label:
+    backgroundColor: "{colors.deep}"
+    textColor: "{colors.on-deep-3}"
+  night-well:
+    backgroundColor: "{colors.deep-2}"
+    textColor: "{colors.on-deep}"
+  night-rule:
+    backgroundColor: "{colors.deep-line}"
+  day:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
-  field:
+  day-quiet:
     backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink-2}"
+  day-label:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink-3}"
+  panel:
+    backgroundColor: "{colors.panel}"
     textColor: "{colors.ink}"
+    rounded: "{rounded.panel}"
   hairline:
     backgroundColor: "{colors.rule}"
   hairline-2:
     backgroundColor: "{colors.rule-2}"
-  surface-hover:
-    backgroundColor: "{colors.paper-2}"
-  header-over-flight:
-    backgroundColor: "{colors.header-over}"
-    textColor: "{colors.on-deep}"
-  header-after-flight:
-    backgroundColor: "{colors.header-solid}"
-    textColor: "{colors.on-deep}"
-  flight-chapter:
-    backgroundColor: "{colors.flight-scrim}"
-    textColor: "{colors.on-deep}"
-  evidence-bar-strong:
-    backgroundColor: "{colors.ev-strong}"
-  evidence-bar-moderate:
-    backgroundColor: "{colors.ev-moderate}"
-  evidence-bar-weak:
-    backgroundColor: "{colors.ev-weak}"
-  caption:
-    textColor: "{colors.ink-3}"
-  secondary-text:
-    textColor: "{colors.ink-2}"
-  sheet:
+  button-primary:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.panel}"
+    rounded: "{rounded.control}"
+  button-on-night:
+    backgroundColor: "{colors.on-deep}"
+    textColor: "{colors.deep}"
+    rounded: "{rounded.control}"
+  link:
     backgroundColor: "{colors.paper}"
+    textColor: "{colors.green}"
+  pen:
+    backgroundColor: "{colors.deep}"
+    textColor: "{colors.sage}"
+  highlighter:
+    backgroundColor: "{colors.tint}"
     textColor: "{colors.ink}"
-  sheet-shadow:
-    backgroundColor: "{colors.shadow-sheet}"
+  spine-strong:
+    backgroundColor: "{colors.c-strong}"
+    textColor: "{colors.on-cloth}"
+  spine-human:
+    backgroundColor: "{colors.c-human}"
+    textColor: "{colors.on-cloth}"
+  spine-lab:
+    backgroundColor: "{colors.c-lab}"
+    textColor: "{colors.on-cloth}"
+  spine-weak:
+    backgroundColor: "{colors.c-weak}"
+    textColor: "{colors.on-cloth}"
+  spine-foil:
+    backgroundColor: "{colors.foil}"
+  spine-light:
+    backgroundColor: "{colors.spine-light}"
+  spine-shade:
+    backgroundColor: "{colors.spine-shade}"
+  shelf:
+    backgroundColor: "{colors.wood}"
+  caption-plate:
+    backgroundColor: "{colors.plate}"
+    textColor: "{colors.on-deep}"
+  film-top:
+    backgroundColor: "{colors.film-top}"
   scrim:
     backgroundColor: "{colors.scrim}"
+  sheet-shadow:
+    backgroundColor: "{colors.shadow}"
+  focus-ring:
+    backgroundColor: "{colors.focus}"
 ---
 
 # DESIGN.md: Evident
@@ -264,333 +327,226 @@ redesign replaces this file on purpose, never by drift.
 
 ## The idea
 
-**A facts panel, not a page of prose.** The reference is the panel on the
-back of a food or medicine package: a fixed, unglamorous, ferociously
-legible block where rule weight encodes importance, every row reports a
-number somebody counted, and nothing is drawn that does not report
-something. That is what this product does, so that is what it looks like.
+**The reading room after hours.** A claim arrives at night: it is typed
+into a dark room, and the verdict is given there, ringed in pen. Then the
+lights come up on the desk and the evidence is laid out by day: what the
+research says, what is still open, and the studies themselves, standing
+on a shelf as books.
 
-This world replaced a broadsheet, and the reason is worth keeping in
-view. The broadsheet was cream paper, a high contrast serif display,
-hairline rules, zero radius and letterspaced small caps. Those are not
-neutral choices: they are the two most common shapes an AI reaches for
-when asked to make something look considered. A tool whose entire product
-is credibility cannot afford to look like the default output of the thing
-it is arguing with. See `DECISIONS.md`.
+Every screen is built from those two grounds and the line that joins
+them. Night carries the question and the answer; day carries the working.
+Nothing in between, no third surface, no gradient from one to the other.
 
-## One typeface
+This world replaced a stamped ticket on blue and white, and before that a
+facts panel. The reader asked for something more engaging than blue and
+white, darker, with no glowing cyan, and then twice for something less
+playful and more premium. The answer is restraint in the colour and
+craft in the details: one accent, three faces, and a shelf that reports
+something true about every study on it.
 
-**Libre Franklin, weights 400 to 900, and nothing else.** A grotesque
-with enough character to carry a headline at 900 and enough plainness to
-set a paragraph at 400. Self-hosted as one variable woff2 latin subset,
-29KB. Do not add a second family: the whole hierarchy is weight and
-scale, and a second voice would dilute the one that is doing the work.
+## Night and day
 
-Do not reintroduce a Google Fonts link. It costs a third party
-connection, it breaks the offline first paint, and the Content Security
-Policy allows `font-src 'self'` only, so it would be blocked outright.
+- **Night**, `#0f1211`, a charcoal with the green of the stacks in it:
+  never navy, never pure black, never glowing. The masthead, the ask, the
+  report's head, an error, a check still running, and the footer.
+  Night surfaces run to both edges of the screen by a border image of the
+  same colour pushed out sideways, which paints outside the box without
+  widening it: it can never scroll, and there is no clipped edge to leave
+  a hairline of paper between two night blocks.
+- **Day**, `#f1f2ee`, cool stone, not cream. Everything you read at
+  length: the short answer, the research, the shelf, the sources, the
+  trust questions, the privacy page.
 
-## Caps are tight
+The page is day stock in every light. `color-scheme: light` keeps the
+browser's own furniture light; night is a surface the page lays down on
+purpose, never the browser's dark mode.
 
-Labels are uppercase at weight 700, **letter spacing zero**. Tracked out
-small caps is the single mannerism this design exists to avoid; it is the
-tell that reads as generated. Where caps need to feel lighter, drop the
-colour to `ink-3`, never open the tracking.
+## Three faces
 
-Headlines run tight the other way: `-0.02em` to `-0.035em`. Numbers are
-always `tabular-nums`.
+- **Bricolage Grotesque**, 300 to 500, pinned at its 96pt optical size
+  because it is only ever set large: the wordmark, headlines, the
+  verdict, the ledger's figures, section titles. Weight 350 with tight
+  tracking (`-0.03em` to `-0.04em`); it is rounded and modern without
+  being soft.
+- **Instrument Sans**, 400 to 600: everything you read. The claim, the
+  short answer, the research, the sources, every control.
+- **IBM Plex Mono**, 500: everything you scan. Labels ("The claim you
+  checked", "Still open"), counts, study numbers, the search query, the
+  live lines of a check. Sentence case, never tracked.
 
-## Colour, and what it is not allowed to mean
+All three are self-hosted latin subsets in `static/fonts/woff2/`, 77KB
+together, with their OFL licences beside them. Do not reintroduce a Google
+Fonts link: it costs a third party connection, breaks the offline first
+paint, and the Content Security Policy allows `font-src 'self'` only.
 
-Black on white with four greys, plus exactly two colours, and **neither
-of them may ever touch a verdict**:
+The one place caps are tracked is the lettering on a spine, uppercase at
+`0.06em`, because that is how a bound volume is lettered.
 
-- **The field**, `#0b1226`, a deep navy ground. It carries the front
-  page's hero and the report's head, and it is **identical on every
-  verdict**. It brands the product; it reports nothing.
-- **The action**, `#0b5fd0`, used only on things you can operate: the
-  deep dive control and outbound links. Never on evidence, never on a
-  verdict, never as a surface.
+## Colour, and what it may not mean
 
-True, false, complicated and not enough evidence are drawn identically,
-in the same ink, at the same weight. "Not enough evidence" is the longest
-label and wraps inside the same stamp; it gets no icon, no tint and no
-special treatment. A tool whose only product is credibility does not get
-to colour its own answers, and green for true would imply a certainty
-the studies do not support.
+**One accent**: bottle green `#2c5848` by day for what you can act on
+(links, focus), sage `#9fc3b0` by night for the pen, and a pale tint
+`#d4e4da` for the highlighter. That is all the colour the interface has.
 
-This is a deliberate reversal of the previous rule, which allowed no
-colour at all. Austerity read as unfinished rather than as restraint;
-see `DECISIONS.md`.
+**The cloth of the books** is the only other colour, and it says one
+thing: what kind of study a book is.
 
-There is no dark mode. The page is white in every light, on every device,
-and `color-scheme: light` keeps the browser's own furniture from going
-dark around it.
+| Cloth | Token | Kind |
+|---|---|---|
+| Green | `--c-strong` | Strong design: meta-analysis, systematic review, randomized trial |
+| Slate blue | `--c-human` | A study in people of another design |
+| Plum | `--c-lab` | Animal or lab |
+| Rust | `--c-weak` | Opinion or a single case |
+| Hatched | `--ink-2` on `--panel` | Retracted |
 
-## Rule weight is the hierarchy
+The four cloths are matched in tone so the shelf reads as one set.
+**No verdict is ever coloured.** "Likely true", "Likely false", "It's
+complicated" and "Not enough evidence" are set identically, in the same
+ink, the same face and the same ring. A tool whose only product is
+credibility does not get to colour its own answers, and green for true
+would imply a certainty the studies do not support. No stylesheet may
+select on `data-verdict`; a test enforces it.
 
-The panel's structure is carried entirely by horizontal rules, and their
-weight is the grammar:
+## The thread and the ring
 
-- **8px** closes the panel head. It is the heaviest mark on the page.
-- **4px** separates one group of facts from the next.
-- **2px** is a border: the panel itself, a button, the masthead.
-- **1px** separates one line from the line below it.
+On the report's night head a single 1px line in `--deep-line` runs down
+the left of the claim, with a 7px sage knot at each label: "The claim you
+checked", then "Verdict". It is the line from the question to its answer,
+and it ends at the verdict's knot.
 
-Nothing is rounded, but zero radius is a consequence of the panel, not
-the signature. The signature is the rule weight.
+**The ring** is a pen stroke in sage, 1.25px, drawn round the verdict
+words rather than the column: `fitRing()` measures the text's own line
+boxes, pads each end by 7% of the text's width plus 12px so the ring's
+curved shoulders never cross a letter, and keeps it inside the screen.
+The stroke's start and end overlap a little at the top, where a pen
+would lift. It is static: drawn, not animated.
 
-## The evidence chart
+## The highlighter
 
-One bar per study, in the order of the list of studies, under a line that
-says in words what the chart says in marks: "Based on 8 studies, 3 used
-for this verdict, 2 strong".
+Titles of the studies the verdict relied on carry a highlighter stroke in
+`--tint` along the lower part of the line, never a block. On a check the
+reader just ran it sweeps in left to right, once; restored or shared
+results draw it already there. The key under the sources says what it
+means: "Highlighted: relied on".
 
-**Height is the kind of study and nothing else.** Three fixed tiers off a
-2px baseline, named down the left in 9.5px caps against 1px gridlines:
-Strong 100%, Moderate 64%, Weak 34%. A withdrawn paper is drawn at the
-weak height whatever it was published as, because a retraction is not
-thin evidence, it is no evidence. The same set of studies therefore
-always draws the same chart, and the chart cannot drift with the verdict.
+## The shelf
 
-**Fill is whether the verdict leaned on it.** Solid ink for used,
-paper with a 1.5px inked edge for read but not used, a 135 degree hatch
-for retracted. Density, never hue: it survives greyscale, printing and
-colour blindness, and it cannot be mistaken for a verdict.
+The evidence chart is a shelf of books, one per study, in the order of
+the list of studies, under a line that says in words what the shelf says
+in shapes: "Based on 7 studies, 2 used for this verdict, 4 strong".
 
-Under each bar its study number, 01 to 08, the same number the prose
-points at and the list carries. The columns tile edge to edge, so no part
-of the plot is dead to a finger: the gap between bars is padding inside
-the button, not space between buttons. Eight equal columns cannot each be
-44px wide on a 375px screen, so the target takes its size the other way,
-the full 94px of the plot (110px on a wide screen).
+- **Height is the strength of the design and nothing else.** Three fixed
+  heights off a dark wood base: strong 100%, moderate 72%, weak 44%. A
+  withdrawn paper stands at the weak height, hatched, whatever it was
+  published as: a retraction is not thin evidence, it is no evidence.
+- **Cloth is the kind of study**, from the table above.
+- **The spine is lettered** with the design in a reader's words
+  ("Randomized trial", "Review", "One case"), small, uppercase, reading
+  up the spine, under two foil rules at the head the way a bound volume
+  is lettered. A word that cannot stand up on its book is left off,
+  never cut: `fitSpines()` hides it, and the tip and the key carry it.
+  A retracted book is never lettered; the hatch and the key say it.
+- **Standing forward is whether the verdict relied on it.** Relied on is
+  full strength with a small green dot above; read but not used stands
+  back at 45%.
 
-A bar is a `<button>`. Pressing one rings the bar, reverses its number out
-of ink, opens the matching study and scrolls to it with a 3px inset rule
-on the row. Hover and focus open a small ink tip above the bar with the
-study type and year; the chart's top margin is that tip's room, so it
-never lands on the summary line. Arrow left and right walk the bars. A
-screen reader gets the counts in a sentence rather than eight anonymous
-marks, and under the chart a key in 11px says what the marks mean.
+Under each book its study number, 01 to 08, the number the prose points
+at and the list carries. A book is a `<button>`: pressing one marks it,
+opens the matching study and scrolls to it. Hover and focus open a small
+ink tip with the type and year. The columns tile edge to edge so no part
+of the shelf is dead to a finger. A key under the shelf names only the
+cloths present.
+
+The **mini shelf** on each of the latest checks is the same shelf at
+20px: the same heights, the same cloth, the relied-on books at full
+strength. A reader can see the shape of the evidence before opening a
+check.
 
 ## Structure
 
-- **The masthead:** wordmark at 900 uppercase, the date, "how it works",
-  closed by a 2px rule.
-- **The front page:** the question as a 40px headline, the lede, then the
-  ledger of real counts between two 4px rules, then the claim box and the
-  primary button, then the latest checks.
-- **Before you trust a verdict:** the last thing on the front page, under
-  the latest checks. The facts panel's grammar turned on the tool itself:
-  a 20px/900 head closed by the 8px rule, one question per row on 1px
-  rules, the group closed by 4px. The question is set like a claim
-  (17px/600), the answer in the secondary ink at reading measure, and on a
-  wide screen the two sit side by side like a label and its value. Every
-  answer ends on a link back to the claim box, in the `link-btn` mark. The
-  last row is a real check, the one the fly-through replays, set as an
-  aside off a 2px `--rule`: the claim in curly quotes, the verdict at
-  20px/900 in ink like every verdict, the short answer, and when it was
-  checked. Plain answers only; nothing on it is coloured.
-- **Type-ahead:** a panel hung directly under the claim box, inside the
-  field, so it uses the on-deep ink rather than the white-ground tokens.
-  A heading in small caps says which kind of list it is, "Already checked"
-  for literal hits and "Did you mean" for corrected spellings, because a
-  fixed typo must never be passed off as what the reader typed. Each row
-  is the claim with its verdict, so the answer is previewed before the tap.
-  The keyboard selection carries a 3px inset rule as well as a tint, since
-  tint alone is invisible to anyone arrowing through it without a mouse.
-- **Nothing found:** when a check has no evidence to stand on, the source
-  column ends with a panel under a 2px rule. A heading that names which
-  emptiness it is ("Nothing matched" for no papers, "Nothing that tests
-  this" for papers that miss the claim), one sentence saying plainly that
-  this is not the same as the claim being false, then actions on ruled
-  rows: the exact search, a wider one, and a plain-words hint. Below that,
-  claims already checked that sit near this one. It never proposes an
-  answer.
-- **The 404:** the masthead, "That page is not here", and the claim field
-  again, plus the most recent checks. A dead end still offers the one
-  thing the visitor came for, and carries the medical disclaimer like
-  every other screen.
-- **The field:** the report's head and the front page's hero, both on
-  `#0b1226`. The report's field carries the case line, then the claim
-  under a 10px caps label, "The claim you checked", set in curly quotes at
-  20px/500 in the secondary ink and wrapped for as long as it needs to be,
-  never truncated, then a 2px rule, then the label "Verdict" and the
-  verdict itself at up to 40px/900 (46px wide). The claim's largest size
-  sits below the verdict's smallest, so on no screen can the claim be read
-  as the answer.
-- **The report:** back, then the field, then **the panel**, which lifts
-  onto the field by 14px with the only shadow in the design, then the
-  deeper layer, then the actions, then the sources. The field and
-  the panel bleed to the same edge and are therefore the same width. On a
-  wide screen the report is two columns, the field and the panel in the
-  first and the sources in the second, and both columns open on the same
-  line; while a check is still running there is nothing to put in the
-  second column, so checking stays one.
-- **The panel:** read top to bottom it answers, then explains, then shows
-  its working. "The short answer" with the takeaway at up to 26px/700,
-  closed by the 8px rule because it is the panel's head. "What the
-  research says", never folded: three to five sentences at 15.5px, each
-  one already through the same gate as the breakdown and each carrying the
-  study numbers it rests on. "Still open". Then "The evidence": the
-  summary line, the chart, its key, the counted figures on one line
-  (pooled analyses, trials, registrations, retractions, the years), and
-  the record sentence. Each group is closed by a 4px rule. Someone who
-  reads only the claim, the verdict and the short answer has a complete
-  answer; everything below it is the working, in the order a reader would
-  ask for it.
-- **The deeper layer:** `Read the full breakdown`, a third `<details>` in
-  the same fold grammar as the source groups, closed on arrival and opened
-  by the reader, under a 4px rule between the reasoning and the actions.
-  Its count is the number of studies the breakdown actually rests on, which
-  is smaller than the number read and is not the same as the panel's
-  "relied on". Inside, five sections separated by 1px rules: the claim
-  split into its parts, each quoted in curly quotes exactly as the reader
-  wrote it, then the evidence in short paragraphs, the effect size under
-  its own 2px rule, why the verdict is what it is, who it covers and who it
-  does not, and what is still unknown. Every sentence carries the study
-  numbers it rests on as tap targets, and a closing line in fine print says
-  so. The short answer above it does not move, shrink or change: the layer
-  is additive, and a result that has no breakdown renders without it rather
-  than with an empty fold.
-- **Who it applies to, narrowed:** when the evidence the verdict leans on
-  was run in one group only, `Who this applies to` carries a second
-  paragraph naming the groups, set as an aside: 14px, indented 12px off a
-  2px `--rule` on its left edge, the way a footnote to the paragraph above
-  it would be set. It is drawn from the records' own titles and publication
-  types, not from the model's prose, so it is a fact about the evidence
-  rather than a finding from it, and it is absent when every cited study
-  was general. No new token: the left rule is the same `--rule` the folds
-  use.
-- **The sources:** two folded groups, `Relied on for the verdict` open and
-  `Read, not relied on` closed, each a `<details>` with its count. Every
-  study stays in the HTML in both states, for crawlers and for a reader
-  with no JavaScript. Study numbers stay global because the prose points
-  at them by number.
-- **Deep dive:** a boxed control on every study row, drawn at rest and
-  filled with ink on hover and focus. Never revealed on hover only: on a
-  phone there is no hover, and a control a mouse alone can find is a
-  control most readers never find.
-- **Cards** (share and link preview): the same panel logic, 1200x630.
-  Wordmark, one heavy rule, the claim, the verdict reversed out of an ink
-  band, the takeaway, the strongest source it leaned on, the colophon.
+- **The masthead:** night, the wordmark, the date in mono, "How it works".
+- **The front page:** the fly-through first (see **The footage**), then
+  the ask on night: the question as a 44px headline ("Heard a health
+  claim?" with "Check it against the research." a step quieter), the lede,
+  the ledger of real counts in light 30px figures under a `--deep-line`
+  rule, the claim box as a well in the night, and the one light shape on
+  the screen, the button. Then by day the latest checks and "Before you
+  trust a verdict".
+- **Latest checks:** a 32px title, then rows on 1px rules: the issue
+  number in mono, the claim, the verdict at the right in plain ink, and
+  under it the mini shelf and its counts. On a wide screen the title sits
+  in a left column and the rows in a right one.
+- **Before you trust a verdict:** the same grammar, one question per row,
+  every answer ending on a link back to the claim box, and a real check
+  as an aside.
+- **The report:** a band of footage, then the night head (back, the case
+  line, the thread, the claim in curly quotes, the reading log while it
+  runs, the ringed verdict), then by day: "The short answer" at 21px,
+  "What the research says", "Still open" under an ink rule, "The
+  evidence" with the shelf, then the sources. On a wide screen the head
+  spans the page, the reading takes the left column and the sources the
+  right.
+- **The sources:** two folds, "Relied on for the verdict" open and "Read,
+  not relied on" closed. Each study row carries a 3px stripe of its cloth
+  down its left edge, and a relied-on title carries the highlighter.
+  Every study stays in the HTML in both states.
+- **A check still running, and an error,** are all night: the head (or
+  the error's message in 26px Bricolage and the way out) runs straight
+  into the footer with only a `--deep-line` rule between them, no strip
+  of paper. While a countdown runs, "Try again" is drawn as an outline
+  and plainly not yet open.
+- **The study sheet:** a panel that rises from the foot of the screen
+  over a scrim, `--r-panel` at its top corners, the only shadow in the
+  design.
+- **Documents** (privacy, the 404): the masthead, a 44px title, the lede,
+  then the text by day under 24px heads. The 404 offers the claim box
+  again and the latest checks.
+- **Cards:** the share image (1080 square, drawn in the browser) and the
+  link preview (1200x630, drawn by `og.py`) are one composition: night on
+  top with the wordmark, the thread, the claim and the ringed verdict;
+  day below with the short answer, what is still open, the mini shelf;
+  a mono colophon with "Not medical advice".
 
 ## The footage
 
 The home page opens on a fly-through: real footage of one real check,
-replayed. It is the one place in the product where a moving picture is
-allowed, and it earns that on a single condition, stated on the clip
-itself in every state: **"Illustrative footage. A real check, replayed."**
-It is not a mood film and not a generated hero. It is a recording of the
-thing the page does, which is why it is not covered by the ban on
-generated imagery and video below.
+replayed, and it says so on the clip in every state. It is not a mood film
+and not a generated hero; it is a recording of the thing the page does.
 
-**The footage does not follow a check.** Submit a claim and the fly-through
-stands down: it is five screens of scroll belonging to a page the reader
-has just left, and keeping it running means decoding frames for a canvas
-nobody can see. What replaces it is **the band**.
+Captions over the footage sit on a plate of the night stock (`--plate`,
+80%) so they hold their contrast over any frame; the claim panel is an
+opaque panel. No glass, no backdrop blur, no glow. "Skip to the checker"
+is the inverted light shape, visible throughout.
 
-### The band and the sheet
-
-Checking, a verdict, an error and a check that found nothing are one
-screen, at every width and on every route:
-
-- **A band of footage across the top**, full bleed, 42vh on a desktop and
-  30vh on a phone, under the masthead and above everything else. It is
-  `aria-hidden` and carries nothing readable.
-- **A sheet below it**, the same centred column the rest of the paper
-  uses, lifted 48px into the foot of the band so the two overlap rather
-  than butt, with a 3px ink edge along its top and the page ground showing
-  on both sides of it. Everything the reader came for is on the sheet: the
-  claim, "Check another claim", the live step lines, the verdict, the
-  studies.
-
-An earlier round ran the footage *behind* the report instead. At this
-column width that left it visible only as two narrow strips at the edges,
-a window frame on one side and half a bookshelf on the other, and no way
-to read either as a picture. A band is the shape a cinematic still wants;
-a background is not.
-
-**Three clips, one per stage of the work.** Searching plays while the
-search is built and run, weighing once studies have come back, and the
-verdict shot is what the result rests on. Each is 1920x600 and crops with
-a chosen `object-position`, never a default one: the book's spine and the
-page it is turning, the marker's tip rather than the knuckles behind it,
-the microscope rather than the rack beside it. See `media/PRODUCTION.md`
-round 10.
-
-Four rules hold it together:
-
-- **Every clip change is an event, never a timer.** A clip changes because
-  the server said that thing happened. The band never runs on to footage
-  of work that has not happened.
-- **Text never sits on moving pictures.** Nothing readable is on the band
-  at all, which is the strongest form of the rule: no panel has to buy its
-  contrast back, and so there is **no backdrop blur, no scrim and no tint
-  anywhere**.
-- **The footage stays at full brightness.** It is not dimmed or darkened
-  to make room for the words. The words have their own room.
-- **The verdict is not colour coded here either.** The stamp on the sheet
-  is ink on paper, exactly as it is on `/checks`.
-
-**The dark field and the panel under it are the same width**, and so share
-a left edge. Inside the gutters the panel was a gutter narrower on each
-side, which read as a misprint.
-
-**Transitions between the three states** (claim, checking, verdict) are
-`transform` and `opacity` only, 300 to 500ms, measured CLS 0. No layout
-jump, no white flash. The band and the sheet arrive once, when a live
-check starts, and do not re-animate when the verdict lands.
-
-**Reduced motion, Save-Data and a slow connection get the same screens
-with nothing playing**: the band shows each clip's own first frame as a
-still, the same sheet arrives with the same copy in the same order, and
-the same way out. Not a degraded flow, the same flow without the motion.
-
-**A shared result link opens cold on one still**, server rendered, 27KB,
-and loads no video at all. Same band, same sheet, same everything, and no
-entrance: nothing moved, the reader navigated there, and a fade-in would
-read as something still loading.
-
-**The clips are never in the way of the first screen.** They are fetched
-once the reader presses Check, or in idle time after the home page has
-gone interactive, whichever comes first.
-
-**"Skip to the checker"** is visible on the first screen of the
-fly-through throughout. It belongs to the fly-through, which is the only
-place it has anything to skip.
+A check does not replay the fly-through. It stands down, and a band of
+footage across the top of the report (30vh on a phone) shows the stage of
+the work: searching, weighing, the verdict. Every clip change is an event
+from the server, never a timer. Nothing readable sits on the band. A
+shared result opens cold on one still and loads no video. Reduced motion,
+Save-Data and a slow connection get the same screens with stills.
 
 ## The keyboard
 
-Arrow up and down walk between studies with focus visible on each, and
-Enter opens the deep dive. **`/` returns to the claim box** from anywhere
-outside a sheet or a text field, with the previous claim selected.
+Arrow up and down walk between studies, Enter opens one. Arrow left and
+right walk the books on the shelf. **`/` returns to the claim box** from
+anywhere outside a sheet or a text field. Focus is a 2px outline in green
+by day and sage by night.
 
 ## Motion
 
-Three moments in the page, plus the sheet:
+Two moments in the reading, and the live check:
 
-1. **The rules under cited sources** draw left to right, staggered 120ms.
-2. **The wire** prints one line per stage while a check runs, a pulsing
-   square against the live line.
-3. **The evidence chart** grows its bars up from the baseline, 250ms each,
-   staggered 20ms, under 400ms for eight studies. Transform and opacity
-   only, once, on a result the reader just ran: a chart that was restored
-   from the cache or from history draws already standing, because the
-   reveal is the drawing of the chart and not an entrance for the section.
+1. **The shelf** grows its books up from the wood, 250ms each, staggered
+   20ms, on a check the reader just ran. Transform and opacity only.
+2. **The highlighter** sweeps across relied-on titles, once, on a check
+   the reader just ran.
+3. **A live check:** the band and the sheet arrive once when the check
+   starts, each line of the reading log prints as its stage happens, and
+   the live line's dot pulses.
 
-The sheet rises 40px and fades in over 260ms, and **it leaves the way it
-arrived**: the closed state sits on the base rule, `@starting-style`
-supplies the entry, and `overlay` and `display` transition
-`allow-discrete` so it is still painted on the way out.
-
-Nothing else in the page animates. No entrances on sections, no parallax,
-no cursor effects, no scroll hijacking, no animated backgrounds. All of it
-collapses under `prefers-reduced-motion`.
-
-The fly-through on `/` and the band over the sheet are the exceptions, and
-both are footage rather than animation: see **The footage** above for what
-they are allowed to do and what they are not.
+The ring does not draw itself. Nothing else animates: no entrances on
+sections, no parallax, no cursor effects, no scroll hijacking, no animated
+backgrounds. All of it collapses under `prefers-reduced-motion`.
 
 ## Copy
 
@@ -604,17 +560,9 @@ copy or model output. A test enforces it on the rendered page;
 
 ## Anti-patterns
 
-Never reintroduce: a cream or beige ground, a serif display face,
-letterspaced small caps, hairline newspaper columns, an accent colour,
-colour coded verdicts, pill buttons, stat rows, gauges, glass, shadows
-used for depth, emoji icons, gradient washes, generated hero imagery or
-video, component library drop-ins, animated or shader backgrounds, cursor
-effects, or analytics of any kind.
-
-Two of those need their edges drawn, now that the home page carries
-footage. **Generated** imagery and video stay banned: pictures invented by
-a model imply evidence the page does not have. The fly-through is a
-recording of a real check and says so on screen. **Glass** stays banned
-without exception, including over the footage: no backdrop blur, no
-translucent panels, no scrim under text. Panels are opaque or they are not
-panels.
+Never reintroduce: a glowing or neon accent, cyan light cues, a navy or
+pure black night, a cream ground, a colour coded verdict, a second accent,
+gradient washes, glass or backdrop blur, pill buttons, shadows used for
+depth on ordinary content, emoji icons, stat-card rows, gauges, generated
+hero imagery or video, animated backgrounds, cursor effects, or analytics
+of any kind.

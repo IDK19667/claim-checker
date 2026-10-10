@@ -53,18 +53,20 @@ app does not need one.
 
 ## Styling rules
 
-- Tokens first: every colour is a CSS custom property in `:root` and its
-  dark counterpart. No hard-coded hex in a rule that isn't a token
-  definition, so a palette change is one edit. `DESIGN.md` frontmatter
-  carries the same tokens in the design.md standard; keep them in sync.
-- Two type voices only: Libre Caslon Text for everything the paper says,
-  Archivo in letterspaced small caps for everything a reader scans
-  (labels, meta, buttons, figures). No third family.
-- No accent colour. Verdicts are not colour-coded: the words and the
-  ruled banner carry the difference.
-- Nothing is rounded, nothing floats. No cards, no shadows except the
-  sheet's, no gradients, glass, glows, texture or emoji icons. Icons are
-  the authored SVG sprite in `index.html`.
+- Tokens first: every colour is a CSS custom property in `:root`. No
+  hard-coded hex in a rule that isn't a token definition, so a palette
+  change is one edit. `DESIGN.md` frontmatter carries the same tokens in
+  the design.md standard; keep them in sync (`scripts/qa.mjs` fails on
+  drift).
+- Three faces only: Bricolage Grotesque for display, Instrument Sans for
+  reading, IBM Plex Mono for labels and counts. No fourth family.
+- One accent (green by day, sage by night). The book cloths say what kind
+  of study a study is, never anything else. Verdicts are not
+  colour-coded: the words and the pen ring carry them, identically.
+- Two grounds, night and day. One shape scale: controls 3px, panels 4px.
+  No cards as a default container, no shadows except the study sheet's,
+  no gradient washes, glass, glows or emoji icons. Icons are the authored
+  SVG sprite in `index.html`.
 - Zero em-dashes and en-dashes in anything a user can read.
 
 ## How to prompt yourself on a change

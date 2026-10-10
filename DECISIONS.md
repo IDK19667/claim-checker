@@ -4,6 +4,67 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-10 (redesign): The reading room after hours
+
+The blue and white ticket is replaced by night and day: a charcoal night
+(`#0f1211`) where a claim arrives and its verdict is ringed in pen, a cool
+stone day (`#f1f2ee`) where the evidence is laid out, and the studies as a
+shelf of books. `DESIGN.md` was rewritten for it, on purpose.
+
+**Why it changed.** The owner found the shipped look flat: "more
+engaging, not just blue and white". They picked from mocks and asked for
+a dark-but-light look with **no glowing cyan light cues**, which read as
+AI slop to them; a coloured book shelf for the studies; rounded, modern
+headings; and all four extras (a pen ring round the verdict, a
+highlighter on what the verdict relied on, a line from the claim to its
+verdict, mini shelves in the latest checks). The first build of that
+(comp D) was called kiddish, the second (comp E) not premium enough.
+Comp F is what shipped: the same ideas with the volume turned down. Light
+display weights, one accent, cloth colours matched in tone, a thin pen
+line, a highlighter along the lower part of a line rather than a block.
+
+**Three faces, where the old rule said one or two.** Bricolage Grotesque
+for display (rounded and modern, pinned at its 96pt optical size),
+Instrument Sans for reading, IBM Plex Mono for the labels a reader scans.
+The detector flags Instrument Sans as an overused face; it stays,
+because the owner chose this pairing from the comps. All self-hosted,
+77KB.
+
+**Colour now means one thing: what kind of study.** The cloth of each
+book is its kind (strong design, a study in people, animal or lab,
+opinion or one case, retracted), told by the server's `evidence.kind()`
+and lettered on the spine by `evidence.spine()`. Height still means the
+strength of the design. **The verdict is still never coloured**: no
+stylesheet selects on `data-verdict`, and a test holds that. The one
+accent (green by day, sage by night) is for what you can act on and for
+the pen.
+
+**The ring is measured, not drawn to the column.** `fitRing()` reads the
+verdict's own line boxes and pads each end by 7% plus 12px, because the
+ring's shoulders curve in and at a tighter fit they crossed the first and
+last letters. It does not animate. A spine word that cannot stand up on a
+short book is hidden rather than cut (`fitSpines()`), and a retracted
+book is never lettered.
+
+**Night runs to the edges by a border image**, not by a negative margin,
+a box shadow or a clip-path. Each of those left a hairline of paper at a
+fractional pixel between two night blocks. A border image of the same
+colour pushed out sideways paints outside the box without widening it,
+so it can never scroll either. A running check and an error are all
+night down to the footer, with a rule between, rather than a strip of
+paper in the middle of the screen.
+
+**Found along the way:** during a live check the "Before you trust a
+verdict" section stayed on screen above the work, so on a phone the
+reader saw the trust questions and not their check. It is hidden while a
+check runs now, with a test.
+
+The app icon was still the newsprint "C" from the name before Evident;
+it is now a short shelf on the night ground (`scripts/make_icons.py`),
+pure geometry so it holds at 16px. The old style tile
+(`static/styletile.html`) preloaded a font that no longer exists and
+showed a world that is gone, so it is removed.
+
 ## 2026-10-09 (launch polish): Ready for strangers
 
 A pass over the things a first visitor meets before they meet a verdict,

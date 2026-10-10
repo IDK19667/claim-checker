@@ -63,10 +63,12 @@ build step is a feature: anyone can read the shipped file.
   (0 errors, 0 warnings).
 - Run the mechanical detector once on changed UI files:
   `node ~/.claude/plugins/cache/impeccable/impeccable/*/skills/impeccable/scripts/detect.mjs --json templates/index.html static/app.js static/style.css`
-- Motion: two moments only, the verdict banner wiping in and the rules
-  drawing under cited sources. No entrances on every section, no animated
-  backgrounds, no cursor effects, no scroll hijacking. Respect
-  `prefers-reduced-motion`.
+- Motion: two moments in the reading, the shelf growing its books and
+  the highlighter sweeping relied-on titles, both only on a check the
+  reader just ran; plus the live check (the band and sheet arrive once,
+  the reading log prints). The pen ring is static. No entrances on every
+  section, no animated backgrounds, no cursor effects, no scroll
+  hijacking. Respect `prefers-reduced-motion`.
 - Cards are not a default container. Group with rules, space and the
   section grammar already in use.
 - Copy is product language: controls name their action, errors name the
@@ -74,9 +76,17 @@ build step is a feature: anyone can read the shipped file.
   user can see** (a test enforces it on the rendered page); commas,
   colons and full stops do the work. `verdict.tidy_prose` applies the
   same rule to model output.
-- Two faces, no more: Libre Caslon Text is everything the paper says,
-  Archivo (letterspaced small caps) is everything a reader scans. There is
-  no accent colour and verdicts are never colour-coded.
+- Three faces, no more: Bricolage Grotesque for display (headlines, the
+  verdict, figures), Instrument Sans for everything read, IBM Plex Mono
+  for labels a reader scans. One accent: green by day for what you can
+  act on, sage by night for the pen ring, a pale tint for the
+  highlighter. The book cloths (`--c-strong`, `--c-human`, `--c-lab`,
+  `--c-weak`) mean the kind of study and nothing else. Verdicts are never
+  colour-coded: no stylesheet selects on `data-verdict`.
+- Night (`--deep`) and day (`--paper`) are the only two grounds. A night
+  surface runs to the screen edges by the border-image rule at the top of
+  `style.css`; never by negative margins, box shadows or clip-path, which
+  leave hairlines. No glow, no neon, no cyan.
 - Fonts are self-hosted in `static/fonts/woff2/`. Don't reintroduce a
   Google Fonts link: it costs a third-party connection and breaks
   offline first paint.
