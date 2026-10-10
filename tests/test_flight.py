@@ -376,7 +376,7 @@ t("the fly-through exposes only stand down and stand up",
                      flight_js.split("window.EvidentFlight")[1][:400]))
   == {"park", "resume"})
 t("a parked fly-through decodes nothing",
-  "if (parked)" in flight_js.split("function tick(")[1][:400])
+  "if (parked || !armed)" in flight_js.split("function tick(")[1][:400])
 t("a page that opens on a check never starts the fly-through at all",
   "document.documentElement.dataset.screen" in flight_js)
 t("nothing cinema-shaped survives in the fly-through engine",
@@ -551,7 +551,7 @@ _tick = _fj.split("function tick(")[1].split("/* ----")[0]
 t("the loop rests: tick re-queues itself only when there is more to draw",
   _fj.count("requestAnimationFrame(tick)") == 2
   and "if (!onScreen || quietTicks >= REST_AFTER_TICKS)" in _tick
-  and "if (parked) { looping = false; return; }" in _tick)
+  and "if (parked || !armed) { looping = false; return; }" in _tick)
 t("  and wakes on a scroll, on resume, on coming into view and on a frame landing nearby",
   "function onScroll() { scrollDirty = true; wake(); }" in _fj
   and "parked = false; scrollDirty = true; wake();" in _fj
@@ -562,6 +562,36 @@ t("  and time asleep is not counted as a frame held mid-fling",
 t("the stage shows the poster, not a black canvas, until a frame is drawn",
   'canvas.setAttribute("data-drawn", "")' in _fj
   and "#flight-canvas[data-drawn] { visibility: visible; }" in flight_css)
+
+# Live gates: the still version follows the reader's settings during the
+# visit, and the stylesheet and the script agree on when it applies.
+_gates = re.findall(r'"(\([^"]+\))"', _fj.split("var GATES = [")[1].split("];")[0])
+_gate_css = flight_css.split("/* ---- the still version's live gates")[1]
+t("the still version has two live gates: reduced motion and a phone on its side",
+  _gates == ["(prefers-reduced-motion: reduce)",
+             "(orientation: landscape) and (pointer: coarse) and (max-height: 560px)"], _gates)
+t("  and flight.css applies the stills on exactly the same query strings",
+  all(g in _gate_css.split("{")[0] for g in _gates))
+t("  in a block last in the file, so it outranks the phone-width rules",
+  flight_css.rfind("@media (max-width: 640px)") < flight_css.find("/* ---- the still version's live gates"))
+t("  and it shows the claim panel and the stills, and hides the canvas",
+  ".stills { display: block; }" in _gate_css and "#flight-canvas," in _gate_css
+  and '.work-layer[data-layer="claim"] {' in _gate_css)
+t("  the gates are listened to, not read once",
+  'm.addEventListener("change", applyGates)' in _fj and "m.addListener(applyGates)" in _fj
+  and not re.search(r'matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches', _fj))
+t("  switching to the stills clears what paint() wrote inline, and empties the decode queue",
+  "clearPaint();" in _fj.split("function disarm(")[1][:400]
+  and "queue.length = 0;" in _fj.split("function disarm(")[1][:400])
+t("  switching back remeasures and wakes the loop on the frame for here",
+  all(x in _fj.split("function arm()")[1].split("function disarm(")[0]
+      for x in ("computeTops();", "layout();", "scrollDirty = true;", "wake();")))
+t("  a reader who opens with reduced motion fetches no footage until it is off",
+  "function start() {" in _fj and 'if (!started) { started = true; start(); return; }' in _fj
+  and _fj.rstrip().endswith("})();") and "applyGates();" in _fj[-400:])
+t("  a rotation remeasures the stage, but only while the footage shows",
+  'addEventListener("resize", remeasure)' in _fj and 'addEventListener("orientationchange", remeasure)' in _fj
+  and "if (!armed || !ready) return;" in _fj.split("function remeasure()")[1][:200])
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

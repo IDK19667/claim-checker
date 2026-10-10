@@ -540,3 +540,51 @@
   .skip-checker { right: 12px; bottom: 12px; font-size: 12px; padding: 10px 12px; }
   .flight-progress { top: 64px; font-size: 10px; padding: 5px 10px; }
 }
+
+/* ---- the still version's live gates ------------------------------------- */
+/* Reduced motion, and a phone held on its side (a stage too short for the
+   panels over it), get the stills from the stylesheet itself, before any
+   script has run and the moment a setting changes. These two queries are
+   GATES in flight.js, character for character, so the script stops the
+   footage at the same moment this starts the stills; .no-flight above stays
+   for the cases only the script can know (Save-Data, no canvas, footage that
+   would not load). Last in the file so it outranks the phone-width rules. */
+
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 560px), (prefers-reduced-motion: reduce) {
+  .flight { height: auto; background: var(--paper); }
+  .flight-stage {
+    position: static;
+    height: auto;
+    overflow: visible;
+    background-image: none;
+  }
+  #flight-canvas,
+  .flight-progress,
+  .chapter-zone { display: none; }
+  .stills { display: block; }
+  .flight-overlay { position: static; pointer-events: auto; }
+  .flight-work {
+    position: static;
+    display: block;
+    width: auto;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 20px 0;
+  }
+  .work-deck { position: static; }
+  .work-layer:not([data-layer="claim"]) { display: none; }
+  .stills .flight-note { display: none; }
+  .work-layer[data-layer="claim"] {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    max-height: none;
+    overflow: visible;
+  }
+  .skip-checker {
+    position: static;
+    display: flex;
+    width: max-content;
+    margin: 20px auto 0;
+  }
+}

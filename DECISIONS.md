@@ -49,6 +49,27 @@ frame after it was gone, and the residency numbers the stress test reads
 were only updated by the loop, so a resting loop reported stale ones.
 Both now read live.
 
+**The still version follows the reader's settings during the visit.**
+Reduced motion was read once, when the page loaded. Switched on
+afterwards, the footage kept flying; switched off, nothing came back. Now
+two gates are listened to: reduced motion, and a phone held on its side
+(`(orientation: landscape) and (pointer: coarse) and (max-height: 560px)`),
+where the stage is too short for the panels over it and the claim box
+ends up squeezed under a strip of footage. Either one switches to the
+stills straight away, and switching back brings the fly-through back on
+the frame for wherever the reader is. The same two strings are the media
+query on the stills in flight.css, so the stylesheet shows the stills
+before any script has run, and a reader who arrives with reduced motion
+on downloads no footage unless they switch it off. Going to the stills
+also clears what the fly-through had written inline on its panels,
+because a claim panel faded out at that moment would otherwise stay
+faded out. A tablet is never gated (its short side is over 560px), and a
+rotation remeasures the stage and redraws the frame at the new size. The
+QA gate now flips reduced motion on and off mid-visit, turns a tablet on
+its side and back, and opens a phone on its side then turns it upright,
+checking each time that the canvas has a picture on it, or that the
+stills and the claim box are showing.
+
 ## 2026-10-09: The footage is kept, and arrives in two requests
 
 The fly-through is 552 frames per size, and Flask serves static files

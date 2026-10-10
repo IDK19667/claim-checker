@@ -224,6 +224,134 @@ for (const v of VIEWS) {
   await ctx.close();
 }
 
+// ---- the still version's live gates ----------------------------------------
+// Reduced motion and a phone on its side are followed during the visit, in
+// both directions, and a rotation never leaves the stage blank.
+{
+  // What a reader would see: the canvas lit with a frame or not, the stills,
+  // the claim box, and anything paint() left inline that would fight the CSS.
+  const look = (page) => page.evaluate(() => {
+    const shown = (e) => {
+      if (!e) return false;
+      for (let n = e; n && n !== document.body; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) < 0.99) return false;
+      }
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const c = document.getElementById("flight-canvas");
+    // An opaque canvas with nothing drawn is pure black: lit means some pixel
+    // on a 3x3 grid across it is not.
+    let lit = false;
+    if (shown(c) && c.width) {
+      const g = c.getContext("2d");
+      for (let i = 1; i <= 3 && !lit; i++) for (let j = 1; j <= 3 && !lit; j++) {
+        const d = g.getImageData(Math.floor(c.width * i / 4), Math.floor(c.height * j / 4), 1, 1).data;
+        if (d[0] + d[1] + d[2] > 12) lit = true;
+      }
+    }
+    const s = window.__flightStats;
+    return {
+      armed: !!(s && s.armed()), off: document.documentElement.getAttribute("data-flight-off"),
+      canvas: shown(c), lit, width: Math.round(c.getBoundingClientRect().width),
+      stills: shown(document.querySelector(".stills")), input: shown(document.getElementById("claim-input")),
+      // Declarations, not the attribute: Chromium can leave an empty style="".
+      inline: [...document.querySelectorAll(".work-layer, .chapter-zone, .counter")].filter((n) => n.style.length).length,
+      gap: s ? Math.abs(s.wanted - s.drawn) : 0, ticks: s ? s.ticks : 0,
+    };
+  });
+  const stillsShown = (where, v, why) => {
+    if (v.armed || v.off !== why) note(where, "gate", `expected the stills for ${why}, got armed ${v.armed}, off ${v.off}`);
+    if (v.canvas) note(where, "gate", "the canvas still shows over the stills");
+    if (!v.stills) note(where, "gate", "the stills are not shown");
+    if (!v.input) note(where, "gate", "the claim box is not visible on the stills");
+    if (v.inline) note(where, "gate", `${v.inline} panel(s) kept inline styles from the footage`);
+  };
+  const footageShown = (where, v, width) => {
+    if (!v.armed || v.off) note(where, "gate", `expected the footage, got armed ${v.armed}, off ${v.off}`);
+    if (!v.canvas || !v.lit) note(where, "blank stage", `canvas shown ${v.canvas}, a frame on it ${v.lit}`);
+    if (v.stills) note(where, "gate", "the stills show under the footage");
+    if (width && Math.abs(v.width - width) > 2) note(where, "stage size", `canvas ${v.width}px wide in a ${width}px window`);
+    if (v.gap > 2) note(where, "settled on the wrong frame", `${v.gap} frames from the scroll position`);
+  };
+  const open = async (opts) => {
+    const ctx = await browser.newContext({ deviceScaleFactor: 1, ...opts });
+    const page = await ctx.newPage();
+    const errors = [];
+    const asked = [];
+    page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+    page.on("pageerror", (e) => errors.push(String(e)));
+    page.on("request", (r) => asked.push(r.url()));
+    await page.goto(`${base}/`, { waitUntil: "load" });
+    return { ctx, page, errors, asked };
+  };
+  const drawn = (page, where) => page.waitForFunction(() =>
+    document.getElementById("flight-canvas").hasAttribute("data-drawn"), null, { timeout: 30000 })
+    .catch(() => note(where, "footage", "no frame drawn within 30s"));
+
+  // Reduced motion switched on mid-visit, then off again.
+  {
+    const where = "reduced motion, mid-visit";
+    const { ctx, page, errors } = await open({ viewport: { width: 1280, height: 900 } });
+    await drawn(page, where);
+    await page.evaluate(() => window.scrollTo(0, 1200));
+    await page.waitForTimeout(1200);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.waitForTimeout(500);
+    const on = await look(page);
+    stillsShown(where + ", switched on", on, "reduced-motion");
+    await page.waitForTimeout(1500);
+    if ((await look(page)).ticks !== on.ticks) note(where, "loop never rests", "the loop kept running behind the stills");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await page.waitForTimeout(1500);
+    footageShown(where + ", switched off", await look(page), 1280);
+    errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+    await ctx.close();
+  }
+
+  // A tablet turned on its side and back: the stage changes shape and is
+  // redrawn at the new size, never left blank.
+  {
+    const where = "tablet rotation";
+    const { ctx, page, errors } = await open({ viewport: { width: 820, height: 1180 }, isMobile: true, hasTouch: true });
+    await drawn(page, where);
+    await page.evaluate(() => window.scrollTo(0, 900));
+    await page.waitForTimeout(1500);
+    footageShown(where + ", upright", await look(page), 820);
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await page.waitForTimeout(1200);
+    footageShown(where + ", on its side", await look(page), 1180);
+    await page.setViewportSize({ width: 820, height: 1180 });
+    await page.waitForTimeout(1200);
+    footageShown(where + ", upright again", await look(page), 820);
+    errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+    await ctx.close();
+  }
+
+  // A phone opened on its side gets the stills and fetches no footage; turned
+  // upright, it gets the fly-through (its own phone cut, after a scroll).
+  {
+    const where = "phone on its side";
+    const { ctx, page, errors, asked } = await open({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await page.waitForTimeout(800);
+    stillsShown(where, await look(page), "landscape-phone");
+    if (asked.some((u) => /manifest[^/]*\.json/.test(u))) note(where, "footage", "fetched the fly-through while showing the stills");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.scrollTo(0, 1));
+    await drawn(page, where + ", turned upright");
+    await page.waitForTimeout(800);
+    footageShown(where + ", turned upright", await look(page), 390);
+    if (!asked.some((u) => /manifest-phone\.json/.test(u))) note(where, "footage", "upright, it did not load the phone cut");
+    errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+    await ctx.close();
+  }
+  console.log("live gates: reduced motion on and off, tablet rotation, phone on its side and upright: ran");
+}
+
 await browser.close();
 
 tokenDrift().forEach((d) => note("tokens", "design system drift", d));

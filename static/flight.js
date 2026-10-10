@@ -48,7 +48,8 @@
  * Two things that have not changed. The page works with the animation off: if
  * the sequence cannot load, or the reader asked for reduced motion, we add
  * .no-flight and the stages become stills in normal page flow, with the claim
- * input present either way. And nothing here calls preventDefault or moves the
+ * input present either way. Reduced motion and a phone held on its side are
+ * followed live (GATES, below), in both directions. And nothing here calls preventDefault or moves the
  * scroll position; the reader stays in charge, forwards and backwards.
  */
 
@@ -118,18 +119,43 @@
     return section.dataset.frames + "/manifest.json";
   }
 
+  // For good: no canvas, Save-Data, or footage that would not load.
+  var dead = false;
   function giveUp(why) {
+    dead = true;
     root.classList.add("no-flight");
     if (why) root.setAttribute("data-flight-off", why);
   }
 
-  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var conn = navigator.connection || {};
   var saveData = !!conn.saveData;
-  if (reduced || saveData || !canvas) {
-    giveUp(reduced ? "reduced-motion" : saveData ? "save-data" : "no-canvas");
+  if (saveData || !canvas) {
+    giveUp(saveData ? "save-data" : "no-canvas");
     return;
   }
+
+  // The still version's live gates: reduced motion, and a phone held on its
+  // side, which passes every width check but leaves a stage too short for the
+  // panels over it. The same strings, character for character, are the media
+  // query on the stills in flight.css, so the stylesheet shows them the moment
+  // one matches, before this script has run, and this stops the footage at
+  // the same moment. Listened to rather than read once: reduced motion
+  // switched on mid-visit drops to the stills, switched off brings the footage
+  // back, and a phone turned upright gets it too.
+  var GATES = [
+    "(prefers-reduced-motion: reduce)",
+    "(orientation: landscape) and (pointer: coarse) and (max-height: 560px)"
+  ];
+  var GATE_NAMES = ["reduced-motion", "landscape-phone"];
+  // Kept referenced: older browsers have dropped listeners on lists that were not.
+  var gateLists = GATES.map(function (q) { return window.matchMedia(q); });
+  var armed = false;        // the footage is the version on screen
+  var started = false;      // the manifest has been asked for
+  var ready = false;        // ...and everything built from it is in place
+  // Work that only matters while the footage shows waits here while the
+  // stills do, and carries on from where it stopped.
+  var onArm = [];
+  function whenArmed(fn) { if (armed) fn(); else onArm.push(fn); }
 
   // A connection that reports 2g or 3g gets the motion tier and nothing else:
   // 6MB instead of 23MB, still sharp enough to read at any scroll speed, and
@@ -382,6 +408,7 @@
     return new Promise(function (resolve) {
       if (!total) { resolve(); return; }
       function step() {
+        if (!armed) { onArm.push(step); return; }
         while (inFlight < BYTES_CONCURRENCY && next < total) {
           (function (idx) {
             inFlight++;
@@ -872,6 +899,7 @@
     idleScheduled = true;
     ric(function () {
       idleScheduled = false;
+      if (!armed) { onArm.push(scheduleIdlePredecode); return; }
       var cur = Math.round(wantedFrame);
       var room = motionStore.cap - motionStore.bitmaps.size;
       if (room <= 0) { setTimeout(scheduleIdlePredecode, 500); return; }
@@ -1095,7 +1123,7 @@
   stats.resting = function () { return !looping; };
 
   function wake() {
-    if (looping || parked || !onScreen) return;
+    if (looping || parked || !armed || !onScreen) return;
     looping = true;
     quietTicks = 0;
     lastTickTime = null;
@@ -1116,9 +1144,9 @@
     var dt = lastTickTime == null ? 16 : Math.max(1, Math.min(200, now - lastTickTime));
     lastTickTime = now;
 
-    // Parked, this section is display:none behind a check's own screen.
-    // Reading a scroll it is not in is work with no picture at the end of it.
-    if (parked) { looping = false; return; }
+    // Parked, this section is display:none behind a check's own screen, and
+    // disarmed it is the stills. Either way there is no picture to draw.
+    if (parked || !armed) { looping = false; return; }
     if (scrollDirty) { scrollDirty = false; updateFromScroll(); }
     if (firstTick) { firstTick = false; lastWantedFrame = wantedFrame; }
 
@@ -1318,83 +1346,157 @@
     stats.motionCap = motionStore.cap;
   }
 
-  /* ---- start -------------------------------------------------------------- */
+  /* ---- start --------------------------------------------------------------
+   * Run once, the first time the footage is the version to show. A reader
+   * who opens the page with reduced motion on fetches none of it, and gets
+   * all of it only if they switch it off.
+   */
 
-  variant = pickVariant();
-  Promise.all([
-    fetch(manifestUrl()).then(function (r) { return r.json(); }),
-    fetch(section.dataset.beats).then(function (r) { return r.json(); })
-  ]).then(function (both) {
-    manifest = both[0];
-    beats = both[1];
-    if (!manifest.count) throw new Error("empty manifest");
-    if (!manifest.motionPattern) throw new Error("manifest has no motion tier");
-    // The stress harness needs to know how many frames full residency means
-    // before it starts flinging, so it waits for a warm page rather than
-    // measuring the warm-up and calling it a fast-scroll failure.
-    stats.frameCount = manifest.count;
+  function start() {
+    variant = pickVariant();
+    Promise.all([
+      fetch(manifestUrl()).then(function (r) { return r.json(); }),
+      fetch(section.dataset.beats).then(function (r) { return r.json(); })
+    ]).then(function (both) {
+      manifest = both[0];
+      beats = both[1];
+      if (!manifest.count) throw new Error("empty manifest");
+      if (!manifest.motionPattern) throw new Error("manifest has no motion tier");
+      // The stress harness needs to know how many frames full residency means
+      // before it starts flinging, so it waits for a warm page rather than
+      // measuring the warm-up and calling it a fast-scroll failure.
+      stats.frameCount = manifest.count;
 
-    lores = new Array(manifest.count);
-    motionStore.pattern = manifest.motionPattern;
-    hiresStore.pattern = manifest.pattern;
-    motionStore.blobs = new Array(manifest.count);
-    hiresStore.blobs = new Array(manifest.count);
-    residentCaps();
-    buildPool();
+      lores = new Array(manifest.count);
+      motionStore.pattern = manifest.motionPattern;
+      hiresStore.pattern = manifest.pattern;
+      motionStore.blobs = new Array(manifest.count);
+      hiresStore.blobs = new Array(manifest.count);
+      residentCaps();
+      buildPool();
 
-    buildOverlay();
+      buildOverlay();
+      computeTops();
+      layout();
+      // A claim submitted inside the first second parks this before there is
+      // anything to park: the attribute app.js sets is the record of that, and
+      // it is read here rather than lost.
+      if (document.documentElement.dataset.screen) parked = true;
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", remeasure);
+      window.addEventListener("orientationchange", remeasure);
+
+      // Order matters. Lores is a few hundred KB and gives every index something
+      // to show immediately. The motion tier comes next because it is what makes
+      // a fast scroll possible at all, and it is a third the bytes of the hi-res
+      // tier. Hi-res bytes load last, in parallel, for the reader who stops.
+      // Off screen (read on to the claim box, or back up past the top) the loop
+      // has nothing to draw. Half a screen of margin, so it is awake before the
+      // section shows again.
+      if (typeof IntersectionObserver === "function") {
+        new IntersectionObserver(function (entries) {
+          onScreen = entries[entries.length - 1].isIntersecting;
+          if (onScreen) { scrollDirty = true; wake(); }
+        }, { rootMargin: "50% 0px" }).observe(section);
+      }
+      // The lores window closes on a timer too, since a resting loop may not be
+      // running when it does.
+      setTimeout(retireLores, Math.max(0, startedAt + LORES_WINDOW_MS - performance.now()));
+      onScroll();
+
+      var phone = variant === "phone" && window.matchMedia("(pointer: coarse)").matches;
+      var everything = (manifest.loresTotalBytes || 0) + (manifest.motionTotalBytes || 0)
+        + (manifest.totalBytes || 0);
+      phoneBudget = phone && everything > PHONE_BUDGET_BYTES;
+      stats.phoneBudget = phoneBudget;
+
+      function loadFootage() {
+        if (!phoneBudget) loadLores();
+        motionStore.preload(manifest.motionBundle, manifest.motionOffsets).then(function () {
+          scheduleIdlePredecode();
+          if (!slowNetwork && !phoneBudget) return hiresStore.preloadBytes();
+        });
+      }
+
+      // Frames start downloading only once the page is interactive. The claim
+      // field is the reason anyone is here, and 23MB of footage queued ahead of
+      // it would make the one control that matters wait on the one thing that
+      // does not. The poster is already painted by then (17KB, preloaded in the
+      // head), so there is something on screen throughout. A phone waits longer
+      // still, for the first scroll: someone who reads the first screen and
+      // types a claim has spent nothing on footage at all.
+      whenArmed(function () {
+        if (phoneBudget) afterFirstScroll(loadFootage);
+        else whenInteractive(loadFootage);
+      });
+      ready = true;
+    }).catch(function () {
+      giveUp("manifest-failed");
+    });
+  }
+
+  // A rotation or a resize: the stage changed shape, so everything measured
+  // off it is measured again and the frame redrawn to fill it. Skipped while
+  // the stills show, where the stage is out of the flow; arm() remeasures.
+  function remeasure() {
+    if (!armed || !ready) return;
     computeTops();
     layout();
-    // A claim submitted inside the first second parks this before there is
-    // anything to park: the attribute app.js sets is the record of that, and
-    // it is read here rather than lost.
-    if (document.documentElement.dataset.screen) parked = true;
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", function () { computeTops(); layout(); onScroll(); });
-    window.addEventListener("orientationchange", function () { computeTops(); layout(); onScroll(); });
-
-    // Order matters. Lores is a few hundred KB and gives every index something
-    // to show immediately. The motion tier comes next because it is what makes
-    // a fast scroll possible at all, and it is a third the bytes of the hi-res
-    // tier. Hi-res bytes load last, in parallel, for the reader who stops.
-    // Off screen (read on to the claim box, or back up past the top) the loop
-    // has nothing to draw. Half a screen of margin, so it is awake before the
-    // section shows again.
-    if (typeof IntersectionObserver === "function") {
-      new IntersectionObserver(function (entries) {
-        onScreen = entries[entries.length - 1].isIntersecting;
-        if (onScreen) { scrollDirty = true; wake(); }
-      }, { rootMargin: "50% 0px" }).observe(section);
-    }
-    // The lores window closes on a timer too, since a resting loop may not be
-    // running when it does.
-    setTimeout(retireLores, Math.max(0, startedAt + LORES_WINDOW_MS - performance.now()));
     onScroll();
+  }
 
-    var phone = variant === "phone" && window.matchMedia("(pointer: coarse)").matches;
-    var everything = (manifest.loresTotalBytes || 0) + (manifest.motionTotalBytes || 0)
-      + (manifest.totalBytes || 0);
-    phoneBudget = phone && everything > PHONE_BUDGET_BYTES;
-    stats.phoneBudget = phoneBudget;
+  // What paint() writes inline would beat the stills' stylesheet: a claim
+  // panel faded out at the moment of the switch would stay faded out.
+  function clearPaint() {
+    if (!ready) return;
+    var nodes = [el.chapterZone, el.counter].concat(cards);
+    for (var k in el.layers) nodes.push(el.layers[k]);
+    nodes.forEach(function (n) { if (n) n.removeAttribute("style"); });
+  }
 
-    function loadFootage() {
-      if (!phoneBudget) loadLores();
-      motionStore.preload(manifest.motionBundle, manifest.motionOffsets).then(function () {
-        scheduleIdlePredecode();
-        if (!slowNetwork && !phoneBudget) return hiresStore.preloadBytes();
-      });
+  function arm() {
+    if (armed || dead) return;
+    armed = true;
+    root.classList.remove("no-flight");
+    root.removeAttribute("data-flight-off");
+    if (!started) { started = true; start(); return; }
+    if (!ready) return;
+    // Back from the stills, the stage was out of the flow, so every offset and
+    // size taken while it was is wrong. Remeasure (which redraws the frame on
+    // screen at the new size), then let the paused work carry on and the loop
+    // draw the frame for wherever the reader is now.
+    computeTops();
+    layout();
+    var waiting = onArm;
+    onArm = [];
+    waiting.forEach(function (fn) { fn(); });
+    scrollDirty = true;
+    wake();
+  }
+
+  function disarm(why) {
+    root.classList.add("no-flight");
+    root.setAttribute("data-flight-off", why);
+    if (!armed) return;
+    armed = false;
+    clearPaint();
+    // Nothing more to decode for a canvas nobody can see.
+    queue.length = 0;
+    stats.queueDepth = 0;
+  }
+
+  function applyGates() {
+    if (dead) return;
+    for (var i = 0; i < gateLists.length; i++) {
+      if (gateLists[i].matches) { disarm(GATE_NAMES[i]); return; }
     }
+    arm();
+  }
 
-    // Frames start downloading only once the page is interactive. The claim
-    // field is the reason anyone is here, and 23MB of footage queued ahead of
-    // it would make the one control that matters wait on the one thing that
-    // does not. The poster is already painted by then (17KB, preloaded in the
-    // head), so there is something on screen throughout. A phone waits longer
-    // still, for the first scroll: someone who reads the first screen and
-    // types a claim has spent nothing on footage at all.
-    if (phoneBudget) afterFirstScroll(loadFootage);
-    else whenInteractive(loadFootage);
-  }).catch(function () {
-    giveUp("manifest-failed");
+  gateLists.forEach(function (m) {
+    if (m.addEventListener) m.addEventListener("change", applyGates);
+    else if (m.addListener) m.addListener(applyGates);   // Safari before 14
   });
+  stats.armed = function () { return armed; };
+  applyGates();
 })();
