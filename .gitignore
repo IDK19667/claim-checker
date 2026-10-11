@@ -41,3 +41,6 @@ skills-lock.json
 /media/_candidates/**
 !/media/_candidates/**/
 !/media/_candidates/**/REPORT.md
+
+# Promo videos the daily task makes; large, and not part of the site
+/promo/out/
