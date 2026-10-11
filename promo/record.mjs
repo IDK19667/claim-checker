@@ -1,12 +1,15 @@
-// Records one Reels-sized video (1080x1920 MP4, about 15 seconds) of a real
-// check on the live site: what people say, the claim typed in, the check
-// running (sped up), a punch-in on the verdict, the shelf of studies, the
-// answer in big type, and an ask to comment the next claim.
+// Records one Reels-sized video (1080x1920 MP4, about 16 seconds) of a real
+// check on the live site. Built on what makes a Reel travel: a hook and an
+// open question in the first two seconds ("True or false? Guess first."),
+// something new on screen every second or two (the check, a punch-in on the
+// verdict, the shelf, the answer in big type), the question closed at the
+// end, and an ask to send it to someone, since sends reach new people most.
+// It has its own sound (promo/sound.mjs).
 // Not part of the site: marketing tooling, run by hand or by the daily task.
 //
 //   node promo/record.mjs --claim "Mouth taping improves your sleep" \
-//        --said "TikTok says" --hook "Tape your mouth shut, sleep better." \
-//        [--out promo/out/2026-10-11]
+//        --said "TikTok says" --hook "Tape your mouth shut. Sleep better." \
+//        --send "Send this to someone who tapes their mouth." [--out dir]
 //
 // Prints one JSON line: the files written and what the site answered, so
 // captions can be written to match the verdict exactly.
@@ -14,6 +17,7 @@ import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { soundtrack } from "./sound.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
   a.startsWith("--") ? [...acc, [a.slice(2), all[i + 1]]] : acc, []));
@@ -21,6 +25,7 @@ const CLAIM = (args.claim || "").trim();
 if (!CLAIM) { console.error("usage: --claim \"...\" [--hook \"...\"] [--out dir]"); process.exit(2); }
 const HOOK = (args.hook || CLAIM).trim();
 const SAID = (args.said || "Everyone says").trim();
+const SEND = (args.send || "Send this to someone who believes it.").trim();
 const BASE = args.base || "https://checkevident.com";
 const today = new Date().toLocaleDateString("en-CA");
 const OUT = path.resolve(args.out || `promo/out/${today}`);
@@ -43,6 +48,9 @@ const cdp = await ctx.newCDPSession(page);
 const frames = [];
 const marks = {};
 const mark = (name) => { marks[name] = Date.now() / 1000; };
+// Sound cues, on the same clock; placed on the video's timeline at the end.
+const cues = [];
+const cue = (type, extra = {}) => cues.push({ type, t: Date.now() / 1000, ...extra });
 cdp.on("Page.screencastFrame", async ({ data, metadata, sessionId }) => {
   const file = path.join(FRAMES, `${String(frames.length).padStart(5, "0")}.jpg`);
   fs.writeFileSync(file, Buffer.from(data, "base64"));
@@ -55,8 +63,8 @@ cdp.on("Page.screencastFrame", async ({ data, metadata, sessionId }) => {
 // the site's own fonts and colours; the site is never changed.
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 // Words that pop in one after another when show() runs.
-const words = (text) => text.split(/\s+/).filter(Boolean).map((w) =>
-  `<span class="pw" style="display:inline-block;opacity:0;transform:translateY(.3em);`
+const words = (text, cls = "") => text.split(/\s+/).filter(Boolean).map((w) =>
+  `<span class="pw ${cls}" style="display:inline-block;opacity:0;transform:translateY(.3em);`
   + `transition:opacity .16s ease,transform .22s cubic-bezier(.2,.8,.2,1)">${esc(w)}</span>`).join(" ");
 const label = (color = "var(--on-deep-2)") =>
   `font:500 15px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:${color};margin:0`;
@@ -77,9 +85,10 @@ async function card(html, { fade = true } = {}) {
     el.innerHTML = html;
     requestAnimationFrame(() => { el.style.opacity = "1"; });
   }, [html, fade]);
-  if (fade) await page.waitForTimeout(260);
+  if (fade) { cue("whoosh"); await page.waitForTimeout(260); }
 }
 async function uncard() {
+  cue("whoosh", { amp: 0.08 });
   await page.evaluate(() => { const el = document.getElementById("promo-card"); if (el) el.style.opacity = "0"; });
   await page.waitForTimeout(260);
   await page.evaluate(() => document.getElementById("promo-card")?.remove());
@@ -102,12 +111,14 @@ async function caption(text) {
 }
 const uncaption = () => page.evaluate(() => document.getElementById("promo-cap")?.remove());
 // Pop in every hidden word on screen; resolves when the last one is in.
-async function show() {
-  const n = await page.evaluate((step) => {
-    const ws = [...document.querySelectorAll(".pw")].filter((w) => w.style.opacity === "0");
+async function show(sel = ".pw") {
+  const t = Date.now() / 1000;
+  const n = await page.evaluate(([sel, step]) => {
+    const ws = [...document.querySelectorAll(sel)].filter((w) => w.style.opacity === "0");
     ws.forEach((w, i) => setTimeout(() => { w.style.opacity = "1"; w.style.transform = "none"; }, i * step));
     return ws.length;
-  }, STEP);
+  }, [sel, STEP]);
+  cues.push({ type: "pops", t, n });
   await page.waitForTimeout(n * STEP + 220);
   return n;
 }
@@ -136,7 +147,8 @@ function beats(text) {
 }
 
 const hookHtml = `<p style="${label("var(--sage)")}">${esc(SAID)}</p>
-  <p style="margin:0;font:700 54px/1.0 var(--display);letter-spacing:-.04em">${words(HOOK)}</p>`;
+  <p style="margin:0;font:700 54px/1.0 var(--display);letter-spacing:-.04em">${words(HOOK)}</p>
+  <p style="margin:10px 0 0;font:650 30px/1.1 var(--display);letter-spacing:-.02em;color:var(--sage)">${words("True or false? Guess first.", "guess")}</p>`;
 
 let result = {};
 try {
@@ -156,15 +168,19 @@ try {
   await page.waitForTimeout(500);
   await cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: 1080, maxHeight: 1920, everyNthFrame: 1 });
   mark("start");
-  await show();
-  await page.waitForTimeout(900);
+  await show(".pw:not(.guess)");
+  await page.waitForTimeout(250);
+  await show(".guess");
+  await page.waitForTimeout(800);
   await uncard();
 
   // 2. "So I checked", and the claim goes in
-  await caption("So I checked the research.");
+  await caption("So we checked the research.");
   const box = page.locator("#claim-input");
   await box.click();
+  const typed = Date.now() / 1000;
   await box.pressSequentially(CLAIM, { delay: 18 });
+  cues.push({ type: "typing", t: typed, until: Date.now() / 1000, n: CLAIM.length });
   await page.waitForTimeout(200);
   mark("check");
   await box.press("Enter");
@@ -186,8 +202,9 @@ try {
     link: location.href,
   }));
 
-  // 4. Punch in on the verdict
-  await page.waitForTimeout(500);
+  // 4. Punch in on the verdict, and close the question from the start
+  await page.waitForTimeout(350);
+  cue("stamp");
   await page.evaluate(() => {
     const r = document.getElementById("result"), s = document.getElementById("stamp").getBoundingClientRect();
     const b = r.getBoundingClientRect();
@@ -196,16 +213,20 @@ try {
     r.style.transition = "transform .55s cubic-bezier(.2,.8,.2,1)";
     r.style.transform = "scale(1.18)";
   });
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(450);
+  await caption("Did you guess right?");
+  await page.waitForTimeout(700);
+  await uncaption();
   await page.evaluate(() => { document.getElementById("result").style.transform = "none"; });
   await page.waitForTimeout(350);
 
   // 5. The shelf: what it rests on
   const shelf = await top("#chart-sec");
   if (shelf != null) {
+    cue("whoosh", { dur: 0.6, amp: 0.07 });
     await glide(Math.max(0, shelf - 150), 700);
     await caption(`${result.studies} real ${result.studies === 1 ? "study" : "studies"} from PubMed.`);
-    await page.waitForTimeout(1300);
+    await page.waitForTimeout(1100);
     await uncaption();
   }
 
@@ -215,13 +236,14 @@ try {
     + parts.map((t, i) => `<p style="margin:0;font:650 38px/1.08 var(--display);letter-spacing:-.03em;`
       + `color:${i ? "var(--sage)" : "var(--on-deep)"}">${words(t)}</p>`).join(""));
   const n = await show();
-  await page.waitForTimeout(Math.min(2800, Math.max(1400, n * 140)));
+  await page.waitForTimeout(Math.min(2400, Math.max(1300, n * 120)));
 
   // 7. The ask
-  await card(`<p style="margin:0;font:700 50px/1.0 var(--display);letter-spacing:-.04em">${words("Comment a claim.")}</p>
-    <p style="margin:0;font:700 50px/1.0 var(--display);letter-spacing:-.04em;color:var(--sage)">${words("We check it next.")}</p>
-    <p style="margin:18px 0 0;font:500 28px/1.2 var(--display)">checkevident.com</p>
+  await card(`<p style="margin:0;font:700 44px/1.02 var(--display);letter-spacing:-.04em">${words(SEND)}</p>
+    <p style="margin:0;font:650 28px/1.12 var(--display);letter-spacing:-.02em;color:var(--sage)">${words("Comment a claim. We check it next.")}</p>
+    <p style="margin:18px 0 0;font:500 26px/1.2 var(--display)">checkevident.com</p>
     <p style="margin:0;font:400 17px/1.45 var(--body);color:var(--on-deep-2)">Free. Real studies. Not medical advice.</p>`);
+  cue("chime");
   await show();
   await page.waitForTimeout(1700);
   mark("end");
@@ -258,15 +280,33 @@ lines.push(`file '${path.basename(frames[frames.length - 1].file)}'`);
 const list = path.join(FRAMES, "list.ffconcat");
 fs.writeFileSync(list, lines.join("\n") + "\n");
 
+// Place each sound on the finished video's clock: real time from the first
+// frame, with the wait for the check squeezed like the picture.
+const t0 = frames[0].t;
+const toOut = (t) => t < marks.check ? t - t0
+  : t < marks.verdict ? (marks.check - t0) + (t - marks.check) / squeeze
+  : (marks.check - t0) + (marks.verdict - marks.check) / squeeze + (t - marks.verdict);
+const LAG = 0.04; // the screencast shows a change a frame or two after it happens
+const placed = [{ type: "riser", at: toOut(marks.check) + LAG, dur: toOut(marks.verdict) - toOut(marks.check) }];
+for (const c of cues) {
+  const at = toOut(c.t) + LAG;
+  if (c.type === "pops") for (let i = 0; i < c.n; i++) placed.push({ type: "pop", at: at + i * STEP / 1000, k: i });
+  else if (c.type === "typing") {
+    const span = toOut(c.until) - toOut(c.t);
+    for (let i = 0; i < c.n; i++) placed.push({ type: "click", at: at + (i + 0.5) * span / c.n });
+  } else placed.push({ ...c, at });
+}
+const wav = path.join(FRAMES, "sound.wav");
+soundtrack(placed, toOut(marks.end) + 0.5, wav);
+
 const video = path.join(OUT, `${slug}.mp4`);
-execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list,
-  "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list, "-i", wav,
   "-vf", "scale=1080:1920:flags=lanczos,fps=30,format=yuv420p",
   "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-profile:v", "high",
-  "-c:a", "aac", "-shortest", "-movflags", "+faststart", video]);
+  "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", video]);
 fs.rmSync(FRAMES, { recursive: true, force: true });
 
 const seconds = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration",
   "-of", "csv=p=0", video]).toString().trim());
-console.log(JSON.stringify({ ok: true, claim: CLAIM, said: SAID, hook: HOOK, video, cover,
+console.log(JSON.stringify({ ok: true, claim: CLAIM, said: SAID, hook: HOOK, send: SEND, video, cover,
   seconds: Math.round(seconds * 10) / 10, check_took: Math.round(waited * 10) / 10, ...result }));
