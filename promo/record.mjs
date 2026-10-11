@@ -1,10 +1,12 @@
-// Records one Reels-sized video (1080x1920 MP4) of a real check on the live
-// site: a hook card, the claim typed in, the check running (sped up), the
-// verdict, a slow scroll through the answer and the studies, and an end card.
+// Records one Reels-sized video (1080x1920 MP4, about 15 seconds) of a real
+// check on the live site: what people say, the claim typed in, the check
+// running (sped up), a punch-in on the verdict, the shelf of studies, the
+// answer in big type, and an ask to comment the next claim.
 // Not part of the site: marketing tooling, run by hand or by the daily task.
 //
-//   node promo/record.mjs --claim "Coffee causes cancer" \
-//        --hook "Does coffee cause cancer?" [--out promo/out/2026-10-11]
+//   node promo/record.mjs --claim "Mouth taping improves your sleep" \
+//        --said "TikTok says" --hook "Tape your mouth shut, sleep better." \
+//        [--out promo/out/2026-10-11]
 //
 // Prints one JSON line: the files written and what the site answered, so
 // captions can be written to match the verdict exactly.
@@ -17,7 +19,8 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
   a.startsWith("--") ? [...acc, [a.slice(2), all[i + 1]]] : acc, []));
 const CLAIM = (args.claim || "").trim();
 if (!CLAIM) { console.error("usage: --claim \"...\" [--hook \"...\"] [--out dir]"); process.exit(2); }
-const HOOK = (args.hook || `“${CLAIM}”. True or not?`).trim();
+const HOOK = (args.hook || CLAIM).trim();
+const SAID = (args.said || "Everyone says").trim();
 const BASE = args.base || "https://checkevident.com";
 const today = new Date().toLocaleDateString("en-CA");
 const OUT = path.resolve(args.out || `promo/out/${today}`);
@@ -27,7 +30,7 @@ fs.rmSync(FRAMES, { recursive: true, force: true });
 fs.mkdirSync(FRAMES, { recursive: true });
 
 // The check itself takes 5 to 20 seconds; on screen it gets this long.
-const CHECK_ON_SCREEN = 3.5;
+const CHECK_ON_SCREEN = 2;
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({
@@ -48,31 +51,66 @@ cdp.on("Page.screencastFrame", async ({ data, metadata, sessionId }) => {
   cdp.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
 });
 
-// A card laid over the page, in the site's own fonts and colours. It is
-// only drawn in this recording; the site is never changed.
-async function card(html, instant = false) {
-  await page.evaluate(([html, instant]) => {
+// Everything drawn over the page below exists only in this recording, in
+// the site's own fonts and colours; the site is never changed.
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// Words that pop in one after another when show() runs.
+const words = (text) => text.split(/\s+/).filter(Boolean).map((w) =>
+  `<span class="pw" style="display:inline-block;opacity:0;transform:translateY(.3em);`
+  + `transition:opacity .16s ease,transform .22s cubic-bezier(.2,.8,.2,1)">${esc(w)}</span>`).join(" ");
+const label = (color = "var(--on-deep-2)") =>
+  `font:500 15px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:${color};margin:0`;
+const STEP = 75; // ms between popping words
+
+// A full-screen night card. Words stay hidden until show().
+async function card(html, { fade = true } = {}) {
+  await page.evaluate(([html, fade]) => {
     let el = document.getElementById("promo-card");
     if (!el) {
       el = document.createElement("div");
       el.id = "promo-card";
       el.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;"
-        + "justify-content:center;gap:22px;padding:0 34px;background:var(--deep);color:var(--on-deep);"
-        + "transition:opacity .35s ease;opacity:" + (instant ? "1" : "0");
+        + "justify-content:center;gap:20px;padding:0 30px;background:var(--deep);color:var(--on-deep);"
+        + "transition:opacity .25s ease;opacity:" + (fade ? "0" : "1");
       document.body.appendChild(el);
     }
     el.innerHTML = html;
     requestAnimationFrame(() => { el.style.opacity = "1"; });
-  }, [html, instant]);
-  await page.waitForTimeout(400);
+  }, [html, fade]);
+  if (fade) await page.waitForTimeout(260);
 }
 async function uncard() {
   await page.evaluate(() => { const el = document.getElementById("promo-card"); if (el) el.style.opacity = "0"; });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(260);
   await page.evaluate(() => document.getElementById("promo-card")?.remove());
 }
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const label = "font:500 15px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--on-deep-2)";
+// A caption box near the top, over the live site.
+async function caption(text) {
+  await page.evaluate((html) => {
+    let el = document.getElementById("promo-cap");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "promo-cap";
+      el.style.cssText = "position:fixed;top:22px;left:18px;right:18px;z-index:2147483646;padding:14px 18px 16px;"
+        + "background:var(--paper);color:var(--ink);border-radius:8px;box-shadow:0 10px 30px var(--shadow);"
+        + "font:650 30px/1.08 var(--display);letter-spacing:-.025em;text-align:center";
+      document.body.appendChild(el);
+    }
+    el.innerHTML = html;
+  }, words(text));
+  return show();
+}
+const uncaption = () => page.evaluate(() => document.getElementById("promo-cap")?.remove());
+// Pop in every hidden word on screen; resolves when the last one is in.
+async function show() {
+  const n = await page.evaluate((step) => {
+    const ws = [...document.querySelectorAll(".pw")].filter((w) => w.style.opacity === "0");
+    ws.forEach((w, i) => setTimeout(() => { w.style.opacity = "1"; w.style.transform = "none"; }, i * step));
+    return ws.length;
+  }, STEP);
+  await page.waitForTimeout(n * STEP + 220);
+  return n;
+}
 
 // A scroll that eases in and out, like a thumb, rather than jumping.
 async function glide(toY, ms) {
@@ -88,17 +126,28 @@ async function glide(toY, ms) {
 }
 const top = (sel) => page.evaluate((sel) => {
   const e = document.querySelector(sel);
-  return e ? Math.round(e.getBoundingClientRect().top + scrollY) : null;
+  return e && e.offsetParent ? Math.round(e.getBoundingClientRect().top + scrollY) : null;
 }, sel);
+
+// The short answer, broken where it turns ("..., but ...") so each part lands.
+function beats(text) {
+  const parts = text.split(/,?\s+(?=(?:but|yet|although|though|however|while)\b)/i);
+  return parts.length > 1 ? [parts[0].replace(/,$/, ""), parts.slice(1).join(" ")] : [text];
+}
+
+const hookHtml = `<p style="${label("var(--sage)")}">${esc(SAID)}</p>
+  <p style="margin:0;font:700 54px/1.0 var(--display);letter-spacing:-.04em">${words(HOOK)}</p>`;
 
 let result = {};
 try {
   await page.goto(`${BASE}/?focus=1`, { waitUntil: "networkidle" });
   await page.evaluate(() => document.fonts.ready);
-  // 1. Hook. The card is up before recording starts, and the page behind
-  // it is moved to the claim box, so the first frame is the hook itself.
-  await card(`<p style="${label}">Checked against the research</p>
-    <p style="margin:0;font:600 50px/1.04 var(--display);letter-spacing:-.03em">${esc(HOOK)}</p>`, true);
+  // The caption box takes the place of the site's own heading on screen.
+  await page.addStyleTag({ content: "html,body{overflow-x:hidden} #ask-heading{visibility:hidden}" });
+
+  // 1. What people say. The card is up before recording starts and the page
+  // behind it waits at the claim box, so the first frame is the hook.
+  await card(hookHtml, { fade: false });
   await page.evaluate(() => {
     document.activeElement?.blur();
     const ask = document.getElementById("ask");
@@ -107,14 +156,16 @@ try {
   await page.waitForTimeout(500);
   await cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: 1080, maxHeight: 1920, everyNthFrame: 1 });
   mark("start");
-  await page.waitForTimeout(1700);
+  await show();
+  await page.waitForTimeout(900);
   await uncard();
 
-  // 2. Type the claim and send it
+  // 2. "So I checked", and the claim goes in
+  await caption("So I checked the research.");
   const box = page.locator("#claim-input");
   await box.click();
-  await box.pressSequentially(CLAIM, { delay: 35 });
-  await page.waitForTimeout(350);
+  await box.pressSequentially(CLAIM, { delay: 18 });
+  await page.waitForTimeout(200);
   mark("check");
   await box.press("Enter");
 
@@ -124,15 +175,7 @@ try {
     return r && !r.hidden && !r.classList.contains("checking") && s && s.textContent.trim();
   }, null, { timeout: 120000, polling: 200 });
   mark("verdict");
-
-  // 4. The verdict, then a slow look at what it rests on
-  await page.waitForTimeout(2400);
-  for (const [sel, ms, hold, above] of [["#tldr", 1100, 2200, 150], ["#chart-sec", 1200, 2000, 40], ["#sources", 1100, 1700, 40]]) {
-    const y = await top(sel);
-    if (y == null) continue;
-    await glide(Math.max(0, y - above), ms);
-    await page.waitForTimeout(hold);
-  }
+  await uncaption();
 
   result = await page.evaluate(() => ({
     verdict: document.getElementById("stamp").textContent.trim(),
@@ -143,11 +186,44 @@ try {
     link: location.href,
   }));
 
-  // 5. End card
-  await card(`<p style="margin:0;font:600 46px/1.05 var(--display);letter-spacing:-.03em">Check any health claim.</p>
-    <p style="margin:0;font:500 30px/1.2 var(--display);color:var(--sage)">checkevident.com</p>
-    <p style="margin:6px 0 0;font:400 18px/1.45 var(--body);color:var(--on-deep-2)">Free. No account. Real studies.<br>Not medical advice.</p>`);
-  await page.waitForTimeout(2300);
+  // 4. Punch in on the verdict
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const r = document.getElementById("result"), s = document.getElementById("stamp").getBoundingClientRect();
+    const b = r.getBoundingClientRect();
+    // Grow from the stamp's left edge, so the verdict stays whole on screen.
+    r.style.transformOrigin = `${s.left - b.left}px ${s.top + s.height / 2 - b.top}px`;
+    r.style.transition = "transform .55s cubic-bezier(.2,.8,.2,1)";
+    r.style.transform = "scale(1.18)";
+  });
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => { document.getElementById("result").style.transform = "none"; });
+  await page.waitForTimeout(350);
+
+  // 5. The shelf: what it rests on
+  const shelf = await top("#chart-sec");
+  if (shelf != null) {
+    await glide(Math.max(0, shelf - 150), 700);
+    await caption(`${result.studies} real ${result.studies === 1 ? "study" : "studies"} from PubMed.`);
+    await page.waitForTimeout(1300);
+    await uncaption();
+  }
+
+  // 6. The answer, big
+  const parts = beats(result.tldr);
+  await card(`<p style="${label()}">What the studies say</p>`
+    + parts.map((t, i) => `<p style="margin:0;font:650 38px/1.08 var(--display);letter-spacing:-.03em;`
+      + `color:${i ? "var(--sage)" : "var(--on-deep)"}">${words(t)}</p>`).join(""));
+  const n = await show();
+  await page.waitForTimeout(Math.min(2800, Math.max(1400, n * 140)));
+
+  // 7. The ask
+  await card(`<p style="margin:0;font:700 50px/1.0 var(--display);letter-spacing:-.04em">${words("Comment a claim.")}</p>
+    <p style="margin:0;font:700 50px/1.0 var(--display);letter-spacing:-.04em;color:var(--sage)">${words("We check it next.")}</p>
+    <p style="margin:18px 0 0;font:500 28px/1.2 var(--display)">checkevident.com</p>
+    <p style="margin:0;font:400 17px/1.45 var(--body);color:var(--on-deep-2)">Free. Real studies. Not medical advice.</p>`);
+  await show();
+  await page.waitForTimeout(1700);
   mark("end");
   await cdp.send("Page.stopScreencast");
 } catch (e) {
@@ -156,14 +232,11 @@ try {
   process.exit(1);
 }
 
-// The verdict frame, for a cover image
+// The cover is the hook, fully shown: it makes people stop without giving
+// the answer away.
 const cover = path.join(OUT, `${slug}-cover.jpg`);
-await page.evaluate(() => {
-  document.getElementById("promo-card")?.remove();
-  const e = document.getElementById("claim-echo");
-  scrollTo(0, e ? e.getBoundingClientRect().top + scrollY - 70 : 0);
-});
-await page.waitForTimeout(400);
+await card(hookHtml.replace(/opacity:0;transform:translateY\(\.3em\)/g, "opacity:1"), { fade: false });
+await page.waitForTimeout(200);
 await page.screenshot({ path: cover, type: "jpeg", quality: 92 });
 await browser.close();
 
@@ -195,5 +268,5 @@ fs.rmSync(FRAMES, { recursive: true, force: true });
 
 const seconds = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration",
   "-of", "csv=p=0", video]).toString().trim());
-console.log(JSON.stringify({ ok: true, claim: CLAIM, hook: HOOK, video, cover,
+console.log(JSON.stringify({ ok: true, claim: CLAIM, said: SAID, hook: HOOK, video, cover,
   seconds: Math.round(seconds * 10) / 10, check_took: Math.round(waited * 10) / 10, ...result }));
