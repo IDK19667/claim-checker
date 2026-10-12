@@ -804,6 +804,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
                       if classify(s.get("publication_types")) == "strong"
                       and not s.get("off_topic")),
         "off_topic": sum(1 for s in studies if s.get("off_topic")),
+        "background": sum(1 for s in studies
+                          if s.get("background") and not s.get("off_topic")),
         "retracted": sum(1 for s in studies
                          if classify(s.get("publication_types")) == "retracted"),
         "year_from": years[0] if years else None,
@@ -852,6 +854,8 @@ def _chart_words(snap: dict) -> dict:
         facts.append(f"{snap['registered']} registered in advance")
     if snap["retracted"]:
         facts.append(_n_things(snap["retracted"], "retracted paper", "retracted papers"))
+    if snap.get("background"):
+        facts.append(f"{snap['background']} animal or lab, background only")
     if snap.get("off_topic"):
         facts.append(f"{snap['off_topic']} off topic")
     if snap["year_from"]:
@@ -861,6 +865,9 @@ def _chart_words(snap: dict) -> dict:
 
     described = [f"{_n_things(read, 'study', 'studies')} read, "
                  f"{used} used for this verdict."]
+    if snap.get("background"):
+        described.append(f"{snap['background']} of them animal or lab studies, "
+                         f"background only, never used for a claim about people.")
     if snap.get("off_topic"):
         described.append(f"{snap['off_topic']} of them off topic for this claim.")
     if snap["mix"]:
@@ -1214,6 +1221,31 @@ def preclinical(study) -> bool:
     """An animal or lab study: it says so, and never mentions people."""
     text = _text(study)
     return bool(_PRECLINICAL.search(text)) and not _HUMANS.search(text)
+
+
+# A claim names animals, or a dish, when it is about them and not about the
+# reader. Everything else is a claim about people: "apple cider vinegar
+# cures diabetes" means in people, whatever a rat study found.
+_NOT_PEOPLE_CLAIM = re.compile(
+    r"\b(?:dogs?|puppies|cats?|kittens?|pets?|horses?|cattle|cows?|pigs?|sheep|"
+    r"goats?|chickens?|poultry|livestock|rats?|mice|mouse|rodents?|animals?|"
+    r"in vitro|petri|test tubes?|in a dish|in the lab|cell cultures?)\b", re.IGNORECASE)
+
+
+def about_people(claim: str) -> bool:
+    """True unless the claim itself is about animals or the lab."""
+    return not _NOT_PEOPLE_CLAIM.search(claim or "")
+
+
+def background(studies, claim: str) -> list[str]:
+    """
+    The PMIDs of the animal and lab studies that are background for this
+    claim: for a claim about people they can say why a thing might work,
+    never whether it does in people, so they are never counted as used.
+    """
+    if not about_people(claim):
+        return []
+    return [s["pmid"] for s in studies or [] if preclinical(s)]
 
 
 def untested_in_people(studies, cited_pmids=()) -> str:

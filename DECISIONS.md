@@ -4,6 +4,33 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-12: Apple cider vinegar does not cure diabetes
+
+The live check of "Apple cider vinegar cure diabetes" was stamped "It's
+complicated" over a short answer saying it does not cure it. Working
+through why turned up six things, each fixed and tested. The claim is
+now number 21 in `tests/regression_claims.json`, expected "Likely
+false".
+
+**Animal and lab studies are background for a claim about people.**
+Two rat studies were counted among the seven "used for this verdict".
+A rat study can say why something might work, never whether it does in
+people. Now `evidence.background` marks every animal or lab study
+(`preclinical`) as background when the claim is about people (anything
+that does not name animals or the lab, `evidence.about_people`), and
+`_read_verdict` takes them out of the cited list whatever the model
+cited. They get their own folded group in the list ("Background only:
+animal and lab studies"), the chart's facts line counts them, and "What
+the research says" never picks a sentence resting only on them. An
+answer resting on nothing else still reaches "Not enough evidence" by
+the existing route, which says "only animal or lab studies", rather
+than the vaguer "nothing cited".
+
+**The population line carries its label.** "Who was studied" is often
+written as a bare noun phrase, which under "What the research says"
+read as a stray fragment. `breakdown.says` now prefixes it: "Who was
+studied: adults with type 2 diabetes...".
+
 ## 2026-10-10 (night): What a full test round found and fixed
 
 The user asked for every scenario to be tried: function, speed,

@@ -770,10 +770,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
     off = result.pop("off_topic", None) or {}
+    back = set(result.pop("background", None) or ())
     for s in studies:
         s.pop("off_topic", None)
+        s.pop("background", None)
         if s["pmid"] in off:
             s["off_topic"] = off[s["pmid"]]
+        elif s["pmid"] in back:
+            s["background"] = True
     return _align_stamp(result, claim)
 
 
@@ -1056,6 +1060,17 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     off_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in off}
     cited_pmids = [p for p in cited_pmids if p not in off]
 
+    # Animal and lab studies are background for a claim about people. They
+    # can say why a thing might work, never whether it does in people, so
+    # they are never counted as used, whatever the model put in its list.
+    # What the model leaned on is kept a moment longer, because an answer
+    # resting on nothing else is "not tested in people", which says more
+    # than "nothing cited".
+    background = [p for p in evidence.background(studies, claim) if p not in off]
+    leaned_on = cited_pmids
+    cited_pmids = [p for p in cited_pmids if p not in background]
+    background_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in background}
+
     explanation = breakdown.drop_citing(breakdown.tell_straight(breakdown.plain(breakdown.soften(
         tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))), studies),
         off_numbers, len(studies))
@@ -1071,7 +1086,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # rule #1 (never claim more certainty than the evidence supports)
     # if the model ignores the prompt.
     forced = False
-    if verdict != "insufficient" and not cited_pmids:
+    if verdict != "insufficient" and not leaned_on:
         verdict = "insufficient"
         forced = True
         explanation = (explanation.rstrip() + " None of the studies found directly "
@@ -1091,7 +1106,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # and a report of one person harmed never makes "does not work".
     thin = ""
     if not forced and verdict != "insufficient":
-        thin = evidence.untested_in_people(studies, cited_pmids)
+        thin = evidence.untested_in_people(studies, leaned_on)
         if thin:
             was = verdict
             verdict = "insufficient"
@@ -1101,8 +1116,16 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
             if was == "false" and "single patients" in thin:
                 explanation += (" A report of someone harmed is a reason for caution, "
                                 "not evidence that it does not work.")
-    elif verdict == "insufficient" and cited_pmids:
-        thin = evidence.untested_in_people(studies, cited_pmids)
+    elif verdict == "insufficient" and leaned_on:
+        thin = evidence.untested_in_people(studies, leaned_on)
+    # The backstop again, now that background studies are out: a verdict
+    # still standing on nothing used becomes "not enough evidence".
+    if verdict != "insufficient" and not cited_pmids:
+        verdict = "insufficient"
+        forced = True
+        explanation = (explanation.rstrip() + " None of the studies found directly "
+                       "test this claim, so there isn't enough evidence to rate it.").strip()
+        deeper = None
 
     if (not forced and verdict in ("true", "false")
             and evidence.narrow_only(studies, cited_pmids, claim)):
@@ -1167,7 +1190,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
         # "What the research says" on the result screen: three to five
         # sentences picked from prose that has already passed the gate, so
         # the block costs no extra call and cannot outrun the evidence.
-        deeper["says"] = breakdown.says(explanation, deeper, studies)
+        deeper["says"] = breakdown.says(explanation, deeper, studies,
+                                        skip=background_numbers)
 
     return {
         "verdict": verdict,
@@ -1177,6 +1201,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
         "cited_studies": cited_pmids,
         "breakdown": deeper,
         "off_topic": off,
+        "background": background,
     }
 
 

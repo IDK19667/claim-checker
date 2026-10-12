@@ -331,7 +331,7 @@
          on, solid or outlined is whether the verdict leaned on it, and
          the number under it is the number the list of studies and every
          sentence of the prose use. #}
-      {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else 'read but not used') }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }} k-{{ s.kind }}"><span class="barcol-spine" aria-hidden="true">{{ s.spine }}</span></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
+      {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else ('animal or lab, background only' if s.background else 'read but not used')) }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }} k-{{ s.kind }}"><span class="barcol-spine" aria-hidden="true">{{ s.spine }}</span></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
 
       <div class="verdict-block"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
         <article class="ticket" aria-labelledby="claim-echo">
@@ -515,16 +515,20 @@
                and a link inside a button is lost to a screen reader. -->
           <button type="button" class="study-go" aria-label="Deep dive on study {{ i + 1 }}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
         </li>{% endmacro %}
-        <!-- The sources fold into two groups: what the verdict leaned on, open,
-             and what was read and set aside, closed. Every study stays in the
+        <!-- The sources fold into groups: what the verdict leaned on, open;
+             animal and lab studies, background only for a claim about
+             people, closed; and what was read and set aside, closed. Every study stays in the
              HTML either way, so crawlers and a reader with no JavaScript get
              the whole file. -->
-        <div class="sources" id="sources">{% if result %}{% set cited = result.studies | selectattr("cited_in_verdict") | list %}{% set others = result.studies | rejectattr("cited_in_verdict") | list %}{% if cited %}<details class="source-group" open>
+        <div class="sources" id="sources">{% if result %}{% set cited = result.studies | selectattr("cited_in_verdict") | list %}{% set back = result.studies | rejectattr("cited_in_verdict") | selectattr("background") | list %}{% set others = result.studies | rejectattr("cited_in_verdict") | rejectattr("background") | list %}{% if cited %}<details class="source-group" open>
           <summary class="group-head"><span class="group-name">Relied on for the verdict</span><span class="group-count">{{ cited | length }}</span></summary>
           <ol class="studies">{% for s in result.studies %}{% if s.cited_in_verdict %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
+        </details>{% endif %}{% if back %}<details class="source-group"{% if not cited and not others %} open{% endif %}>
+          <summary class="group-head"><span class="group-name">Background only: animal and lab studies</span><span class="group-count">{{ back | length }}</span></summary>
+          <ol class="studies">{% for s in result.studies %}{% if not s.cited_in_verdict and s.background %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
         </details>{% endif %}{% if others %}<details class="source-group"{% if not cited %} open{% endif %}>
           <summary class="group-head"><span class="group-name">{% if cited %}Read, not relied on{% else %}Read{% endif %}</span><span class="group-count">{{ others | length }}</span></summary>
-          <ol class="studies">{% for s in result.studies %}{% if not s.cited_in_verdict %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
+          <ol class="studies">{% for s in result.studies %}{% if not s.cited_in_verdict and not s.background %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
         </details>{% endif %}{% if not result.studies %}<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>{% endif %}{% endif %}</div>
         <!-- Shown only when the check found nothing to stand on. Every line
              here is checkable: the search that ran, a wider one, and claims

@@ -1663,7 +1663,10 @@ def who_label(sentence: str) -> str:
     return WHO_LABEL + text
 
 
-def says(explanation: str, bd: dict, studies: list[dict]) -> list[str]:
+def says(explanation: str, bd: dict, studies: list[dict], skip=()) -> list[str]:
+    # `skip` is the study numbers that are background only (animal and lab
+    # studies, for a claim about people). A sentence resting on nothing else
+    # is not what the research says about the claim, so it is not picked.
     count = len(studies or [])
     if not count or not isinstance(bd, dict):
         return []
@@ -1684,7 +1687,7 @@ def says(explanation: str, bd: dict, studies: list[dict]) -> list[str]:
         for sentence in sentences(source):
             if got >= most or len(out) >= SAYS_MAX:
                 return
-            if not refs(sentence, count):
+            if not refs(sentence, count) or not drop_citing(sentence, skip, count):
                 continue
             # The same sentence can reach here twice, because a paragraph of
             # the breakdown and the explanation often make the same point.

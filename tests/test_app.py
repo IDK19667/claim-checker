@@ -10,6 +10,7 @@ import os
 import pathlib
 import sys
 import tempfile
+import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -2068,6 +2069,65 @@ t("  its links put the cursor in the claim box without changing the address",
 _pending = (ROOT / "static" / "app.js").read_text().split("function renderPending")[1].split("\nfunction ")[0]
 t("  and a check in progress hides it, so the work is what the reader sees",
   "if (trustSection) trustSection.hidden = true;" in _pending)
+
+# ---- accuracy round 3 (apple cider vinegar "cures" diabetes) -------------------
+# 2. Animal and lab studies are background for a claim about people: never
+# counted as used, whatever the model cited, and grouped on their own.
+_ACV = [_study("A1", "Apple cider vinegar and glycemic control in type 2 diabetes: a meta-analysis",
+               types=["Meta-Analysis"], abstract="Adults with type 2 diabetes took vinegar."),
+        _study("A2", "Apple cider vinegar in patients with type 2 diabetes: a randomized trial",
+               abstract="Patients with type 2 diabetes took 30 ml a day."),
+        _study("A3", "Apple cider vinegar attenuates lipid profile in normal and diabetic rats.",
+               types=["Journal Article"], abstract="Diabetic rats were fed vinegar for four weeks.")]
+t("a claim is about people unless it names animals or the lab",
+  evidence.about_people("Apple cider vinegar cures diabetes")
+  and not evidence.about_people("Chocolate is poisonous to dogs")
+  and not evidence.about_people("Turmeric kills cancer cells in vitro"))
+fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr="It lowers blood sugar a little.",
+                            evidence=["Vinegar lowered blood sugar (Study 1)."]))]
+_v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV],
+                            "(vinegar) AND (blood sugar)")
+t("  a rat study the model cited is not counted as used",
+  _v["cited_studies"] == ["A1", "A2"], _v["cited_studies"])
+_acv_studies = [dict(s) for s in _ACV]
+fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr="It lowers blood sugar a little.",
+                            evidence=["Vinegar lowered blood sugar (Study 1)."]))]
+verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", _acv_studies, "(vinegar) AND (blood sugar)")
+t("  it is marked background on its record, and nothing else is",
+  [bool(s.get("background")) for s in _acv_studies] == [False, False, True], _acv_studies)
+_snap = evidence.snapshot(_acv_studies, ["A1", "A2"])
+t("  the chart counts it as background, not used",
+  "2 used for this verdict" in _snap["summary"]
+  and "1 animal or lab, background only" in _snap["facts"], _snap)
+fg.models.script = [Resp(VJ("true", [3], tldr="Vinegar lowers blood sugar.",
+                            evidence=["Rats had lower blood sugar (Study 3)."]))]
+_v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV],
+                            "(vinegar) AND (blood sugar)")
+t("  resting on nothing but a rat study is 'not enough evidence', and says why",
+  _v["verdict"] == "insufficient" and _v["cited_studies"] == []
+  and "animal or lab studies" in _v["explanation"], _v)
+_dog = [_study("D1", "Theobromine poisoning in dogs fed chocolate", types=["Journal Article"],
+               abstract="Dogs fed chocolate developed signs of poisoning.")]
+fg.models.script = [Resp(VJ("true", [1], tldr="Chocolate can poison dogs.",
+                            evidence=["Dogs fed chocolate were poisoned (Study 1)."]))]
+_v = verdict.weigh_evidence("Chocolate is poisonous to dogs", _dog, "(chocolate) AND (dogs)")
+t("  a claim about dogs still counts a study in dogs",
+  _v["cited_studies"] == ["D1"], _v)
+t("  'what the research says' never picks a line resting only on a rat study",
+  breakdown.says("Rats had lower sugar (Study 3). People had lower sugar (Study 1).",
+                 {"evidence": []}, _ACV, skip={3}) == ["People had lower sugar (Study 1)."])
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _ACV]
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"),
+                    Resp(VJ("complicated", [1, 2, 3], tldr="It lowers blood sugar a little.",
+                            evidence=["Vinegar lowered blood sugar (Study 1)."]))]
+_r = P("Apple cider vinegar lowers blood sugar after meals", ip="9.9.3.1"); _d = _r.get_json()
+_page = c.get("/?q=" + urllib.parse.quote(_d["claim"])).get_data(as_text=True)
+t("  the API marks it, and the page and the script both group it as background",
+  [s["background"] for s in _d["studies"]] == [False, False, True]
+  and [s["cited_in_verdict"] for s in _d["studies"]] == [True, True, False]
+  and "Background only: animal and lab studies" in _page
+  and "Background only: animal and lab studies" in (ROOT / "static" / "app.js").read_text(), _d["studies"])
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
