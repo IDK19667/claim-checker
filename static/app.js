@@ -429,7 +429,7 @@ function linkStudyRefs(text, count) {
 // What was read and relied on, as one sentence. The evidence word is
 // highlighted, the way you'd mark the line that matters on a printout.
 function recordSentence(n, cited, ev, best) {
-  const what = `<button type="button" class="what link-btn" id="meter">what does this mean?</button>`;
+  const what = `<button type="button" class="what link-btn" id="meter">What does this mean?</button>`;
   if (!n) return `Found nothing on PubMed that matched well enough to weigh. <mark>No direct evidence</mark> either way. ${what}`;
   const read = `Read ${n} ${n === 1 ? "study" : "studies"} from PubMed`;
   if (!cited || ev.level === 0) return `${read}, but none of them actually tests this claim, so there's <mark>no direct evidence</mark> either way. ${what}`;
