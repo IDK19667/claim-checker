@@ -1398,10 +1398,20 @@ t("  a sentence the gate rejects never reaches it",
   != ["Colds fell by 47% (Study 1)."])
 # Picked, not written: nothing is asked of the model for this block, and
 # every sentence in it is already somewhere else in the same answer.
-_elsewhere = " ".join([_vd["explanation"], breakdown.flatten(_vd["breakdown"])])
+_elsewhere = " ".join([_vd["explanation"], breakdown.flatten(_vd["breakdown"])]).lower()
+_unlabel = lambda line: line[len(breakdown.WHO_LABEL):] if line.startswith(breakdown.WHO_LABEL) else line
 t("  and it costs no extra call: every sentence is already in the answer",
   "says" not in verdict.VERDICT_SCHEMA["properties"]
-  and all(line in _elsewhere for line in _says), _says)
+  and all(_unlabel(line).lower() in _elsewhere for line in _says), _says)
+# A population line is often a bare noun phrase. Under "What the research
+# says" it reads as a stray fragment unless it carries its label.
+_who = breakdown.says("", {"applies_to": "Adults with type 2 diabetes, overweight, or obesity (Studies 1, 2)."},
+                      _BD_STUDIES)
+t("  the population line carries its label, and drops a common word's capital",
+  _who == ["Who was studied: adults with type 2 diabetes, overweight, or obesity (Studies 1, 2)."], _who)
+t("  a name keeps its capital, and the label is never doubled",
+  breakdown.who_label("HIV patients on treatment (Study 1).") == "Who was studied: HIV patients on treatment (Study 1)."
+  and breakdown.who_label("Who was studied: adults (Study 1).") == "Who was studied: adults (Study 1).")
 
 # (f) The evidence chart. Everything it says in words is counted on the
 # server, so the streamed check and the shared link cannot disagree.

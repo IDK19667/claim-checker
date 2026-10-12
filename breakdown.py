@@ -1641,6 +1641,28 @@ def contents(bd: dict) -> str:
     return line[0].upper() + line[1:] + "."
 
 
+WHO_LABEL = "Who was studied: "
+# Words that open a population line and are not names, so they drop their
+# capital after the label. Anything else ("HIV", "Japanese") keeps it.
+_COMMON_OPENERS = set("""a adults all an athletes both children elderly healthy
+individuals infants men middle-aged mostly obese older only overweight participants
+patients people postmenopausal pregnant students studies subjects teenagers the
+these those trials volunteers women young younger adolescents mainly most
+""".split())
+
+
+def who_label(sentence: str) -> str:
+    """'Adults with type 2 diabetes (Study 1).' -> 'Who was studied: adults
+    with type 2 diabetes (Study 1).'"""
+    text = str(sentence or "").strip()
+    if not text or text.lower().startswith(WHO_LABEL.strip().lower()):
+        return text
+    first = text.split(None, 1)[0]
+    if first.lower().strip(",.:;") in _COMMON_OPENERS:
+        text = text[0].lower() + text[1:]
+    return WHO_LABEL + text
+
+
 def says(explanation: str, bd: dict, studies: list[dict]) -> list[str]:
     count = len(studies or [])
     if not count or not isinstance(bd, dict):
@@ -1685,7 +1707,13 @@ def says(explanation: str, bd: dict, studies: list[dict]) -> list[str]:
     pair = [line for line in said if figure and figure.group(0) in line][:1]
     pair += [line for line in said if line.startswith(TRANSLATION_LEAD)][:1]
     take(" ".join(pair) if pair else bd.get("effect_size"), 2)
+    # Who was studied is often written as a bare noun phrase ("Adults with
+    # type 2 diabetes (Study 1)."), which under a heading about what the
+    # research says reads as a stray fragment, so it carries its label.
+    before = len(out)
     take(bd.get("applies_to"), 1)
+    if len(out) > before:
+        out[-1] = who_label(out[-1])
     # Still thin: the explanation was mostly dropped, or there was no effect
     # size to report. The paragraphs underneath are the same material.
     for para in bd.get("evidence") or []:
