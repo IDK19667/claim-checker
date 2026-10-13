@@ -12,6 +12,39 @@ through why turned up six things, each fixed and tested. The claim is
 now number 21 in `tests/regression_claims.json`, expected "Likely
 false".
 
+**A claim that promises the whole thing is tested as written.** "Cures",
+"eliminates", "eradicates", "reverses", "gets rid of", "completely
+prevents" (`breakdown.absolute_claim`; plain "prevents" is a risk claim
+and is not on the list). Studies that found a real but partial effect
+looked for the effect and found less than the claim promises, so they
+contradict it as written: the verdict is "false", and the short answer
+says what it does do and then that it does not do what the claim says.
+Three parts. The prompt gets one paragraph for these claims only
+(`_absolute_note`), and its "complicated" example ("slightly lowers
+blood sugar" is not "cures diabetes"), which says the opposite, is
+swapped for them (`_narrower_example`); every other claim gets the
+prompt byte for byte as before, checked for all 20 audit claims. The
+stamp check reads "but it does not cure it" as a plain no to such a
+claim, however hedged the first half (`denies_absolute`). And when the
+model stamps "complicated" over its own takeaway saying it does not
+cure, the stamp follows the words. That is the one place code raises a
+verdict, a deliberate, scoped exception to "code only lowers
+certainty" and to non-negotiable 1's "no prompt tuning may push toward
+confident true/false", made on the owner's instruction: only from
+"complicated" to "false", only on human evidence that was used, never
+past a downgrade made above it, never for a group the evidence does not
+cover, and only when the model's own takeaway already says no. It adds
+one sentence saying why. "Likely false" still says "likely". If the
+studies show the whole effect in some people (a remission), it is
+"complicated"; if nothing tests it in people, "not enough evidence".
+Two things had to change for it to work: `soften` turned the noun in
+"rather than a full cure" into "rather than a full help with" (the
+garbled sentence on the live page), and a claim about treating
+"diabetes" did not count studies in people with diabetes as its own
+group, so a "false" would have been downgraded as "one narrow group".
+Both fixed (`_CURE_NOUN_BEFORE`, `evidence._TREATED`, never for a risk
+claim).
+
 **Animal and lab studies are background for a claim about people.**
 Two rat studies were counted among the seven "used for this verdict".
 A rat study can say why something might work, never whether it does in

@@ -863,6 +863,47 @@ claim is right: the takeaway agrees with it and the verdict is "true".
 If they show it does happen, the verdict is "false"."""
 
 
+def _narrower_example(claim: str) -> str:
+    """
+    The example under "complicated". For most claims it is the one it has
+    always been. For a claim that promises the whole thing (a cure), that
+    example says the opposite of the rule in `_absolute_note`, so the claim
+    gets a version that points there instead.
+    """
+    if breakdown.absolute_claim(claim):
+        return (" in who or what it covers (a smaller effect than a claim\n"
+                "promises is a different case, set out below)")
+    return (' (for example, "slightly lowers blood sugar" is not "cures\n'
+            'diabetes")')
+
+
+def _absolute_note(claim: str) -> str:
+    """
+    A claim that promises the whole thing ("apple cider vinegar cures
+    diabetes") is tested as written: studies showing a real but partial
+    effect answer it with a no. This is the one place the prompt asks for
+    a plainer verdict than "complicated", and only for these claims; every
+    other claim is sent the prompt exactly as before, the same way the
+    note for a claim that says "not" is kept to those claims.
+    """
+    word = breakdown.absolute_claim(claim)
+    if not word:
+        return ""
+    return f"""
+
+This claim promises the whole thing: it says "{word}". Test it exactly
+as written. If studies in people tested it and found a real but partial
+effect (a little lower, somewhat milder, fewer cases but not none), they
+contradict the claim as written, because they looked for the effect and
+found less than it promises: the verdict is "false". The takeaway then
+says what it does do, and then that it does not do what the claim says,
+for example "Zinc may shorten a cold by a day or so, but it does not
+cure it." If studies show the whole effect the claim names (a cure, a
+remission, complete prevention) in some people and not in others, the
+verdict is "complicated". If nothing here tests it in people, it is
+"insufficient", as always."""
+
+
 def weigh_prompt(claim: str, studies_block: str, subgroup_block: str = "") -> str:
     """
     The one prompt behind every verdict. A function rather than an f-string
@@ -888,8 +929,7 @@ saying yes or no.
 "complicated" is a legitimate, correct verdict. Use it when human
 studies do test the claim and what they show is mixed, weak,
 preliminary, low certainty, true only for one group, or narrower than
-the claim (for example, "slightly lowers blood sugar" is not "cures
-diabetes").
+the claim{_narrower_example(claim)}.
 
 "insufficient" means not enough evidence: nothing here actually tests
 the claim. Use it when the only papers are case reports about single
@@ -921,7 +961,7 @@ not make children hyperactive", "it works no better than ordinary
 dieting"), the verdict is "false". If it says a plain "yes", the verdict
 is "true". "complicated" is for an answer that really is "partly" or "it
 depends", and its takeaway holds both sides. Never stamp "complicated"
-over a takeaway that says plainly yes or plainly no.{_denial_note(claim)}
+over a takeaway that says plainly yes or plainly no.{_denial_note(claim)}{_absolute_note(claim)}
 
 PubMed's search can return studies that only superficially match the
 words in the claim. A study is evidence for this claim only when it
@@ -1160,6 +1200,22 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     sized = (deeper or {}).get("effect") or {}
     if sized.get("label"):
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
+    # A claim that promises the whole thing ("cures diabetes") is tested as
+    # written. When the model's own takeaway says the whole thing does not
+    # happen ("it lowers blood sugar a bit, but it does not cure it") and it
+    # stamped "complicated" anyway, the stamp follows the words. The one
+    # place code raises a verdict, and only this far: from "complicated" to
+    # "false", only on human evidence that was used, never past a downgrade
+    # made above, and never for a group the evidence does not cover.
+    absolute = breakdown.absolute_claim(claim)
+    if (absolute and verdict == "complicated" and cited_pmids
+            and not (forced or thin or forced_narrow or forced_low)
+            and breakdown.denies_absolute(tldr, claim)
+            and not evidence.narrow_only(studies, cited_pmids, claim)):
+        verdict = "false"
+        explanation = (explanation.rstrip() + f' The claim says "{absolute}", and these '
+                       f"studies found a smaller effect than that, so as written it is "
+                       f"likely false.").strip()
     # A downgrade made here, in code, leaves the model's takeaway answering
     # the question the stamp no longer answers. The takeaway follows the
     # stamp, so the two never disagree on the reader's screen.

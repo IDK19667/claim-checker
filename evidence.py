@@ -218,7 +218,20 @@ def claim_groups(claim: str) -> set:
     for pattern, groups in _NATURAL_GROUPS:
         if pattern.search(claim):
             found.update(groups)
+    # A claim about treating a disease is about the people who have it:
+    # "apple cider vinegar cures diabetes" can only be tested in people with
+    # diabetes, though it never says "type 2". Not for a risk claim, whose
+    # answer is in the people who do not have the disease yet.
+    if not risk:
+        found.update(label for pattern, label in _TREATED if pattern.search(claim))
     return found
+
+
+_TREATED = [(re.compile(p, re.IGNORECASE), label) for p, label in (
+    (r"\bdiabet", "people with diabetes"),
+    (r"\bcancers?\b|\btumou?rs?\b", "people treated for cancer"),
+    (r"\bkidney (?:disease|failure)", "people with kidney failure"),
+)]
 
 
 # What a study's own authors concluded. A structured abstract keeps the

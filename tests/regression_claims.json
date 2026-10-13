@@ -1,5 +1,5 @@
 {
-  "about": "The 20-claim accuracy audit of 2026-10-04. 'expected' is the verdict Cochrane, WHO, NIH and the major reviews support. 'also_ok' lists a verdict that is defensible but less precise; it does not count as a match. Re-run with: .venv/bin/python scripts/regression.py (needs a key, about 20 minutes, uses free-tier quota).",
+  "about": "The 20-claim accuracy audit of 2026-10-04, plus claim 21 (2026-10-12): a claim that says 'cure' is tested literally, so a small effect is not a cure. 'expected' is the verdict Cochrane, WHO, NIH and the major reviews support. 'also_ok' lists a verdict that is defensible but less precise; it does not count as a match. Re-run with: .venv/bin/python scripts/regression.py (needs a key, about 20 minutes, uses free-tier quota).",
   "claims": [
     {"n": 1,  "kind": "supported",     "claim": "Exercise lowers the risk of depression", "expected": "true"},
     {"n": 2,  "kind": "supported",     "claim": "Smoking causes lung cancer", "expected": "true"},
@@ -20,6 +20,7 @@
     {"n": 17, "kind": "thin",          "claim": "Cold showers boost immunity", "expected": "insufficient", "also_ok": ["complicated"]},
     {"n": 18, "kind": "thin",          "claim": "Magnesium supplements improve sleep quality", "expected": "complicated"},
     {"n": 19, "kind": "thin",          "claim": "Standing desks reduce back pain", "expected": "complicated"},
-    {"n": 20, "kind": "thin",          "claim": "Ashwagandha reduces stress", "expected": "complicated"}
+    {"n": 20, "kind": "thin",          "claim": "Ashwagandha reduces stress", "expected": "complicated"},
+    {"n": 21, "kind": "absolute",      "claim": "Apple cider vinegar cure diabetes", "expected": "false"}
   ]
 }

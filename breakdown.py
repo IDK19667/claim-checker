@@ -702,6 +702,58 @@ def claim_denies(claim: str) -> bool:
     return False
 
 
+# A claim that promises the whole thing: a cure, an end, a reversal,
+# complete prevention. It is tested as written, so studies showing a partial
+# effect answer it with a no: "vinegar lowers blood sugar a little" is real,
+# and it is not "vinegar cures diabetes". Plain "prevents" is not on the list:
+# "vitamin D prevents winter infections" is a claim about risk.
+_ABSOLUTE = re.compile(
+    r"\b(?:cures?|cured|curing|eliminat(?:e|es|ed|ing)|eradicat(?:e|es|ed|ing)|"
+    r"revers(?:e|es|ed|ing)|get(?:s|ting)? rid of|wipes? out|"
+    r"(?:completely|fully|totally|entirely|always|permanently)\s+(?:prevents?|stops?|"
+    r"protects?|blocks?|heals?|fix(?:es)?)|"
+    r"(?:prevents?|stops?|blocks?|heals?|fix(?:es)?)\b[^.,;]{0,40}?\b(?:completely|"
+    r"entirely|totally|for good|forever|permanently))\b", re.IGNORECASE)
+# "Cured meats", "reverse dieting", "reverse osmosis": the word is a name.
+_NOT_ABSOLUTE_AFTER = re.compile(r"\s+(?:meats?|ham|bacon|salmon|fish|pork|sausages?|"
+                                 r"foods?|dieting|diets?|osmosis)\b", re.IGNORECASE)
+# A takeaway that says the whole thing does not happen: "but it does not
+# cure it", "is not a cure", "rather than a cure", "won't prevent it
+# completely". A few words may come between the "not" and the verb.
+_ABSOLUTE_DENIED = re.compile(
+    r"(?:\bnot|n't|\bnever|\bno|\bnor|\bcannot|\brather than|\bshort of|\bfar from|"
+    r"\binstead of|\bwithout)\b(?:\s+[\w'-]+){0,4}?\s+(?:cur(?:e|es|ed|ing)\b|"
+    r"eliminat\w*|eradicat\w*|revers\w*|rid of\b|wipes? out\b|prevent\w*|stops?\b|"
+    r"blocks?\b|protects?\b|heals?\b|fix(?:es)?\b)", re.IGNORECASE)
+
+
+def absolute_claim(claim: str) -> str:
+    """
+    The words that make a claim absolute ("cure", "reverses", "completely
+    prevents"), or "" for any other claim. A claim that is itself a "no"
+    ("vinegar does not cure diabetes") is answered the ordinary way, and a
+    word that opens the claim is its subject ("Eliminating sugar clears
+    skin"), not its promise.
+    """
+    text = claim or ""
+    if claim_denies(text):
+        return ""
+    for m in _ABSOLUTE.finditer(text):
+        if not text[:m.start()].strip() or _NOT_ABSOLUTE_AFTER.match(text[m.end():]):
+            continue
+        return " ".join(m.group(0).split()).lower()
+    return ""
+
+
+def denies_absolute(text: str, claim: str) -> bool:
+    """True when the first sentence of `text` says the whole thing an
+    absolute claim promises does not happen."""
+    if not absolute_claim(claim):
+        return False
+    first = (sentences(text or "") or [""])[0]
+    return bool(_ABSOLUTE_DENIED.search(first))
+
+
 def stance(text: str, claim: str) -> str:
     """
     What a takeaway commits to about the claim: "yes", "no", "untested" or
@@ -722,6 +774,10 @@ def _plain_stance(text: str, claim: str) -> str:
         return "mixed"
     if _UNTESTED_SAID.search(first) and not _TURN_AFTER.search(first):
         return "untested"
+    # "It lowers blood sugar a little, but it does not cure it" is a plain
+    # no to "it cures diabetes", however hedged its first half is.
+    if denies_absolute(first, claim):
+        return "no"
     if _COMPARATIVE_CLAIM.search(claim or ""):
         same = _COMPARES_SAME.search(first)
         if same:
@@ -845,13 +901,25 @@ def off_claim(tldr: str, claim: str) -> list[str]:
 # verb with a negation in the few words before it is left as written, the
 # same way match_effect() leaves a sentence with "no" or "not" in it alone.
 _NEGATION_BEFORE = re.compile(r"\b(?:not|never|no|nothing|neither|nor|cannot|without|"
-                              r"fails?|failed)\b|n't\b", re.IGNORECASE)
+                              r"fails?|failed|rather than|short of|far from|instead of)\b"
+                              r"|n't\b", re.IGNORECASE)
+# "Cure" the noun is not a promise. "Modest control rather than a full cure"
+# came out as "rather than a full help with", because the rule meant for
+# "vinegar cures diabetes" read the noun as the verb. After an article or
+# an adjective, or before "for", the word is the thing, and stays.
+_CURE_NOUN_BEFORE = re.compile(
+    r"\b(?:a|an|the|no|any|full|complete|total|real|true|actual|miracle|magic|"
+    r"permanent|definitive|outright|possible|potential)\s*$", re.IGNORECASE)
 
 
 def _soften_unless_negated(weaker):
     def swap(m: re.Match) -> str:
         head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
         if _NEGATION_BEFORE.search(" ".join(head.split()[-4:])):
+            return m.group(0)
+        if (m.group(0).lower().startswith("cure")
+                and (_CURE_NOUN_BEFORE.search(head)
+                     or re.match(r"\s+for\b", m.string[m.end():]))):
             return m.group(0)
         return m.expand(weaker)
     return swap

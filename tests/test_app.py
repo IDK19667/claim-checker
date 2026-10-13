@@ -2071,14 +2071,67 @@ t("  and a check in progress hides it, so the work is what the reader sees",
   "if (trustSection) trustSection.hidden = true;" in _pending)
 
 # ---- accuracy round 3 (apple cider vinegar "cures" diabetes) -------------------
-# 2. Animal and lab studies are background for a claim about people: never
-# counted as used, whatever the model cited, and grouped on their own.
 _ACV = [_study("A1", "Apple cider vinegar and glycemic control in type 2 diabetes: a meta-analysis",
                types=["Meta-Analysis"], abstract="Adults with type 2 diabetes took vinegar."),
         _study("A2", "Apple cider vinegar in patients with type 2 diabetes: a randomized trial",
                abstract="Patients with type 2 diabetes took 30 ml a day."),
         _study("A3", "Apple cider vinegar attenuates lipid profile in normal and diabetic rats.",
                types=["Journal Article"], abstract="Diabetic rats were fed vinegar for four weeks.")]
+# 1. A claim that promises the whole thing is tested as written. The live
+# check stamped "It's complicated" over "it does not cure it".
+_ACV_CLAIM = "Apple cider vinegar cure diabetes"
+_ACV_TLDR = "Apple cider vinegar can lower blood sugar a bit in people with diabetes, but it does not cure it."
+t("a claim that says cure, reverses or completely prevents is absolute",
+  breakdown.absolute_claim(_ACV_CLAIM) == "cure"
+  and breakdown.absolute_claim("Low carb diets reverse type 2 diabetes") == "reverse"
+  and breakdown.absolute_claim("Sunscreen completely prevents skin cancer") == "completely prevents")
+t("  and plain 'prevents', cured meats, a subject and a claim that says no are not",
+  not any(breakdown.absolute_claim(c) for c in (
+      "Vitamin D supplements prevent winter infections", "Cured meats cause cancer",
+      "Eliminating sugar clears skin", "Reverse dieting boosts metabolism",
+      "Vinegar does not cure diabetes")))
+t("  'it lowers blood sugar a bit, but it does not cure it' is a plain no to it",
+  breakdown.stance(_ACV_TLDR, _ACV_CLAIM) == "no"
+  and breakdown.stance("It lowers blood sugar a little, but it is not a cure.", _ACV_CLAIM) == "no"
+  and not breakdown.stamp_conflict("false", _ACV_TLDR, "", _ACV_CLAIM))
+t("  the noun is not softened: 'rather than a full cure' stays a full cure",
+  breakdown.soften("Modest control rather than a full cure.") == "Modest control rather than a full cure."
+  and breakdown.soften("There is no cure for it.") == "There is no cure for it."
+  and breakdown.soften("Vinegar cures diabetes.") == "Vinegar helps with diabetes.")
+t("  curing diabetes is about people with diabetes, so their trials are not 'one narrow group'",
+  "people with diabetes" in evidence.claim_groups(_ACV_CLAIM)
+  and "people with diabetes" not in evidence.claim_groups("Regular physical activity reduces the risk of type 2 diabetes")
+  and not evidence.narrow_only([_study("N1", "Vinegar in adults with type 2 diabetes")], ["N1"], _ACV_CLAIM))
+_abs_prompt = verdict.weigh_prompt(_ACV_CLAIM, "S")
+_plain_prompt = verdict.weigh_prompt("Vitamin D supplements prevent winter infections", "S")
+t("  only an absolute claim's prompt carries the note, and the old example goes",
+  'it says "cure"' in _abs_prompt and 'is not "cures\ndiabetes"' not in _abs_prompt
+  and "promises the whole thing" not in _plain_prompt
+  and '(for example, "slightly lowers blood sugar" is not "cures\ndiabetes")' in _plain_prompt)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_ACV_TLDR,
+                            evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
+_v = verdict.weigh_evidence(_ACV_CLAIM, [dict(s) for s in _ACV], "(vinegar) AND (diabetes)")
+t("  'complicated' over 'it does not cure it' becomes 'Likely false', and says why",
+  _v["verdict"] == "false" and _v["tldr"] == _ACV_TLDR
+  and 'The claim says "cure"' in _v["explanation"], _v)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Vinegar can lower blood sugar a bit in people with diabetes.",
+                            evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
+_v = verdict.weigh_evidence(_ACV_CLAIM, [dict(s) for s in _ACV], "(vinegar) AND (diabetes)")
+t("  words that never say no leave the stamp alone",
+  _v["verdict"] == "complicated", _v)
+fg.models.script = [Resp(VJ("complicated", [3], tldr=_ACV_TLDR,
+                            evidence=["Rats had lower blood sugar (Study 3)."]))]
+_v = verdict.weigh_evidence(_ACV_CLAIM, [dict(s) for s in _ACV], "(vinegar) AND (diabetes)")
+t("  and a rat study alone never makes it false",
+  _v["verdict"] == "insufficient" and _v["cited_studies"] == [], _v)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Cinnamon lowers blood sugar a bit, but it does not cure it.",
+                            evidence=["Cinnamon lowered fasting blood sugar (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Cinnamon lowers blood sugar", [dict(s) for s in _ACV], "(cinnamon) AND (blood sugar)")
+t("  a claim that promises less is never raised",
+  _v["verdict"] == "complicated", _v)
+
+# 2. Animal and lab studies are background for a claim about people: never
+# counted as used, whatever the model cited, and grouped on their own.
 t("a claim is about people unless it names animals or the lab",
   evidence.about_people("Apple cider vinegar cures diabetes")
   and not evidence.about_people("Chocolate is poisonous to dogs")
