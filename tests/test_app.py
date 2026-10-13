@@ -2493,6 +2493,12 @@ t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its 
 t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure to keep",
   _fr("In Study 1, HbA1c fell by 1.53. It helps a bit.", _ACV_R) == "It helps a bit."
   and _fr("HbA1c fell by 1.53 (Study 1).", _ACV_R) == "")
+t("  a unit the model wrote for a figure the abstract printed bare is no unit at all",
+  _fr("Fasting blood sugar decreased by about 22 milligrams per deciliter and HbA1c decreased "
+      "by 1.53 percent in patients with type 2 diabetes (Study 1).", _ACV_R)
+  == "Fasting blood sugar decreased by about 22 milligrams per deciliter in patients with "
+     "type 2 diabetes (Study 1)."
+  and _fr("HbA1c decreased by 1.53 percent (Study 1).", _ACV_R) == "")
 t("  a unit the model dropped is put back from the abstract",
   _fr("Insulin rose by 2.059 (Study 1).", _ACV_R) == "Insulin rose by 2.06 \u03bcU/mL (Study 1).")
 t("  an HbA1c change in % is said in percentage points; a level in % is left alone",

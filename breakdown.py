@@ -1797,6 +1797,7 @@ _MEASURE = re.compile(
     r"body mass index|waist(?: circumference)?|insulin)\b", re.IGNORECASE)
 _HBA1C = re.compile(r"A1c|glycated|glycosylated", re.IGNORECASE)
 _UNIT = (r"(?:%|percentage points?|percent|mg/dl|mmol/l|mmol/mol|mmhg|mm hg|"
+         r"milligrams? per decilit(?:er|re)|millimoles? per lit(?:er|re)|"
          r"kg/m2|kg/m\u00b2|kg|lbs?|pounds?|cm|inches|g/dl|\u03bcu/ml|\u00b5u/ml|"
          r"mu/l|miu/l|points?|ml|mg|g)(?![a-z])")
 _FIGURE_UNIT = re.compile(r"(?<![\w.])([-\u2212]?\d+(?:\.\d+)?)(?![\d])(\s*" + _UNIT + ")?",
@@ -1870,6 +1871,14 @@ def _to_whole(figure: str) -> bool:
     return bool(r and r[1])
 
 
+def _model_unit(figure: str, abstracts: str) -> bool:
+    """Whether a unit written beside this figure came from the model alone:
+    the abstracts print the figure, and never with a unit or as a ratio."""
+    bare = re.escape(figure.lstrip("-\u2212"))
+    return (_unit_in(figure, abstracts) is None
+            and re.search(r"(?<![\d.])" + bare + r"(?![\d])", abstracts) is not None)
+
+
 def _unit_in(figure: str, abstracts: str) -> str | None:
     """
     The unit an abstract printed straight after this exact figure; "" when
@@ -1929,7 +1938,11 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
         if (near and (change or "." in figure) and not in_ci and not joined
                 and not _UNITLESS_BEFORE.search(before)):
             hba1c = bool(_HBA1C.search(near.group(0)))
-            if unit:
+            if unit and _model_unit(figure, abstracts):
+                # The abstract printed this figure bare and the model
+                # supplied the unit: "HbA1c decreased by 1.53 percent".
+                unit, note = "", _NO_UNIT
+            elif unit:
                 if hba1c and unit.strip() == "%" and change:
                     unit = " percentage points"
             elif _RANGE_UNIT.match(text[m.end():]):
