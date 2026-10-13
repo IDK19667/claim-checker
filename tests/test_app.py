@@ -2184,6 +2184,87 @@ t("  an explanation sentence that rules against an agreed answer is the one that
   and "did not change behaviour" in _v["explanation"], _v)
 
 
+# Red wine: reviews of how a compound might work are background, and a main
+# review that puts the link down to lifestyle is said in the short answer.
+_WINE = "Red wine is good for the heart"
+_WINE_SR = _study("W1", "Alcohol Consumption and Cardiovascular Health.",
+                  types=["Journal Article", "Systematic Review"],
+                  abstract="The study population included a total of 1,579,435 individuals based on 56 "
+                           "cohorts. Although moderate wine consumption is probably associated with low "
+                           "cardiovascular disease events, there are many confounding factors, in "
+                           "particular, lifestyle, genetic, and socioeconomic associations with wine "
+                           "drinking, which likely explain much of the association with wine and "
+                           "reduced cardiovascular disease events.")
+_WINE_RES = _study("W2", "Resveratrol and Cardiovascular Diseases.", types=["Journal Article", "Review"],
+                   abstract="RES is known for its antioxidant and anti-inflammatory properties and for its "
+                            "ability to upregulate endothelial NO synthase. In bovine aortic endothelial "
+                            "cells under glucose-induced oxidative stress, RES restored the activity of an "
+                            "enzyme. Preclinical studies have made it possible to identify molecular "
+                            "targets; however, there are limited human clinical trials.")
+_WINE_POLY = _study("W3", "Cardioprotective effects of dietary polyphenols.", types=["Journal Article", "Review"],
+                    abstract="Dietary polyphenols have been shown to possess cardioprotective effects. Many "
+                             "studies have shown inhibitory effects of polyphenols on LDL oxidation. These "
+                             "compounds possess additional cardioprotective functions.")
+_ASHWA_REV = _study("W4", "Effects of Withania somnifera (Ashwagandha) on Stress", types=["Journal Article", "Review"],
+                    abstract="This review summarises preclinical and clinical studies. Reports of human trials "
+                             "and animal studies were collected. Extracts exhibited anti-stress activity in "
+                             "animal and human studies, through GABAergic pathways and active compounds. It "
+                             "appears safe for human use.")
+t("a narrative review of compounds and mechanisms is background, like the lab work it reviews",
+  evidence.mechanism_review(_WINE_RES) and evidence.mechanism_review(_WINE_POLY)
+  and evidence.background([_WINE_SR, _WINE_RES, _WINE_POLY], _WINE) == ["W2", "W3"])
+t("  a review that sums up human trials is not, and a systematic review never is",
+  not evidence.mechanism_review(_ASHWA_REV) and not evidence.mechanism_review(_WINE_SR)
+  and not evidence.mechanism_review(_study("W5", "Polyphenols and the heart", types=["Review"],
+                                           abstract="We randomised 300 adults. Antioxidant compounds "
+                                                    "acted on molecular pathways in cells.")))
+t("a review that says lifestyle likely explains its link is confounded; the routine caveat is not",
+  evidence.confounded(_WINE_SR)
+  and not evidence.confounded(_study("W6", "Eggs and heart disease: a meta-analysis", types=["Meta-Analysis"],
+                                     abstract="Residual confounding cannot be excluded."))
+  and not evidence.confounded(_study("W7", "Wine and the heart", types=["Review"],
+                                     abstract="Confounding likely explains much of the association.")))
+t("  a takeaway that puts the link down to other factors says so, one that only names them does not",
+  breakdown.says_confounded("Wine drinkers have fewer heart problems, but lifestyle and other factors "
+                            "likely explain much of that link.")
+  and not breakdown.says_confounded("Moderate wine may lower heart risks, but lifestyle factors and "
+                                    "heavy drinking complicate the picture."))
+t("  and saying so is a qualified answer, never a plain yes",
+  breakdown.stance("Wine drinkers have fewer heart problems, but the main review says lifestyle likely "
+                   "explains much of that.", _WINE) == "mixed")
+t("  a 'true' resting on that review is capped, and its line says why",
+  evidence.certainty_cap([_WINE_SR], ["W1"]) == evidence.CONFOUNDED_REASON
+  and evidence.evidence_line("complicated", [_WINE_SR], ["W1"], _WINE).startswith("Low certainty")
+  and not evidence.evidence_line("false", [_WINE_SR], ["W1"], _WINE).startswith("Low certainty"))
+t("  only a set with such a review gets the extra paragraph",
+  "Study 1 says the link it found is likely explained" in verdict._confounded_note([_WINE_SR, _WINE_RES])
+  and verdict._confounded_note([_WINE_RES, _WINE_POLY]) == "")
+_WINE_SET = [_WINE_SR, _WINE_RES, _WINE_POLY]
+_WINE_MAY = "Moderate wine may lower heart risks, but lifestyle factors and heavy drinking complicate the picture."
+_WINE_SAYS = "Wine drinkers have fewer heart problems, but lifestyle and other factors likely explain much of that link."
+fg.models.calls = 0
+fg.models.prompts = []
+fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr=_WINE_MAY,
+                            evidence=["Wine was linked to fewer heart deaths (Study 1)."])),
+                    Resp(VJ("complicated", [1, 2, 3], tldr=_WINE_SAYS,
+                            evidence=["Wine was linked to fewer heart deaths (Study 1)."]))]
+_v = verdict.weigh_evidence(_WINE, [dict(x) for x in _WINE_SET], "(red wine) AND (heart)")
+t("red wine: the resveratrol reviews are background, the takeaway that skipped confounding is asked again",
+  _v["cited_studies"] == ["W1"] and fg.models.calls == 2 and _v["tldr"] == _WINE_SAYS
+  and "Study 1, a review the answer relies on" in fg.models.prompts[1]
+  and "Study 1 says the link it found is likely explained" in fg.models.prompts[0], (_v, fg.models.calls))
+fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr=_WINE_MAY,
+                            evidence=["Wine was linked to fewer heart deaths (Study 1)."]))] * 2
+_v = verdict.weigh_evidence(_WINE, [dict(x) for x in _WINE_SET], "(red wine) AND (heart)")
+t("  still left out, the takeaway is replaced, not added to",
+  _v["tldr"] == verdict.CONFOUNDED_TLDR and "may lower" not in _v["tldr"]
+  and not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], "", _WINE), _v)
+fg.models.script = [Resp(VJ("true", [1], tldr=_WINE_SAYS,
+                            evidence=["Wine was linked to fewer heart deaths (Study 1)."]))]
+_v = verdict.weigh_evidence(_WINE, [dict(x) for x in _WINE_SET], "(red wine) AND (heart)")
+t("  and a 'true' over it is 'It's complicated', with the reason in the explanation",
+  _v["verdict"] == "complicated" and "lifestyle and other factors likely explain" in _v["explanation"], _v)
+
 # ---- accuracy round 3 (apple cider vinegar "cures" diabetes) -------------------
 _ACV = [_study("A1", "Apple cider vinegar and glycemic control in type 2 diabetes: a meta-analysis",
                types=["Meta-Analysis"], abstract="Adults with type 2 diabetes took vinegar."),

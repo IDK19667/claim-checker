@@ -657,8 +657,22 @@ _QUALIFIES = re.compile(
     r"\b(?:effects?|evidence|results?|stud(?:y|ies)|trials?|benefits?|certainty|"
     r"data|findings|proof|research|small|modest|limited|unclear|not clear|mixed|"
     r"inconsistent|var(?:y|ies|ied)|only|some|few|weak|uncertain|unknown|"
-    r"not (?:all|everyone|always|proven)|people (?:who|with)|depends?)\b",
+    r"not (?:all|everyone|always|proven)|people (?:who|with)|depends?|lifestyle|"
+    r"confound\w*|other factors|explain(?:s|ed)?|account(?:s|ed)? for)\b",
     re.IGNORECASE)
+
+# A takeaway that says the link is likely the people rather than the thing:
+# "but lifestyle and other factors likely explain much of that link".
+_OTHER_FACTORS = re.compile(r"\b(?:lifestyle|other (?:factors|habits|differences)|"
+                            r"confound\w*|healthier habits|socioeconomic|wealth|income)\b",
+                            re.IGNORECASE)
+_EXPLAINS = re.compile(r"\b(?:explain\w*|account(?:s|ed)? for|due to|because of|behind|"
+                       r"driv(?:e|es|ing|en)|caused by|rather than|not the)\b", re.IGNORECASE)
+
+
+def says_confounded(text: str) -> bool:
+    """True when a sentence of `text` puts the link down to other factors."""
+    return any(_OTHER_FACTORS.search(t) and _EXPLAINS.search(t) for t in sentences(text or ""))
 
 
 def _stem(word: str) -> str:

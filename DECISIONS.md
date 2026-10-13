@@ -47,6 +47,37 @@ answer ("the claim is true" under "Likely false") is the one dropped.
 The vinegar rule above stays as it is; it runs first, and needs no
 retry. There was no special case for claim 13 to remove.
 
+**Red wine: reviews of how a compound works are background, and
+confounding is said.** Claim 14 counted three narrative reviews of
+resveratrol and grape polyphenols (antioxidants, enzymes in cow artery
+cells, molecular targets) among the studies used. A review of lab work
+can say no more about people than the lab work does, so a narrative
+review that is mostly about mechanisms and says little or nothing about
+people (`evidence.mechanism_review`: three or more distinct mechanism
+words, at least three times as many as its mentions of people or trials,
+not counting "limited human trials", and no sample size) is now
+background, exactly like an animal study: same shelf cloth, same folded
+group, never counted as used. A systematic review or meta-analysis never
+is. Across all 157 studies of the last 21-claim run it catches only the
+four red wine reviews; the ashwagandha review, which sums up human
+trials, is not caught. The folded group keeps its label, "animal and lab
+studies", which now also covers reviews of that work. Second, the
+systematic review the answer rested on says lifestyle, genetic and
+socioeconomic differences "likely explain much of the association", and
+the short answer said "may lower heart risks". A cited systematic review
+or meta-analysis that says so plainly (`evidence.confounded`; "residual
+confounding cannot be excluded" does not count) now does three things:
+the prompt names it, gated, so every other set of studies gets the
+prompt as before; a takeaway that does not put the link down to other
+factors is a fault for the one retry; and if the retry still leaves it
+out, the takeaway is replaced by "The main review says lifestyle and
+other factors likely explain much of the link these studies found",
+rather than added to, because "may lower heart risks, but..." still
+leads with the benefit. Such a review also caps "Likely true" at "It's
+complicated" (`certainty_cap`), and the line under the chart says "Low
+certainty" unless the stamp is "Likely false", which the review
+supports.
+
 Three readings were wrong and are fixed, in general, not for these
 claims: the answer to "A, so B" is the conclusion B ("needs vary by
 person, so eight glasses is not a hard rule" is a no); a number is one

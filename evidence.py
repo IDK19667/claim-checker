@@ -885,7 +885,10 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
         return ""
-    if certainty_cap(studies, cited_pmids, comparative):
+    cap = certainty_cap(studies, cited_pmids, comparative)
+    # A review that puts the link down to other factors weakens the case for
+    # the claim, not the case against it.
+    if cap and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
@@ -1165,6 +1168,29 @@ def trial_caveats(study) -> list[str]:
     return out
 
 
+# A review that says its own link is likely not the thing itself: "many
+# confounding factors, in particular lifestyle, genetic, and socioeconomic
+# associations with wine drinking, which likely explain much of the
+# association". Only a plain statement counts: "residual confounding cannot
+# be excluded" is the caveat every cohort review carries, and says nothing
+# about how much of the link it explains.
+_CONFOUNDED = re.compile(
+    r"\bconfound\w*[^.]{0,160}?\b(?:likely|largely|probably|mostly)\s+(?:explain|account)\w*|"
+    r"\b(?:likely|largely|probably|mostly)\s+(?:explained|accounted for|due to|driven)\s+"
+    r"(?:by\s+)?(?:residual\s+)?(?:confound\w*|lifestyle|other factors|socioeconomic)",
+    re.IGNORECASE)
+
+
+def confounded(study) -> bool:
+    """A systematic review or meta-analysis that says its link is likely
+    explained by lifestyle or other factors rather than the thing itself."""
+    return is_review(study) and bool(_CONFOUNDED.search(_text(study)))
+
+
+CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "
+                     "much of the link")
+
+
 def certainty_cap(studies, cited_pmids=(), comparative: bool = False) -> str | None:
     """
     Why the evidence behind a "true" cannot carry it, in words for the
@@ -1179,6 +1205,8 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False) -> str | N
         return None
     reviews = [s for s in cited if is_review(s)]
     if reviews:
+        if any(confounded(s) for s in reviews):
+            return CONFOUNDED_REASON
         if any(low_certainty(s) for s in reviews) and not any(
                 _HIGHER_CERTAINTY.search(_text(s)) for s in reviews):
             return "the review behind it rates the certainty of its own evidence as low"
@@ -1308,9 +1336,46 @@ def single_case(study) -> bool:
 
 
 def preclinical(study) -> bool:
-    """An animal or lab study: it says so, and never mentions people."""
+    """
+    An animal or lab study: it says so, and never mentions people. Or a
+    review of that work (`mechanism_review`), which can say no more about
+    people than the studies it reviews.
+    """
     text = _text(study)
-    return bool(_PRECLINICAL.search(text)) and not _HUMANS.search(text)
+    return (bool(_PRECLINICAL.search(text)) and not _HUMANS.search(text)) \
+        or mechanism_review(study)
+
+
+# A narrative review about how something might work: its compounds, its
+# pathways, what it does to cells. "Resveratrol and cardiovascular
+# diseases" reviews antioxidant action, enzymes in bovine aortic cells and
+# molecular targets, and says itself that human trials are limited. It is
+# background for a claim about people, like the lab work it reviews. A
+# systematic review or meta-analysis is never one: those pool outcomes.
+_MECHANISM = re.compile(
+    r"\b(mechanis(?:ms?|tic)|molecular|pathways?|signal(?:l)?ing|antioxidants?|"
+    r"anti-inflammatory|oxidative stress|in vitro|in vivo|preclinical|cells?|enzymes?|"
+    r"(?:up|down)-?regulat\w*|receptors?|gene expression|compounds?|polyphenol\w*|"
+    r"bioactive|chemistry|chemical|oxidation)\b", re.IGNORECASE)
+# What a review says about people. A mention of their absence ("there are
+# limited human clinical trials") is not evidence in people.
+_IN_PEOPLE = re.compile(
+    r"\b(?:participants|patients|volunteers|adults|children|women|men|people|subjects|"
+    r"individuals|cohorts?|humans?|trials?|clinical stud(?:y|ies))\b", re.IGNORECASE)
+_ABSENT_BEFORE = re.compile(r"\b(?:limited|few|lack(?:ing)? of|no|scarce|absence of|"
+                            r"without)\b(?:\s+[\w-]+){0,2}\s*$", re.IGNORECASE)
+
+
+def mechanism_review(study) -> bool:
+    """A narrative review about mechanisms, with little or nothing on people."""
+    types = study.get("publication_types") or []
+    if "Review" not in types or is_review(study) or sample_size(study) is not None:
+        return False
+    text = _text(study)
+    marks = {m.lower().rstrip("s") for m in _MECHANISM.findall(text)}
+    people = [m for m in _IN_PEOPLE.finditer(text)
+              if not _ABSENT_BEFORE.search(text[max(0, m.start() - 40):m.start()])]
+    return len(marks) >= 3 and len(marks) >= 3 * len(people)
 
 
 # A claim names animals, or a dish, when it is about them and not about the

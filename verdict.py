@@ -767,7 +767,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         for i, s in enumerate(studies)
     )
     prompt = weigh_prompt(claim, studies_block,
-                          _subgroup_block(studies, claim))
+                          _subgroup_block(studies, claim)) + _confounded_note(studies)
     reported = evidence.conditions_reported(studies, claim)
 
     # Temperature 0, like the search: the same claim over the same studies
@@ -781,7 +781,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # claims about the evidence, and code cannot tell which one is the true
     # one. Asking again is the cheapest honest move, and if the second
     # answer is no better the first one stands.
-    faults = _faults(result, claim, reported)
+    faults = _faults(result, claim, reported, studies)
     if faults:
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
                                         VERDICT_SCHEMA, max_tokens=12000, temperature=0)
@@ -791,7 +791,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         # and is one.
         answered = again.get("breakdown") or (again.get("verdict") == "insufficient"
                                               and again.get("tldr"))
-        if answered and len(_faults(again, claim, reported)) < len(faults):
+        if answered and len(_faults(again, claim, reported, studies)) < len(faults):
             result = again
             kept = raw, stop_note
     # The stamp and the takeaway are one answer. Asked once to agree and
@@ -816,10 +816,34 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             s["off_topic"] = off[s["pmid"]]
         elif s["pmid"] in back:
             s["background"] = True
-    return _settle_ruling(result, claim)
+    return _settle_confounding(_settle_ruling(result, claim), studies)
 
 
-def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
+def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:
+    """The study numbers of the cited reviews that say their link is likely
+    explained by lifestyle or other factors, when the takeaway does not."""
+    if breakdown.says_confounded(result.get("tldr") or ""):
+        return []
+    cited = set(result.get("cited_studies") or ())
+    return [i + 1 for i, s in enumerate(studies)
+            if s["pmid"] in cited and evidence.confounded(s)]
+
+
+def _settle_confounding(result: dict, studies: list[dict]) -> dict:
+    """
+    The last word on a takeaway that still presents a link its own main
+    review puts down to lifestyle and other factors. It is replaced, not
+    added to: "may lower heart risks, but..." still leads with the benefit.
+    """
+    if not _confounded_numbers(result, studies):
+        return result
+    _stamp_log.warning("the takeaway left out that the main review puts the link down to "
+                       "other factors, so it was replaced: %r", result.get("tldr"))
+    return {**result, "tldr": CONFOUNDED_TLDR}
+
+
+def _faults(result: dict, claim: str, reported: list[str],
+            studies: list[dict] = ()) -> list[str]:
     """Everything this answer says twice or says about something else."""
     bd = result.get("breakdown") or {}
     texts = [result.get("tldr"), result.get("explanation"), result.get("still_open")]
@@ -836,6 +860,12 @@ def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
                                      result.get("explanation") or "", claim)
     if clash:
         found.append(clash)
+    for n in _confounded_numbers(result, list(studies)):
+        found.append(f"Study {n}, a review the answer relies on, says the link it found is "
+                     f"likely explained by lifestyle or other factors rather than by the "
+                     f"thing itself, and the takeaway does not say so. The takeaway must say "
+                     f"that plainly, and must not present the benefit as real")
+        break
     return found
 
 
@@ -843,6 +873,8 @@ def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
 LOW_CERTAINTY_TLDR = ("The studies found point towards yes, but the certainty of "
                       "that evidence is low.")
 UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
+CONFOUNDED_TLDR = ("The main review says lifestyle and other factors likely explain much of "
+                   "the link these studies found.")
 
 _stamp_log = logging.getLogger("evident.stamp")
 
@@ -936,6 +968,25 @@ cure it." If studies show the whole effect the claim names (a cure, a
 remission, complete prevention) in some people and not in others, the
 verdict is "complicated". If nothing here tests it in people, it is
 "insufficient", as always."""
+
+
+def _confounded_note(studies: list[dict]) -> str:
+    """
+    A review in this set that says its own link is likely explained by
+    lifestyle or other factors gets one more paragraph, naming it. Every
+    other set of studies is sent the prompt exactly as before.
+    """
+    numbers = [str(i + 1) for i, s in enumerate(studies) if evidence.confounded(s)]
+    if not numbers:
+        return ""
+    which = f"Study {numbers[0]}" if len(numbers) == 1 else "Studies " + ", ".join(numbers)
+    return f"""
+
+{which} says the link it found is likely explained by lifestyle or other
+factors (confounding) rather than by the thing itself. If you rely on it,
+the takeaway must say that plainly, and must not present the benefit as
+real: not "it may lower the risk", but that the people who do it differ
+in other ways that likely explain the link."""
 
 
 def weigh_prompt(claim: str, studies_block: str, subgroup_block: str = "") -> str:
