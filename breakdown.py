@@ -1894,7 +1894,19 @@ _COMMON_OPENERS = set("""a adults all an athletes both children elderly healthy
 individuals infants men middle-aged mostly obese older only overweight participants
 patients people postmenopausal pregnant students studies subjects teenagers the
 these those trials volunteers women young younger adolescents mainly most
+general office desk-based sedentary community-dwelling hospitalized hospitalised
+employees workers smokers nonsmokers boys girls newborns toddlers residents
+outpatients inpatients runners mixed various diverse groups persons populations
 """.split())
+
+# An ending that says the label again: "Office workers were included in these
+# studies" under "Who was studied:".
+_WHO_TAIL = re.compile(
+    r"(?:\s+(?:were|was)\s+(?:studied|included|tested|enrolled|examined|recruited|involved)"
+    r"(?:\s+in\s+(?:these|this|the(?: cited| included)?)\s+(?:studies|study|trials|trial|reviews|review))?"
+    r"|\s+(?:studied|tested|included)\s+in\s+(?:these|this|the(?: cited| included)?)\s+"
+    r"(?:studies|study|trials|trial|reviews|review))"
+    r"(?=\s*(?:\([^()]*\))?\s*\.?\s*$)", re.IGNORECASE)
 
 
 # A lead-in that says again what the label says: "These findings apply to
@@ -1914,7 +1926,7 @@ def who_label(sentence: str) -> str:
     text = str(sentence or "").strip()
     if not text or text.lower().startswith(WHO_LABEL.strip().lower()):
         return text
-    bare = _WHO_LEAD.sub("", text, count=1)
+    bare = _WHO_TAIL.sub("", _WHO_LEAD.sub("", text, count=1), count=1)
     if bare != text and bare:
         text = bare[0].upper() + bare[1:]
     first = text.split(None, 1)[0]

@@ -1401,9 +1401,14 @@ t("  a sentence the gate rejects never reaches it",
 # every sentence in it is already somewhere else in the same answer.
 _elsewhere = " ".join([_vd["explanation"], breakdown.flatten(_vd["breakdown"])]).lower()
 _unlabel = lambda line: line[len(breakdown.WHO_LABEL):] if line.startswith(breakdown.WHO_LABEL) else line
+# The labelled line may lose words that repeat its label ("were studied"),
+# so it is held to every word coming from the answer, not every character.
+_words = lambda text: set(re.findall(r"[a-z0-9]+", text.lower()))
 t("  and it costs no extra call: every sentence is already in the answer",
   "says" not in verdict.VERDICT_SCHEMA["properties"]
-  and all(_unlabel(line).lower() in _elsewhere for line in _says), _says)
+  and all(_unlabel(line).lower() in _elsewhere
+          or (line.startswith(breakdown.WHO_LABEL) and _words(_unlabel(line)) <= _words(_elsewhere))
+          for line in _says), _says)
 # A population line is often a bare noun phrase. Under "What the research
 # says" it reads as a stray fragment unless it carries its label.
 _who = breakdown.says("", {"applies_to": "Adults with type 2 diabetes, overweight, or obesity (Studies 1, 2)."},
@@ -1418,6 +1423,17 @@ t("  a name keeps its capital, and the label is never doubled",
 _lead = breakdown.who_label("These findings apply to adults with type 2 diabetes (Studies 1, 2, 8).")
 t("  a lead-in that repeats the label is dropped",
   _lead == "Who was studied: adults with type 2 diabetes (Studies 1, 2, 8).", _lead)
+# And endings from the 21-claim run: "...were included in these studies".
+_tails = [breakdown.who_label(x) for x in (
+    "General groups and geriatric patients were included in these studies (Studies 1, 2).",
+    "Office workers using sit-stand desks were studied (Study 1).",
+    "Healthy adults and athletes studied in the cited trials (Studies 1, 2).",
+    "Smokers tested in large systematic reviews (Studies 2, 7).")]
+t("  so is an ending that repeats it, and a common first word loses its capital",
+  _tails == ["Who was studied: general groups and geriatric patients (Studies 1, 2).",
+             "Who was studied: office workers using sit-stand desks (Study 1).",
+             "Who was studied: healthy adults and athletes (Studies 1, 2).",
+             "Who was studied: smokers tested in large systematic reviews (Studies 2, 7)."], _tails)
 
 # (f) The evidence chart. Everything it says in words is counted on the
 # server, so the streamed check and the shared link cannot disagree.
