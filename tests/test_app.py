@@ -1413,6 +1413,11 @@ t("  the population line carries its label, and drops a common word's capital",
 t("  a name keeps its capital, and the label is never doubled",
   breakdown.who_label("HIV patients on treatment (Study 1).") == "Who was studied: HIV patients on treatment (Study 1)."
   and breakdown.who_label("Who was studied: adults (Study 1).") == "Who was studied: adults (Study 1).")
+# The live vinegar check wrote "These findings apply to adults with...":
+# under the label that read "Who was studied: these findings apply to".
+_lead = breakdown.who_label("These findings apply to adults with type 2 diabetes (Studies 1, 2, 8).")
+t("  a lead-in that repeats the label is dropped",
+  _lead == "Who was studied: adults with type 2 diabetes (Studies 1, 2, 8).", _lead)
 
 # (f) The evidence chart. Everything it says in words is counted on the
 # server, so the streamed check and the shared link cannot disagree.

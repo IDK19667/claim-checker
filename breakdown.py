@@ -1866,12 +1866,26 @@ these those trials volunteers women young younger adolescents mainly most
 """.split())
 
 
+# A lead-in that says again what the label says: "These findings apply to
+# adults with..." under "Who was studied:" is the same words twice.
+_WHO_LEAD = re.compile(
+    r"^(?:(?:these|the|all|most) (?:findings|results|studies|trials|data|reviews)\s+"
+    r"(?:apply to|were (?:done |run |carried out |conducted )?(?:in|on|among|with)|"
+    r"included|involved|studied|enrolled|looked at|focused on|covered)|"
+    r"(?:participants|subjects|the people studied|those studied) were|"
+    r"(?:studies|trials) (?:were )?(?:in|on|among|included|involved|enrolled))\s+",
+    re.IGNORECASE)
+
+
 def who_label(sentence: str) -> str:
     """'Adults with type 2 diabetes (Study 1).' -> 'Who was studied: adults
     with type 2 diabetes (Study 1).'"""
     text = str(sentence or "").strip()
     if not text or text.lower().startswith(WHO_LABEL.strip().lower()):
         return text
+    bare = _WHO_LEAD.sub("", text, count=1)
+    if bare != text and bare:
+        text = bare[0].upper() + bare[1:]
     first = text.split(None, 1)[0]
     if first.lower().strip(",.:;") in _COMMON_OPENERS:
         text = text[0].lower() + text[1:]
