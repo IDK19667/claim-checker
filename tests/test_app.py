@@ -2204,6 +2204,9 @@ t("  so the small call decides, and the stamp becomes 'Likely false', never 'Lik
 fg.models.calls = 0
 fg.models.script = [_GUIDE_R, DIR("mixed")]
 _v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+t("  the small call is told a fixed rule that 'varies' or is 'a rough guide' is answered no",
+  "only a rough guide or rule of thumb" in verdict._direction_prompt(_WATER, _GUIDE)
+  and "there is not one" in verdict._direction_prompt(_WATER, _GUIDE))
 t("  a reading that agrees with the stamp means a false alarm: no retry, nothing changes",
   _v["verdict"] == "complicated" and fg.models.calls == 2, (_v, fg.models.calls))
 fg.models.calls = 0

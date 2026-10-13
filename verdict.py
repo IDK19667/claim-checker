@@ -881,6 +881,11 @@ is true is unknown.
 mixed: the answer says the evidence points both ways, or that the claim holds
 only partly, a little, or for some people.
 
+When the claim states a fixed amount, rule or need ("you need", "everyone
+should", "every day"), an answer that the amount varies from person to person,
+is only a rough guide or rule of thumb, or is not required, is no: the claim
+states a requirement and the answer says there is not one.
+
 Return JSON: {{"answer": "yes" | "no" | "untested" | "mixed"}}."""
 
 
