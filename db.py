@@ -41,6 +41,22 @@ CREATE TABLE IF NOT EXISTS verdict_cache (
     created_at TEXT NOT NULL
 );
 
+-- The PubMed search a claim was given, kept so the same claim always runs
+-- the same search: a re-check reuses it instead of asking the model again,
+-- which could word it differently and find different studies. Keyed on the
+-- claim and on the version of the prompt that wrote it, so changing that
+-- prompt starts afresh. Holds what verdict_cache holds: the claim, never
+-- who typed it.
+CREATE TABLE IF NOT EXISTS query_cache (
+    claim_key TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    search_query TEXT NOT NULL,
+    surrogate TEXT,
+    understood TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (claim_key, prompt_version)
+);
+
 CREATE TABLE IF NOT EXISTS checks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     claim_key TEXT,
@@ -109,6 +125,30 @@ def normalize_claim(claim: str) -> str:
     key = re.sub(r"\s+", " ", key)
     key = key.rstrip(" .!?")
     return key
+
+
+def get_cached_query(claim: str, prompt_version: str) -> tuple[str, str, str] | None:
+    """(search query, surrogate, claim as understood) this claim was given
+    before, or None."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT search_query, surrogate, understood FROM query_cache "
+            "WHERE claim_key = ? AND prompt_version = ?",
+            (normalize_claim(claim), prompt_version)).fetchone()
+    if not row:
+        return None
+    return row["search_query"], row["surrogate"] or "", row["understood"] or claim
+
+
+def put_cached_query(claim: str, prompt_version: str, search_query: str,
+                     surrogate: str, understood: str):
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO query_cache
+               (claim_key, prompt_version, search_query, surrogate, understood, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (normalize_claim(claim), prompt_version, search_query, surrogate or "",
+             understood or claim, _now()))
 
 
 def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:

@@ -661,7 +661,21 @@ def _run_check(claim: str, client_ip: str, base_url: str):
     # 3. The real thing, stage by stage.
     try:
         yield {"stage": "search"}
-        search_query, surrogate, understood = verdict.extract_search_terms(claim)
+        # The same claim always runs the same search: a saved one is reused,
+        # and only a claim never seen before asks the model for one.
+        saved = db.get_cached_query(claim, verdict.QUERY_PROMPT_VERSION)
+        if saved:
+            search_query, surrogate, understood = saved
+        else:
+            search_query, surrogate, understood = verdict.extract_search_terms(claim)
+            # A model that answered nothing leaves the claim itself as the
+            # query. That is a stopgap, not a search worth keeping.
+            if search_query.strip().lower() != claim.strip().lower():
+                db.put_cached_query(claim, verdict.QUERY_PROMPT_VERSION,
+                                    search_query, surrogate, understood)
+                if understood != claim:
+                    db.put_cached_query(understood, verdict.QUERY_PROMPT_VERSION,
+                                        search_query, surrogate, understood)
         typed = None
         if understood != claim:
             # Misspelled. Everything from here runs on the claim as meant:

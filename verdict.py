@@ -20,6 +20,7 @@ before pointing a classroom at it.
 """
 
 import difflib
+import hashlib
 import json
 import logging
 import os
@@ -133,8 +134,9 @@ def _anthropic_wrap(fn):
         raise ProviderError("other", f"The AI service returned an error ({e.status_code}).")
 
 
-def _anthropic_text(prompt: str, max_tokens: int) -> str:
+def _anthropic_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
     client = _anthropic()
+    extra = {} if temperature is None else {"temperature": temperature}
 
     def go():
         m = client.messages.create(
@@ -144,6 +146,7 @@ def _anthropic_text(prompt: str, max_tokens: int) -> str:
             # otherwise count against max_tokens.
             thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}],
+            **extra,
         )
         return _anthropic_text_of(m)
 
@@ -213,18 +216,21 @@ def _gemini_wrap(fn):
         raise ProviderError("unavailable", "Couldn't reach the AI service.")
 
 
-def _gemini_text(prompt: str, max_tokens: int) -> str:
+def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
     client = _gemini()
+    config = {
+        "max_output_tokens": max_tokens,
+        # No tools here; this just silences the SDK's AFC warning.
+        "automatic_function_calling": {"disable": True},
+    }
+    if temperature is not None:
+        config["temperature"] = temperature
 
     def go():
         r = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config={
-                "max_output_tokens": max_tokens,
-                # No tools here; this just silences the SDK's AFC warning.
-                "automatic_function_calling": {"disable": True},
-            },
+            config=config,
         )
         return (r.text or "").strip()
 
@@ -260,8 +266,9 @@ def _gemini_json(prompt: str, schema: dict, max_tokens: int):
     return _gemini_wrap(go)
 
 
-def _complete_text(prompt: str, max_tokens: int) -> str:
-    return (_gemini_text if provider() == "gemini" else _anthropic_text)(prompt, max_tokens)
+def _complete_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
+    return (_gemini_text if provider() == "gemini" else _anthropic_text)(
+        prompt, max_tokens, temperature)
 
 
 def _complete_json(prompt: str, schema: dict, max_tokens: int):
@@ -304,7 +311,14 @@ def extract_search_terms(claim: str) -> tuple[str, str, str]:
     search of its own in pubmed.search_and_fetch, so a claim about hair
     loss can still reach the trials that measured the hormone.
     """
-    prompt = (
+    # Temperature 0: the same claim is meant to get the same search, so the
+    # model is asked for its single most likely wording, not a fresh one.
+    raw = _complete_text(_query_prompt(claim), max_tokens=256, temperature=0)
+    return _two_groups(_clean_query(raw, claim)), _surrogate(raw), spelling_fix(claim, _claim_line(raw))
+
+
+def _query_prompt(claim: str) -> str:
+    return (
         "A student typed this health claim into a fact-checking "
         f'tool: "{claim}"\n\n'
         "Write the best PubMed search query to find studies relevant to "
@@ -365,8 +379,12 @@ def extract_search_terms(claim: str) -> tuple[str, str, str]:
         "Respond with the search query on the first line and nothing else "
         "except those optional lines. No quotes, no explanation."
     )
-    raw = _complete_text(prompt, max_tokens=256)
-    return _two_groups(_clean_query(raw, claim)), _surrogate(raw), spelling_fix(claim, _claim_line(raw))
+
+
+# Which wording of the prompt above wrote a saved search. A saved search is
+# only reused under the prompt that wrote it, so changing the prompt starts
+# every claim afresh rather than mixing old searches with new ones.
+QUERY_PROMPT_VERSION = hashlib.sha256(_query_prompt("\0").encode()).hexdigest()[:12]
 
 
 # Lines after the query that carry something else, never the query itself.

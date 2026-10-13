@@ -109,6 +109,7 @@ class FakeModels:
 
     def generate_content(self, **kw):
         self.calls += 1
+        self.configs = getattr(self, "configs", []) + [kw.get("config") or {}]
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -2090,6 +2091,23 @@ t("  its links put the cursor in the claim box without changing the address",
 _pending = (ROOT / "static" / "app.js").read_text().split("function renderPending")[1].split("\nfunction ")[0]
 t("  and a check in progress hides it, so the work is what the reader sees",
   "if (trustSection) trustSection.hidden = true;" in _pending)
+
+# ---- the same claim always runs the same search
+fg.models.script = [Resp("(salt) AND (blood pressure)"), Resp(VJ("complicated", [1]))]
+_n0 = fg.models.calls
+P("Salt raises blood pressure in everyone", ip="9.9.4.1")
+t("the search call asks for temperature 0",
+  fg.models.configs[_n0].get("temperature") == 0, fg.models.configs[_n0:])
+t("  and the search is saved for the claim",
+  db.get_cached_query("salt raises blood pressure in everyone.", verdict.QUERY_PROMPT_VERSION)
+  == ("(salt) AND (blood pressure)", "", "Salt raises blood pressure in everyone"))
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_n0 = fg.models.calls
+_d = P("Salt raises blood pressure in everyone", ip="9.9.4.2").get_json()
+t("  a re-check reuses it: one call, the verdict, and the same search",
+  fg.models.calls == _n0 + 1 and _d["search_query_used"] == "(salt) AND (blood pressure)", _d.get("search_query_used"))
 
 # ---- accuracy round 3 (apple cider vinegar "cures" diabetes) -------------------
 _ACV = [_study("A1", "Apple cider vinegar and glycemic control in type 2 diabetes: a meta-analysis",
