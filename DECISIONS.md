@@ -101,7 +101,20 @@ full text only, so an abstract-only check cannot catch it.
 **The population line carries its label.** "Who was studied" is often
 written as a bare noun phrase, which under "What the research says"
 read as a stray fragment. `breakdown.says` now prefixes it: "Who was
-studied: adults with type 2 diabetes...".
+studied: adults with type 2 diabetes...". Words that say the label
+again are dropped ("These findings apply to...", "...were included in
+these studies").
+
+**What the 21-claim run showed.** 16 of 21 match, the same 15 of the
+first 20 as the best earlier run, with no stamp contradicting its own
+takeaway and no off-topic or animal study counted as used. Claim 21
+(vinegar) is "Likely false". Claim 13 has missed in every run. Claim 9
+moved from "Not enough evidence" to "It's complicated" because the
+model wrote a different PubMed search and got different studies, not
+because of these changes. The run also showed a confidence interval
+printed as "-27 to -7.44", so both ends of a range are now rounded to
+the same precision, and the breakdown's "Rests on N studies" no longer
+counts an animal or lab study a part happens to mention.
 
 ## 2026-10-10 (night): What a full test round found and fixed
 
