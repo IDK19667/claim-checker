@@ -1248,6 +1248,10 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
         # the block costs no extra call and cannot outrun the evidence.
         deeper["says"] = breakdown.says(explanation, deeper, studies,
                                         skip=background_numbers)
+        # "Rests on N studies" counts what the verdict stands on, so an
+        # animal or lab study a part mentions is not one of them.
+        deeper["rests_on"] = len([p for p in breakdown.cited_pmids(deeper, studies)
+                                  if p not in background])
 
     # Last, and only now that every gate above has checked each figure
     # against the abstract that printed it: figures are rounded for reading
