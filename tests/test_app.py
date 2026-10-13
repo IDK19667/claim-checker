@@ -2157,6 +2157,17 @@ _snap = evidence.snapshot(_acv_studies, ["A1", "A2"])
 t("  the chart counts it as background, not used",
   "2 used for this verdict" in _snap["summary"]
   and "1 animal or lab, background only" in _snap["facts"], _snap)
+t("  and says one of them in the singular",
+  "1 of them an animal or lab study, background only" in _snap["described"]
+  and "2 of them animal or lab studies, background only" in evidence.snapshot(
+      _acv_studies + [dict(_acv_studies[2], pmid="A4")], ["A1", "A2"])["described"], _snap["described"])
+fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr="It lowers blood sugar a little.",
+                            evidence=["Vinegar lowered blood sugar in people (Study 1).",
+                                      "Rats given vinegar had lower blood sugar (Study 3)."]))]
+_v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV],
+                            "(vinegar) AND (blood sugar)")
+t("  the breakdown's 'Rests on' count leaves it out too",
+  _v["breakdown"] and _v["breakdown"]["rests_on"] == 1, _v["breakdown"])
 fg.models.script = [Resp(VJ("true", [3], tldr="Vinegar lowers blood sugar.",
                             evidence=["Rats had lower blood sugar (Study 3)."]))]
 _v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV],

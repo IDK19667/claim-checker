@@ -954,8 +954,10 @@ def _chart_words(snap: dict) -> dict:
     described = [f"{_n_things(read, 'study', 'studies')} read, "
                  f"{used} used for this verdict."]
     if snap.get("background"):
-        described.append(f"{snap['background']} of them animal or lab studies, "
-                         f"background only, never used for a claim about people.")
+        described.append(f"{snap['background']} of them "
+                         + ("an animal or lab study" if snap["background"] == 1
+                            else "animal or lab studies")
+                         + ", background only, never used for a claim about people.")
     if snap.get("off_topic"):
         described.append(f"{snap['off_topic']} of them off topic for this claim.")
     if snap["mix"]:
