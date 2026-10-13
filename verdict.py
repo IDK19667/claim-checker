@@ -227,6 +227,9 @@ def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None)
     }
     if temperature is not None:
         config["temperature"] = temperature
+        if temperature == 0:
+            # A fixed seed too: temperature 0 alone still varies run to run.
+            config["seed"] = 0
 
     def go():
         r = client.models.generate_content(
@@ -249,6 +252,9 @@ def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float 
     }
     if temperature is not None:
         config["temperature"] = temperature
+        if temperature == 0:
+            # A fixed seed too: temperature 0 alone still varies run to run.
+            config["seed"] = 0
 
     def go():
         r = client.models.generate_content(
@@ -775,13 +781,15 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
     result = _read_verdict(raw, stop_note, studies, claim)
     kept = raw, stop_note
+    read = {}
+    said = _stamp_disagrees(result, claim, read)
 
     # One retry, and only when the answer disagrees with itself. Dropping a
     # contradictory sentence is not an option here: the two halves are both
     # claims about the evidence, and code cannot tell which one is the true
     # one. Asking again is the cheapest honest move, and if the second
     # answer is no better the first one stands.
-    faults = _faults(result, claim, reported, studies)
+    faults = _faults(result, claim, reported, studies, said)
     if faults:
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
                                         VERDICT_SCHEMA, max_tokens=12000, temperature=0)
@@ -791,19 +799,21 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         # and is one.
         answered = again.get("breakdown") or (again.get("verdict") == "insufficient"
                                               and again.get("tldr"))
-        if answered and len(_faults(again, claim, reported, studies)) < len(faults):
-            result = again
-            kept = raw, stop_note
+        if answered:
+            said_again = _stamp_disagrees(again, claim, read)
+            if len(_faults(again, claim, reported, studies, said_again)) < len(faults):
+                result, said = again, said_again
+                kept = raw, stop_note
     # The stamp and the takeaway are one answer. Asked once to agree and
     # still apart, the stamp follows the takeaway: a reader acts on the
     # sentence, and the sentence is the half the model wrote out in words.
     # The stamp is set before the gates in _read_verdict, so every downgrade
     # there still applies to it.
-    if breakdown.words_stamp(result.get("verdict") or "", result.get("tldr") or "", claim):
-        _stamp_log.warning("stamp %r still disagreed with the takeaway after the retry, "
-                           "so it follows the takeaway: %r", result.get("verdict"),
+    if said:
+        _stamp_log.warning("stamp %r still disagreed with the takeaway (%s) after the retry, "
+                           "so it follows the takeaway: %r", result.get("verdict"), said,
                            result.get("tldr"))
-        result = _read_verdict(*kept, studies, claim, follow_words=True)
+        result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said])
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
@@ -842,8 +852,78 @@ def _settle_confounding(result: dict, studies: list[dict]) -> dict:
     return {**result, "tldr": CONFOUNDED_TLDR}
 
 
+# The one small call behind the rule above. Code screens every takeaway for
+# a plain answer the stamp does not match, cheaply and with false alarms
+# ("eight glasses is just a rough guide" reads to it as a plain yes); a
+# stamp is only ever changed on what this call reads. It runs only when the
+# screen fires, about one check in five, so the free tier holds.
+DIRECTION_SCHEMA = {
+    "type": "object",
+    "properties": {"answer": {"type": "string", "enum": ["yes", "no", "untested", "mixed"]}},
+    "required": ["answer"],
+}
+
+
+def _direction_prompt(claim: str, tldr: str) -> str:
+    return f"""A health claim and the one-sentence answer written about it. Say which
+way the answer answers the claim exactly as written.
+
+Claim: "{claim}"
+Answer: "{tldr}"
+
+yes: the answer says the claim is true.
+no: the answer says the claim is false as written: it does not happen, it is
+not needed or not the rule the claim states, it does not do what the claim
+promises, it is no better than what the claim compares it with, or it is a
+myth.
+untested: the answer says nothing has tested or shown the claim, so whether it
+is true is unknown.
+mixed: the answer says the evidence points both ways, or that the claim holds
+only partly, a little, or for some people.
+
+Return JSON: {{"answer": "yes" | "no" | "untested" | "mixed"}}."""
+
+
+def classify_direction(claim: str, tldr: str) -> str | None:
+    """Which way the takeaway answers the claim, read by the model, or None
+    when the call fails. A failed read changes nothing."""
+    try:
+        raw, stop = _complete_json(_direction_prompt(claim, tldr), DIRECTION_SCHEMA,
+                                   max_tokens=2000, temperature=0)
+    except ProviderError:
+        return None
+    if stop:
+        return None
+    try:
+        said = json.loads(raw.replace("```json", "").replace("```", "").strip()).get("answer")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    return said if said in breakdown.STANCES else None
+
+
+def _stamp_disagrees(result: dict, claim: str, read: dict) -> str | None:
+    """
+    The plain answer ("yes", "no" or "untested") the takeaway gives when the
+    stamp does not match it, or None when they agree. `read` keeps each
+    takeaway's reading, so a retry that writes the same sentence costs no
+    second call.
+    """
+    verdict, tldr = result.get("verdict") or "", result.get("tldr") or ""
+    if not breakdown.words_stamp(verdict, tldr, claim):
+        return None
+    if tldr not in read:
+        read[tldr] = classify_direction(claim, tldr)
+        if read[tldr] is None:
+            _stamp_log.warning("could not read which way the takeaway answers the claim, so "
+                               "the stamp %r stands: %r", verdict, tldr)
+    said = read[tldr]
+    if not said or said in breakdown._AGREES.get(verdict, set()):
+        return None
+    return said
+
+
 def _faults(result: dict, claim: str, reported: list[str],
-            studies: list[dict] = ()) -> list[str]:
+            studies: list[dict] = (), said: str | None = None) -> list[str]:
     """Everything this answer says twice or says about something else."""
     bd = result.get("breakdown") or {}
     texts = [result.get("tldr"), result.get("explanation"), result.get("still_open")]
@@ -856,10 +936,14 @@ def _faults(result: dict, claim: str, reported: list[str],
     if stray:
         found.append("the takeaway answers for " + ", ".join(stray)
                      + ", which the claim never mentions")
-    clash = breakdown.stamp_conflict(result.get("verdict") or "", result.get("tldr") or "",
-                                     result.get("explanation") or "", claim)
-    if clash:
-        found.append(clash)
+    if said:
+        found.append(breakdown.stamp_note(result.get("verdict") or "", result.get("tldr") or "",
+                                          said, claim))
+    else:
+        clash = breakdown.stamp_conflict(result.get("verdict") or "", "",
+                                         result.get("explanation") or "", claim)
+        if clash:
+            found.append(clash)
     for n in _confounded_numbers(result, list(studies)):
         found.append(f"Study {n}, a review the answer relies on, says the link it found is "
                      f"likely explained by lifestyle or other factors rather than by the "
@@ -887,16 +971,11 @@ def _settle_ruling(result: dict, claim: str) -> dict:
     one out, and it goes rather than the answer changing under it.
     """
     verdict = result.get("verdict") or ""
-    tldr, exp = result.get("tldr") or "", result.get("explanation") or ""
-    if not breakdown.stamp_conflict(verdict, tldr, exp, claim):
-        return result
-    if breakdown.words_stamp(verdict, tldr, claim):
-        # Cannot happen: weigh_evidence has already made the stamp follow
-        # the takeaway, and every gate rewrites the takeaway it overrules.
-        _stamp_log.error("stamp %r still disagrees with the takeaway %r", verdict, tldr)
+    exp = result.get("explanation") or ""
+    if not breakdown.stamp_conflict(verdict, "", exp, claim):
         return result
     kept = [t for t in breakdown.sentences(exp)
-            if not breakdown.stamp_conflict(verdict, tldr, t, claim)]
+            if not breakdown.stamp_conflict(verdict, "", t, claim)]
     _stamp_log.warning("dropped an explanation sentence that ruled against the stamp %r",
                        verdict)
     return {**result, "explanation": " ".join(kept).strip()}
@@ -1134,12 +1213,13 @@ Respond with JSON in this exact shape:
 
 
 def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
-                  follow_words: bool = False) -> dict:
+                  follow: str | None = None) -> dict:
     """
     Everything after the call: parse, map citations, gate every string.
 
-    `follow_words` makes the stamp the one the takeaway commits to, when the
-    two disagree, before any gate runs, so the gates judge it like any other.
+    `follow` is the stamp the takeaway commits to, when weigh_evidence found
+    the two still apart. It replaces the model's stamp before any gate runs,
+    so the gates judge it like any other.
     """
     if stop_note:
         return _fallback(
@@ -1223,8 +1303,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     sized = (deeper or {}).get("effect") or {}
     if sized.get("label"):
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
-    if follow_words:
-        verdict = breakdown.words_stamp(verdict, tldr, claim) or verdict
+    if follow:
+        verdict = follow
 
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or

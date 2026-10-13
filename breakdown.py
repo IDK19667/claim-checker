@@ -639,8 +639,8 @@ _COMPARES_MORE = re.compile(r"\b(?:better|more|faster|superior|outperform\w*)\b"
 # Where a sentence turns. After "but" the answer follows the turn; after
 # "though" the answer came before it.
 _TURN_AFTER = re.compile(r",?\s+\b(?:but|yet|however)\b,?\s+", re.IGNORECASE)
-_TURN_BEFORE = re.compile(r",?\s+\b(?:though|although|even though|while|whereas)\b\s+",
-                          re.IGNORECASE)
+_TURN_BEFORE = re.compile(r",?\s+\b(?:though|although|even though|while|whereas)\b\s+|"
+                          r",\s+(?:as|since|because)\s+|\s+because\s+", re.IGNORECASE)
 # Where a sentence concludes. "Needs vary by person, so eight glasses is not
 # a hard rule": the answer is the conclusion, not the reason given for it.
 _CONCLUDES = re.compile(r",\s+(?:so|which means|meaning)\s+(?!far\b|much\b|many\b|long\b)",
@@ -925,6 +925,13 @@ def stamp_conflict(verdict: str, tldr: str, explanation: str, claim: str) -> str
             said = None
     if not said:
         return None
+    return stamp_note(verdict, tldr, said, claim, where)
+
+
+def stamp_note(verdict: str, tldr: str, said: str, claim: str,
+               where: str = "the takeaway") -> str:
+    """What a retry is told when the stamp and `said`, the plain answer the
+    takeaway (or the explanation) gives, disagree."""
     turned = ("; the claim itself says no, so a takeaway agreeing that it does not "
               "happen is a yes to it, and the verdict for that is \"true\""
               if said in ("yes", "no") and claim_denies(claim) else "")

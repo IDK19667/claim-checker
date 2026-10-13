@@ -129,6 +129,11 @@ STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", 
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 
+def DIR(answer):
+    """The one-word reading of a takeaway's direction (verdict.classify_direction)."""
+    return Resp(json.dumps({"answer": answer}))
+
+
 def VJ(v, nums, tldr="Short take.", still_open="", **extra):
     body = {"verdict": v, "tldr": tldr, "explanation": "Because.", "cited_study_numbers": nums}
     if still_open:
@@ -1622,26 +1627,29 @@ _SUGAR = [{"pmid": f"S{i}", "title": "Sugar and hyperactivity: a meta-analysis",
            "authors": [], "data_banks": None, "url": "u"} for i in (1, 2)]
 _NO_TLDR = "Controlled tests show sugar does not make children hyperactive."
 fg.models.calls = 0
-fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR,
-                            evidence=["Sugar did not change behaviour (Study 1)."])),
+_SUGAR_NO = Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR,
+                     evidence=["Sugar did not change behaviour (Study 1)."]))
+fg.models.script = [_SUGAR_NO, DIR("no"),
                     Resp(VJ("false", [1, 2], tldr=_NO_TLDR,
                             evidence=["Sugar did not change behaviour (Study 1)."]))]
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
 t("a stamp that contradicts its takeaway is asked again, once, and the agreeing answer wins",
-  _v["verdict"] == "false" and fg.models.calls == 2, (_v["verdict"], fg.models.calls))
+  _v["verdict"] == "false" and fg.models.calls == 3, (_v["verdict"], fg.models.calls))
 fg.models.calls = 0
-fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR,
-                            evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
+fg.models.script = [_SUGAR_NO, DIR("no"), _SUGAR_NO]
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
 t("  if the retry still contradicts, the stamp follows the takeaway's plain no",
-  _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 2, _v)
+  _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 3, _v)
+t("  and a retry that writes the same sentence costs no second reading",
+  fg.models.script == [] and fg.models.calls == 3)
 t("  and the words are kept, never swapped for a stock line",
   not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], _v["explanation"],
                                "Sugar makes children hyperactive")
   and not hasattr(verdict, "LEAN_TLDR") and "point towards" not in _v["tldr"])
 fg.models.calls = 0
-fg.models.script = [Resp(VJ("true", [1, 2], tldr=_NO_TLDR,
-                            evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
+_SUGAR_TRUE = Resp(VJ("true", [1, 2], tldr=_NO_TLDR,
+                       evidence=["Sugar did not change behaviour (Study 1)."]))
+fg.models.script = [_SUGAR_TRUE, DIR("no"), _SUGAR_TRUE]
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
 t("  a stamp over opposite words follows the words, whichever way they point",
   _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR, _v)
@@ -2098,8 +2106,10 @@ _n0 = fg.models.calls
 P("Salt raises blood pressure in everyone", ip="9.9.4.1")
 t("the search call asks for temperature 0",
   fg.models.configs[_n0].get("temperature") == 0, fg.models.configs[_n0:])
-t("  and so does the call that writes the verdict",
-  fg.models.configs[_n0 + 1].get("temperature") == 0, fg.models.configs[_n0:])
+t("  and so does the call that writes the verdict, both with a fixed seed",
+  fg.models.configs[_n0 + 1].get("temperature") == 0
+  and fg.models.configs[_n0].get("seed") == 0 == fg.models.configs[_n0 + 1].get("seed"),
+  fg.models.configs[_n0:])
 t("  and the search is saved for the claim",
   db.get_cached_query("salt raises blood pressure in everyone.", verdict.QUERY_PROMPT_VERSION)
   == ("(salt) AND (blood pressure)", "", "Salt raises blood pressure in everyone"))
@@ -2150,31 +2160,62 @@ _COLDS = [_study("C1", "Cold water immersion and immune cell counts in adults: a
                  abstract="Adults took cold showers for 30 days.")]
 fg.models.calls = 0
 fg.models.prompts = []
-fg.models.script = [Resp(VJ("complicated", [1], tldr=_UNTESTED_COLD,
-                            evidence=["Cold showers changed immune cell counts (Study 1)."]))] * 2
+_COLD_R = Resp(VJ("complicated", [1], tldr=_UNTESTED_COLD,
+                   evidence=["Cold showers changed immune cell counts (Study 1)."]))
+fg.models.script = [_COLD_R, DIR("untested"), _COLD_R]
 _stamp = _Catch()
 logging.getLogger("evident.stamp").addHandler(_stamp)
 _v = verdict.weigh_evidence(_COLD, [dict(x) for x in _COLDS], "(cold shower) AND (immunity)")
 logging.getLogger("evident.stamp").removeHandler(_stamp)
-t("  the retry is shown both halves and told they must agree",
-  fg.models.calls == 2 and f'the takeaway, "{_UNTESTED_COLD}"' in fg.models.prompts[1]
-  and 'the verdict is "complicated"' in fg.models.prompts[1]
-  and "must agree" in fg.models.prompts[1] and '"insufficient"' in fg.models.prompts[1],
-  fg.models.prompts[1:])
+t("  the direction is read by one small call at temperature 0",
+  fg.models.calls == 3 and f'Answer: "{_UNTESTED_COLD}"' in fg.models.prompts[1]
+  and fg.models.configs[-2].get("temperature") == 0, fg.models.prompts[1])
+t("  and the retry is shown both halves and told they must agree",
+  f'the takeaway, "{_UNTESTED_COLD}"' in fg.models.prompts[2]
+  and 'the verdict is "complicated"' in fg.models.prompts[2]
+  and "must agree" in fg.models.prompts[2] and '"insufficient"' in fg.models.prompts[2],
+  fg.models.prompts[2:])
 t("  still apart, 'nothing tested this' makes it 'Not enough evidence', and says so in the log",
   _v["verdict"] == "insufficient" and _v["tldr"] == _UNTESTED_COLD
   and len(_stamp.lines) == 1 and "follows the takeaway" in _stamp.lines[0], (_v, _stamp.lines))
-fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Ashwagandha reduces stress.",
-                            evidence=["Ashwagandha reduced stress (Study 1)."]))] * 2
+_ASH_R = Resp(VJ("complicated", [1, 2], tldr="Ashwagandha reduces stress.",
+                  evidence=["Ashwagandha reduced stress (Study 1)."]))
+fg.models.script = [_ASH_R, DIR("yes"), _ASH_R]
 _v = verdict.weigh_evidence("Ashwagandha reduces stress", _ASHWA, "(ashwagandha) AND (stress)")
 t("  a plain yes followed to 'true' still meets every gate: low certainty brings it back",
   _v["verdict"] == "complicated" and "certainty of that evidence is low" in _v["tldr"], _v)
-fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Vitamin D stops colds.",
-                            evidence=["Vitamin D cut colds (Study 1)."]))] * 2
+_VITD_R = Resp(VJ("complicated", [1, 2], tldr="Vitamin D stops colds.",
+                   evidence=["Vitamin D cut colds (Study 1)."]))
+fg.models.script = [_VITD_R, DIR("yes"), _VITD_R]
 _v = verdict.weigh_evidence("Vitamin D stops colds", _MEASLES, "(vitamin d) AND (colds)")
 t("  and so does the one-group downgrade",
   _v["verdict"] == "complicated" and "Every study behind this" in _v["explanation"]
   and not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], "", "Vitamin D stops colds"), _v)
+_GUIDE = "Daily water needs vary by person and food intake, so eight glasses is just a rough guide."
+_WATER_S = [_study("H1", "Human water needs: a review of hydration in adults", types=["Systematic Review"])]
+_GUIDE_R = Resp(VJ("complicated", [1], tldr=_GUIDE, evidence=["Water needs varied (Study 1)."]))
+t("  the code screen misreads 'just a rough guide' as a plain yes",
+  breakdown.words_stamp("complicated", _GUIDE, _WATER) == "true")
+fg.models.calls = 0
+fg.models.script = [_GUIDE_R, DIR("no"), _GUIDE_R]
+_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+t("  so the small call decides, and the stamp becomes 'Likely false', never 'Likely true'",
+  _v["verdict"] == "false" and _v["tldr"] == _GUIDE and fg.models.calls == 3, _v)
+fg.models.calls = 0
+fg.models.script = [_GUIDE_R, DIR("mixed")]
+_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+t("  a reading that agrees with the stamp means a false alarm: no retry, nothing changes",
+  _v["verdict"] == "complicated" and fg.models.calls == 2, (_v, fg.models.calls))
+fg.models.calls = 0
+fg.models.script = [_GUIDE_R, Resp("not json")]
+_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+t("  and a reading that fails changes nothing either",
+  _v["verdict"] == "complicated" and _v["tldr"] == _GUIDE and fg.models.calls == 2, (_v, fg.models.calls))
+t("  the screen reads a reason after ', as' as the reason, not the answer",
+  breakdown.stance("Cracking your knuckles does not cause arthritis, as studies show no link.",
+                   "Cracking your knuckles causes arthritis") == "no"
+  and breakdown.stance("Smoking causes lung cancer, as smoking remains the main cause.",
+                       "Smoking causes lung cancer") == "yes")
 fg.models.script = [Resp(VJ("false", [1, 2], tldr=_NO_TLDR,
                             explanation="The claim is true for some children (Study 1). Sugar did not change behaviour (Study 2).",
                             evidence=["Sugar did not change behaviour (Study 1)."]))] * 2

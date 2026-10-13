@@ -20,32 +20,43 @@ default for the verdict, because thinking is on there and the API
 refuses any other temperature while it is.
 
 **One rule for the stamp, instead of fixes claim by claim.** After the
-verdict call, code reads the short answer's direction
-(`breakdown.stance`): a plain yes, a plain no, "nothing here tests
-this", or hedged. Each plain answer pins one stamp: yes is "Likely
-true", no is "Likely false", untested is "Not enough evidence"
-(`STAMP_FOR`). A hedged answer ("may", "a little", "for most people")
-pins none and sits beside any stamp that is itself a lean, which is why
-"Exercise slightly lowers the risk" can stay "Likely true". "It's
-complicated" no longer stands over "nothing tests this": the two are
-different answers. When the stamp disagrees with the direction, the
-model is asked once more, shown both halves word for word and told they
-must agree. If they still disagree, the stamp follows the short answer
-(`_read_verdict(follow_words=True)`), and the log says so. The stamp is
-set before the gates, so a "true" reached this way still meets the
+verdict call, the short answer's direction is read as one of four: yes,
+no, untested ("nothing here tests this") or mixed (both ways, partly, a
+little, for some people). Each of the first three pins one stamp: yes
+is "Likely true", no is "Likely false", untested is "Not enough
+evidence" (`STAMP_FOR`). Mixed pins none and sits beside any stamp,
+which is why "Exercise slightly lowers the risk" can stay "Likely true".
+"It's complicated" no longer stands over "nothing tests this": the two
+are different answers. Reading the direction takes two steps. A code
+screen (`breakdown.words_stamp`) flags a possible disagreement; it is
+cheap and fires on about one check in five, but it is only a screen.
+The first version let the screen decide, and on the claim 9 triple run
+it read "eight glasses is just a rough guide" as a plain yes and turned
+the stamp to "Likely true", the opposite of right. So a flag now costs
+one small model call at temperature 0 (`classify_direction`, one word
+from those four), and only that call's answer changes anything. If it
+agrees with the stamp, or fails, the stamp stands and nothing is
+retried. If it confirms the disagreement, the model is asked once more,
+shown both halves word for word and told they must agree. If they still
+disagree, the stamp follows the short answer
+(`_read_verdict(follow=...)`), and the log says so. The stamp is set
+before the gates, so a "true" reached this way still meets the
 low-certainty cap, the one-group downgrade and the "not tested in
 people" rule like any other. The old fallback, which kept the stamp and
 replaced the short answer with a stock line ("Some of these studies
 point towards no, but together they don't settle it"), is gone: it hid
-the model's actual answer behind a sentence that said nothing. This is
-a second scoped exception to non-negotiable 1, on the owner's
-instruction: code may now raise a stamp from "complicated", but only to
-what the model's own short answer already says in plain words, after
-the model was asked to reconcile them, and never past a gate. An
-explanation sentence that rules on the claim outright against an agreed
-answer ("the claim is true" under "Likely false") is the one dropped.
-The vinegar rule above stays as it is; it runs first, and needs no
-retry. There was no special case for claim 13 to remove.
+the model's actual answer behind a sentence that said nothing. Both
+Gemini calls at temperature 0 also send a fixed seed, because
+temperature 0 alone still gave claim 9 a differently worded short
+answer each run. This is a second scoped exception to non-negotiable 1,
+on the owner's instruction: code may now raise a stamp from
+"complicated", but only to what the model's own short answer already
+says, confirmed by a second reading, after the model was asked to
+reconcile them, and never past a gate. An explanation sentence that
+rules on the claim outright against an agreed answer ("the claim is
+true" under "Likely false") is the one dropped. The vinegar rule above
+stays as it is; it runs first, and needs no retry. There was no special
+case for claim 13 to remove.
 
 **Red wine: reviews of how a compound works are background, and
 confounding is said.** Claim 14 counted three narrative reviews of
