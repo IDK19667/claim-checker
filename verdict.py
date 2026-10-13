@@ -1193,6 +1193,20 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
         deeper["says"] = breakdown.says(explanation, deeper, studies,
                                         skip=background_numbers)
 
+    # Last, and only now that every gate above has checked each figure
+    # against the abstract that printed it: figures are rounded for reading
+    # and a measured change gets its unit back (breakdown.for_reading).
+    readable = lambda text: breakdown.for_reading(text, studies)
+    tldr, explanation, still_open = readable(tldr), readable(explanation), readable(still_open)
+    if deeper is not None:
+        for key in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):
+            if deeper.get(key):
+                deeper[key] = readable(deeper[key])
+        deeper["evidence"] = [readable(t) for t in deeper.get("evidence") or []]
+        deeper["says"] = [readable(t) for t in deeper.get("says") or []]
+        for part in deeper.get("parts") or []:
+            part["assessment"] = readable(part.get("assessment"))
+
     return {
         "verdict": verdict,
         "tldr": tldr,

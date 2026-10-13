@@ -636,7 +636,7 @@ function renderBreakdown(bd, count, studies = []) {
         : "")));
   }
   if (bd.unknowns) out.push(sec("What is still unknown", prose(bd.unknowns)));
-  out.push(`<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts, never worked out from them. Tap a study number to read it.</p>`);
+  out.push(`<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them. Tap a study number to read it.</p>`);
   body.innerHTML = out.join("");
 
   const head = wrap.querySelector(".deeper-head .group-count");

@@ -2129,5 +2129,45 @@ t("  the API marks it, and the page and the script both group it as background",
   and "Background only: animal and lab studies" in (ROOT / "static" / "app.js").read_text(), _d["studies"])
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
+# 4. Figures are rounded for reading after the gate has checked them, and a
+# measured change keeps its unit, or says it never had one.
+_ACV_ABS = ("RESULTS: ACV significantly reduced fasting blood sugar (FBS) (WMD: -21.929 mg/dL, "
+            "95% CI: -29.19, -14.67, p < 0.001) and HbA1c (WMD: -1.53, 95% CI: -2.65, -0.41, "
+            "p = 0.008) and increased insulin (WMD: 2.059 \u03bcu/ml). Seven studies, 319 people.")
+_ACV_R = [dict(_ACV[0], abstract=_ACV_ABS)] + _ACV[1:]
+_fr = breakdown.for_reading
+t("a figure with three decimals is rounded, and an HbA1c change with no unit says so",
+  _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 in adults (Study 1).", _ACV_R)
+  == "Fasting blood sugar fell by about 22 mg/dL and HbA1c fell by 1.53 (no unit given) in adults (Study 1).")
+t("  a unit the model dropped is put back from the abstract",
+  _fr("Insulin rose by 2.059 (Study 1).", _ACV_R) == "Insulin rose by 2.06 \u03bcU/mL (Study 1).")
+t("  an HbA1c change in % is said in percentage points; a level in % is left alone",
+  _fr("HbA1c dropped by 0.5% (Study 2).", _ACV_R) == "HbA1c dropped by 0.5 percentage points (Study 2)."
+  and _fr("People with HbA1c over 7.5% took part (Study 2).", _ACV_R)
+  == "People with HbA1c over 7.5% took part (Study 2).")
+t("  p-values, ratios, counts, years and study numbers are never touched",
+  _fr("In 2019, 7 trials of 319 people found odds ratio 0.88, p = 0.0042 (Studies 1, 2).", _ACV_R)
+  == "In 2019, 7 trials of 319 people found odds ratio 0.88, p = 0.0042 (Studies 1, 2).")
+t("  an interval is rounded without 'about', and a range carries its unit once",
+  _fr("FBS fell 21.929 mg/dL (95% CI 29.19 to 14.67) (Study 1).", _ACV_R)
+  == "FBS fell about 22 mg/dL (95% CI 29 to 15) (Study 1)."
+  and _fr("Glucose fell between 12.345 and 30.555 mg/dL (Study 1).", _ACV_R)
+  == "Glucose fell between about 12 and 31 mg/dL (Study 1).")
+_once = _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 (Study 1).", _ACV_R)
+t("  and reading it twice changes nothing", _fr(_once, _ACV_R) == _once, _once)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="It lowers blood sugar a little.",
+                            effect_size="Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53 (Study 1).",
+                            evidence=["Vinegar lowered fasting blood sugar by 21.929 mg/dL (Study 1)."]))]
+_v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV_R],
+                            "(vinegar) AND (blood sugar)")
+_bd = _v["breakdown"] or {}
+t("  a real verdict prints the rounded figure everywhere, after the gate kept it",
+  "about 22 mg/dL" in _bd.get("effect_size", "") and "1.53 (no unit given)" in _bd.get("effect_size", "")
+  and not any("21.929" in x for x in [_bd.get("effect_size", "")] + _bd.get("evidence", []) + _bd.get("says", [])),
+  _bd)
+t("  and the footnote says figures are rounded",
+  "rounded for reading" in (ROOT / "templates" / "index.html").read_text()
+  and "rounded for reading" in (ROOT / "static" / "app.js").read_text())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

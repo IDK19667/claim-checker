@@ -45,6 +45,7 @@ call that already runs, so a check is still two model calls.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, ROUND_HALF_UP
 
 import evidence
 
@@ -1601,6 +1602,152 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | N
     out["rests_on"] = len(cited_pmids(out, studies))
     out["grade"] = reading_grade(flatten(out), claim_terms(claim))
     return out
+
+
+# ---------------------------------------------------------------------
+# Rule 10: a figure is rounded for reading, and never loses its unit.
+#
+# The gate compares digits to digits, so the model is told to copy every
+# figure exactly, and "fasting blood sugar fell by 21.929 mg/dL" reached
+# the page: three decimals no reader can use. Rounding happens here, after
+# the gate has passed the sentence, so the gate still checks the figure the
+# abstract printed and the reader gets "about 22 mg/dL". The same pass puts
+# back a unit the model dropped, copied from the abstract that printed the
+# figure. When the abstract never gave one, the sentence says so rather
+# than guess: a review of apple cider vinegar reported HbA1c as "-1.53"
+# with no unit at all, and its own table called it mg/dL, which HbA1c
+# never is.
+# ---------------------------------------------------------------------
+
+# Measures whose figures mean nothing without a unit. Read in the few words
+# before the figure, not anywhere in the sentence.
+_MEASURE = re.compile(
+    r"\b(?:HbA1c|A1c|h(?:a)?emoglobin A1c|glycated h(?:a)?emoglobin|"
+    r"glycosylated h(?:a)?emoglobin|(?:fasting\s+)?(?:blood|plasma|serum)\s+"
+    r"(?:sugar|glucose)|glucose|FBS|FPG|FBG|blood pressure|systolic|diastolic|"
+    r"cholesterol|LDL(?:-C)?|HDL(?:-C)?|triglycerides?|weight|BMI|"
+    r"body mass index|waist(?: circumference)?|insulin)\b", re.IGNORECASE)
+_HBA1C = re.compile(r"A1c|glycated|glycosylated", re.IGNORECASE)
+_UNIT = (r"(?:%|percentage points?|percent|mg/dl|mmol/l|mmol/mol|mmhg|mm hg|"
+         r"kg/m2|kg/m\u00b2|kg|lbs?|pounds?|cm|inches|g/dl|\u03bcu/ml|\u00b5u/ml|"
+         r"mu/l|miu/l|points?|ml|mg|g)(?![a-z])")
+_FIGURE_UNIT = re.compile(r"(?<![\w.])([-\u2212]?\d+(?:\.\d+)?)(?![\d])(\s*" + _UNIT + ")?",
+                          re.IGNORECASE)
+# What may follow a figure that has lost its unit. Anything else after it
+# ("4 trials", "319 people", "eight weeks") makes the figure a count.
+_AFTER_BARE = re.compile(
+    r"\s*(?:$|[).,;:]|\((?!no unit)|(?:in|and|or|among|after|over|for|with|compared|"
+    r"versus|vs|than|from|to|at|on|when|while|but|across|between|overall)\b)",
+    re.IGNORECASE)
+# A figure is a change when it follows "by", "of" or a difference. Only a
+# change is held to having a unit; "HbA1c under 7" is a level.
+_CHANGE_BEFORE = re.compile(
+    r"(?:\bby|\bof|\bW?MD:?|mean difference(?: of)?|difference(?: of)?)\s*(?:about\s+)?$",
+    re.IGNORECASE)
+# Ratios and standardized differences have no unit, and need none.
+_UNITLESS_BEFORE = re.compile(
+    r"\b(?:a?ORs?|a?RRs?|a?HRs?|IRRs?|SMDs?|ratio|relative risk|standardi[sz]ed|"
+    r"Hedges|Cohen|effect size|g)\b[^.\d]{0,12}$", re.IGNORECASE)
+_P_BEFORE = re.compile(r"\bp\s*(?:-?value)?\s*(?:=|<|>|\u2264|\u2265|of)\s*$", re.IGNORECASE)
+_CI_BEFORE = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval|\b95%",
+                        re.IGNORECASE)
+_ABOUT_BEFORE = re.compile(r"(?:\b(?:about|around|roughly|approximately|nearly|almost|"
+                           r"some|over|under|more than|less than)|~)\s*$", re.IGNORECASE)
+_RANGE_JOIN = re.compile(r"\s*(?:to|and|or|,|-|\u2013)\s*")
+_RANGE_UNIT = re.compile(r"\s*(?:to|and|or|-|\u2013)\s*[-\u2212]?\d+(?:\.\d+)?\s*" + _UNIT,
+                         re.IGNORECASE)
+_UNIT_CASE = {"mg/dl": "mg/dL", "mmol/l": "mmol/L", "mmhg": "mmHg", "mm hg": "mmHg",
+              "g/dl": "g/dL", "kg/m2": "kg/m\u00b2", "mmol/mol": "mmol/mol",
+              "\u03bcu/ml": "\u03bcU/mL", "\u00b5u/ml": "\u00b5U/mL", "ml": "mL"}
+NO_UNIT = "(no unit given)"
+
+
+def _rounded(figure: str):
+    """(new figure, whether it is now approximate), or None to leave it."""
+    sign = figure[:1] if figure[:1] in "-\u2212" else ""
+    whole, _, frac = figure.lstrip("-\u2212").partition(".")
+    if not frac:
+        return None
+    value = Decimal(whole + "." + frac)
+    if value >= 10 and len(frac) >= 2:
+        return sign + str(value.quantize(Decimal(1), ROUND_HALF_UP)), True
+    if len(frac) < 3 or value == 0:
+        return None
+    if value >= 1:
+        return sign + str(value.quantize(Decimal("0.01"), ROUND_HALF_UP)), False
+    # Two significant figures: 0.0345 is 0.035, 0.123 is 0.12.
+    place = Decimal(1).scaleb(value.adjusted() - 1)
+    return sign + format(value.quantize(place, ROUND_HALF_UP), "f"), False
+
+
+def _unit_in(figure: str, abstracts: str) -> str | None:
+    """
+    The unit an abstract printed straight after this exact figure; "" when
+    it printed the figure as a ratio or standardized difference, which has
+    none; None when it printed the figure bare, or not at all.
+    """
+    bare = re.escape(figure.lstrip("-\u2212"))
+    for m in re.finditer(r"(?<![\d.])[-\u2212]?\s?" + bare + r"(?![\d])(\s*" + _UNIT + ")?",
+                         abstracts, re.IGNORECASE):
+        if _UNITLESS_BEFORE.search(abstracts[max(0, m.start() - 20):m.start()]):
+            return ""
+        if m.group(1):
+            return m.group(1).strip()
+    return None
+
+
+def for_reading(text: str, studies: list[dict] = ()) -> str:
+    """
+    Round the figures in prose that has passed the gate, and give a measured
+    change its unit. "Fasting blood sugar fell by 21.929 mg/dL and HbA1c by
+    1.53" becomes "fell by about 22 mg/dL and HbA1c by 1.53 (no unit given)"
+    when no abstract printed a unit for 1.53, and a change in HbA1c printed
+    in % is said in percentage points, which is what it is. Study numbers,
+    p-values, counts and years are never touched.
+    """
+    if not text or not re.search(r"\d", text):
+        return text or ""
+    abstracts = " ".join(str(s.get("abstract") or "") for s in studies or [])
+    refs_at = [m.span() for m in _REF.finditer(text)]
+    prev_end = [None]
+
+    def fix(m: re.Match) -> str:
+        a = m.start(1)
+        figure, unit = m.group(1), m.group(2) or ""
+        before = text[max(0, a - 40):a]
+        joined = prev_end[0] is not None and bool(_RANGE_JOIN.fullmatch(text[prev_end[0]:a]))
+        prev_end[0] = m.end()
+        if any(x <= a < y for x, y in refs_at) or _P_BEFORE.search(before):
+            return m.group(0)
+        in_ci = bool(_CI_BEFORE.search(text[max(0, a - 30):a]))
+        change = _CHANGE_BEFORE.search(before)
+        near = _MEASURE.search(" ".join(text[max(0, a - 90):a].split()[-9:]))
+        note = ""
+        if (near and (change or "." in figure) and not in_ci and not joined
+                and not _UNITLESS_BEFORE.search(before)):
+            hba1c = bool(_HBA1C.search(near.group(0)))
+            if unit:
+                if hba1c and unit.strip() == "%" and change:
+                    unit = " percentage points"
+            elif _RANGE_UNIT.match(text[m.end():]):
+                pass    # "between 12 and 31 mg/dL": the unit comes once, at the end
+            elif _AFTER_BARE.match(text[m.end():]):
+                found = _unit_in(figure, abstracts)
+                if found == "%":
+                    note = " percentage points" if hba1c else "%"
+                elif found:
+                    note = " " + _UNIT_CASE.get(found.lower(), found)
+                elif found is None:
+                    note = " " + NO_UNIT
+        new = figure
+        r = _rounded(figure)
+        if r:
+            new, approx = r
+            if approx and not in_ci and not joined and not _ABOUT_BEFORE.search(before):
+                new = "about " + new
+        return new + unit + note
+
+    return _FIGURE_UNIT.sub(fix, text)
 
 
 # ---------------------------------------------------------------------

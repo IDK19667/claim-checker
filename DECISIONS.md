@@ -26,6 +26,26 @@ answer resting on nothing else still reaches "Not enough evidence" by
 the existing route, which says "only animal or lab studies", rather
 than the vaguer "nothing cited".
 
+**Figures are rounded for reading, and keep their unit.** The page
+printed "decreased by 21.929 mg/dL" and "HbA1c decreased by 1.53". The
+gate compares digits to digits, so the model is told never to round;
+rounding now happens in code after the gate (`breakdown.for_reading`):
+three decimals or a two-decimal figure of 10 or more becomes "about 22",
+a figure from 1 to 10 keeps two decimals, under 1 keeps two significant
+figures. p-values, counts, years and study numbers are left alone, and
+an interval is rounded without "about". The same pass puts back a unit
+the model dropped, copied from the abstract that printed the figure,
+and says an HbA1c change in % as percentage points. When no abstract
+gave a unit it says "(no unit given)" rather than guess. The 1.53 was
+checked against PMID 39949546: it is the review's overall pooled figure,
+not a subgroup and not a misread, but the review prints it with no unit,
+its full text pools it from only 4 of the 7 trials (319 people,
+I² 83%, GRADE "low"), and its own table labels it mg/dL, which HbA1c
+never is. Most likely it is percentage points; the page does not assert
+what the paper does not say. The "seven trials" in the explanation
+conflates the review's total with the four HbA1c trials; that is in the
+full text only, so an abstract-only check cannot catch it.
+
 **The population line carries its label.** "Who was studied" is often
 written as a bare noun phrase, which under "What the research says"
 read as a stray fragment. `breakdown.says` now prefixes it: "Who was
