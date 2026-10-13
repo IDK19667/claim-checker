@@ -4,6 +4,59 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
+
+**The same claim runs the same search and is read the same way.** Claim
+9 moved between runs because the model wrote a different PubMed search
+each time. Both calls now ask for temperature 0, and the search a claim
+was given is saved (`query_cache`, keyed on the normalised claim and a
+hash of the prompt that wrote it, so editing that prompt starts afresh)
+and reused on every re-check. The table holds the claim and its search,
+never who typed it, and goes with every deploy like the rest of the
+database. Google advises the default temperature for Gemini 3 models,
+warning of loops at lower values; the runs below are where that would
+show, as answers that "ran out of room". The Anthropic path keeps its
+default for the verdict, because thinking is on there and the API
+refuses any other temperature while it is.
+
+**One rule for the stamp, instead of fixes claim by claim.** After the
+verdict call, code reads the short answer's direction
+(`breakdown.stance`): a plain yes, a plain no, "nothing here tests
+this", or hedged. Each plain answer pins one stamp: yes is "Likely
+true", no is "Likely false", untested is "Not enough evidence"
+(`STAMP_FOR`). A hedged answer ("may", "a little", "for most people")
+pins none and sits beside any stamp that is itself a lean, which is why
+"Exercise slightly lowers the risk" can stay "Likely true". "It's
+complicated" no longer stands over "nothing tests this": the two are
+different answers. When the stamp disagrees with the direction, the
+model is asked once more, shown both halves word for word and told they
+must agree. If they still disagree, the stamp follows the short answer
+(`_read_verdict(follow_words=True)`), and the log says so. The stamp is
+set before the gates, so a "true" reached this way still meets the
+low-certainty cap, the one-group downgrade and the "not tested in
+people" rule like any other. The old fallback, which kept the stamp and
+replaced the short answer with a stock line ("Some of these studies
+point towards no, but together they don't settle it"), is gone: it hid
+the model's actual answer behind a sentence that said nothing. This is
+a second scoped exception to non-negotiable 1, on the owner's
+instruction: code may now raise a stamp from "complicated", but only to
+what the model's own short answer already says in plain words, after
+the model was asked to reconcile them, and never past a gate. An
+explanation sentence that rules on the claim outright against an agreed
+answer ("the claim is true" under "Likely false") is the one dropped.
+The vinegar rule above stays as it is; it runs first, and needs no
+retry. There was no special case for claim 13 to remove.
+
+Three readings were wrong and are fixed, in general, not for these
+claims: the answer to "A, so B" is the conclusion B ("needs vary by
+person, so eight glasses is not a hard rule" is a no); a number is one
+of the claim's words however it is written ("eight" is the claim's
+"8"); and calling the claim itself unsettled ("it is not clear they
+boost immunity", "whether it prevents colds is unknown") is "not
+shown", while calling a finding unclear ("it is unclear whether the
+effect matters") is still a hedge. "Not clearly" and "for most people"
+now hedge, so a qualified no stays mixed.
+
 ## 2026-10-12: Apple cider vinegar does not cure diabetes
 
 The live check of "Apple cider vinegar cure diabetes" was stamped "It's

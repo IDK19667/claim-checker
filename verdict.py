@@ -774,6 +774,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # should read the same way every time it is checked.
     raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
     result = _read_verdict(raw, stop_note, studies, claim)
+    kept = raw, stop_note
 
     # One retry, and only when the answer disagrees with itself. Dropping a
     # contradictory sentence is not an option here: the two halves are both
@@ -792,6 +793,17 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                                               and again.get("tldr"))
         if answered and len(_faults(again, claim, reported)) < len(faults):
             result = again
+            kept = raw, stop_note
+    # The stamp and the takeaway are one answer. Asked once to agree and
+    # still apart, the stamp follows the takeaway: a reader acts on the
+    # sentence, and the sentence is the half the model wrote out in words.
+    # The stamp is set before the gates in _read_verdict, so every downgrade
+    # there still applies to it.
+    if breakdown.words_stamp(result.get("verdict") or "", result.get("tldr") or "", claim):
+        _stamp_log.warning("stamp %r still disagreed with the takeaway after the retry, "
+                           "so it follows the takeaway: %r", result.get("verdict"),
+                           result.get("tldr"))
+        result = _read_verdict(*kept, studies, claim, follow_words=True)
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
@@ -804,7 +816,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             s["off_topic"] = off[s["pmid"]]
         elif s["pmid"] in back:
             s["background"] = True
-    return _align_stamp(result, claim)
+    return _settle_ruling(result, claim)
 
 
 def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
@@ -827,39 +839,35 @@ def _faults(result: dict, claim: str, reported: list[str]) -> list[str]:
     return found
 
 
-# What the takeaway becomes when the stamp and the words still disagree after
-# the one retry. Every line here says less than either half did, so the
-# fallback can only ever lower the certainty of an answer, never raise it.
-LEAN_TLDR = {
-    "yes": "Some of these studies point towards yes, but together they don't settle it.",
-    "no": "Some of these studies point towards no, but together they don't settle it.",
-}
+# The takeaways code writes itself, when a gate below changes the stamp.
 LOW_CERTAINTY_TLDR = ("The studies found point towards yes, but the certainty of "
                       "that evidence is low.")
 UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
 
+_stamp_log = logging.getLogger("evident.stamp")
 
-def _align_stamp(result: dict, claim: str) -> dict:
+
+def _settle_ruling(result: dict, claim: str) -> dict:
     """
-    The last word on a stamp the words still contradict. Code cannot tell
-    which half was right, so it keeps the less certain one: a plain verdict
-    over hedged words drops to "complicated", and hedged stamp over plain
-    words keeps its stamp and loses the plain words.
+    The last word on an explanation that rules on the claim outright ("the
+    claim is false") against a stamp its takeaway agrees with. By now the
+    takeaway and the stamp are one answer, so the ruling sentence is the odd
+    one out, and it goes rather than the answer changing under it.
     """
     verdict = result.get("verdict") or ""
-    tldr = result.get("tldr") or ""
-    if not breakdown.stamp_conflict(verdict, tldr, result.get("explanation") or "", claim):
+    tldr, exp = result.get("tldr") or "", result.get("explanation") or ""
+    if not breakdown.stamp_conflict(verdict, tldr, exp, claim):
         return result
-    said = breakdown.stance(tldr, claim)
-    out = dict(result)
-    if verdict in ("true", "false"):
-        out["verdict"] = "complicated"
-        out["tldr"] = LEAN_TLDR.get(said) or LEAN_TLDR["yes" if verdict == "true" else "no"]
-    elif verdict == "complicated":
-        out["tldr"] = LEAN_TLDR.get(said, tldr)
-    else:
-        out["tldr"] = UNTESTED_TLDR
-    return out
+    if breakdown.words_stamp(verdict, tldr, claim):
+        # Cannot happen: weigh_evidence has already made the stamp follow
+        # the takeaway, and every gate rewrites the takeaway it overrules.
+        _stamp_log.error("stamp %r still disagrees with the takeaway %r", verdict, tldr)
+        return result
+    kept = [t for t in breakdown.sentences(exp)
+            if not breakdown.stamp_conflict(verdict, tldr, t, claim)]
+    _stamp_log.warning("dropped an explanation sentence that ruled against the stamp %r",
+                       verdict)
+    return {**result, "explanation": " ".join(kept).strip()}
 
 
 def _redo_note(faults: list[str]) -> str:
@@ -1074,8 +1082,14 @@ Respond with JSON in this exact shape:
 }}"""
 
 
-def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
-    """Everything after the call: parse, map citations, gate every string."""
+def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
+                  follow_words: bool = False) -> dict:
+    """
+    Everything after the call: parse, map citations, gate every string.
+
+    `follow_words` makes the stamp the one the takeaway commits to, when the
+    two disagree, before any gate runs, so the gates judge it like any other.
+    """
     if stop_note:
         return _fallback(
             f"The evidence-weighing step {stop_note}. "
@@ -1146,6 +1160,21 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
     # abstracts has already been dropped by the time this returns.
     deeper = breakdown.ground(parsed, studies, tidy_prose, claim, skip=off_numbers)
 
+    # The takeaway is held to the same rule as the breakdown: words that
+    # claim more than this evidence can carry are rewritten weaker.
+    tldr = breakdown.natural(
+        breakdown.plain(breakdown.soften(
+            tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX))))
+    # And to the size of it. "Reduces colds and flu" is the wrong sentence
+    # for an odds ratio of 0.88, whatever else is right about it. The label
+    # is measured from the prose the breakdown is actually printing, so the
+    # two layers cannot disagree about how big the effect was.
+    sized = (deeper or {}).get("effect") or {}
+    if sized.get("label"):
+        tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
+    if follow_words:
+        verdict = breakdown.words_stamp(verdict, tldr, claim) or verdict
+
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or
     # "true") here; it's "not well studied". This is the backstop for
@@ -1214,18 +1243,6 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "") -> dict:
                            f"low, because {forced_low}, so it can't be rated likely "
                            f"true.").strip()
 
-    # The takeaway is held to the same rule as the breakdown: words that
-    # claim more than this evidence can carry are rewritten weaker.
-    tldr = breakdown.natural(
-        breakdown.plain(breakdown.soften(
-            tidy_prose(str(parsed.get("tldr") or ""), TLDR_MAX))))
-    # And to the size of it. "Reduces colds and flu" is the wrong sentence
-    # for an odds ratio of 0.88, whatever else is right about it. The label
-    # is measured from the prose the breakdown is actually printing, so the
-    # two layers cannot disagree about how big the effect was.
-    sized = (deeper or {}).get("effect") or {}
-    if sized.get("label"):
-        tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
     # A claim that promises the whole thing ("cures diabetes") is tested as
     # written. When the model's own takeaway says the whole thing does not
     # happen ("it lowers blood sugar a bit, but it does not cure it") and it

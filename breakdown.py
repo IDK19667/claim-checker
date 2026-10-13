@@ -603,7 +603,8 @@ _HEDGED = re.compile(
     r"vary|varies|varied|unclear|not clear|uncertain|depends?|partly|limited|"
     r"weak|small|modest|possibly|probably|unknown|inconsistent|only|unless|"
     r"low.certainty|lean|leans|suggests?|appears?|seems?|if you|in people "
-    r"(?:who|with)|for people (?:who|with)|for some|in some)\b", re.IGNORECASE)
+    r"(?:who|with)|for people (?:who|with)|for some|in some|not clearly|"
+    r"(?:for|in) most)\b", re.IGNORECASE)
 
 # The claim was never put to a test. Checked before the plain "no", because
 # "no study tests this" is a negative sentence that is not a "no".
@@ -640,6 +641,10 @@ _COMPARES_MORE = re.compile(r"\b(?:better|more|faster|superior|outperform\w*)\b"
 _TURN_AFTER = re.compile(r",?\s+\b(?:but|yet|however)\b,?\s+", re.IGNORECASE)
 _TURN_BEFORE = re.compile(r",?\s+\b(?:though|although|even though|while|whereas)\b\s+",
                           re.IGNORECASE)
+# Where a sentence concludes. "Needs vary by person, so eight glasses is not
+# a hard rule": the answer is the conclusion, not the reason given for it.
+_CONCLUDES = re.compile(r",\s+(?:so|which means|meaning)\s+(?!far\b|much\b|many\b|long\b)",
+                        re.IGNORECASE)
 # A second clause starts at ", and", ", so", ";", or a bare "and" that
 # opens a new verb ("don't remove toxins and can hurt your liver"), whose
 # hedge belongs to it and not to the answer before it.
@@ -664,20 +669,53 @@ def _stem(word: str) -> str:
     return w
 
 
+# A number in a claim is one of its words, whichever way it is written:
+# "eight glasses is not a hard rule" is about "8 glasses of water".
+_NUMBER_WORDS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve".split())}
+
+
+def _words_of(text: str) -> set:
+    """Stemmed words and numbers, with a hyphenated word counted as its parts."""
+    out = set()
+    for w in re.findall(r"[A-Za-z][A-Za-z'-]*|\d+", re.sub(r"(?<=\d),(?=\d{3})", "", text or "")):
+        for part in [w] + (w.split("-") if "-" in w else []):
+            if part:
+                out.add(_NUMBER_WORDS.get(part.lower(), _stem(part)))
+    return out
+
+
 def _echoes(clause: str, claim: str) -> bool:
     """True when the clause is about the claim's own words, not a neighbour's."""
-    terms = {_stem(t) for t in claim_terms(claim)}
+    terms = ({_stem(t) for t in claim_terms(claim)}
+             | set(re.findall(r"\d+", re.sub(r"(?<=\d),(?=\d{3})", "", claim or ""))))
     if not terms:
         return False
-    words = {_stem(w) for w in re.findall(r"[A-Za-z][A-Za-z'-]*", clause or "")}
+    words = _words_of(clause)
     hits = {t for t in terms
             if any(w == t or (len(w) >= 5 and len(t) >= 5 and w[:5] == t[:5])
                    for w in words)}
     return len(hits) >= min(2, len(terms))
 
 
-def _polarity(clause: str) -> str:
+# "It is not clear they boost immunity", "whether it prevents colds is
+# unknown": the claim itself is called unsettled, which is the answer "this
+# has not been shown", not a hedge on a finding. Only when what is unsettled
+# is the claim: "it is not clear the effect matters" stays a hedge.
+_UNSETTLED = re.compile(r"\b(?:not (?:yet )?clear|unclear|not (?:yet )?known|unknown|"
+                        r"uncertain|unproven)\b(?:\s+(?:if|whether|that))?", re.IGNORECASE)
+_WHETHER_UNSETTLED = re.compile(r"^\s*whether\b.*\b(?:is|remains)\s+(?:still\s+)?"
+                                r"(?:not clear|unclear|unknown|uncertain|unproven)\b",
+                                re.IGNORECASE)
+
+
+def _polarity(clause: str, claim: str = "") -> str:
     if _UNTESTED_SAID.search(clause):
+        return "untested"
+    if claim and _WHETHER_UNSETTLED.search(clause) and _echoes(clause, claim):
+        return "untested"
+    unsettled = _UNSETTLED.search(clause)
+    if claim and unsettled and _echoes(clause[unsettled.end():], claim):
         return "untested"
     if _HEDGED.search(clause):
         return "mixed"
@@ -804,10 +842,13 @@ def _plain_stance(text: str, claim: str) -> str:
         parts = _TURN_BEFORE.split(first, maxsplit=1)
         answer = parts[0] if len(parts) == 2 else None
     if answer is not None:
-        return _polarity(answer) if _echoes(answer, claim) else "mixed"
+        return _polarity(answer, claim) if _echoes(answer, claim) else "mixed"
+    concluded = _CONCLUDES.split(first, maxsplit=1)
+    if len(concluded) == 2 and _echoes(concluded[1], claim):
+        return _polarity(concluded[1], claim)
     for clause in _AND_CLAUSE.split(first):
         if _echoes(clause, claim):
-            return _polarity(clause)
+            return _polarity(clause, claim)
     return "mixed"
 
 
@@ -821,18 +862,35 @@ _RULES_YES = re.compile(r"\bthe claim is (?:true|correct|accurate|well supported
                         r"\b(?<!not )(?<!n't )(?:clearly |strongly )?supports? the claim\b",
                         re.IGNORECASE)
 
-# Which stances each stamp can stand beside. "complicated" holds both sides,
-# so a plain yes or a plain no under it is the contradiction; "insufficient"
-# means nothing tested the claim, so any plain answer under it is one too.
+# Which stances each stamp can stand beside. A plain answer pins one stamp:
+# a plain yes is "true", a plain no is "false", and "nothing here tests it"
+# is "insufficient". "complicated" says the studies point both ways, so any
+# plain answer under it is the contradiction, an untested one included. A
+# hedged answer ("may", "a little") commits to no stamp of its own and can
+# sit beside any of them.
 _AGREES = {
     "true": {"yes", "mixed"},
     "false": {"no", "mixed"},
-    "complicated": {"mixed", "untested"},
+    "complicated": {"mixed"},
     "insufficient": {"untested", "mixed"},
 }
 
+# The stamp each plain answer commits to.
+STAMP_FOR = {"yes": "true", "no": "false", "untested": "insufficient"}
+
 _SAYS = {"yes": "a plain yes", "no": "a plain no",
          "untested": "that nothing here tests the claim"}
+
+
+def words_stamp(verdict: str, tldr: str, claim: str) -> str | None:
+    """
+    The stamp the takeaway commits to, when that is not `verdict`; None when
+    the two agree or the takeaway is hedged and commits to none.
+    """
+    said = stance(tldr, claim)
+    if said in _AGREES.get(verdict, set()):
+        return None
+    return STAMP_FOR.get(said)
 
 
 def stamp_conflict(verdict: str, tldr: str, explanation: str, claim: str) -> str | None:
@@ -856,9 +914,14 @@ def stamp_conflict(verdict: str, tldr: str, explanation: str, claim: str) -> str
     turned = ("; the claim itself says no, so a takeaway agreeing that it does not "
               "happen is a yes to it, and the verdict for that is \"true\""
               if said in ("yes", "no") and claim_denies(claim) else "")
-    return (f"the verdict is \"{verdict}\" but {where} says {_SAYS[said]}. If the "
-            f"studies really show {_SAYS[said]}, the verdict must say so; if they do "
-            f"not, the takeaway must say no more than the verdict does{turned}")
+    # Both halves are shown, so the retry is answering this answer's own
+    # words rather than a description of them.
+    if where == "the takeaway":
+        where = f'the takeaway, "{" ".join((tldr or "").split())}",'
+    return (f"the verdict is \"{verdict}\" but {where} says {_SAYS[said]}. The verdict "
+            f"and the takeaway must agree. If the studies really show {_SAYS[said]}, "
+            f"the verdict must be \"{STAMP_FOR[said]}\"; if they do not, the takeaway "
+            f"must say no more than \"{verdict}\" does{turned}")
 
 
 # ---------------------------------------------------------------------

@@ -110,6 +110,7 @@ class FakeModels:
     def generate_content(self, **kw):
         self.calls += 1
         self.configs = getattr(self, "configs", []) + [kw.get("config") or {}]
+        self.prompts = getattr(self, "prompts", []) + [kw.get("contents") or ""]
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -1632,21 +1633,20 @@ fg.models.calls = 0
 fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR,
                             evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
-t("  if the retry still contradicts, the stamp stays and the plain words go",
-  _v["verdict"] == "complicated" and _v["tldr"] == verdict.LEAN_TLDR["no"]
-  and fg.models.calls == 2, _v)
-t("  and that fallback never contradicts its own stamp",
+t("  if the retry still contradicts, the stamp follows the takeaway's plain no",
+  _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 2, _v)
+t("  and the words are kept, never swapped for a stock line",
   not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], _v["explanation"],
-                               "Sugar makes children hyperactive"))
+                               "Sugar makes children hyperactive")
+  and not hasattr(verdict, "LEAN_TLDR") and "point towards" not in _v["tldr"])
 fg.models.calls = 0
 fg.models.script = [Resp(VJ("true", [1, 2], tldr=_NO_TLDR,
                             evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
-t("  a confident stamp over opposite words drops to complicated, never the other way",
-  _v["verdict"] == "complicated" and _v["tldr"] == verdict.LEAN_TLDR["no"], _v)
+t("  a stamp over opposite words follows the words, whichever way they point",
+  _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR, _v)
 t("the prompt says the verdict and the takeaway are one answer",
   "one answer said twice" in verdict.weigh_prompt("c", "s"))
-
 
 # 2. The one-group downgrade reads the claim. Measles vaccines are given to
 # children, so the Cochrane review in children answers the claim as asked.
@@ -2110,6 +2110,79 @@ _n0 = fg.models.calls
 _d = P("Salt raises blood pressure in everyone", ip="9.9.4.2").get_json()
 t("  a re-check reuses it: one call, the verdict, and the same search",
   fg.models.calls == _n0 + 1 and _d["search_query_used"] == "(salt) AND (blood pressure)", _d.get("search_query_used"))
+
+# ---- accuracy round 4 (one rule for the stamp) --------------------------------
+# The general rule (accuracy round 4): the takeaway's direction pins the
+# stamp. Yes, no and "nothing tested this" each have one stamp; a hedged
+# takeaway has none of its own and sits beside any lean.
+_COLD = "Cold showers boost immunity"
+t("each plain answer pins one stamp, and a hedged one pins none",
+  breakdown.words_stamp("complicated", _NO_TLDR, "Sugar makes children hyperactive") == "false"
+  and breakdown.words_stamp("complicated", "Smoking causes lung cancer.", "Smoking causes lung cancer") == "true"
+  and breakdown.words_stamp("complicated", "No study has tested whether cold showers boost immunity.", _COLD) == "insufficient"
+  and breakdown.words_stamp("true", "Exercise slightly lowers the risk of depression.", "Exercise lowers the risk of depression") is None
+  and breakdown.words_stamp("complicated", "Magnesium may help sleep a bit, but the proof is weak.",
+                            "Magnesium supplements improve sleep quality") is None)
+t("  'it's complicated' over 'nothing has tested this' is now a contradiction",
+  breakdown.stamp_conflict("complicated", "No study has tested whether cold showers boost immunity.", "", _COLD)
+  and not breakdown.stamp_conflict("insufficient", "No study has tested whether cold showers boost immunity.", "", _COLD))
+_WATER = "You need to drink 8 glasses of water a day"
+t("  the answer after 'so' is the conclusion, and 'eight' is the claim's '8'",
+  breakdown.stance("Daily water needs vary by person, and drinks like milk can hydrate you too, "
+                   "so eight glasses is not a hard rule.", _WATER) == "no"
+  and breakdown.stance("Smoking causes lung cancer, so quitting lowers the risk.",
+                       "Smoking causes lung cancer") == "yes"
+  and breakdown.stance("Creatine can help some memory tasks, so it may be worth it for some people.",
+                       "Creatine improves cognitive performance") == "mixed")
+t("  calling the claim itself unsettled is 'not shown', a hedge on a finding is not",
+  breakdown.stance("Cold showers may alter immune markers, but it is not clear they truly boost immunity.", _COLD) == "untested"
+  and breakdown.stance("Whether vitamin D supplements prevent winter infections is unclear.",
+                       "Vitamin D supplements prevent winter infections") == "untested"
+  and breakdown.stance("Vitamin D may help a little, but it is unclear whether the effect matters.",
+                       "Vitamin D supplements prevent winter infections") == "mixed"
+  and breakdown.stance("Magnesium may help you fall asleep a bit faster, but the evidence is unclear.",
+                       "Magnesium supplements improve sleep quality") == "mixed")
+t("  'not clearly' and 'for most people' hedge a no",
+  breakdown.stance("Eating an egg a day does not clearly raise heart risk for most people, so moderate "
+                   "intake looks fine.", "Eggs raise heart disease risk") == "mixed")
+_UNTESTED_COLD = "No study has tested whether cold showers boost immunity."
+_COLDS = [_study("C1", "Cold water immersion and immune cell counts in adults: a randomized trial",
+                 abstract="Adults took cold showers for 30 days.")]
+fg.models.calls = 0
+fg.models.prompts = []
+fg.models.script = [Resp(VJ("complicated", [1], tldr=_UNTESTED_COLD,
+                            evidence=["Cold showers changed immune cell counts (Study 1)."]))] * 2
+_stamp = _Catch()
+logging.getLogger("evident.stamp").addHandler(_stamp)
+_v = verdict.weigh_evidence(_COLD, [dict(x) for x in _COLDS], "(cold shower) AND (immunity)")
+logging.getLogger("evident.stamp").removeHandler(_stamp)
+t("  the retry is shown both halves and told they must agree",
+  fg.models.calls == 2 and f'the takeaway, "{_UNTESTED_COLD}"' in fg.models.prompts[1]
+  and 'the verdict is "complicated"' in fg.models.prompts[1]
+  and "must agree" in fg.models.prompts[1] and '"insufficient"' in fg.models.prompts[1],
+  fg.models.prompts[1:])
+t("  still apart, 'nothing tested this' makes it 'Not enough evidence', and says so in the log",
+  _v["verdict"] == "insufficient" and _v["tldr"] == _UNTESTED_COLD
+  and len(_stamp.lines) == 1 and "follows the takeaway" in _stamp.lines[0], (_v, _stamp.lines))
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Ashwagandha reduces stress.",
+                            evidence=["Ashwagandha reduced stress (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Ashwagandha reduces stress", _ASHWA, "(ashwagandha) AND (stress)")
+t("  a plain yes followed to 'true' still meets every gate: low certainty brings it back",
+  _v["verdict"] == "complicated" and "certainty of that evidence is low" in _v["tldr"], _v)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Vitamin D stops colds.",
+                            evidence=["Vitamin D cut colds (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Vitamin D stops colds", _MEASLES, "(vitamin d) AND (colds)")
+t("  and so does the one-group downgrade",
+  _v["verdict"] == "complicated" and "Every study behind this" in _v["explanation"]
+  and not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], "", "Vitamin D stops colds"), _v)
+fg.models.script = [Resp(VJ("false", [1, 2], tldr=_NO_TLDR,
+                            explanation="The claim is true for some children (Study 1). Sugar did not change behaviour (Study 2).",
+                            evidence=["Sugar did not change behaviour (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("  an explanation sentence that rules against an agreed answer is the one that goes",
+  _v["verdict"] == "false" and "The claim is true" not in _v["explanation"]
+  and "did not change behaviour" in _v["explanation"], _v)
+
 
 # ---- accuracy round 3 (apple cider vinegar "cures" diabetes) -------------------
 _ACV = [_study("A1", "Apple cider vinegar and glycemic control in type 2 diabetes: a meta-analysis",
