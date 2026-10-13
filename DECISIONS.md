@@ -59,6 +59,25 @@ answer resting on nothing else still reaches "Not enough evidence" by
 the existing route, which says "only animal or lab studies", rather
 than the vaguer "nothing cited".
 
+**The line under the chart says what the evidence shows about the
+claim.** It ended "the strongest is a systematic review, so the
+evidence is strong", which is about the designs: printed under "Likely
+false" it read as strong evidence for the cure. It now reads "Read 8
+studies from PubMed and relied on 5, the strongest a systematic review.
+Strong evidence of a partial effect, not a cure." The level word still
+comes from the designs used, as the meter's legend says, and drops to
+"Low certainty" when `certainty_cap` would; what follows says what that
+evidence is evidence of, from facts the page already has: the stamp,
+the effect's size label, the claim's promise, the one group
+(`evidence.evidence_line`). Worded on the server and sent as
+`evidence_line`, so it costs no call and a streamed check and a shared
+link cannot disagree; a result saved on a device before it existed says
+"Strong study designs", which is all the old word measured. The legend
+gains "Low certainty" and one line: strong evidence of a small effect is
+not strong evidence for a cure. A model-written phrase ("a small drop in
+blood sugar") was considered and not taken: it needs a new schema field
+on every call, and the user's own example is the generic form.
+
 **Figures are rounded for reading, and keep their unit.** The page
 printed "decreased by 21.929 mg/dL" and "HbA1c decreased by 1.53". The
 gate compares digits to digits, so the model is told never to round;

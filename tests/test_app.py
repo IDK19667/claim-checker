@@ -2182,6 +2182,36 @@ t("  the API marks it, and the page and the script both group it as background",
   and "Background only: animal and lab studies" in (ROOT / "static" / "app.js").read_text(), _d["studies"])
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
+# 3. The line under the chart says what the evidence shows about the claim,
+# not how strong the designs were. "So the evidence is strong" under "Likely
+# false" read as strong evidence for the cure.
+_el = evidence.evidence_line
+t("the evidence line says what the evidence is evidence of",
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence of a partial effect, not a cure"
+  and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
+  and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
+  == "Strong evidence for this claim, a moderate effect"
+  and _el("false", _ACV, ["A1"], "Vinegar raises blood sugar") == "Strong evidence against this claim"
+  and _el("complicated", _ACV, ["A1"], "Vinegar lowers blood sugar in diabetes", "small")
+  == "Strong evidence of a small effect, but no plain yes or no")
+t("  it names the one group, says low certainty, and is empty with nothing used",
+  _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
+  and _el("complicated", [_study("L1", "Pilot trial of vinegar", abstract="A pilot trial in 12 adults.")],
+          ["L1"], "Vinegar lowers blood sugar").startswith("Low certainty evidence")
+  and _el("insufficient", _ACV, [], _ACV_CLAIM) == "" and _el("false", _ACV, [], _ACV_CLAIM) == "")
+_rec = (ROOT / "static" / "app.js").read_text().split("function recordSentence")[1].split("\nfunction ")[0]
+t("  the record line prints it, and no longer calls the designs 'the evidence'",
+  "data.evidence_line" in (ROOT / "static" / "app.js").read_text()
+  and "the evidence is <mark>" not in _rec and "escapeHtml(line)" in _rec)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _ACV]
+fg.models.script = [Resp("(vinegar) AND (diabetes)"),
+                    Resp(VJ("complicated", [1, 2], tldr=_ACV_TLDR,
+                            evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
+_d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
+t("  a real check carries it in the payload, under the 'Likely false' it explains",
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence of a partial effect, not a cure", _d)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
 # 4. Figures are rounded for reading after the gate has checked them, and a
 # measured change keeps its unit, or says it never had one.
 _ACV_ABS = ("RESULTS: ACV significantly reduced fasting blood sugar (FBS) (WMD: -21.929 mg/dL, "

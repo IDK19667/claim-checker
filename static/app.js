@@ -426,16 +426,21 @@ function linkStudyRefs(text, count) {
   });
 }
 
-// What was read and relied on, as one sentence. The evidence word is
-// highlighted, the way you'd mark the line that matters on a printout.
-function recordSentence(n, cited, ev, best) {
+// What was read and relied on, as one sentence, then what that evidence
+// shows about the claim, highlighted the way you'd mark the line that
+// matters on a printout. The line is worded on the server
+// (evidence.evidence_line): "Strong evidence of a partial effect, not a
+// cure". A result saved on this device before it existed names the designs
+// instead, which is all the level word ever measured.
+function recordSentence(n, cited, ev, best, line) {
   const what = `<button type="button" class="what link-btn" id="meter">What does this mean?</button>`;
   if (!n) return `Found nothing on PubMed that matched well enough to weigh. <mark>No direct evidence</mark> either way. ${what}`;
   const read = `Read ${n} ${n === 1 ? "study" : "studies"} from PubMed`;
   if (!cited || ev.level === 0) return `${read}, but none of them actually tests this claim, so there's <mark>no direct evidence</mark> either way. ${what}`;
   const ti = best ? typeInfo(best.publication_types) : null;
-  const strongest = ti && ti.label !== DEFAULT_TYPE[0] ? ` The strongest is a ${ti.label.toLowerCase()}, so` : " So";
-  return `${read} and relied on ${cited}.${strongest} the evidence is <mark>${ev.label.toLowerCase()}</mark>. ${what}`;
+  const strongest = ti && ti.label !== DEFAULT_TYPE[0] ? `, the strongest a ${ti.label.toLowerCase()}` : "";
+  const said = line ? escapeHtml(line) : `${ev.label} study designs`;
+  return `${read} and relied on ${cited}${strongest}. <mark>${said}.</mark> ${what}`;
 }
 
 function fmtDate(iso) {
@@ -708,7 +713,7 @@ function renderResult(data) {
   const n = data.studies.length;
   const cited = data.studies.filter((s) => s.cited_in_verdict).length;
   const ev = evidenceLevel(data.studies);
-  $("record").innerHTML = recordSentence(n, cited, ev, strongestCited(data.studies));
+  $("record").innerHTML = recordSentence(n, cited, ev, strongestCited(data.studies), data.evidence_line);
 
   const note = $("cached-note");
   note.hidden = !(data.cached || data.restored);

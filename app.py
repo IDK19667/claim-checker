@@ -599,6 +599,14 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # Counts the reader can check us on, computed from PubMed's own
         # metadata rather than from anything the model said.
         "evidence": evidence.snapshot(studies, cited),
+        # What that evidence shows about the claim, for the line under the
+        # chart: "Strong evidence of a partial effect, not a cure". The level
+        # word alone described the designs, not the claim.
+        "evidence_line": evidence.evidence_line(
+            verdict_value, studies, cited, claim,
+            ((breakdown or {}).get("effect") or {}).get("label"),
+            breakdown_mod.absolute_claim(claim),
+            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or ""))),
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),

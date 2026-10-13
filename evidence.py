@@ -834,6 +834,81 @@ def snapshot(studies, cited_pmids=()) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# What the evidence shows about the claim
+#
+# The line under the chart used to end "so the evidence is strong". That was
+# about the designs, not the claim: two meta-analyses showing that apple
+# cider vinegar lowers blood sugar a little are strong evidence that it does
+# not cure diabetes, and "strong" printed beside "Likely false" read as
+# strong evidence for the cure. The level word still comes from the designs
+# that were used (the meter's legend explains it), but the line now says
+# what that evidence is evidence of: "Strong evidence of a partial effect,
+# not a cure". Built here from facts the page already has (the stamp, the
+# size of the effect, the claim's own words), so it costs no model call and
+# a streamed check and a shared link cannot word it differently.
+# ---------------------------------------------------------------------------
+
+# What an absolute claim promises, as a noun for "not ...".
+_PROMISES = [
+    (re.compile(r"cur", re.IGNORECASE), "a cure"),
+    (re.compile(r"revers", re.IGNORECASE), "a reversal"),
+    (re.compile(r"prevent|protect|block", re.IGNORECASE), "complete prevention"),
+    (re.compile(r"stop", re.IGNORECASE), "a complete stop"),
+    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "getting rid of it"),
+    (re.compile(r"heal|fix", re.IGNORECASE), "a full fix"),
+]
+
+
+def level_word(studies, cited_pmids=()) -> str:
+    """Strong, Moderate or Weak, from the designs of the studies used; ""
+    when none were used. The same rule as the meter's legend."""
+    cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
+    if not cited:
+        return ""
+    tiers = {classify(s.get("publication_types")) for s in cited}
+    if "strong" in tiers:
+        return "Strong"
+    if "moderate" in tiers:
+        return "Moderate"
+    return "Weak"
+
+
+def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
+                  effect_label: str | None = None, absolute: str = "",
+                  comparative: bool = False) -> str:
+    """
+    What the evidence used shows about the claim, as one short line with no
+    full stop, or "" when nothing was used (the page says "no direct
+    evidence" there). `absolute` is the claim's promise ("cure"), from
+    breakdown.absolute_claim; `effect_label` is the breakdown's size label.
+    """
+    level = level_word(studies, cited_pmids)
+    if not level or verdict not in ("true", "false", "complicated"):
+        return ""
+    if certainty_cap(studies, cited_pmids, comparative):
+        level = "Low certainty"
+    size = effect_label if effect_label in ("small", "moderate", "large") else ""
+    promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
+                   "what the claim promises") if absolute else ""
+    if verdict == "true":
+        return f"{level} evidence for this claim" + (f", a {size} effect" if size else "")
+    if verdict == "false":
+        if effect_label == "none":
+            return f"{level} evidence of no clear effect"
+        if absolute:
+            return f"{level} evidence of a {size or 'partial'} effect, not {promise}"
+        return f"{level} evidence against this claim"
+    narrow = narrow_populations(studies, cited_pmids)
+    if narrow and narrow_only(studies, cited_pmids, claim):
+        return f"{level} evidence, but only in {', '.join(narrow)}"
+    if effect_label == "none":
+        return f"{level} evidence of no clear effect, but no plain yes or no"
+    if size:
+        return f"{level} evidence of a {size} effect, but no plain yes or no"
+    return f"{level} evidence, but no plain yes or no"
+
+
+# ---------------------------------------------------------------------------
 # The chart's own words
 #
 # The evidence chart prints three sentences the reader can check: what it is
