@@ -116,6 +116,43 @@ shown", while calling a finding unclear ("it is unclear whether the
 effect matters") is still a hedge. "Not clearly" and "for most people"
 now hedge, so a qualified no stays mixed.
 
+Two more found by the live run, both on the vinegar page. The model
+wrote "HbA1c decreased by 1.53 percent", supplying a unit the abstract
+never printed, so a unit beside a figure that the abstracts print only
+bare now counts as missing (`breakdown._model_unit`) and the clause
+goes the same way. And "none of these trials show that apple cider
+vinegar can cure diabetes" was softened to "can help with diabetes",
+the opposite of the sentence before it: the rule that weakens "cures"
+looked only four words back for a "not". Inside "no evidence that",
+"none show that", "did not find that" and their relatives, the strong
+verb is what was not found, so it now stays (`_NEGATED_FINDING`).
+
+The runs. Claim 9, three times, 30 seconds apart: "Likely false" all
+three, the short answer word for word the same in two and one word
+apart in the third ("food" against "food intake"); a fourth time in the
+full run, also "Likely false", worded "is not a strict rule for
+everyone". Before the second reading and the seed, the same triple run
+gave "It's complicated", "Likely true", "Likely true". The full 21, 30
+seconds apart: 18 on the expected verdict, 3 on an accepted second
+choice (red wine, melatonin and cold showers all "It's complicated"),
+none wrong, against 16, 3 and 2 in the run before (claims 9 and 13 were
+wrong). Seven claims hit a Google outage (503, "overloaded") in the
+middle of the run; each got the app's defined error, and all seven
+were run again once it passed. Eggs no longer shows the stock line: its
+short answer is its own words ("do not clearly raise heart disease risk
+overall, but some large studies link higher intake to higher risk").
+Red wine's short answer now says lifestyle likely explains much of the
+benefit. Cold showers stays "It's complicated": its short answer is
+itself a hedge ("may alter immune markers, but it is not clear they
+actually boost immunity"), the second reading calls it mixed, and the
+three studies are human studies of immune markers, so the hedge fits;
+in the run before, the stamp contradicted words that said nothing was
+tested. One thing is worse, and it is the model's: the measles answer
+reads "Vaccines successfully lowers the risk of measles and lower the
+risk of severe illness", a grammar slip no rule here catches. The
+regression script's CONFLICT column still uses the code screen alone,
+so it flags claims 9 and 17 although the second reading cleared them.
+
 ## 2026-10-12: Apple cider vinegar does not cure diabetes
 
 The live check of "Apple cider vinegar cure diabetes" was stamped "It's
