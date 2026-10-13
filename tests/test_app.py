@@ -709,6 +709,15 @@ t("  and under a 'not' it leaves the verb alone, since weakening it there would 
   and breakdown.soften("Zinc never prevents colds, but it cures boredom.")
   == "Zinc never prevents colds, but it helps with boredom.",
   breakdown.soften("Zinc never prevents colds, but it cures boredom."))
+t("  and inside 'none show that', 'did not find that' or 'little evidence that', however far back",
+  breakdown.soften("But none of these trials show that apple cider vinegar can cure diabetes.")
+  == "But none of these trials show that apple cider vinegar can cure diabetes."
+  and breakdown.soften("The trial did not find that daily garlic capsules prevent colds.")
+  == "The trial did not find that daily garlic capsules prevent colds."
+  and breakdown.soften("There is little evidence that drinking green tea every day cures anything.")
+  == "There is little evidence that drinking green tea every day cures anything."
+  and breakdown.soften("No side effects were seen, and vinegar cures diabetes.")
+  == "No side effects were seen, and vinegar helps with diabetes.")
 t("grounding: a breakdown with nothing left in it is no breakdown at all",
   breakdown.ground({"parts": [], "evidence": ["no citation here"], "effect_size": "",
                     "strength": "", "applies_to": "", "not_applies_to": "",

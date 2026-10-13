@@ -984,7 +984,7 @@ def off_claim(tldr: str, claim: str) -> list[str]:
 # that contradicted "helps with some cancers" in the same takeaway. So a
 # verb with a negation in the few words before it is left as written, the
 # same way match_effect() leaves a sentence with "no" or "not" in it alone.
-_NEGATION_BEFORE = re.compile(r"\b(?:not|never|no|nothing|neither|nor|cannot|without|"
+_NEGATION_BEFORE = re.compile(r"\b(?:not|never|no|none|nothing|neither|nor|cannot|without|"
                               r"fails?|failed|rather than|short of|far from|instead of)\b"
                               r"|n't\b", re.IGNORECASE)
 # "Cure" the noun is not a promise. "Modest control rather than a full cure"
@@ -996,10 +996,25 @@ _CURE_NOUN_BEFORE = re.compile(
     r"permanent|definitive|outright|possible|potential)\s*$", re.IGNORECASE)
 
 
+# A negation that governs what was shown, further back than four words:
+# "none of these trials show that apple cider vinegar can cure diabetes"
+# became "can help with diabetes", which says the opposite of the
+# sentence before it. Inside "no evidence that", "did not find that" and
+# their relatives, the strong verb is what was not found, and weakening it
+# turns a denial into a claim.
+_NEGATED_FINDING = re.compile(
+    r"(?:\b(?:not|never|no|none|nothing|neither|nor|little|lack)\b|n't\b)[^.;:]*?"
+    r"\b(?:show|shows|showed|shown|prove|proves|proved|proven|find|finds|found|"
+    r"evidence|suggest|suggests|suggested|support|supports|supported|tested|test|tests)\b",
+    re.IGNORECASE)
+
+
 def _soften_unless_negated(weaker):
     def swap(m: re.Match) -> str:
         head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
-        if _NEGATION_BEFORE.search(" ".join(head.split()[-4:])):
+        clause = re.split(r",\s+(?:and|but|so|while|yet)\s+", head)[-1]
+        if (_NEGATION_BEFORE.search(" ".join(head.split()[-4:]))
+                or _NEGATED_FINDING.search(clause)):
             return m.group(0)
         if (m.group(0).lower().startswith("cure")
                 and (_CURE_NOUN_BEFORE.search(head)
