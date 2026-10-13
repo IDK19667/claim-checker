@@ -49,7 +49,8 @@ for k, item in enumerate(spec):
            "query": d.get("search_query_used"),
            "studies": [{"pmid": s.get("pmid"), "year": s.get("year"), "title": s.get("title"),
                         "type_label": s.get("type_label"), "cited": s.get("cited_in_verdict"),
-                        "off_topic": s.get("off_topic")} for s in studies],
+                        "off_topic": s.get("off_topic"), "background": s.get("background")}
+                       for s in studies],
            "body": None if r.status_code == 200 else d}
     if fh:
         fh.write(json.dumps(rec) + "\n"); fh.flush()
