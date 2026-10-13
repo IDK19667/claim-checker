@@ -2252,6 +2252,15 @@ t("  an interval is rounded without 'about', and a range carries its unit once",
   == "FBS fell about 22 mg/dL (95% CI 29 to 15) (Study 1)."
   and _fr("Glucose fell between 12.345 and 30.555 mg/dL (Study 1).", _ACV_R)
   == "Glucose fell between about 12 and 31 mg/dL (Study 1).")
+t("  one range, one precision: both ends round alike, but two separate figures do not",
+  _fr("Sleep came 17.19 min sooner (95% CI -27.19 to -7.44, p = 0.0006) (Study 1).", _ACV_R)
+  == "Sleep came about 17 min sooner (95% CI -27 to -7, p = 0.0006) (Study 1)."
+  and _fr("It took between 7.44 and 27.19 minutes (Study 1).", _ACV_R)
+  == "It took between about 7 and 27 minutes (Study 1)."
+  and _fr("Odds ratio 0.88 (95% CI 0.81 to 0.96) (Study 1).", _ACV_R)
+  == "Odds ratio 0.88 (95% CI 0.81 to 0.96) (Study 1)."
+  and _fr("Weight fell by 2.35 and 12.67 kg in two groups (Study 1).", _ACV_R)
+  == "Weight fell by 2.35 and 13 kg in two groups (Study 1).")
 _once = _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 (Study 1).", _ACV_R)
 t("  and reading it twice changes nothing", _fr(_once, _ACV_R) == _once, _once)
 fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="It lowers blood sugar a little.",

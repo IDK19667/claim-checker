@@ -1722,6 +1722,12 @@ _CI_BEFORE = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval|\b9
 _ABOUT_BEFORE = re.compile(r"(?:\b(?:about|around|roughly|approximately|nearly|almost|"
                            r"some|over|under|more than|less than)|~)\s*$", re.IGNORECASE)
 _RANGE_JOIN = re.compile(r"\s*(?:to|and|or|,|-|\u2013)\s*")
+# The two ends of one range: "27.19 to 7.44", or "-29.15, -14.71" inside a
+# confidence interval. Both ends are printed to the same precision.
+# "between 7.44 and 27.19" too, but a bare "and" joins two separate figures.
+_PAIR_JOIN = re.compile(r"\s*(?:to|-|\u2013|(,)|(and))\s*")
+_PAIR_NEXT = re.compile(r"\s*(?:to|-|\u2013|(,)|(and))\s*([-\u2212]?\d+(?:\.\d+)?)(?![\d])")
+_BETWEEN_BEFORE = re.compile(r"\bbetween\s+(?:about\s+)?$", re.IGNORECASE)
 _RANGE_UNIT = re.compile(r"\s*(?:to|and|or|-|\u2013)\s*[-\u2212]?\d+(?:\.\d+)?\s*" + _UNIT,
                          re.IGNORECASE)
 _UNIT_CASE = {"mg/dl": "mg/dL", "mmol/l": "mmol/L", "mmhg": "mmHg", "mm hg": "mmHg",
@@ -1746,6 +1752,12 @@ def _rounded(figure: str):
     # Two significant figures: 0.0345 is 0.035, 0.123 is 0.12.
     place = Decimal(1).scaleb(value.adjusted() - 1)
     return sign + format(value.quantize(place, ROUND_HALF_UP), "f"), False
+
+
+def _to_whole(figure: str) -> bool:
+    """Whether _rounded makes this figure a whole number."""
+    r = _rounded(figure)
+    return bool(r and r[1])
 
 
 def _unit_in(figure: str, abstracts: str) -> str | None:
@@ -1778,16 +1790,29 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
     abstracts = " ".join(str(s.get("abstract") or "") for s in studies or [])
     refs_at = [m.span() for m in _REF.finditer(text)]
     prev_end = [None]
+    prev_whole = [False]
+    prev_between = [False]
 
     def fix(m: re.Match) -> str:
         a = m.start(1)
         figure, unit = m.group(1), m.group(2) or ""
         before = text[max(0, a - 40):a]
-        joined = prev_end[0] is not None and bool(_RANGE_JOIN.fullmatch(text[prev_end[0]:a]))
+        gap = text[prev_end[0]:a] if prev_end[0] is not None else None
+        joined = gap is not None and bool(_RANGE_JOIN.fullmatch(gap))
         prev_end[0] = m.end()
+        was_whole, prev_whole[0] = prev_whole[0], False
+        was_between = prev_between[0]
+        prev_between[0] = bool(_BETWEEN_BEFORE.search(before))
         if any(x <= a < y for x, y in refs_at) or _P_BEFORE.search(before):
             return m.group(0)
         in_ci = bool(_CI_BEFORE.search(text[max(0, a - 30):a]))
+        pair = gap is not None and _PAIR_JOIN.fullmatch(gap)
+        nxt = _PAIR_NEXT.match(text, m.end())
+        partner_whole = (
+            (pair and (in_ci or not pair.group(1)) and (was_between or not pair.group(2))
+             and was_whole)
+            or (nxt and (in_ci or not nxt.group(1)) and (prev_between[0] or not nxt.group(2))
+                and _to_whole(nxt.group(3))))
         change = _CHANGE_BEFORE.search(before)
         near = _MEASURE.search(" ".join(text[max(0, a - 90):a].split()[-9:]))
         note = ""
@@ -1809,6 +1834,12 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
                     note = " " + NO_UNIT
         new = figure
         r = _rounded(figure)
+        if (not (r and r[1]) and partner_whole and "." in figure
+                and Decimal(figure.lstrip("-\u2212")) >= 1):
+            # "-27 to -7.44" reads as two kinds of figure. One range, one precision.
+            r = figure[:1].strip("0123456789") + str(
+                Decimal(figure.lstrip("-\u2212")).quantize(Decimal(1), ROUND_HALF_UP)), True
+        prev_whole[0] = bool(r and r[1])
         if r:
             new, approx = r
             if approx and not in_ci and not joined and not _ABOUT_BEFORE.search(before):
