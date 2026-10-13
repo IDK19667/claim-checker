@@ -78,6 +78,23 @@ complicated" (`certainty_cap`), and the line under the chart says "Low
 certainty" unless the stamp is "Likely false", which the review
 supports.
 
+**A figure with no unit is left out, not marked.** The vinegar page
+printed "HbA1c by 1.53 (no unit given)". A reader cannot use a number
+with no unit, so `breakdown.drop_unitless` now takes it out: when a
+figure with its unit comes earlier in the same sentence, only the clause
+carrying the bare one goes, with its interval ("fell by about 22 mg/dL
+and HbA1c by 1.53" keeps "fell by about 22 mg/dL"); otherwise the
+sentence goes. A field left with nothing says "The size of this change
+is given without a unit, so it is left out here." This reverses the
+"(no unit given)" marker in the entry below. The abstract itself, shown
+under each study, is source text and is left as printed. The evidence
+certainty rating was not added: the review's abstract gives none, and
+its full text grades per outcome ("moderate" for fasting blood sugar,
+"low" for HbA1c), in prose whose wording varies from paper to paper.
+Reading that reliably would mean fetching and parsing full text for
+each review, for a line that would be wrong whenever the parse is, so
+the page stays correct without it.
+
 Three readings were wrong and are fixed, in general, not for these
 claims: the answer to "A, so B" is the conclusion B ("needs vary by
 person, so eight glasses is not a hard rule" is a no); a number is one

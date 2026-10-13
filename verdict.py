@@ -1350,16 +1350,23 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # Last, and only now that every gate above has checked each figure
     # against the abstract that printed it: figures are rounded for reading
     # and a measured change gets its unit back (breakdown.for_reading).
+    # A figure no abstract gave a unit for is left out, and a field that was
+    # nothing but that figure says so rather than going blank.
     readable = lambda text: breakdown.for_reading(text, studies)
+    left_out = breakdown.UNITLESS_LEFT_OUT
     tldr, explanation, still_open = readable(tldr), readable(explanation), readable(still_open)
+    if not explanation:
+        explanation = left_out
+    if not tldr:
+        tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
     if deeper is not None:
         for key in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):
             if deeper.get(key):
-                deeper[key] = readable(deeper[key])
-        deeper["evidence"] = [readable(t) for t in deeper.get("evidence") or []]
-        deeper["says"] = [readable(t) for t in deeper.get("says") or []]
+                deeper[key] = readable(deeper[key]) or (left_out if key == "effect_size" else "")
+        deeper["evidence"] = [x for x in (readable(t) for t in deeper.get("evidence") or []) if x]
+        deeper["says"] = [x for x in (readable(t) for t in deeper.get("says") or []) if x]
         for part in deeper.get("parts") or []:
-            part["assessment"] = readable(part.get("assessment"))
+            part["assessment"] = readable(part.get("assessment")) or left_out
 
     return {
         "verdict": verdict,

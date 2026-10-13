@@ -1758,10 +1758,11 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | N
 # the gate has passed the sentence, so the gate still checks the figure the
 # abstract printed and the reader gets "about 22 mg/dL". The same pass puts
 # back a unit the model dropped, copied from the abstract that printed the
-# figure. When the abstract never gave one, the sentence says so rather
-# than guess: a review of apple cider vinegar reported HbA1c as "-1.53"
-# with no unit at all, and its own table called it mg/dL, which HbA1c
-# never is.
+# figure. When the abstract never gave one, the figure is left out rather
+# than guessed or printed bare: a review of apple cider vinegar reported
+# HbA1c as "-1.53" with no unit at all, and its own table called it mg/dL,
+# which HbA1c never is. A reader cannot use a number with no unit, so the
+# clause that carries it goes, or its sentence when that is all it says.
 # ---------------------------------------------------------------------
 
 # Measures whose figures mean nothing without a unit. Read in the few words
@@ -1781,7 +1782,7 @@ _FIGURE_UNIT = re.compile(r"(?<![\w.])([-\u2212]?\d+(?:\.\d+)?)(?![\d])(\s*" + _
 # What may follow a figure that has lost its unit. Anything else after it
 # ("4 trials", "319 people", "eight weeks") makes the figure a count.
 _AFTER_BARE = re.compile(
-    r"\s*(?:$|[).,;:]|\((?!no unit)|(?:in|and|or|among|after|over|for|with|compared|"
+    r"\s*(?:$|[).,;:]|\(|(?:in|and|or|among|after|over|for|with|compared|"
     r"versus|vs|than|from|to|at|on|when|while|but|across|between|overall)\b)",
     re.IGNORECASE)
 # A figure is a change when it follows "by", "of" or a difference. Only a
@@ -1810,7 +1811,17 @@ _RANGE_UNIT = re.compile(r"\s*(?:to|and|or|-|\u2013)\s*[-\u2212]?\d+(?:\.\d+)?\s
 _UNIT_CASE = {"mg/dl": "mg/dL", "mmol/l": "mmol/L", "mmhg": "mmHg", "mm hg": "mmHg",
               "g/dl": "g/dL", "kg/m2": "kg/m\u00b2", "mmol/mol": "mmol/mol",
               "\u03bcu/ml": "\u03bcU/mL", "\u00b5u/ml": "\u00b5U/mL", "ml": "mL"}
-NO_UNIT = "(no unit given)"
+# Where for_reading found a measured change no abstract gave a unit for.
+# Never printed: drop_unitless takes the figure out at each one.
+_NO_UNIT = "\x00"
+# What joins a clause to the one before it, and an interval that belongs to
+# the figure just dropped.
+_CLAUSE_JOIN = re.compile(r"(?:\s*,\s*and|\s*,|\s*;|\s+and|\s+while|\s+whereas|\s+but)\s+",
+                          re.IGNORECASE)
+_TRAILING_CI = re.compile(r"\s*\((?:[^()]*?\b(?:CI|confidence interval)\b)[^()]*\)",
+                          re.IGNORECASE)
+_FIGURE_WITH_UNIT = re.compile(r"\d\s*" + _UNIT, re.IGNORECASE)
+UNITLESS_LEFT_OUT = "The size of this change is given without a unit, so it is left out here."
 
 
 def _rounded(figure: str):
@@ -1857,10 +1868,10 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
     """
     Round the figures in prose that has passed the gate, and give a measured
     change its unit. "Fasting blood sugar fell by 21.929 mg/dL and HbA1c by
-    1.53" becomes "fell by about 22 mg/dL and HbA1c by 1.53 (no unit given)"
-    when no abstract printed a unit for 1.53, and a change in HbA1c printed
-    in % is said in percentage points, which is what it is. Study numbers,
-    p-values, counts and years are never touched.
+    1.53" becomes "fell by about 22 mg/dL" when no abstract printed a unit
+    for 1.53 (drop_unitless), and a change in HbA1c printed in % is said in
+    percentage points, which is what it is. Study numbers, p-values, counts
+    and years are never touched.
     """
     if not text or not re.search(r"\d", text):
         return text or ""
@@ -1908,7 +1919,7 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
                 elif found:
                     note = " " + _UNIT_CASE.get(found.lower(), found)
                 elif found is None:
-                    note = " " + NO_UNIT
+                    note = _NO_UNIT
         new = figure
         r = _rounded(figure)
         if (not (r and r[1]) and partner_whole and "." in figure
@@ -1923,7 +1934,40 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
                 new = "about " + new
         return new + unit + note
 
-    return _FIGURE_UNIT.sub(fix, text)
+    return drop_unitless(_FIGURE_UNIT.sub(fix, text))
+
+
+def drop_unitless(text: str) -> str:
+    """
+    Take out each figure for_reading marked as having no unit. When a figure
+    with its unit comes earlier in the same sentence, only the clause that
+    carries the bare one goes: "fell by about 22 mg/dL and HbA1c by 1.53"
+    keeps "fell by about 22 mg/dL". Otherwise the sentence goes. "" when
+    nothing is left.
+    """
+    if _NO_UNIT not in (text or ""):
+        return text or ""
+    kept = []
+    for sent in sentences(text):
+        while _NO_UNIT in sent:
+            mark = sent.index(_NO_UNIT)
+            start = mark
+            while start and (sent[start - 1].isdigit() or sent[start - 1] in ".-\u2212"):
+                start -= 1
+            joins = [m for m in _CLAUSE_JOIN.finditer(sent, 0, start)
+                     if _FIGURE_WITH_UNIT.search(sent[:m.start()])]
+            if not joins:
+                sent = ""
+                break
+            end = mark + len(_NO_UNIT)
+            ci = _TRAILING_CI.match(sent, end)
+            if ci:
+                end = ci.end()
+            sent = sent[:joins[-1].start()] + sent[end:]
+        sent = re.sub(r"\s+([.,;)])", r"\1", " ".join(sent.split()))
+        if sent:
+            kept.append(sent)
+    return " ".join(kept)
 
 
 # ---------------------------------------------------------------------

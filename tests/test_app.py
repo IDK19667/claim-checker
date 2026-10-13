@@ -2425,9 +2425,21 @@ _ACV_ABS = ("RESULTS: ACV significantly reduced fasting blood sugar (FBS) (WMD: 
             "p = 0.008) and increased insulin (WMD: 2.059 \u03bcu/ml). Seven studies, 319 people.")
 _ACV_R = [dict(_ACV[0], abstract=_ACV_ABS)] + _ACV[1:]
 _fr = breakdown.for_reading
-t("a figure with three decimals is rounded, and an HbA1c change with no unit says so",
+t("a figure with three decimals is rounded, and an HbA1c change with no unit is left out",
   _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 in adults (Study 1).", _ACV_R)
-  == "Fasting blood sugar fell by about 22 mg/dL and HbA1c fell by 1.53 (no unit given) in adults (Study 1).")
+  == "Fasting blood sugar fell by about 22 mg/dL in adults (Study 1).")
+t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its interval",
+  _fr("Study 1 showed drops in fasting blood sugar with a weighted mean difference of -21.929 mg/dL "
+      "and HbA1c with -1.53.", _ACV_R)
+  == "Study 1 showed drops in fasting blood sugar with a weighted mean difference of about -22 mg/dL."
+  and _fr("Fasting blood sugar was reduced by -21.929 mg/dL (95% CI: -29.19, -14.67) (Study 1). HbA1c "
+          "was reduced by a weighted mean difference of -1.53 (95% CI: -2.65, -0.41) (Study 1).", _ACV_R)
+  == "Fasting blood sugar was reduced by about -22 mg/dL (95% CI: -29, -15) (Study 1)."
+  and _fr("In Study 1, fasting blood sugar fell by 21.929 mg/dL, and HbA1c fell by 1.53 "
+          "(95% CI -2.65 to -0.41).", _ACV_R) == "In Study 1, fasting blood sugar fell by about 22 mg/dL.")
+t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure to keep",
+  _fr("In Study 1, HbA1c fell by 1.53. It helps a bit.", _ACV_R) == "It helps a bit."
+  and _fr("HbA1c fell by 1.53 (Study 1).", _ACV_R) == "")
 t("  a unit the model dropped is put back from the abstract",
   _fr("Insulin rose by 2.059 (Study 1).", _ACV_R) == "Insulin rose by 2.06 \u03bcU/mL (Study 1).")
 t("  an HbA1c change in % is said in percentage points; a level in % is left alone",
@@ -2460,9 +2472,21 @@ _v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) f
                             "(vinegar) AND (blood sugar)")
 _bd = _v["breakdown"] or {}
 t("  a real verdict prints the rounded figure everywhere, after the gate kept it",
-  "about 22 mg/dL" in _bd.get("effect_size", "") and "1.53 (no unit given)" in _bd.get("effect_size", "")
+  "about 22 mg/dL" in _bd.get("effect_size", "") and "1.53" not in _bd.get("effect_size", "")
   and not any("21.929" in x for x in [_bd.get("effect_size", "")] + _bd.get("evidence", []) + _bd.get("says", [])),
   _bd)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="It lowers blood sugar a little.",
+                            effect_size="HbA1c fell by 1.53 (Study 1).",
+                            evidence=["HbA1c fell by 1.53 (Study 1).", "Vinegar lowered fasting blood sugar (Study 2)."]))]
+_v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV_R],
+                            "(vinegar) AND (blood sugar)")
+_bd = _v["breakdown"] or {}
+_seen = " ".join([_v["tldr"], _v["explanation"], _v["still_open"], _bd.get("effect_size", "")]
+                 + _bd.get("evidence", []) + _bd.get("says", []))
+t("  no unitless figure reaches the page; a field that was only that says it is left out",
+  "1.53" not in _seen and "no unit given" not in _seen and "\x00" not in _seen
+  and _bd.get("effect_size") == breakdown.UNITLESS_LEFT_OUT
+  and _bd.get("evidence") == ["Vinegar lowered fasting blood sugar (Study 2)."], _bd)
 t("  and the footnote says figures are rounded",
   "rounded for reading" in (ROOT / "templates" / "index.html").read_text()
   and "rounded for reading" in (ROOT / "static" / "app.js").read_text())
