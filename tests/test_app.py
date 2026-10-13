@@ -2098,6 +2098,8 @@ _n0 = fg.models.calls
 P("Salt raises blood pressure in everyone", ip="9.9.4.1")
 t("the search call asks for temperature 0",
   fg.models.configs[_n0].get("temperature") == 0, fg.models.configs[_n0:])
+t("  and so does the call that writes the verdict",
+  fg.models.configs[_n0 + 1].get("temperature") == 0, fg.models.configs[_n0:])
 t("  and the search is saved for the claim",
   db.get_cached_query("salt raises blood pressure in everyone.", verdict.QUERY_PROMPT_VERSION)
   == ("(salt) AND (blood pressure)", "", "Salt raises blood pressure in everyone"))

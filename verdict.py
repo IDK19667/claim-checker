@@ -153,7 +153,9 @@ def _anthropic_text(prompt: str, max_tokens: int, temperature: float | None = No
     return _anthropic_wrap(go)
 
 
-def _anthropic_json(prompt: str, schema: dict, max_tokens: int):
+def _anthropic_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
+    # `temperature` is accepted and ignored: thinking is on for this call,
+    # and the API refuses any temperature but the default while it is.
     client = _anthropic()
 
     def go():
@@ -237,19 +239,22 @@ def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None)
     return _gemini_wrap(go)
 
 
-def _gemini_json(prompt: str, schema: dict, max_tokens: int):
+def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
     client = _gemini()
+    config = {
+        "max_output_tokens": max_tokens,
+        "response_mime_type": "application/json",
+        "response_json_schema": schema,
+        "automatic_function_calling": {"disable": True},
+    }
+    if temperature is not None:
+        config["temperature"] = temperature
 
     def go():
         r = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config={
-                "max_output_tokens": max_tokens,
-                "response_mime_type": "application/json",
-                "response_json_schema": schema,
-                "automatic_function_calling": {"disable": True},
-            },
+            config=config,
         )
         text = (r.text or "").strip()
         finish = None
@@ -271,8 +276,9 @@ def _complete_text(prompt: str, max_tokens: int, temperature: float | None = Non
         prompt, max_tokens, temperature)
 
 
-def _complete_json(prompt: str, schema: dict, max_tokens: int):
-    return (_gemini_json if provider() == "gemini" else _anthropic_json)(prompt, schema, max_tokens)
+def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
+    return (_gemini_json if provider() == "gemini" else _anthropic_json)(
+        prompt, schema, max_tokens, temperature)
 
 
 # ---------------------------------------------------------------------
@@ -764,7 +770,9 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                           _subgroup_block(studies, claim))
     reported = evidence.conditions_reported(studies, claim)
 
-    raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000)
+    # Temperature 0, like the search: the same claim over the same studies
+    # should read the same way every time it is checked.
+    raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
     result = _read_verdict(raw, stop_note, studies, claim)
 
     # One retry, and only when the answer disagrees with itself. Dropping a
@@ -775,7 +783,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     faults = _faults(result, claim, reported)
     if faults:
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
-                                        VERDICT_SCHEMA, max_tokens=12000)
+                                        VERDICT_SCHEMA, max_tokens=12000, temperature=0)
         again = _read_verdict(raw, stop_note, studies, claim)
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,
