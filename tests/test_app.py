@@ -750,15 +750,48 @@ t("  the second search asks PubMed for the designs that settle claims",
 _seen = []
 def _fake_search(q, max_results=8):
     _seen.append(q)
+    if "systematic review OR meta-analysis)" in q:
+        return ["MAIN"]
     return ["REVIEW1", "REVIEW2"] if "[pt]" in q else ["POPULAR", "REVIEW1", "TAIL"]
 _real_search = pubmed.search_pubmed
 pubmed.search_pubmed = _fake_search
 _merged = pubmed.search_merged("q", max_results=8)
 pubmed.search_pubmed = _real_search
 t("  strong designs take the front of the merged list, with no duplicates",
-  _merged == ["REVIEW1", "REVIEW2", "POPULAR", "TAIL"], _merged)
-t("  and both searches really ran, the filtered one first",
-  len(_seen) == 2 and "[pt]" in _seen[0] and "[pt]" not in _seen[1])
+  _merged == ["MAIN", "REVIEW1", "REVIEW2", "POPULAR", "TAIL"], _merged)
+t("  and every search really ran, the review search first, then the filtered one",
+  len(_seen) == 3 and _seen[0] == "(q) AND (systematic review OR meta-analysis)"
+  and "[pt]" in _seen[1] and "[pt]" not in _seen[2], _seen)
+
+# Round 3, rule 6. The main review on a topic is found with the claim's own
+# words alone, not with every synonym ORed in.
+t("search: the review search uses the first, as-typed term of each group",
+  pubmed.review_query("(zinc OR zinc lozenges OR zinc acetate) AND (cold duration OR "
+                      "common cold OR upper respiratory infection)")
+  == "(zinc) AND (cold duration) AND (systematic review OR meta-analysis)",
+  pubmed.review_query("(zinc OR zinc lozenges) AND (cold duration OR common cold)"))
+t("  a query with one group still gets one, and an empty one does not",
+  pubmed.review_query("knuckle cracking") == "(knuckle cracking) AND (systematic review OR "
+  "meta-analysis)" and pubmed.review_query("") is None)
+_seen = []
+def _fake_search(q, max_results=8):
+    _seen.append((q, max_results))
+    if q.endswith("(systematic review OR meta-analysis)"):
+        return ["COCHRANE", "OTHER_SR", "THIRD_SR", "FOURTH_SR"][:max_results]
+    if "[pt]" in q:
+        return [f"PT{i}" for i in range(16)]
+    return [f"GEN{i}" for i in range(16)]
+pubmed.search_pubmed = _fake_search
+_merged = pubmed.search_merged("(sunscreen OR sunblock) AND (skin cancer OR melanoma)",
+                               max_results=8)
+pubmed.search_pubmed = _real_search
+t("  its top reviews lead the list, however many synonym searches find",
+  _merged[:3] == ["COCHRANE", "OTHER_SR", "THIRD_SR"] and "FOURTH_SR" not in _merged
+  and len(_merged) == 16, _merged)
+t("  and it is one extra search, asked for only the review slots",
+  sum(1 for q, _ in _seen if q.endswith("(systematic review OR meta-analysis)")) == 1
+  and ("(sunscreen) AND (skin cancer) AND (systematic review OR meta-analysis)",
+       pubmed.REVIEW_SLOTS) in _seen, _seen)
 t("  a third AND group is dropped, whatever the prompt asked for",
   verdict._two_groups("(vitamin D OR cholecalciferol) AND (cold OR flu) "
                       "AND (deficiency OR insufficiency)")
@@ -2060,7 +2093,7 @@ pubmed.search_pubmed = _fake_search
 _merged = pubmed.search_merged(_KQ, max_results=8)
 pubmed.search_pubmed = _real_search
 t("  and what the phrase search finds is always among the studies read",
-  "KNUCKLE1" in _merged and "KNUCKLE2" in _merged and len(_merged) == 16 and len(_seen) == 3, _merged)
+  "KNUCKLE1" in _merged and "KNUCKLE2" in _merged and len(_merged) == 16 and len(_seen) == 4, _merged)
 
 # ---- Before you trust a verdict: the home page's plain answers -----------
 import html as _html

@@ -31,8 +31,9 @@ EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 TIMEOUT = 15
 
 # NCBI allows 3 requests a second without a key, and answers 429 past it.
-# One check is now three calls in a row (two searches and a fetch), which
-# sits exactly on the limit, so they are spaced instead of raced. A lock,
+# One check is now five or six calls in a row (four searches and a fetch,
+# and a surrogate search when there is one), which is past the limit, so
+# they are spaced instead of raced. A lock,
 # because Flask serves checks on threads and the limit is per client.
 MIN_INTERVAL = 0.35
 _last_call = 0.0
@@ -352,26 +353,67 @@ def phrase_query(query: str) -> str | None:
     return " AND ".join("(" + " OR ".join(g) + ")" for g in [head] + split[1:])
 
 
+# How many places at the front of the list the review search may take. Three:
+# the main review on a topic is nearly always in PubMed's top three for its
+# own words, and more would let reviews of neighbouring questions crowd out
+# the trials.
+REVIEW_SLOTS = 3
+
+
+def review_query(query: str) -> str | None:
+    """
+    The claim's own words for its subject and its outcome, and nothing else,
+    asked for as a systematic review or meta-analysis: "(zinc) AND (common
+    cold) AND (systematic review OR meta-analysis)". None when the query has
+    no group to take a word from.
+
+    The search step lists the claim's own words first in each group, so the
+    first term of each is the claim as typed. The synonyms are left out on
+    purpose: the main review on a topic uses the topic's own words in its
+    title, and every synonym ORed in is another way for a review of
+    something else to outrank it. The words are not quoted and carry no
+    field tag, so PubMed still maps them to its own subject headings; and
+    the design words are words, not the [pt] filter, because a review only
+    gets its publication type once it has been indexed, which takes months,
+    and the newest review on a question is often the one that settles it.
+    """
+    groups = split_and(query or "")[:2]
+    heads = []
+    for g in groups:
+        terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
+        if terms:
+            heads.append(terms[0].strip("()"))
+    if not heads:
+        return None
+    return " AND ".join(f"({h})" for h in heads) + " AND (systematic review OR meta-analysis)"
+
+
 def search_merged(query: str, max_results: int = 8) -> list[str]:
     """
-    Two searches, one list. PubMed ranks by relevance alone, so a narrow
+    Four searches, one list. PubMed ranks by relevance alone, so a narrow
     trial in a convenient journal can crowd out the meta-analysis that
-    actually settles the question. The second search asks the index for
-    the strong designs only, and those take the front of the list.
+    actually settles the question. One search asks the index for the
+    strong designs only, and those take the front of the list; ahead of
+    them go the top few reviews found with the claim's own words alone
+    (review_query), because the strong-design search ORs in every synonym
+    and can still bury the one review the question is known by.
 
-    Both calls are esearch, which is free and needs no key, so this costs
+    Every call is esearch, which is free and needs no key, so this costs
     a check nothing but a few hundred milliseconds. Twice the asked-for
     number comes back, because the next step throws away the records that
     have nothing in them to read.
     """
     want = max_results * 2
+    asked = review_query(query)
+    reviews = search_pubmed(asked, max_results=REVIEW_SLOTS) if asked else []
     best = search_pubmed(best_evidence_query(query), max_results=want)
     # The phrase search sits between the two: it can only find papers that
     # name a term as written, so what it finds is about the claim.
     phrased = phrase_query(query)
     exact = search_pubmed(phrased, max_results=max_results) if phrased else []
     general = search_pubmed(query, max_results=want)
-    return list(dict.fromkeys(best[:max_results] + exact + best[max_results:] + general))[:want]
+    return list(dict.fromkeys(reviews[:REVIEW_SLOTS] + best[:max_results] + exact
+                              + best[max_results:] + general))[:want]
 
 
 def usable(studies: list[dict]) -> list[dict]:

@@ -4,6 +4,26 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-16: Accuracy round 3, seven patterns from the holdout test
+
+A holdout of 20 claims the code had never seen scored 14 of 20. The
+misses were not 6 separate bugs. They came from 7 patterns, and each is
+fixed below as a pattern. None of the 20 claims was added to
+`tests/regression_claims.json` or written into any rule, so the holdout
+stays a fair test. Every new test uses a made-up claim.
+
+**Search: the main review is searched for by name.** The strong-design
+search ORs in every synonym the search step wrote. That casts a wide net,
+and a wide net can bury the one review a question is known by. One more
+esearch now asks for the claim's own subject and outcome words (the
+first, as-typed term of each group) plus "systematic review OR
+meta-analysis", and its top 3 hits take the front of the list
+(`pubmed.review_query`, `REVIEW_SLOTS`). The design words are plain
+words, not PubMed's `[pt]` filter. A review only gets its publication
+type once it is indexed, which takes months, and the newest review is
+often the one that settles a question. Cost: one free esearch call,
+about a third of a second.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim
