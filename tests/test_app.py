@@ -3223,6 +3223,11 @@ t("  efficacy reads as a clause alone, a noun after a verb, and stays inside a c
   and breakdown.plain("There was no efficacy in adults.") == "There was no effect in adults."
   and breakdown.plain("The trials assessed vaccine effectiveness against measles (Study 1).")
   == "The trials tested vaccine effectiveness against measles (Study 1).")
+t("  before 'of' it is the noun 'effect', never 'how well it works of'",
+  breakdown.plain("The long term safety and efficacy of vinegar is unknown (Study 1).")
+  == "The long term safety and effect of vinegar is unknown (Study 1)."
+  and breakdown.plain("The effectiveness of the program was low (Study 2).")
+  == "The effect of the program was low (Study 2).")
 t("  a meta analysis without its hyphen and sleep onset latency are said in words",
   breakdown.plain("A meta analysis of 12 trials found less pain (Study 1).")
   == "A pooled review (meta-analysis) of 12 trials found less pain (Study 1)."

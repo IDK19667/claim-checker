@@ -147,6 +147,9 @@ def _how_well(m: re.Match) -> str:
         return "effect"
     if word in _ARTICLE_AFTER:
         return "an effect"
+    # "Safety and efficacy of X" needs a noun too: "safety and effect of X".
+    if re.match(r"\s+of\b", m.string[m.end():]):
+        return "effect"
     return "how well it works"
 
 
@@ -231,7 +234,7 @@ PLAIN = [
 
     # The "the X of Y" trap: a noun here, a clause where it stands alone.
     (r"\b(?:the |its )effica(?:cy|ciousness) of\b", "the effect of", None),
-    (r"\b(?:the|its|their|this)\s+(?:efficacy|effectiveness)\b", "how well it works", None),
+    (r"\b(?:the|its|their|this)\s+(?:efficacy|effectiveness)\b(?!\s+of\b)", "how well it works", None),
     (r"\befficacy\b", lambda m: _how_well(m), None),
     (r"\b(?:the |its )effectiveness of\b", "the effect of", None),
     (r"\beffectiveness\b", lambda m: _how_well(m), None),
