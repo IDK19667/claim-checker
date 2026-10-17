@@ -450,6 +450,10 @@ Reading every page, I found and fixed five things. None changed a verdict.
   claim." Any other verdict repeats its short answer.
 - 658/658 tests pass.
 - Commits: 3f470e6, 6c110c4, 5237bcd, 5a4c03b.
-- The safety run itself was on the code before these four fixes. They
-  touch wording and the answer checker, not how a verdict is chosen,
-  so 15/15 stands.
+- The safety run itself was on the code before these four fixes.
+  - They change wording, plus one thing that matters more: the answer
+    checker that decides whether to ask the model again.
+  - That reading now agrees with what was shown on the two pages it
+    misread, so it would ask again less often, not more.
+  - Nothing failed, so per your instructions nothing was re-run. The
+    regression run below uses the new code.
