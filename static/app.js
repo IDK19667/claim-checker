@@ -492,7 +492,7 @@ function renderChart(data) {
     const said = [`Study ${i + 1}`, (s.type_label || "").toLowerCase(), s.year,
                   s.cited_in_verdict ? "used for this verdict"
                     : s.off_topic ? "read, off topic"
-                    : s.background ? "animal or lab, background only" : "read but not used"]
+                    : s.background ? `${s.background_why || "animal or lab"}, background only` : "read but not used"]
       .filter(Boolean).join(", ");
     return `<button type="button" class="barcol${s.cited_in_verdict ? " is-used" : ""}" data-i="${i}" style="--i:${i}"` +
       ` aria-label="${escapeHtml(said)}. Go to it in the list of studies.">` +
@@ -751,13 +751,16 @@ function renderResult(data) {
       `<ol class="studies">${rows.join("")}</ol></details>`
     : "";
   // Animal and lab studies read for a claim about people are background
-  // only: never counted as used, and grouped on their own so it shows.
+  // only: never counted as used, and grouped on their own so it shows. So
+  // are opinion pieces and buying guides; the server names the group.
   const citedRows = [], backRows = [], otherRows = [];
   data.studies.forEach((s, i) =>
     (s.cited_in_verdict ? citedRows : s.background ? backRows : otherRows).push(studyRow(s, i)));
   $("sources").innerHTML = n
     ? group("Relied on for the verdict", citedRows, true) +
-      group("Background only: animal and lab studies", backRows, !citedRows.length && !otherRows.length) +
+      group(escapeHtml((data.evidence && data.evidence.background_label)
+                       || "Background only: animal and lab studies"),
+            backRows, !citedRows.length && !otherRows.length) +
       group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0)
     : `<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>`;
 

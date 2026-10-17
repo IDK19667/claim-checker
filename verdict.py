@@ -570,10 +570,22 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
     why_off = evidence.off_topic(study, claim)
     if why_off:
         lines.append(f"OFF TOPIC: {why_off}. Do not cite it")
+    elif evidence.background_reasons([study], claim):
+        why_back = evidence.background_reasons([study], claim)[study["pmid"]]
+        lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
+                     f"this claim in people and never counts as evidence for or against it")
     if evidence.is_review(study) and evidence.low_certainty(study):
         lines.append("LOW CERTAINTY: this review rates its own evidence as low certainty")
     lines.append(f"Abstract: {abstract}\n")
     return "\n".join(lines)
+
+
+# The BACKGROUND ONLY marker's words, by evidence.background_reasons.
+_BACKGROUND_SAID = {
+    evidence.BG_LAB: "an animal or lab study",
+    evidence.BG_OPINION: "an opinion piece or commentary, which measured nothing",
+    evidence.BG_GUIDE: "a product or buying guide, which measured nothing",
+}
 
 
 def _subgroup_block(studies: list[dict], claim: str) -> str:
@@ -620,8 +632,11 @@ VERDICT_SCHEMA = {
                     "study": {"type": "integer"},
                     "subject": {"type": "boolean"},
                     "outcome": {"type": "boolean"},
+                    # Whether it reports or pools anything measured in
+                    # people. An essay, a buying guide or a cow trial does not.
+                    "in_people": {"type": "boolean"},
                 },
-                "required": ["study", "subject", "outcome"],
+                "required": ["study", "subject", "outcome", "in_people"],
                 "additionalProperties": False,
             },
         },
@@ -767,6 +782,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         )
 
     groups = pubmed.split_and(query or "")
+    subject = groups[0] if groups else ""
     outcome = groups[1] if len(groups) > 1 else ""
     studies_block = "\n\n".join(
         _format_study_for_prompt(i + 1, s, outcome, surrogate, claim)
@@ -779,7 +795,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # Temperature 0, like the search: the same claim over the same studies
     # should read the same way every time it is checked.
     raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
-    result = _read_verdict(raw, stop_note, studies, claim)
+    result = _read_verdict(raw, stop_note, studies, claim, subject=subject)
     kept = raw, stop_note
     read = {}
     said = _stamp_disagrees(result, claim, read)
@@ -793,7 +809,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     if faults:
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
                                         VERDICT_SCHEMA, max_tokens=12000, temperature=0)
-        again = _read_verdict(raw, stop_note, studies, claim)
+        again = _read_verdict(raw, stop_note, studies, claim, subject=subject)
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,
         # and is one.
@@ -813,19 +829,20 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         _stamp_log.warning("stamp %r still disagreed with the takeaway (%s) after the retry, "
                            "so it follows the takeaway: %r", result.get("verdict"), said,
                            result.get("tldr"))
-        result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said])
+        result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said],
+                               subject=subject)
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
     off = result.pop("off_topic", None) or {}
-    back = set(result.pop("background", None) or ())
+    back = result.pop("background", None) or {}
     for s in studies:
         s.pop("off_topic", None)
         s.pop("background", None)
         if s["pmid"] in off:
             s["off_topic"] = off[s["pmid"]]
         elif s["pmid"] in back:
-            s["background"] = True
+            s["background"] = back[s["pmid"]]
     return _settle_confounding(_settle_ruling(result, claim), studies)
 
 
@@ -1149,6 +1166,16 @@ the ones that match both. Studies marked OFF TOPIC are never cited. If
 none of these studies are actually about the claim, say so plainly,
 give the verdict "insufficient", and cite no studies.
 
+Judge one more thing about every study in "relevance": "in_people" is
+true only when the paper reports or pools something measured in people
+(a trial, an observational study, or a review of those). It is false for
+animal studies, farm animals included, and lab studies; for opinion
+pieces, commentaries, editorials and letters; for product or buying
+guides; and for essays that argue a view without reporting data. A study
+marked BACKGROUND ONLY is one of those already. Such a paper is
+background: it can be mentioned as such, and it never counts as evidence
+for or against the claim.
+
 Some studies above are marked NARROW POPULATION. They were run in one
 particular group, and they are strong evidence about that group only.
 Never answer a general claim from narrow-population studies alone: if
@@ -1212,19 +1239,20 @@ Respond with JSON in this exact shape:
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
   "cited_study_numbers": [1, 2],
-  "relevance": [{{"study": 1, "subject": true, "outcome": true}}, {{"study": 2, "subject": true, "outcome": false}}],
+  "relevance": [{{"study": 1, "subject": true, "outcome": true, "in_people": true}}, {{"study": 2, "subject": true, "outcome": false, "in_people": true}}],
 {breakdown.PROMPT_SHAPE}
 }}"""
 
 
 def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
-                  follow: str | None = None) -> dict:
+                  follow: str | None = None, subject: str = "") -> dict:
     """
     Everything after the call: parse, map citations, gate every string.
 
     `follow` is the stamp the takeaway commits to, when weigh_evidence found
     the two still apart. It replaces the model's stamp before any gate runs,
-    so the gates judge it like any other.
+    so the gates judge it like any other. `subject` is the query's first
+    OR-group, for the relevance gate.
     """
     if stop_note:
         return _fallback(
@@ -1272,17 +1300,22 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # or that the model itself judged to miss its subject or its outcome, is
     # not used, whatever the model put in its cited list, and no sentence
     # that leans on it alone reaches the reader.
-    off = _relevance(parsed, studies, claim)
+    off = _relevance(parsed, studies, claim, subject)
     off_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in off}
     cited_pmids = [p for p in cited_pmids if p not in off]
 
     # Animal and lab studies are background for a claim about people. They
     # can say why a thing might work, never whether it does in people, so
     # they are never counted as used, whatever the model put in its list.
-    # What the model leaned on is kept a moment longer, because an answer
-    # resting on nothing else is "not tested in people", which says more
-    # than "nothing cited".
-    background = [p for p in evidence.background(studies, claim) if p not in off]
+    # So are opinion pieces, commentaries and buying guides, for any claim:
+    # nothing in them was measured. Code finds the ones it can on sight; the
+    # model's in_people reading finds the rest. What the model leaned on is
+    # kept a moment longer, because an answer resting on nothing else is
+    # "not tested in people", which says more than "nothing cited".
+    reasons = {**_not_tested(parsed, studies, claim),
+               **evidence.background_reasons(studies, claim)}
+    reasons = {p: why for p, why in reasons.items() if p not in off}
+    background = [s["pmid"] for s in studies if s["pmid"] in reasons]
     leaned_on = cited_pmids
     cited_pmids = [p for p in cited_pmids if p not in background]
     background_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in background}
@@ -1337,7 +1370,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # and a report of one person harmed never makes "does not work".
     thin = ""
     if not forced and verdict != "insufficient":
-        thin = evidence.untested_in_people(studies, leaned_on)
+        thin = evidence.untested_in_people(studies, leaned_on, reasons)
         if thin:
             was = verdict
             verdict = "insufficient"
@@ -1348,7 +1381,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
                 explanation += (" A report of someone harmed is a reason for caution, "
                                 "not evidence that it does not work.")
     elif verdict == "insufficient" and leaned_on:
-        thin = evidence.untested_in_people(studies, leaned_on)
+        thin = evidence.untested_in_people(studies, leaned_on, reasons)
     # The backstop again, now that background studies are out: a verdict
     # still standing on nothing used becomes "not enough evidence".
     if verdict != "insufficient" and not cited_pmids:
@@ -1461,7 +1494,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         "cited_studies": cited_pmids,
         "breakdown": deeper,
         "off_topic": off,
-        "background": background,
+        "background": reasons,
     }
 
 
@@ -1469,18 +1502,25 @@ OFF_SUBJECT = "tests something other than what this claim is about"
 OFF_OUTCOME = "measures a different outcome from the one this claim names"
 
 
-def _relevance(parsed: dict, studies: list[dict], claim: str) -> dict:
+def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "") -> dict:
     """
     {pmid: why} for every study that is not evidence for this claim: the
     ones code can rule out on sight, then the ones the model judged to miss
     the claim's subject or its outcome. A missing or malformed judgement
     rules nothing out; the gate only ever removes on a clear "no".
+
+    `subject` is the query's first OR-group. A record that never names it,
+    in any of its words, is not a test of the thing the claim is about,
+    whatever the model judged: the model read a trial of one seed extract
+    as a test of seed cycling.
     """
     off = {}
     for s in studies:
         why = evidence.off_topic(s, claim)
         if why:
             off[s["pmid"]] = why
+        elif subject and not evidence.names_subject(s, subject):
+            off[s["pmid"]] = OFF_SUBJECT
     for item in parsed.get("relevance") or []:
         if not isinstance(item, dict):
             continue
@@ -1495,3 +1535,26 @@ def _relevance(parsed: dict, studies: list[dict], claim: str) -> dict:
         elif item.get("outcome") is False:
             off[studies[n - 1]["pmid"]] = OFF_OUTCOME
     return off
+
+
+def _not_tested(parsed: dict, studies: list[dict], claim: str) -> dict:
+    """
+    {pmid: why} for the studies the model judged report nothing measured in
+    people: an essay, a buying guide, a review of animal work. Background,
+    like the ones code finds on sight. Never a trial PubMed tags as one and
+    whose record names the people in it, which is a test in people whatever
+    the reading says; and nothing at all for a claim about animals.
+    """
+    if not evidence.about_people(claim):
+        return {}
+    out = {}
+    for item in parsed.get("relevance") or []:
+        if not isinstance(item, dict) or item.get("in_people") is not False:
+            continue
+        try:
+            n = int(item.get("study"))
+        except (TypeError, ValueError):
+            continue
+        if 0 < n <= len(studies) and not evidence.human_trial(studies[n - 1]):
+            out[studies[n - 1]["pmid"]] = evidence.BG_NOT_TESTED
+    return out

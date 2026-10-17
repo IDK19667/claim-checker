@@ -553,9 +553,12 @@ def _study_payload(s: dict, cited: set) -> dict:
         # Why this record is not evidence for the claim, or null. Set by
         # the relevance gate in verdict.py and cached with the record.
         "off_topic": s.get("off_topic"),
-        # True for an animal or lab study read for a claim about people:
-        # background only, never counted as used. Set in verdict.py.
+        # True for a record that is background only, never counted as used:
+        # an animal or lab study read for a claim about people, an opinion
+        # piece, a buying guide. Set in verdict.py. `background_why` says
+        # which, in the words the study list uses.
         "background": bool(s.get("background")),
+        "background_why": evidence.background_why(s),
     }
 
 

@@ -819,6 +819,11 @@ def snapshot(studies, cited_pmids=()) -> dict:
         "off_topic": sum(1 for s in studies if s.get("off_topic")),
         "background": sum(1 for s in studies
                           if s.get("background") and not s.get("off_topic")),
+        # Why each background record is one, once each, in a fixed order:
+        # the chart and the study list name the kinds that are there.
+        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED)
+                             if any(background_why(s) == k for s in studies
+                                    if not s.get("off_topic"))],
         "retracted": sum(1 for s in studies
                          if classify(s.get("publication_types")) == "retracted"),
         "year_from": years[0] if years else None,
@@ -830,6 +835,11 @@ def snapshot(studies, cited_pmids=()) -> dict:
                   if any(kind(s) == k for s in studies)],
     }
     snap.update(_chart_words(snap))
+    # The name of the study list's background group, worded here so the
+    # server page and a streamed check say the same thing.
+    snap["background_label"] = ("Background only: animal and lab studies"
+                                if snap["background_kinds"] in ([], [BG_LAB])
+                                else "Background only: not tests of this claim")
     return snap
 
 
@@ -924,6 +934,11 @@ def _n_things(count: int, singular: str, plural: str) -> str:
     return f"{count} {singular if count == 1 else plural}"
 
 
+# How the chart's description names each kind of background record.
+_BG_PLURAL = {"animal or lab": "animal or lab studies", "opinion piece": "opinion pieces",
+              "product guide": "product guides", "not a test of this claim": "other papers"}
+
+
 def _chart_words(snap: dict) -> dict:
     read = snap["read"]
     if not read:
@@ -945,8 +960,10 @@ def _chart_words(snap: dict) -> dict:
         facts.append(f"{snap['registered']} registered in advance")
     if snap["retracted"]:
         facts.append(_n_things(snap["retracted"], "retracted paper", "retracted papers"))
+    lab_only = snap.get("background_kinds", [BG_LAB]) in ([], [BG_LAB])
     if snap.get("background"):
-        facts.append(f"{snap['background']} animal or lab, background only")
+        facts.append(f"{snap['background']} animal or lab, background only" if lab_only
+                     else f"{snap['background']} background only")
     if snap.get("off_topic"):
         facts.append(f"{snap['off_topic']} off topic")
     if snap["year_from"]:
@@ -956,11 +973,16 @@ def _chart_words(snap: dict) -> dict:
 
     described = [f"{_n_things(read, 'study', 'studies')} read, "
                  f"{used} used for this verdict."]
-    if snap.get("background"):
+    kinds = [_BG_PLURAL[k] for k in snap.get("background_kinds") or [] if k in _BG_PLURAL]
+    if snap.get("background") and (lab_only or not kinds):
         described.append(f"{snap['background']} of them "
                          + ("an animal or lab study" if snap["background"] == 1
                             else "animal or lab studies")
                          + ", background only, never used for a claim about people.")
+    elif snap.get("background"):
+        said = kinds[0] if len(kinds) == 1 else ", ".join(kinds[:-1]) + " and " + kinds[-1]
+        described.append(f"{snap['background']} of them background only, never used for "
+                         f"this verdict, because they do not test the claim in people: {said}.")
     if snap.get("off_topic"):
         described.append(f"{snap['off_topic']} of them off topic for this claim.")
     if snap["mix"]:
@@ -1264,6 +1286,23 @@ _SURVEY = re.compile(
     r"\bbeliefs? about\b|\bawareness of\b|\bknowledge,? attitudes?\b", re.IGNORECASE)
 
 
+# A review of whether something is safe is not a test of whether it works.
+# A claim that red light smooths wrinkles was answered in part from a review
+# of whether red light causes cancer. Read from the title, and only for a
+# claim that is not itself about safety, harm or risk.
+_SAFETY_TITLE = re.compile(
+    r"\b(?:safety|adverse (?:events?|effects?|reactions?)|side[- ]effects?|toxicit(?:y|ies)|"
+    r"harms?|dangers?|carcinogenic\w*|oncologic(?:al)? risks?)\b", re.IGNORECASE)
+_WORKS_TITLE = re.compile(
+    r"\b(?:efficacy|effectiveness|effective|efficacious|benefits?|improv\w*|reduc\w*|"
+    r"outcomes?|effects? (?:of|on))\b", re.IGNORECASE)
+_SAFETY_CLAIM = re.compile(
+    r"\b(?:safe|safety|unsafe|harm\w*|danger\w*|risks?|toxic\w*|side[- ]effects?|"
+    r"health(?:y|ier)?|unhealthy|causes?|caused|causing|cancers?|poison\w*|kills?|deadly)\b",
+    re.IGNORECASE)
+SAFETY_ONLY = "about whether it is safe, not about whether it does what this claim says"
+
+
 def caused_outcome(claim: str) -> str:
     """'lung cancer' for 'Smoking causes lung cancer'; '' for other claims."""
     m = CAUSE_CLAIM.search(str(claim or "").strip().rstrip(".!?"))
@@ -1308,6 +1347,9 @@ def off_topic(study, claim: str) -> str | None:
         return "about finding the disease early, not about what causes it"
     if _SURVEY.search(title) and not _SURVEY.search(claim):
         return "measures what people believe, not what happens to them"
+    if (_SAFETY_TITLE.search(title) and not _WORKS_TITLE.search(title)
+            and not _SAFETY_CLAIM.search(claim)):
+        return SAFETY_ONLY
     if _DRINK_CLAIM.search(claim) and _PROCEDURE.search(opening):
         return "uses alcohol as a medical procedure, not as a drink"
     return None
@@ -1326,9 +1368,29 @@ def off_topic(study, claim: str) -> str | None:
 
 _PRECLINICAL = re.compile(
     r"\b(?:mice|mouse|murine|rats?|rodents?|zebrafish|rabbits?|piglets?|canine|"
-    r"in vitro|cell lines?|cultured cells|animal models?|ex vivo)\b", re.IGNORECASE)
+    r"in vitro|cell lines?|cultured cells|animal models?|ex vivo|"
+    # Farm animals. A feeding trial in 36 Holstein cows is an animal study
+    # however it is designed, and a claim about hormones in people was
+    # answered with one.
+    r"cows?|cattle|heifers?|calves|steers?|Holsteins?|dairy herds?|livestock|swine|sows|"
+    r"ewes|lambs|broilers?|poultry|hens|pigs?|sheep|goats?|chickens?|horses?|equine|"
+    r"(?:non-?human )?primates?|monkeys?|macaques?|"
+    r"(?:experimental|laboratory) animals?|animal (?:stud(?:y|ies)|experiments?|bioassays?))\b",
+    re.IGNORECASE)
+# The animals a title can name without being about people at all. Narrower
+# than the list above on purpose: "goat milk", "chicken" and "dog ownership"
+# are things people eat and keep, and a title naming them is often a study
+# of people.
+_PRECLINICAL_TITLE = re.compile(
+    r"\b(?:mice|mouse|murine|rats?|rodents?|zebrafish|rabbits?|piglets?|in vitro|"
+    r"cell lines?|cultured cells|animal models?|ex vivo|cows|cattle|heifers|calves|"
+    r"Holsteins?|dairy herds?|livestock|swine|sows|ewes|broilers|"
+    r"(?:experimental|laboratory) animals?|animal (?:stud(?:y|ies)|experiments?|bioassays?))\b",
+    re.IGNORECASE)
 _HUMANS = re.compile(r"\b(?:participants|patients|volunteers|adults|children|women|men|"
                      r"humans?|people|subjects|individuals)\b", re.IGNORECASE)
+_TITLE_HUMANS = re.compile(r"\b(?:humans?|people|patients|participants|adults|children|"
+                           r"women|men|volunteers|clinical|epidemiolog\w*)\b", re.IGNORECASE)
 
 
 def single_case(study) -> bool:
@@ -1341,6 +1403,13 @@ def preclinical(study) -> bool:
     review of that work (`mechanism_review`), which can say no more about
     people than the studies it reviews.
     """
+    # A title that says it is about animals is, whatever the abstract goes
+    # on to say about people: a systematic review of cancer in laboratory
+    # animals mentions human exposure in its background, and is still a
+    # review of animals.
+    title = str(study.get("title") or "")
+    if _PRECLINICAL_TITLE.search(title) and not _TITLE_HUMANS.search(title):
+        return True
     text = _text(study)
     return (bool(_PRECLINICAL.search(text)) and not _HUMANS.search(text)) \
         or mechanism_review(study)
@@ -1392,35 +1461,212 @@ def about_people(claim: str) -> bool:
     return not _NOT_PEOPLE_CLAIM.search(claim or "")
 
 
+# ---------------------------------------------------------------------------
+# Not a test at all
+#
+# Some records are about the claim and test nothing: an essay arguing that
+# children should keep their phones away from their heads, a commentary on
+# someone else's rat study, a guide to buying a red light mask. They are
+# worth showing, because they are what PubMed has, and never worth counting,
+# because nothing in them was measured.
+# ---------------------------------------------------------------------------
+
+_OPINION_TYPES = ("Editorial", "Comment", "Letter", "News", "Newspaper Article", "Interview",
+                  "Personal Narrative", "Lecture", "Address")
+_OPINION_TITLE = re.compile(
+    r"^(?:commentary|editorial|viewpoint|opinion|letter)\b|\bcommentary (?:on|to)\b|"
+    r"[:.]\s*(?:an?\s+)?(?:commentary|editorial|viewpoint|opinion(?: piece)?|personal view|"
+    r"call to action)\s*\.?$|\b(?:reply|response) to\b|^in reply\b|\bletter to the editor\b",
+    re.IGNORECASE)
+_GUIDE_TITLE = re.compile(
+    r"\b(?:product|buyer'?s|buying|consumer'?s?|shopping|purchasing) guide\b|"
+    r"\bwhat to look for (?:in|when)\b|\bhow to (?:choose|buy|pick|select)\b", re.IGNORECASE)
+# Any sign that a record reports something measured or pooled. Words an
+# essay uses as freely as a study ("results", "patients", "trials") are not
+# signs: an essay about phones says "the results of any study" too.
+_STUDY_SIGNAL = re.compile(
+    r"\b(?:we|our)\b|\bthis (?:study|trial|review|analysis|meta-analysis)\b|"
+    r"\b(?:participants|subjects|respondents|cohorts?|randomi[sz]ed|enrolled|recruited|"
+    r"analy[sz]ed|measured|questionnaires?|surveyed|methods?|meta-analys[ie]s|"
+    r"systematic review)\b|\b[nN]\s*=\s*\d", re.IGNORECASE)
+# A structured abstract's own section label: "METHODS: ", "RESULTS: ".
+_SECTION_LABEL = re.compile(r"(?:^|\s)[A-Z]{3,}(?: [A-Z]{2,})*:\s")
+
+
+_ESSAY_MIN_ABSTRACT = 400
+
+
+def opinion(study) -> bool:
+    """
+    An opinion piece: PubMed tags it as one (editorial, comment, letter), its
+    title says it is one ("Commentary on..."), or it is an essay, a record
+    with no design of its own whose abstract never mentions anything it
+    measured, anyone it studied or any data at all.
+    """
+    types = study.get("publication_types") or []
+    if any(t.startswith(_OPINION_TYPES) for t in types):
+        return True
+    if _OPINION_TITLE.search(str(study.get("title") or "")):
+        return True
+    if any(not t.startswith(IGNORE_PREFIXES) for t in types):
+        return False
+    # An essay is a long abstract that never once reports a study. A stub
+    # record, or one that names the animals it was done in, is not one.
+    abstract = str(study.get("abstract") or "")
+    return (len(abstract.strip()) >= _ESSAY_MIN_ABSTRACT
+            and not _STUDY_SIGNAL.search(abstract)
+            and not _SECTION_LABEL.search(abstract)
+            and not _PRECLINICAL.search(_text(study))
+            and sample_size(study) is None)
+
+
+def product_guide(study) -> bool:
+    """A buying guide: "What to Look for in Red Light Therapy"."""
+    return bool(_GUIDE_TITLE.search(str(study.get("title") or "")))
+
+
+# Why a record is background only, as the study list and the chart say it.
+# A cached record from before the reasons existed carries plain True, which
+# was only ever set for an animal or lab study.
+BG_LAB = "animal or lab"
+BG_OPINION = "opinion piece"
+BG_GUIDE = "product guide"
+BG_NOT_TESTED = "not a test of this claim"
+
+
+def background_reasons(studies, claim: str) -> dict:
+    """
+    {pmid: why} for the records that are background for this claim and are
+    never counted as used. Opinion pieces and buying guides, for any claim:
+    nothing in them was measured. Animal and lab studies, for a claim about
+    people: they can say why a thing might work, never whether it does.
+    """
+    people = about_people(claim)
+    out = {}
+    for s in studies or []:
+        if product_guide(s):
+            out[s["pmid"]] = BG_GUIDE
+        elif people and preclinical(s):
+            out[s["pmid"]] = BG_LAB
+        elif opinion(s):
+            out[s["pmid"]] = BG_OPINION
+    return out
+
+
 def background(studies, claim: str) -> list[str]:
-    """
-    The PMIDs of the animal and lab studies that are background for this
-    claim: for a claim about people they can say why a thing might work,
-    never whether it does in people, so they are never counted as used.
-    """
-    if not about_people(claim):
-        return []
-    return [s["pmid"] for s in studies or [] if preclinical(s)]
+    """The PMIDs of background_reasons, in study order."""
+    return list(background_reasons(studies, claim))
 
 
-def untested_in_people(studies, cited_pmids=()) -> str:
+def human_trial(study) -> bool:
+    """A trial PubMed tags as one, whose record names the people in it."""
+    return (any(t.startswith(TRIAL_TYPES) for t in study.get("publication_types") or [])
+            and bool(_HUMANS.search(_text(study))) and not preclinical(study))
+
+
+def background_why(study) -> str:
+    """The reason a record is background only, or ""."""
+    why = study.get("background")
+    if not why:
+        return ""
+    return why if isinstance(why, str) else BG_LAB
+
+
+# ---------------------------------------------------------------------------
+# Names the claim's subject
+#
+# A study is evidence for a claim only if it tests the thing the claim is
+# about. PubMed's own matching is loose (a search for seed cycling returns
+# trials of single seed extracts, which are not seed cycling), and when
+# fewer than three papers name the subject the ranking keeps the rest, so
+# the gate has to be here as well.
+# ---------------------------------------------------------------------------
+
+_SUFFIX = re.compile(r"(?:ing|ers|er|es|ed|s)$", re.IGNORECASE)
+
+
+def _stem(word: str) -> str:
+    """'skipping' -> 'skipp', 'saunas' -> 'sauna'. Never shorter than four letters."""
+    cut = _SUFFIX.sub("", word)
+    return cut if len(cut) >= 4 else word
+
+
+def _term_pattern(term: str):
+    """
+    A term as a pattern that allows the ordinary variations: plurals and
+    other endings, a hyphen for a space, and two words either way round
+    with up to two words between ("skipping breakfast", "breakfast
+    skippers").
+    """
+    clean = re.sub(r"\[[^\]]*\]", "", term).strip(' "()')
+    words = [w for w in re.split(r"[\s-]+", clean) if w]
+    if not words:
+        return None
+
+    def one(w):
+        if w.endswith("*"):
+            return r"\b" + re.escape(w.rstrip("*")) + r"\w*"
+        return r"\b" + re.escape(_stem(w)) + r"\w*"
+
+    if len(words) == 1:
+        return re.compile(one(words[0]), re.IGNORECASE)
+    gap = r"\W+(?:\w+\W+){0,2}?"
+    forward = gap.join(one(w) for w in words)
+    backward = gap.join(one(w) for w in reversed(words))
+    return re.compile(f"(?:{forward})|(?:{backward})", re.IGNORECASE)
+
+
+_SUBJECT_MIN_ABSTRACT = 200
+
+
+def names_subject(study, terms_group: str) -> bool:
+    """
+    True when this record names the thing `terms_group` (the subject's
+    OR-group from the query) anywhere in its title or abstract. Read in the
+    whole abstract, not just its opening: this decides only whether a paper
+    can be about the subject at all, and a paper that never names it, in
+    any of the words the search step gave it, cannot be.
+    """
+    terms = [t for t in re.split(r"\s+OR\s+", (terms_group or "").strip().strip("()"))
+             if len(t.strip(' "()')) > 2]
+    if not terms:
+        return True
+    study = study or {}
+    text = _text(study)
+    # A record with next to no abstract is not ruled out on what it never
+    # had the room to say: PubMed matched it on something.
+    if len(str(study.get("abstract") or "").strip()) < _SUBJECT_MIN_ABSTRACT:
+        return True
+    return any(p.search(text) for p in (_term_pattern(t) for t in terms) if p)
+
+
+def untested_in_people(studies, cited_pmids=(), reasons=None) -> str:
     """
     What the cited evidence is, in words, when none of it tests anything in
     people: "reports of single patients", "animal or lab studies", or both.
-    "" when at least one cited study is a test in people.
+    "" when at least one cited study is a test in people. `reasons` is the
+    {pmid: why} of the records already judged background, so a paper the
+    model read as no test at all counts as one here too.
     """
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
     if not cited:
         return ""
+    reasons = reasons or {}
     kinds = set()
     for s in cited:
+        why = reasons.get(s.get("pmid"))
         if single_case(s) or classify(s.get("publication_types")) == "weak":
             kinds.add("reports of single patients" if single_case(s) else "opinion pieces")
-        elif preclinical(s):
+        elif preclinical(s) or why == BG_LAB:
             kinds.add("animal or lab studies")
+        elif opinion(s) or product_guide(s) or why in (BG_OPINION, BG_GUIDE):
+            kinds.add("opinion pieces")
+        elif why == BG_NOT_TESTED:
+            kinds.add("papers that test nothing in people")
         else:
             return ""
-    order = ["reports of single patients", "animal or lab studies", "opinion pieces"]
+    order = ["reports of single patients", "animal or lab studies", "opinion pieces",
+             "papers that test nothing in people"]
     said = [k for k in order if k in kinds]
     return " and ".join(said)
 

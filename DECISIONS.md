@@ -24,6 +24,31 @@ type once it is indexed, which takes months, and the newest review is
 often the one that settles a question. Cost: one free esearch call,
 about a third of a second.
 
+**Relevance: a study is used only if it tests this claim in people.**
+Four gates now send a record to background or off topic before the model
+can lean on it. (1) Farm and lab animals are animals: cows, heifers,
+pigs, poultry and the rest join rats and mice in `evidence.preclinical`,
+and a title that names one with no people in it settles it. (2) Opinion
+pieces, buying guides and essays are background for any claim: PubMed's
+own comment and editorial tags, a "Commentary on..." title, a "what to
+look for in" title, or an abstract of 400 characters or more that never
+reports a sample, a method or anyone studied. A short stub record and a
+record that names animals are never essays: too little to judge, and the
+animal rule already covers them. (3) The model now says per study
+whether it measured anything in people (`in_people`). A "no" sends it to
+background, except for a trial PubMed tags as one whose record names
+the people in it. (4) A record that never names the claim's subject, in
+any word the search step gave it, is off topic whatever the model
+judged. It only applies to abstracts of 200 characters or more, so a
+record with no room to say it is not ruled out. A safety-only review
+("Safety of..." with no efficacy word in the title) is off topic, not
+background, for a claim that something works. It is about people, it is
+just about a different question, and off topic is the honest label. The
+study list and the chart now name the background group for what is in
+it: "Background only: animal and lab studies" when that is all it holds,
+"Background only: not tests of this claim" otherwise, and each bar's
+label says why.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

@@ -2583,5 +2583,91 @@ t("  and the footnote says figures are rounded",
   "rounded for reading" in (ROOT / "templates" / "index.html").read_text()
   and "rounded for reading" in (ROOT / "static" / "app.js").read_text())
 
+# ---- the relevance gate: only tests of the claim in people are used ----------------
+# Synthetic records only: the holdout claims stay out of the tests.
+_GAR_CLAIM = "Garlic supplements lower cholesterol"
+_GAR_Q = "(garlic OR allium sativum) AND (cholesterol OR LDL)"
+_GAR_TRIAL = ("Adults with raised cholesterol were randomized to garlic powder or placebo for "
+              "twelve weeks. LDL cholesterol was measured at the start and at the end, and "
+              "participants kept a food diary throughout the trial period.")
+_GAR_ESSAY = ("Garlic has been prized in kitchens and folk medicine for thousands of years, and "
+              "its reputation as a friend of the heart has only grown with the supplement trade. "
+              "This essay reflects on why the idea is so appealing, how marketing has shaped it, "
+              "and what a careful reader might ask before reaching for a bottle of capsules. It "
+              "closes with thoughts on how such ideas spread, and why they tend to last so long.")
+_GAR = [_study("G1", "Garlic powder and LDL cholesterol in adults: a randomized trial", abstract=_GAR_TRIAL),
+        _study("G2", "Dietary garlic and serum cholesterol in growing pigs", types=["Journal Article"],
+               abstract="Forty growing pigs were fed garlic for six weeks and serum cholesterol was measured."),
+        _study("G3", "Commentary on garlic and heart health", types=["Journal Article"]),
+        _study("G4", "What to look for in a garlic supplement", types=["Journal Article"]),
+        _study("G5", "Garlic and the heart: an old idea", types=["Journal Article"], abstract=_GAR_ESSAY)]
+t("relevance gate: farm animals, commentaries, essays and buying guides are background",
+  evidence.background_reasons(_GAR, _GAR_CLAIM)
+  == {"G2": evidence.BG_LAB, "G3": evidence.BG_OPINION, "G4": evidence.BG_GUIDE, "G5": evidence.BG_OPINION},
+  evidence.background_reasons(_GAR, _GAR_CLAIM))
+t("  dairy cows and heifers are animals, whatever the abstract says",
+  evidence.preclinical(_study("C1", "Garlic oil and milk cholesterol in dairy cows", types=["Journal Article"],
+                              abstract="Milk from the herd was sampled weekly."))
+  and evidence.preclinical(_study("C2", "Garlic in the diet of Holstein heifers", types=["Journal Article"])))
+t("  an abstract that reports people studied is no essay, and a stub record is not one either",
+  not evidence.opinion(_study("E1", "Garlic and the heart", types=["Journal Article"],
+                              abstract=_GAR_ESSAY + " We surveyed 300 participants."))
+  and not evidence.opinion(_study("E2", "Garlic and the heart", types=["Journal Article"], abstract="Short.")))
+t("  a study in dogs is never an opinion piece, so a claim about dogs can still use it",
+  evidence.background_reasons([_study("D1", "Garlic and anaemia in dogs", types=["Journal Article"],
+                                      abstract="Dogs fed garlic developed anaemia.")],
+                              "Garlic is poisonous to dogs") == {})
+t("  a safety review is off topic for a claim that something works",
+  evidence.off_topic(_study("S1", "Long-term safety of melatonin: a systematic review", types=["Systematic Review"]),
+                     "Melatonin helps you fall asleep") == evidence.SAFETY_ONLY
+  and evidence.off_topic(_study("S2", "Efficacy and safety of melatonin for insomnia", types=["Systematic Review"]),
+                         "Melatonin helps you fall asleep") is None
+  and evidence.off_topic(_study("S3", "Long-term safety of melatonin: a systematic review", types=["Systematic Review"]),
+                         "Melatonin is safe for children") is None)
+_ONION = _study("O1", "Onion extract and LDL cholesterol in adults: a randomized trial",
+                abstract=_GAR_TRIAL.replace("garlic powder", "onion extract"))
+t("  a record that never names the claim's subject cannot be about it",
+  not evidence.names_subject(_ONION, "(garlic OR allium sativum)")
+  and evidence.names_subject(_study("A1", "Allium sativum and lipids", abstract=_GAR_TRIAL.replace("garlic", "the bulb")),
+                             "(garlic OR allium sativum)")
+  and evidence.names_subject(_study("A2", "Lipids in adults", abstract="Too short to rule out."),
+                             "(garlic OR allium sativum)"))
+
+def _rel(n, subject=True, outcome=True, in_people=True):
+    return {"study": n, "subject": subject, "outcome": outcome, "in_people": in_people}
+
+_gar = [dict(s) for s in _GAR] + [dict(_ONION)]
+fg.models.script = [Resp(VJ("true", [1, 2, 3, 4, 5, 6], tldr="Garlic lowers cholesterol a little.",
+                            evidence=["Garlic lowered LDL cholesterol (Study 1)."],
+                            relevance=[_rel(i) for i in range(1, 7)]))] * 3
+_v = verdict.weigh_evidence(_GAR_CLAIM, _gar, _GAR_Q)
+t("  through a real verdict, only the trial in people that names garlic is used",
+  _v["cited_studies"] == ["G1"], _v["cited_studies"])
+t("  the onion trial is off topic, the rest are background with their reasons",
+  _gar[5].get("off_topic") == verdict.OFF_SUBJECT
+  and [s.get("background") for s in _gar[:5]]
+  == [None, evidence.BG_LAB, evidence.BG_OPINION, evidence.BG_GUIDE, evidence.BG_OPINION],
+  [(s["pmid"], s.get("background"), s.get("off_topic")) for s in _gar])
+_gar2 = [dict(_GAR[0]), dict(_study("G6", "Garlic and cholesterol: a narrative overview", types=["Review"],
+                                    abstract=_GAR_TRIAL))]
+fg.models.script = [Resp(VJ("true", [1, 2], tldr="Garlic lowers cholesterol a little.",
+                            evidence=["Garlic lowered LDL cholesterol (Study 1)."],
+                            relevance=[_rel(1, in_people=False), _rel(2, in_people=False)]))] * 3
+_v = verdict.weigh_evidence(_GAR_CLAIM, _gar2, _GAR_Q)
+t("  a paper the model reads as measuring nothing in people is background; a human trial never is",
+  _v["cited_studies"] == ["G1"] and _gar2[1].get("background") == evidence.BG_NOT_TESTED
+  and not _gar2[0].get("background"), (_v["cited_studies"], _gar2))
+_snap = evidence.snapshot(_gar, ["G1"])
+t("  the chart names the group for what is in it, not only animal and lab studies",
+  _snap["background_label"] == "Background only: not tests of this claim"
+  and "4 background only" in _snap["facts"] and "opinion pieces" in _snap["described"],
+  _snap)
+t("  and the payload says why each one is background",
+  appmod._study_payload(_gar[3], set())["background_why"] == evidence.BG_GUIDE
+  and appmod._study_payload({**_gar[1], "background": True}, set())["background_why"] == evidence.BG_LAB)
+t("  the page and the script both print the server's group name",
+  "background_label" in (ROOT / "templates" / "index.html").read_text()
+  and "background_label" in (ROOT / "static" / "app.js").read_text())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
