@@ -2913,6 +2913,24 @@ _v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_RCT_NO, _TEA_COH
 t("  a large trial that found nothing outranks a cohort that found a link",
   _v["verdict"] == "false" and _v["tldr"] == verdict.RANKED_TLDR["false"]
   and "found it does not" in _v["explanation"], _v)
+_CIN_CLAIM = "Cinnamon cures diabetes"
+_CIN_MA = _study("H6", "Cinnamon and blood sugar: a meta-analysis of randomized controlled trials",
+                 types=["Meta-Analysis"], abstract="We pooled 10 randomized controlled trials in adults with diabetes.")
+_CIN_COHORT = _study("H7", "Cinnamon intake and diabetes in a cohort of adults",
+                     types=["Observational Study"],
+                     abstract="A cohort of 3,000 adults was followed for eight years.")
+_CURE = VJ("false", [1], tldr="Cinnamon does not cure diabetes, though it may lower blood sugar a little.",
+           explanation="Pooled trials found slightly lower blood sugar (Study 1), but none found a cure.",
+           evidence=["Pooled trials found slightly lower blood sugar (Study 1)."],
+           relevance=[_f(1, "for"), _f(2, "against")])
+fg.models.calls = 0
+fg.models.script = [Resp(_CURE), Resp(_CURE), Resp(_CURE)]
+_v = verdict.weigh_evidence(_CIN_CLAIM, [dict(x) for x in (_CIN_MA, _CIN_COHORT)],
+                            "(cinnamon) AND (diabetes OR blood sugar)")
+t("  trials marked 'for' never turn the model's no into a yes",
+  _v["verdict"] == "false" and _v["tldr"] != verdict.RANKED_TLDR["true"]
+  and "fairer test" not in _v["explanation"]
+  and not any("Trials outrank them" in p for p in fg.models.prompts[-fg.models.calls:]), _v)
 _PILOT = VJ("complicated", [1, 2], tldr="The evidence is mixed.",
             evidence=["A pilot trial found lower blood pressure (Study 1)."],
             relevance=[_f(1, "for"), _f(2, "against")])

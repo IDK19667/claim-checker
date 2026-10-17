@@ -1615,6 +1615,12 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # verdict follows the trials and the answer says the rest disagree: a
     # trial that says yes against a survey that says no is not a tie.
     ranked = _trials_outweigh(parsed, studies, off, reasons)
+    # It settles a tie, and it may turn a yes into a no when trials found
+    # nothing. It never turns the model's no into a yes: a "for" finding is
+    # about what a trial measured (blood sugar), and a no that reads the
+    # claim's own words ("cures diabetes") is the answer the claim needs.
+    if ranked and verdict == "false" and ranked["verdict"] == "true":
+        ranked = None
     forced_rank = None
     # Set when a takeaway below is code's own, written for the stamp it set:
     # a later downgrade replaces it rather than leaving it to argue.

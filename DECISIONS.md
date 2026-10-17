@@ -287,6 +287,24 @@ mg/dL (likely range: -29, -15)" now reads "reduced by about 22 mg/dL
 (likely range: 29, 15)", the form "fell about 22 mg/dL (likely range 29
 to 15)" already had.
 
+**The trials rule settles a tie; it never turns a no into a yes.** The
+re-run of the 21 regression claims after these fixes stamped "Apple cider
+vinegar cure diabetes" True. The model had answered no ("it does not cure
+diabetes, though it can lower blood sugar"), but its reading of each
+study marked the pooled trials "for", because they found lower blood
+sugar, and one small 2007 study "against". The rule that randomized trials
+outrank weaker studies (pattern 1 of this round) then turned the stamp to
+True, wrote "Randomized trials say yes", and its retry note had told the
+model the verdict "must be true". A study's "for" is about what it
+measured; a no that reads the claim's own words ("cures") is the answer
+the claim needs. The rule still settles "It's complicated" when trials
+and weaker studies split, and still turns a yes into a no when large
+trials found nothing, which is the cautious direction. It no longer turns
+the model's no into a yes. In every run so far the rule had fired once,
+on this check. Not caused by tonight's other fixes (the same studies were
+found and read as before); the model read the trials differently this
+time, and the rule let that through.
+
 **Tried and taken back out: telling the search step to use placebo or
 sham when a claim names no outcome.** On "homeopathy works better than a
 placebo" the search filled its outcome group with words nearly every
