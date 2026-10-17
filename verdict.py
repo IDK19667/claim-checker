@@ -428,6 +428,11 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
     skip = {i + 1 for i, s in enumerate(studies) if s.get("background")}
     explanation = result.get("explanation") or ""
     evidence_paras = list(bd.get("evidence") or [])
+    # A line can come from any field of the breakdown, the effect row and
+    # the part-by-part answers included, so a fix is made wherever it sits.
+    fields = {k: bd.get(k) or "" for k in ("effect_size", "strength", "applies_to",
+                                           "not_applies_to", "unknowns")}
+    parts = [dict(p) for p in bd.get("parts") or []]
     kept_lines = list(lines)
     for item in read.get("lines") or []:
         if not isinstance(item, dict) or item.get("verdict") not in ("rewrite", "drop"):
@@ -457,6 +462,9 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
         kept_lines = [new if t == old else t for t in kept_lines]
         explanation = _swap(explanation, old, new)
         evidence_paras = [_swap(p, old, new) for p in evidence_paras]
+        fields = {k: _swap(v, old, new) for k, v in fields.items()}
+        for p in parts:
+            p["assessment"] = _swap(p.get("assessment") or "", old, new)
     kept_lines = [t for t in kept_lines if t]
     missing = _gate_line(str(read.get("missing") or ""), studies, allowed, skip)
     if missing and not any(missing.lower()[:40] in t.lower() for t in kept_lines):
@@ -464,8 +472,16 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
     # With every line gone the page falls back to the explanation, so that
     # has lost the same sentences. If nothing of it is left either, the
     # short answer stands in rather than a line that failed the check.
+    # A part whose whole answer failed points at the paragraphs below, as the
+    # gate does when it drops one, or goes when there are none; an effect
+    # row left empty is left out of the page.
+    evidence_paras = [p for p in evidence_paras if p]
+    for p in parts:
+        if not p["assessment"] and evidence_paras:
+            p["assessment"] = breakdown.PART_BELOW
     new_bd = breakdown.settle_effect(
-        {**bd, "says": kept_lines, "evidence": [p for p in evidence_paras if p]})
+        {**bd, **fields, "parts": [p for p in parts if p["assessment"]],
+         "says": kept_lines, "evidence": evidence_paras})
     return {**result, "tldr": tldr, "explanation": explanation or tldr, "breakdown": new_bd}
 
 

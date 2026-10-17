@@ -126,7 +126,8 @@ A rewrite goes through the same gates as the original: the prose rules,
 a citation of a study used, no figure the abstracts lack. A rewrite
 that fails them is dropped. A rewritten short answer is kept only if it
 does not argue with the stamp. Dropped and rewritten lines are changed
-in the explanation and the breakdown too, so the page's fallback cannot
+in the explanation and everywhere in the breakdown too, the effect row
+and the part-by-part answers included, so no other part of the page can
 bring them back. A takeaway code wrote itself is not sent: it is not a
 reading of any study. Cost: one call per check, and only when there are
 research lines to check. When the call fails the answer stands as it

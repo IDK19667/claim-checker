@@ -2975,6 +2975,20 @@ t("  a takeaway code wrote is not sent to be checked",
   verdict._code_takeaway(verdict.RANKED_TLDR["true"]) and verdict._code_takeaway(verdict.UNTESTED_TLDR)
   and not verdict._code_takeaway("Tai chi lowers blood pressure a little."))
 
+# A dropped line goes from every place it sits, the effect row and the
+# part-by-part answers included.
+_EIGHT = "Tai chi lowered blood pressure by 8 mmHg (Study 1)."
+fg.models.script = [Resp(VJ("true", [1, 2], tldr="Tai chi lowers blood pressure a little.",
+                            explanation=_EIGHT, effect_size=_EIGHT,
+                            parts=[{"part": "Tai chi lowers blood pressure", "assessment": _EIGHT}],
+                            evidence=[_EIGHT, "Tai chi lowered blood pressure by 4 mmHg (Study 2)."])),
+                    FJ([_L(1, "drop", "group")])]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+_bd = _v["breakdown"] or {}
+t("faithfulness: a dropped line leaves the effect row and the part-by-part answers too",
+  "8 mmHg" not in json.dumps(_bd) and _bd.get("effect_size") == ""
+  and _bd["parts"][0]["assessment"] == breakdown.PART_BELOW, _bd)
+
 # ---- writing: numbers, statistics, verbs, and the effect line ----------------
 # Synthetic claims and studies only; none of these is a holdout claim.
 _dg = breakdown.digits
