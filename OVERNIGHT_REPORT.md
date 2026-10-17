@@ -1,6 +1,56 @@
 # Overnight report, 2026-10-16
 
-(The morning summary goes at the top when the run is finished.)
+## Morning summary
+
+**1. What's done, and where.** Everything is on one branch,
+`accuracy-round-3`, pushed to GitHub. Main is untouched and nothing was
+deployed.
+- Step 1, done. The rewrite step never drops a hedge like "slightly" or
+  "may". 21-claim regression: 19 right, 2 accepted, 0 wrong.
+- Step 2, done. 20 fresh claims graded (table below).
+- Step 3, done. Seven general fixes, each with tests. One more was tried
+  and taken back out. On the finished code the 21 regression claims came
+  out 18 right, 3 accepted, 0 wrong. 618 of 618 tests pass, and the
+  design QA check passes.
+- Step 4, nothing to do. All six launch-polish items were already on
+  main since 9 October, so I made no empty branch.
+
+**2. Holdout #2: FAIL.** 16 of 20 verdicts right (the bar is 16). 13 of
+20 right with no misleading text (the bar is 13). 1 harmful miss (the bar
+is 0): "Antibiotics cure the common cold" was stamped "It's complicated".
+Its cause is fixed (c11b16b). As you asked, I did not re-run the holdout
+claims, so a third fresh holdout is needed to show the fixes work.
+
+**3. Merge: not ready yet.** The blocker is a third fresh holdout of 20
+new claims, which has to pass the same bar. Merging on its own does not
+deploy (Render waits for your Manual Deploy click). When holdout #3
+passes, this one line merges it:
+
+```bash
+git checkout main && git pull --ff-only origin main && git merge --ff-only accuracy-round-3 && git push origin main
+```
+
+**4. What broke or was skipped.**
+- The regression run caught a new harmful answer on this branch:
+  "Apple cider vinegar cure diabetes" was stamped True. The cause was a
+  rule added earlier in this round ("trials outrank weaker studies"),
+  which overruled the model's correct no. Fixed (706c845) and checked
+  twice since: False both times.
+- I tried a search-prompt change for claims like "homeopathy works better
+  than a placebo" and took it back out. Changing that prompt gives every
+  claim a new search, and the water claim went wrong.
+- Left unfixed, because each needs a prompt change or a careful one:
+  - MSG called "mixed" when the review says it's unproven.
+  - Creatine's page said a trial found "nobody lost hair", but that trial
+    never measured hair.
+  - One small trial can still produce the word "Strong".
+  - The search missed the Cochrane review on antibiotics for colds.
+  - A few wording slips.
+- Melatonin now comes out "It's complicated" (an accepted answer) instead
+  of True.
+- No Gemini rate limit or daily quota limit was hit. The holdout and
+  every regression run used Gemini only, with the backups switched off.
+  The holdout used a separate scratch database.
 
 ## Log
 
