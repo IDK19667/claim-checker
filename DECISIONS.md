@@ -68,6 +68,29 @@ next to "evidence". The "N strong" count now leaves out background as
 well as off-topic records: an animal-study review is not strong evidence
 about people.
 
+**Hierarchy: randomized trials outrank weaker studies, and that is not a
+tie.** The model now says per study which way its own result points
+(`finding`: for, against, mixed, unclear). Code reads each design off
+the record (`evidence.design_rank`): a randomized trial or a review of
+only randomized trials is "trial"; an observational study, a survey, a
+review of those, or an animal or lab study is "weaker"; a review that
+mixes designs, or a narrative review, is neither. When the trials agree
+with each other and weaker studies point the other way, the verdict
+follows the trials. The model is asked once more first. If it still
+calls it a tie, or follows the weaker studies, code turns the stamp,
+counts the trials as used, writes a plain takeaway ("Randomized trials
+say yes. Some weaker studies disagree, but trials are the fairer test.")
+and adds one sentence naming the weaker studies by number. An answer
+that already follows the trials but never mentions the dissent gets
+that sentence too. Two limits keep this honest. One small, pilot,
+uncontrolled or maker-funded trial does not outrank a field: at least
+one trial must be a review of trials or a trial without those caveats.
+Trials that disagree with each other are a real "complicated", and code
+does not choose between them. Every downgrade after this (thin evidence,
+one narrow group, the lead review's low certainty) still applies. This
+is the second place code raises a verdict, and the reason is the oldest
+rule in evidence-based medicine, not a model's reading.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

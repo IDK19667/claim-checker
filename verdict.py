@@ -637,8 +637,13 @@ VERDICT_SCHEMA = {
                     # Whether it reports or pools anything measured in
                     # people. An essay, a buying guide or a cow trial does not.
                     "in_people": {"type": "boolean"},
+                    # Which way its own result points on this claim. With
+                    # the design, read in code, this is how a trial that
+                    # says yes outranks a survey that says no.
+                    "finding": {"type": "string",
+                                "enum": ["for", "against", "mixed", "unclear"]},
                 },
-                "required": ["study", "subject", "outcome", "in_people"],
+                "required": ["study", "subject", "outcome", "in_people", "finding"],
                 "additionalProperties": False,
             },
         },
@@ -838,6 +843,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # chart leaves them out of its strong count, and says why.
     off = result.pop("off_topic", None) or {}
     back = result.pop("background", None) or {}
+    result.pop("ranked", None)
     for s in studies:
         s.pop("off_topic", None)
         s.pop("background", None)
@@ -968,6 +974,14 @@ def _faults(result: dict, claim: str, reported: list[str],
                                          result.get("explanation") or "", claim)
         if clash:
             found.append(clash)
+    ranked = result.get("ranked")
+    if ranked:
+        found.append(f"Randomized trials ({_refs(ranked['trials'])}) found "
+                     f"{'it works' if ranked['verdict'] == 'true' else 'it does not work'}, and "
+                     f"only weaker {ranked['kinds']} ({_refs(ranked['weaker'])}) point the other "
+                     f"way. Trials outrank them, so the verdict must be "
+                     f"\"{ranked['verdict']}\", not a tie, and the answer must say the weaker "
+                     f"studies disagree and count for less")
     for n in _confounded_numbers(result, list(studies)):
         found.append(f"Study {n}, a review the answer relies on, says the link it found is "
                      f"likely explained by lifestyle or other factors rather than by the "
@@ -1178,6 +1192,21 @@ marked BACKGROUND ONLY is one of those already. Such a paper is
 background: it can be mentioned as such, and it never counts as evidence
 for or against the claim.
 
+And "finding": which way the study's own result points on this claim.
+"for" when it found what the claim says happens; "against" when it found
+no effect or the opposite; "mixed" when it found both; "unclear" when it
+reports no result on this claim. Judge the study's result, not your
+verdict.
+
+Not every study is an equal test. A randomized trial, or a review that
+pools randomized trials, is the fair test of whether one thing causes
+another. Observational studies, surveys, reviews of those, and animal or
+lab studies are weaker. When the randomized evidence points one way and
+the weaker studies point the other, the verdict follows the trials:
+"true" or "false", never "complicated" for that reason. Say in the
+explanation that the weaker studies disagree, and why they count for
+less. That is not a tie.
+
 Some studies above are marked NARROW POPULATION. They were run in one
 particular group, and they are strong evidence about that group only.
 Never answer a general claim from narrow-population studies alone: if
@@ -1241,7 +1270,7 @@ Respond with JSON in this exact shape:
   "explanation": "2-3 sentences, under 90 words, naming which specific study numbers mattered most and why, with the concrete numbers from their abstracts where they exist",
   "still_open": "one sentence, under 30 words: the biggest gap in these studies (what they don't test, who they leave out, how short they ran), or if the question is settled, what kind of new finding would reopen it. No study numbers",
   "cited_study_numbers": [1, 2],
-  "relevance": [{{"study": 1, "subject": true, "outcome": true, "in_people": true}}, {{"study": 2, "subject": true, "outcome": false, "in_people": true}}],
+  "relevance": [{{"study": 1, "subject": true, "outcome": true, "in_people": true, "finding": "for"}}, {{"study": 2, "subject": true, "outcome": false, "in_people": true, "finding": "unclear"}}],
 {breakdown.PROMPT_SHAPE}
 }}"""
 
@@ -1346,6 +1375,26 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
     if follow:
         verdict = follow
+
+    # Randomized trials outrank weaker studies. When the trials point one
+    # way and observational studies, surveys or animal work the other, the
+    # verdict follows the trials and the answer says the rest disagree: a
+    # trial that says yes against a survey that says no is not a tie.
+    ranked = _trials_outweigh(parsed, studies, off, reasons)
+    forced_rank = None
+    if ranked and verdict != "insufficient":
+        if verdict != ranked["verdict"]:
+            forced_rank = ranked
+            verdict = ranked["verdict"]
+            for n in ranked["trials"]:
+                pmid = studies[n - 1]["pmid"]
+                if pmid not in cited_pmids:
+                    cited_pmids.append(pmid)
+                if pmid not in leaned_on:
+                    leaned_on.append(pmid)
+            tldr = RANKED_TLDR[verdict]
+        if forced_rank or not _says_weaker(explanation, ranked):
+            explanation = (explanation.rstrip() + " " + _ranked_sentence(ranked)).strip()
 
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or
@@ -1497,6 +1546,9 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         "still_open": still_open,
         "cited_studies": cited_pmids,
         "breakdown": deeper,
+        # Set when code had to turn the stamp to follow the trials, so the
+        # retry can ask for an answer that does it in its own words.
+        "ranked": forced_rank,
         "off_topic": off,
         "background": reasons,
     }
@@ -1539,6 +1591,85 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "")
         elif item.get("outcome") is False:
             off[studies[n - 1]["pmid"]] = OFF_OUTCOME
     return off
+
+
+# The takeaway code writes when it turns the stamp to follow the trials.
+RANKED_TLDR = {
+    "true": "Randomized trials say yes. Some weaker studies disagree, but trials are the fairer test.",
+    "false": "Randomized trials say no. Some weaker studies disagree, but trials are the fairer test.",
+}
+_WEAKER_SAID = re.compile(
+    r"\b(?:observational|cohort|case[- ]control|cross[- ]sectional|survey|animal|"
+    r"weaker|association|associated|linked)\w*", re.IGNORECASE)
+
+
+def _refs(numbers: list[int]) -> str:
+    """Study numbers as the prose writes them: "Study 3", "Studies 1 and 4"."""
+    ns = [str(n) for n in numbers]
+    if len(ns) == 1:
+        return f"Study {ns[0]}"
+    return f"Studies {', '.join(ns[:-1])} and {ns[-1]}"
+
+
+def _and(words: list[str]) -> str:
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict) -> dict | None:
+    """
+    When the randomized evidence used points one way and weaker studies
+    the other: {"verdict", "trials", "weaker", "kinds"}, else None. The
+    direction of each study is the model's "finding"; its design is read
+    off the record (evidence.design_rank). The trials have to agree with
+    each other, and at least one has to be able to bear it: a review of
+    trials, or a randomized trial that is not small, a pilot, uncontrolled
+    or paid for by the maker. One small pilot does not outrank a field.
+    """
+    found = {}
+    for item in parsed.get("relevance") or []:
+        if not isinstance(item, dict) or item.get("finding") not in ("for", "against"):
+            continue
+        try:
+            n = int(item.get("study"))
+        except (TypeError, ValueError):
+            continue
+        if 0 < n <= len(studies):
+            found[n] = item["finding"]
+    trials, weaker = [], []
+    for n, finding in sorted(found.items()):
+        s = studies[n - 1]
+        if s["pmid"] in off:
+            continue
+        why = reasons.get(s["pmid"])
+        rank = evidence.design_rank(s)
+        if rank == "trial" and not why:
+            trials.append((n, finding))
+        elif rank == "weaker" and why in (None, evidence.BG_LAB):
+            weaker.append((n, finding))
+    directions = {f for _, f in trials}
+    if len(directions) != 1:
+        return None
+    direction = directions.pop()
+    against = [n for n, f in weaker if f != direction]
+    if not against or not any(evidence.is_review(studies[n - 1])
+                              or not evidence.trial_caveats(studies[n - 1])
+                              for n, _ in trials):
+        return None
+    kinds = list(dict.fromkeys(evidence.weaker_kind(studies[n - 1]) for n in against))
+    return {"verdict": "true" if direction == "for" else "false",
+            "trials": [n for n, _ in trials], "weaker": against, "kinds": _and(kinds)}
+
+
+def _says_weaker(explanation: str, ranked: dict) -> bool:
+    """Whether the explanation already says the weaker studies disagree."""
+    return bool(_WEAKER_SAID.search(explanation or ""))
+
+
+def _ranked_sentence(ranked: dict) -> str:
+    found = "it does" if ranked["verdict"] == "true" else "it does not"
+    return (f"Randomized trials ({_refs(ranked['trials'])}) found {found}, and they are the "
+            f"fairer test. The {ranked['kinds']} that point the other way "
+            f"({_refs(ranked['weaker'])}) count for less, so the verdict follows the trials.")
 
 
 def _not_tested(parsed: dict, studies: list[dict], claim: str) -> dict:

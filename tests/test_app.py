@@ -2734,5 +2734,90 @@ t("  the page builds the line from the query's outcome group",
   appmod._outcome_group("(ginger) AND (vomiting OR emesis)") == "(vomiting OR emesis)"
   and appmod._outcome_group("ginger") == "")
 
+# ---- the evidence hierarchy: randomized trials outrank weaker studies ----------------
+_TEA_CLAIM = "Green tea lowers blood pressure"
+_TEA_Q = "(green tea) AND (blood pressure)"
+_TEA_MA = _study("H1", "Green tea and blood pressure: a meta-analysis of randomized controlled trials",
+                 types=["Meta-Analysis"], abstract="We pooled 14 randomized controlled trials in adults.")
+_TEA_COHORT = _study("H2", "Green tea drinking and blood pressure in a cohort of adults",
+                     types=["Observational Study"],
+                     abstract="A cohort of 5,000 adults was followed for ten years.")
+_TEA_SURVEY = _study("H3", "Green tea habits and blood pressure", types=["Journal Article"],
+                     abstract="A survey of 2,000 adults asked how much green tea they drank.")
+_TEA_PILOT = _study("H4", "Green tea and blood pressure: a randomized pilot trial",
+                    abstract="A pilot trial of 20 adults randomized to green tea or placebo.")
+_TEA_RCT_NO = _study("H5", "Green tea and blood pressure: a randomized trial",
+                     abstract="Adults were randomized to green tea or placebo; 400 completed it.")
+t("hierarchy: designs are ranked from the record",
+  [evidence.design_rank(x) for x in (_TEA_MA, _TEA_COHORT, _TEA_SURVEY, _TEA_PILOT)]
+  == ["trial", "weaker", "weaker", "trial"]
+  and evidence.design_rank(_study("M", "Tea: a meta-analysis", types=["Meta-Analysis"],
+                                  abstract="We pooled 9 cohort studies.")) == "weaker"
+  and evidence.design_rank(_study("X", "Tea: a meta-analysis", types=["Meta-Analysis"],
+                                  abstract="We pooled randomized trials and cohort studies.")) == ""
+  and evidence.design_rank(_study("N", "Tea: a narrative review", types=["Review"])) == ""
+  and evidence.design_rank(_study("R", "Green tea in hypertensive rats", types=["Journal Article"])) == "weaker")
+t("  the weaker ones are named in a reader's words",
+  [evidence.weaker_kind(x) for x in (_TEA_COHORT, _TEA_SURVEY)] == ["observational studies", "surveys"])
+
+def _f(n, finding):
+    return {"study": n, "subject": True, "outcome": True, "in_people": True, "finding": finding}
+
+_TIE = VJ("complicated", [1, 2, 3], tldr="The evidence on green tea is mixed.",
+          explanation="Some studies found lower blood pressure and some found none.",
+          evidence=["Pooled trials found lower blood pressure (Study 1)."],
+          relevance=[_f(1, "for"), _f(2, "against"), _f(3, "against")])
+fg.models.calls = 0
+fg.models.script = [Resp(_TIE), Resp(_TIE), Resp(_TIE)]
+_v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_MA, _TEA_COHORT, _TEA_SURVEY)], _TEA_Q)
+t("  trials say yes, a cohort and a survey say no: the verdict follows the trials, never a tie",
+  _v["verdict"] == "true" and _v["tldr"] == verdict.RANKED_TLDR["true"], _v)
+t("  and the answer says the weaker studies disagree, by number",
+  "Randomized trials (Study 1) found it does" in _v["explanation"]
+  and "observational studies and surveys that point the other way (Studies 2 and 3)" in _v["explanation"],
+  _v["explanation"])
+t("  the model was asked once more before code turned the stamp",
+  fg.models.calls == 2 and "Trials outrank them" in fg.models.prompts[-1], fg.models.calls)
+fg.models.script = [Resp(_TIE), Resp(VJ("true", [1], tldr="Green tea lowers blood pressure a little.",
+                                        explanation="Pooled trials found it lowers blood pressure; "
+                                                    "observational studies found no link, which counts for less.",
+                                        evidence=["Pooled trials found lower blood pressure (Study 1)."],
+                                        relevance=[_f(1, "for"), _f(2, "against"), _f(3, "against")]))]
+_v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_MA, _TEA_COHORT, _TEA_SURVEY)], _TEA_Q)
+t("  a retry that follows the trials in its own words is the answer",
+  _v["verdict"] == "true" and _v["tldr"] == "Green tea lowers blood pressure a little."
+  and "Randomized trials (Study 1)" not in _v["explanation"], _v)
+_NO = VJ("true", [1, 2], tldr="Green tea lowers blood pressure.",
+         explanation="A cohort study linked green tea with lower blood pressure.",
+         evidence=["Green tea drinkers had lower blood pressure (Study 2)."],
+         relevance=[_f(1, "against"), _f(2, "for")])
+fg.models.script = [Resp(_NO), Resp(_NO), Resp(_NO)]
+_v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_RCT_NO, _TEA_COHORT)], _TEA_Q)
+t("  a large trial that found nothing outranks a cohort that found a link",
+  _v["verdict"] == "false" and _v["tldr"] == verdict.RANKED_TLDR["false"]
+  and "found it does not" in _v["explanation"], _v)
+_PILOT = VJ("complicated", [1, 2], tldr="The evidence is mixed.",
+            evidence=["A pilot trial found lower blood pressure (Study 1)."],
+            relevance=[_f(1, "for"), _f(2, "against")])
+fg.models.script = [Resp(_PILOT), Resp(_PILOT)]
+_v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_PILOT, _TEA_COHORT)], _TEA_Q)
+t("  one small pilot trial does not outrank everything else",
+  _v["verdict"] == "complicated", _v)
+_SPLITTRIALS = VJ("complicated", [1, 2, 3], tldr="The evidence is mixed.",
+                  evidence=["Pooled trials found lower blood pressure (Study 1)."],
+                  relevance=[_f(1, "for"), _f(2, "against"), _f(3, "against")])
+fg.models.script = [Resp(_SPLITTRIALS), Resp(_SPLITTRIALS)]
+_v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_MA, _TEA_RCT_NO, _TEA_COHORT)], _TEA_Q)
+t("  trials that disagree with each other are a real 'complicated'",
+  _v["verdict"] == "complicated", _v)
+fg.models.script = [Resp(VJ("true", [1], tldr="Green tea lowers blood pressure a little.",
+                            explanation="Pooled trials found it lowers blood pressure (Study 1).",
+                            evidence=["Pooled trials found lower blood pressure (Study 1)."],
+                            relevance=[_f(1, "for"), _f(2, "against")]))]
+_v = verdict.weigh_evidence(_TEA_CLAIM, [dict(x) for x in (_TEA_MA, _TEA_COHORT)], _TEA_Q)
+t("  an answer that follows the trials but never mentions the dissent gets one sentence saying so",
+  _v["verdict"] == "true" and "count for less" in _v["explanation"]
+  and _v["tldr"] == "Green tea lowers blood pressure a little.", _v)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

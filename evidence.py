@@ -1306,6 +1306,60 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
 
 
 # ---------------------------------------------------------------------------
+# Which design outranks which
+#
+# A randomized trial, or a review that pools only randomized trials, is the
+# fair test of whether a thing causes an outcome: chance decides who gets
+# it. An observational study, a survey, or a review of them can only show
+# that the two go together, and an animal or lab study shows what happens
+# in animals or a dish. When the two tiers point opposite ways the verdict
+# follows the trials (verdict.py), and says the weaker studies disagree.
+# ---------------------------------------------------------------------------
+
+_RANDOMIZED = re.compile(r"(?i:\brandomi[sz]ed\b)|\bRCTs?\b")
+_OBSERVED = re.compile(
+    r"\bobservational\b|\bcohorts?\b|\bcase[- ]control\b|\bcross[- ]sectional\b|"
+    r"\bsurveys?\b|\bquestionnaires?\b|\bregistry\b|\bregistries\b|\becological\b",
+    re.IGNORECASE)
+_SURVEYED = re.compile(r"\bsurveys?\b|\bquestionnaires?\b|\bsurveyed\b", re.IGNORECASE)
+
+
+def design_rank(study) -> str:
+    """
+    "trial" for a randomized trial or a review of randomized trials only;
+    "weaker" for an observational study, a survey, a review of those, or an
+    animal or lab study; "" for anything that is neither or both (a review
+    that mixes the designs, a narrative review, a record that never says).
+    """
+    if preclinical(study):
+        return "weaker"
+    text = _text(study)
+    rct = bool(_RANDOMIZED.search(text))
+    seen = bool(_OBSERVED.search(text))
+    types = study.get("publication_types") or []
+    if is_review(study):
+        return "trial" if rct and not seen else "weaker" if seen and not rct else ""
+    if any(t.startswith("Review") for t in types):
+        return ""
+    if "Randomized Controlled Trial" in types or (is_trial(study) and rct):
+        return "trial"
+    if "Observational Study" in types or seen:
+        return "weaker"
+    return ""
+
+
+def weaker_kind(study) -> str:
+    """A weaker study in a reader's words, plural, for "the ... that disagree"."""
+    if preclinical(study):
+        return "animal or lab studies"
+    if is_review(study):
+        return "reviews of observational studies"
+    if _SURVEYED.search(_text(study)):
+        return "surveys"
+    return "observational studies"
+
+
+# ---------------------------------------------------------------------------
 # Off topic
 #
 # A study is evidence for a claim when it tests the claim's subject and
