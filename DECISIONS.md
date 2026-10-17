@@ -199,7 +199,12 @@ Hedges' g, Cohen's d and "a g of -0.78". A capital is kept only where the
 sentence opens, so "an SMD of" reads "an effect size of", not "an Effect
 size". A word said twice running ("a large pooled pooled review", where
 the plain name for meta-analysis met the model's own "pooled") is said
-once. Renaming any of these
+once. "Efficacy" and "effectiveness" read as "how well it works" only
+where a clause fits: inside a compound they stay ("vaccine
+effectiveness", which had printed "assess vaccine how well it works"),
+and where a noun is needed they are "effect" ("it lacked an effect", "no
+effect"). "Meta analysis" without its hyphen and "sleep onset latency"
+are said in words too. Renaming any of these
 earlier would hide them from `evidence.effect_size`. Agreement is fixed
 only where it cannot misfire: a plural subject that opens its clause
 with its verb straight after it, a singular study word the same way,

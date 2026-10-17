@@ -121,6 +121,35 @@ _PERCENT = re.compile(r"\d+(?:\.\d+)?\s?(?:%|per ?cent)")
 # "infection" and "vitamin D deficiency" before "deficiency".
 # ---------------------------------------------------------------------
 
+# "Vaccine effectiveness" is a compound: swapping the noun for a clause
+# printed "assess vaccine how well it works". After a word that makes it
+# one, the term stays as written.
+_COMPOUND_BEFORE = {
+    "vaccine", "vaccines", "drug", "drugs", "treatment", "treatments", "therapy",
+    "intervention", "interventions", "clinical", "real-world", "comparative", "relative",
+    "program", "programme", "screening", "mask", "medication", "booster"}
+
+
+# Where the sentence needs a noun, the plain one is "effect": "it lacked
+# efficacy" is "it lacked an effect", "no efficacy" is "no effect".
+_NOUN_AFTER = {"no", "any", "little", "some", "much", "less", "more", "greater", "similar"}
+_ARTICLE_AFTER = {"lacked", "lack", "lacks", "showed", "show", "shows", "demonstrated",
+                  "demonstrate", "demonstrates", "had", "has", "have", "proved", "found",
+                  "confirmed", "confirm", "confirms", "without", "with"}
+
+
+def _how_well(m: re.Match) -> str:
+    before = re.search(r"([\w-]+)\s+$", m.string[:m.start()])
+    word = before.group(1).lower() if before else ""
+    if word in _COMPOUND_BEFORE:
+        return m.group(0)
+    if word in _NOUN_AFTER:
+        return "effect"
+    if word in _ARTICLE_AFTER:
+        return "an effect"
+    return "how well it works"
+
+
 # Each row is (pattern, replacement, term-to-keep-in-brackets-or-None).
 #
 # Patterns, not bare words, because English does not let a noun be swapped
@@ -140,12 +169,12 @@ PLAIN = [
     # which one was a pooled review of trials.
     # Singular and plural are separate rows: "meta-analyses show" has to
     # come out as "pooled reviews show", not "pooled review show".
-    (r"\bsystematic reviews and meta-analyses\b", "pooled reviews",
+    (r"\bsystematic reviews and meta[- ]?analyses\b", "pooled reviews",
      "systematic reviews and meta-analyses"),
-    (r"\bsystematic review and meta-analysis\b", "pooled review",
+    (r"\bsystematic review and meta[- ]?analysis\b", "pooled review",
      "systematic review and meta-analysis"),
-    (r"\bmeta-analyses\b", "pooled reviews", "meta-analyses"),
-    (r"\bmeta-analysis\b", "pooled review", "meta-analysis"),
+    (r"\bmeta[- ]?analyses\b", "pooled reviews", "meta-analyses"),
+    (r"\bmeta[- ]?analysis\b", "pooled review", "meta-analysis"),
     (r"\bdietary interventions?\b", "diet change", None),
     (r"\bintervention(s?)\b", r"treatment\1", None),
     (r"\bheterogeneity\b", "differences between the studies", None),
@@ -202,9 +231,11 @@ PLAIN = [
 
     # The "the X of Y" trap: a noun here, a clause where it stands alone.
     (r"\b(?:the |its )effica(?:cy|ciousness) of\b", "the effect of", None),
-    (r"\befficacy\b", "how well it works", None),
+    (r"\b(?:the|its|their|this)\s+(?:efficacy|effectiveness)\b", "how well it works", None),
+    (r"\befficacy\b", lambda m: _how_well(m), None),
     (r"\b(?:the |its )effectiveness of\b", "the effect of", None),
-    (r"\beffectiveness\b", "how well it works", None),
+    (r"\beffectiveness\b", lambda m: _how_well(m), None),
+    (r"\bsleep(?:[- ]onset)? latency(?: time)?\b", "time to fall asleep", "sleep latency"),
     (r"\b(?:the |its )incidence of\b", "the rate of", None),
     (r"\bincidence\b", "how often it happened", None),
     (r"\b(?:the |its )prevalence of\b", "the rate of", None),

@@ -3134,6 +3134,17 @@ t("  Hedges' g, Cohen's d and a bare g are effect sizes, capitalised only where 
   and _uj("Cohen's d was 0.4 (Study 1).") == "Effect size was 0.4 (Study 1)."
   and _uj("Weight fell with an SMD of -0.39 (Study 2).") == "Weight fell with an effect size of -0.39 (Study 2)."
   and _uj("They ate 5 g of salt and 1,337 g of water.") == "They ate 5 g of salt and 1,337 g of water.")
+t("  efficacy reads as a clause alone, a noun after a verb, and stays inside a compound",
+  breakdown.plain("Its efficacy was unclear (Study 1).") == "How well it works was unclear (Study 1)."
+  and breakdown.plain("It lacked efficacy (Study 2).") == "It lacked an effect (Study 2)."
+  and breakdown.plain("There was no efficacy in adults.") == "There was no effect in adults."
+  and breakdown.plain("The trials assessed vaccine effectiveness against measles (Study 1).")
+  == "The trials tested vaccine effectiveness against measles (Study 1).")
+t("  a meta analysis without its hyphen and sleep onset latency are said in words",
+  breakdown.plain("A meta analysis of 12 trials found less pain (Study 1).")
+  == "A pooled review (meta-analysis) of 12 trials found less pain (Study 1)."
+  and breakdown.plain("Melatonin shortened sleep onset latency by 7 minutes (Study 2).")
+  == "Melatonin shortened time to fall asleep (sleep latency) by 7 minutes (Study 2).")
 t("  and a word the plain name doubled is said once",
   breakdown.house_style("A large pooled pooled review (meta-analysis) found less pain (Study 1).")
   == "A large pooled review (meta-analysis) found less pain (Study 1).")
