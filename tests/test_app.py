@@ -2124,6 +2124,13 @@ t("  a 'not' inside 'people who don't' is not the claim saying no",
   breakdown.stance("People who sleep less gain more weight.",
                    "People who do not sleep enough gain weight") == "yes"
   and breakdown.stance("Red wine is not good for your heart.", "Red wine is good for your heart") == "no")
+t("  'should not stop' is a plain no to 'can safely stop'",
+  breakdown.stance("People who have had a heart attack should not stop taking statins, as trials show they prevent repeat attacks.",
+                   "People who have had a heart attack can safely stop taking statins") == "no"
+  and breakdown.stamp_conflict("false", "Pregnant women should not drink alcohol.", "",
+                               "Drinking a little alcohol during pregnancy is safe") is None
+  and breakdown.claim_denies("You should not eat eggs every day")
+  and not breakdown.claim_denies("People who should not drink milk feel bloated"))
 t("  softening's own negation check leaves the verdict reader's alone",
   breakdown._NEGATED.search("No, smoking is the main cause of lung cancer") is None)
 

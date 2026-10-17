@@ -656,7 +656,8 @@ _UNTESTED_SAID = re.compile(
 
 _NEGATED = re.compile(
     r"\b(?:does not|do not|did not|doesn't|don't|didn't|is not|isn't|are not|"
-    r"aren't|was not|were not|cannot|can't|won't|will not|never|no (?:more|"
+    r"aren't|was not|were not|cannot|can't|won't|will not|should not|shouldn't|"
+    r"must not|mustn't|need not|never|no (?:more|"
     r"better)|not (?:better|more effective|any better)|(?:about|just|roughly) as "
     r"(?:well|good|effective) as|no (?:\w+ ){0,2}(?:benefits?|effect|link|"
     r"difference|advantage|change)|myth)\b", re.IGNORECASE)
