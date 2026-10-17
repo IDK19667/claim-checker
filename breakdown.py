@@ -669,8 +669,8 @@ _COMPARATIVE_CLAIM = re.compile(
 _COMPARES_SAME = re.compile(
     r"\b(?:about|just|roughly|nearly|much) as (?:well|good|effective|much) "
     r"(?:(?:for|at|in) [\w -]{1,30}? )?as\b|"
-    r"\bno (?:better|worse|more|less)\b|\bnot (?:any )?(?:better|worse|more "
-    r"effective)\b|\b(?:similar|same|equal(?:ly)?|comparable|no difference)\b",
+    r"\bno (?:better|worse|more|less)\b|(?:\bnot|n't) (?:any )?(?:better|worse|more|"
+    r"less|healthier|safer)\b|\b(?:similar|same|equal(?:ly)?|comparable|no difference)\b",
     re.IGNORECASE)
 _CLAUSE_EDGE = re.compile(r",|;|\b(?:but|yet|however|though|although|while|whereas)\b",
                           re.IGNORECASE)

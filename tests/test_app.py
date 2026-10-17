@@ -2131,6 +2131,13 @@ t("  'should not stop' is a plain no to 'can safely stop'",
                                "Drinking a little alcohol during pregnancy is safe") is None
   and breakdown.claim_denies("You should not eat eggs every day")
   and not breakdown.claim_denies("People who should not drink milk feel bloated"))
+t("  'not more dangerous than' is a plain no to 'more dangerous than'",
+  breakdown.stance("The MMR vaccine is not more dangerous than measles, which causes serious complications and death.",
+                   "The MMR vaccine is more dangerous than measles itself") == "no"
+  and breakdown.stance("Raw milk isn't healthier than pasteurized milk.",
+                       "Raw milk is healthier than pasteurized milk") == "no"
+  and breakdown.stance("Raw milk may not be healthier than pasteurized milk.",
+                       "Raw milk is healthier than pasteurized milk") == "mixed")
 t("  softening's own negation check leaves the verdict reader's alone",
   breakdown._NEGATED.search("No, smoking is the main cause of lung cancer") is None)
 
