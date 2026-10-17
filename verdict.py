@@ -1483,6 +1483,7 @@ def _faults(result: dict, claim: str, reported: list[str],
 LOW_CERTAINTY_TLDR = ("The studies found point towards yes, but the certainty of "
                       "that evidence is low.")
 UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
+NO_REASON_LEFT = "There isn't enough evidence in the studies found to rate this claim."
 CONFOUNDED_TLDR = ("The main review says lifestyle and other factors likely explain much of "
                    "the link these studies found.")
 
@@ -2055,7 +2056,10 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     left_out = breakdown.UNITLESS_LEFT_OUT
     tldr, explanation, still_open = readable(tldr), readable(explanation), readable(still_open)
     if not explanation:
-        explanation = left_out
+        # A reason that is only about a missing unit is no reason at all.
+        # With none of the model's own words left, the page says what the
+        # stamp means, or repeats the short answer.
+        explanation = (NO_REASON_LEFT if verdict == "insufficient" else tldr) or left_out
     if not tldr:
         tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
     if deeper is not None:

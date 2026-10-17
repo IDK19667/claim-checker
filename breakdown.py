@@ -1605,10 +1605,17 @@ def _cited_abstracts(sentence: str, studies: list[dict]) -> list[tuple[str, str]
     return out
 
 
+# A number that is part of a name, not a result: "type 1 diabetes",
+# "COVID-19", "omega-3", "a phase 3 trial", "stage 2 cancer".
+_NAME_NUMBER = re.compile(r"(?:\b(?:type|phase|stage|grade|class|step|wave|tier)\s+|[A-Za-z]-)$",
+                          re.IGNORECASE)
+
+
 def _figures(sentence: str) -> list[str]:
     bare = _REF.sub(" ", sentence)
-    return [f for f in _FIGURE.findall(bare)
-            if not re.fullmatch(r"(?:19|20)\d\d", f.lstrip("-"))]
+    return [m.group(0) for m in _FIGURE.finditer(bare)
+            if not re.fullmatch(r"(?:19|20)\d\d", m.group(0).lstrip("-"))
+            and not _NAME_NUMBER.search(bare[:m.start()])]
 
 
 def null_figure(sentence: str, studies: list[dict]) -> str | None:

@@ -2674,6 +2674,12 @@ t("  no unitless figure reaches the page; a field that was only that says it is 
   "1.53" not in _seen and "no unit given" not in _seen and "\x00" not in _seen
   and _bd.get("effect_size") == breakdown.UNITLESS_LEFT_OUT
   and _bd.get("evidence") == ["Vinegar lowered fasting blood sugar (Study 2)."], _bd)
+fg.models.script = [Resp(VJ("insufficient", [], tldr="No trial has tested this in people.",
+                            explanation="HbA1c fell by 1.53 (Study 1)."))]
+_v = verdict.weigh_evidence("Apple cider vinegar lowers blood sugar", [dict(s) for s in _ACV_R],
+                            "(vinegar) AND (blood sugar)")
+t("  an explanation that was only a unitless figure is not replaced by a note about units",
+  _v["explanation"] == verdict.NO_REASON_LEFT and "unit" not in _v["explanation"], _v["explanation"])
 t("  and the footnote says figures are rounded",
   "rounded for reading" in (ROOT / "templates" / "index.html").read_text()
   and "rounded for reading" in (ROOT / "static" / "app.js").read_text())
@@ -3445,6 +3451,13 @@ t("an adjective before 'efficacy' takes the noun: 'lack clear effect', 'the long
   breakdown.plain("Trials lack clear efficacy in adults.") == "Trials lack clear effect in adults."
   and breakdown.plain("Studies must establish the long-term efficacy and safety of it.")
   == "Studies must establish the long-term effect and safety of it.")
+t("a number in a name is not a result: no 'not significant' note after 'type 1 diabetes'",
+  breakdown._figures("Children and adults with type 1 diabetes (Studies 1, 2).") == []
+  and breakdown._figures("COVID-19 patients in a phase 3 trial (Study 4).") == []
+  and breakdown._figures("Omega-3 lowered triglycerides by 0.3 mmol/L (Study 2).") == ["0.3"]
+  and breakdown.say_nulls("Children and adults with type 1 diabetes (Study 1).",
+                          [_study("1", "T1D diet", abstract="HbA1c fell 1 point, which was not significant (p = 0.4).")])
+  == "Children and adults with type 1 diabetes (Study 1).")
 t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
   breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
   == "A pooled review estimated the global rate of alcohol use during pregnancy."
