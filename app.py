@@ -609,12 +609,19 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
             verdict_value, studies, cited, claim,
             ((breakdown or {}).get("effect") or {}).get("label"),
             breakdown_mod.absolute_claim(claim),
-            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or ""))),
+            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
+            _outcome_group(search_query)),
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
         "studies": [_study_payload(s, cited) for s in studies],
     }
+
+
+def _outcome_group(search_query) -> str:
+    """The query's outcome group, the second of its ANDed groups, or ""."""
+    groups = pubmed.split_and(search_query or "")
+    return groups[1] if len(groups) > 1 else ""
 
 
 def _log_check_safe(claim, verdict_value, explanation, studies, cached=False):

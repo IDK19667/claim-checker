@@ -1825,9 +1825,9 @@ t("  two versions of the treatment and nobody without is no untreated comparison
   evidence.uncontrolled(_DESKS[1]) and not evidence.uncontrolled(_DESKS[0])
   and evidence.uncontrolled(_study("S", "A single-arm trial of X", abstract="Placebo was not used.")))
 t("  a review that grades its evidence low is low certainty, one that says moderate is not",
-  evidence.low_certainty(_ASHWA[0])
-  and not evidence.low_certainty(_study("R", "r", abstract="Moderate certainty evidence showed a benefit.",
-                                        types=["Meta-Analysis"])))
+  evidence.review_certainty(_ASHWA[0]) in ("low", "very low")
+  and evidence.review_certainty(_study("R", "r", abstract="Moderate certainty evidence showed a benefit.",
+                                       types=["Meta-Analysis"])) == "moderate")
 t("a low-certainty review caps 'true'",
   evidence.certainty_cap(_ASHWA, ["A1", "A2"]) is not None)
 t("  and so does a stack of small, pilot and uncontrolled trials",
@@ -2668,6 +2668,71 @@ t("  and the payload says why each one is background",
 t("  the page and the script both print the server's group name",
   "background_label" in (ROOT / "templates" / "index.html").read_text()
   and "background_label" in (ROOT / "static" / "app.js").read_text())
+
+# ---- the certainty line: the lead review's own words ---------------------------------
+_GIN_CLAIM = "Ginger reduces vomiting"
+_GIN_Q = "(ginger OR zingiber) AND (vomiting OR emesis)"
+def _gin_review(pmid, abstract, types=("Meta-Analysis",)):
+    return _study(pmid, "Ginger for nausea and vomiting: a meta-analysis", types=list(types),
+                  abstract=abstract)
+_SPLIT = ("Twelve randomized trials in adults were pooled. Moderate-certainty evidence shows ginger "
+          "reduces vomiting; low-certainty evidence suggests it reduces headache.")
+t("certainty: a review's own rating is read in its own words",
+  evidence.review_certainty(_gin_review("R1", "Low-certainty evidence suggests ginger reduces vomiting.")) == "low"
+  and evidence.review_certainty(_gin_review("R2", "The certainty of evidence ranged from very low to moderate.")) == "very low"
+  and evidence.review_certainty(_gin_review("R3", "Ginger reduced vomiting (GRADE: very low).")) == "very low"
+  and evidence.review_certainty(_gin_review("R4", "The quality of the evidence was rated as high.")) == "high")
+t("  'high-quality trials are needed' rates nothing, and a trial is never a lead review",
+  evidence.review_certainty(_gin_review("R5", "More high-quality trials are needed.")) is None
+  and evidence.review_certainty(_study("T1", "Ginger in pregnancy",
+                                       abstract="Low-certainty evidence suggests ginger reduces vomiting.")) is None)
+t("  a review that rates each outcome is read on the claim's own outcome, lowest when none match",
+  evidence.review_certainty(_gin_review("R6", _SPLIT), "(vomiting OR emesis)") == "moderate"
+  and evidence.review_certainty(_gin_review("R6", _SPLIT), "(headache)") == "low"
+  and evidence.review_certainty(_gin_review("R6", _SPLIT), "(sleep)") == "low"
+  and evidence.review_certainty(_gin_review("R6", _SPLIT)) == "low")
+_LOWREV = _gin_review("L1", "Ten randomized trials were pooled. Low-certainty evidence suggests ginger reduces vomiting.")
+_VLREV = _gin_review("L2", "Ten randomized trials were pooled. Very low certainty evidence suggests ginger reduces vomiting.")
+_MODREV = _gin_review("L3", _SPLIT)
+_PLAIN = _gin_review("L4", "Ten randomized trials were pooled and ginger reduced vomiting.")
+t("  the evidence line never says Strong when the lead review says low or very low",
+  evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Low certainty evidence, but no plain yes or no"
+  and evidence.evidence_line("false", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Very low certainty evidence against this claim"
+  and evidence.evidence_line("true", [_MODREV], ["L3"], _GIN_CLAIM, outcome="(vomiting OR emesis)")
+  == "Moderate certainty evidence for this claim"
+  and evidence.evidence_line("true", [_PLAIN], ["L4"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Strong evidence for this claim")
+t("  the lead review is the first one used that rates itself",
+  evidence.lead_certainty([_PLAIN, _VLREV, _MODREV], ["L4", "L2", "L3"], "(vomiting)") == "very low"
+  and evidence.lead_certainty([_PLAIN, _VLREV], ["L4"], "(vomiting)") is None)
+t("  a true verdict is capped on the claim's outcome, not on another one",
+  evidence.certainty_cap([_MODREV], ["L3"], outcome="(vomiting OR emesis)") is None
+  and "low" in (evidence.certainty_cap([_MODREV], ["L3"], outcome="(headache)") or "")
+  and "very low" in (evidence.certainty_cap([_VLREV], ["L2"], outcome="(vomiting)") or ""))
+fg.models.script = [Resp(VJ("true", [1], tldr="Ginger reduces vomiting.",
+                            evidence=["Ginger reduced vomiting (Study 1)."]))] * 3
+_v = verdict.weigh_evidence(_GIN_CLAIM, [dict(_VLREV)], _GIN_Q)
+t("  through a real verdict, a very low certainty review cannot carry a true",
+  _v["verdict"] == "complicated" and "very low" in _v["explanation"]
+  and "LOW CERTAINTY: this review rates its own evidence on this outcome as very low certainty"
+  in fg.models.prompts[-1], _v)
+fg.models.script = [Resp(VJ("true", [1], tldr="Ginger reduces vomiting.",
+                            evidence=["Ginger reduced vomiting (Study 1)."]))] * 3
+_v = verdict.weigh_evidence(_GIN_CLAIM, [dict(_MODREV)], _GIN_Q)
+t("  and a review sure of this outcome, unsure of another, keeps it",
+  _v["verdict"] == "true", _v)
+_animal_sr = {**_study("B1", "Ginger and vomiting in rats: a systematic review of animal studies",
+                       types=["Systematic Review"]), "background": evidence.BG_LAB}
+_offtopic_ma = {**_study("B2", "Ginger and wound healing: a meta-analysis", types=["Meta-Analysis"]),
+                "off_topic": verdict.OFF_SUBJECT}
+_snap = evidence.snapshot([_animal_sr, _offtopic_ma, dict(_PLAIN)], ["L4"])
+t("  only on-topic studies in people count as strong designs",
+  _snap["strong"] == 1 and "1 strong" in _snap["summary"], _snap["summary"])
+t("  the page builds the line from the query's outcome group",
+  appmod._outcome_group("(ginger) AND (vomiting OR emesis)") == "(vomiting OR emesis)"
+  and appmod._outcome_group("ginger") == "")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

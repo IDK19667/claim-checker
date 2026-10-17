@@ -49,6 +49,25 @@ it: "Background only: animal and lab studies" when that is all it holds,
 "Background only: not tests of this claim" otherwise, and each bar's
 label says why.
 
+**Certainty: the lead review's own words.** The line under the chart
+used to take its level word from study designs, so a meta-analysis that
+rated its own evidence "low certainty" printed "Strong evidence". Now
+`evidence.review_certainty` reads a review's own rating (GRADE wording,
+"low certainty", "very low", "quality of the evidence was moderate"),
+and the lead review, the first review used that rates itself, sets the
+line: "Low certainty evidence for this claim", "Very low certainty",
+"Moderate certainty". Reviews often rate each outcome separately ("moderate
+certainty it does not prevent colds; low certainty it shortens them"),
+so the rating that counts is the one in the clauses that name the query's
+outcome words. When none name them, the lowest rating stands, because a
+review is never read as surer than its least sure word. The same reading
+drives the cap on a "true" verdict and the LOW CERTAINTY marker the model
+sees, so the line, the stamp and the prompt never disagree. "More
+high-quality trials are needed" rates nothing: "quality" only counts
+next to "evidence". The "N strong" count now leaves out background as
+well as off-topic records: an animal-study review is not strong evidence
+about people.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

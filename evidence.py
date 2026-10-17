@@ -812,10 +812,11 @@ def snapshot(studies, cited_pmids=()) -> dict:
         "pooled": pooled,
         "trials": trials,
         "registered": sum(1 for s in studies if s.get("data_banks")),
-        # A strong design about something else is not strong evidence here.
+        # A strong design about something else, or one that tests nothing
+        # in people, is not strong evidence here.
         "strong": sum(1 for s in studies
                       if classify(s.get("publication_types")) == "strong"
-                      and not s.get("off_topic")),
+                      and not s.get("off_topic") and not s.get("background")),
         "off_topic": sum(1 for s in studies if s.get("off_topic")),
         "background": sum(1 for s in studies
                           if s.get("background") and not s.get("off_topic")),
@@ -885,20 +886,27 @@ def level_word(studies, cited_pmids=()) -> str:
 
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
-                  comparative: bool = False) -> str:
+                  comparative: bool = False, outcome: str = "") -> str:
     """
     What the evidence used shows about the claim, as one short line with no
     full stop, or "" when nothing was used (the page says "no direct
     evidence" there). `absolute` is the claim's promise ("cure"), from
-    breakdown.absolute_claim; `effect_label` is the breakdown's size label.
+    breakdown.absolute_claim; `effect_label` is the breakdown's size label;
+    `outcome` is the query's outcome group.
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
         return ""
-    cap = certainty_cap(studies, cited_pmids, comparative)
+    # A lead review that rates its own evidence says how sure it is in its
+    # own words, and those words replace the one read off the designs: a
+    # meta-analysis of low-certainty evidence is not "strong evidence".
+    lead = lead_certainty(studies, cited_pmids, outcome)
+    if lead:
+        level = f"{lead.capitalize()} certainty"
+    cap = certainty_cap(studies, cited_pmids, comparative, outcome)
     # A review that puts the link down to other factors weakens the case for
     # the claim, not the case against it.
-    if cap and not (verdict == "false" and cap == CONFOUNDED_REASON):
+    if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
@@ -1136,16 +1144,6 @@ _CONTROL_SAID = re.compile(
     r"\bwait[- ]?(?:ing[- ])?list|\bno[- ](?:intervention|treatment|supplement)|"
     r"\buntreated\b|\bdelayed\b|\bat the end of\b|\bcross-?over\b|\bcomparison group\b|"
     r"\bvehicle\b|\bdummy\b|\bnothing\b|\bnon-?users?\b", re.IGNORECASE)
-_LOW_CERTAINTY = re.compile(
-    r"\b(?:very[- ])?low(?:[- ]to[- ](?:moderate|very[- ]low))?[- ](?:certainty|quality)"
-    r"(?: of)?(?: the)? evidence\b|"
-    r"\b(?:certainty|quality) of (?:the )?evidence (?:was|is|were|ranged from) "
-    r"(?:rated |judged |graded )?(?:as )?(?:very )?low\b|"
-    r"\bevidence (?:was|is) of (?:very )?low (?:certainty|quality)\b", re.IGNORECASE)
-_HIGHER_CERTAINTY = re.compile(
-    r"\b(?:moderate|high)[- ](?:certainty|quality)(?: of)?(?: the)? evidence\b|"
-    r"\b(?:certainty|quality) of (?:the )?evidence (?:was|is|were) (?:rated |judged |graded )?"
-    r"(?:as )?(?:moderate|high)\b", re.IGNORECASE)
 _INDUSTRY = re.compile(
     r"\bindustry[- ](?:funded|sponsored)\b|\b(?:funded|sponsored|supported) by\b[^.]{0,80}?"
     r"\b(?:Ltd|Inc|Pvt|GmbH|LLC|Pharma\w*|Laborator(?:y|ies)|Corporation|Co\.)", re.IGNORECASE)
@@ -1167,10 +1165,64 @@ def uncontrolled(study) -> bool:
     return not _CONTROL_SAID.search(text)
 
 
-def low_certainty(study) -> bool:
-    """A review that grades its own evidence as low, and nowhere higher."""
-    text = _text(study)
-    return bool(_LOW_CERTAINTY.search(text)) and not _HIGHER_CERTAINTY.search(text)
+# A review's own rating of its evidence, GRADE style, in the words it uses.
+# "Quality" counts only beside "evidence": "more high-quality trials are
+# needed" rates nothing. Lowest first, so a range reads as its low end.
+CERTAINTY_LEVELS = ("very low", "low", "moderate", "high")
+_LVL = r"(?:very[- ]low|low|moderate|high)"
+_RATED = re.compile(
+    rf"\b({_LVL})(?:[- ]to[- ]({_LVL}))?[- ](?:certainty|(?:quality|grade)(?=[- ](?:of[- ](?:the[- ])?)?evidence))\b|"
+    rf"\b(?:(?:certainty|quality) of (?:the )?evidence|(?:overall|evidence) certainty) "
+    rf"(?:was|is|were|ranged from|ranging from) (?:rated |judged |graded |considered |assessed )?"
+    rf"(?:as )?(?:to be )?(?:being )?({_LVL})(?: to ({_LVL}))?\b|"
+    rf"\bevidence (?:was|is|were) of ({_LVL}) (?:certainty|quality)\b|"
+    rf"\bGRADE\W{{1,3}}({_LVL})\b", re.IGNORECASE)
+_CLAUSE = re.compile(r"(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
+
+
+def _level(word: str) -> str:
+    return re.sub(r"[- ]", " ", word.lower())
+
+
+def review_certainty(study, outcome: str = "") -> str | None:
+    """
+    The certainty a review gives its own evidence ("very low", "low",
+    "moderate" or "high"), or None when it states none. A review often rates
+    each outcome on its own ("moderate certainty that zinc does not prevent
+    colds; low certainty that it shortens them"), so when `outcome` (the
+    query's outcome group) is given, the clauses that name it decide. When
+    none do, every rating counts. Either way the lowest one stands: a review
+    is never read as surer than its least sure word on the question.
+    """
+    if not is_review(study):
+        return None
+    rated = []
+    for clause in _CLAUSE.split(_text(study)):
+        levels = [_level(g) for m in _RATED.finditer(clause) for g in m.groups() if g]
+        if levels:
+            rated.append((clause, min(levels, key=CERTAINTY_LEVELS.index)))
+    if not rated:
+        return None
+    terms = [t for t in re.split(r"\s+OR\s+", (outcome or "").strip().strip("()"))
+             if len(t.strip(' "()')) > 2]
+    patterns = [p for p in (_term_pattern(t) for t in terms) if p]
+    on_outcome = [lvl for clause, lvl in rated if any(p.search(clause) for p in patterns)]
+    return min(on_outcome or [lvl for _, lvl in rated], key=CERTAINTY_LEVELS.index)
+
+
+def lead_certainty(studies, cited_pmids=(), outcome: str = "") -> str | None:
+    """
+    The certainty the lead review states: the first review used for the
+    verdict that rates its own evidence at all, in the order the studies
+    were ranked. None when no review used states one.
+    """
+    cited = set(cited_pmids or ())
+    for s in studies or []:
+        if s.get("pmid") in cited:
+            level = review_certainty(s, outcome)
+            if level:
+                return level
+    return None
 
 
 def trial_caveats(study) -> list[str]:
@@ -1213,14 +1265,16 @@ CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely ex
                      "much of the link")
 
 
-def certainty_cap(studies, cited_pmids=(), comparative: bool = False) -> str | None:
+def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
+                  outcome: str = "") -> str | None:
     """
     Why the evidence behind a "true" cannot carry it, in words for the
-    reader, or None when it can. Two ways to fail: the review it leans on
-    rates its own certainty low and no cited review rates it higher; or
-    there is no cited review and every cited study is small, a pilot,
-    funded by the maker, or (for a claim that something works, as against
-    one that compares two things) has nobody who went without.
+    reader, or None when it can. Two ways to fail: the lead review rates its
+    own certainty on this outcome low or very low (`outcome` is the query's
+    outcome group); or there is no cited review and every cited study is
+    small, a pilot, funded by the maker, or (for a claim that something
+    works, as against one that compares two things) has nobody who went
+    without.
     """
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
     if not cited:
@@ -1229,9 +1283,9 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False) -> str | N
     if reviews:
         if any(confounded(s) for s in reviews):
             return CONFOUNDED_REASON
-        if any(low_certainty(s) for s in reviews) and not any(
-                _HIGHER_CERTAINTY.search(_text(s)) for s in reviews):
-            return "the review behind it rates the certainty of its own evidence as low"
+        lead = lead_certainty(studies, cited_pmids, outcome)
+        if lead in ("low", "very low"):
+            return f"the review behind it rates the certainty of its own evidence as {lead}"
         return None
     solid, limited = [], []
     for s in cited:

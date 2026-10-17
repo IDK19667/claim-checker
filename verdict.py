@@ -574,8 +574,10 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
         why_back = evidence.background_reasons([study], claim)[study["pmid"]]
         lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
                      f"this claim in people and never counts as evidence for or against it")
-    if evidence.is_review(study) and evidence.low_certainty(study):
-        lines.append("LOW CERTAINTY: this review rates its own evidence as low certainty")
+    rated = evidence.review_certainty(study, outcome)
+    if rated in ("low", "very low"):
+        lines.append(f"LOW CERTAINTY: this review rates its own evidence on this outcome "
+                     f"as {rated} certainty")
     lines.append(f"Abstract: {abstract}\n")
     return "\n".join(lines)
 
@@ -795,7 +797,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # Temperature 0, like the search: the same claim over the same studies
     # should read the same way every time it is checked.
     raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
-    result = _read_verdict(raw, stop_note, studies, claim, subject=subject)
+    result = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome)
     kept = raw, stop_note
     read = {}
     said = _stamp_disagrees(result, claim, read)
@@ -809,7 +811,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     if faults:
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
                                         VERDICT_SCHEMA, max_tokens=12000, temperature=0)
-        again = _read_verdict(raw, stop_note, studies, claim, subject=subject)
+        again = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome)
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,
         # and is one.
@@ -830,7 +832,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                            "so it follows the takeaway: %r", result.get("verdict"), said,
                            result.get("tldr"))
         result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said],
-                               subject=subject)
+                               subject=subject, outcome=outcome)
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
@@ -1245,14 +1247,15 @@ Respond with JSON in this exact shape:
 
 
 def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
-                  follow: str | None = None, subject: str = "") -> dict:
+                  follow: str | None = None, subject: str = "", outcome: str = "") -> dict:
     """
     Everything after the call: parse, map citations, gate every string.
 
     `follow` is the stamp the takeaway commits to, when weigh_evidence found
     the two still apart. It replaces the model's stamp before any gate runs,
     so the gates judge it like any other. `subject` is the query's first
-    OR-group, for the relevance gate.
+    OR-group, for the relevance gate; `outcome` its second, for the
+    certainty a review gives that outcome.
     """
     if stop_note:
         return _fallback(
@@ -1405,7 +1408,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     forced_low = ""
     if not forced and verdict == "true":
         forced_low = evidence.certainty_cap(
-            studies, cited_pmids, bool(breakdown._COMPARATIVE_CLAIM.search(claim))) or ""
+            studies, cited_pmids, bool(breakdown._COMPARATIVE_CLAIM.search(claim)),
+            outcome) or ""
         if forced_low:
             verdict = "complicated"
             explanation = (explanation.rstrip() + f" The certainty of this evidence is "
