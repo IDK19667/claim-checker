@@ -455,6 +455,10 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
                 _faith_log.warning("the short answer did not match its abstracts (%s), so it "
                                    "was rewritten: %r -> %r", item.get("problem"), tldr, fixed)
                 tldr = fixed
+            elif fixed:
+                _faith_log.warning("a rewrite of the short answer was refused, because it argued "
+                                   "with the stamp, lost a hedge or changed the answer: %r -> %r",
+                                   tldr, fixed)
             continue
         if not 0 < k <= len(lines):
             continue

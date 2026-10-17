@@ -3004,9 +3004,13 @@ t("  an answer with no research lines costs no check",
 fg.models.script = [Resp(VJ("true", [1, 2], tldr="Tai chi slightly lowers blood pressure.",
                             explanation=_EIGHT_TC, evidence=[_EIGHT_TC])),
                     FJ([_L(0, "rewrite", "direction", "Tai chi lowers blood pressure.")])]
+_faith = _Catch()
+logging.getLogger("evident.faithful").addHandler(_faith)
 _v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
-t("  a rewritten short answer that only takes the hedge out is refused",
-  _v["tldr"] == "Tai chi slightly lowers blood pressure.", _v["tldr"])
+logging.getLogger("evident.faithful").removeHandler(_faith)
+t("  a rewritten short answer that only takes the hedge out is refused, and the refusal is logged",
+  _v["tldr"] == "Tai chi slightly lowers blood pressure."
+  and any("was refused" in m for m in _faith.lines), (_v["tldr"], _faith.lines))
 t("  but one that turns a hedged answer round, or adds a hedge, is kept",
   breakdown.lost_hedge("Tai chi may lower blood pressure.", "Tai chi does not lower blood pressure.",
                        _TC_CLAIM) is False
