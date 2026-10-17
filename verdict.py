@@ -447,7 +447,11 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
             fixed = breakdown.for_reading(breakdown.natural(breakdown.plain(breakdown.soften(
                 tidy_prose(breakdown._REF.sub("", str(item.get("rewrite") or "")).replace(" ()", ""),
                            TLDR_MAX)))), studies).strip()
-            if fixed and not breakdown.stamp_conflict(result.get("verdict") or "", fixed, "", claim):
+            # Nor may it take the size of the effect back out of it, or turn
+            # a plain yes or no into a tie.
+            if (fixed and not breakdown.stamp_conflict(result.get("verdict") or "", fixed, "", claim)
+                    and not breakdown.lost_hedge(tldr, fixed, claim)
+                    and breakdown.kept_answer(tldr, fixed, claim)):
                 _faith_log.warning("the short answer did not match its abstracts (%s), so it "
                                    "was rewritten: %r -> %r", item.get("problem"), tldr, fixed)
                 tldr = fixed
@@ -457,6 +461,10 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
         old = lines[k - 1]
         new = (_gate_line(str(item.get("rewrite") or ""), studies, allowed, skip)
                if item.get("verdict") == "rewrite" else "")
+        # A line that failed is never swapped for a surer one: a rewrite
+        # that only loses its hedge goes, and the line with it.
+        if new and breakdown.lost_hedge(old, new, claim):
+            new = ""
         _faith_log.warning("a research line did not match its abstract (%s), so it was %s: %r",
                            item.get("problem"), "rewritten" if new else "dropped", old)
         kept_lines = [new if t == old else t for t in kept_lines]

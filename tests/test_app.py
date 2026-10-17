@@ -2919,6 +2919,7 @@ _TC_V = Resp(VJ("true", [1, 2], tldr="Tai chi lowers blood pressure a lot.",
                 explanation="Tai chi lowered blood pressure by 8 mmHg (Study 1). It also improved sleep (Study 2).",
                 evidence=["Tai chi lowered blood pressure by 8 mmHg (Study 1)."]))
 _GROUP_FIX = "Tai chi lowered blood pressure by 3 mmHg; the 8 mmHg drop was in the yoga group (Study 1)."
+_EIGHT_TC = "Tai chi lowered blood pressure by 4 mmHg (Study 2)."
 
 def FJ(lines, missing=""):
     return Resp(json.dumps({"lines": lines, "missing": missing}))
@@ -2971,6 +2972,49 @@ fg.models.script = [Resp(VJ("complicated", [1], tldr="Tai chi may help a little.
 verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
 t("  an answer with no research lines costs no check",
   fg.models.calls == 1, fg.models.calls)
+fg.models.script = [Resp(VJ("true", [1, 2], tldr="Tai chi slightly lowers blood pressure.",
+                            explanation=_EIGHT_TC, evidence=[_EIGHT_TC])),
+                    FJ([_L(0, "rewrite", "direction", "Tai chi lowers blood pressure.")])]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+t("  a rewritten short answer that only takes the hedge out is refused",
+  _v["tldr"] == "Tai chi slightly lowers blood pressure.", _v["tldr"])
+t("  but one that turns a hedged answer round, or adds a hedge, is kept",
+  breakdown.lost_hedge("Tai chi may lower blood pressure.", "Tai chi does not lower blood pressure.",
+                       _TC_CLAIM) is False
+  and breakdown.lost_hedge("Tai chi lowers blood pressure a lot.", "Tai chi lowers blood pressure a little.",
+                           _TC_CLAIM) is False
+  and breakdown.lost_hedge("Tai chi slightly lowers blood pressure.", "Tai chi lowers blood pressure.",
+                           _TC_CLAIM) is True)
+t("  'small', 'some' and 'low certainty' are hedges too, and a figure fixed is not a hedge lost",
+  all(breakdown.lost_hedge(x, y, _TC_CLAIM) for x, y in [
+      ("Tai chi lowered blood pressure a small amount (Study 1).", "Tai chi lowered blood pressure (Study 1)."),
+      ("Some trials found tai chi lowered blood pressure (Study 1).",
+       "Trials found tai chi lowered blood pressure (Study 1)."),
+      ("Low-certainty evidence suggests tai chi lowers blood pressure (Study 1).",
+       "Tai chi lowers blood pressure (Study 1).")])
+  and not breakdown.lost_hedge("Tai chi lowered blood pressure by 8 mmHg (Study 1).",
+                               "Tai chi lowered blood pressure by 3 mmHg (Study 1).", _TC_CLAIM))
+fg.models.script = [Resp(VJ("false", [1, 2], tldr="Tai chi does not lower blood pressure.",
+                            explanation=_EIGHT_TC, evidence=[_EIGHT_TC])),
+                    FJ([_L(0, "rewrite", "direction", "Tai chi studies show mixed results because some "
+                                                      "trials find no change while others find a drop.")])]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+t("  a rewritten short answer that turns a plain no into a tie is refused",
+  _v["tldr"] == "Tai chi does not lower blood pressure.", _v["tldr"])
+t("  but hedging a plain answer keeps it, and a 'not' inside a hedge stays a no",
+  breakdown.kept_answer("Tai chi lowers blood pressure a lot.", "Tai chi lowers blood pressure a little.",
+                        _TC_CLAIM)
+  and breakdown.kept_answer("Tai chi does not lower blood pressure.",
+                            "Tai chi does not clearly lower blood pressure.", _TC_CLAIM)
+  and breakdown.lost_hedge("Tai chi does not clearly lower blood pressure.",
+                           "Tai chi does not lower blood pressure.", _TC_CLAIM))
+_SOME = "Some trials found tai chi lowered blood pressure (Study 2)."
+fg.models.script = [Resp(VJ("true", [1, 2], tldr="Tai chi slightly lowers blood pressure.",
+                            explanation=_SOME, evidence=[_SOME])),
+                    FJ([_L(1, "rewrite", "direction", "Trials found tai chi lowered blood pressure (Study 2).")])]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+t("  a research line rewritten without its hedge is dropped, never printed surer",
+  not any("rials found tai chi" in x for x in (_v["breakdown"] or {}).get("says") or []), _v["breakdown"])
 t("  a takeaway code wrote is not sent to be checked",
   verdict._code_takeaway(verdict.RANKED_TLDR["true"]) and verdict._code_takeaway(verdict.UNTESTED_TLDR)
   and not verdict._code_takeaway("Tai chi lowers blood pressure a little."))

@@ -125,7 +125,22 @@ comes ok, rewrite or drop per line, plus any missing headline finding.
 A rewrite goes through the same gates as the original: the prose rules,
 a citation of a study used, no figure the abstracts lack. A rewrite
 that fails them is dropped. A rewritten short answer is kept only if it
-does not argue with the stamp. Dropped and rewritten lines are changed
+does not argue with the stamp, keeps every hedge it had, and gives the
+same plain yes or no. The 21-claim run showed why both matter. The check
+turned "Exercise slightly lowers the risk of depression" into "Exercise
+lowers", taking out the "slightly" that `match_effect` had put there to
+size the effect. It also turned "Sugar does not make children
+hyperactive" into "mixed results, some trials find no effect while
+others show a link", which is the tie the hierarchy rule forbids, under
+a False stamp. `breakdown.lost_hedge` sets the hedges aside (may,
+slightly, small, some, low certainty and the rest; a "not" inside "not
+clearly" stays a "not"), and if what is left gives the same answer as
+the rewrite, the rewrite only took the hedge out and is refused.
+`breakdown.kept_answer` refuses a rewrite that turns a plain yes or no
+into anything else. Hedging a plain answer is still allowed ("a lot" to
+"a little"). A research line rewritten without its hedge is dropped, not
+printed surer: the line already failed the check, so it cannot stay
+either. Dropped and rewritten lines are changed
 in the explanation and everywhere in the breakdown too, the effect row
 and the part-by-part answers included, so no other part of the page can
 bring them back. A takeaway code wrote itself is not sent: it is not a

@@ -945,6 +945,47 @@ def stamp_note(verdict: str, tldr: str, said: str, claim: str,
             f"must say no more than \"{verdict}\" does{turned}")
 
 
+# Words that make an answer smaller without turning it round.
+_SIZE_HEDGE = re.compile(
+    r"\b(?:may|might|could|slightly|a little|a bit|somewhat|marginally|modest(?:ly)?|"
+    r"small|some|probably|possibly|likely|(?:very[- ])?low[- ]certainty|"
+    r"certainty (?:of (?:the )?evidence )?(?:is|was) (?:very )?low)\b\s*", re.IGNORECASE)
+
+
+def lost_hedge(before: str, after: str, claim: str) -> bool:
+    """
+    A rewrite that gives the same answer with the hedge taken out says more
+    than the sentence it replaced. "Slightly lowers" is the size of the
+    effect, put there on purpose by match_effect(); "lowers" is a bigger
+    claim, and so is a line that loses "low certainty", "small" or "some".
+    A rewrite that turns the answer round ("may lower" to "does not lower")
+    is a correction, not this.
+    """
+    hedged = lambda t: bool(_SIZE_HEDGE.search(t or "") or _HEDGED.search(t or ""))
+    if not hedged(before) or hedged(after):
+        return False
+    return stance(_bare(before), claim) == stance(after, claim)
+
+
+def _bare(text: str) -> str:
+    """The answer with its hedges set aside, and any "not" in them kept:
+    "does not clearly lower" is still a no."""
+    out = _HEDGED.sub(lambda m: " not " if m.group().lower().startswith("not") else " ",
+                      _SIZE_HEDGE.sub("", text or ""))
+    return re.sub(r"\s{2,}", " ", out)
+
+
+def kept_answer(before: str, after: str, claim: str) -> bool:
+    """
+    A rewrite of a short answer that said a plain yes or no still says it,
+    however much it hedges. "Lowers it a lot" to "lowers it a little" keeps
+    the answer; "does not" to "some trials find no effect while others show
+    a link" turns a verdict that followed the trials back into a tie.
+    """
+    was = stance(_bare(before), claim)
+    return was not in ("yes", "no") or stance(_bare(after), claim) == was
+
+
 # ---------------------------------------------------------------------
 # Rule 7: the answer is about the claim that was typed.
 #
