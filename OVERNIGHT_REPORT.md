@@ -143,3 +143,93 @@ Also, the main Cochrane review on this question was not found.
 Small wording faults seen but not counted against the text: "a drop of
 -5.31 mm Hg" (a minus sign after "drop"), "ergogenic" not in plain words.
 No dashes appeared on any page.
+
+### Step 3: fix the patterns holdout #2 showed (done)
+
+Every fix is general, has tests, and names no holdout claim. None of the
+holdout #2 claims was re-run afterwards: they would no longer be a fair
+test. **A third fresh holdout is needed** to know whether these fixes work
+on claims nobody has tuned for.
+
+| Commit | What it fixes | Holdout #2 case that showed it |
+|---|---|---|
+| c11b16b | A review or guideline enrolled nobody, so its abstract no longer makes the evidence "only in children". It is read from its title, like a pooled review already was. | 10, antibiotics and colds (the harmful miss) |
+| e2e739c | A British spelling or a plural is the same search term ("homoeopathic", "abdominal exercises"). | 11, homeopathy (its main review was found, then thrown away); 9 |
+| cf1b67a | A phrase PubMed has never seen is not searched as loose words ("ab exercises" had become "abnormalities AND exercise"). | 9, ab exercises (8 off-topic papers) |
+| 04561b1 | "Strong evidence" needs more than a pooled review of observational studies; that now says "Moderate". | 6, antiperspirants |
+| 6d91de7, 526bb2c | A fall is said once: no minus sign after "drop" or "fell by", or on its range. | seen on 2 and 5 |
+| 98fa0a8 | "Safety and efficacy of X" reads "safety and effect of X", not "how well it works of X". | seen in the regression run |
+| 706c845 | The "trials outrank weaker studies" rule never turns the model's no into a yes. | found by the regression run, see below |
+
+**Tried and taken back out (039d7f8 reverts 428de9c).** A line in the
+search prompt telling it to search "placebo or sham" when a claim names
+no outcome (for 11, homeopathy). Any change to that prompt's wording
+makes every claim get a brand new search, here and in production, and in
+the regression run "8 glasses of water a day" drifted to the wrong studies
+and to "It's complicated". Too broad to leave in while you were asleep.
+The spelling fix already keeps the main homeopathy review. A narrower
+idea for later is in DECISIONS.md.
+
+**Regression runs (21 claims, Gemini only, 30 seconds apart):**
+- With the placebo line: stopped after water went wrong (see above).
+- Without it: 17 exact, 3 accepted, **1 wrong**. "Apple cider vinegar
+  cure diabetes" was stamped **True**, which is harmful. The model had
+  answered no ("lowers blood sugar a bit, does not cure diabetes"), but it
+  marked the trials "for" because they lowered blood sugar, and the rule
+  that trials outrank weaker studies (added earlier in this round) turned
+  the stamp to True. Fixed as a pattern (706c845): that rule can still
+  settle "It's complicated" and can still turn a yes into a no when large
+  trials found nothing, but never turns a no into a yes. In every run
+  tonight the rule fired only this once. Re-run: False, and the page
+  reads right.
+- Melatonin moved from True to "It's complicated", which the list
+  accepts. Same search, same five reviews; the model weighed the review
+  that found no effect in adults with chronic insomnia more heavily. One
+  slip in its text: it says "healthy adults" where the review says adults
+  with chronic insomnia. Not fixed (model wording).
+- Final run on the finished code: **18 exact, 3 accepted, 0 wrong.** The same as the original baseline
+  (18, 3, 0); one fewer exact than step 1 (19, 2, 0) because melatonin is
+  now "It's complicated" twice in a row. Vinegar: False, "does not cure
+  diabetes, even though it can help lower blood sugar a bit". The trials
+  rule did not fire anywhere. No dash on any page. Small text faults seen,
+  not fixed: melatonin says "lack clear how well it works" and "healthy
+  adults" again; the measles page gives the size of the effect for autism
+  (no link), not for measles.
+
+**Patterns from holdout #2 left unfixed, and why:**
+- MSG and headaches called "mixed" when the review says unproven: that is
+  the model's judgement, and changing it means a prompt change (see the
+  placebo note above for why I did not do that unattended).
+- Creatine: the page said a 2009 trial found "nobody lost hair"; that
+  trial never measured hair. The faithfulness check did not catch an
+  outcome the study never looked at. Needs a careful change to that
+  check.
+- One small, short trial on the wrong outcome can still produce the word
+  "Strong" (artificial sweeteners). Written down in DECISIONS.md.
+- The main Cochrane review on antibiotics for colds was not found by the
+  search. Search coverage, not fixed.
+- "Ergogenic" is not put in plain words; "robust" is logged, not
+  rewritten (an earlier decision).
+
+**Tests and checks:** 618 of 618 tests pass. The QA gate passes
+(contrast, tap targets, overflow, console, tokens, both widths and both
+colour schemes). No shell files changed, so the service worker cache
+stays at evident-v70. Branch accuracy-round-3 pushed.
+
+### Step 4: launch polish (nothing to do, no branch made)
+
+All six items were already built and merged to main on 2026-10-09:
+
+| Item | Commit on main |
+|---|---|
+| (a) the fly-through's animation loop rests when parked, off screen or settled | afce49c |
+| (b) phones get one tier of footage, loaded after the first scroll | 5615a36 |
+| (c) reduced motion and rotation followed live during the visit | 195455f |
+| (d) nothing plays when the tab is hidden (body.paused) | 5181bc9 |
+| (e) the page cannot be pushed sideways on a phone (overflow-x clip) | b1c65b3 |
+| (f) the "Before you trust a verdict" section (where studies come from, is an AI making this up, who made it, is it free, not medical advice) | 2ebc3b8 |
+
+accuracy-round-3 already contains them, and tonight's QA gate checked
+each one (fly-through rests, live gates, pause when unseen, overflow,
+trust section). A launch-polish branch would have had nothing new in it,
+so I did not make one.
