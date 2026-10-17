@@ -3445,6 +3445,16 @@ t("an adjective before 'efficacy' takes the noun: 'lack clear effect', 'the long
   breakdown.plain("Trials lack clear efficacy in adults.") == "Trials lack clear effect in adults."
   and breakdown.plain("Studies must establish the long-term efficacy and safety of it.")
   == "Studies must establish the long-term effect and safety of it.")
+t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
+  breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
+  == "A pooled review estimated the global rate of alcohol use during pregnancy."
+  and breakdown.plain("The prevalence was 10%.") == "The rate was 10%."
+  and breakdown.plain("Melanoma incidence fell.") == "Melanoma rate fell."
+  and breakdown.plain("The estimated incidence was low.") == "The estimated rate was low."
+  and breakdown.plain("No study measured incidence.") == "No study measured how often it happened.")
+t("  and 'safety and efficacy' is 'safety and effect'",
+  breakdown.plain("HPV vaccines have durable safety and efficacy.") == "HPV vaccines have durable safety and effect."
+  and breakdown.plain("Vaccine efficacy was high.") == "Vaccine efficacy was high.")
 fg.models.script = [Resp(VJ(
     "complicated", [1, 2], tldr="Valerian may not help people with insomnia sleep.",
     explanation="A pooled review found valerian did not shorten sleep onset in adults with chronic insomnia "

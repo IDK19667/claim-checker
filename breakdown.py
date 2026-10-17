@@ -133,6 +133,8 @@ _COMPOUND_BEFORE = {
 # Where the sentence needs a noun, the plain one is "effect": "it lacked
 # efficacy" is "it lacked an effect", "no efficacy" is "no effect".
 _NOUN_AFTER = {"no", "any", "little", "some", "much", "less", "more", "greater", "similar",
+               # "safety and efficacy" pairs two nouns: "safety and effect"
+               "and", "or",
                # and after an adjective: "lack clear efficacy" is "lack clear effect"
                "clear", "proven", "significant", "established", "limited", "modest", "real",
                "overall", "long-term", "short-term", "lasting", "sustained", "meaningful",
@@ -157,6 +159,28 @@ def _how_well(m: re.Match) -> str:
     if re.match(r"\s+of\b", m.string[m.end():]):
         return "effect"
     return "how well it works"
+
+
+# "Prevalence" and "incidence" are nouns in nearly every slot they fill:
+# "the global prevalence of alcohol use", "the incidence was low",
+# "melanoma incidence fell". A clause ("how common it is") only reads where
+# a verb or preposition is asking what was measured; everywhere else the
+# plain noun is "rate".
+_CLAUSE_FITS = {"measured", "measure", "measures", "measuring", "estimated", "estimate",
+                "estimates", "estimating", "assessed", "assess", "assesses", "examined",
+                "examine", "examines", "studied", "tracked", "recorded"}
+
+
+def _rate(clause: str):
+    def swap(m: re.Match) -> str:
+        before = re.search(r"(?:([\w-]+)\s+)?([\w-]+)\s+$", m.string[:m.start()])
+        word = before.group(2).lower() if before else ""
+        # "the estimated incidence": a participle after an article is an adjective
+        det = (before.group(1) or "").lower() in {"the", "a", "an", "its", "their", "this"} if before else False
+        if word in _CLAUSE_FITS and not det and not re.match(r"\s+of\b", m.string[m.end():]):
+            return clause
+        return "rate"
+    return swap
 
 
 # Each row is (pattern, replacement, term-to-keep-in-brackets-or-None).
@@ -246,9 +270,9 @@ PLAIN = [
     (r"\beffectiveness\b", lambda m: _how_well(m), None),
     (r"\bsleep(?:[- ]onset)? latency(?: time)?\b", "time to fall asleep", "sleep latency"),
     (r"\b(?:the |its )incidence of\b", "the rate of", None),
-    (r"\bincidence\b", "how often it happened", None),
+    (r"\bincidence\b", _rate("how often it happened"), None),
     (r"\b(?:the |its )prevalence of\b", "the rate of", None),
-    (r"\bprevalence\b", "how common it is", None),
+    (r"\bprevalence\b", _rate("how common it is"), None),
     (r"\b(?:the |its )duration of\b", "the length of", None),
     # "duration" sits in too many grammatical slots for a clause to replace
     # it. "The studies were of short duration" became "of short how long it
