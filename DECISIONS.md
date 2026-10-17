@@ -88,6 +88,20 @@ three rows: the measles one, and two creatine rows that gave a hormone
 take for the same thing. A check whose search names the hormone as its
 stand-in keeps that row.
 
+**"Healthy" describes who was studied, so a study has to say it
+(`breakdown.unsaid_healthy`).** Melatonin's page said a review found no
+effect "in healthy adults"; the review was in adults with chronic
+insomnia. Every printed line already passes through `for_reading` with its
+studies, so there "healthy" before the people a sentence names is taken
+out when none of its cited studies (or, for an uncited line, none shown)
+says "healthy" or the same thing another way ("non-diabetic", "without
+disease", "normotensive"). A study with no abstract keeps it. Across 124
+saved checks it changes 8 sentences, all of them for the better or no
+worse; "healthy groups" is left alone, because without it "children and
+groups not tested" says nothing. The same line read "lack clear how well
+it works": after an adjective ("clear", "long-term", "proven"...),
+"efficacy" now becomes the noun "effect".
+
 ## 2026-10-16: Accuracy round 3, seven patterns from the holdout test
 
 A holdout of 20 claims the code had never seen scored 14 of 20. The

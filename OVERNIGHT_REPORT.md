@@ -390,3 +390,17 @@ row. It is also not used to size the short answer.
     hair-loss effect, which a reader would take for the same thing.
 - Nothing else changes.
 - 647/647 tests pass.
+
+### Step 3c: "healthy adults" no study said (done)
+
+Melatonin's page said a review found no effect "in healthy adults", but
+the review was in adults with chronic insomnia. Now "healthy" before
+people ("adults", "volunteers", "children") is taken out unless a cited
+study says it, or says the same thing another way ("non-diabetic",
+"without disease").
+
+- The same line read "lack clear how well it works". After an adjective,
+  "efficacy" now becomes "effect": "lack clear effect in adults".
+- Checked against 124 saved checks: it changes 8 sentences, all for the
+  better or no worse.
+- 652/652 tests pass.

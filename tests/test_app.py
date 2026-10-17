@@ -3411,6 +3411,37 @@ t("  and the size the takeaway is held to comes from the claim's own outcome",
   "0.62" in (_fbd.get("effect") or {}).get("figure", "") and not (_fbd.get("effect") or {}).get("null"),
   _fbd.get("effect"))
 
+# ---- "healthy" is who was studied, so it comes from the studies -------------------
+_INS = [_study("I1", "Valerian for chronic insomnia: a meta-analysis", types=["Meta-Analysis"],
+               abstract="We pooled 14 trials in adults with chronic insomnia. Valerian did not shorten sleep onset."),
+        _study("I2", "Valerian in healthy volunteers", abstract="Twenty healthy adults took valerian for a week."),
+        _study("I3", "Valerian and glucose", abstract="Non-diabetic adults took valerian."),
+        _study("I4", "Valerian", abstract="")]
+t("'healthy' that no cited study says is taken out, and a sentence that started with it still starts upper case",
+  breakdown.for_reading("It did not help healthy adults (Study 1).", _INS) == "It did not help adults (Study 1)."
+  and breakdown.for_reading("Healthy adults slept no better (Study 1).", _INS) == "Adults slept no better (Study 1).")
+t("  but stays when the study says it, or says it another way, or has no abstract to read",
+  all(breakdown.for_reading(x, _INS) == x for x in (
+      "It helped healthy adults sleep (Study 2).", "It was tried in healthy adults (Study 3).",
+      "It was tried in healthy adults (Study 4).")))
+t("  and an uncited sentence keeps it when any study shown says it",
+  breakdown.for_reading("It may help healthy adults.", _INS) == "It may help healthy adults."
+  and breakdown.for_reading("It may help healthy adults.", _INS[:1]) == "It may help adults.")
+t("an adjective before 'efficacy' takes the noun: 'lack clear effect', 'the long-term effect and safety'",
+  breakdown.plain("Trials lack clear efficacy in adults.") == "Trials lack clear effect in adults."
+  and breakdown.plain("Studies must establish the long-term efficacy and safety of it.")
+  == "Studies must establish the long-term effect and safety of it.")
+fg.models.script = [Resp(VJ(
+    "complicated", [1, 2], tldr="Valerian may not help people with insomnia sleep.",
+    explanation="A pooled review found valerian did not shorten sleep onset in adults with chronic insomnia "
+                "(Study 1). A small trial gave it to 20 healthy adults (Study 2).",
+    evidence=["A pooled review of 14 trials found valerian did not shorten sleep onset (Study 1)."],
+    strength="Pooled trials show it lacks clear efficacy in healthy adults (Study 1)."))]
+_hv = verdict.weigh_evidence("Valerian helps you fall asleep", [dict(s) for s in _INS], "(valerian) AND (sleep onset)")
+t("  through a real check, both reach the page fixed",
+  "lacks clear effect in adults (Study 1)" in (_hv["breakdown"] or {}).get("strength", "")
+  and "20 healthy adults (Study 2)" in _hv["explanation"], _hv)
+
 # ---- the guideline check ------------------------------------------------------
 t("guideline check: runs for medicine, vaccines, infections, cancer, pregnancy, stopping "
   "treatment and protective practices",

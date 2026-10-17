@@ -132,7 +132,13 @@ _COMPOUND_BEFORE = {
 
 # Where the sentence needs a noun, the plain one is "effect": "it lacked
 # efficacy" is "it lacked an effect", "no efficacy" is "no effect".
-_NOUN_AFTER = {"no", "any", "little", "some", "much", "less", "more", "greater", "similar"}
+_NOUN_AFTER = {"no", "any", "little", "some", "much", "less", "more", "greater", "similar",
+               # and after an adjective: "lack clear efficacy" is "lack clear effect"
+               "clear", "proven", "significant", "established", "limited", "modest", "real",
+               "overall", "long-term", "short-term", "lasting", "sustained", "meaningful",
+               "definite", "definitive", "strong", "weak", "high", "low", "superior",
+               "inferior", "equal", "good", "poor", "better", "worse", "consistent", "added",
+               "additional", "potential", "possible", "uncertain"}
 _ARTICLE_AFTER = {"lacked", "lack", "lacks", "showed", "show", "shows", "demonstrated",
                   "demonstrate", "demonstrates", "had", "has", "have", "proved", "found",
                   "confirmed", "confirm", "confirms", "without", "with"}
@@ -2004,6 +2010,43 @@ def _unit_in(figure: str, abstracts: str) -> str | None:
     return None
 
 
+# "Healthy" is a description of who was studied, so it has to come from
+# the studies: "healthy adults" said of a review of adults with chronic
+# insomnia names the wrong people.
+_HEALTHY = re.compile(
+    r"\bhealthy\s+(?=(?:young\s+|older\s+|adult\s+)?(?:adults?|people|persons?|volunteers?|"
+    r"individuals?|men|women|participants?|subjects?|children|kids|adolescents?|teens?|"
+    r"teenagers?|infants?|babies|seniors?|elderly)\b)", re.IGNORECASE)
+# What a study writes when it means the same thing.
+_SAYS_HEALTHY = re.compile(
+    r"\bhealthy\b|\bnon-?diabetic|\bwithout (?:any |known )*(?:disease|diabetes|illness|"
+    r"comorbidit)|\bdisease-free\b|\bnormoglyc|\bnormotensive\b|\bnormal[- ]weight\b",
+    re.IGNORECASE)
+
+
+def unsaid_healthy(text: str, studies: list[dict] = ()) -> str:
+    """
+    "Healthy" before the people a sentence describes is taken out when no
+    study it cites (or, uncited, no study at all) says "healthy". A study
+    with no abstract to read keeps it: absence there proves nothing.
+    """
+    if not text or not studies or not _HEALTHY.search(text):
+        return text or ""
+    out, changed = [], False
+    for sentence in sentences(text):
+        if _HEALTHY.search(sentence):
+            numbers = refs(sentence, len(studies)) or range(1, len(studies) + 1)
+            cited = [studies[n - 1] for n in numbers]
+            if not any(not str(st.get("abstract") or "").strip()
+                       or _SAYS_HEALTHY.search(f"{st.get('title') or ''} {st.get('abstract')}")
+                       for st in cited):
+                sentence = _HEALTHY.sub("", sentence)
+                sentence = sentence[:1].upper() + sentence[1:]
+                changed = True
+        out.append(sentence)
+    return " ".join(out) if changed else text
+
+
 def for_reading(text: str, studies: list[dict] = ()) -> str:
     """
     Round the figures in prose that has passed the gate, and give a measured
@@ -2011,8 +2054,9 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
     1.53" becomes "fell by about 22 mg/dL" when no abstract printed a unit
     for 1.53 (drop_unitless), and a change in HbA1c printed in % is said in
     percentage points, which is what it is. Study numbers, p-values, counts
-    and years are never touched.
+    and years are never touched. "Healthy" no study said goes too.
     """
+    text = unsaid_healthy(text, studies)
     if not text or not re.search(r"\d", text):
         return house_style(text or "")
     abstracts = " ".join(str(s.get("abstract") or "") for s in studies or [])
