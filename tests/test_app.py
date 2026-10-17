@@ -280,7 +280,7 @@ t("tidy: empty stays empty", verdict.tidy_prose("   ", 100) == "")
 # ---- the copy gate on model output -------------------------------------------
 t("tidy: an em dash before a new thought becomes a full stop",
   verdict.tidy_prose("The trials were small \u2014 Most ran for six weeks", 700)
-  == "The trials were small. Most ran for six weeks.")
+  == "The trials were small. Most ran for 6 weeks.")
 t("tidy: a spaced hyphen used as a dash becomes a comma",
   verdict.tidy_prose("It may lower sugar a little - but only after meals", 700)
   == "It may lower sugar a little, but only after meals.")
@@ -2237,7 +2237,7 @@ _v = verdict.weigh_evidence("Vitamin D stops colds", _MEASLES, "(vitamin d) AND 
 t("  and so does the one-group downgrade",
   _v["verdict"] == "complicated" and "Every study behind this" in _v["explanation"]
   and not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], "", "Vitamin D stops colds"), _v)
-_GUIDE = "Daily water needs vary by person and food intake, so eight glasses is just a rough guide."
+_GUIDE = "Daily water needs vary by person and food intake, so 8 glasses is just a rough guide."
 _WATER_S = [_study("H1", "Human water needs: a review of hydration in adults", types=["Systematic Review"])]
 _GUIDE_R = Resp(VJ("complicated", [1], tldr=_GUIDE, evidence=["Water needs varied (Study 1)."]))
 t("  the code screen misreads 'just a rough guide' as a plain yes",
@@ -2521,10 +2521,10 @@ t("a figure with three decimals is rounded, and an HbA1c change with no unit is 
 t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its interval",
   _fr("Study 1 showed drops in fasting blood sugar with a weighted mean difference of -21.929 mg/dL "
       "and HbA1c with -1.53.", _ACV_R)
-  == "Study 1 showed drops in fasting blood sugar with a weighted mean difference of about -22 mg/dL."
+  == "Study 1 showed drops in fasting blood sugar with an average difference of about -22 mg/dL."
   and _fr("Fasting blood sugar was reduced by -21.929 mg/dL (95% CI: -29.19, -14.67) (Study 1). HbA1c "
           "was reduced by a weighted mean difference of -1.53 (95% CI: -2.65, -0.41) (Study 1).", _ACV_R)
-  == "Fasting blood sugar was reduced by about -22 mg/dL (95% CI: -29, -15) (Study 1)."
+  == "Fasting blood sugar was reduced by about -22 mg/dL (likely range: -29, -15) (Study 1)."
   and _fr("In Study 1, fasting blood sugar fell by 21.929 mg/dL, and HbA1c fell by 1.53 "
           "(95% CI -2.65 to -0.41).", _ACV_R) == "In Study 1, fasting blood sugar fell by about 22 mg/dL.")
 t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure to keep",
@@ -2547,16 +2547,16 @@ t("  p-values, ratios, counts, years and study numbers are never touched",
   == "In 2019, 7 trials of 319 people found odds ratio 0.88, p = 0.0042 (Studies 1, 2).")
 t("  an interval is rounded without 'about', and a range carries its unit once",
   _fr("FBS fell 21.929 mg/dL (95% CI 29.19 to 14.67) (Study 1).", _ACV_R)
-  == "FBS fell about 22 mg/dL (95% CI 29 to 15) (Study 1)."
+  == "FBS fell about 22 mg/dL (likely range 29 to 15) (Study 1)."
   and _fr("Glucose fell between 12.345 and 30.555 mg/dL (Study 1).", _ACV_R)
   == "Glucose fell between about 12 and 31 mg/dL (Study 1).")
 t("  one range, one precision: both ends round alike, but two separate figures do not",
   _fr("Sleep came 17.19 min sooner (95% CI -27.19 to -7.44, p = 0.0006) (Study 1).", _ACV_R)
-  == "Sleep came about 17 min sooner (95% CI -27 to -7, p = 0.0006) (Study 1)."
+  == "Sleep came about 17 min sooner (likely range -27 to -7, p = 0.0006) (Study 1)."
   and _fr("It took between 7.44 and 27.19 minutes (Study 1).", _ACV_R)
   == "It took between about 7 and 27 minutes (Study 1)."
   and _fr("Odds ratio 0.88 (95% CI 0.81 to 0.96) (Study 1).", _ACV_R)
-  == "Odds ratio 0.88 (95% CI 0.81 to 0.96) (Study 1)."
+  == "Odds ratio 0.88 (likely range 0.81 to 0.96) (Study 1)."
   and _fr("Weight fell by 2.35 and 12.67 kg in two groups (Study 1).", _ACV_R)
   == "Weight fell by 2.35 and 13 kg in two groups (Study 1).")
 _once = _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 (Study 1).", _ACV_R)
@@ -2974,6 +2974,125 @@ t("  an answer with no research lines costs no check",
 t("  a takeaway code wrote is not sent to be checked",
   verdict._code_takeaway(verdict.RANKED_TLDR["true"]) and verdict._code_takeaway(verdict.UNTESTED_TLDR)
   and not verdict._code_takeaway("Tai chi lowers blood pressure a little."))
+
+# ---- writing: numbers, statistics, verbs, and the effect line ----------------
+# Synthetic claims and studies only; none of these is a holdout claim.
+_dg = breakdown.digits
+t("writing: a number spelled out is written in digits",
+  _dg("A pooled review of thirty-six trials found less pain.") == "A pooled review of 36 trials found less pain."
+  and _dg("They enrolled four thousand ninety-one adults.") == "They enrolled 4091 adults."
+  and _dg("Two hundred and twelve people took part.") == "212 people took part.")
+t("  a decimal and a sign said in words become the figure",
+  _dg("LDL fell by negative zero point thirty-one mmol per liter.") == "LDL fell by -0.31 mmol per liter."
+  and _dg("The difference was minus 0.54 kg (95% CI minus 1.05 to minus 0.03).")
+  == "The difference was -0.54 kg (95% CI -1.05 to -0.03).")
+t("  but 'one' and 'zero' as words, and fractions, stay words",
+  _dg("One of the trials found no effect, and no one dropped out.")
+  == "One of the trials found no effect, and no one dropped out."
+  and _dg("Two-thirds improved, with zero side effects at one point.")
+  == "Two-thirds improved, with zero side effects at one point."
+  and _dg("About one in four people, over one or two weeks.") == "About 1 in 4 people, over 1 or 2 weeks.")
+_th = breakdown.thousands
+t("writing: a long number gets its commas",
+  _th("covering 2481190 adults and 10000 steps") == "covering 2,481,190 adults and 10,000 steps"
+  and _th("over 1500 people") == "over 1,500 people")
+t("  a year, a PMID, a decimal and a trial registration number do not",
+  _th("a 2019 review, from 1990 to 2020") == "a 2019 review, from 1990 to 2020"
+  and _th("PMID 31234567, p < 0.00001, NCT01234567") == "PMID 31234567, p < 0.00001, NCT01234567"
+  and _th("in 2018, 2000 people took part") == "in 2018, 2,000 people took part")
+_uj = breakdown.unjargon
+t("writing: an area under the glucose curve is the total rise in blood sugar",
+  _uj("Glucose netiAUC was 7.9 mmol/L/h (Study 2).") == "The total rise in blood sugar was 7.9 mmol/L/h (Study 2)."
+  and _uj("Walks lower the glucose incremental area under the curve (Study 1).")
+  == "Walks lower the total rise in blood sugar (Study 1)."
+  and _uj("Walks led to a lower iAUC for glucose (Study 1).")
+  == "Walks led to a lower total rise in blood sugar (Study 1).")
+t("  a weighted mean difference is the average difference, and a 95% CI the likely range",
+  _uj("The weighted mean difference was -0.54 kg (95% CI -1.05 to -0.03) (Study 7).")
+  == "The average difference was -0.54 kg (likely range -1.05 to -0.03) (Study 7)."
+  and _uj("WMD -1.2 kg (Study 3).") == "Average difference -1.2 kg (Study 3).")
+t("  a standardized mean difference is an effect size, and after meals is said in words",
+  _uj("Weight fell with a standardized mean difference of -0.39 (Study 2).")
+  == "Weight fell with an effect size of -0.39 (Study 2)."
+  and _uj("Postprandial blood glucose fell (Study 1).") == "Blood sugar after meals fell (Study 1).")
+_ag = breakdown.agree
+t("writing: a plural subject takes a plural verb",
+  _ag("Vaccines successfully lowers the risk.") == "Vaccines successfully lower the risk."
+  and _ag("These findings suggests a benefit.") == "These findings suggest a benefit."
+  and _ag("The review found that lentils lowers LDL.") == "The review found that lentils lower LDL."
+  and _ag("Studies 1 and 3 shows a drop.") == "Studies 1 and 3 show a drop."
+  and _ag("The studies was small.") == "The studies were small.")
+t("  and a singular one a singular verb",
+  _ag("The evidence suggest a small effect.") == "The evidence suggests a small effect."
+  and _ag("Study 2 show a drop.") == "Study 2 shows a drop."
+  and _ag("This review have limits.") == "This review has limits.")
+t("  a sentence that was already right is left alone",
+  all(_ag(s) == s for s in (
+      "Eating lentils lowers LDL.", "Analysis of trials shows a benefit.", "This shows a benefit.",
+      "Measles causes a rash.", "Diabetes affects millions.", "8 glasses is just a rough guide.",
+      "Study 1 and Study 2 show a drop.", "The study report shows a benefit.",
+      "Does the evidence show a benefit?", "Trial results show a drop.")))
+
+# The gate now sees a spelled-out number, so it has to be in an abstract.
+_LENT = [_study("LE1", "Lentils and LDL cholesterol: a meta-analysis", types=["Meta-Analysis"],
+                abstract="We pooled 36 randomized trials in 2481190 adults. Lentils lowered LDL "
+                         "cholesterol (weighted mean difference -0.19 mmol/L, 95% CI -0.23 to -0.15)."),
+         _study("LE2", "Lentils and blood sugar after meals: a randomized trial",
+                abstract="120 adults were randomized to lentils or rice. Lentils lowered the glucose "
+                         "iAUC by 18% compared with rice.")]
+_raw = {"parts": [], "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+        "effect_size": "",
+        "evidence": ["A trial of fifty-five adults found lower LDL cholesterol (Study 2).",
+                     "A trial of one hundred and twenty adults found lower blood sugar (Study 2).",
+                     "A pooled review of thirty-six trials found lower LDL cholesterol (Study 1)."]}
+_g = breakdown.ground(_raw, _LENT, verdict.tidy_prose)
+t("writing: a number spelled in words meets the gate like any other",
+  not any("55" in p or "fifty" in p for p in _g["evidence"])
+  and any("120 adults" in p for p in _g["evidence"]) and any("36 trials" in p for p in _g["evidence"]),
+  _g["evidence"])
+
+# The effect line points above only at the size of an effect.
+_counts = dict(_raw, evidence=["A pooled review of 36 trials in 2481190 adults found lower LDL cholesterol (Study 1)."])
+t("effect line: counts of people or trials are not figures to point at",
+  breakdown.ground(dict(_counts, effect_size="LDL fell by 0.31 mmol/L (Study 1)."),
+                   _LENT, verdict.tidy_prose)["effect_size"] == "")
+t("  and with no figure given at all, the abstracts are still said to carry none",
+  breakdown.ground(dict(_counts, effect_size="The effect was modest (Study 1)."),
+                   _LENT, verdict.tidy_prose)["effect_size"] == breakdown.NO_EFFECT_SIZE)
+t("  while a size above is still pointed at",
+  breakdown.ground(dict(_counts, effect_size="LDL fell by 0.31 mmol/L (Study 1).",
+                        evidence=["Lentils lowered blood sugar by 18% (Study 2)."]),
+                   _LENT, verdict.tidy_prose)["effect_size"] == breakdown.EFFECT_SIZE_ABOVE)
+t("  a pointer left with nothing above it, after a later step, is taken out",
+  breakdown.settle_effect({"effect_size": breakdown.EFFECT_SIZE_ABOVE, "parts": [],
+                           "evidence": ["A review of 36 trials found less LDL (Study 1)."]})["effect_size"] == ""
+  and breakdown.settle_effect({"effect_size": breakdown.EFFECT_SIZE_ABOVE, "parts": [],
+                               "evidence": ["LDL fell by 0.19 mmol/L (Study 1)."]})["effect_size"]
+  == breakdown.EFFECT_SIZE_ABOVE)
+t("  and the page prints no effect row when there is no line",
+  "{%- if bd.effect_size %}" in (ROOT / "templates" / "index.html").read_text()
+  and "(bd.effect_size\n        ? `<p class=\"effect\">" in (ROOT / "static" / "app.js").read_text())
+
+# All of it, through a real check.
+_LENT_CLAIM = "Lentils lower LDL cholesterol"
+fg.models.calls = 0
+fg.models.script = [Resp(VJ(
+    "true", [1, 2], tldr="Lentils successfully lowers LDL cholesterol a little.",
+    explanation="A pooled review of thirty-six trials in 2481190 adults found the weighted mean "
+                "difference was minus 0.19 mmol/L (95% CI minus 0.23 to minus 0.15) (Study 1). "
+                "Lentils cut the glucose iAUC by 18% (Study 2).",
+    evidence=["A pooled review of thirty-six trials in 2481190 adults found lower LDL cholesterol (Study 1)."],
+    effect_size="The weighted mean difference was minus 0.19 mmol/L (Study 1)."))]
+_v = verdict.weigh_evidence(_LENT_CLAIM, [dict(x) for x in _LENT], "(lentils) AND (ldl cholesterol)")
+_all = " ".join([_v["tldr"], _v["explanation"]] + list((_v["breakdown"] or {}).get("says") or [])
+                + list((_v["breakdown"] or {}).get("evidence") or [])
+                + [(_v["breakdown"] or {}).get("effect_size") or ""])
+t("writing: a real check prints digits, commas and plain names for its statistics",
+  "36 trials" in _all and "2,481,190 adults" in _all and "average difference" in _all
+  and "likely range" in _all and "total rise in blood sugar" in _all
+  and not re.search(r"thirty|minus|weighted mean|iAUC|95% CI|2481190", _all), _all)
+t("  and its verbs agree with their subjects",
+  _v["tldr"].startswith("Lentils successfully lower "), _v["tldr"])
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

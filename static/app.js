@@ -611,7 +611,9 @@ function renderBreakdown(bd, count, studies = []) {
   if ((bd.evidence || []).length) {
     out.push(sec("What the evidence shows",
       bd.evidence.map(prose).join("") +
-      `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bd.effect_size || "", count)}</span></p>`));
+      (bd.effect_size
+        ? `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bd.effect_size, count)}</span></p>`
+        : "")));
   }
   // Quoted from the abstracts on the server, so the quote is escaped and never
   // linked: a "study 2" inside it is the authors' study 2, not ours.

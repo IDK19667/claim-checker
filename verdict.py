@@ -464,7 +464,8 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
     # With every line gone the page falls back to the explanation, so that
     # has lost the same sentences. If nothing of it is left either, the
     # short answer stands in rather than a line that failed the check.
-    new_bd = {**bd, "says": kept_lines, "evidence": [p for p in evidence_paras if p]}
+    new_bd = breakdown.settle_effect(
+        {**bd, "says": kept_lines, "evidence": [p for p in evidence_paras if p]})
     return {**result, "tldr": tldr, "explanation": explanation or tldr, "breakdown": new_bd}
 
 
@@ -922,6 +923,9 @@ def tidy_prose(text: str, limit: int) -> str:
     # A hyphen with a space either side, between words, is a dash too. Only
     # between letters, so "5 - 10 mg" keeps its meaning.
     t = re.sub(r"(?<=[A-Za-z])\s+-\s+(?=[A-Za-z])", ", ", t)
+    # Numbers in digits, here and not later, so a number spelled out in
+    # words meets the gate like any other (breakdown.digits).
+    t = breakdown.digits(t)
     # Filler openers, per sentence.
     parts = _SENTENCE_END.split(t)
     cleaned = []
@@ -1766,6 +1770,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         deeper["says"] = [x for x in (readable(t) for t in deeper.get("says") or []) if x]
         for part in deeper.get("parts") or []:
             part["assessment"] = readable(part.get("assessment")) or left_out
+        deeper = breakdown.settle_effect(deeper)
 
     return {
         "verdict": verdict,

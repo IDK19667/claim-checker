@@ -404,7 +404,9 @@
                 {%- for para in bd.evidence %}
                 <p class="deeper-p">{{ para }}</p>
                 {%- endfor %}
+                {%- if bd.effect_size %}
                 <p class="effect"><b>How big the effect is</b><span>{{ bd.effect_size }}</span></p>
+                {%- endif %}
               </section>
               {%- endif %}
               {%- if bd.concluded %}

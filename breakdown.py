@@ -1695,11 +1695,16 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | N
     # reached the page anywhere, and the gate drops sentences one at a time,
     # so the effect-size line can go while an odds ratio two paragraphs up
     # stays. Saying the abstracts carry no figure there would contradict it.
+    #
+    # Pointing above needs the size of an effect above, not any number: "33
+    # reviews covering 17,155,277 people" is a count. And when the model did
+    # give a figure here and the gate took it out, the abstracts may well
+    # report one, so neither line is true and the row is left out.
     if not effect or not _NUMERAL.search(_REF.sub(" ", effect)):
         said = paragraphs + [p["assessment"] for p in parts]
-        effect = (EFFECT_SIZE_ABOVE
-                  if any(_NUMERAL.search(_REF.sub(" ", t)) for t in said)
-                  else NO_EFFECT_SIZE)
+        gave = _NUMERAL.search(_REF.sub(" ", tidy(str(raw.get("effect_size") or ""), FIELD_MAX)))
+        effect = (EFFECT_SIZE_ABOVE if any(shows_effect(t) for t in said)
+                  else "" if gave else NO_EFFECT_SIZE)
 
     # The figure, read as a size. The translation is only ever written beside
     # the figure it came from: a ratio in this line translated and parked
@@ -1905,7 +1910,7 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
     and years are never touched.
     """
     if not text or not re.search(r"\d", text):
-        return text or ""
+        return house_style(text or "")
     abstracts = " ".join(str(s.get("abstract") or "") for s in studies or [])
     refs_at = [m.span() for m in _REF.finditer(text)]
     prev_end = [None]
@@ -1969,7 +1974,7 @@ def for_reading(text: str, studies: list[dict] = ()) -> str:
                 new = "about " + new
         return new + unit + note
 
-    return drop_unitless(_FIGURE_UNIT.sub(fix, text))
+    return house_style(drop_unitless(_FIGURE_UNIT.sub(fix, text)))
 
 
 def drop_unitless(text: str) -> str:
@@ -2003,6 +2008,318 @@ def drop_unitless(text: str) -> str:
         if sent:
             kept.append(sent)
     return " ".join(kept)
+
+
+# ---------------------------------------------------------------------
+# Rule 11: house style for numbers, statistics and verbs.
+#
+# The holdout test printed "17155277 people", "thirteen thousand
+# seventy-eight patients", "negative zero point twenty-seven mmol per
+# liter", "glucose netiAUC" and "Vaccines successfully lowers". The prompt
+# already asks for digits and plain words; these are what got past it.
+#
+# Two places. Number words become digits in tidy_prose, before the gate,
+# so a number the model spelled out is checked against the abstracts like
+# any other instead of slipping past the gate in words. The rest is the
+# last step of for_reading, after every rule that reads a figure or the
+# name of a statistic: calling a standardized mean difference an "effect
+# size" any earlier would hide it from the code that sizes it.
+# ---------------------------------------------------------------------
+
+_NUMBER_WORD = "|".join(sorted(evidence._NUM_WORDS, key=len, reverse=True))
+_SPELLED = re.compile(
+    rf"\b(?P<sign>(?:negative|minus)\s+)?"
+    rf"(?P<whole>(?:{_NUMBER_WORD})\b(?:(?:-|\s+)(?:{_NUMBER_WORD}|hundred|thousand)\b"
+    rf"|(?:(?<=hundred)|(?<=thousand))\s+and\s+(?:{_NUMBER_WORD})\b)*)"
+    rf"(?:\s+point\s+(?P<part>(?:{_NUMBER_WORD})\b(?:(?:-|\s+)(?:{_NUMBER_WORD})\b)*))?",
+    re.IGNORECASE)
+_FRACTION_AFTER = re.compile(r"(?:-|\s+)(?:halves|half|thirds?|quarters?|fourths?|fifths?|"
+                             r"sixths?|sevenths?|eighths?|ninths?|tenths?)\b", re.IGNORECASE)
+# "one" and "zero" are words more often than numbers: "one of the trials",
+# "no one", "zero effect". They become digits only beside another number.
+_BESIDE_NUMBER = re.compile(rf"\s+(?:in|to|or|and)\s+(?:\d|(?:{_NUMBER_WORD})\b)", re.IGNORECASE)
+_TENS = {20, 30, 40, 50, 60, 70, 80, 90}
+
+
+def _spelled_value(words: list[str]) -> int | None:
+    """The run's value, or None when the words are two numbers side by side."""
+    for prev, cur in zip(words, words[1:]):
+        if prev in ("hundred", "thousand") or cur in ("hundred", "thousand"):
+            continue
+        if not (evidence._NUM_WORDS[prev] in _TENS and 0 < evidence._NUM_WORDS[cur] < 10):
+            return None
+    return evidence._fold(words)
+
+
+def _spelled_digits(words: list[str]) -> str | None:
+    """The digits after a decimal point: "twenty seven" is 27, "zero five" 05."""
+    out, i = "", 0
+    while i < len(words):
+        v = evidence._NUM_WORDS[words[i]]
+        if v in _TENS and i + 1 < len(words) and 0 < evidence._NUM_WORDS[words[i + 1]] < 10:
+            v += evidence._NUM_WORDS[words[i + 1]]
+            i += 1
+        out += str(v)
+        i += 1
+    return out
+
+
+def digits(text: str) -> str:
+    """
+    Numbers the model spelled out, written as digits: "forty-two articles"
+    is "42 articles", "negative zero point twenty-seven" is "-0.27", "minus
+    0.54 kg" is "-0.54 kg". Fractions ("two-thirds") and a lone "one" or
+    "zero" are left as words.
+    """
+    def swap(m: re.Match) -> str:
+        if _FRACTION_AFTER.match(m.string, m.end()):
+            return m.group(0)
+        words = [w for w in re.findall(r"[a-z]+", m.group("whole").lower()) if w != "and"]
+        value = _spelled_value(words)
+        if value is None:
+            return m.group(0)
+        part = m.group("part")
+        if (len(words) == 1 and words[0] in ("one", "zero") and not part and not m.group("sign")
+                and not _BESIDE_NUMBER.match(m.string, m.end())
+                and not re.search(rf"(?:\d|\b(?:{_NUMBER_WORD}))\s+(?:in|to|or|and)\s+$",
+                                  m.string[:m.start()], re.IGNORECASE)):
+            return m.group(0)
+        out = str(value)
+        if part:
+            out += "." + _spelled_digits(re.findall(r"[a-z]+", part.lower()))
+        return ("-" if m.group("sign") else "") + out
+
+    t = _SPELLED.sub(swap, text or "")
+    return re.sub(r"\b(?:minus|negative)\s+(?=\d)", "-", t, flags=re.IGNORECASE)
+
+
+# A year is not a count. Between 1800 and 2100 a four-digit number takes
+# a comma only when what follows says it was counted.
+_COUNTED_AFTER = re.compile(
+    r"\s*(?:people|persons|participants|patients|adults|children|kids|infants|women|men|"
+    r"subjects|individuals|volunteers|respondents|students|workers|athletes|smokers|users|"
+    r"cases|deaths|births|pregnancies|steps|calories|kcal|IU|mcg|µg|mg|g|kg|ml)\b",
+    re.IGNORECASE)
+_LONG_NUMBER = re.compile(r"(?<![\w.,])(\d{4,})(?!\d)")
+
+
+def thousands(text: str) -> str:
+    """17155277 is 17,155,277. Years, PMIDs and decimals are left alone."""
+    def group(m: re.Match) -> str:
+        n = int(m.group(1))
+        if re.search(r"PMID:?\s*$", m.string[:m.start()], re.IGNORECASE):
+            return m.group(0)
+        if len(m.group(1)) == 4 and 1800 <= n <= 2100 and not _COUNTED_AFTER.match(m.string, m.end()):
+            return m.group(0)
+        return f"{n:,}"
+
+    return _LONG_NUMBER.sub(group, text or "")
+
+
+def _total_rise(m: re.Match) -> str:
+    named = " ".join(g for g in m.groups() if g).lower()
+    near = m.string[max(0, m.start() - 80):m.end() + 80].lower()
+    what = ("insulin" if "insulin" in named
+            else "blood sugar" if named or re.search(r"glucose|sugar|glyc", near)
+            else None)
+    said = f"total rise in {what}" if what else "total rise after eating"
+    # "a lower iAUC" already has its article; "lowers iAUC" needs one.
+    before = m.string[max(0, m.start() - 30):m.start()]
+    if not re.search(r"\b(?:a|an|the|its|their)\s+(?:[\w-]+\s+)?$", before, re.IGNORECASE):
+        said = "the " + said
+    return said
+
+
+# Statistics with a plain name. Each keeps its figure and its meaning: an
+# incremental area under the glucose curve is the total rise in blood sugar
+# after eating, and a weighted mean difference is the average difference
+# between the groups, weighted only in how the review added the trials up.
+JARGON = [
+    (r"\b(?:the\s+)?(?:(?:postprandial\s+)?(?:blood\s+|plasma\s+)?(glucose|sugar|insulin)\s+)?"
+     r"(?:net\s*)?(?:iAUC|incremental\s+(?:AUC|area\s+under\s+the(?:\s+(?:glucose|insulin))?\s+curve)"
+     r"(?:\s*\(i?AUC\))?)(?:\s+(?:for|of)\s+(?:blood\s+|plasma\s+)?(glucose|sugar|insulin))?",
+     _total_rise),
+    (r"\bstandardi[sz]ed\s+mean\s+difference(s?)(?:\s*\(SMDs?\))?", r"effect size\1"),
+    (r"\bSMD(s?)\b(?=:?\s*[-−]?\d)", r"effect size\1"),
+    (r"\b(?:weighted\s+|pooled\s+)?mean\s+difference(s?)(?:\s*\(W?MDs?\))?", r"average difference\1"),
+    (r"\bW?MD(s?)\b(?=:?\s*[-−]?\d)", r"average difference\1"),
+    (r"\b95\s?%\s*CIs?\b", "likely range"),
+    (r"\bpostprandial\s+(?:blood\s+|plasma\s+)?(?:glucose|sugar)\b", "blood sugar after meals"),
+    (r"\bpostprandial\b", "after-meal"),
+    (r"\bfasting\s+(?:blood\s+|plasma\s+)?glucose\b", "fasting blood sugar"),
+    (r"\b(?:blood|plasma)\s+glucose\b", "blood sugar"),
+]
+_JARGON = [(re.compile(p, re.IGNORECASE), r) for p, r in JARGON]
+
+
+def unjargon(text: str) -> str:
+    """Name each statistic in plain words, keeping its figure."""
+    out = text or ""
+    for pattern, plain_words in _JARGON:
+        out = pattern.sub(lambda m, r=plain_words: _recase(
+            m.group(0), r(m) if callable(r) else m.expand(r)), out)
+    return _fix_articles(out)
+
+
+# Subject and verb. Only the patterns that cannot misfire are fixed: a
+# plural subject that opens its clause and is followed straight by its
+# verb, a singular study word the same way, and a study reference. "Eating
+# eggs raises" is right (the subject is the eating), so a subject with an
+# -ing word in it is never touched, and nor is one with a preposition in
+# it, where the noun beside the verb is not the subject at all.
+_AGREE_BASE = ("show suggest find indicate support report confirm link lower reduce raise "
+               "increase improve help cause need seem appear remain lead make give offer "
+               "affect decrease slow boost protect prevent work point tend shorten harm worsen").split()
+_IRREGULAR = {"have": "has", "do": "does", "are": "is", "were": "was"}
+
+
+def _s_form(verb: str) -> str:
+    low = verb.lower()
+    if low in _IRREGULAR:
+        out = _IRREGULAR[low]
+    elif re.search(r"[^aeiou]y$", low):
+        out = low[:-1] + "ies"
+    elif re.search(r"(?:s|x|z|ch|sh|o)$", low):
+        out = low + "es"
+    else:
+        out = low + "s"
+    return _recase(verb, out)
+
+
+def _base_form(verb: str) -> str:
+    low = verb.lower()
+    back = {v: k for k, v in _IRREGULAR.items()}
+    if low in back:
+        out = back[low]
+    elif low.endswith("ies"):
+        out = low[:-3] + "y"
+    elif re.search(r"(?:sses|xes|zes|ches|shes|oes)$", low):
+        out = low[:-2]
+    else:
+        out = low[:-1]
+    return _recase(verb, out)
+
+
+# A singular subject is only corrected to verbs that cannot be nouns. "The
+# study report shows" and "the research support for it" are compounds, and
+# turning "report" into "reports" there would break a sentence that was right.
+_AGREE_SURE = "show suggest find indicate confirm seem appear remain".split()
+_S_VERBS = "|".join(sorted({_s_form(v) for v in _AGREE_BASE} | {"cuts", "hurts", "has", "does",
+                                                                "is", "was"}, key=len, reverse=True))
+_BASE_VERBS = "|".join(sorted(_AGREE_SURE + list(_IRREGULAR), key=len, reverse=True))
+# Two verbs in a row means the first was a noun: "trial results show".
+_VERB_NEXT = re.compile(rf"\s+(?:{_S_VERBS}|{_BASE_VERBS}|had|did|\w+ed)\b", re.IGNORECASE)
+_CLAUSE_START = r"(?:^|(?<=[.!?]\s)|(?<=\bthat\s)|(?<=\bbecause\s))"
+_ADVERB = r"(?P<adv>(?:(?:also|still|often|\w+ly)\s+)?)"
+_NOT_SUBJECT = frozenset("""of in on at by for from with without among across about like than
+    after before during between into over under within per versus vs and or but nor that which
+    who whose where when while if whether because since although though as how why what to not
+    never no does did do can could will would should may might must let found showed reported
+    is are was were has have had""".split())
+_PLURAL_HEAD = frozenset("""studies trials reviews analyses results findings researchers authors
+    people patients participants adults children kids women men users vaccines supplements
+    foods drinks they""".split())
+_PLURAL_DET = frozenset("""these those both many most several multiple few all other some two
+    three four five six seven eight nine ten""".split())
+_NOT_PLURAL = frozenset("""this thus its his hers theirs ours yours whereas perhaps always
+    sometimes besides as yes does goes has was is us diabetes herpes measles mumps rickets rabies
+    scabies shingles news series species means lens gas bias atlas canvas molasses pilates aids
+    sars mers covid""".split())
+_SINGULAR_HEAD = ("study|trial|review|analysis|meta-analysis|evidence|research|survey|paper|"
+                  "cohort|experiment")
+_PLURAL_SUBJECT = re.compile(
+    rf"{_CLAUSE_START}(?P<np>(?:[A-Za-z0-9][\w'-]*\s+){{0,3}}?)"
+    rf"(?P<head>[A-Za-z][\w-]*s|people|children|women|men)\s+{_ADVERB}(?P<verb>{_S_VERBS})\b")
+_SINGULAR_SUBJECT = re.compile(
+    rf"{_CLAUSE_START}(?P<np>(?:[A-Za-z0-9][\w'-]*\s+){{0,3}}?)"
+    rf"(?P<head>{_SINGULAR_HEAD})\s+{_ADVERB}(?P<verb>{_BASE_VERBS})\b", re.IGNORECASE)
+_STUDIES_REF = re.compile(
+    rf"(?<![(\w])(?P<np>Studies\s+\d+(?:\s*,\s*\d+)*(?:,?\s+and\s+\d+)?)\s+{_ADVERB}"
+    rf"(?P<verb>{_S_VERBS})\b")
+_STUDY_REF = re.compile(
+    rf"(?<![(\w])(?P<np>Study\s+\d+)\s+{_ADVERB}(?P<verb>{_BASE_VERBS})\b")
+
+
+def _np_words(np: str) -> list[str]:
+    return [w.lower() for w in re.findall(r"[\w'-]+", np)]
+
+
+def agree(text: str) -> str:
+    """Fix a verb that does not agree with its subject, where that is sure."""
+    def to_base(m: re.Match) -> str:
+        words = _np_words(m.group("np"))
+        head = m.group("head").lower()
+        if (head in _NOT_PLURAL or _VERB_NEXT.match(m.string, m.end())
+                or any(w in _NOT_SUBJECT or w.endswith("ing") for w in words)):
+            return m.group(0)
+        # "8 glasses is just a rough guide" is one amount, and reads right.
+        if any(re.fullmatch(r"[\d,.]+", w) for w in words) and head not in _PLURAL_HEAD:
+            return m.group(0)
+        if not (head in _PLURAL_HEAD or any(w in _PLURAL_DET for w in words)
+                or not re.search(r"(?:ss|us|is|ics|ous|ness)$", head)):
+            return m.group(0)
+        return m.group(0)[:m.start("verb") - m.start()] + _base_form(m.group("verb"))
+
+    def to_s(m: re.Match) -> str:
+        words = _np_words(m.group("np"))
+        if (_VERB_NEXT.match(m.string, m.end())
+                or any(w in _NOT_SUBJECT or w in _PLURAL_DET for w in words)):
+            return m.group(0)
+        return m.group(0)[:m.start("verb") - m.start()] + _s_form(m.group("verb"))
+
+    def ref_base(m: re.Match) -> str:
+        return m.group(0)[:m.start("verb") - m.start()] + _base_form(m.group("verb"))
+
+    def ref_s(m: re.Match) -> str:
+        if re.search(r"(?:\band|\bor|,)\s*$", m.string[:m.start()]):
+            return m.group(0)
+        return m.group(0)[:m.start("verb") - m.start()] + _s_form(m.group("verb"))
+
+    out = _PLURAL_SUBJECT.sub(to_base, text or "")
+    out = _SINGULAR_SUBJECT.sub(to_s, out)
+    out = _STUDIES_REF.sub(ref_base, out)
+    return _STUDY_REF.sub(ref_s, out)
+
+
+def house_style(text: str) -> str:
+    """The last pass over prose a reader sees: commas, plain statistics, agreement."""
+    return agree(unjargon(thousands(text or "")))
+
+
+# The effect line points at figures above it only when one is there. A
+# count of people or trials is a number, not the size of an effect.
+_BY_FIGURE = re.compile(r"\bby\s+(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+|over\s+|"
+                        r"more than\s+)?[-−]?\d", re.IGNORECASE)
+_OUTCOME_FIGURE = re.compile(r"\d\s*(?:%|percent\b|per cent\b|percentage points?\b|mg/dl|"
+                             r"mmol/l|mmol/mol|mm ?hg|kg/m2|kg\b|lbs?\b|pounds?\b|cm\b|"
+                             r"inches\b|points?\b)", re.IGNORECASE)
+_CHANGE_WORD = re.compile(r"\b(?:increas|decreas|reduc|lower|rais|rose|ris|fell|fall|drop|declin|"
+                          r"improv|gain|los[ts]|differ|chang|higher|shorter|longer|less|more|"
+                          r"cut|shrank|grew|slow)\w*", re.IGNORECASE)
+_NAMED_SIZE = re.compile(r"\b(?:effect size|average difference)\b[^.]{0,24}?[-−]?\d",
+                         re.IGNORECASE)
+
+
+def shows_effect(text: str) -> bool:
+    """Whether this prose gives the size of an effect, not just a count."""
+    for s in sentences(text or ""):
+        bare = _REF.sub(" ", s)
+        if (evidence.effect_size(bare) or _BY_FIGURE.search(bare) or _NAMED_SIZE.search(bare)
+                or (_OUTCOME_FIGURE.search(bare) and _CHANGE_WORD.search(bare))):
+            return True
+    return False
+
+
+def settle_effect(bd: dict | None) -> dict | None:
+    """
+    Take the effect line out when it points at figures that are no longer
+    above it: rounding, the faithfulness check or the unit rule can remove
+    the last one after the line was written.
+    """
+    if not bd or bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+        return bd
+    said = list(bd.get("evidence") or []) + [p.get("assessment") or "" for p in bd.get("parts") or []]
+    return bd if any(shows_effect(t) for t in said) else {**bd, "effect_size": ""}
 
 
 # ---------------------------------------------------------------------

@@ -133,6 +133,34 @@ research lines to check. When the call fails the answer stands as it
 was, logged on `evident.faithful`. That is fail-open on purpose: the
 lines it would check have already passed every code gate.
 
+**Writing: numbers in digits with commas, statistics in plain words,
+verbs that agree, and no pointer to figures that are not there.** The
+prompt already asked for digits, and the model still wrote "thirteen
+thousand seventy-eight" and "negative zero point twenty-seven", most
+likely to avoid a minus sign it read as a dash. Code now does it.
+`breakdown.digits` runs inside `tidy_prose`, before the gate, and that
+order is the point: a number in words used to slip past the check that
+every figure is in an abstract, and now it meets it like any other. A
+lone "one" or "zero" stays a word ("one of the trials", "no one"), and
+so do fractions. Everything else is the last step of `for_reading`,
+after the code that sizes an effect has read it: commas in counts
+(17,155,277; a year, a PMID or a decimal is left alone), the total rise
+in blood sugar for an incremental area under the curve, the average
+difference for a weighted mean difference, an effect size for a
+standardized one, the likely range for a 95% CI. Renaming any of these
+earlier would hide them from `evidence.effect_size`. Agreement is fixed
+only where it cannot misfire: a plural subject that opens its clause
+with its verb straight after it, a singular study word the same way,
+and "Studies 1 and 3 shows". A subject with an -ing word or a
+preposition in it is left alone, because "Eating eggs raises" is right
+and in "Analysis of trials shows" the noun beside the verb is not the
+subject. "The figures these studies report are in the paragraphs above"
+now needs the size of an effect above it, not any number: a count of
+people or trials does not count. When the model gave a figure and the
+gate took it out, the abstracts may well report one, so neither that
+line nor "the abstracts don't report the size" is true, and the row is
+left out of the page.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim
