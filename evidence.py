@@ -826,7 +826,7 @@ _OUTCOME_KIN = [
 ]
 
 
-def _kin(stems: list[str]) -> list[str]:
+def outcome_kin(stems: list[str]) -> list[str]:
     out = list(stems)
     for family in _OUTCOME_KIN:
         if any(s.startswith(f) or f.startswith(s) for s in stems for f in family):
@@ -864,7 +864,7 @@ def never_mentions(study, stems: list[str]) -> bool:
     abstract = str((study or {}).get("abstract") or "").strip()
     if not stems or not abstract or abstract.lower().startswith("(no abstract"):
         return False
-    return not names_any(f"{study.get('title') or ''} {abstract}", _kin(stems))
+    return not names_any(f"{study.get('title') or ''} {abstract}", outcome_kin(stems))
 
 
 def indirect(study, outcome: str, surrogate: str) -> str | None:

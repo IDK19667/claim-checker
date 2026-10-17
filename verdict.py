@@ -1280,7 +1280,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # Temperature 0, like the search: the same claim over the same studies
     # should read the same way every time it is checked.
     raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
-    result = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome)
+    result = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome, surrogate=surrogate)
     kept = raw, stop_note
     read = {}
     said = _stamp_disagrees(result, claim, read)
@@ -1294,7 +1294,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     if faults:
         raw, stop_note = _complete_json(prompt + _redo_note(faults),
                                         VERDICT_SCHEMA, max_tokens=12000, temperature=0)
-        again = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome)
+        again = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome, surrogate=surrogate)
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,
         # and is one.
@@ -1315,7 +1315,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                            "so it follows the takeaway: %r", result.get("verdict"), said,
                            result.get("tldr"))
         result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said],
-                               subject=subject, outcome=outcome)
+                               subject=subject, outcome=outcome, surrogate=surrogate)
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
@@ -1764,7 +1764,8 @@ Respond with JSON in this exact shape:
 
 
 def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
-                  follow: str | None = None, subject: str = "", outcome: str = "") -> dict:
+                  follow: str | None = None, subject: str = "", outcome: str = "",
+                  surrogate: str = "") -> dict:
     """
     Everything after the call: parse, map citations, gate every string.
 
@@ -1847,7 +1848,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
 
     # The deeper layer, gated. Everything it could not tie back to these
     # abstracts has already been dropped by the time this returns.
-    deeper = breakdown.ground(parsed, studies, tidy_prose, claim, skip=off_numbers)
+    deeper = breakdown.ground(parsed, studies, tidy_prose, claim, skip=off_numbers,
+                              outcome=outcome, surrogate=surrogate)
 
     # The takeaway is held to the same rule as the breakdown: words that
     # claim more than this evidence can carry are rewritten weaker.

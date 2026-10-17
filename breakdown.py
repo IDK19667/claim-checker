@@ -1679,7 +1679,28 @@ def drop_citing(text: str, skip, count: int) -> str:
                     if not (refs(sentence, count) and set(refs(sentence, count)) <= set(skip)))
 
 
-def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | None:
+def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "") -> bool:
+    """
+    True when a figure is about some other outcome than the claim's: it
+    names neither the outcome nor its stand-in, and every study it cites
+    never mentions either. A measles claim's effect row read "no link
+    between vaccination and autism", from a review that never says measles.
+    """
+    stems = evidence.outcome_stems(outcome)
+    if not text or not stems:
+        return False
+    stand_in = evidence.outcome_stems(surrogate)
+    if evidence.names_any(text, evidence.outcome_kin(stems + stand_in)):
+        return False
+    numbers = refs(text, len(studies or []))
+    return bool(numbers) and all(
+        evidence.never_mentions(studies[n - 1], stems)
+        and (not stand_in or evidence.never_mentions(studies[n - 1], stand_in))
+        for n in numbers)
+
+
+def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: str = "",
+           surrogate: str = "") -> dict | None:
     """
     Gate whatever the model returned into a breakdown the page can render,
     or None if too little survived to be worth opening.
@@ -1764,6 +1785,11 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | N
             p["assessment"] = PART_BELOW
 
     effect = clean(raw.get("effect_size"), FIELD_MAX)
+    # The size of some other outcome's effect is not this claim's, so the
+    # row is left out rather than pointed at a figure above.
+    elsewhere = off_outcome(effect, studies, outcome, surrogate)
+    if elsewhere:
+        effect = ""
     # By here the gate has checked every figure in it against the abstracts.
     # If nothing survived, which line is honest depends on the rest of the
     # layer: "the abstracts don't report it" is only true when no figure
@@ -1775,7 +1801,9 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | N
     # reviews covering 17,155,277 people" is a count. And when the model did
     # give a figure here and the gate took it out, the abstracts may well
     # report one, so neither line is true and the row is left out.
-    if not effect or not _NUMERAL.search(_REF.sub(" ", effect)):
+    if elsewhere:
+        pass
+    elif not effect or not _NUMERAL.search(_REF.sub(" ", effect)):
         said = paragraphs + [p["assessment"] for p in parts]
         gave = _NUMERAL.search(_REF.sub(" ", tidy(str(raw.get("effect_size") or ""), FIELD_MAX)))
         effect = (EFFECT_SIZE_ABOVE if any(shows_effect(t) for t in said)
@@ -1813,7 +1841,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=()) -> dict | N
         effect = (f"{effect.rstrip().rstrip('.')}. "
                   f"{TRANSLATION_LEAD}{said}{where}.")
     sized = sized or next(
-        (e for e in (evidence.effect_size(t) for t in paragraphs) if e), None)
+        (e for e in (evidence.effect_size(t) for t in paragraphs
+                     if not off_outcome(t, studies, outcome, surrogate)) if e), None)
 
     out = {
         "parts": parts,

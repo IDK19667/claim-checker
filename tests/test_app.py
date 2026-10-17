@@ -3381,6 +3381,36 @@ t("  and through a real check it goes from every place it was written, while the
 t("  and the model's own check is told the same rule",
   "for an outcome that abstract never" in verdict._faithful_prompt("c", "t", ["l"], [1], _STONE))
 
+# ---- an effect row about some other outcome -------------------------------------
+_FLU_Q = "(influenza vaccine OR flu vaccine) AND (hospitalization OR hospital admission)"
+_FLU = [_study("F1", "Influenza vaccination and hospital admission in older adults",
+               abstract="Vaccinated adults had fewer hospital admissions for influenza (relative risk 0.62)."),
+        _study("F2", "Influenza vaccine and Guillain-Barre syndrome: a meta-analysis", types=["Meta-Analysis"],
+               abstract="We pooled 12 cohorts. There was no link with Guillain-Barre syndrome (odds ratio 1.02).")]
+_flu_out = pubmed.split_and(_FLU_Q)[1]
+_gbs = "There was no link between the vaccine and Guillain-Barre syndrome, odds ratio 1.02 (Study 2)."
+t("off-outcome effect: a figure for another outcome, from a study that never names this one, is caught",
+  breakdown.off_outcome(_gbs, _FLU, _flu_out))
+t("  but not a figure that names the outcome, or one from a study about it",
+  not breakdown.off_outcome("Hospital admissions fell, relative risk 0.62 (Study 1).", _FLU, _flu_out)
+  and not breakdown.off_outcome("The relative risk was 0.62 (Study 1).", _FLU, _flu_out))
+t("  nor a figure for the stand-in the search named for this outcome",
+  not breakdown.off_outcome(_gbs, _FLU, _flu_out, surrogate="(Guillain-Barre syndrome)"))
+fg.models.script = [Resp(VJ(
+    "true", [1, 2], tldr="Flu vaccines seem to keep people out of hospital.",
+    explanation="Vaccinated adults had fewer hospital admissions, relative risk 0.62 (Study 1). " + _gbs,
+    evidence=["Vaccinated adults had fewer hospital admissions, relative risk 0.62 (Study 1).",
+              "A review of 12 cohorts found no link with Guillain-Barre syndrome, odds ratio 1.02 (Study 2)."],
+    effect_size=_gbs))]
+_fv = verdict.weigh_evidence("Flu vaccines reduce hospital admissions", [dict(s) for s in _FLU], _FLU_Q)
+_fbd = _fv["breakdown"] or {}
+t("  through a real check, that row is left out of 'How big is the effect', not pointed at",
+  "Guillain" not in (_fbd.get("effect_size") or "")
+  and _fbd.get("effect_size") not in (breakdown.EFFECT_SIZE_ABOVE, breakdown.NO_EFFECT_SIZE), _fbd)
+t("  and the size the takeaway is held to comes from the claim's own outcome",
+  "0.62" in (_fbd.get("effect") or {}).get("figure", "") and not (_fbd.get("effect") or {}).get("null"),
+  _fbd.get("effect"))
+
 # ---- the guideline check ------------------------------------------------------
 t("guideline check: runs for medicine, vaccines, infections, cancer, pregnancy, stopping "
   "treatment and protective practices",

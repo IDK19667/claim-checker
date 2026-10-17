@@ -376,3 +376,17 @@ abstract.
   that says "cardiovascular" counted as never mentioning "heart"; two
   existing tests caught that.
 - 642/642 tests pass.
+
+### Step 3b: an effect line about some other outcome (done)
+
+The measles page's "How big is the effect" row was about autism (from a
+review that never mentions measles). Now a figure that doesn't name the
+claim's outcome, and whose studies never mention it, is left out of that
+row. It is also not used to size the short answer.
+
+- Checked against 124 saved checks, it removes 3 rows:
+  - the measles one;
+  - two creatine rows that gave a hormone figure as the size of a
+    hair-loss effect, which a reader would take for the same thing.
+- Nothing else changes.
+- 647/647 tests pass.

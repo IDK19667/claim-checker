@@ -75,6 +75,19 @@ prompt now names the same failure under "unsupported". Checked against
 124 saved checks: it drops four sentences, all about hair loss from the
 hormone trial, and nothing else.
 
+**"How big is the effect" is about the claim's outcome, or it is left
+out (`breakdown.off_outcome`).** "Vaccines reduce the risk of severe
+measles" printed "no relationship between vaccination and autism, odds
+ratio 0.99" as its effect, from a review that never says measles. A figure
+that names neither the outcome nor the stand-in the search named, and
+whose studies never mention either, no longer fills that row, and the row
+is left out rather than pointed at a figure above. Such a paragraph is
+also not used to size the takeaway. Across 124 saved checks it removes
+three rows: the measles one, and two creatine rows that gave a hormone
+(DHT) figure as the size of a hair-loss effect, which the reader would
+take for the same thing. A check whose search names the hormone as its
+stand-in keeps that row.
+
 ## 2026-10-16: Accuracy round 3, seven patterns from the holdout test
 
 A holdout of 20 claims the code had never seen scored 14 of 20. The
