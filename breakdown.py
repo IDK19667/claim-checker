@@ -2181,11 +2181,16 @@ JARGON = [
      r"(?:\s*\(i?AUC\))?)(?:\s+(?:for|of)\s+(?:blood\s+|plasma\s+)?(glucose|sugar|insulin))?",
      _total_rise),
     (r"\bstandardi[sz]ed\s+mean\s+difference(s?)(?:\s*\(SMDs?\))?", r"effect size\1"),
-    (r"\bSMD(s?)\b(?=:?\s*[-−]?\d)", r"effect size\1"),
+    (r"\bSMD(s?)\b(?=:?\s*(?:of\s+|=\s*)?[-−]?\d)", r"effect size\1"),
     (r"\b(?:weighted\s+|pooled\s+)?mean\s+difference(s?)(?:\s*\(W?MDs?\))?", r"average difference\1"),
-    (r"\bW?MD(s?)\b(?=:?\s*[-−]?\d)", r"average difference\1"),
+    (r"\bW?MD(s?)\b(?=:?\s*(?:of\s+|=\s*)?[-−]?\d)", r"average difference\1"),
     (r"\b95\s?%\s*CIs?\b", "likely range"),
-    (r"\b(?:95\s?%\s*)?confidence\s+interval(s?)(?:\s*\(CIs?\))?", r"likely range\1"),
+    # The gloss gloss_once() gave "confidence interval" goes with it: the
+    # plain name says the same thing.
+    (r"\b(?:95\s?(?:%|percent|per cent)\s*)?confidence\s+interval(s?)"
+     r"(?:\s*\((?:CIs?|the range the real answer is probably in)\))?", r"likely range\1"),
+    (r"\bHedges'?\s*g\b|\bCohen'?s\s*d\b|(?<=\b[Aa]\s)g\b(?=\s*(?:of|=|:)\s*[-−]?\d)",
+     "effect size"),
     (r"\bpostprandial\s+(?:blood\s+|plasma\s+)?(?:glucose|sugar)\b", "blood sugar after meals"),
     (r"\bpostprandial\b", "after-meal"),
     (r"\bfasting\s+(?:blood\s+|plasma\s+)?glucose\b", "fasting blood sugar"),
@@ -2198,9 +2203,16 @@ def unjargon(text: str) -> str:
     """Name each statistic in plain words, keeping its figure."""
     out = text or ""
     for pattern, plain_words in _JARGON:
-        out = pattern.sub(lambda m, r=plain_words: _recase(
-            m.group(0), r(m) if callable(r) else m.expand(r)), out)
+        out = pattern.sub(lambda m, r=plain_words: _open_case(
+            m, r(m) if callable(r) else m.expand(r)), out)
     return _fix_articles(out)
+
+
+def _open_case(m: re.Match, said: str) -> str:
+    """A capital only where the sentence opens: "an SMD of" and "a Hedges'
+    g of" are capitals of their own, not of the sentence."""
+    before = m.string[:m.start()].rstrip()
+    return _recase(m.group(0), said) if not before or before[-1] in ".!?" else said
 
 
 # Subject and verb. Only the patterns that cannot misfire are fixed: a
@@ -2323,9 +2335,14 @@ def agree(text: str) -> str:
     return _STUDY_REF.sub(ref_s, out)
 
 
+# A word said twice running, where a plain name met the word already
+# beside it: "a large pooled meta-analysis" became "pooled pooled review".
+_SAID_TWICE = re.compile(r"\b(\w{4,})\s+\1\b", re.IGNORECASE)
+
+
 def house_style(text: str) -> str:
     """The last pass over prose a reader sees: commas, plain statistics, agreement."""
-    return agree(unjargon(thousands(text or "")))
+    return _SAID_TWICE.sub(r"\1", agree(unjargon(thousands(text or ""))))
 
 
 # The effect line points at figures above it only when one is there. A
