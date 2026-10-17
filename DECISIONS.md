@@ -259,20 +259,6 @@ among the outcome's synonyms is dropped and the search asked once more;
 an unknown subject means there is no phrase search to make, and it
 returns nothing rather than noise.
 
-**A claim that only says something works is searched against placebo or
-sham.** With no condition named, the search step filled the outcome group
-with words nearly every paper uses ("treatment efficacy", "therapeutic
-effect", "treatment outcome"). Those matched five old narrative reviews
-and missed the placebo-controlled trials and their reviews, which are the
-fair test of a claim like that. The prompt now says the second group is
-what a fair test compares it with, `(placebo OR sham OR placebo effect OR
-placebo-controlled)`, and never those general words. Its example is
-"reiki works", which no test set contains. Tried once on "Reiki works
-better than a placebo": `(reiki OR reiki healing OR energy therapy OR
-energy healing) AND (placebo OR sham OR placebo effect OR
-placebo-controlled)`. A new prompt wording starts every saved search
-afresh, as `QUERY_PROMPT_VERSION` intends.
-
 **"Strong evidence" needs more than a pooled review of observational
 studies.** The line under the chart reads its strength word off the study
 designs, and a meta-analysis is a strong design. On antiperspirants and
@@ -300,6 +286,23 @@ signed. One older expectation changed with it: "reduced by about -22
 mg/dL (likely range: -29, -15)" now reads "reduced by about 22 mg/dL
 (likely range: 29, 15)", the form "fell about 22 mg/dL (likely range 29
 to 15)" already had.
+
+**Tried and taken back out: telling the search step to use placebo or
+sham when a claim names no outcome.** On "homeopathy works better than a
+placebo" the search filled its outcome group with words nearly every
+paper uses ("treatment efficacy", "therapeutic effect") and missed the
+placebo-controlled reviews. A prompt line asking for `(placebo OR sham OR
+placebo effect OR placebo-controlled)` instead worked on a test claim.
+But any change to the prompt's wording starts every saved search afresh
+(`QUERY_PROMPT_VERSION`), so all 21 regression claims got new searches,
+and "you need 8 glasses of water a day" drifted from hydration-status
+studies to general health words and to "It's complicated". A change that
+reshuffles every claim's search, here and in production, is too broad
+for a fix aimed at one kind of claim. The spelling fix above already
+keeps the main homeopathy review, which the search found and then threw
+away. A narrower route for later: code that spots an outcome group made
+only of general words and runs one extra review search on the claim's
+subject alone.
 
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
