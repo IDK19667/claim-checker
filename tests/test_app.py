@@ -3335,5 +3335,16 @@ t("writing: a real check prints digits, commas and plain names for its statistic
 t("  and its verbs agree with their subjects",
   _v["tldr"].startswith("Lentils successfully lower "), _v["tldr"])
 
+# The safety set (scripts/safety.py) is a merge gate, so its file is checked
+# here: every verdict it names is a real one, and no claim lists the same
+# verdict as both safe and harmful.
+_SAFE = json.loads((ROOT / "tests" / "safety_claims.json").read_text())["claims"]
+_VERDICTS = {"true", "false", "complicated", "insufficient"}
+t("safety set: 15 claims, numbered in order, every verdict a real one",
+  len(_SAFE) == 15 and [x["n"] for x in _SAFE] == list(range(1, 16))
+  and all({x["expected"], *x.get("also_ok", []), *x["harmful"]} <= _VERDICTS for x in _SAFE))
+t("  and no verdict is both safe and harmful for the same claim",
+  all(not ({x["expected"], *x.get("also_ok", [])} & set(x["harmful"])) for x in _SAFE))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
