@@ -330,3 +330,31 @@ the backups switched off.
   limit, stops at the daily quota, prints `15/15 safe (N exact, M safe
   alternative), K harmful`, and exits non-zero unless every claim is
   safe. A new test checks the claim file itself (620/620 pass).
+
+### Step 2: guideline check (done)
+
+For a claim about medicine, vaccines, infections, cancer, pregnancy,
+stopping treatment, or a protective practice (sunscreen, pasteurization),
+one more AI call now asks what the WHO, CDC, NIH, Cochrane, FDA, NHS or
+NICE advise. If their guidance is plain and the verdict disagrees, the
+verdict follows the guidance, the short answer becomes "Major health
+guidelines say: ...", and the change is logged.
+
+- It is a general rule. No claim is named anywhere in it.
+- Limits, so it can't invent certainty (details in DECISIONS.md):
+  - Only plain guidance moves a verdict. "Mixed", "none" and any doubt
+    leave the verdict alone.
+  - The guidance sentence can't contain numbers, must name a body, and
+    must not argue with itself.
+  - A verdict that used no study, or one resting only on lab, animal or
+    single-patient papers, keeps "Not enough evidence". There the
+    guidance line is added to the short answer instead.
+  - If the call fails, the answer stands as before.
+  - Everyday claims (cold showers, eggs, creatine) never make the call.
+- A live probe of the call alone, before committing:
+  - "Vitamin D supplements prevent winter infections", a regression
+    claim that should stay "It's complicated", came back "mixed", so it
+    won't be moved.
+  - Sunscreen came back "supports", and vinegar curing diabetes came
+    back "rejects", as they should.
+- Tests: 15 new ones, 635/635 pass.

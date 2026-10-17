@@ -131,6 +131,10 @@ STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", 
             "publication_types": ["Journal Article"], "authors": ["A B"], "data_banks": None, "url": f"u{i}"}
            for i in range(1, 4)]
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+# The guideline check is one more call on high-stakes claims. It is tested
+# on its own near the end, and stays out of every scripted check until then.
+_real_guideline_view = verdict.guideline_view
+verdict.guideline_view = lambda claim: None
 
 # A refused PubMed call is asked once more before the check gives up.
 class _R:
@@ -3334,6 +3338,121 @@ t("writing: a real check prints digits, commas and plain names for its statistic
   and not re.search(r"thirty|minus|weighted mean|iAUC|95% CI|2481190", _all), _all)
 t("  and its verbs agree with their subjects",
   _v["tldr"].startswith("Lentils successfully lower "), _v["tldr"])
+
+# ---- the guideline check ------------------------------------------------------
+t("guideline check: runs for medicine, vaccines, infections, cancer, pregnancy, stopping "
+  "treatment and protective practices",
+  all(verdict.guideline_topic(x) for x in (
+      "Antibiotics cure the common cold", "Daily sunscreen use lowers the risk of skin cancer",
+      "Drinking a little alcohol during pregnancy is safe", "Raw milk is healthier than pasteurized milk",
+      "The HPV vaccine is safe", "Ivermectin cures COVID-19", "Skipping doses of your treatment is harmless",
+      "People who have had a heart attack can safely stop taking statins")))
+t("  and not for everyday claims, where it would only cost a call",
+  not any(verdict.guideline_topic(x) for x in (
+      "Cold showers boost immunity", "Eggs raise heart disease risk", "Creatine improves cognitive performance",
+      "Detox teas remove toxins from the body", "Magnesium supplements improve sleep quality",
+      "Red light therapy reduces wrinkles")))
+
+verdict.guideline_view = _real_guideline_view
+_GL = lambda pos, says, bodies=("CDC", "WHO"): Resp(json.dumps(
+    {"position": pos, "bodies": list(bodies), "says": says}))
+fg.models.script = [_GL("rejects", "Antibiotics do not work on colds, which are caused by viruses — not bacteria.")]
+_gv = verdict.guideline_view("Antibiotics cure the common cold")
+t("  a plain guideline is read as a verdict and one printable sentence",
+  _gv and _gv["verdict"] == "false" and _gv["bodies"] == ["CDC", "WHO"]
+  and _gv["says"].startswith("antibiotics do not work on colds") and "—" not in _gv["says"]
+  and _gv["says"].endswith("."), _gv)
+fg.models.script = [_GL("mixed", "", ())]
+_mixed = verdict.guideline_view("Vitamin D prevents infections")
+fg.models.script = [_GL("none", "", ())]
+_none = verdict.guideline_view("Vitamin D prevents infections")
+fg.models.script = [_GL("rejects", "fewer than 2 in 10 colds respond to antibiotics.")]
+_digits = verdict.guideline_view("Antibiotics cure the common cold")
+fg.models.script = [_GL("rejects", "antibiotics do not work on colds.", ())]
+_nobody = verdict.guideline_view("Antibiotics cure the common cold")
+fg.models.script = []
+_down = verdict.guideline_view("Antibiotics cure the common cold")
+t("  and mixed, unknown, a figure nothing can check, no named body, or a failed call all mean "
+  "no guidance", _mixed is None and _none is None and _digits is None and _nobody is None
+  and _down is None)
+
+_GUIDE_STUDIES = [_study("G1", "Antibiotics for the common cold", types=["Systematic Review"]),
+                  _study("G2", "Antibiotic prescribing for colds in primary care", types=["Observational Study"])]
+_said = []
+def _guide(v, says):
+    def view(claim):
+        _said.append(claim)
+        return {"verdict": v, "says": says, "bodies": ["CDC", "WHO"]}
+    return view
+_mixed_result = {"verdict": "complicated", "tldr": "The evidence on antibiotics for colds is mixed.",
+                 "explanation": "A review found antibiotics did not shorten colds (Study 1). "
+                                "The evidence supports the claim in some settings (Study 2).",
+                 "still_open": "Whether some people with colds benefit.", "cited_studies": ["G1", "G2"],
+                 "breakdown": {"says": ["A review found antibiotics did not shorten colds (Study 1).",
+                                        "The evidence supports the claim in some settings (Study 2)."]}}
+verdict.guideline_view = _guide("false", "antibiotics do not work on colds, which are caused by viruses.")
+_fl = verdict.follow_guidelines(dict(_mixed_result), [dict(s) for s in _GUIDE_STUDIES],
+                                "Antibiotics cure the common cold")
+t("guideline check: a verdict that conflicts with plain guidance follows it, and the takeaway says so",
+  _fl["verdict"] == "false" and _fl["tldr"] == "Major health guidelines say: antibiotics do not work on "
+  "colds, which are caused by viruses." and _fl["cited_studies"] == ["G1", "G2"]
+  and _fl["still_open"] == _mixed_result["still_open"], _fl)
+t("  and a research line or explanation sentence that rules against the new stamp goes",
+  "did not shorten colds" in _fl["explanation"] and "supports the claim" not in _fl["explanation"]
+  and _fl["breakdown"]["says"] == ["A review found antibiotics did not shorten colds (Study 1)."], _fl)
+t("  and it is a code-written takeaway, so the faithfulness check leaves it alone",
+  verdict._code_takeaway(_fl["tldr"]))
+_agree = dict(_mixed_result, verdict="false", tldr="No, antibiotics don't cure colds.")
+t("  a verdict that already agrees is left exactly as it was",
+  verdict.follow_guidelines(dict(_agree), _GUIDE_STUDIES, "Antibiotics cure the common cold") == _agree)
+_said.clear()
+t("  and a claim outside those topics never makes the call",
+  verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Cold showers boost immunity")
+  == _mixed_result and not _said)
+verdict.guideline_view = _guide("true", "antibiotics do not cure colds.")
+t("  a guideline sentence that argues with its own position is not used",
+  verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Antibiotics cure the common cold")
+  == _mixed_result)
+
+_LAB = [_study("L1", "Antibacterial activity of colloidal silver against bacteria in vitro",
+               abstract="Silver nanoparticles inhibited bacterial growth in cultured cells in vitro.",
+               types=["Journal Article"])]
+_lab_result = {"verdict": "insufficient", "tldr": "Nothing has tested this in people yet. The only papers "
+               "are animal or lab studies.", "explanation": "Silver stopped bacteria in a dish (Study 1).",
+               "still_open": "Whether it works in people.", "cited_studies": ["L1"], "breakdown": None}
+verdict.guideline_view = _guide("false", "colloidal silver is not safe or effective for treating any disease.")
+_kept = verdict.follow_guidelines(dict(_lab_result), [dict(s) for s in _LAB], "Colloidal silver cures infections")
+t("guideline check: never overrules 'Not enough evidence' on papers that test nothing in people; "
+  "it adds the guidance to the takeaway",
+  _kept["verdict"] == "insufficient" and _kept["tldr"].startswith("Nothing has tested this in people yet.")
+  and _kept["tldr"].endswith("Major health guidelines say: colloidal silver is not safe or effective "
+                             "for treating any disease."), _kept)
+_none_cited = dict(_lab_result, verdict="complicated", cited_studies=[],
+                   tldr="Couldn't reach a verdict from the evidence found.")
+t("  and never rates a verdict that used no study at all",
+  verdict.follow_guidelines(dict(_none_cited), _LAB, "Colloidal silver cures infections") == _none_cited)
+_none_found = verdict.weigh_evidence("Colloidal silver cures infections", [], "")
+t("  and when PubMed finds nothing, the stamp stays 'Not enough evidence' with the guidance added",
+  _none_found["verdict"] == "insufficient" and "Major health guidelines say: colloidal silver"
+  in _none_found["tldr"], _none_found)
+
+# Through a real check: the flipped verdict is what is shown and cached.
+verdict.guideline_view = _guide("true", "daily sunscreen use lowers the risk of skin cancer.")
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in STUDIES]
+fg.models.script = [Resp("sunscreen AND skin cancer"),
+                    Resp(VJ("complicated", [1, 2], tldr="The evidence on sunscreen and skin cancer is mixed.",
+                            explanation="One trial found fewer skin cancers (Study 1). Another found no "
+                                        "difference (Study 2)."))]
+_sun = P("Daily sunscreen lowers the risk of skin cancer", ip="7.7.7.31").get_json()
+_sun_cached = db.get_cached_verdict("Daily sunscreen lowers the risk of skin cancer", 24)
+t("guideline check: through a real check, the page and the cache both carry the guidance",
+  _sun.get("verdict") == "true" and _sun.get("tldr", "").startswith("Major health guidelines say: ")
+  and _sun_cached and _sun_cached["verdict"] == "true"
+  and _sun_cached["tldr"].startswith("Major health guidelines say: "), _sun)
+t("  with no dash anywhere in what the reader sees",
+  not re.search("[–—]", json.dumps(_sun, ensure_ascii=False)))
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+verdict.guideline_view = lambda claim: None
 
 # The safety set (scripts/safety.py) is a merge gate, so its file is checked
 # here: every verdict it names is a real one, and no claim lists the same

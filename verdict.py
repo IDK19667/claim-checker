@@ -376,7 +376,7 @@ def _code_takeaway(tldr: str) -> bool:
     return (tldr in fixed or tldr.startswith((
         "The strongest studies here", "No randomized trial or major review here",
         "The studies found were all in", "Nothing has tested this in people yet",
-        "No published studies on this yet")))
+        "No published studies on this yet", GUIDELINE_LEAD)))
 
 
 def _gate_line(text: str, studies: list[dict], allowed: set, skip=()) -> str:
@@ -495,6 +495,188 @@ def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
         {**bd, **fields, "parts": [p for p in parts if p["assessment"]],
          "says": kept_lines, "evidence": evidence_paras})
     return {**result, "tldr": tldr, "explanation": explanation or tldr, "breakdown": new_bd}
+
+
+# ---------------------------------------------------------------------
+# The guideline check: one more call, for claims where a wrong answer hurts
+#
+# Eight studies from one search can miss the review that settled a
+# question, and then a claim like "sunscreen lowers skin cancer risk" or
+# "antibiotics cure colds" comes out "It's complicated". For a claim about
+# medicine, vaccines, infections, cancer, pregnancy or stopping treatment,
+# one call asks what WHO, CDC, NIH, Cochrane and the like advise. Where
+# that guidance is plain and the verdict says otherwise, the verdict
+# follows the guidance and the takeaway says so in one line. The call
+# fails open: when it cannot run, or the guidance is mixed or unknown, the
+# answer stands as the studies left it.
+# ---------------------------------------------------------------------
+
+_guide_log = logging.getLogger("evident.guideline")
+GUIDELINE_LEAD = "Major health guidelines say: "
+
+_GUIDELINE_TOPIC = re.compile(
+    r"\b(?:"
+    # medicine and treatment
+    r"medicines?|medications?|drugs?|pills?|prescri\w+|antibiotics?|antivirals?|statins?|"
+    r"insulin|chemo\w*|radiotherapy|aspirin|ibuprofen|paracetamol|acetaminophen|"
+    r"antidepressants?|metformin|ivermectin|hydroxychloroquine|steroids?|opioids?|painkillers?|"
+    r"cur(?:e|es|ed|ing)|"
+    # vaccines
+    r"vaccin\w*|immuni[sz]ations?|mmr|hpv|flu shots?|"
+    # infections
+    r"infect\w*|virus\w*|viral|covid\w*|coronavirus|influenza|flu|common cold|colds|measles|"
+    r"mumps|rubella|polio|tetanus|hepatitis|hiv|tuberculosis|malaria|pneumonia|sepsis|strep|"
+    r"utis?|stds?|stis?|herpes|fungal|parasit\w*|"
+    # cancer
+    r"cancers?|tumou?rs?|leuk(?:a)?emia|lymphoma|melanoma|carcinoma|oncolog\w*|"
+    # pregnancy
+    r"pregnan\w*|prenatal|antenatal|f(?:o)?etus|f(?:o)?etal|miscarriage|breastfe\w*"
+    r")\b", re.IGNORECASE)
+# "Stopping treatment": going without a therapy or a dose, by any name.
+_STOPPING_TREATMENT = re.compile(
+    r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
+    r"giv(?:e|ing) up|ditch\w*)\b.{0,40}\b(?:treatments?|therap(?:y|ies)|doses?)\b",
+    re.IGNORECASE)
+
+
+def guideline_topic(claim: str) -> bool:
+    """A claim about medicine, vaccines, infections, cancer, pregnancy or
+    stopping treatment, or about a protective practice (sunscreen,
+    pasteurization): the ones where a wrong verdict can hurt someone."""
+    claim = str(claim or "")
+    return bool(_GUIDELINE_TOPIC.search(claim) or _STOPPING_TREATMENT.search(claim)
+                or evidence.protective_practice(claim))
+
+
+GUIDELINE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "position": {"type": "string", "enum": ["supports", "rejects", "mixed", "none"]},
+        "bodies": {"type": "array",
+                   "items": {"type": "string",
+                             "enum": ["WHO", "CDC", "NIH", "Cochrane", "FDA", "NHS", "NICE"]}},
+        "says": {"type": "string"},
+    },
+    "required": ["position", "bodies", "says"],
+}
+
+
+def _guideline_prompt(claim: str) -> str:
+    return f"""You are checking one health claim against what major health bodies advise:
+the WHO, the CDC, the NIH, Cochrane reviews, the FDA, the NHS and NICE.
+
+Claim: "{claim}"
+
+Answer only from guidance those bodies have published that is plain, widely
+known and current. Give "position":
+"supports" when their guidance says the claim, as worded, is true;
+"rejects" when their guidance says the claim, as worded, is false, or warns
+  against doing what the claim says is fine to do;
+"mixed" when they disagree, or their guidance says the evidence is uncertain
+  or not enough to recommend it either way;
+"none" when none of them has guidance on this, or you are not sure what it
+  says. Never guess: if in doubt, answer "none".
+
+Judge the claim's own words. A claim that something cures a disease is
+rejected by guidance that it does not cure it, even if it helps a little.
+A claim that something is safe is supported only by guidance that it is safe
+for the people the claim is about. Guidance recommending something for a
+different reason than the claim gives does not support the claim.
+
+"bodies": which of them say so, or [] for mixed or none.
+"says": for supports or rejects, one plain sentence under 25 words stating
+what that guidance says about this claim, written to follow the words "Major
+health guidelines say:" and starting with a lowercase word unless it is a
+name. Plain words a 12-year-old can follow, no numbers, no dashes, no study
+citations. "" for mixed or none.
+
+Return JSON: {{"position": "none", "bodies": [], "says": ""}}."""
+
+
+def guideline_view(claim: str) -> dict | None:
+    """
+    {"verdict": "true"|"false", "says": str, "bodies": [...]} when the major
+    health bodies give plain guidance on the claim, else None. One call;
+    None when it fails, or when its sentence can't be printed as it is.
+    """
+    try:
+        raw, stop = _complete_json(_guideline_prompt(claim), GUIDELINE_SCHEMA,
+                                   max_tokens=600, temperature=0)
+        if stop:
+            return None
+        read = json.loads(raw.replace("```json", "").replace("```", "").strip())
+    except (ProviderError, json.JSONDecodeError, AttributeError, TypeError) as e:
+        _guide_log.warning("the guideline check did not run, so the answer stands: %s", e)
+        return None
+    if not isinstance(read, dict) or read.get("position") not in ("supports", "rejects"):
+        return None
+    bodies = [b for b in read.get("bodies") or [] if b in GUIDELINE_SCHEMA["properties"]
+              ["bodies"]["items"]["enum"]]
+    room = TLDR_MAX - len(GUIDELINE_LEAD)
+    says = breakdown.plain(tidy_prose(breakdown._REF.sub("", str(read.get("says") or ""))
+                                      .replace(" ()", ""), room)).strip()
+    # Nothing here was read from an abstract, so it may print no figure:
+    # there would be nothing on the page to check it against.
+    if not bodies or not says or re.search(r"\d", says) or len(says) > room:
+        _guide_log.warning("the guideline answer could not be used as it was: %r", read)
+        return None
+    # It follows "say:", so it starts in lower case, unless it starts with
+    # a name ("CDC", "Cochrane").
+    first = says.split()[0]
+    if first[0].isupper() and not first.isupper() and not first.startswith("Cochrane"):
+        says = says[0].lower() + says[1:]
+    if not says.endswith((".", "!", "?")):
+        says += "."
+    return {"verdict": "true" if read["position"] == "supports" else "false",
+            "says": says, "bodies": bodies}
+
+
+def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
+    """
+    The last word on a high-stakes claim. When the major health bodies give
+    plain guidance and the verdict says otherwise, the verdict follows the
+    guidance and the takeaway becomes "Major health guidelines say: ...".
+    Two things it never does: rate a claim no study shown was used for (that
+    is "Not enough evidence" by rule), or overrule "Not enough evidence" on
+    papers that test nothing in people. There, the guidance is added to the
+    takeaway and the stamp stays.
+    """
+    if not guideline_topic(claim):
+        return result
+    view = guideline_view(claim)
+    if not view or view["verdict"] == result.get("verdict"):
+        return result
+    line = GUIDELINE_LEAD + view["says"]
+    verdict = result.get("verdict") or ""
+    tldr = result.get("tldr") or ""
+    if breakdown.stamp_conflict(view["verdict"], line, "", claim):
+        # A sentence that argues with its own position is no guidance.
+        _guide_log.warning("a guideline answer argued with itself, so it was not used: %r (%s)",
+                           line, view["verdict"])
+        return result
+    cited = list(result.get("cited_studies") or ())
+    reasons = {s["pmid"]: s["background"] for s in studies if s.get("background")}
+    if not cited or (verdict == "insufficient"
+                     and evidence.untested_in_people(studies, cited, reasons)):
+        if verdict != "insufficient":
+            return result
+        _guide_log.warning("health guidance (%s) added to a %r it cannot overrule: %r",
+                           ", ".join(view["bodies"]), verdict, line)
+        return {**result, "tldr": f"{tldr.rstrip()} {line}".strip()}
+    _guide_log.warning("the verdict %r conflicted with health guidance (%s), so it follows the "
+                       "guidance as %r: %r (was %r)", verdict, ", ".join(view["bodies"]),
+                       view["verdict"], line, tldr)
+    # The research lines and the explanation still describe the studies; a
+    # sentence in them that rules against the new stamp goes, as it would
+    # against any stamp.
+    against = lambda t: breakdown.stamp_conflict(view["verdict"], "", t, claim)
+    explanation = " ".join(t for t in breakdown.sentences(result.get("explanation") or "")
+                           if not against(t)).strip()
+    bd = result.get("breakdown")
+    if bd:
+        bd = {**bd, "says": [t for t in bd.get("says") or [] if not against(t)]}
+    return {**result, "verdict": view["verdict"], "tldr": line,
+            "explanation": explanation or line, "breakdown": bd}
 
 
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
@@ -998,14 +1180,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     check below catches before a reader sees it.
     """
     if not studies:
-        return _fallback(
+        return follow_guidelines(_fallback(
             "No relevant studies were found on PubMed for this claim. "
             "That doesn't mean the claim is false, it may just not be "
             "well studied yet, or the search terms need refining.",
             tldr="No published studies on this yet. Unproven, not disproven.",
             still_open="Whether anyone has tested this claim directly. PubMed found nothing that does.",
             verdict="insufficient",
-        )
+        ), studies, claim)
 
     groups = pubmed.split_and(query or "")
     subject = groups[0] if groups else ""
@@ -1072,7 +1254,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    return check_faithful(result, studies, claim)
+    return follow_guidelines(check_faithful(result, studies, claim), studies, claim)
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:
