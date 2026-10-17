@@ -111,6 +111,10 @@ class FakeModels:
         self.calls += 1
         self.configs = getattr(self, "configs", []) + [kw.get("config") or {}]
         self.prompts = getattr(self, "prompts", []) + [kw.get("contents") or ""]
+        # An empty script is a provider that is down: every call that can
+        # fail open (the faithfulness check, the direction read) does.
+        if not self.script:
+            raise errors.ServerError(503, {"error": {"message": "script empty"}})
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -1170,8 +1174,8 @@ fg.models.script = [Resp("vitamin d AND respiratory infection"),
                             **_BD_RAW))]
 _before = fg.models.calls
 _vd = P("Vitamin D supplements in winter cut colds", ip="9.9.9.9").get_json()
-t("the breakdown rides on the verdict call: still 2 calls per check",
-  fg.models.calls - _before == 2, fg.models.calls - _before)
+t("the breakdown rides on the verdict call: one search, one verdict, one faithfulness read",
+  fg.models.calls - _before == 3, fg.models.calls - _before)
 t("  the takeaway is held to the same rule as the breakdown",
   _vd["tldr"] == "Vitamin D slightly lowers the risk of colds.", _vd["tldr"])
 t("  the breakdown is in the API payload, gated",
@@ -1210,7 +1214,7 @@ fg.models.script = [
 _cbefore = fg.models.calls
 _cr = P("Vitamin D cuts colds but only if you are deficient", ip="8.8.8.8").get_json()
 t("a self contradicting answer costs one more call, and only then",
-  fg.models.calls - _cbefore == 3, fg.models.calls - _cbefore)
+  fg.models.calls - _cbefore == 4, fg.models.calls - _cbefore)
 t("  and the answer the reader gets is the consistent one",
   "do not test" not in _cr["explanation"] and "bigger effect" in _cr["explanation"],
   _cr["explanation"])
@@ -1676,14 +1680,14 @@ fg.models.script = [_SUGAR_NO, DIR("no"),
                             evidence=["Sugar did not change behaviour (Study 1)."]))]
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
 t("a stamp that contradicts its takeaway is asked again, once, and the agreeing answer wins",
-  _v["verdict"] == "false" and fg.models.calls == 3, (_v["verdict"], fg.models.calls))
+  _v["verdict"] == "false" and fg.models.calls == 4, (_v["verdict"], fg.models.calls))
 fg.models.calls = 0
 fg.models.script = [_SUGAR_NO, DIR("no"), _SUGAR_NO]
 _v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
 t("  if the retry still contradicts, the stamp follows the takeaway's plain no",
-  _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 3, _v)
+  _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 4, _v)
 t("  and a retry that writes the same sentence costs no second reading",
-  fg.models.script == [] and fg.models.calls == 3)
+  fg.models.script == [] and fg.models.calls == 4)
 t("  and the words are kept, never swapped for a stock line",
   not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], _v["explanation"],
                                "Sugar makes children hyperactive")
@@ -2210,8 +2214,8 @@ logging.getLogger("evident.stamp").addHandler(_stamp)
 _v = verdict.weigh_evidence(_COLD, [dict(x) for x in _COLDS], "(cold shower) AND (immunity)")
 logging.getLogger("evident.stamp").removeHandler(_stamp)
 t("  the direction is read by one small call at temperature 0",
-  fg.models.calls == 3 and f'Answer: "{_UNTESTED_COLD}"' in fg.models.prompts[1]
-  and fg.models.configs[-2].get("temperature") == 0, fg.models.prompts[1])
+  fg.models.calls == 4 and f'Answer: "{_UNTESTED_COLD}"' in fg.models.prompts[1]
+  and fg.models.configs[-3].get("temperature") == 0, fg.models.prompts[1])
 t("  and the retry is shown both halves and told they must agree",
   f'the takeaway, "{_UNTESTED_COLD}"' in fg.models.prompts[2]
   and 'the verdict is "complicated"' in fg.models.prompts[2]
@@ -2336,7 +2340,7 @@ fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr=_WINE_MAY,
                             evidence=["Wine was linked to fewer heart deaths (Study 1)."]))]
 _v = verdict.weigh_evidence(_WINE, [dict(x) for x in _WINE_SET], "(red wine) AND (heart)")
 t("red wine: the resveratrol reviews are background, the takeaway that skipped confounding is asked again",
-  _v["cited_studies"] == ["W1"] and fg.models.calls == 2 and _v["tldr"] == _WINE_SAYS
+  _v["cited_studies"] == ["W1"] and fg.models.calls == 3 and _v["tldr"] == _WINE_SAYS
   and "Study 1, a review the answer relies on" in fg.models.prompts[1]
   and "Study 1 says the link it found is likely explained" in fg.models.prompts[0], (_v, fg.models.calls))
 fg.models.script = [Resp(VJ("complicated", [1, 2, 3], tldr=_WINE_MAY,
@@ -2777,7 +2781,7 @@ t("  and the answer says the weaker studies disagree, by number",
   and "observational studies and surveys that point the other way (Studies 2 and 3)" in _v["explanation"],
   _v["explanation"])
 t("  the model was asked once more before code turned the stamp",
-  fg.models.calls == 2 and "Trials outrank them" in fg.models.prompts[-1], fg.models.calls)
+  fg.models.calls == 3 and "Trials outrank them" in fg.models.prompts[-2], fg.models.calls)
 fg.models.script = [Resp(_TIE), Resp(VJ("true", [1], tldr="Green tea lowers blood pressure a little.",
                                         explanation="Pooled trials found it lowers blood pressure; "
                                                     "observational studies found no link, which counts for less.",
@@ -2850,7 +2854,7 @@ t("  an answer steering people from vaccination with no trial or review behind i
   and "Going without vaccination" in _v["tldr"]
   and "none here says so" in _v["explanation"] and "(Study 2) points the other way" in _v["explanation"], _v)
 t("  and the model was asked to fix it first",
-  "without a randomized trial or a major review" in fg.models.prompts[-1])
+  any("without a randomized trial or a major review" in x for x in fg.models.prompts[-3:]))
 fg.models.script = [Resp(VJ("false", [1], tldr="Flu vaccines don't cut hospital admissions.",
                             evidence=["Vaccinated adults were admitted as often (Study 1)."],
                             relevance=[_f(1, "against"), _f(2, "for")]))] * 3
@@ -2900,6 +2904,76 @@ _line = evidence.evidence_line(_v["verdict"], [_SIG], _v["cited_studies"], "Flu 
                                ((_v["breakdown"] or {}).get("effect") or {}).get("label"))
 t("  'no clear effect' is never shown when a cited trial found a significant benefit",
   "no clear effect" not in _line and not ((_v["breakdown"] or {}).get("effect") or {}).get("null"), (_line, _v))
+
+# ---- the faithfulness check: every line read against the abstract it cites --------
+_TC_CLAIM = "Tai chi lowers blood pressure"
+_TC_Q = "(tai chi) AND (blood pressure)"
+_TC = [_study("TC1", "Tai chi, yoga and blood pressure: a randomized trial",
+              abstract="Adults were randomized to tai chi, yoga or usual care; 300 took part. Blood pressure "
+                       "fell by 8 mmHg in the yoga group and by 3 mmHg in the tai chi group. Tai chi lowered "
+                       "blood pressure modestly."),
+       _study("TC2", "Tai chi and blood pressure in adults: a randomized trial",
+              abstract="Adults were randomized to tai chi or usual care; 200 took part. Tai chi did not change "
+                       "resting heart rate, but it lowered blood pressure by 4 mmHg.")]
+_TC_V = Resp(VJ("true", [1, 2], tldr="Tai chi lowers blood pressure a lot.",
+                explanation="Tai chi lowered blood pressure by 8 mmHg (Study 1). It also improved sleep (Study 2).",
+                evidence=["Tai chi lowered blood pressure by 8 mmHg (Study 1)."]))
+_GROUP_FIX = "Tai chi lowered blood pressure by 3 mmHg; the 8 mmHg drop was in the yoga group (Study 1)."
+
+def FJ(lines, missing=""):
+    return Resp(json.dumps({"lines": lines, "missing": missing}))
+
+def _L(n, verdict="ok", problem="none", rewrite=""):
+    return {"line": n, "verdict": verdict, "problem": problem, "rewrite": rewrite}
+
+fg.models.calls = 0
+fg.models.script = [_TC_V, FJ([_L(0, "rewrite", "direction", "Tai chi lowers blood pressure a little."),
+                               _L(1, "rewrite", "group", _GROUP_FIX),
+                               _L(2, "drop", "unsupported")],
+                              missing="Tai chi lowered blood pressure by 4 mmHg (Study 2).")]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+_says = (_v["breakdown"] or {}).get("says") or []
+t("faithfulness: a figure from another arm is rewritten to the group the line names",
+  _says[:1] == [_GROUP_FIX] and "8 mmHg (Study 1)." not in " ".join(_says), _says)
+t("  a line its abstract cannot support is dropped, here and in the explanation",
+  not any("sleep" in x for x in _says) and "sleep" not in _v["explanation"]
+  and _GROUP_FIX in _v["explanation"], (_says, _v["explanation"]))
+t("  a study's own headline finding that no line gave is added",
+  "Tai chi lowered blood pressure by 4 mmHg (Study 2)." in _says, _says)
+t("  the short answer is held to the abstracts too",
+  _v["tldr"] == "Tai chi lowers blood pressure a little.", _v["tldr"])
+t("  and all of it costs one call after the verdict, at temperature 0",
+  fg.models.calls == 2 and "You are checking a summary of health research" in fg.models.prompts[-1]
+  and fg.models.configs[-1].get("temperature") == 0, fg.models.calls)
+t("  the check is shown each line, numbered, with only the studies used",
+  'L1: "Tai chi lowered blood pressure by 8 mmHg (Study 1)."' in fg.models.prompts[-1]
+  and "[Study 2]" in fg.models.prompts[-1] and 'L0 (the short answer): "Tai chi lowers blood pressure a lot."'
+  in fg.models.prompts[-1])
+fg.models.script = [_TC_V, FJ([_L(0, "rewrite", "direction", "Tai chi does not lower blood pressure."),
+                               _L(1, "rewrite", "group", "Tai chi lowered blood pressure by 12 mmHg (Study 1)."),
+                               _L(2, "rewrite", "unsupported", "It also helped sleep (Study 3).")])]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+_says = (_v["breakdown"] or {}).get("says") or []
+t("  a rewrite goes through the same gates: a figure no abstract printed, or a study not used, is dropped",
+  not any("12 mmHg" in x or "Study 3" in x or "8 mmHg" in x or "sleep" in x for x in _says), _says)
+t("  and a rewritten short answer that argues with the stamp is refused",
+  _v["tldr"] == "Tai chi lowers blood pressure a lot.", _v["tldr"])
+fg.models.calls = 0
+fg.models.script = [_TC_V]
+_v = verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+t("  when the check cannot run, the answer stands as it was",
+  _v["verdict"] == "true" and (_v["breakdown"] or {}).get("says")
+  == ["Tai chi lowered blood pressure by 8 mmHg (Study 1).", "It also improved sleep (Study 2)."]
+  and fg.models.calls == 2, _v)
+fg.models.calls = 0
+fg.models.script = [Resp(VJ("complicated", [1], tldr="Tai chi may help a little.",
+                            explanation="The evidence is thin."))]
+verdict.weigh_evidence(_TC_CLAIM, [dict(x) for x in _TC], _TC_Q)
+t("  an answer with no research lines costs no check",
+  fg.models.calls == 1, fg.models.calls)
+t("  a takeaway code wrote is not sent to be checked",
+  verdict._code_takeaway(verdict.RANKED_TLDR["true"]) and verdict._code_takeaway(verdict.UNTESTED_TLDR)
+  and not verdict._code_takeaway("Tai chi lowers blood pressure a little."))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

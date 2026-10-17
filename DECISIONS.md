@@ -113,6 +113,26 @@ effect and its abstract reports it as significant. Finally, a takeaway
 code wrote for a stamp it set is replaced, not argued with, when a later
 gate lowers that stamp.
 
+**Faithfulness: one more call reads every line against its abstract.**
+The gates check that each figure appears in an abstract. They cannot
+check that the figure belongs to the group the sentence names (the yoga
+arm, not the walking arm), that a line points the same way as its study's
+own conclusion, or that a study's headline finding made it in at all.
+That takes a reading. After the answer is final, `verdict.check_faithful`
+sends the short answer and each "What the research says" line, with the
+abstracts of the studies used, to the same model at temperature 0. Back
+comes ok, rewrite or drop per line, plus any missing headline finding.
+A rewrite goes through the same gates as the original: the prose rules,
+a citation of a study used, no figure the abstracts lack. A rewrite
+that fails them is dropped. A rewritten short answer is kept only if it
+does not argue with the stamp. Dropped and rewritten lines are changed
+in the explanation and the breakdown too, so the page's fallback cannot
+bring them back. A takeaway code wrote itself is not sent: it is not a
+reading of any study. Cost: one call per check, and only when there are
+research lines to check. When the call fails the answer stands as it
+was, logged on `evident.faithful`. That is fail-open on purpose: the
+lines it would check have already passed every code gate.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

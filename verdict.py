@@ -282,6 +282,192 @@ def _complete_text(prompt: str, max_tokens: int, temperature: float | None = Non
         prompt, max_tokens, temperature)
 
 
+# ---------------------------------------------------------------------
+# The faithfulness check: one more call, after the answer is final
+#
+# The gates check that every figure is in an abstract. They cannot check
+# that a figure belongs to the group the sentence names (the yoga arm, not
+# the walking arm), that a line agrees with its study's own conclusion,
+# or that a study's headline finding made it in at all. That takes a
+# reading, so the short answer and each "What the research says" line are
+# read once more against the abstracts they cite. A line that fails is
+# rewritten, through the same gates as everything else, or dropped. The
+# call fails open: when it cannot run, the answer stands as it was.
+# ---------------------------------------------------------------------
+
+_faith_log = logging.getLogger("evident.faithful")
+
+FAITHFUL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lines": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "line": {"type": "integer"},
+                    "verdict": {"type": "string", "enum": ["ok", "rewrite", "drop"]},
+                    "problem": {"type": "string",
+                                "enum": ["none", "direction", "group", "unsupported"]},
+                    "rewrite": {"type": "string"},
+                },
+                "required": ["line", "verdict", "problem", "rewrite"],
+            },
+        },
+        "missing": {"type": "string"},
+    },
+    "required": ["lines", "missing"],
+}
+
+
+def _faithful_prompt(claim: str, tldr: str, lines: list[str], numbers: list[int],
+                     studies: list[dict]) -> str:
+    shown = "\n\n".join(
+        f"[Study {n}] \"{studies[n - 1].get('title')}\"\n"
+        f"Abstract: {(studies[n - 1].get('abstract') or '(no abstract)').strip()[:2500]}"
+        for n in numbers)
+    listed = "\n".join([f'L0 (the short answer): "{tldr}"' if tldr else "L0: (none)"]
+                        + [f'L{i}: "{t}"' for i, t in enumerate(lines, 1)])
+    return f"""You are checking a summary of health research against the abstracts it
+cites, before a reader sees it.
+
+Claim: "{claim}"
+
+The studies the summary relies on:
+
+{shown}
+
+The lines to check:
+
+{listed}
+
+For every line, L0 included, say:
+"ok" when everything it states matches the abstract it cites;
+"rewrite" when it fails any of these, with the corrected line in "rewrite":
+  direction: it points the other way from, or says more than, that study's own
+  conclusion;
+  group: a number it gives belongs to a different group from the one it names
+  (one arm of the trial and not another, one subgroup and not everyone);
+  unsupported: it states something the abstract does not say;
+"drop" when the abstract cannot support any version of it.
+Give "problem" as the failure, or "none" for ok. Leave "rewrite" empty unless
+the verdict is rewrite.
+
+L0 is the short answer. It cites no study: check it against all of them. A
+rewrite of it keeps its yes, no or mixed answer and fixes only what is wrong.
+Any other rewrite keeps its own citation, "(Study N)", and cites nothing else.
+
+Then "missing": if one study's own headline finding, what its conclusion says
+it found about this claim, is in none of the lines, write one plain sentence
+stating it, ending with its citation "(Study N)". Otherwise "".
+
+Write the way the lines are written: plain words a 12-year-old can follow,
+numbers as digits, no dashes. Never add a number the abstract does not print.
+
+Return JSON: {{"lines": [{{"line": 0, "verdict": "ok", "problem": "none",
+"rewrite": ""}}], "missing": ""}}."""
+
+
+# The takeaways code writes for itself are not the model's reading of a
+# study, so there is nothing in an abstract to hold them to.
+def _code_takeaway(tldr: str) -> bool:
+    fixed = {UNTESTED_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
+             *RANKED_TLDR.values()}
+    return (tldr in fixed or tldr.startswith((
+        "The strongest studies here", "No randomized trial or major review here",
+        "The studies found were all in", "Nothing has tested this in people yet",
+        "No published studies on this yet")))
+
+
+def _gate_line(text: str, studies: list[dict], allowed: set, skip=()) -> str:
+    """One rewritten line through the gates every line has passed: the prose
+    rules, a citation of a study used, no figure the abstracts lack."""
+    count = len(studies)
+    t = breakdown.plain(breakdown.soften(tidy_prose(text or "", EXPLANATION_MAX)))
+    t = breakdown.keep_sentences(t, count, breakdown.corpus(studies))
+    t = breakdown.drop_citing(t, skip, count)
+    kept = [x for x in breakdown.sentences(t)
+            if breakdown.refs(x, count) and set(breakdown.refs(x, count)) <= allowed]
+    return breakdown.for_reading(" ".join(kept[:2]), studies) if kept else ""
+
+
+def _swap(text: str, old: str, new: str) -> str:
+    """Replace one sentence of prose where it appears word for word."""
+    if not text or not old or old not in text:
+        return text
+    return re.sub(r"\s{2,}", " ", text.replace(old, new)).strip()
+
+
+def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
+    """
+    The short answer and the "What the research says" lines, read against
+    the abstracts they cite, and fixed where they fail. Runs only when there
+    are lines to check; costs one call; changes nothing if the call fails.
+    """
+    bd = result.get("breakdown") or {}
+    lines = list(bd.get("says") or [])
+    cited = [i + 1 for i, s in enumerate(studies) if s["pmid"] in set(result.get("cited_studies") or ())]
+    if not lines or not cited:
+        return result
+    count = len(studies)
+    numbers = sorted({n for t in lines for n in breakdown.refs(t, count)} | set(cited))
+    tldr = result.get("tldr") or ""
+    check_tldr = tldr if tldr and not _code_takeaway(tldr) else ""
+    try:
+        raw, stop = _complete_json(_faithful_prompt(claim, check_tldr, lines, numbers, studies),
+                                   FAITHFUL_SCHEMA, max_tokens=4000, temperature=0)
+        if stop:
+            return result
+        read = json.loads(raw.replace("```json", "").replace("```", "").strip())
+    except (ProviderError, json.JSONDecodeError, AttributeError, TypeError) as e:
+        _faith_log.warning("the faithfulness check did not run, so the answer stands: %s", e)
+        return result
+    if not isinstance(read, dict):
+        return result
+    allowed = set(cited)
+    skip = {i + 1 for i, s in enumerate(studies) if s.get("background")}
+    explanation = result.get("explanation") or ""
+    evidence_paras = list(bd.get("evidence") or [])
+    kept_lines = list(lines)
+    for item in read.get("lines") or []:
+        if not isinstance(item, dict) or item.get("verdict") not in ("rewrite", "drop"):
+            continue
+        try:
+            k = int(item.get("line"))
+        except (TypeError, ValueError):
+            continue
+        if k == 0:
+            if not check_tldr or item.get("verdict") != "rewrite":
+                continue
+            fixed = breakdown.for_reading(breakdown.natural(breakdown.plain(breakdown.soften(
+                tidy_prose(breakdown._REF.sub("", str(item.get("rewrite") or "")).replace(" ()", ""),
+                           TLDR_MAX)))), studies).strip()
+            if fixed and not breakdown.stamp_conflict(result.get("verdict") or "", fixed, "", claim):
+                _faith_log.warning("the short answer did not match its abstracts (%s), so it "
+                                   "was rewritten: %r -> %r", item.get("problem"), tldr, fixed)
+                tldr = fixed
+            continue
+        if not 0 < k <= len(lines):
+            continue
+        old = lines[k - 1]
+        new = (_gate_line(str(item.get("rewrite") or ""), studies, allowed, skip)
+               if item.get("verdict") == "rewrite" else "")
+        _faith_log.warning("a research line did not match its abstract (%s), so it was %s: %r",
+                           item.get("problem"), "rewritten" if new else "dropped", old)
+        kept_lines = [new if t == old else t for t in kept_lines]
+        explanation = _swap(explanation, old, new)
+        evidence_paras = [_swap(p, old, new) for p in evidence_paras]
+    kept_lines = [t for t in kept_lines if t]
+    missing = _gate_line(str(read.get("missing") or ""), studies, allowed, skip)
+    if missing and not any(missing.lower()[:40] in t.lower() for t in kept_lines):
+        kept_lines = kept_lines[:breakdown.SAYS_MAX - 1] + [missing]
+    # With every line gone the page falls back to the explanation, so that
+    # has lost the same sentences. If nothing of it is left either, the
+    # short answer stands in rather than a line that failed the check.
+    new_bd = {**bd, "says": kept_lines, "evidence": [p for p in evidence_paras if p]}
+    return {**result, "tldr": tldr, "explanation": explanation or tldr, "breakdown": new_bd}
+
+
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
     return (_gemini_json if provider() == "gemini" else _anthropic_json)(
         prompt, schema, max_tokens, temperature)
@@ -852,7 +1038,8 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             s["off_topic"] = off[s["pmid"]]
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
-    return _settle_confounding(_settle_ruling(result, claim), studies)
+    result = _settle_confounding(_settle_ruling(result, claim), studies)
+    return check_faithful(result, studies, claim)
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:
