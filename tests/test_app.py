@@ -2153,6 +2153,12 @@ pubmed.search_pubmed = _real_search
 t("  and what the phrase search finds is always among the studies read",
   "KNUCKLE1" in _merged and "KNUCKLE2" in _merged and len(_merged) == 16 and len(_seen) == 4, _merged)
 
+# A claim that names no outcome had its second group filled with words every
+# paper uses ("treatment outcome"), and the placebo trials were lost.
+t("a claim that only says something works is searched against placebo or sham",
+  "(placebo OR sham OR placebo effect OR placebo-controlled)" in verdict._query_prompt("reiki works")
+  and '"treatment outcome"' in verdict._query_prompt("reiki works"))
+
 # A phrase PubMed has never seen is split into loose words, and slang like
 # "ab exercises" became "ab" (abnormalities) AND exercise.
 _asked = []
