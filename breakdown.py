@@ -2185,6 +2185,7 @@ JARGON = [
     (r"\b(?:weighted\s+|pooled\s+)?mean\s+difference(s?)(?:\s*\(W?MDs?\))?", r"average difference\1"),
     (r"\bW?MD(s?)\b(?=:?\s*[-−]?\d)", r"average difference\1"),
     (r"\b95\s?%\s*CIs?\b", "likely range"),
+    (r"\b(?:95\s?%\s*)?confidence\s+interval(s?)(?:\s*\(CIs?\))?", r"likely range\1"),
     (r"\bpostprandial\s+(?:blood\s+|plasma\s+)?(?:glucose|sugar)\b", "blood sugar after meals"),
     (r"\bpostprandial\b", "after-meal"),
     (r"\bfasting\s+(?:blood\s+|plasma\s+)?glucose\b", "fasting blood sugar"),

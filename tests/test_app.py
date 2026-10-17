@@ -3098,6 +3098,10 @@ t("  a weighted mean difference is the average difference, and a 95% CI the like
   _uj("The weighted mean difference was -0.54 kg (95% CI -1.05 to -0.03) (Study 7).")
   == "The average difference was -0.54 kg (likely range -1.05 to -0.03) (Study 7)."
   and _uj("WMD -1.2 kg (Study 3).") == "Average difference -1.2 kg (Study 3).")
+t("  and so is a confidence interval written out",
+  _uj("The odds ratio was 1.22 with a 95% confidence interval of 1.04 to 1.42 (Study 1).")
+  == "The odds ratio was 1.22 with a likely range of 1.04 to 1.42 (Study 1)."
+  and _uj("OR 1.3 (confidence interval (CI) 1.1 to 1.5)") == "OR 1.3 (likely range 1.1 to 1.5)")
 t("  a standardized mean difference is an effect size, and after meals is said in words",
   _uj("Weight fell with a standardized mean difference of -0.39 (Study 2).")
   == "Weight fell with an effect size of -0.39 (Study 2)."

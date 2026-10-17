@@ -182,7 +182,9 @@ after the code that sizes an effect has read it: commas in counts
 (17,155,277; a year, a PMID or a decimal is left alone), the total rise
 in blood sugar for an incremental area under the curve, the average
 difference for a weighted mean difference, an effect size for a
-standardized one, the likely range for a 95% CI. Renaming any of these
+standardized one, the likely range for a 95% CI or a confidence interval
+written out (the run printed "a 95% confidence interval of 1.04 to 1.42"
+on the sugar page). Renaming any of these
 earlier would hide them from `evidence.effect_size`. Agreement is fixed
 only where it cannot misfire: a plural subject that opens its clause
 with its verb straight after it, a singular study word the same way,
