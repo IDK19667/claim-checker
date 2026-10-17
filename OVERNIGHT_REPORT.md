@@ -4,7 +4,7 @@
 
 ## Log
 
-### Step 1: finish accuracy-round-3 (in progress)
+### Step 1: finish accuracy-round-3 (done)
 
 **1a. The faithfulness rewrite never drops a hedge.** Done, commit
 54c3091. A rewritten short answer is refused if it only takes a hedge out
@@ -35,3 +35,38 @@ were accepted, except:
 
 Also fixed from the run (commit e4f64d7): "95% confidence interval"
 written out is now "likely range", like "95% CI" already was.
+
+**1b, finished. Regression result on the final code: 19 exact, 2
+accepted, 0 wrong.** (Baseline was 18 exact, 3 accepted, 0 wrong, so one
+better.) Measles is True again. Claims 16 and 18 were re-run after the
+PubMed outage and both matched. The two accepted ones are the same kind as
+before: red wine and heart health, cold showers and immunity, both "It's
+complicated" where the list says something firmer and the reviews allow
+either. No dash appeared on any page.
+
+More fixes the run's text turned up, each a pattern and each with tests:
+- Commit 7bd6597: PubMed sometimes turns a request away for a moment
+  (that was the outage on 16 and 18). The app now spaces its PubMed
+  calls a little and asks once more after a short wait, instead of
+  showing the "try again" page straight away.
+- Commit 020f1fb: when the app refuses a rewrite of the short answer, it
+  writes a line in the server log saying so, so we can see how often.
+- Commit 98efbab: Hedges' g, Cohen's d, "an SMD of" and a doubled word
+  ("pooled pooled") now read in plain words.
+- Commit 0332d51: "vaccine effectiveness" stays as written (it had
+  printed "assess vaccine how well it works"), "lacked efficacy" reads
+  "lacked an effect", and "meta analysis" without its hyphen and "sleep
+  onset latency" are said in words.
+
+Seen but left alone on purpose: one page said "these robust trials".
+Words like "robust" are logged, not rewritten, which was an earlier
+decision (rewriting them changed meaning too often). Worth a look later.
+
+**1c. Tests and QA.** 606 of 606 tests pass. The QA gate passes
+(contrast, tap targets, overflow, console, tokens, at both widths in both
+schemes), and I looked at the phone result screenshot. Branch
+accuracy-round-3 pushed.
+
+Note: in the earlier session, one local QA run did a real check of
+"Apple cider vinegar cures diabetes" on my machine. It used a little of
+the free Gemini quota and nothing else.
