@@ -2715,6 +2715,35 @@ t("  a true verdict is capped on the claim's outcome, not on another one",
   evidence.certainty_cap([_MODREV], ["L3"], outcome="(vomiting OR emesis)") is None
   and "low" in (evidence.certainty_cap([_MODREV], ["L3"], outcome="(headache)") or "")
   and "very low" in (evidence.certainty_cap([_VLREV], ["L2"], outcome="(vomiting)") or ""))
+_BRACKETED = _gin_review("L5", "Twelve cohorts were pooled. Ginger prevented vomiting in 80% (RR 0.20, "
+                         "95% CI 0.10 to 0.40; 7 cohort studies; 1,200 adults; moderate certainty evidence). "
+                         "Given after surgery, ginger prevented vomiting in 60% (RR 0.40; 2 cohort studies; "
+                         "low certainty evidence). Ginger did not change headache (RR 1.10; 3 cohort studies; "
+                         "very low certainty evidence).")
+_SEVERE = "(severe vomiting OR vomiting episodes OR hospitalization for vomiting)"
+t("certainty: a rating inside brackets stays with the finding it rates",
+  evidence.certainty_on_outcome(_BRACKETED, "(vomiting)")
+  and evidence.certainty_range(_BRACKETED, "(vomiting)") == "low to moderate"
+  and evidence.review_certainty(_BRACKETED, "(headache)") == "very low")
+t("  an outcome no finding names whole is read on the word its terms share",
+  evidence.certainty_on_outcome(_BRACKETED, _SEVERE)
+  and evidence.certainty_range(_BRACKETED, _SEVERE) == "low to moderate")
+t("  only a review that rates the outcome low and nowhere higher can cap a true",
+  evidence.review_certainty(_BRACKETED, _SEVERE) == "low"
+  and evidence.review_certainty(_BRACKETED, _SEVERE, strict=True) is None
+  and evidence.certainty_cap([_BRACKETED], ["L5"], outcome=_SEVERE) is None
+  and evidence.review_certainty(_BRACKETED, "(headache)", strict=True) == "very low"
+  and evidence.review_certainty(_gin_review("R6", _SPLIT), "(sleep)", strict=True) is None)
+t("  and the certainty line gives the review's own range, never Strong",
+  evidence.evidence_line("true", [_BRACKETED], ["L5"], _GIN_CLAIM, outcome=_SEVERE)
+  == "Low to moderate certainty evidence for this claim")
+fg.models.script = [Resp(VJ("true", [1], tldr="Ginger prevents vomiting.",
+                            evidence=["Ginger prevented vomiting in 80% (Study 1)."]))] * 3
+fg.models.prompts = []
+_v = verdict.weigh_evidence(_GIN_CLAIM, [dict(_BRACKETED)], "(ginger) AND " + _SEVERE)
+t("  through a real verdict, a narrower question's low rating neither caps it nor flags the review",
+  _v["verdict"] == "true" and "Twelve cohorts were pooled" in fg.models.prompts[0]
+  and "LOW CERTAINTY: this review" not in fg.models.prompts[0], _v)
 fg.models.script = [Resp(VJ("true", [1], tldr="Ginger reduces vomiting.",
                             evidence=["Ginger reduced vomiting (Study 1)."]))] * 3
 _v = verdict.weigh_evidence(_GIN_CLAIM, [dict(_VLREV)], _GIN_Q)

@@ -58,15 +58,34 @@ and the lead review, the first review used that rates itself, sets the
 line: "Low certainty evidence for this claim", "Very low certainty",
 "Moderate certainty". Reviews often rate each outcome separately ("moderate
 certainty it does not prevent colds; low certainty it shortens them"),
-so the rating that counts is the one in the clauses that name the query's
+so the rating that counts is the one in the findings that name the query's
 outcome words. When none name them, the lowest rating stands, because a
-review is never read as surer than its least sure word. The same reading
-drives the cap on a "true" verdict and the LOW CERTAINTY marker the model
-sees, so the line, the stamp and the prompt never disagree. "More
+review is never read as surer than its least sure word. "More
 high-quality trials are needed" rates nothing: "quality" only counts
 next to "evidence". The "N strong" count now leaves out background as
 well as off-topic records: an animal-study review is not strong evidence
 about people.
+
+The 21-claim run caught this reading going too far. "Vaccines reduce
+the risk of severe measles" came back "It's complicated". The Cochrane
+review rates measles prevention moderate certainty, and only mumps and
+the narrower question of a dose after exposure low. Two things were
+wrong. A finding was cut at every semicolon, including those inside
+brackets ("(RR 0.05; 7 cohort studies; moderate certainty evidence)"),
+so each rating lost the word "measles" it belonged to. And with the
+outcome found nowhere, the lowest rating anywhere in the review, a mumps
+one, capped the verdict and flagged the review LOW CERTAINTY to the
+model. Now a finding is cut only outside brackets. An outcome group no
+finding names whole is read on the word most of its terms share
+("measles" in "severe measles OR measles complications"). Only a strict
+reading can lower a verdict or mark the prompt: the review must rate
+the outcome low and nowhere higher, or, when no finding names it, rate
+everything low (the rule before this round). A guess about which
+outcome a rating belongs to never makes a vaccine answer weaker. The
+line under the chart gives the review's own range on the question, so
+the measles answer reads "Low to moderate certainty evidence for this
+claim". It never says Strong, and never makes the review sound less sure
+than it is.
 
 **Hierarchy: randomized trials outrank weaker studies, and that is not a
 tie.** The model now says per study which way its own result points

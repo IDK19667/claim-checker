@@ -902,7 +902,8 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # meta-analysis of low-certainty evidence is not "strong evidence".
     lead = lead_certainty(studies, cited_pmids, outcome)
     if lead:
-        level = f"{lead.capitalize()} certainty"
+        span = certainty_range(lead_review(studies, cited_pmids, outcome), outcome) or lead
+        level = f"{span.capitalize()} certainty"
     cap = certainty_cap(studies, cited_pmids, comparative, outcome)
     # A review that puts the link down to other factors weakens the case for
     # the claim, not the case against it.
@@ -1177,52 +1178,146 @@ _RATED = re.compile(
     rf"(?:as )?(?:to be )?(?:being )?({_LVL})(?: to ({_LVL}))?\b|"
     rf"\bevidence (?:was|is|were) of ({_LVL}) (?:certainty|quality)\b|"
     rf"\bGRADE\W{{1,3}}({_LVL})\b", re.IGNORECASE)
-_CLAUSE = re.compile(r"(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
+_CLAUSE = re.compile(r"[()\[\]]|(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
+
+# Words an outcome group shares with every other outcome, so they say
+# nothing about which one a sentence rates.
+_GENERIC_OUTCOME = {
+    "severe", "mild", "risk", "rate", "rates", "level", "levels", "outcome", "outcomes",
+    "effect", "effects", "people", "adults", "children", "patients", "from", "with",
+    "health", "total", "overall", "incidence", "prevalence", "symptoms"}
+
+
+def _clauses(text: str) -> list[str]:
+    """
+    The abstract cut where one finding ends and the next begins, but never
+    inside brackets: "measles was 95% after one dose (RR 0.05; 7 cohort
+    studies; moderate certainty evidence)" is one finding, and its rating
+    belongs with the word measles.
+    """
+    out, depth, start = [], 0, 0
+    for m in _CLAUSE.finditer(text):
+        mark = m.group()
+        if mark in ("(", "["):
+            depth += 1
+        elif mark in (")", "]"):
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            out.append(text[start:m.start()])
+            start = m.end()
+    out.append(text[start:])
+    return [c for c in out if c.strip()]
+
+
+def _outcome_patterns(outcome: str) -> list[list]:
+    """
+    The outcome group as patterns, closest first: each term whole, then the
+    word most of the terms share ("measles" in "severe measles OR measles
+    complications OR hospitalization from measles"), so a review that says
+    "preventing measles" is still read on the claim's outcome.
+    """
+    terms = [t for t in re.split(r"\s+OR\s+", (outcome or "").strip().strip("()"))
+             if len(t.strip(' "()')) > 2]
+    whole = [p for p in (_term_pattern(t) for t in terms) if p]
+    if len(terms) < 2:
+        return [whole]
+    count: dict[str, int] = {}
+    for t in terms:
+        for w in set(re.findall(r"[a-z]{4,}", t.lower())) - _GENERIC_OUTCOME:
+            count[w] = count.get(w, 0) + 1
+    shared = [p for p in (_term_pattern(w) for w, n in count.items() if n * 2 >= len(terms)) if p]
+    return [whole, shared]
+
+
+def _ratings(study, outcome: str = "") -> tuple[list[str], list[str]]:
+    """Every rating the review gives, and those of them on the claim's own
+    outcome (empty when no finding names it)."""
+    rated = []
+    for clause in _clauses(_text(study)):
+        levels = [_level(g) for m in _RATED.finditer(clause) for g in m.groups() if g]
+        if levels:
+            rated.append((clause, levels))
+    on_outcome = []
+    for patterns in _outcome_patterns(outcome):
+        on_outcome = [lvl for clause, levels in rated
+                      if any(p.search(clause) for p in patterns) for lvl in levels]
+        if on_outcome:
+            break
+    return [lvl for _, levels in rated for lvl in levels], on_outcome
 
 
 def _level(word: str) -> str:
     return re.sub(r"[- ]", " ", word.lower())
 
 
-def review_certainty(study, outcome: str = "") -> str | None:
+def _rank(level: str) -> int:
+    return CERTAINTY_LEVELS.index(level)
+
+
+def review_certainty(study, outcome: str = "", strict: bool = False) -> str | None:
     """
     The certainty a review gives its own evidence ("very low", "low",
     "moderate" or "high"), or None when it states none. A review often rates
     each outcome on its own ("moderate certainty that zinc does not prevent
     colds; low certainty that it shortens them"), so when `outcome` (the
-    query's outcome group) is given, the clauses that name it decide. When
-    none do, every rating counts. Either way the lowest one stands: a review
-    is never read as surer than its least sure word on the question.
+    query's outcome group) is given, the findings that name it decide, and
+    every rating counts only when none do. The lowest one stands: a review is
+    never read as surer than its least sure word on the question.
+
+    A `strict` reading, the one that can lower a verdict, needs the review to
+    rate it low and nowhere higher: a review that finds moderate certainty
+    that vaccination prevents measles, and low certainty for the narrower
+    question of a dose given after exposure, has not rated its evidence that
+    vaccination prevents measles low.
     """
     if not is_review(study):
         return None
-    rated = []
-    for clause in _CLAUSE.split(_text(study)):
-        levels = [_level(g) for m in _RATED.finditer(clause) for g in m.groups() if g]
-        if levels:
-            rated.append((clause, min(levels, key=CERTAINTY_LEVELS.index)))
-    if not rated:
+    every, on_outcome = _ratings(study, outcome)
+    levels = on_outcome or every
+    if not levels:
         return None
-    terms = [t for t in re.split(r"\s+OR\s+", (outcome or "").strip().strip("()"))
-             if len(t.strip(' "()')) > 2]
-    patterns = [p for p in (_term_pattern(t) for t in terms) if p]
-    on_outcome = [lvl for clause, lvl in rated if any(p.search(clause) for p in patterns)]
-    return min(on_outcome or [lvl for _, lvl in rated], key=CERTAINTY_LEVELS.index)
+    if strict and max(levels, key=_rank) not in ("low", "very low"):
+        return None
+    return min(levels, key=_rank)
 
 
-def lead_certainty(studies, cited_pmids=(), outcome: str = "") -> str | None:
+def certainty_range(study, outcome: str = "") -> str | None:
+    """The review's ratings on the question, in its own words, lowest to
+    highest: "low", or "low to moderate" when it gives both."""
+    if not is_review(study):
+        return None
+    every, on_outcome = _ratings(study, outcome)
+    levels = on_outcome or every
+    if not levels:
+        return None
+    low, high = min(levels, key=_rank), max(levels, key=_rank)
+    return low if low == high else f"{low} to {high}"
+
+
+def certainty_on_outcome(study, outcome: str = "") -> bool:
+    """True when the review rates the claim's own outcome by name."""
+    return is_review(study) and bool(_ratings(study, outcome)[1])
+
+
+def lead_review(studies, cited_pmids=(), outcome: str = ""):
+    """The first review used for the verdict that rates its own evidence
+    at all, in the order the studies were ranked, or None."""
+    cited = set(cited_pmids or ())
+    return next((s for s in studies or []
+                 if s.get("pmid") in cited and review_certainty(s, outcome)), None)
+
+
+def lead_certainty(studies, cited_pmids=(), outcome: str = "",
+                   strict: bool = False) -> str | None:
     """
     The certainty the lead review states: the first review used for the
     verdict that rates its own evidence at all, in the order the studies
     were ranked. None when no review used states one.
     """
-    cited = set(cited_pmids or ())
-    for s in studies or []:
-        if s.get("pmid") in cited:
-            level = review_certainty(s, outcome)
-            if level:
-                return level
-    return None
+    # A strict reading the lead review cannot give is not handed to the next
+    # review down.
+    lead = lead_review(studies, cited_pmids, outcome)
+    return review_certainty(lead, outcome, strict) if lead else None
 
 
 def trial_caveats(study) -> list[str]:
@@ -1283,7 +1378,7 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
     if reviews:
         if any(confounded(s) for s in reviews):
             return CONFOUNDED_REASON
-        lead = lead_certainty(studies, cited_pmids, outcome)
+        lead = lead_certainty(studies, cited_pmids, outcome, strict=True)
         if lead in ("low", "very low"):
             return f"the review behind it rates the certainty of its own evidence as {lead}"
         return None

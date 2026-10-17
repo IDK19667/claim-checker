@@ -785,9 +785,10 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
         why_back = evidence.background_reasons([study], claim)[study["pmid"]]
         lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
                      f"this claim in people and never counts as evidence for or against it")
-    rated = evidence.review_certainty(study, outcome)
+    rated = evidence.review_certainty(study, outcome, strict=True)
     if rated in ("low", "very low"):
-        lines.append(f"LOW CERTAINTY: this review rates its own evidence on this outcome "
+        where = " on this outcome" if evidence.certainty_on_outcome(study, outcome) else ""
+        lines.append(f"LOW CERTAINTY: this review rates its own evidence{where} "
                      f"as {rated} certainty")
     lines.append(f"Abstract: {abstract}\n")
     return "\n".join(lines)
