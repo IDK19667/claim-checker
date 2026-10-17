@@ -113,6 +113,8 @@ POPULATIONS = [
 ]
 
 _POOLED = ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review")
+# Papers about a topic rather than about people they enrolled.
+_OVERVIEW_TYPES = ("Review", "Practice Guideline", "Guideline", "Consensus Development")
 
 # "Women and men with overweight" is everyone, not one sex. Read before the
 # table above, because "men" is matched first and the audit found a mixed
@@ -134,14 +136,19 @@ def population(study, claim: str = "") -> str | None:
     with diabetes.
 
     The title counts wherever it matches. The abstract counts only for
-    papers that are not pooled evidence: a meta-analysis of 25 trials
-    mentions children in a subgroup line without being a study of
-    children, and mislabelling the broadest paper in the set as the
-    narrowest would invert the whole point of the flag.
+    papers that enrolled people: a meta-analysis of 25 trials mentions
+    children in a subgroup line without being a study of children, and
+    mislabelling the broadest paper in the set as the narrowest would
+    invert the whole point of the flag. A narrative review or a guideline
+    enrolled nobody either. "Antimicrobial treatment of ENT infections"
+    names children where it turns to ear infections, and was read as a
+    study of children; that turned "antibiotics do not cure colds" into
+    "it's complicated".
     """
     study = study or {}
     title = str(study.get("title") or "")
-    pooled = strongest_label(study.get("publication_types")) in _POOLED
+    pooled = (strongest_label(study.get("publication_types")) in _POOLED
+              or any(t.startswith(_OVERVIEW_TYPES) for t in study.get("publication_types") or []))
     # Trials state who they enrolled early, in Background or Methods.
     body = "" if pooled else str(study.get("abstract") or "")[:700]
     mixed_sex = bool(_BOTH_SEXES.search(title) or (body and _BOTH_SEXES.search(body)))

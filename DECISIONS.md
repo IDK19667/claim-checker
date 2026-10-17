@@ -218,6 +218,24 @@ gate took it out, the abstracts may well report one, so neither that
 line nor "the abstracts don't report the size" is true, and the row is
 left out of the page.
 
+### Holdout #2 (20 fresh claims): what it showed, and the general fixes
+
+The second holdout failed on one harmful miss, and the fixes below are for
+the patterns behind its misses, never for its claims. Its claims are not
+in the regression set and were not re-run after these changes, so a third
+fresh holdout is the honest test of them.
+
+**A review or a guideline enrolled nobody, so its abstract cannot make
+the evidence narrow.** `evidence.population` read the abstract of any
+paper that was not pooled evidence. A narrative review of ear, nose and
+throat infections mentions children where it turns to ear infections,
+and it was the one paper a "false" on "antibiotics cure the common cold"
+rested on, so code ruled every study "run in children" and stamped it
+"It's complicated". That is the harmful direction: it reads as "maybe for
+adults". Reviews, practice guidelines and consensus statements are now
+read from the title alone, as pooled reviews already were. A trial is
+still read from its abstract, where it says who it enrolled.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

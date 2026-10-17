@@ -842,6 +842,15 @@ t("  a pooled review is not narrowed by a subgroup line in its abstract",
   evidence.population({"title": "Vitamin D to prevent infections: a meta-analysis",
                        "abstract": "Subgroup analysis in children showed no effect.",
                        "publication_types": ["Meta-Analysis"]}) is None)
+t("  nor is a narrative review or a guideline, which enrolled nobody; its title still counts",
+  evidence.population({"title": "Antimicrobial treatment of ENT infections.",
+                       "abstract": "Acute otitis media in children may need antibiotics.",
+                       "publication_types": ["Journal Article", "Review"]}) is None
+  and evidence.population({"title": "Sore throat: antibiotic prescribing",
+                           "abstract": "Most children and adults recover without antibiotics.",
+                           "publication_types": ["Practice Guideline"]}) is None
+  and evidence.population({"title": "Pediatric sinusitis.", "abstract": "a",
+                           "publication_types": ["Review"]}) == "children")
 t("  a general trial is not labelled at all",
   evidence.population({"title": "Vitamin D in adults", "abstract": "We enrolled adults.",
                        "publication_types": ["Randomized Controlled Trial"]}) is None)
@@ -875,6 +884,22 @@ t("narrow evidence cannot carry a true verdict",
   _nr["verdict"] == "complicated", _nr["verdict"])
 t("  and the result says whose evidence it was",
   "children, pregnant women" in _nr["explanation"], _nr["explanation"])
+
+# The holdout's harmful miss: a general review that names children where it
+# turns to ear infections was read as a study of children, and code turned
+# "antibiotics do not cure colds" into "it's complicated".
+_ENT = [_study("E1", "Antimicrobial treatment of ENT infections.", types=["Journal Article", "Review"],
+               abstract="Acute otitis media in children and streptococcal pharyngitis may need "
+                        "antibiotics. Antibiotics should not be used for the common cold.")]
+fg.models.script = [Resp("antibiotics AND common cold"),
+                    Resp(VJ("false", [1], tldr="Antibiotics do not cure the common cold.",
+                            explanation="Antibiotics should not be used for the common cold (Study 1).",
+                            still_open="Nothing."))]
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _ENT
+_ent = P("Antibiotics cure the common cold", ip="7.7.7.8").get_json()
+t("a review that names children in passing does not make the evidence narrow",
+  _ent["verdict"] == "false" and "one group" not in _ent["explanation"],
+  (_ent["verdict"], _ent["explanation"]))
 
 # ---- the claim's own condition ----------------------------------------------------
 # The failure this covers: the answer said the condition was never tested while
