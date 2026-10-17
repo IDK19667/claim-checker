@@ -3243,6 +3243,12 @@ t("  a fall is not given a minus sign as well, nor is its range or what it is co
 t("  but a range that crosses zero keeps every sign, the fall's too",
   breakdown.house_style("Pain fell by -1.2 points (95% CI -2.0 to 0.4) (Study 2).")
   == "Pain fell by -1.2 points (likely range -2.0 to 0.4) (Study 2).")
+t("  a fall written without its sign loses the signs on its range too, unless it crosses zero",
+  breakdown.house_style("Fasting blood sugar dropped by about 22 mg/dL (likely range -29 to -15) (Study 2).")
+  == "Fasting blood sugar dropped by about 22 mg/dL (likely range 29 to 15) (Study 2)."
+  and breakdown.house_style("Pain fell by 1.2 points (likely range -2.0 to 0.4) (Study 2).")
+  == "Pain fell by 1.2 points (likely range -2.0 to 0.4) (Study 2)."
+  and breakdown.house_style("Weight fell by 2 kg (Study 3).") == "Weight fell by 2 kg (Study 3).")
 t("  and a word the plain name doubled is said once",
   breakdown.house_style("A large pooled pooled review (meta-analysis) found less pain (Study 1).")
   == "A large pooled review (meta-analysis) found less pain (Study 1).")

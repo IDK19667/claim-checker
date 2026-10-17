@@ -2381,7 +2381,7 @@ _FALL_BY = re.compile(
     r"\b(?:drop|fall|decrease|reduction|decline|loss|lowering|cut|"
     r"dropped|fell|decreased|reduced|lowered|declined)"
     r"(?:\s+(?:in|of)\s+[^,.;:()\d]{1,60}?)?\s+(?:of|by)\s+"
-    r"(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+)?([-\u2212])(?=\d)", re.IGNORECASE)
+    r"(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+)?([-\u2212])?(?=\d)", re.IGNORECASE)
 _COMPARED_SIGN = re.compile(r"(\b(?:compared (?:to|with)|versus|vs\.?)\s+)[-\u2212](?=\d)",
                             re.IGNORECASE)
 
@@ -2412,8 +2412,12 @@ def _unsign_falls(text: str) -> str:
     for sentence in re.split(r"(?<=[.!?])\s+", text):
         m = _FALL_BY.search(sentence)
         if m:
-            sign = m.start(1)
-            head, rest = sentence[:sign], sentence[sign + 1:]
+            # "Dropped by about 22 mg/dL (likely range -29 to -15)": the
+            # figure is already unsigned, and its range follows it.
+            if m.group(1):
+                head, rest = sentence[:m.start(1)], sentence[m.start(1) + 1:]
+            else:
+                head, rest = sentence[:m.end()], sentence[m.end():]
             figure = re.match(r"[\d.,]+\s*[^\s(]*", rest)
             cut = figure.end() if figure else 0
             after = _unsign_range(rest[cut:])
