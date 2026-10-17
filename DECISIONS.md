@@ -60,6 +60,21 @@ A live probe before committing: "Vitamin D supplements prevent winter
 infections" (a regression claim whose right answer is "It's complicated")
 came back "mixed", so it is not moved.
 
+**A result for an outcome nobody measured is dropped, in code.** A page
+said a creatine trial found "nobody lost hair"; that trial measured
+hormones and never mentions hair. Now, before the faithfulness call, any
+sentence that names the claim's outcome (the words of the search's outcome
+group, less generic ones like "risk" or "levels") and cites only studies
+whose title and whole abstract never mention it goes, from every place it
+was written. A sentence that says the study did not measure it ("without
+tracking hair loss", "neither tested whether", "it remains unknown if")
+stays, and so does one citing a study with no abstract to read. Small word
+families ("heart" and "cardiovascular", "blood sugar" and "glucose") stop
+a study that used other words from counting as silent. The faithfulness
+prompt now names the same failure under "unsupported". Checked against
+124 saved checks: it drops four sentences, all about hair loss from the
+hormone trial, and nothing else.
+
 ## 2026-10-16: Accuracy round 3, seven patterns from the holdout test
 
 A holdout of 20 claims the code had never seen scored 14 of 20. The

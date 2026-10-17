@@ -3339,6 +3339,48 @@ t("writing: a real check prints digits, commas and plain names for its statistic
 t("  and its verbs agree with their subjects",
   _v["tldr"].startswith("Lentils successfully lower "), _v["tldr"])
 
+# ---- a result for an outcome nobody measured ------------------------------------
+_STONE_Q = "(coffee OR caffeine) AND (kidney stones OR nephrolithiasis OR renal calculi)"
+_STONE = [_study("K1", "Coffee intake and kidney stones: a randomized trial",
+                 abstract="We randomized 200 adults to coffee or water. Kidney stones formed in 4 and 5 people."),
+          _study("K2", "Caffeine pharmacokinetics after three weeks of coffee",
+                 abstract="Plasma caffeine and paraxanthine levels were measured in 20 men. Levels rose by 40%."),
+          _study("K3", "Coffee and urine", abstract="")]
+_stem = evidence.outcome_stems(pubmed.split_and(_STONE_Q)[1])
+t("unmeasured outcome: the outcome group is read as its naming words, not 'risk' or 'levels'",
+  _stem == ["kidney", "stone", "nephrolithiasis", "renal", "calculi"], _stem)
+t("  and a study that names it in other words ('cardiovascular' for heart) did mention it",
+  not evidence.never_mentions(_study("H1", "Wine and cardiovascular events", abstract="Fewer cardiovascular "
+                                     "events."), evidence.outcome_stems("(heart)"))
+  and evidence.never_mentions(_STONE[1], _stem))
+_bad = "A second trial found caffeine levels rose, but nobody developed kidney stones (Study 2)."
+_out = pubmed.split_and(_STONE_Q)[1]
+t("  a sentence reporting that outcome for a study that never mentions it is caught",
+  verdict.unmeasured(_bad, _STONE, _out))
+t("  but not one that says the study didn't measure it",
+  not any(verdict.unmeasured(x, _STONE, _out) for x in (
+      "A second trial measured caffeine levels without tracking kidney stones (Study 2).",
+      "That study did not measure kidney stones (Study 2).",
+      "Neither tested whether kidney stones formed (Study 2).",
+      "It remains unknown if higher caffeine levels lead to kidney stones (Study 2).")))
+t("  nor one citing a study that did measure it, nor one citing a study with no abstract to read",
+  not verdict.unmeasured("The trial found no difference in kidney stones (Study 1).", _STONE, _out)
+  and not verdict.unmeasured("Coffee drinkers had fewer kidney stones (Study 3).", _STONE, _out)
+  and not verdict.unmeasured("Both trials found no kidney stones (Study 1, Study 2).", _STONE, _out))
+fg.models.script = [Resp(VJ(
+    "false", [1, 2], tldr="Coffee doesn't seem to cause kidney stones.",
+    explanation="A trial of 200 adults found kidney stones in 4 and 5 people (Study 1). " + _bad,
+    evidence=["A trial of 200 adults found kidney stones in 4 and 5 people (Study 1). " + _bad,
+              "Caffeine levels rose by 40% in 20 men (Study 2). That study did not measure kidney "
+              "stones (Study 2)."]))]
+_kv = verdict.weigh_evidence("Coffee causes kidney stones", [dict(s) for s in _STONE], _STONE_Q)
+_kall = json.dumps(_kv)
+t("  and through a real check it goes from every place it was written, while the honest line stays",
+  "nobody developed" not in _kall and "did not measure kidney stones" in _kall
+  and "4 and 5 people" in _kv["explanation"], _kv)
+t("  and the model's own check is told the same rule",
+  "for an outcome that abstract never" in verdict._faithful_prompt("c", "t", ["l"], [1], _STONE))
+
 # ---- the guideline check ------------------------------------------------------
 t("guideline check: runs for medicine, vaccines, infections, cancer, pregnancy, stopping "
   "treatment and protective practices",

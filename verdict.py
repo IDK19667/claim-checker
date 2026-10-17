@@ -348,7 +348,9 @@ For every line, L0 included, say:
   conclusion;
   group: a number it gives belongs to a different group from the one it names
   (one arm of the trial and not another, one subgroup and not everyone);
-  unsupported: it states something the abstract does not say;
+  unsupported: it states something the abstract does not say, including any
+  result, "no change" and "nobody" included, for an outcome that abstract never
+  says the study measured;
 "drop" when the abstract cannot support any version of it.
 Give "problem" as the failure, or "none" for ok. Leave "rewrite" empty unless
 the verdict is rewrite.
@@ -398,12 +400,87 @@ def _swap(text: str, old: str, new: str) -> str:
     return re.sub(r"\s{2,}", " ", text.replace(old, new)).strip()
 
 
-def check_faithful(result: dict, studies: list[dict], claim: str) -> dict:
+# A sentence that says what a study did not do is the honest kind: "it
+# measured a hormone without tracking hair loss".
+_NOT_MEASURED = re.compile(
+    r"\b(?:without (?:tracking|measuring|looking at|checking|testing|counting|recording)|"
+    r"did(?:n[\u2019']?t| not) (?:measure|track|look at|test|check|study|report|record|count)|"
+    r"(?:never|not|wasn[\u2019']?t|weren[\u2019']?t) (?:measured|tracked|looked at|tested|checked|"
+    r"studied|reported|recorded|counted)|no data on|no information on|rather than|instead of|"
+    r"(?:neither|none|nor|no (?:study|trial|one))\b[^.]{0,40}\b(?:tested|measured|tracked|looked at|"
+    r"checked|studied)|no\b[^.]{0,40}\b(?:was|were) (?:measured|tracked|tested|recorded|counted|"
+    r"assessed)|unknown|unclear|not (?:yet )?(?:known|clear)|uncertain|remains to be)\b",
+    re.IGNORECASE)
+
+
+def unmeasured(sentence: str, studies: list[dict], outcome: str) -> bool:
+    """
+    True when a sentence reports on the claim's outcome ("nobody lost hair")
+    but every study it cites never mentions that outcome anywhere in its
+    title or abstract, so cannot have measured it.
+    """
+    stems = evidence.outcome_stems(outcome)
+    if not stems or _NOT_MEASURED.search(sentence or "") or not evidence.names_any(sentence, stems):
+        return False
+    numbers = breakdown.refs(sentence, len(studies))
+    return bool(numbers) and all(evidence.never_mentions(studies[n - 1], stems) for n in numbers)
+
+
+def drop_unmeasured(result: dict, studies: list[dict], outcome: str) -> dict:
+    """
+    Every sentence that reports a result for an outcome its studies never
+    measured goes, wherever it sits: the explanation, the research lines,
+    the paragraphs, the breakdown fields and the part-by-part answers.
+    Deterministic, so it runs before the faithfulness call and costs none.
+    """
+    if not evidence.outcome_stems(outcome):
+        return result
+    gone = []
+
+    def keep(text: str) -> str:
+        if not text:
+            return text
+        parts = breakdown.sentences(text)
+        kept = [x for x in parts if not unmeasured(x, studies, outcome)]
+        if len(kept) == len(parts):
+            return text
+        gone.extend(x for x in parts if x not in kept)
+        return " ".join(kept).strip()
+
+    explanation = keep(result.get("explanation") or "")
+    bd = result.get("breakdown")
+    if bd:
+        bd = dict(bd)
+        bd["says"] = [x for x in (keep(t) for t in bd.get("says") or []) if x]
+        bd["evidence"] = [x for x in (keep(t) for t in bd.get("evidence") or []) if x]
+        for k in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):
+            if bd.get(k):
+                bd[k] = keep(bd[k])
+        parts = []
+        for p in bd.get("parts") or []:
+            p = {**p, "assessment": keep(p.get("assessment") or "")}
+            if not p["assessment"] and bd["evidence"]:
+                p["assessment"] = breakdown.PART_BELOW
+            if p["assessment"]:
+                parts.append(p)
+        bd["parts"] = parts
+    if not gone:
+        return result
+    for x in dict.fromkeys(gone):
+        _faith_log.warning("a sentence reported an outcome its studies never measured, so it "
+                           "was dropped: %r", x)
+    return {**result, "explanation": explanation or result.get("tldr") or "",
+            "breakdown": breakdown.settle_effect(bd) if bd else bd}
+
+
+def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str = "") -> dict:
     """
     The short answer and the "What the research says" lines, read against
     the abstracts they cite, and fixed where they fail. Runs only when there
     are lines to check; costs one call; changes nothing if the call fails.
+    A line about an outcome its study never measured goes first, in code.
     """
+    result = drop_unmeasured(result, studies, outcome)
     bd = result.get("breakdown") or {}
     lines = list(bd.get("says") or [])
     cited = [i + 1 for i, s in enumerate(studies) if s["pmid"] in set(result.get("cited_studies") or ())]
@@ -1254,7 +1331,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    return follow_guidelines(check_faithful(result, studies, claim), studies, claim)
+    return follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:

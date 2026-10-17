@@ -786,6 +786,87 @@ def measures(study, terms_group: str) -> bool:
     return any(re.search(_query_term(t), body, re.IGNORECASE) for t in terms)
 
 
+# Words in an outcome group that name no outcome on their own: "loss" in
+# "hair loss", "risk" in "cancer risk", "blood" in "blood pressure".
+_NOT_AN_OUTCOME = frozenset("""
+    risk risks loss losses level levels health effect effects rate rates change changes
+    symptom symptoms function functions quality disease diseases disorder disorders outcome
+    outcomes score scores status severity incidence prevalence reduction increase decrease
+    improvement performance total mean body human people adult adults child children acute
+    chronic severe mild high higher lower daily general overall condition conditions problem
+    problems event events common upper lower blood test tests measure measures marker markers
+    complicated complication complications related associated induced from with patients
+    """.split())
+_STEM_END = re.compile(r"(?:ness|ings?|ed|(?<![siu])s)$")
+# An abstract can name the outcome in other words than the query did:
+# "heart" as "cardiovascular", "blood sugar" as "glucose". A study that
+# uses any word of the family has said something about that outcome.
+_OUTCOME_KIN = [
+    ("heart", "cardi", "coronary", "myocard", "cvd", "chd"),
+    ("sugar", "glucose", "glyc", "insulin", "hba1c", "diabet"),
+    ("cancer", "tumor", "neoplas", "carcino", "oncolog", "malignan", "lymphoma", "leuk",
+     "melanoma", "sarcoma"),
+    ("kidney", "renal", "nephr", "stone", "calculi", "lithiasis"),
+    ("liver", "hepat"),
+    ("stroke", "cerebrovascular"),
+    ("weight", "obes", "adipos", "bmi", "body mass", "fat"),
+    ("sleep", "insomnia"),
+    ("depress", "mood"),
+    ("memory", "cognit", "dementia"),
+    ("skin", "derma", "cutaneous"),
+    ("hair", "alopecia", "bald"),
+    ("bone", "fracture", "osteopor"),
+    ("teeth", "tooth", "dental", "caries", "cavit"),
+    ("pressure", "hypertens"),
+    ("cholesterol", "lipid", "ldl", "hdl", "triglycer"),
+    ("cold", "respiratory", "urti"),
+    ("death", "mortality", "surviv"),
+    ("autism", "asd"),
+    ("inflammat", "crp", "c-reactive"),
+]
+
+
+def _kin(stems: list[str]) -> list[str]:
+    out = list(stems)
+    for family in _OUTCOME_KIN:
+        if any(s.startswith(f) or f.startswith(s) for s in stems for f in family):
+            out += [f for f in family if f not in out]
+    return out
+
+
+def outcome_stems(group: str) -> list[str]:
+    """
+    The words of a query's outcome group that name the outcome, cut to a
+    stem: "(hair loss OR alopecia OR baldness)" gives hair, alopecia, bald.
+    """
+    stems = []
+    for word in re.findall(r"[a-z]+", _us(group or "").lower()):
+        if len(word) < 4 or word in _NOT_AN_OUTCOME:
+            continue
+        stem = _STEM_END.sub("", word) if len(word) > 5 else word
+        if len(stem) >= 4 and stem not in stems:
+            stems.append(stem)
+    return stems
+
+
+def names_any(text: str, stems: list[str]) -> bool:
+    """True when the text uses one of these stems as the start of a word."""
+    text = _us(text or "")
+    return any(re.search(r"\b" + re.escape(s), text, re.IGNORECASE) for s in stems)
+
+
+def never_mentions(study, stems: list[str]) -> bool:
+    """
+    True when a study's title and whole abstract use none of these stems,
+    so it cannot have measured that outcome. False when there is no
+    abstract to read: absence there proves nothing.
+    """
+    abstract = str((study or {}).get("abstract") or "").strip()
+    if not stems or not abstract or abstract.lower().startswith("(no abstract"):
+        return False
+    return not names_any(f"{study.get('title') or ''} {abstract}", _kin(stems))
+
+
 def indirect(study, outcome: str, surrogate: str) -> str | None:
     """
     The surrogate this study measured instead of the claim's outcome, or None

@@ -358,3 +358,21 @@ guidelines say: ...", and the change is logged.
   - Sunscreen came back "supports", and vinegar curing diabetes came
     back "rejects", as they should.
 - Tests: 15 new ones, 635/635 pass.
+
+### Step 3a: a result for an outcome nobody measured (done)
+
+The creatine page said a trial found "nobody lost hair", but that trial
+only measured hormones. Now, before the faithfulness call, code drops
+any sentence that reports on the claim's outcome while citing only
+studies that never mention that outcome anywhere in their title or
+abstract.
+
+- Honest lines stay: "measured a hormone without tracking hair loss",
+  "neither tested whether", "it remains unknown if".
+- The AI faithfulness check's instructions now name the same failure.
+- Checked against 124 saved checks: it drops 4 sentences, all
+  hair-loss claims about the hormone trial, and nothing else.
+- To get there it needed small synonym families. Without them, a study
+  that says "cardiovascular" counted as never mentioning "heart"; two
+  existing tests caught that.
+- 642/642 tests pass.
