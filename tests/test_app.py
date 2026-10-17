@@ -132,6 +132,25 @@ STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", 
            for i in range(1, 4)]
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
+# A refused PubMed call is asked once more before the check gives up.
+class _R:
+    def __init__(self, code): self.status_code = code
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(str(self.status_code))
+_real_get, _real_retry = pubmed.requests.get, pubmed.RETRY_AFTER
+pubmed.RETRY_AFTER = 0
+_codes = [429, 200]
+pubmed.requests.get = lambda *a, **k: _R(_codes.pop(0))
+t("pubmed: a call NCBI turns away (429) is asked once more", pubmed._get("esearch.fcgi", {}).status_code == 200)
+_codes = [503, 503]
+try:
+    pubmed._get("esearch.fcgi", {}); _gave_up = False
+except requests.HTTPError:
+    _gave_up = True
+t("  and a second refusal still fails, into the check's defined PubMed error", _gave_up and not _codes)
+pubmed.requests.get, pubmed.RETRY_AFTER = _real_get, _real_retry
+
 
 def DIR(answer):
     """The one-word reading of a takeaway's direction (verdict.classify_direction)."""

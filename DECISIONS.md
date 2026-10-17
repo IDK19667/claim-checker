@@ -24,6 +24,15 @@ type once it is indexed, which takes months, and the newest review is
 often the one that settles a question. Cost: one free esearch call,
 about a third of a second.
 
+That one call had a cost the tests could not see. NCBI allows 3 requests
+a second without a key, and calls were spaced 0.35 s apart: exactly at
+the limit, so a little network jitter lands four in one second. In the
+21-claim run, 3 checks in 26 failed in about a second with "Couldn't
+reach PubMed", against none in the round before. Calls are now 0.4 s
+apart, and a call NCBI turns away (429) or answers with a passing server
+error is asked once more after 1.5 s (`pubmed._get`). A second refusal
+still fails into the defined PubMed error, so no check hangs.
+
 **Relevance: a study is used only if it tests this claim in people.**
 Four gates now send a record to background or off topic before the model
 can lean on it. (1) Farm and lab animals are animals: cows, heifers,

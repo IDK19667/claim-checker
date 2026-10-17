@@ -35,20 +35,35 @@ TIMEOUT = 15
 # and a surrogate search when there is one), which is past the limit, so
 # they are spaced instead of raced. A lock,
 # because Flask serves checks on threads and the limit is per client.
-MIN_INTERVAL = 0.35
+# Spaced a little wider than the limit itself: requests leave 0.35 s apart
+# can still arrive four to a second. And one that is turned away anyway
+# (429), or meets a passing server error, is asked once more after a
+# pause: the review search made a check one call longer, and in the
+# 21-claim run 3 checks in 26 failed on a single refused call.
+MIN_INTERVAL = 0.4
+RETRY_AFTER = 1.5
+_RETRY_STATUS = {429, 500, 502, 503, 504}
 _last_call = 0.0
 _pace = threading.Lock()
 
 
-def _get(endpoint: str, params: dict):
-    """One E-utilities call, no faster than NCBI's published rate."""
+def _paced_get(endpoint: str, params: dict):
     global _last_call
     with _pace:
         wait = MIN_INTERVAL - (time.monotonic() - _last_call)
         if wait > 0:
             time.sleep(wait)
         _last_call = time.monotonic()
-    resp = requests.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
+    return requests.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
+
+
+def _get(endpoint: str, params: dict):
+    """One E-utilities call, no faster than NCBI's published rate, asked
+    once more if NCBI turns it away or has a passing fault."""
+    resp = _paced_get(endpoint, params)
+    if resp.status_code in _RETRY_STATUS:
+        time.sleep(RETRY_AFTER)
+        resp = _paced_get(endpoint, params)
     resp.raise_for_status()
     return resp
 
