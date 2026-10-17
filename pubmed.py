@@ -87,7 +87,16 @@ def search_pubmed(query: str, max_results: int = 8) -> list[str]:
         **_tool_params(),
     }
     data = _get("esearch.fcgi", params).json()
-    return data.get("esearchresult", {}).get("idlist", [])
+    result = data.get("esearchresult", {})
+    missing = (result.get("warninglist") or {}).get("quotedphrasesnotfound") or []
+    if missing:
+        _UNKNOWN_PHRASES[query] = [m.strip('"') for m in missing]
+    return result.get("idlist", [])
+
+
+# Quoted phrases PubMed reported it has never seen, by the query that asked,
+# read once and dropped by search_phrases.
+_UNKNOWN_PHRASES: dict[str, list[str]] = {}
 
 
 def _text_or_none(el):
@@ -368,6 +377,35 @@ def phrase_query(query: str) -> str | None:
     return " AND ".join("(" + " OR ".join(g) + ")" for g in [head] + split[1:])
 
 
+def search_phrases(phrased: str, max_results: int = 8) -> list[str]:
+    """
+    The phrase search, without the phrases PubMed does not know. A quoted
+    phrase that is in no record is not searched as a phrase: PubMed splits it
+    into loose words, so slang like "ab exercises" became "ab" (read as
+    abnormalities) AND exercise, and filled the list with papers on insulin
+    resistance and fat in dogs. An unknown phrase among the outcome's
+    synonyms is dropped and the search asked again; when the claim's own
+    subject is the unknown one, there is no phrase search to make.
+    """
+    ids = search_pubmed(phrased, max_results=max_results)
+    missing = _UNKNOWN_PHRASES.pop(phrased, [])
+    if not missing:
+        return ids
+    groups = split_and(phrased)
+    kept = []
+    for g in groups:
+        terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
+        terms = [t for t in terms if t.strip('"') not in missing]
+        if not terms:
+            return []
+        kept.append("(" + " OR ".join(terms) + ")")
+    again = " AND ".join(kept)
+    if again == phrased:
+        return ids
+    ids = search_pubmed(again, max_results=max_results)
+    return [] if _UNKNOWN_PHRASES.pop(again, []) else ids
+
+
 # How many places at the front of the list the review search may take. Three:
 # the main review on a topic is nearly always in PubMed's top three for its
 # own words, and more would let reviews of neighbouring questions crowd out
@@ -425,7 +463,7 @@ def search_merged(query: str, max_results: int = 8) -> list[str]:
     # The phrase search sits between the two: it can only find papers that
     # name a term as written, so what it finds is about the claim.
     phrased = phrase_query(query)
-    exact = search_pubmed(phrased, max_results=max_results) if phrased else []
+    exact = search_phrases(phrased, max_results=max_results) if phrased else []
     general = search_pubmed(query, max_results=want)
     return list(dict.fromkeys(reviews[:REVIEW_SLOTS] + best[:max_results] + exact
                               + best[max_results:] + general))[:want]

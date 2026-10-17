@@ -248,6 +248,17 @@ tumour, fibre, randomised and a few more, each a whole root, never a
 loose "oe"), and a term takes its plural or singular. "Creatinine" is
 still not "creatine".
 
+**A phrase PubMed has never seen is not searched as a phrase.** The
+phrase search (`pubmed.phrase_query`) quotes the claim's own words so it
+can only find papers that use them. When a quoted phrase is in no record,
+PubMed says so in its reply and quietly splits it into loose words: "ab
+exercises" became "ab" (which it reads as "abnormalities") AND exercise,
+and the list filled with papers on insulin resistance and obesity in dogs
+and cats. `pubmed.search_phrases` reads that warning. An unknown phrase
+among the outcome's synonyms is dropped and the search asked once more;
+an unknown subject means there is no phrase search to make, and it
+returns nothing rather than noise.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

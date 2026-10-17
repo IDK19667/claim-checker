@@ -2153,6 +2153,25 @@ pubmed.search_pubmed = _real_search
 t("  and what the phrase search finds is always among the studies read",
   "KNUCKLE1" in _merged and "KNUCKLE2" in _merged and len(_merged) == 16 and len(_seen) == 4, _merged)
 
+# A phrase PubMed has never seen is split into loose words, and slang like
+# "ab exercises" became "ab" (abnormalities) AND exercise.
+_asked = []
+def _fake_unknown(q, max_results=8):
+    _asked.append(q)
+    for phrase in ("ab exercises", "wobbly knee"):
+        if f'"{phrase}"' in q:
+            pubmed._UNKNOWN_PHRASES[q] = [phrase]
+    return ["LOOSE1"] if "ab exercises" in q else ["KNEE1"]
+pubmed.search_pubmed = _fake_unknown
+_slang = pubmed.search_phrases('("ab exercises") AND ("belly fat" OR "abdominal fat")')
+_outcome = pubmed.search_phrases('("knuckle cracking") AND (arthritis OR "wobbly knee")')
+pubmed.search_pubmed = _real_search
+t("  a subject PubMed does not know as a phrase is not searched as one",
+  _slang == [] and sum("ab exercises" in q for q in _asked) == 1, (_slang, _asked))
+t("  an unknown outcome phrase is dropped and the search asked again",
+  _outcome == ["KNEE1"] and _asked[-1] == '("knuckle cracking") AND (arthritis)'
+  and not pubmed._UNKNOWN_PHRASES, (_outcome, _asked))
+
 # ---- Before you trust a verdict: the home page's plain answers -----------
 import html as _html
 import inspect as _inspect
