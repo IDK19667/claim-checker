@@ -2371,9 +2371,58 @@ def agree(text: str) -> str:
 _SAID_TWICE = re.compile(r"\b(\w{4,})\s+\1\b", re.IGNORECASE)
 
 
+# "A drop of -5.31 mm Hg" says the fall twice, once in the word and once in
+# the sign, and read literally it is a rise. After a word that already says
+# down, the minus goes, and so does the minus on the figure it is compared to.
+_FALL_BY = re.compile(
+    r"\b(?:drop|fall|decrease|reduction|decline|loss|lowering|cut|"
+    r"dropped|fell|decreased|reduced|lowered|declined)"
+    r"(?:\s+(?:in|of)\s+[^,.;:()\d]{1,60}?)?\s+(?:of|by)\s+"
+    r"(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+)?([-\u2212])(?=\d)", re.IGNORECASE)
+_COMPARED_SIGN = re.compile(r"(\b(?:compared (?:to|with)|versus|vs\.?)\s+)[-\u2212](?=\d)",
+                            re.IGNORECASE)
+
+
+# The bracket straight after it, when every figure in it is negative: the
+# range of the same fall.
+_RANGE_AFTER = re.compile(r"^(\s*[^()\d]{0,30}?\()([^()]*)\)")
+_SIGNED = re.compile(r"[-\u2212](?=\d)")
+
+
+def _unsign_range(rest: str) -> str | None:
+    """The text after the figure, its range unsigned; None when the range
+    crosses zero, because then the signs carry the meaning and stay."""
+    m = _RANGE_AFTER.match(rest)
+    if not m or re.match(r"\s*Stud(?:y|ies)\b", m.group(2)):
+        return rest
+    inside = re.sub(r"\b9[059]\s?(?:%|percent\b|per cent\b)", "", m.group(2))
+    numbers = re.findall(r"[-\u2212]?\d+(?:\.\d+)?", re.sub(r"\bp\s*[<=>]\s*[\d.]+", "", inside))
+    if not numbers:
+        return rest
+    if not all(n[0] in "-\u2212" for n in numbers):
+        return None
+    return m.group(1) + _SIGNED.sub("", m.group(2)) + ")" + rest[m.end():]
+
+
+def _unsign_falls(text: str) -> str:
+    out = []
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        m = _FALL_BY.search(sentence)
+        if m:
+            sign = m.start(1)
+            head, rest = sentence[:sign], sentence[sign + 1:]
+            figure = re.match(r"[\d.,]+\s*[^\s(]*", rest)
+            cut = figure.end() if figure else 0
+            after = _unsign_range(rest[cut:])
+            if after is not None:
+                sentence = _COMPARED_SIGN.sub(r"\1", head + rest[:cut] + after)
+        out.append(sentence)
+    return " ".join(out)
+
+
 def house_style(text: str) -> str:
     """The last pass over prose a reader sees: commas, plain statistics, agreement."""
-    return _SAID_TWICE.sub(r"\1", agree(unjargon(thousands(text or ""))))
+    return _SAID_TWICE.sub(r"\1", agree(unjargon(_unsign_falls(thousands(text or "")))))
 
 
 # The effect line points at figures above it only when one is there. A

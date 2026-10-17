@@ -2603,7 +2603,7 @@ t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its 
   == "Study 1 showed drops in fasting blood sugar with an average difference of about -22 mg/dL."
   and _fr("Fasting blood sugar was reduced by -21.929 mg/dL (95% CI: -29.19, -14.67) (Study 1). HbA1c "
           "was reduced by a weighted mean difference of -1.53 (95% CI: -2.65, -0.41) (Study 1).", _ACV_R)
-  == "Fasting blood sugar was reduced by about -22 mg/dL (likely range: -29, -15) (Study 1)."
+  == "Fasting blood sugar was reduced by about 22 mg/dL (likely range: 29, 15) (Study 1)."
   and _fr("In Study 1, fasting blood sugar fell by 21.929 mg/dL, and HbA1c fell by 1.53 "
           "(95% CI -2.65 to -0.41).", _ACV_R) == "In Study 1, fasting blood sugar fell by about 22 mg/dL.")
 t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure to keep",
@@ -3216,6 +3216,16 @@ t("  a meta analysis without its hyphen and sleep onset latency are said in word
   == "A pooled review (meta-analysis) of 12 trials found less pain (Study 1)."
   and breakdown.plain("Melatonin shortened sleep onset latency by 7 minutes (Study 2).")
   == "Melatonin shortened time to fall asleep (sleep latency) by 7 minutes (Study 2).")
+t("  a fall is not given a minus sign as well, nor is its range or what it is compared to",
+  breakdown.house_style("A review found a drop in systolic blood pressure of -5.31 mm Hg (Study 5).")
+  == "A review found a drop in systolic blood pressure of 5.31 mm Hg (Study 5)."
+  and breakdown.house_style("Triglycerides had a drop of -1.51 mmol per liter compared to -0.66 (Study 8).")
+  == "Triglycerides had a drop of 1.51 mmol per liter compared to 0.66 (Study 8)."
+  and breakdown.house_style("LDL fell by -0.33 mmol/L (95% CI -0.38 to -0.27) (Study 1).")
+  == "LDL fell by 0.33 mmol/L (likely range 0.38 to 0.27) (Study 1).")
+t("  but a range that crosses zero keeps every sign, the fall's too",
+  breakdown.house_style("Pain fell by -1.2 points (95% CI -2.0 to 0.4) (Study 2).")
+  == "Pain fell by -1.2 points (likely range -2.0 to 0.4) (Study 2).")
 t("  and a word the plain name doubled is said once",
   breakdown.house_style("A large pooled pooled review (meta-analysis) found less pain (Study 1).")
   == "A large pooled review (meta-analysis) found less pain (Study 1).")

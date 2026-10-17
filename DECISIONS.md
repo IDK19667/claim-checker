@@ -287,6 +287,20 @@ for later: one small, short trial on the wrong outcome still makes the
 word "Strong" (artificial sweeteners and weight: a 17-person, 14-day gut
 study).
 
+**A fall is said once, by the word or by the sign.** "A drop in systolic
+blood pressure of -5.31 mm Hg" and "a triglyceride drop of -1.51 compared
+to -0.66" read, taken literally, as rises. After a word that already says
+down (drop, fall, reduction, fell by, reduced by), `breakdown.house_style`
+drops the minus, and the minus on the figure it is compared to and on the
+same fall's range in the bracket after it. A range that crosses zero
+keeps every sign, the fall's included, because there the sign is the
+meaning: "fell by -1.2 (likely range -2.0 to 0.4)" may be no fall at all.
+"An average difference of -2.07 kg" is left alone, since a difference is
+signed. One older expectation changed with it: "reduced by about -22
+mg/dL (likely range: -29, -15)" now reads "reduced by about 22 mg/dL
+(likely range: 29, 15)", the form "fell about 22 mg/dL (likely range 29
+to 15)" already had.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim
