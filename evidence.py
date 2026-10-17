@@ -919,6 +919,15 @@ def level_word(studies, cited_pmids=()) -> str:
     return "Weak"
 
 
+def observational_only(studies, cited_pmids=()) -> bool:
+    """True when the strong designs used are all reviews of observational
+    studies, so "strong" would describe the paperwork, not the evidence."""
+    cited = set(cited_pmids or ())
+    strong = [s for s in studies or [] if s.get("pmid") in cited
+              and classify(s.get("publication_types")) == "strong"]
+    return bool(strong) and all(is_review(s) and design_rank(s) == "weaker" for s in strong)
+
+
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
                   comparative: bool = False, outcome: str = "") -> str:
@@ -932,6 +941,12 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
         return ""
+    # A pooled review is a strong design, but pooling case-control studies
+    # does not make them trials: "Strong evidence of no clear effect" on
+    # antiperspirants rested on case-control studies alone. When every strong
+    # design used is a review of observational studies, the line says so.
+    if level == "Strong" and observational_only(studies, cited_pmids):
+        level = "Moderate"
     # A lead review that rates its own evidence says how sure it is in its
     # own words, and those words replace the one read off the designs: a
     # meta-analysis of low-certainty evidence is not "strong evidence".

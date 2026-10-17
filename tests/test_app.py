@@ -2787,6 +2787,17 @@ t("  the evidence line never says Strong when the lead review says low or very l
   == "Moderate certainty evidence for this claim"
   and evidence.evidence_line("true", [_PLAIN], ["L4"], _GIN_CLAIM, outcome="(vomiting)")
   == "Strong evidence for this claim")
+_CASECONTROL = _study("CC1", "Deodorant use and breast cancer: a meta-analysis of case-control studies",
+                      types=["Meta-Analysis"], abstract="We pooled seven case-control studies.")
+_TRIALREV = _study("TR1", "A meta-analysis", types=["Meta-Analysis"],
+                   abstract="We pooled twelve randomized controlled trials.")
+t("  and never Strong when the only strong designs pool observational studies",
+  evidence.evidence_line("false", [_CASECONTROL], ["CC1"], "Deodorant causes breast cancer",
+                         effect_label="none") == "Moderate evidence of no clear effect"
+  and evidence.evidence_line("false", [_CASECONTROL, _TRIALREV], ["CC1", "TR1"], "x",
+                             effect_label="none") == "Strong evidence of no clear effect"
+  and evidence.observational_only([_CASECONTROL], ["CC1"])
+  and not evidence.observational_only([_CASECONTROL, _TRIALREV], ["CC1", "TR1"]))
 t("  the lead review is the first one used that rates itself",
   evidence.lead_certainty([_PLAIN, _VLREV, _MODREV], ["L4", "L2", "L3"], "(vomiting)") == "very low"
   and evidence.lead_certainty([_PLAIN, _VLREV], ["L4"], "(vomiting)") is None)

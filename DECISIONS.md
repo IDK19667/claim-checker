@@ -273,6 +273,20 @@ energy healing) AND (placebo OR sham OR placebo effect OR
 placebo-controlled)`. A new prompt wording starts every saved search
 afresh, as `QUERY_PROMPT_VERSION` intends.
 
+**"Strong evidence" needs more than a pooled review of observational
+studies.** The line under the chart reads its strength word off the study
+designs, and a meta-analysis is a strong design. On antiperspirants and
+breast cancer the only evidence was case-control studies, pooled, and the
+page said "Strong evidence of no clear effect". When every strong design
+used is a review whose abstract pools observational studies and no trials
+(`evidence.observational_only`, from `design_rank`), the line says
+"Moderate" instead. The chart's design counts are unchanged: they count
+designs, and the line says what the evidence shows, the same way a
+review's own low certainty rating already replaces the design word. Left
+for later: one small, short trial on the wrong outcome still makes the
+word "Strong" (artificial sweeteners and weight: a 17-person, 14-day gut
+study).
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim
