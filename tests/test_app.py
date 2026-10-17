@@ -2819,5 +2819,87 @@ t("  an answer that follows the trials but never mentions the dissent gets one s
   _v["verdict"] == "true" and "count for less" in _v["explanation"]
   and _v["tldr"] == "Green tea lowers blood pressure a little.", _v)
 
+# ---- the harm guard: a risky answer needs a trial or a major review ---------------
+t("harm guard: which way a claim leans on a protective practice",
+  [(evidence.protective_practice(c) or {}).get("against") for c in (
+      "Vaccines weaken the immune system", "Flu vaccines reduce hospital admissions",
+      "Unpasteurized cheese is better than pasteurized cheese", "Skipping your prescribed medication is safe",
+      "Sunscreen prevents sunburn", "Shade works better than sunscreen")]
+  == [True, False, True, True, False, True]
+  and evidence.protective_practice("Herbal medications cure colds") is None
+  and evidence.protective_practice("Seed oils cause inflammation") is None
+  and evidence.claims_safe("Energy drinks are safe for teenagers")
+  and not evidence.claims_safe("Energy drinks are not safe for teenagers"))
+t("  a significant result is read off the abstract, and a negated one is not",
+  evidence.significant({"abstract": "Admissions were significantly reduced (p < 0.01)."})
+  and not evidence.significant({"abstract": "There was no significant difference between groups."})
+  and not evidence.significant({"abstract": "It did not significantly change; p = 0.40."}))
+
+_FLU_Q = "(flu vaccine OR influenza vaccine) AND (hospital admissions)"
+_FLU_COHORT = _study("V1", "Flu vaccine and hospital admissions: a cohort study", types=["Observational Study"],
+                     abstract="A cohort of 9,000 adults was followed for two winters.")
+_FLU_REVIEW = _study("V2", "Flu vaccines and hospital admissions in adults: a systematic review",
+                     types=["Systematic Review"], abstract="We pooled 12 studies of adults.")
+fg.models.script = [Resp(VJ("false", [1], tldr="Flu vaccines don't cut hospital admissions.",
+                            evidence=["Vaccinated adults were admitted as often (Study 1)."],
+                            relevance=[_f(1, "against"), _f(2, "for")]))] * 3
+_v = verdict.weigh_evidence("Flu vaccines reduce hospital admissions", [dict(_FLU_COHORT), dict(_FLU_REVIEW)], _FLU_Q)
+t("  an answer steering people from vaccination with no trial or review behind it follows the review",
+  _v["verdict"] == "true" and "V2" in _v["cited_studies"]
+  and _v["tldr"].startswith("The strongest studies here support this claim.")
+  and "Going without vaccination" in _v["tldr"]
+  and "none here says so" in _v["explanation"] and "(Study 2) points the other way" in _v["explanation"], _v)
+t("  and the model was asked to fix it first",
+  "without a randomized trial or a major review" in fg.models.prompts[-1])
+fg.models.script = [Resp(VJ("false", [1], tldr="Flu vaccines don't cut hospital admissions.",
+                            evidence=["Vaccinated adults were admitted as often (Study 1)."],
+                            relevance=[_f(1, "against"), _f(2, "for")]))] * 3
+_v = verdict.weigh_evidence("Flu vaccines reduce hospital admissions",
+                            [dict(_FLU_COHORT, title="Flu vaccine and admissions in older adults"),
+                             dict(_FLU_REVIEW, title="Flu vaccines and admissions in older adults: a review")],
+                            _FLU_Q)
+t("  a later downgrade replaces a takeaway code wrote, so the two never argue",
+  _v["verdict"] == "complicated" and "support this claim" not in _v["tldr"], _v)
+_IMM_REVIEW = _study("V3", "Vaccination and immune function: a meta-analysis", types=["Meta-Analysis"],
+                     abstract="We pooled 20 studies of immune markers after vaccination.")
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Some studies suggest vaccines tax the immune system.",
+                            evidence=["Immune markers dipped after vaccination (Study 1)."],
+                            relevance=[_f(1, "for"), _f(2, "against")]))] * 3
+_v = verdict.weigh_evidence("Vaccines weaken the immune system",
+                            [dict(_FLU_COHORT, pmid="V4"), dict(_IMM_REVIEW)], "(vaccines) AND (immune system)")
+t("  a 'complicated' that lends weight to an anti-vaccine claim follows the review that says no",
+  _v["verdict"] == "false" and _v["tldr"].startswith("The strongest studies here go against this claim."), _v)
+_AP_RCT = _study("P1", "Prescribed antipsychotic medication and weight: a randomized trial",
+                 abstract="Adults were randomized to the drug or placebo; 600 took part. Weight rose significantly (p < 0.001).")
+fg.models.script = [Resp(VJ("true", [1], tldr="Prescribed antipsychotics cause weight gain.",
+                            evidence=["Weight rose on the drug (Study 1)."],
+                            relevance=[_f(1, "for")]))]
+_v = verdict.weigh_evidence("Prescribed antipsychotic medication causes weight gain", [dict(_AP_RCT)],
+                            "(antipsychotic medication) AND (weight gain)")
+t("  a documented harm a trial backs stands as it is",
+  _v["verdict"] == "true" and _v["tldr"] == "Prescribed antipsychotics cause weight gain."
+  and "none here says so" not in _v["explanation"], _v)
+_DS = _study("D1", "Energy drinks and teenagers: a survey", types=["Journal Article"],
+             abstract="A survey of 3,000 teenagers asked about energy drinks and symptoms.")
+fg.models.script = [Resp(VJ("true", [1], tldr="Energy drinks are fine for teenagers.",
+                            evidence=["Few teenagers reported symptoms (Study 1)."],
+                            relevance=[_f(1, "for")]))] * 3
+_v = verdict.weigh_evidence("Energy drinks are safe for teenagers", [dict(_DS)], "(energy drinks) AND (teenagers)")
+t("  'it is safe' with nothing but a survey behind it is not rated likely true",
+  _v["verdict"] == "complicated" and _v["tldr"] == verdict._UNSAFE_UNPROVEN
+  and verdict._UNSAFE_UNPROVEN in _v["explanation"], _v)
+_SIG = _study("S1", "Flu vaccine and hospital admissions: a randomized trial",
+              abstract="Adults were randomized to vaccine or placebo; 2,000 took part. "
+                       "Admissions fell by 12% and were significantly reduced (p < 0.01).")
+fg.models.script = [Resp(VJ("complicated", [1], tldr="Flu vaccines may cut admissions a little.",
+                            effect_size="Admissions fell by 12%, not statistically significant (Study 1).",
+                            evidence=["Admissions fell by 12% (Study 1)."],
+                            relevance=[_f(1, "for")]))] * 3
+_v = verdict.weigh_evidence("Flu vaccines reduce hospital admissions", [dict(_SIG)], _FLU_Q)
+_line = evidence.evidence_line(_v["verdict"], [_SIG], _v["cited_studies"], "Flu vaccines reduce hospital admissions",
+                               ((_v["breakdown"] or {}).get("effect") or {}).get("label"))
+t("  'no clear effect' is never shown when a cited trial found a significant benefit",
+  "no clear effect" not in _line and not ((_v["breakdown"] or {}).get("effect") or {}).get("null"), (_line, _v))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

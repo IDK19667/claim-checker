@@ -91,6 +91,28 @@ one narrow group, the lead review's low certainty) still applies. This
 is the second place code raises a verdict, and the reason is the oldest
 rule in evidence-based medicine, not a model's reading.
 
+**Harm guard: an answer that can hurt someone needs a trial or a major
+review behind it.** `evidence.protective_practice` reads whether a claim
+is about sunscreen, vaccination, pasteurization or a prescribed medicine,
+and which way it leans. The subject is whatever it names first, so "Raw
+milk causes illness" leans for pasteurization and "Stopping your
+medication is safe" leans against the medicine. An answer that would
+steer a reader away from the practice (a "false" on a claim for it; a
+"true" or "complicated" on a claim against it), or call something safe
+(`claims_safe`), must have a randomized trial or a systematic review used
+for the verdict whose own finding says so. If none does, the model is
+asked once more, and then code follows the strongest evidence that points
+the protective way. If there is none, it stops at "complicated". Either
+way the answer states the risk in one plain sentence per practice. These
+sentences are code's, not the abstracts'. That is the one exception to
+"only what the studies say", and it is kept to four uncontroversial
+facts. A documented harm that a trial backs ("antipsychotics cause
+weight gain") stands untouched. Separately, the effect is never labelled
+"no clear effect" when a randomized trial used for the verdict found the
+effect and its abstract reports it as significant. Finally, a takeaway
+code wrote for a stamp it set is replaced, not argued with, when a later
+gate lowers that stamp.
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

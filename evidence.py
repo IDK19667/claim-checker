@@ -1360,6 +1360,99 @@ def weaker_kind(study) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Protective practices and safety
+#
+# Some answers can hurt someone who acts on them. A verdict that steers a
+# reader away from sunscreen, vaccination, pasteurization or a prescribed
+# medicine, or that calls something safe, has to rest on a randomized trial
+# or a major review that says so (verdict.py). These read the claim for
+# which way it leans; the risk sentence is what the answer says plainly
+# when the guard has to act.
+# ---------------------------------------------------------------------------
+
+_PRACTICES = (
+    ("sunscreen", re.compile(r"\bsun ?screens?\b|\bsun ?blocks?\b|\bSPF\b", re.IGNORECASE), None,
+     "Sun exposure without protection is a documented cause of skin cancer."),
+    ("vaccination", re.compile(r"\bvaccin\w*|\bimmuni[sz]ations?\b|\bflu shots?\b", re.IGNORECASE),
+     None, "Going without vaccination leaves people open to the diseases vaccines prevent."),
+    ("pasteurization", re.compile(r"\bpasteuri[sz]\w*", re.IGNORECASE),
+     re.compile(r"\braw milk\b|\bunpasteuri[sz]ed\b", re.IGNORECASE),
+     "Raw milk can carry bacteria that pasteurization kills."),
+    ("prescribed medicine", re.compile(r"\bprescri(?:bed|ptions?)\b|\bmedications?\b", re.IGNORECASE),
+     None, "Stopping a prescribed medicine without a doctor's advice can be risky."),
+)
+_NOT_PRESCRIBED = re.compile(
+    r"\b(?:herbal|natural|homeopathic|ayurvedic|traditional|alternative|folk)\b", re.IGNORECASE)
+_PRACTICE_HARM = re.compile(
+    r"\b(?:causes?|caused|causing|leads? to|linked to|triggers?|toxic|poison\w*|dangerous|"
+    r"harmful|harms?|unsafe|damages?|weakens?|useless|unnecessary|pointless|overrated|scam|"
+    r"ineffective|no need|not needed|(?:do(?:es)?n[\u2019']?t|do(?:es)? not|never|won[\u2019']?t) "
+    r"(?:work|help|need|protect|prevent))\b", re.IGNORECASE)
+_PROTECTIVE_VERB = re.compile(
+    r"\b(?:prevents?|protects?|reduces?|lowers?|cuts?|decreases?|stops?|blocks?|saves?)\b",
+    re.IGNORECASE)
+_THAN = re.compile(r"\b(?:than|instead of|rather than)\b", re.IGNORECASE)
+# "Stopping your medication is safe": the subject is going without it.
+_GOING_WITHOUT = re.compile(
+    r"\b(?:stop(?:ping|s)?|quit(?:ting|s)?|skip(?:ping|s)?|giv(?:e|ing) up|com(?:e|ing) off|"
+    r"go(?:ing)? off|avoid(?:ing|s)?|without|refus\w*|declin\w*|ditch\w*|no)\b", re.IGNORECASE)
+_SAFE_CLAIM = re.compile(
+    r"\b(?:is|are|it[\u2019']?s)\s+(?:completely |totally |perfectly |100% )?safe\b|\bharmless\b|"
+    r"\bno side[- ]effects?\b|\brisk[- ]free\b|\bwon[\u2019']?t hurt\b|\bsafe to\b", re.IGNORECASE)
+
+
+def protective_practice(claim: str) -> dict | None:
+    """
+    {"practice", "against", "risk"} when the claim is about one of the
+    protective practices, else None. `against` is True when the claim leans
+    away from the practice: "Vaccines cause autism", "Raw milk is healthier
+    than pasteurized milk", "You don't need sunscreen in winter". The claim's
+    subject is whatever it names first: "Raw milk causes illness" is a claim
+    for pasteurization, not against it, and "Stopping your medication is
+    safe" is about going without it.
+    """
+    claim = str(claim or "")
+    for name, pattern, opposite, risk in _PRACTICES:
+        m = pattern.search(claim)
+        o = opposite.search(claim) if opposite else None
+        if not (m or o):
+            continue
+        if name == "prescribed medicine" and _NOT_PRESCRIBED.search(claim):
+            continue
+        first = min(x.start() for x in (m, o) if x)
+        than = _THAN.search(claim)
+        on_practice = (bool(m) and m.start() == first and not (than and than.start() < m.start())
+                       and not _GOING_WITHOUT.search(claim[:m.start()]))
+        harm = _PRACTICE_HARM.search(claim)
+        protect = _PROTECTIVE_VERB.search(claim)
+        negative = bool(harm) and not (protect and protect.start() < harm.start())
+        return {"practice": name, "against": negative if on_practice else not negative,
+                "risk": risk}
+    return None
+
+
+def claims_safe(claim: str) -> bool:
+    """A claim that something is safe ("Melatonin is safe for children")."""
+    return bool(_SAFE_CLAIM.search(str(claim or "")))
+
+
+_P_SIGNIFICANT = re.compile(
+    r"\b[pP]\s*(?:<|\u2264|<=)\s*0?\.0[0-5]\d*\b|\b[pP]\s*=\s*0?\.0[0-4]\d*\b")
+_NOT_SIGNIFICANT_BEFORE = re.compile(
+    r"\b(?:no|not|non|nor|neither|without|failed to (?:show|find|reach)|lack of)\b[\w\s-]{0,20}$",
+    re.IGNORECASE)
+
+
+def significant(study) -> bool:
+    """Whether the abstract reports a statistically significant result."""
+    text = str(study.get("abstract") or "")
+    if _P_SIGNIFICANT.search(text):
+        return True
+    return any(not _NOT_SIGNIFICANT_BEFORE.search(text[max(0, m.start() - 30):m.start()])
+               for m in re.finditer(r"\bsignificant(?:ly)?\b", text, re.IGNORECASE))
+
+
+# ---------------------------------------------------------------------------
 # Off topic
 #
 # A study is evidence for a claim when it tests the claim's subject and

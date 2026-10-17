@@ -844,6 +844,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     off = result.pop("off_topic", None) or {}
     back = result.pop("background", None) or {}
     result.pop("ranked", None)
+    result.pop("guarded", None)
     for s in studies:
         s.pop("off_topic", None)
         s.pop("background", None)
@@ -982,6 +983,14 @@ def _faults(result: dict, claim: str, reported: list[str],
                      f"way. Trials outrank them, so the verdict must be "
                      f"\"{ranked['verdict']}\", not a tie, and the answer must say the weaker "
                      f"studies disagree and count for less")
+    guarded = result.get("guarded")
+    if guarded:
+        doing = ("calls it safe" if guarded["subject"] == "that it is safe"
+                 else f"steers people {guarded['subject']}")
+        found.append(f"This answer {doing} without a randomized trial or a major review "
+                     f"that says so. Follow the strongest evidence"
+                     + (f" ({_refs(guarded['follows'])})" if guarded["follows"] else "")
+                     + " and state the risk plainly")
     for n in _confounded_numbers(result, list(studies)):
         found.append(f"Study {n}, a review the answer relies on, says the link it found is "
                      f"likely explained by lifestyle or other factors rather than by the "
@@ -1371,6 +1380,11 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # is measured from the prose the breakdown is actually printing, so the
     # two layers cannot disagree about how big the effect was.
     sized = (deeper or {}).get("effect") or {}
+    # "No clear effect" is never the answer when a randomized trial used
+    # here found the effect and calls it significant: the size is left
+    # unsaid rather than said wrong.
+    if sized.get("null") and _significant_trial(parsed, studies, cited_pmids):
+        deeper["effect"] = sized = {}
     if sized.get("label"):
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
     if follow:
@@ -1382,6 +1396,9 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # trial that says yes against a survey that says no is not a tie.
     ranked = _trials_outweigh(parsed, studies, off, reasons)
     forced_rank = None
+    # Set when a takeaway below is code's own, written for the stamp it set:
+    # a later downgrade replaces it rather than leaving it to argue.
+    templated = False
     if ranked and verdict != "insufficient":
         if verdict != ranked["verdict"]:
             forced_rank = ranked
@@ -1393,8 +1410,32 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
                 if pmid not in leaned_on:
                     leaned_on.append(pmid)
             tldr = RANKED_TLDR[verdict]
+            templated = True
         if forced_rank or not _says_weaker(explanation, ranked):
             explanation = (explanation.rstrip() + " " + _ranked_sentence(ranked)).strip()
+
+    # The harm guard. An answer that would steer someone away from
+    # sunscreen, vaccination, pasteurization or a prescribed medicine, or
+    # call something safe, has to rest on a randomized trial or a major
+    # review that says so. Otherwise it follows the strongest evidence and
+    # states the risk plainly.
+    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids)
+    if guarded:
+        for n in guarded["follows"]:
+            pmid = studies[n - 1]["pmid"]
+            if pmid not in cited_pmids:
+                cited_pmids.append(pmid)
+            if pmid not in leaned_on:
+                leaned_on.append(pmid)
+        if guarded["verdict"] != verdict:
+            verdict = guarded["verdict"]
+            tldr = (_UNSAFE_UNPROVEN if guarded["risk"] == _UNSAFE_UNPROVEN
+                    and verdict == "complicated"
+                    else _cap(_GUARD_TLDR[verdict].format(risk=guarded["risk"]), TLDR_MAX))
+            templated = True
+        else:
+            guarded = {**guarded, "kept": True}
+        explanation = (explanation.rstrip() + " " + _guard_sentence(guarded)).strip()
 
     # A true/false verdict with nothing cited is a verdict with no
     # evidence behind it. Absence of studies is never "false" (or
@@ -1484,15 +1525,15 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # A downgrade made here, in code, leaves the model's takeaway answering
     # the question the stamp no longer answers. The takeaway follows the
     # stamp, so the two never disagree on the reader's screen.
-    if forced_narrow and breakdown.stamp_conflict(verdict, tldr, "", claim):
+    if forced_narrow and (templated or breakdown.stamp_conflict(verdict, tldr, "", claim)):
         tldr = _cap(f"The studies found were all in {forced_narrow}, so they answer "
                     f"this for them and not for people in general.", TLDR_MAX)
     if forced_low:
         leaned = f"{tldr.rstrip().rstrip('.')}, but the certainty of that evidence is low."
-        tldr = (leaned if len(leaned) <= TLDR_MAX and tldr
+        tldr = (leaned if len(leaned) <= TLDR_MAX and tldr and not templated
                 and not breakdown.stamp_conflict(verdict, leaned, "", claim)
                 else LOW_CERTAINTY_TLDR)
-    if thin and breakdown.stamp_conflict(verdict, tldr, "", claim):
+    if thin and (templated or breakdown.stamp_conflict(verdict, tldr, "", claim)):
         tldr = _cap(f"Nothing has tested this in people yet. The only papers are {thin}.",
                     TLDR_MAX)
     if forced:
@@ -1549,6 +1590,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         # Set when code had to turn the stamp to follow the trials, so the
         # retry can ask for an answer that does it in its own words.
         "ranked": forced_rank,
+        "guarded": guarded if guarded and not guarded.get("kept") else None,
         "off_topic": off,
         "background": reasons,
     }
@@ -1615,6 +1657,23 @@ def _and(words: list[str]) -> str:
     return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
+def _findings(parsed: dict, studies: list[dict]) -> dict:
+    """{study number: "for" | "against" | "mixed" | "unclear"} from the
+    model's relevance reading, for the studies it gave one."""
+    found = {}
+    for item in parsed.get("relevance") or []:
+        if not isinstance(item, dict) or item.get("finding") not in (
+                "for", "against", "mixed", "unclear"):
+            continue
+        try:
+            n = int(item.get("study"))
+        except (TypeError, ValueError):
+            continue
+        if 0 < n <= len(studies):
+            found[n] = item["finding"]
+    return found
+
+
 def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict) -> dict | None:
     """
     When the randomized evidence used points one way and weaker studies
@@ -1625,16 +1684,7 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
     trials, or a randomized trial that is not small, a pilot, uncontrolled
     or paid for by the maker. One small pilot does not outrank a field.
     """
-    found = {}
-    for item in parsed.get("relevance") or []:
-        if not isinstance(item, dict) or item.get("finding") not in ("for", "against"):
-            continue
-        try:
-            n = int(item.get("study"))
-        except (TypeError, ValueError):
-            continue
-        if 0 < n <= len(studies):
-            found[n] = item["finding"]
+    found = {n: f for n, f in _findings(parsed, studies).items() if f in ("for", "against")}
     trials, weaker = [], []
     for n, finding in sorted(found.items()):
         s = studies[n - 1]
@@ -1670,6 +1720,78 @@ def _ranked_sentence(ranked: dict) -> str:
     return (f"Randomized trials ({_refs(ranked['trials'])}) found {found}, and they are the "
             f"fairer test. The {ranked['kinds']} that point the other way "
             f"({_refs(ranked['weaker'])}) count for less, so the verdict follows the trials.")
+
+
+# What the answer says when the harm guard has to act. The risk sentence
+# is evidence.protective_practice's, for the practice the claim is about.
+_GUARD_TLDR = {
+    "true": "The strongest studies here support this claim. {risk}",
+    "false": "The strongest studies here go against this claim. {risk}",
+    "complicated": "No randomized trial or major review here settles this. {risk}",
+}
+_UNSAFE_UNPROVEN = "No randomized trial or major review here shows it is safe."
+
+
+def _strong(study: dict) -> bool:
+    """A randomized trial, a review of them, or any systematic review or
+    meta-analysis: the evidence a risky answer has to rest on."""
+    return evidence.design_rank(study) == "trial" or evidence.is_review(study)
+
+
+def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
+                reasons: dict, cited_pmids: list[str]) -> dict | None:
+    """
+    When this verdict would steer a reader away from a protective practice
+    (sunscreen, vaccination, pasteurization, a prescribed medicine), or
+    call something safe, and no randomized trial or major review used says
+    so: {"verdict", "follows", "risk", "subject"} for what the answer must
+    say instead, else None. It follows the strongest evidence that points
+    the protective way when there is some, and otherwise stops short of the
+    risky answer. Nothing happens on a reading with no findings at all.
+    """
+    practice = evidence.protective_practice(claim)
+    if practice:
+        risky = ("true", "complicated") if practice["against"] else ("false",)
+        safe_way = "false" if practice["against"] else "true"
+        risk = practice["risk"]
+        subject = f"away from {practice['practice']}"
+    elif evidence.claims_safe(claim):
+        risky, safe_way, risk, subject = ("true",), "false", _UNSAFE_UNPROVEN, "that it is safe"
+    else:
+        return None
+    findings = _findings(parsed, studies)
+    if verdict not in risky or not findings:
+        return None
+    usable = [n for n in findings
+              if studies[n - 1]["pmid"] not in off and studies[n - 1]["pmid"] not in reasons
+              and _strong(studies[n - 1])]
+    backing = {"true": ("for",), "false": ("against",), "complicated": ("for", "mixed")}[verdict]
+    if any(findings[n] in backing and studies[n - 1]["pmid"] in cited_pmids for n in usable):
+        return None
+    toward = "for" if safe_way == "true" else "against"
+    follows = sorted(n for n in usable if findings[n] == toward)
+    return {"verdict": safe_way if follows else "complicated", "follows": follows,
+            "risk": risk, "subject": subject}
+
+
+def _guard_sentence(guard: dict) -> str:
+    if guard["subject"] == "that it is safe":
+        lead = _UNSAFE_UNPROVEN
+    else:
+        lead = (f"An answer that steers people {guard['subject']} needs a randomized trial "
+                f"or a major review behind it, and none here says so.")
+    if guard["follows"]:
+        lead += f" The strongest evidence here ({_refs(guard['follows'])}) points the other way."
+    return lead if guard["risk"] == _UNSAFE_UNPROVEN else f"{lead} {guard['risk']}"
+
+
+def _significant_trial(parsed: dict, studies: list[dict], cited_pmids: list[str]) -> bool:
+    """A randomized trial used for this verdict, or a review of them, that
+    found the claim's effect and reports it as statistically significant."""
+    return any(f == "for" and studies[n - 1]["pmid"] in cited_pmids
+               and evidence.design_rank(studies[n - 1]) == "trial"
+               and evidence.significant(studies[n - 1])
+               for n, f in _findings(parsed, studies).items())
 
 
 def _not_tested(parsed: dict, studies: list[dict], claim: str) -> dict:
