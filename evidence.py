@@ -742,6 +742,35 @@ def effect_size(text: str) -> dict | None:
 SUBJECT_WINDOW = 700
 
 
+# British spellings, read as American on both sides of a match. The main
+# review on a question can be written in either: "Efficacy of homoeopathic
+# treatment" did not count as about "homeopathic treatment", fell to the
+# band of papers about neither half of the claim, and was dropped.
+_US_SPELLING = [
+    (r"\b(hom)oeo", r"\1eo"), (r"\boe(soph|str|dem)", r"e\1"), (r"(diarrh|dyspn|apn)oe", r"\1e"),
+    (r"\bfoet", "fet"), (r"\bcoeliac", "celiac"), (r"(an|isch|leuk|sept)aem", r"\1em"),
+    (r"\bhaem", "hem"), (r"\b(ortho)?paed", r"\1ped"), (r"\b(tum|behavi|col|lab)our", r"\1or"),
+    (r"\b(fib|cent|lit)re(s?)\b", r"\1er\2"),
+    (r"\b(randomi|organi|hospitali)s(ation|ed|e|ing)\b", r"\1z\2"),
+]
+
+
+def _us(text: str) -> str:
+    for pattern, plain in _US_SPELLING:
+        text = re.sub(pattern, plain, text, flags=re.IGNORECASE)
+    return text
+
+
+def _query_term(term: str) -> str:
+    """A query term as a whole-word pattern that also takes its plural or
+    singular: "abdominal exercise" finds "abdominal exercises", and
+    "probiotics" finds "probiotic"."""
+    word = re.escape(_us(term.strip()))
+    if term.endswith("s") and not term.endswith("ss") and len(term) > 4:
+        word = word[:-1]
+    return r"\b" + word + r"(?:s|es)?\b"
+
+
 def measures(study, terms_group: str) -> bool:
     """
     True when this paper is about the thing `terms_group` names: an OR-group
@@ -752,10 +781,9 @@ def measures(study, terms_group: str) -> bool:
     if not terms:
         return True
     study = study or {}
-    body = (f"{study.get('title') or ''}  "
-            f"{str(study.get('abstract') or '')[:SUBJECT_WINDOW]}")
-    return any(re.search(r"\b" + re.escape(t.strip()) + r"\b", body, re.IGNORECASE)
-               for t in terms)
+    body = _us(f"{study.get('title') or ''}  "
+               f"{str(study.get('abstract') or '')[:SUBJECT_WINDOW]}")
+    return any(re.search(_query_term(t), body, re.IGNORECASE) for t in terms)
 
 
 def indirect(study, outcome: str, surrogate: str) -> str | None:

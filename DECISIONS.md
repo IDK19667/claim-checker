@@ -236,6 +236,18 @@ adults". Reviews, practice guidelines and consensus statements are now
 read from the title alone, as pooled reviews already were. A trial is
 still read from its abstract, where it says who it enrolled.
 
+**A British spelling or a plural is the same search term.** After the
+searches, `pubmed.prioritise` keeps the papers that name the claim's
+subject and outcome and drops the ones that name neither.
+`evidence.measures` matched whole words exactly, so "Efficacy of
+homoeopathic treatment", the main review on the homeopathy question, did
+not count as naming "homeopathic treatment", and "abdominal exercises" did
+not count as "abdominal exercise". Both sides of the match now read
+British spellings as American (homoeo, oesoph, diarrhoea, anaemia, paed,
+tumour, fibre, randomised and a few more, each a whole root, never a
+loose "oe"), and a term takes its plural or singular. "Creatinine" is
+still not "creatine".
+
 ## 2026-10-12 (later): The same claim reads the same way, and the stamp follows the short answer
 
 **The same claim runs the same search and is read the same way.** Claim

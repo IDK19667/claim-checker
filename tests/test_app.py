@@ -1003,6 +1003,16 @@ t("  the subject filter reads the title and the abstract's opening only",
   evidence.measures(_HAIR, "(creatine)") is True
   and evidence.measures(_study("X", "Baricitinib safety", abstract="x " * 400
                                + "creatine kinase was normal"), "(creatine)") is False)
+t("  a British spelling or a plural is the same term",
+  evidence.measures(_study("H", "Efficacy of homoeopathic treatment: a systematic review"),
+                    "(homeopathy OR homeopathic treatment)")
+  and evidence.measures(_study("A", "The effect of abdominal exercises on abdominal fat"),
+                        "(ab exercises OR abdominal exercise)")
+  and evidence.measures(_study("D", "Zinc for paediatric diarrhoea"), "(diarrhea)")
+  and evidence.measures(_study("P", "Probiotic use and colds"), "(probiotics)"))
+t("  but a longer word is still another word",
+  not evidence.measures(_study("C", "Creatinine clearance in older adults"), "(creatine)")
+  and not evidence.measures(_study("M", "Tested in mice"), "(mouse)"))
 t("  and the prompt tells the model which study measured a stand-in",
   "INDIRECT: measures dihydrotestosterone" in verdict._format_study_for_prompt(
       1, _DHT, "(hair loss OR alopecia)", "dihydrotestosterone OR DHT"))
