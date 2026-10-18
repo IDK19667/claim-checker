@@ -1168,14 +1168,16 @@ _LINK = re.compile(r"\b([Ll]inks?) to\b")
 _LINK_NOUN_AFTER = frozenset("""a an the no any some this that its their one
     small weak strong clear possible modest direct causal slight consistent
     plausible real significant definite firm limited tenuous potential likely
-    known proven little inverse positive negative statistical close
+    known proven little inverse positive negative statistical close mixed
+    conflicting inconsistent unclear uncertain contradictory variable
     has have had with of found find finds show shows showed suggest suggests
     suggested report reports reported""".split())
 
 
 def _link_as_verb(m: re.Match) -> str:
     before = re.findall(r"[A-Za-z']+", m.string[:m.start()])
-    if before and before[-1].lower() in _LINK_NOUN_AFTER:
+    # One word back or two: "shows mixed links to" has its verb already.
+    if any(w.lower() in _LINK_NOUN_AFTER for w in before[-2:]):
         return m.group(0)
     return "is linked to" if m.group(1).lower() == "links" else "are linked to"
 

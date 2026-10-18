@@ -1209,6 +1209,9 @@ t("  and 'link' used as a thing is left alone, never 'a small are linked to'",
   and breakdown.natural("Coffee has links to lower risk.") == "Coffee has links to lower risk."
   and breakdown.natural("Studies found no link to cancer.") == "Studies found no link to cancer."
   and breakdown.natural("Sugary drinks link to diabetes.") == "Sugary drinks are linked to diabetes.")
+t("  nor after a describing word with the verb before it: never 'shows mixed is linked to'",
+  breakdown.natural("Red wine shows mixed links to heart health.") == "Red wine shows mixed links to heart health."
+  and breakdown.natural("Coffee has conflicting links to cancer.") == "Coffee has conflicting links to cancer.")
 
 t("grade: the claim's own words are not counted against the prose",
   breakdown.claim_terms("Taking vitamin D supplements in winter cuts your risk of flu")
