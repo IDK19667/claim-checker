@@ -715,3 +715,23 @@ already right.
 - Commits 17ea759 (the change) and 9f4d568 (DECISIONS.md).
 - This prompt is separate from the one that builds PubMed searches, so
   saved searches were not reset (the search key is still 39497158fa41).
+
+
+# Night 3, 2026-10-17: log
+
+Branch accuracy-round-4, made from main after step 1. Same rules as
+before: no force push, no deploy, .env and the stashes untouched, 30
+seconds between real checks, holdout claims kept out of the test sets.
+Orchestrator mode: helpers write the code, a separate helper grades.
+
+### Step 1: accuracy-round-3 merged into main (done)
+
+- You approved the merge (safety 15 of 15, 0 harmful, regression 0
+  wrong), even though holdout #3 missed the clean bar by one page.
+- Fast-forward only: main went from 8ac332b to c84b477, 47 commits, no
+  merge commit. Pushed to origin.
+- `git log origin/main -1` shows c84b477, "Overnight report: holdout #3
+  accepted answers were written down before the run".
+- No new settings or packages are needed in production. The only new
+  settings lines are in scripts/safety.py, which runs locally.
+- Waiting on you: click Manual Deploy in Render.
