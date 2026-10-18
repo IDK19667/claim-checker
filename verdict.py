@@ -665,9 +665,26 @@ different reason than the claim gives does not support the claim.
 what that guidance says about this claim, written to follow the words "Major
 health guidelines say:" and starting with a lowercase word unless it is a
 name. Plain words a 12-year-old can follow, no numbers, no dashes, no study
-citations. "" for mixed or none.
+citations. Name only the organisation, if anyone, and never a document: no
+report, guideline, fact sheet or statement by its title, no "the WHO report
+on", no quotation marks, no years. Say what the guidance says, not where it
+says it. "" for mixed or none.
 
 Return JSON: {{"position": "none", "bodies": [], "says": ""}}."""
+
+
+# The line names who advises, never which document: a title or a "the WHO
+# report on" is a citation the page has nothing to check against, and a
+# reader can't tell a real one from a made-up one.
+_NAMED_DOCUMENT = re.compile(
+    r"[\"\u201c\u201d\u2018]"
+    r"|\b(?:fact ?sheets?|position (?:statements?|papers?)|consensus statements?|"
+    r"committee opinions?|handbooks?|bulletins?|white papers?|monographs?)\b"
+    r"|\b(?:the|a|an|its|their|this|that|WHO|CDC|NIH|FDA|NHS|NICE|Cochrane)\s+"
+    r"(?:[\w'-]+\s+){0,2}?(?:report|review titled|publication)\b"
+    r"|\b(?:titled|entitled|called|named)\b"
+    r"|(?<!^)(?<![.!?]\s)\b(?:Guidelines?|Guidance|Recommendations?|Strategy|Report|"
+    r"Statement|Framework|Handbook|Manual|Plan|Programme|Program|Policy)\b")
 
 
 def guideline_view(claim: str) -> dict | None:
@@ -694,7 +711,8 @@ def guideline_view(claim: str) -> dict | None:
                                       .replace(" ()", ""), room)).strip()
     # Nothing here was read from an abstract, so it may print no figure:
     # there would be nothing on the page to check it against.
-    if not bodies or not says or re.search(r"\d", says) or len(says) > room:
+    if (not bodies or not says or re.search(r"\d", says) or len(says) > room
+            or _NAMED_DOCUMENT.search(says)):
         _guide_log.warning("the guideline answer could not be used as it was: %r", read)
         return None
     # It follows "say:", so it starts in lower case, unless it starts with

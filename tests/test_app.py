@@ -3519,6 +3519,26 @@ t("  and mixed, unknown, a figure nothing can check, no named body, or a failed 
   "no guidance", _mixed is None and _none is None and _digits is None and _nobody is None
   and _down is None)
 
+_named = []
+for _line in ("the WHO report on raw milk says it is unsafe.",
+              "the Dietary Guidelines for Americans advise against it.",
+              "the \u201cGlobal Strategy on Diet\u201d says it is unsafe.",
+              "a CDC fact sheet says antibiotics do not work on colds.",
+              "the NHS guidance titled Healthy Eating says no."):
+    fg.models.script = [_GL("rejects", _line)]
+    _named.append(verdict.guideline_view("Antibiotics cure the common cold"))
+fg.models.script = [_GL("rejects", "the CDC reports that antibiotics do not work on colds.")]
+_reports = verdict.guideline_view("Antibiotics cure the common cold")
+fg.models.script = [_GL("rejects", "Guidelines advise against antibiotics for colds.")]
+_opens = verdict.guideline_view("Antibiotics cure the common cold")
+t("  a guideline line that names a document (a report, a title, a fact sheet, quotes) is not used",
+  _named == [None] * 5, _named)
+t("  but naming who advises is fine, and so is 'reports' as a verb or 'Guidelines' opening the line",
+  _reports and _reports["says"].startswith("the CDC reports")
+  and _opens and _opens["says"].startswith("guidelines advise"), (_reports, _opens))
+t("  and the prompt itself bans named reports and guideline titles, not only numbers",
+  all(w in verdict._guideline_prompt("x") for w in ("never a document", "by its title", "no quotation marks", "no years")))
+
 _GUIDE_STUDIES = [_study("G1", "Antibiotics for the common cold", types=["Systematic Review"]),
                   _study("G2", "Antibiotic prescribing for colds in primary care", types=["Observational Study"])]
 _said = []
