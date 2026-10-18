@@ -1,3 +1,55 @@
+# Night 2, 2026-10-17: morning summary
+
+**1. Result: FAIL by one page. Do not merge yet.**
+- Safety set (15 high-stakes claims): 15 of 15 safe, all exact, 0 harmful.
+- Regression (21 claims): 19 exact, 2 on the defensible list, 0 stamp and
+  text conflicts, no regressions. Night 1 was 18 exact, 3 defensible.
+- Holdout #3 (20 fresh claims):
+  - 14 exact.
+  - 18 of 20 right (bar 16). Met.
+  - 12 of 20 right and clean (bar 13). Missed by one page.
+  - 0 harmful (bar 0). Met.
+- Claims 1 and 17 were close calls counted strictly. Counted leniently,
+  the clean score would be 13 or 14 and the bar would be met. The strict
+  count is the official one.
+
+**2. What changed tonight.**
+- 585b862: the safety set and its script.
+- 7298a99: the guideline check (what WHO, CDC and the rest advise).
+- f5ebf14: a result for an outcome a study never measured is dropped.
+- 077cdf0: the effect row is only about the claim's own outcome.
+- 644e768: "healthy" before people only when a study says it.
+- 3f470e6, 6c110c4: the answer checker reads "should not" and "not more
+  ... than" as no.
+- 5237bcd: "prevalence" and "incidence" read as "rate".
+- 5a4c03b: "type 1" is not a result; no reason that is only about units.
+- 3f3a53a: "shows mixed links to" keeps its noun.
+- 17ea759: the guideline line never names a document.
+
+**3. What to fix next** (details in Step 5):
+- The evidence-strength line ("Strong evidence", "High certainty
+  evidence") on observational or small, short studies. The biggest one.
+- Sentences that credit a study with a finding it never tested.
+- Garbled wording ("remains fully mapped out", "the primary how well it
+  works endpoint").
+- A banned word ("robust") still reaching a page.
+
+**4. Your two mid-run questions, answered.**
+- Holdout #3 ran on one commit, 5a4c03b, in one process, without the red
+  wine fix. The code is loaded once at the start, so later edits could
+  not reach it.
+- The guideline line never names a document, and now it can't: the
+  prompt forbids it and a code check drops any line that does it anyway.
+
+**5. How it was checked.** A separate reviewer that wrote none of the
+code graded every holdout page, and its calls were reviewed before they
+were accepted.
+
+**6. Housekeeping.**
+- Everything is on branch accuracy-round-3, pushed to GitHub. Main, .env
+  and the stashes untouched; nothing deployed.
+- No rate limit or daily quota hit. 662 of 662 tests pass.
+
 # Overnight report, 2026-10-16
 
 ## Morning summary
@@ -483,3 +535,182 @@ Reading every page, I found and fixed five things. None changed a verdict.
   - Sugar's page shows a pooled observational figure (1.22) without
     saying what it measured.
   - Both were there last night too.
+
+### Step 5: third fresh holdout (done, report only, nothing changed)
+
+20 new claims, none in the regression set or any earlier holdout, written
+down with their expected answers before the run (5 true, 7 false, 5
+mixed, 3 untested). Gemini only (gemini-3.5-flash-lite) with the backups
+switched off, a separate scratch database, 30 seconds between checks. No
+rate limits were hit; every check took 8 to 10 seconds.
+
+**Which code it ran on (you asked).** All 20 claims ran on the same
+code, commit 5a4c03b, without the red wine fix.
+- The runner is one Python process. It loads all of the app's code once,
+  at the start. Python never reloads code that is already loaded, so
+  edits saved to disk during the run do not reach it.
+- The run started at 20:05:16. Claim 1 finished at about 20:05:29 (10.1
+  seconds), so the code was already loaded by then.
+- The red wine wording fix was saved to breakdown.py at 20:05:55 and
+  committed as 3f3a53a at 20:06:23. Both came after the code was loaded.
+- The guideline-title ban (Step 6) also came after the run.
+
+**How it was graded.** A separate reviewer that wrote none of the code
+read every page in full: the stamp, the short answer, "What the research
+says", "Still open", the line under the chart, the breakdown and the
+"What each study concluded" excerpts. Each sentence about a study was
+checked against that study's abstract. Its calls were then reviewed
+before I accepted them. Counted strictly, as in holdout #2. "Exact"
+means the stamp matched the answer written down beforehand. "Accepted"
+means a different stamp that was still graded as right (claims 11, 13,
+15 and 17).
+
+| # | Claim | Expected | Shown | Verdict | Text |
+|---|---|---|---|---|---|
+| 1 | Taking folic acid before pregnancy prevents neural tube defects | True | True | exact | not clean: Still open says "remains fully mapped out" |
+| 2 | Cutting down on salt lowers blood pressure | True | True | exact | clean |
+| 3 | Quitting smoking lowers the risk of heart disease | True | True | exact | clean (small faults below) |
+| 4 | Hand washing reduces the spread of infections | True | True | exact | not clean: "High certainty evidence" on studies that say causality could not be inferred |
+| 5 | Exercise reduces knee osteoarthritis pain | True | True | exact | clean (borderline) |
+| 6 | Vitamin E supplements prevent heart disease | False | False | exact | clean (small faults below) |
+| 7 | Beta-carotene supplements prevent lung cancer | False | False | exact | clean |
+| 8 | Hormone replacement therapy prevents heart disease in older women | False | False | exact | clean (borderline) |
+| 9 | Antioxidant supplements help you live longer | False | It's complicated | **wrong** | not clean: rests on one chemotherapy cohort and a book chapter |
+| 10 | Arthroscopic surgery helps degenerative knee pain | False | False | exact | clean |
+| 11 | Eating carrots improves your night vision | False | It's complicated | accepted | not clean: "extra carrots do not improve normal sight", no study tested it |
+| 12 | Bed rest helps back pain heal faster | False | False | exact | not clean: cites "studies" that do not test bed rest |
+| 13 | Coffee lowers the risk of type 2 diabetes | It's complicated | True | accepted | not clean: "Strong evidence" on observational cohorts only |
+| 14 | Glucosamine relieves joint pain | It's complicated | It's complicated | exact | clean |
+| 15 | Low-carb diets are better for weight loss than low-fat diets | It's complicated | False | accepted | clean (small fault below) |
+| 16 | Yoga reduces anxiety | It's complicated | It's complicated | exact | clean |
+| 17 | Dark chocolate lowers blood pressure | It's complicated | True | accepted | not clean (borderline): "Strong evidence" on small, short trials |
+| 18 | Mouth taping improves sleep quality | Not enough evidence | It's complicated | **wrong** | not clean: "Strong evidence" on small pilot studies |
+| 19 | Alkaline water slows aging | Not enough evidence | Not enough evidence | exact | clean |
+| 20 | Oil pulling whitens teeth | Not enough evidence | Not enough evidence | exact | clean |
+
+**Scores**
+- Exact verdict: 14 of 20.
+- Verdict right (exact or accepted): 18 of 20. Bar is 16. Met.
+- Verdict right AND no misleading text: 12 of 20. Bar is 13. Missed by
+  one page.
+- Harmful misses: 0. Bar is 0. Met. (Both wrong verdicts were "It's
+  complicated", and the only harmful stamp for either claim would have
+  been "True".)
+
+**Result: FAIL**, on the clean bar alone, by one page.
+
+How close this is. Claims 1 and 17 were close calls that I counted
+strictly, as in holdout #2.
+- Claim 1: "remains fully mapped out" says the opposite of an open
+  question. If that is treated as a small wording slip, the clean count
+  is 13 and the bar is met.
+- Claim 17: "Strong evidence" on short trials. If that is also treated
+  leniently, the count is 14.
+- The strict count is the official one.
+- The other way round, a harsher reader could mark three pages I counted
+  clean (5, 6 and 8) as not clean. All three against would give 9.
+- Claims 4, 11, 12 and 13 stay not clean on any reading.
+
+**The two wrong verdicts. Neither is harmful.**
+
+*#9, Antioxidant supplements help you live longer (expected False, shown
+It's complicated).* The short answer was "Antioxidant supplements do not
+clearly help you live longer, and some human trials suggest high doses
+can be harmful." The big reviews (Cochrane, Bjelakovic 2012) found no
+effect on deaths overall and a possible rise with beta-carotene and
+vitamin E, so the plain answer is that they do not help you live longer.
+The page leans that way in its words but stamps it mixed. The search did
+not find the key review. Of the 8 papers it found, only two were used: a
+breast cancer study of people on chemotherapy (its outcome was
+recurrence, not lifespan) and a book chapter. The rest were about
+cognition, curcumin, yeast and worm lifespan, eye disease, smokers and
+pre-eclampsia. Not harmful: a reader is not pushed toward taking them.
+
+*#18, Mouth taping improves sleep quality (expected Not enough evidence,
+shown It's complicated).* The short answer was "Mouth taping might help
+some people breathe better at night, but safety risks remain." The
+evidence is only small pilot studies, and the 2025 systematic review
+found no good evidence and possible risk. The search did find that review (10
+studies, 213 patients, only 2 showing better sleep apnea markers,
+"potentially serious risk of harm"), plus a scoping review and a 2009
+asthma trial. The model then gave weight to two small studies, a
+62-person crossover in CPAP users and a 20-person uncontrolled pilot,
+and stamped it mixed. The short answer is also about breathing, not
+sleep quality, which is what the claim names. Not harmful: the page does
+warn about the risk.
+
+**What most of the not-clean pages have in common (for the next round):**
+1. The evidence-strength line ("Strong evidence", "High certainty
+   evidence") on observational or small, short studies: claims 4, 13 and
+   17, and also 9 and 18.
+2. Sentences that credit a study with a finding it never tested: claim 4
+   (two studies cited for lower infection rates only measured how often
+   staff wash) and claim 12 (three "studies" cited for bed rest that do
+   not test it).
+3. Garbled wording:
+   - Claim 1's "Still open" says "remains fully mapped out".
+   - Claim 6 shows "the primary how well it works endpoint", a
+     plain-word swap still breaking on "primary efficacy endpoint".
+4. A banned word ("robust") still reached a page on claim 19.
+
+**Small faults seen, not counted against clean:**
+- #3 and #15: "The abstracts don't report the size of the effect" is
+  wrong on both. The abstracts give figures (hazard ratios of 0.61 and
+  0.57 on #3; 5.3 kg against 6.0 kg of weight lost on #15).
+- #1: the 72 percent figure comes from women who had already had an
+  affected pregnancy, and the page does not say so.
+- #6: "the largest randomized trial" is not the largest in the list.
+- #7: the excerpt for one study lists the cancers with no effect and
+  leaves out lung cancer, the one that rose. "Beta-carotene was harmful"
+  drops "in smokers".
+- #14: "3.9 percentage points higher than placebo" has no note that it was
+  not statistically significant.
+- #17: "likely range 4.17; 0.88 mmHg" has lost its minus signs, and one
+  figure is a double negative.
+- #20: the short answer says "No human clinical trials test whether oil
+  pulling actually whitens teeth" as a fact, but the search found one
+  off-topic paper. The second line is more careful.
+
+No em dash or en dash appeared on any of the 20 pages.
+
+### Step 6: the guideline line names no document (done)
+
+You asked for this check after the holdout.
+
+**What I found.** Of the 15 safety-set pages, 4 carry a "Major health
+guidelines say:" line. All four in full:
+1. Sunscreen (shown True): "Major health guidelines say: daily
+   sunscreen use helps protect skin and lowers your risk of getting skin
+   cancer."
+2. Raw milk (shown False): "Major health guidelines say: drinking raw
+   milk can carry harmful germs and pasteurized milk is much safer to
+   drink."
+3. Essential oils (shown Not enough evidence): "Major health guidelines
+   say: essential oils cannot cure bacterial infections and standard
+   medical treatment must be used instead."
+4. Colloidal silver (shown Not enough evidence): "Major health
+   guidelines say: colloidal silver is not safe or effective to treat any
+   disease or infection."
+
+None names a document, a report or guideline title, or a year. None even
+names an organisation: each is a plain position after the generic lead.
+No numbers, no quotation marks, no dashes. The app's own named-document
+pattern, run over the four sentences, matched none of them. These pages
+came from the safety run, before the ban below existed.
+
+No holdout page carried a guideline line. Four holdout claims (1, 4, 7
+and 8) use words the topic filter looks for, but the line is only added
+when the guidance disagrees with the verdict, and all four verdicts were
+already right.
+
+**The ban, so it stays true (done).**
+- The guideline prompt now says to name only the organisation, never a
+  document: no report, guideline, fact sheet or statement by its title,
+  no "the WHO report on", no quotation marks, no years.
+- A code check (`_NAMED_DOCUMENT` in verdict.py) drops any line that does
+  it anyway, so the verdict stands on the studies alone. Naming the body,
+  as in "the CDC reports that", is still allowed.
+- Three tests were added; 662 of 662 tests pass.
+- Commits 17ea759 (the change) and 9f4d568 (DECISIONS.md).
+- This prompt is separate from the one that builds PubMed searches, so
+  saved searches were not reset (the search key is still 39497158fa41).
