@@ -2773,6 +2773,56 @@ t("  the page and the script both print the server's group name",
   "background_label" in (ROOT / "templates" / "index.html").read_text()
   and "background_label" in (ROOT / "static" / "app.js").read_text())
 
+# A sentence that cites an off-topic study with only background beside it rests
+# on no study that tests the claim and leans on one that tests something else.
+# One on background alone is context and stays; one on a study used stays.
+_MIXED = ("Adults given garlic had lower LDL (Study 1). "
+          "Pigs and adults on onion both improved (Studies 2, 6). "
+          "Pigs fed garlic had lower serum cholesterol (Study 2). "
+          "Garlic and onion each lowered LDL in adults (Studies 1, 6). "
+          "Onion lowered LDL in adults (Study 6). "
+          "Garlic is sold as capsules, powder and oil (Studies 3, 4, 6).")
+_kept = breakdown.drop_citing(_MIXED, {6}, 6, {2, 3, 4, 5})
+t("off-topic plus background: dropped like one citing only the off-topic study",
+  "Pigs and adults on onion" not in _kept and "Garlic is sold" not in _kept
+  and "Onion lowered LDL in adults" not in _kept, _kept)
+t("  background alone is context, so it stays",
+  "Pigs fed garlic had lower serum cholesterol (Study 2)." in _kept, _kept)
+t("  one study used saves it, off-topic or background beside it or not",
+  "Adults given garlic had lower LDL (Study 1)." in _kept
+  and "Garlic and onion each lowered LDL in adults (Studies 1, 6)." in _kept, _kept)
+t("  without the background list it only drops what rests on off-topic studies, as before",
+  breakdown.drop_citing(_MIXED, {6}, 6).count("(Studies 2, 6)") == 1
+  and "(Study 6)" not in breakdown.drop_citing(_MIXED, {6}, 6)
+  and breakdown.drop_citing(_MIXED, (), 6, {2}) == _MIXED)
+t("  a background list alone drops nothing: it needs an off-topic study in the sentence",
+  breakdown.drop_citing(_MIXED, (), 6, {2, 3, 4, 5}) == _MIXED
+  and breakdown.drop_citing("Pigs fed garlic had lower serum cholesterol (Study 2).", {6}, 6, {2})
+  == "Pigs fed garlic had lower serum cholesterol (Study 2).")
+_gar3 = [dict(s) for s in _GAR] + [dict(_ONION)]
+fg.models.script = [Resp(VJ("true", [1, 2, 3, 4, 5, 6], tldr="Garlic lowers cholesterol a little.",
+                            explanation="Garlic powder lowered LDL cholesterol in adults (Study 1). "
+                                        "Pigs fed garlic had lower cholesterol, as did adults given onion extract "
+                                        "(Studies 2, 6). Pigs fed garlic had lower serum cholesterol (Study 2).",
+                            evidence=["Garlic powder lowered LDL cholesterol in adults (Study 1).",
+                                      "Pigs fed garlic had lower cholesterol, as did adults given onion extract "
+                                      "(Studies 2, 6)."],
+                            strength="Pigs fed garlic had lower cholesterol, as did adults given onion extract "
+                                     "(Studies 2, 6).",
+                            applies_to="Adults with raised cholesterol (Studies 1, 6).",
+                            not_applies_to="Adults on onion extract (Studies 5, 6).",
+                            relevance=[_rel(i) for i in range(1, 7)]))] * 3
+_v = verdict.weigh_evidence(_GAR_CLAIM, _gar3, _GAR_Q)
+_bd = _v["breakdown"] or {}
+t("  through a real verdict, the explanation loses the off-topic plus background sentence only",
+  "Garlic powder lowered LDL cholesterol in adults (Study 1)." in _v["explanation"]
+  and "Pigs fed garlic had lower serum cholesterol (Study 2)." in _v["explanation"]
+  and "onion" not in _v["explanation"], _v["explanation"])
+t("  and so does every breakdown field: paragraphs, strength, who it applies to and who it does not",
+  _bd.get("evidence") == ["Garlic powder lowered LDL cholesterol in adults (Study 1)."]
+  and not _bd.get("strength") and not _bd.get("not_applies_to")
+  and "(Studies 1, 6)" in (_bd.get("applies_to") or ""), _bd)
+
 # ---- the certainty line: the lead review's own words ---------------------------------
 _GIN_CLAIM = "Ginger reduces vomiting"
 _GIN_Q = "(ginger OR zingiber) AND (vomiting OR emesis)"

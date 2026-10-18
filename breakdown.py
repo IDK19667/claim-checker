@@ -1711,12 +1711,23 @@ def tell_straight(text: str, studies: list[dict]) -> str:
     return say_nulls(keep_comparison(text, studies), studies)
 
 
-def drop_citing(text: str, skip, count: int) -> str:
-    """Every sentence of text except those resting only on studies in skip."""
+def drop_citing(text: str, skip, count: int, background=()) -> str:
+    """
+    Every sentence of text except those resting only on studies in skip.
+
+    `background` is the studies used for context, not for the verdict. A
+    sentence citing only those is context and stays. But one that cites an
+    off-topic study (in skip) with background alongside is dropped too: it
+    rests on no study that tests the claim and leans on one that tests
+    something else, and a background study beside it does not rescue it. A
+    sentence that cites even one study the verdict uses is kept.
+    """
     if not skip:
         return text or ""
+    skip, either = set(skip), set(skip) | set(background)
     return " ".join(sentence for sentence in sentences(text or "")
-                    if not (refs(sentence, count) and set(refs(sentence, count)) <= set(skip)))
+                    if not (refs(sentence, count) and set(refs(sentence, count)) <= either
+                            and set(refs(sentence, count)) & skip))
 
 
 def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "") -> bool:
@@ -1740,7 +1751,7 @@ def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "
 
 
 def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: str = "",
-           surrogate: str = "") -> dict | None:
+           surrogate: str = "", background=()) -> dict | None:
     """
     Gate whatever the model returned into a breakdown the page can render,
     or None if too little survived to be worth opening.
@@ -1748,7 +1759,9 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
     `tidy` is verdict.tidy_prose, passed in rather than imported, so this
     module stays free of the provider plumbing and the import stays one
     way round. `claim` is only ever read, never printed: its own words are
-    excluded from the reading grade.
+    excluded from the reading grade. `skip` is the off-topic studies and
+    `background` the context-only ones: see drop_citing for what each costs
+    a sentence.
 
     Order matters. Plain words go in before the length rule is applied, so
     a sentence is measured and kept or dropped as the reader will meet it,
@@ -1765,7 +1778,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
     def clean(value, limit):
         said = soften(tidy(str(value or ""), limit))
         before = set(kept_terms)
-        out = drop_citing(keep_sentences(plain(said, kept_terms), count, known), skip, count)
+        out = drop_citing(keep_sentences(plain(said, kept_terms), count, known), skip, count,
+                          background)
         if out:
             return tell_straight(out, studies)
         # Nothing survived. The commonest reason is the length rule, and the
@@ -1779,7 +1793,8 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
         kept_terms.clear()
         kept_terms.update(before)
         return tell_straight(drop_citing(
-            keep_sentences(plain(said, set(PARKED_TERMS)), count, known), skip, count), studies)
+            keep_sentences(plain(said, set(PARKED_TERMS)), count, known), skip, count,
+            background), studies)
 
     parts = []
     for item in (raw.get("parts") or [])[:4]:

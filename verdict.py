@@ -1867,15 +1867,20 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     cited_pmids = [p for p in cited_pmids if p not in background]
     background_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in background}
 
+    # A sentence on an off-topic study with only background beside it goes
+    # too: it rests on no study that tests the claim and leans on one that
+    # tests something else, and a background study alongside does not rescue
+    # it. A sentence on background alone is context, and stays.
     explanation = breakdown.drop_citing(breakdown.tell_straight(breakdown.plain(breakdown.soften(
         tidy_prose(str(parsed.get("explanation") or ""), EXPLANATION_MAX))), studies),
-        off_numbers, len(studies))
+        off_numbers, len(studies), background_numbers)
     still_open = tidy_prose(str(parsed.get("still_open") or ""), STILL_OPEN_MAX)
 
     # The deeper layer, gated. Everything it could not tie back to these
     # abstracts has already been dropped by the time this returns.
     deeper = breakdown.ground(parsed, studies, tidy_prose, claim, skip=off_numbers,
-                              outcome=outcome, surrogate=surrogate)
+                              outcome=outcome, surrogate=surrogate,
+                              background=background_numbers)
 
     # The takeaway is held to the same rule as the breakdown: words that
     # claim more than this evidence can carry are rewritten weaker.
