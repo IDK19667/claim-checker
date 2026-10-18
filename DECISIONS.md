@@ -45,6 +45,11 @@ evidence supports") is real, and these limits keep it narrow:
 - The guidance sentence may print no figure (nothing on the page could
   check it), must name a body, and must not argue with its own position
   (`stamp_conflict`); otherwise it is not used.
+- It says what the guidance says, never where. No report or guideline
+  title, no "the WHO report on", no quotation marks, no years: the prompt
+  bans them and `_NAMED_DOCUMENT` drops a line that has one. A title is a
+  citation the page has nothing to check against, and a reader can't tell
+  a real one from a made-up one. Naming the body ("the CDC") is fine.
 - Non-negotiable #2 is kept whole. A verdict that used no study stays "Not
   enough evidence", and so does one resting only on case reports or animal
   and lab studies. There the guidance is added to the takeaway and the
