@@ -288,7 +288,8 @@ def _complete_text(prompt: str, max_tokens: int, temperature: float | None = Non
 # The gates check that every figure is in an abstract. They cannot check
 # that a figure belongs to the group the sentence names (the yoga arm, not
 # the walking arm), that a line agrees with its study's own conclusion,
-# or that a study's headline finding made it in at all. That takes a
+# that a study tested what a line credits to it and did not only mention
+# it, or that a study's headline finding made it in at all. That takes a
 # reading, so the short answer and each "What the research says" line are
 # read once more against the abstracts they cite. A line that fails is
 # rewritten, through the same gates as everything else, or dropped. The
@@ -308,7 +309,7 @@ FAITHFUL_SCHEMA = {
                     "line": {"type": "integer"},
                     "verdict": {"type": "string", "enum": ["ok", "rewrite", "drop"]},
                     "problem": {"type": "string",
-                                "enum": ["none", "direction", "group", "unsupported"]},
+                                "enum": ["none", "direction", "group", "unsupported", "untested"]},
                     "rewrite": {"type": "string"},
                 },
                 "required": ["line", "verdict", "problem", "rewrite"],
@@ -351,6 +352,12 @@ For every line, L0 included, say:
   unsupported: it states something the abstract does not say, including any
   result, "no change" and "nobody" included, for an outcome that abstract never
   says the study measured;
+  untested: it credits a study (for L0, any of them) with a finding about an
+  outcome, treatment, exposure or comparison that the abstract never says the
+  study tested or measured. Naming it in the background, the aims or the wider
+  framing is not testing it, and a study that only counted how often people did
+  something has not tested what doing it achieves. A rewrite says what that
+  study did test;
 "drop" when the abstract cannot support any version of it.
 Give "problem" as the failure, or "none" for ok. Leave "rewrite" empty unless
 the verdict is rewrite.

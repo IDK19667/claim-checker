@@ -3195,6 +3195,55 @@ t("faithfulness: a dropped line leaves the effect row and the part-by-part answe
   "8 mmHg" not in json.dumps(_bd) and _bd.get("effect_size") == ""
   and _bd["parts"][0]["assessment"] == breakdown.PART_BELOW, _bd)
 
+# A line that credits a study with something it never tested. The survey
+# below mentions gum disease only as the reason people are told to floss; it
+# counted how often they do. Synthetic claim and studies, not a holdout claim.
+_FL_CLAIM = "Flossing prevents gum disease"
+_FL_Q = "(flossing OR dental floss) AND (gum disease OR gingivitis OR periodontitis)"
+_FL = [_study("FL1", "How often do adults floss? A survey of daily habits", types=["Journal Article"],
+              abstract="Gum disease is common, and dentists tell people to floss every day. We surveyed "
+                       "adults about how often they floss. Only 31% said they floss every day, and "
+                       "younger adults flossed less often than older adults."),
+       _study("FL2", "Flossing and gingivitis: a meta-analysis", types=["Meta-Analysis"],
+              abstract="We pooled 14 randomized trials in 3200 adults who flossed every day or brushed "
+                       "only for 8 weeks. Gingivitis scores fell by 20% in the flossing group and by 5% "
+                       "in the brush only group.")]
+_FL_BAD = "Daily flossing lowered gum disease (Study 1)."
+_FL_GOOD = "Gingivitis scores fell by 20% with flossing (Study 2)."
+_FL_V = Resp(VJ("true", [1, 2], tldr="Flossing seems to help gums a little.",
+                explanation=f"{_FL_BAD} {_FL_GOOD}", evidence=[f"{_FL_BAD} {_FL_GOOD}"]))
+_FL_FIX = "That survey asked how often adults floss (Study 1)."
+fg.models.script = [_FL_V, FJ([_L(1, "rewrite", "untested", _FL_FIX)])]
+_faith = _Catch()
+logging.getLogger("evident.faithful").addHandler(_faith)
+_v = verdict.weigh_evidence(_FL_CLAIM, [dict(x) for x in _FL], _FL_Q)
+logging.getLogger("evident.faithful").removeHandler(_faith)
+_says = (_v["breakdown"] or {}).get("says") or []
+t("faithfulness: a line that credits a study with what it never tested is rewritten to what it did",
+  _FL_FIX in _says and _FL_BAD not in _says and _FL_GOOD in _says
+  and _FL_FIX in _v["explanation"] and _FL_BAD not in _v["explanation"], (_says, _v["explanation"]))
+t("  and the problem is named in the log",
+  any("(untested), so it was rewritten" in m for m in _faith.lines), _faith.lines)
+fg.models.script = [_FL_V, FJ([_L(1, "drop", "untested")])]
+_v = verdict.weigh_evidence(_FL_CLAIM, [dict(x) for x in _FL], _FL_Q)
+_says = (_v["breakdown"] or {}).get("says") or []
+t("  or dropped when no version of it is true, and the page still reads from what is left",
+  _says == [_FL_GOOD] and _v["explanation"] == _FL_GOOD, (_says, _v["explanation"]))
+fg.models.script = [_FL_V, FJ([_L(1, "drop", "untested"), _L(2, "drop", "untested")])]
+_v = verdict.weigh_evidence(_FL_CLAIM, [dict(x) for x in _FL], _FL_Q)
+t("  and with every line gone, the explanation falls back to the short answer",
+  not (_v["breakdown"] or {}).get("says") and _v["explanation"] == _v["tldr"] != "", _v)
+_fp = re.sub(r"\s+", " ", verdict._faithful_prompt(_FL_CLAIM, "", [_FL_BAD], [1], _FL))
+t("  the check is told the rule, and its older rules stand",
+  "untested: it credits a study (for L0, any of them) with a finding about an outcome, treatment, "
+  "exposure or comparison" in _fp and "the abstract never says the study tested or measured" in _fp
+  and "the background, the aims or the wider framing is not testing it" in _fp
+  and all(k in _fp for k in ("direction:", "group:", "unsupported:"))
+  and "for an outcome that abstract never says the study measured" in _fp, _fp)
+_enum = verdict.FAITHFUL_SCHEMA["properties"]["lines"]["items"]["properties"]["problem"]["enum"]
+t("  and the reply is allowed to name it",
+  _enum == ["none", "direction", "group", "unsupported", "untested"], _enum)
+
 # ---- writing: numbers, statistics, verbs, and the effect line ----------------
 # Synthetic claims and studies only; none of these is a holdout claim.
 _dg = breakdown.digits
