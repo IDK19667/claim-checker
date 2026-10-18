@@ -562,8 +562,9 @@ says", "Still open", the line under the chart, the breakdown and the
 checked against that study's abstract. Its calls were then reviewed
 before I accepted them. Counted strictly, as in holdout #2. "Exact"
 means the stamp matched the answer written down beforehand. "Accepted"
-means a different stamp that was still graded as right (claims 11, 13,
-15 and 17).
+means the stamp matched a second answer also written down before the
+run as fair, because the reviews support it too (claims 11, 13, 15 and
+17). Nothing was accepted after seeing a page.
 
 | # | Claim | Expected | Shown | Verdict | Text |
 |---|---|---|---|---|---|
