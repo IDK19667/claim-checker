@@ -457,3 +457,29 @@ Reading every page, I found and fixed five things. None changed a verdict.
     misread, so it would ask again less often, not more.
   - Nothing failed, so per your instructions nothing was re-run. The
     regression run below uses the new code.
+
+### Step 4b: the 21 regression claims (done: no regressions)
+
+- **19/21 exact, 2 on the pre-declared defensible list, 0 stamp/text
+  conflicts.** Night 1 ended at 18 exact and 3 defensible.
+  - Melatonin moved up from "complicated" to the expected "true".
+  - Red wine ("complicated", want "false") and cold showers
+    ("complicated", want "not enough evidence") are the same two
+    defensible answers as last night.
+- **Last night's three slips are gone:**
+  - The measles page has no autism figure in its effect row; the row
+    honestly says the abstracts don't give a size.
+  - Creatine says nothing about hair.
+  - Melatonin's "who was studied" names people with insomnia and
+    sleep disorders, not "healthy adults".
+- **One new slip, fixed:** the red wine short answer read "Red wine
+  shows mixed is linked to heart health". The verb fix for "X links to
+  Y" mistook "mixed links" for a verb. It now looks two words back.
+  - Test added; 659/659 pass.
+  - Commit 3f3a53a.
+- **Not fixed, and not misleading:**
+  - A few pages repeat a figure in two lines (physical activity's "26%
+    risk drop" twice; sleep's effect sizes twice).
+  - Sugar's page shows a pooled observational figure (1.22) without
+    saying what it measured.
+  - Both were there last night too.
