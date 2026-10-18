@@ -14,6 +14,8 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
+import copyrules
+
 FONTS = os.path.join(os.path.dirname(__file__), "static", "fonts")
 DISPLAY = os.path.join(FONTS, "BricolageGrotesque.ttf")
 BODY = os.path.join(FONTS, "InstrumentSans.ttf")
@@ -202,4 +204,7 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
 
 
 def render_card(claim: str, verdict: str, tldr: str, study_count: int, receipt: tuple | None = None) -> bytes:
-    return _render(claim, verdict, tldr or "", study_count, tuple(receipt) if receipt else None)
+    # The short answer is our copy and goes through the banned-word table;
+    # the claim and the study's title (the receipt) are not ours to reword.
+    return _render(claim, verdict, copyrules.clean_text(tldr or ""), study_count,
+                   tuple(receipt) if receipt else None)

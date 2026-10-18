@@ -22,6 +22,7 @@ import dotenv  # noqa: E402
 dotenv.load_dotenv = lambda *a, **k: None  # keep the developer's .env out of the tests
 
 import app as appmod  # noqa: E402
+import copyrules  # noqa: E402
 import og  # noqa: E402
 import db  # noqa: E402
 import pubmed  # noqa: E402
@@ -338,12 +339,144 @@ t("copy gate: every banned word in model prose is flagged",
   verdict.banned_words(_txt))
 t("  and the flag is a log line naming the words, not the text",
   len(_copy.lines) == 1 and "delve" in _copy.lines[0] and "vinegar" not in _copy.lines[0], _copy.lines)
-t("  and the words are flagged, not rewritten", _out == _txt)
+t("  and the words are replaced with plain ones, the sentence still reads",
+  _out == "Studies look into how vinegar can open up a smooth effect. Using this is a sign of nothing.", _out)
 _copy.lines.clear()
 verdict.tidy_prose("Elevated blood pressure fell in two small salt solution trials.", 700)
 t("copy gate: elevated (a finding) and a single solution are not flagged", _copy.lines == [], _copy.lines)
 t("copy gate: every word on the list is caught",
   all(verdict.banned_words(w) for w in verdict.BANNED_WORDS))
+
+# The table that does the replacing (copyrules.py). Every word on the list,
+# in a typical sentence, comes out gone and still English. The two first rows
+# are the real ones: both reached a page before the list was enforced in code.
+_CR = [
+    ("A review notes that claims of anti-aging effects lack robust clinical evidence in humans (Study 7).",
+     "A review notes that claims of anti-aging effects lack good clinical evidence in humans (Study 7)."),
+    ("There is an urgent need to undertake methodologically robust research on multimodal care.",
+     "There is an urgent need to undertake well designed research on multimodal care."),
+    ("Larger robust clinical trials are warranted.", "Larger clinical trials are warranted."),
+    ("Robust evidence from trials shows a small benefit.", "Evidence from trials shows a small benefit."),
+    ("A robust link was found between X and Y.", "A link was found between X and Y."),
+    ("A robust effect appeared in adults.", "An effect appeared in adults."),
+    ("The association remained robust after adjustment for age.",
+     "The association remained consistent after adjustment for age."),
+    ("The result was not robust to sensitivity analyses.",
+     "The result was not stable under sensitivity analyses."),
+    ("The data are robust, but small.", "The data are consistent, but small."),
+    ("Consistent and robust evidence supports this.", "Consistent evidence supports this."),
+    ("There is no robust evidence that vinegar helps.", "There is no good evidence that vinegar helps."),
+    ("The robustness of the findings is unclear.", "The consistency of the findings is unclear."),
+    ("Vitamin D was robustly linked to fewer colds.", "Vitamin D was linked to fewer colds."),
+    ("Studies leverage large datasets and leveraged trials, leveraging this.",
+     "Studies use large datasets and used trials, using this."),
+    ("Leverage the evidence. He has little leverage over outcomes.",
+     "Use the evidence. He has little influence over outcomes."),
+    ("Seamless integration; it works seamlessly with diet.", "Smooth integration; it works smoothly with diet."),
+    ("It empowers patients to manage care. Patients were empowered to quit.",
+     "It helps patients to manage care. Patients were helped to quit."),
+    ("Many feel empowered to ask, and an empowering approach helps.",
+     "Many feel able to ask, and a supportive approach helps."),
+    ("Patient empowerment is key. They empower people.", "Patient autonomy is key. They help people."),
+    ("Vinegar can unlock weight loss; it unlocks benefits, unlocked others, unlocking more.",
+     "Vinegar can open up weight loss; it opens up benefits, opened up others, opening up more."),
+    ("Actionable advice is lacking. The findings are actionable.",
+     "Practical advice is lacking. The findings are practical."),
+    ("A data-driven approach helps; data driven methods too.", "A data-based approach helps; data-based methods too."),
+    ("There are no easy solutions. Quick solutions fail. Digital health solutions are sold.",
+     "There are no easy answers. Quick fixes fail. Digital health options are sold."),
+    ("Solutions to the problem are unclear.", "Answers to the problem are unclear."),
+    ("This is a testament to its popularity. Testaments to care.",
+     "This is a sign of its popularity. Signs of care."),
+    ("The research landscape is changing. The landscape of nutrition research is wide.",
+     "The research is changing. The state of nutrition research is wide."),
+    ("The current landscape shows little.", "The current picture shows little."),
+    ("Studies delve into diet. One delved deeper. Delving into causes, they delve further.",
+     "Studies look into diet. One looked deeper. Looking into causes, they look further."),
+    ("Saturated fat elevates LDL cholesterol. Exercise may elevate mood.",
+     "Saturated fat raises LDL cholesterol. Exercise may raise mood."),
+    ("Elevate the legs to reduce swelling.", "Raise the legs to reduce swelling."),
+]
+_CR_BAD = [(w, g) for w, n in _CR for g in [copyrules.clean_text(w)] if g != n]
+t("copy table: every banned word comes out as the plain word, in a typical sentence",
+  not _CR_BAD, _CR_BAD[:2])
+_cr_hits = {h for was, _ in _CR for h in copyrules.banned_words(was)}
+t("  and every word on the list has a sentence above",
+  all(any(w[:5] in h for h in _cr_hits) for w in verdict.BANNED_WORDS),
+  [w for w in verdict.BANNED_WORDS if not any(w[:5] in h for h in _cr_hits)])
+t("  nothing banned is left, in any of them", all(not copyrules.banned_words(n) for _, n in _CR))
+t("  a second pass changes nothing", all(copyrules.clean_text(n) == n for _, n in _CR))
+t("  no double spaces, no dashes, the sentence still opens with a capital and closes as it did",
+  all("  " not in n and "\u2014" not in n and "\u2013" not in n
+      and n[:1].isupper() == was[:1].isupper() and n[-1] == was[-1] for was, n in _CR))
+t("  a sentence with none of them is returned untouched, and so is anything that is not text",
+  copyrules.clean_text("Vinegar did not change blood sugar.") == "Vinegar did not change blood sugar."
+  and copyrules.clean_text(None) is None and copyrules.clean_text(7) == 7)
+_FORBID = ("strong", "high quality", "high-quality", "high certainty", "proven", "definitive",
+           "conclusive", "convincing", "compelling")
+t("copy table: no swap ever raises the certainty of the sentence it is in",
+  all(f not in n.lower() or f in was.lower() for was, n in _CR for f in _FORBID)
+  and not [r for p, r in copyrules.REPLACEMENTS if isinstance(r, str)
+           and any(f in r.lower() for f in _FORBID)])
+t("  a denial stays a denial: no robust evidence is no good evidence, never plain evidence",
+  copyrules.clean_text("Studies found no robust evidence of benefit.") == "Studies found no good evidence of benefit."
+  and copyrules.clean_text("They lack robust trials.") == "They lack good trials.")
+# The same words, meaning something else. A saline solution is medicine, a
+# natural landscape is a place, elevated blood pressure is a finding, and
+# robusta is a coffee.
+_KEPT = ["Oral rehydration solutions were compared.", "Glucose-electrolyte solutions worked.",
+         "5% dextrose solutions were used.", "Hypertonic saline solutions raised sodium.",
+         "Solutions containing zinc were tested.", "A saline solution and a glucose solution.",
+         "Exposure to natural landscapes helps.", "Elevated blood pressure fell in two trials.",
+         "Elevation of the legs helped.", "Coffea robusta beans were roasted."]
+t("copy table: a liquid, a place, a finding and a species keep their words",
+  all(copyrules.clean_text(k) == k and not copyrules.banned_words(k) for k in _KEPT),
+  [k for k in _KEPT if copyrules.clean_text(k) != k])
+# Every form of every word in the places a model puts them: opening a sentence,
+# before a noun, after "was", before "and", "or", "but" and a comma. Whatever
+# the swap, the sentence must not be left with a stray conjunction, a gap, a
+# lost capital or a banned word.
+import re as _re  # noqa: E402
+_FORMS = ["leverage", "leverages", "leveraged", "leveraging", "seamless", "seamlessly", "empower",
+          "empowers", "empowered", "empowering", "empowerment", "unlock", "unlocks", "unlocked",
+          "unlocking", "robust", "robustly", "robustness", "non-robust", "actionable", "data-driven",
+          "data driven", "solutions", "testament", "testaments", "landscape", "landscapes", "delve",
+          "delves", "delved", "delving", "elevate", "elevates", "elevating"]
+_PLACES = ["{w} matters.", "The {w} trial.", "It was {w}.", "It was {w} and clear.",
+           "A {w} and unusual result.", "Both {w} and plain.", "{w}, but small.",
+           "A {w}, but small, effect.", "It is {w} or fragile.", "{w} and well tolerated.",
+           "They did not {w} it.", "No {w} evidence was found.", "Is it {w}?", "{w} (Study 1) matters.",
+           "The study found {w}", "More {w} than before."]
+_CONJ = _re.compile(r"\b(?:a|an|the|both|of|to|is|was|it|they|no|not|more)\s+(?:and|or|but)\b", _re.I)
+_odd = []
+for _f in _FORMS:
+    for _pl in _PLACES:
+        _s = _pl.format(w=_f)
+        _s = _s[:1].upper() + _s[1:] if _pl.startswith("{w}") else _s
+        _o = copyrules.clean_text(_s)
+        if (copyrules.banned_words(_o) or not _o.strip() or _re.search(r"  | ,|,,|^\s|\s$", _o)
+                or (_s[:1].isupper() and _o[:1].islower()) or copyrules.clean_text(_o) != _o
+                or (_CONJ.search(_o) and not _CONJ.search(_s))):
+            _odd.append((_s, _o))
+t(f"copy table: {len(_FORMS)} forms in {len(_PLACES)} places each leave a clean, whole sentence",
+  not _odd, _odd[:3])
+_cp_in = {"tldr": "A robust result.", "claim": "Does vinegar unlock energy?",
+          "studies": [{"title": "A robust landscape of solutions", "abstract": "We delve into it.",
+                       "url": "https://example.org/robust", "cited_in_verdict": True,
+                       "authors": ["Robust Delve"]}],
+          "breakdown": {"parts": [{"part": "vinegar unlock", "assessment": "It unlocks energy (Study 1)."}],
+                        "evidence": ["Leveraged trials (Study 1)."]}, "n": 3, "none": None}
+_cp_was = json.dumps(_cp_in, sort_keys=True)
+_cp = copyrules.clean_payload(_cp_in, "Does vinegar unlock energy?")
+t("copy table: a payload is cleaned all the way down, and what is not ours is left as published",
+  _cp["tldr"] == "A result." and _cp["breakdown"]["evidence"] == ["Used trials (Study 1)."]
+  and _cp["breakdown"]["parts"][0]["assessment"] == "It opens up energy (Study 1)."
+  and _cp["studies"] == _cp_in["studies"] and _cp["claim"] == _cp_in["claim"]
+  and _cp["n"] == 3 and _cp["none"] is None, _cp)
+t("  the reader's own words, quoted back piece by piece, stay as typed",
+  _cp["breakdown"]["parts"][0]["part"] == "vinegar unlock"
+  and copyrules.clean_payload({"part": "vinegar unlock"})["part"] == "vinegar open up")
+t("  and the input is left exactly as it was", json.dumps(_cp_in, sort_keys=True) == _cp_was)
 logging.getLogger("evident.copy").removeHandler(_copy)
 fg.models.script = [Resp("q"), Resp(VJ("true", [1], tldr="Overall, it works \u2013 mostly.",
                                           still_open="Whether it lasts past 12 weeks \u2014 no trial ran longer"))]
@@ -357,6 +490,166 @@ d = P("uncited again", ip="7.7.7.7").get_json()
 t("forced complicated names the open question", d["still_open"].startswith("Whether any study"), d)
 html = c.get("/?q=gate%20claim").data.decode()
 t("no dashes in shipped copy", "\u2014" not in html and "\u2013" not in html)
+
+# The same words from a model that ignores the prompt. The fake provider fills
+# every line a reader can see with banned words, and each way out (the API,
+# the cache, the page, the card) has to come out clean. The studies' titles
+# and abstracts are the papers' own words and stay as published.
+import html as _esc  # noqa: E402
+_BAN = _re.compile(r"leverag|seamless|empower|unlock|robust|actionable|data[- ]driven|solutions|"
+                   r"testament|landscape|delv(?:e|es|ed|ing)\b|elevat(?:e|es|ing)\b", _re.I)
+_THEIRS = {"claim", "typed", "search_query_used", "title", "abstract", "journal", "authors", "pmid",
+           "publication_types", "data_banks"}
+
+
+def _stuffed(obj, path=""):
+    """Every banned word left in a payload's own strings, and where it sits.
+    This pattern is deliberately not copyrules's: a check that shares the
+    code's blind spot would pass for the same reason the code does."""
+    if isinstance(obj, str):
+        return [f"{path}: {m.group(0)}" for m in _BAN.finditer(obj)]
+    if isinstance(obj, dict):
+        return [h for k, v in obj.items() if k not in _THEIRS and not k.endswith("url")
+                for h in _stuffed(v, f"{path}.{k}")]
+    if isinstance(obj, list):
+        return [h for i, v in enumerate(obj) for h in _stuffed(v, f"{path}[{i}]")]
+    return []
+
+
+_STUFF_STUDIES = [
+    {"pmid": "K1", "title": "A robust landscape of leveraged solutions",
+     "abstract": "BACKGROUND: Vinegar is common. CONCLUSIONS: The effect was robust and seamless "
+                 "across the adults studied here.",
+     "journal": "J", "year": "2020", "publication_types": ["Randomized Controlled Trial"],
+     "authors": ["A B"], "data_banks": None, "url": "uK1"},
+    {"pmid": "K2", "title": "Unlocking empowerment: a testament to data-driven delving",
+     "abstract": "We delve into a robust landscape of actionable solutions.",
+     "journal": "J", "year": "2021", "publication_types": ["Randomized Controlled Trial"],
+     "authors": ["C D"], "data_banks": None, "url": "uK2"},
+]
+_STUFF_RAW = {
+    "parts": [{"part": "vinegar burns belly fat",
+               "assessment": "The trial found a robust, seamless drop in waist size (Study 1)."}],
+    "evidence": ["A robust trial leveraged a data-driven design to delve into waist size (Study 1).",
+                 "Its authors called it a testament to actionable solutions that empower people (Study 2)."],
+    "effect_size": "The drop was robust in the group studied (Study 1).",
+    "strength": "Both trials are robust and seamless (Studies 1, 2).",
+    "applies_to": "Adults in a robust sample were studied (Study 1).",
+    "not_applies_to": "Children sit outside this landscape of trials (Study 1).",
+    "unknowns": "Whether it will unlock lasting benefits for people with elevated risk (Study 2).",
+}
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _STUFF_STUDIES
+fg.models.script = [Resp("q"), Resp(VJ(
+    "complicated", [1, 2], tldr="Vinegar can unlock a robust, seamless effect.",
+    explanation="Studies leverage a data-driven landscape, and this is a testament to "
+                "actionable solutions that empower patients (Study 1).",
+    still_open="Whether it will unlock robust benefits over time.", **_STUFF_RAW))]
+_sd = P("Vinegar burns belly fat", ip="6.6.6.1").get_json()
+t("a model that stuffs its answer with banned words reaches the reader clean",
+  _stuffed(_sd) == [], _stuffed(_sd))
+t("  in the takeaway, the explanation and the open question, in the plain words",
+  _sd["tldr"] == "Vinegar can open up a smooth effect."
+  and _sd["still_open"] == "Whether it will open up benefits over time."
+  and _sd["explanation"].startswith("Studies use a data-based picture, and this is a sign of"), _sd)
+t("  and in the breakdown, which was there to be cleaned, and the conclusion quoted from an abstract",
+  _sd["breakdown"] and len(_sd["breakdown"]["evidence"]) == 2
+  and _sd["breakdown"]["strength"] == "Both trials are consistent and smooth (Studies 1, 2)."
+  and _sd["breakdown"]["concluded"] == [
+      {"n": 1, "said": "The effect was consistent and smooth across the adults studied here."}], _sd["breakdown"])
+t("  the claim, and each study's title and abstract, stay exactly as published",
+  _sd["claim"] == "Vinegar burns belly fat"
+  and [s["title"] for s in _sd["studies"]] == [s["title"] for s in _STUFF_STUDIES]
+  and [s["abstract"] for s in _sd["studies"]] == [s["abstract"] for s in _STUFF_STUDIES])
+
+
+def _outside_the_papers(page):
+    """A page with each study's title and abstract taken out, in every form a
+    page prints them: they are the papers' own words and are shown as published."""
+    for st in _STUFF_STUDIES:
+        for key in ("title", "abstract"):
+            for form in (st[key], _esc.escape(st[key]), _esc.escape(st[key], quote=False),
+                         json.dumps(st[key])[1:-1]):
+                page = page.replace(form, "")
+    return page
+
+
+_sp = c.get("/?q=Vinegar+burns+belly+fat").get_data(as_text=True)
+t("  and its server-rendered page is clean too, with the papers' own words still on it",
+  not _BAN.findall(_outside_the_papers(_sp)) and "A robust landscape of leveraged solutions" in _sp
+  and "Vinegar can open up a smooth effect." in _sp, _BAN.findall(_outside_the_papers(_sp)))
+_sd2 = P("Vinegar burns belly fat", ip="6.6.6.2").get_json()
+t("  and so is the cache hit that follows",
+  _sd2["cached"] is True and _stuffed(_sd2) == [] and _sd2["tldr"] == _sd["tldr"], _stuffed(_sd2))
+
+# A verdict cached before a word was banned (or by code that skipped the gate)
+# has the word in its row. The row is left as it was written and every read of
+# it is clean: the API, the page, the lists, the card.
+_OLD_BD = {k: v for k, v in _sd["breakdown"].items() if k not in ("concluded", "contents")}
+_OLD_BD.update(evidence=["A robust trial leveraged a data-driven design (Study 1)."],
+               strength="Robust and seamless, a testament to the landscape (Studies 1, 2).",
+               says=["Studies delve into actionable solutions (Study 1)."],
+               unknowns="Whether it can unlock lasting benefits (Study 2).")
+_OLD_ARGS = ("old stuffed row", "q", "complicated", "Leveraging a data-driven landscape (Study 1).",
+             ["K1", "K2"], _STUFF_STUDIES)
+db.put_cached_verdict(*_OLD_ARGS, tldr="A robust, seamless result.",
+                      still_open="Whether it can unlock more.", breakdown=_OLD_BD)
+with db.get_conn() as conn:
+    _row = conn.execute("select tldr, explanation, breakdown_json from verdict_cache "
+                        "where claim_key = ?", (db.normalize_claim("old stuffed row"),)).fetchone()
+t("an old cached row still holds the words as it was written",
+  "robust" in _row["tldr"] and "Leveraging" in _row["explanation"] and "robust" in _row["breakdown_json"])
+_old_key = db.normalize_claim("old stuffed row")
+_old_reads = {"get_cached_verdict": db.get_cached_verdict("old stuffed row", 24),
+              "get_cached_by_key": db.get_cached_by_key(_old_key),
+              "recent_verdicts": next(v for v in db.recent_verdicts(50) if v["claim_text"] == "old stuffed row")}
+t("  but every way the database hands it back is clean",
+  all(_stuffed(v) == [] for v in _old_reads.values())
+  and _old_reads["get_cached_verdict"]["tldr"] == "A smooth result."
+  and _old_reads["get_cached_by_key"]["explanation"] == "Using a data-based picture (Study 1).",
+  {k: _stuffed(v) for k, v in _old_reads.items()})
+_oldd = P("old stuffed row", ip="6.6.6.3").get_json()
+t("  and so is the API, which still gives the studies' own titles",
+  _oldd["cached"] is True and _stuffed(_oldd) == [] and _oldd["tldr"] == "A smooth result."
+  and _oldd["breakdown"]["strength"] == "Smooth, a sign of the picture (Studies 1, 2)."
+  and _oldd["studies"][0]["title"] == _STUFF_STUDIES[0]["title"], _stuffed(_oldd))
+_oldp = c.get("/?q=old+stuffed+row").get_data(as_text=True)
+t("  and the page it renders, meta tags and markup included",
+  not _BAN.findall(_outside_the_papers(_oldp)) and "A smooth result." in _oldp,
+  _BAN.findall(_outside_the_papers(_oldp)))
+_card = c.get("/og/" + urllib.parse.quote(_old_key) + ".png").data
+_receipt = og.strongest_cited(_STUFF_STUDIES, ["K1", "K2"])
+t("  and so is the share card, which draws the cleaned takeaway and the study's title as published",
+  _card == og._render("old stuffed row", "complicated", "A smooth result.", 2, tuple(_receipt))
+  and _card != og._render("old stuffed row", "complicated", "A robust, seamless result.", 2, tuple(_receipt)))
+t("  and render_card is itself a choke point: any caller's takeaway is cleaned",
+  og.render_card("c", "true", "A robust result.", 1) == og.render_card("c", "true", "A result.", 1))
+
+# A line that code wrote after the gates, here the one the health bodies' view
+# becomes, is still cleaned by the last pass over the finished result.
+_copy2 = _Catch()
+logging.getLogger("evident.copy").addHandler(_copy2)
+verdict.guideline_view = lambda claim: {"verdict": "false", "bodies": ["WHO"],
+                                        "says": "vaccines are not linked to autism in any robust study."}
+fg.models.script = [Resp(VJ("true", [1, 2]))]
+_gl = verdict.weigh_evidence("Vaccines cause autism", _STUFF_STUDIES, "vaccines AND autism")
+verdict.guideline_view = lambda claim: None
+logging.getLogger("evident.copy").removeHandler(_copy2)
+t("the last pass cleans a line no earlier gate saw, and logs that it had to",
+  _gl["verdict"] == "false" and _stuffed(_gl) == []
+  and _gl["tldr"] == "Major health guidelines say: vaccines are not linked to autism in any study."
+  and any("last pass" in x and "robust" in x for x in _copy2.lines), (_gl["tldr"], _copy2.lines))
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+# The pages and scripts that ship carry none of the words either.
+_ship = {p: c.get(p).get_data(as_text=True) for p in ("/", "/checks", "/privacy", "/llms.txt", "/no-such-page")}
+# (The recent checks on these pages show the studies' titles as published, and
+# the two checks above have banned words in theirs.)
+t("the home page, the checker, the privacy page and the 404 carry none of the banned words",
+  all(not _BAN.findall(_outside_the_papers(h)) for h in _ship.values()),
+  {p: _BAN.findall(_outside_the_papers(h)) for p, h in _ship.items()})
+t("  nor does the script that draws a result and builds the share text, nor the stylesheet",
+  not _BAN.findall((ROOT / "static" / "app.js").read_text())
+  and not _BAN.findall((ROOT / "static" / "style.css").read_text()))
 
 # ---- readable without JavaScript, and to crawlers --------------------------------
 html = c.get("/?q=streamed%20claim").data.decode()

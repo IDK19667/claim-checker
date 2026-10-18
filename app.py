@@ -16,6 +16,7 @@ from flask import (Flask, Response, g, jsonify, redirect, render_template, reque
                    send_from_directory)
 
 import breakdown as breakdown_mod
+import copyrules
 import db
 import evidence
 import og
@@ -581,7 +582,13 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # its authors' words, and the line saying what the fold holds.
         breakdown = {**breakdown, "concluded": evidence.conclusions(studies, cited)}
         breakdown["contents"] = breakdown_mod.contents(breakdown)
-    return {
+    # Everything below goes out through the banned-word table once more, as
+    # the last thing that happens to it: the conclusions are excerpts of
+    # abstracts, the chart's words are code's, and a cached verdict may be
+    # older than a rule. The claim, the search and the studies' own titles
+    # and abstracts are not ours to reword and are left as written, and so
+    # are the pieces of the claim the breakdown quotes back.
+    return copyrules.clean_payload({
         "claim": claim,
         # What the reader typed, present only when its spelling was fixed
         # and the check ran on the corrected claim, so the page can say so.
@@ -615,7 +622,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
         "studies": [_study_payload(s, cited) for s in studies],
-    }
+    }, claim)
 
 
 def _outcome_group(search_query) -> str:

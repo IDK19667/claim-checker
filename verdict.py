@@ -27,6 +27,7 @@ import os
 import re
 
 import breakdown
+import copyrules
 import evidence
 import pubmed
 
@@ -1178,32 +1179,16 @@ _FILLER = re.compile(
 )
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"\u201c(])")
 
-# Words this product never says (the copy rules in CLAUDE.md). Flagged, not
-# rewritten: swapping one word for another can change what a sentence
-# claims, and a verdict's wording is not ours to guess at. The flag is a log
-# line naming the words, never the text, so the prompt can be fixed against
-# it. "elevated" and "elevation" are left out on purpose: elevated blood
-# pressure is a finding, not a sales word.
-BANNED_WORDS = ("leverage", "seamless", "empower", "unlock", "robust",
-                "actionable", "data-driven", "solutions", "testament",
-                "landscape", "delve", "elevate")
-_BANNED = re.compile(
-    r"\b(?:leverag(?:e|es|ed|ing)|seamless(?:ly)?|empower\w*|unlock\w*|robust\w*"
-    r"|actionable|data-driven|solutions|testaments?|landscapes?"
-    r"|delv(?:e|es|ed|ing)|elevate|elevates|elevating)\b",
-    re.IGNORECASE,
-)
+# Words this product never says (the copy rules in CLAUDE.md). The list, the
+# plain words that replace each one and the walk that applies them to a whole
+# result live in copyrules.py, because the database and the page need them
+# too and must not import this module. tidy_prose below replaces them in model
+# prose as it arrives, still logging which ones the model used (the words,
+# never the text) so the prompt can be fixed against it; weigh_evidence runs
+# the same table once more over the finished result.
+BANNED_WORDS = copyrules.BANNED_WORDS
+banned_words = copyrules.banned_words
 _copy_log = logging.getLogger("evident.copy")
-
-
-def banned_words(text: str) -> list[str]:
-    """The banned words in `text`, lower-cased, each once, in order of first use."""
-    seen: list[str] = []
-    for m in _BANNED.finditer(text or ""):
-        w = m.group(0).lower()
-        if w not in seen:
-            seen.append(w)
-    return seen
 
 
 def _cap(text: str, limit: int) -> str:
@@ -1221,8 +1206,9 @@ def _cap(text: str, limit: int) -> str:
 def tidy_prose(text: str, limit: int) -> str:
     """
     Strip the tells (filler openers, dashes as punctuation, doubled
-    spaces), make sure the text ends like a sentence, and cap its length
-    at a sentence boundary. Returns "" for empty input.
+    spaces), swap any banned word for plain ones, make sure the text ends
+    like a sentence, and cap its length at a sentence boundary. Returns ""
+    for empty input.
     """
     t = (text or "").strip()
     if not t:
@@ -1258,7 +1244,23 @@ def tidy_prose(text: str, limit: int) -> str:
     hits = banned_words(t)
     if hits:
         _copy_log.warning("model prose used banned words: %s", ", ".join(hits))
+        t = copyrules.clean_text(t)
     return _cap(t, limit)
+
+
+def finish(result: dict, claim: str = "") -> dict:
+    """
+    The last pass over a finished result, so no banned word reaches the page
+    or the cache by a path that skipped tidy_prose: the guideline line, a
+    sentence code wrote, a breakdown field a gate rebuilt. Study titles and
+    abstracts are not in a result, and stay as published wherever they are,
+    and so do the reader's own words where the breakdown quotes the claim.
+    """
+    clean = copyrules.clean_payload(result, claim)
+    if clean != result:
+        _copy_log.warning("banned words reached the finished result, so the last pass "
+                          "replaced them: %s", ", ".join(banned_words(json.dumps(result))))
+    return clean
 
 
 def weigh_evidence(claim: str, studies: list[dict], query: str = "",
@@ -1282,14 +1284,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     check below catches before a reader sees it.
     """
     if not studies:
-        return follow_guidelines(_fallback(
+        return finish(follow_guidelines(_fallback(
             "No relevant studies were found on PubMed for this claim. "
             "That doesn't mean the claim is false, it may just not be "
             "well studied yet, or the search terms need refining.",
             tldr="No published studies on this yet. Unproven, not disproven.",
             still_open="Whether anyone has tested this claim directly. PubMed found nothing that does.",
             verdict="insufficient",
-        ), studies, claim)
+        ), studies, claim), claim)
 
     groups = pubmed.split_and(query or "")
     subject = groups[0] if groups else ""
@@ -1356,7 +1358,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    return follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    return finish(follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim), claim)
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:

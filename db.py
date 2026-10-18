@@ -21,6 +21,8 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
+import copyrules
+
 DB_PATH = os.environ.get("DB_PATH", "health_claim_checker.db")
 
 SCHEMA = """
@@ -168,9 +170,9 @@ def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
     return {
         "search_query": row["search_query"],
         "verdict": row["verdict"],
-        "tldr": row["tldr"] or "",
-        "explanation": row["explanation"],
-        "still_open": row["still_open"] or "",
+        "tldr": _prose(row["tldr"]),
+        "explanation": copyrules.clean_text(row["explanation"]),
+        "still_open": _prose(row["still_open"]),
         "breakdown": _breakdown(row),
         "cited_studies": json.loads(row["cited_json"] or "[]"),
         "studies": json.loads(row["studies_json"] or "[]"),
@@ -194,7 +196,16 @@ def _breakdown(row) -> dict | None:
         parsed = json.loads(raw)
     except (ValueError, TypeError):
         return None
-    return parsed if isinstance(parsed, dict) else None
+    # The breakdown quotes the claim part by part; those pieces are the reader's.
+    return copyrules.clean_payload(parsed, row["claim_text"]) if isinstance(parsed, dict) else None
+
+
+# Every line of prose a row hands back goes through the banned-word table
+# (copyrules.py) on the way out, not on the way in. A verdict cached before a
+# word was banned, or by code that skipped the gate, is served clean, and the
+# stored row is left exactly as it was written.
+def _prose(text):
+    return copyrules.clean_text(text or "")
 
 
 def put_cached_verdict(
@@ -288,9 +299,9 @@ def get_cached_by_key(claim_key: str) -> dict | None:
     return {
         "claim_text": row["claim_text"],
         "verdict": row["verdict"],
-        "tldr": row["tldr"] or "",
-        "explanation": row["explanation"],
-        "still_open": row["still_open"] or "",
+        "tldr": _prose(row["tldr"]),
+        "explanation": copyrules.clean_text(row["explanation"]),
+        "still_open": _prose(row["still_open"]),
         "breakdown": _breakdown(row),
         "cited_studies": json.loads(row["cited_json"] or "[]"),
         "studies": json.loads(row["studies_json"] or "[]"),
@@ -368,8 +379,8 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
         except (ValueError, TypeError):
             studies, cited = [], []
         out.append({"issue": r["issue"], "claim_text": r["claim_text"],
-                    "verdict": r["verdict"], "tldr": r["tldr"] or "",
-                    "still_open": r["still_open"] or "",
+                    "verdict": r["verdict"], "tldr": _prose(r["tldr"]),
+                    "still_open": _prose(r["still_open"]),
                     "created_at": r["created_at"],
                     "studies": studies, "cited": cited})
     return out

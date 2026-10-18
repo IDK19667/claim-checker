@@ -154,6 +154,7 @@ pubmed.py         PubMed E-utilities wrapper, XML parsing, broadened retry
 ratelimit.py      In-memory sliding windows (per IP + global + feedback)
 db.py             SQLite: verdict_cache, anonymous checks log, feedback
 evidence.py       what kind of study it is, and the snapshot figures
+copyrules.py     the banned-word table, applied to every line a reader sees
 og.py             Pillow renderer for link-preview cards
 templates/        index.html (the single page + two bottom sheets),
                   privacy.html

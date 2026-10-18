@@ -38,6 +38,7 @@ accounts, installable as a PWA. See `PRODUCT.md`.
 ```
 app.py            routes, the check pipeline as a stage generator
 verdict.py        the two AI calls, the JSON schema, the prose gate
+copyrules.py     the banned-word table and the pass that enforces it
 pubmed.py         search + fetch + broadening fallback
 db.py             verdict cache, anonymous check log, feedback
 og.py             link-preview cards (Pillow, server-side)
