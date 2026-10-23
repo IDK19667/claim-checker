@@ -2118,14 +2118,20 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
             part["assessment"] = readable(part.get("assessment")) or left_out
         deeper = breakdown.settle_effect(deeper)
 
-    # The evidence line says "Limited" when the trials were small and
-    # "Observational" when no trial was among them. The prose follows it,
-    # so the page never says strong in one place and limited in another.
-    # Last of all, after every gate has checked its figures: it only swaps
-    # words and cannot add a number.
-    level = evidence.level_word(studies, cited_pmids)
-    if level in ("Limited", "Observational"):
-        said = lambda text: breakdown.temper(text, level)
+    # The evidence line opens "Strong" only over randomized trials, or
+    # reviews of them, that no review rates low; otherwise it says Moderate,
+    # Limited, Weak, Observational or a certainty. The prose follows it, so
+    # the page never says strong in one place and something weaker in
+    # another. The opening comes from evidence.line_head, the same helper
+    # the line is built from, with the same inputs app.py gives it: the
+    # final verdict, whether the claim compares two things, and the query's
+    # outcome group. Last of all, after every gate has checked its figures:
+    # it only swaps words and cannot add a number.
+    head = evidence.line_head(
+        verdict, studies, cited_pmids, bool(breakdown._COMPARATIVE_CLAIM.search(claim or "")),
+        outcome)
+    if breakdown.temper_words(head):
+        said = lambda text: breakdown.temper(text, head)
         tldr, explanation, still_open = said(tldr), said(explanation), said(still_open)
         if deeper is not None:
             for key in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):

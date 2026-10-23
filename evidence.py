@@ -1034,18 +1034,21 @@ def observational_only(studies, cited_pmids=()) -> bool:
     return evidence_basis(studies, cited_pmids) == "observational"
 
 
-def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
-                  effect_label: str | None = None, absolute: str = "",
-                  comparative: bool = False, outcome: str = "") -> str:
+def line_head(verdict: str, studies, cited_pmids=(), comparative: bool = False,
+              outcome: str = "") -> str:
     """
-    What the evidence used shows about the claim, as one short line with no
-    full stop, or "" when nothing was used (the page says "no direct
-    evidence" there). `absolute` is the claim's promise ("cure"), from
-    breakdown.absolute_claim; `effect_label` is the breakdown's size label;
-    `outcome` is the query's outcome group.
+    How the evidence line opens: "Strong evidence", "Moderate evidence",
+    "Low certainty evidence", "Evidence from observational studies (can't
+    show cause)" and the rest, or "" when nothing was used. The line and the
+    prose gate (verdict._read_verdict) both read it from here, so the page
+    can never say strong in the takeaway and moderate under the chart.
+    `comparative` and `outcome` are the same inputs the verdict's own cap
+    reads: whether the claim compares two things, and the query's outcome
+    group. `verdict` only matters to the cap that blames other factors,
+    which weakens a "true" and not a "false".
     """
     level = level_word(studies, cited_pmids)
-    if not level or verdict not in ("true", "false", "complicated"):
+    if not level:
         return ""
     # What the line opens with. Observational evidence says what it is and
     # what it cannot show; everything else is "<word> evidence".
@@ -1078,6 +1081,22 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # the lead one.
     elif lead not in ("low", "very low") and rated_low_on_outcome(studies, cited_pmids, outcome):
         head = f"Low certainty evidence{via}"
+    return head
+
+
+def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
+                  effect_label: str | None = None, absolute: str = "",
+                  comparative: bool = False, outcome: str = "") -> str:
+    """
+    What the evidence used shows about the claim, as one short line with no
+    full stop, or "" when nothing was used (the page says "no direct
+    evidence" there). `absolute` is the claim's promise ("cure"), from
+    breakdown.absolute_claim; `effect_label` is the breakdown's size label;
+    `outcome` is the query's outcome group. The opening is line_head's.
+    """
+    head = line_head(verdict, studies, cited_pmids, comparative, outcome)
+    if not head or verdict not in ("true", "false", "complicated"):
+        return ""
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
                    "what the claim promises") if absolute else ""

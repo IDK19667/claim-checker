@@ -1323,14 +1323,17 @@ def soften(text: str) -> str:
 # ---------------------------------------------------------------------
 # The prose never calls the evidence stronger than the evidence line does.
 #
-# `evidence.level_word` reads the designs behind a verdict and says
-# "Limited" when the trials were small and "Observational" when no trial
-# was among them. A model that has read a cohort meta-analysis still says
-# "strong evidence", and the page would then say Limited in one place and
-# strong in another. Like soften(), every swap here is weaker than what it
-# replaces and is left alone under a negation or a wish ("no strong
+# `evidence.line_head` reads the designs and the reviews' own ratings behind
+# a verdict and opens the line with "Strong evidence", "Moderate evidence",
+# "Limited evidence", "Low certainty evidence" and so on. A model that has
+# read a cohort meta-analysis, or a trial review rated low, still says
+# "strong evidence", and the page would then say strong in one place and
+# something weaker in another. Like soften(), every swap here is weaker than
+# what it replaces and is left alone under a negation or a wish ("no strong
 # evidence", "stronger evidence is needed"), so it can only pull a sentence
-# back towards the line.
+# back towards the line. Only a Strong or High certainty opening leaves the
+# prose alone: "strong evidence" is for randomized trials, or reviews of
+# them, that no review rates low.
 # ---------------------------------------------------------------------
 
 _PRAISE = (r"(?:strong|robust|solid|compelling|convincing|conclusive|definitive|"
@@ -1342,7 +1345,7 @@ _EVIDENCE_OF_QUALITY = re.compile(
     re.IGNORECASE)
 _EVIDENCE_IS_STRONG = re.compile(
     rf"\b((?:evidence|findings|results|data|support|body of evidence)\s+"
-    rf"(?:is|are|was|were|looks|seems|appears|remains))\s+{_PRAISE_ADVERB}{_PRAISE}\b",
+    rf"(?:is|are|was|were|looks|seems|appears|remains))\s+(?:of\s+)?{_PRAISE_ADVERB}{_PRAISE}\b",
     re.IGNORECASE)
 _PRAISED_STUDIES = re.compile(
     rf"\b{_PRAISE}\s+(?=(?:data|findings|results|studies|trials|research|meta-analyses|"
@@ -1358,21 +1361,59 @@ _WISHED_BEFORE = re.compile(
 _DENIED_AFTER = re.compile(
     r"^(?:(?!\b(?:and|but|while|yet)\b)[^.;:,]){0,50}?\b(?:is|are|was|were|remains?)\s+(?:still\s+)?"
     r"(?:lacking|missing|absent|needed|required|wanting|scarce|rare|not)\b", re.IGNORECASE)
-_TEMPER_WORD = {"Limited": "limited", "Observational": "observational"}
+_HEAD_CERTAINTY = re.compile(
+    r"^(?P<span>[a-z ]+?) certainty evidence(?P<via> from observational studies.*)?$")
+_HEAD_PLAIN = re.compile(r"^(?P<word>[a-z]+)(?: evidence)?$")
+_HEAD_OBSERVATIONAL = re.compile(r"^evidence from observational studies")
 
 
-def temper(text: str, level: str) -> str:
+def temper_words(head: str) -> tuple[str, str] | None:
+    """
+    The words the prose takes from the evidence line, or None when the line
+    opens Strong or High certainty (or not at all) and the prose stands.
+    `head` is evidence.line_head's opening ("Moderate evidence", "Low
+    certainty evidence from observational studies (can't show cause)"); a
+    bare level word ("Limited", "Observational") reads the same way.
+
+    Returns (before a noun, after "evidence is"): ("moderate", "moderate"),
+    ("low certainty", "of low certainty"), ("low certainty observational",
+    "observational and of low certainty").
+    """
+    h = " ".join((head or "").lower().split())
+    if not h:
+        return None
+    if _HEAD_OBSERVATIONAL.match(h):
+        return "observational", "observational"
+    m = _HEAD_CERTAINTY.match(h)
+    if m:
+        span = m.group("span")
+        if span == "high":
+            return None
+        if m.group("via"):
+            return f"{span} certainty observational", f"observational and of {span} certainty"
+        return f"{span} certainty", f"of {span} certainty"
+    m = _HEAD_PLAIN.match(h)
+    if m and m.group("word") not in ("strong", "high"):
+        return m.group("word"), m.group("word")
+    return None
+
+
+def temper(text: str, head: str) -> str:
     """
     Take "strong evidence" and its relatives out of a sentence when the
-    evidence line says `level` ("Limited" or "Observational"). Any other
-    level leaves the text alone. The words are swapped for the line's own:
-    "There is strong evidence that coffee lowers risk" becomes "There is
-    observational evidence that coffee lowers risk".
+    evidence line opens with anything but Strong or High certainty. The
+    words are swapped for the line's own: under "Evidence from
+    observational studies (can't show cause)", "There is strong evidence
+    that coffee lowers risk" becomes "There is observational evidence that
+    coffee lowers risk"; under "Low certainty evidence", "low certainty
+    evidence". A Strong or High certainty line, or none, leaves the text
+    alone.
     """
     t = text or ""
-    if not t or level not in _TEMPER_WORD:
+    words = temper_words(head) if t else None
+    if not words:
         return t
-    word = _TEMPER_WORD[level]
+    word, after_is = words
 
     def held(m: re.Match) -> bool:
         head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
@@ -1390,7 +1431,7 @@ def temper(text: str, level: str) -> str:
         return m.group(0) if held(m) else f"{word} evidence"
 
     def predicate(m: re.Match) -> str:
-        return m.group(0) if held(m) else f"{m.group(1)} {word}"
+        return m.group(0) if held(m) else f"{m.group(1)} {after_is}"
 
     def dropped(m: re.Match) -> str:
         return m.group(0) if held(m) else ""

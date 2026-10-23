@@ -3157,9 +3157,70 @@ fg.models.script = [Resp(VJ("true", [1], tldr="Strong evidence says ginger reduc
                             explanation="High-quality evidence from cohorts shows less vomiting (Study 1).",
                             strength="The evidence is strong (Study 1)."))]
 _low_obs = verdict.weigh_evidence("Ginger reduces vomiting", [dict(_COHORT_LOW)], "(ginger) AND (vomiting)")
-t("  and the prose is still held to observational, not strong",
+t("  and the prose is still held to observational and low certainty, not strong",
   "trong" not in json.dumps(_low_obs) and "high-quality" not in json.dumps(_low_obs)
-  and _low_obs["tldr"].startswith("Observational evidence says"), _low_obs)
+  and _low_obs["tldr"].startswith("Low certainty observational evidence says"), _low_obs)
+
+# The prose follows the line's opening, whatever it is. "Strong evidence" is
+# for randomized trials, or reviews of them, that no review rates low; every
+# other opening pulls the takeaway back to its own word.
+_tp = breakdown.temper
+_OBS_LOW = "Low certainty evidence from observational studies (can't show cause)"
+t("the prose gate takes its word from whatever the line opens with, except Strong and High certainty",
+  _tp("There is strong evidence it works.", "Moderate evidence") == "There is moderate evidence it works."
+  and _tp("Strong evidence shows a drop.", "Weak evidence") == "Weak evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", "Limited evidence") == "Limited evidence shows a drop."
+  and _tp("High-certainty evidence shows a drop.", "Low certainty evidence")
+  == "Low certainty evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", "Very low certainty evidence")
+  == "Very low certainty evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", "Moderate certainty evidence")
+  == "Moderate certainty evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", "Very low to low certainty evidence")
+  == "Very low to low certainty evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", "Evidence from observational studies (can't show cause)")
+  == "Observational evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", _OBS_LOW) == "Low certainty observational evidence shows a drop."
+  and _tp("The evidence is strong.", "Moderate evidence") == "The evidence is moderate."
+  and _tp("The evidence is strong.", "Low certainty evidence") == "The evidence is of low certainty."
+  and _tp("The evidence is strong.", _OBS_LOW) == "The evidence is observational and of low certainty."
+  and _tp("The evidence is of high quality.", "Weak evidence") == "The evidence is weak."
+  and all(_tp(x, "Low certainty evidence") == x for x in (
+      "There is no strong evidence that it works.", "The evidence is not strong.",
+      "Stronger evidence is needed to be sure.", "Strong evidence for the claim is lacking.",
+      "It does not strongly suggest a benefit."))
+  and _tp("Strong evidence shows a drop.", "Strong evidence") == "Strong evidence shows a drop."
+  and _tp("Strong evidence shows a drop.", "High certainty evidence") == "Strong evidence shows a drop.")
+fg.models.script = [Resp(VJ("true", [1], tldr="Strong evidence says ginger helps nausea.",
+                            explanation="High-quality evidence shows less nausea (Study 1). The evidence is strong.",
+                            strength="The evidence is strong (Study 1)."))]
+_mixed = verdict.weigh_evidence("Ginger helps nausea", [dict(_NONRANDOM)], "(ginger) AND (nausea)")
+t("  a mixed-design verdict whose takeaway says strong evidence comes out moderate evidence",
+  evidence.line_head("true", [_NONRANDOM], ["NR1"]) == "Moderate evidence"
+  and _mixed["tldr"].startswith("Moderate evidence says ginger helps nausea")
+  and "The evidence is moderate" in _mixed["explanation"]
+  and "trong" not in json.dumps(_mixed) and "high-quality" not in json.dumps(_mixed), _mixed)
+fg.models.script = [Resp(VJ("true", [1], tldr="High-certainty evidence says ginger reduces vomiting.",
+                            explanation="Evidence of high certainty shows less vomiting (Study 1).",
+                            strength="The evidence is strong (Study 1)."))]
+_lowrev = verdict.weigh_evidence("Ginger reduces vomiting", [dict(_REV_LOW)], "(ginger) AND (vomiting)")
+t("  a trial review rated low, with high-certainty evidence in the prose, comes out low certainty evidence",
+  evidence.line_head(_lowrev["verdict"], [_REV_LOW], ["RL1"], False, _V) == "Low certainty evidence"
+  and _lowrev["tldr"].startswith("Low certainty evidence says ginger reduces vomiting")
+  and "low certainty evidence shows less vomiting" in _lowrev["explanation"].lower()
+  and "trong" not in json.dumps(_lowrev) and "high-certainty" not in json.dumps(_lowrev).lower()
+  and "high certainty" not in json.dumps(_lowrev).lower(), _lowrev)
+_RCT_COLDS = _study("RC1", "Vitamin C and colds: a randomized trial",
+                    abstract="METHODS: 1,817 adults were randomized to vitamin C or placebo. RESULTS: Fewer colds.")
+fg.models.script = [Resp(VJ("true", [1], tldr="Strong evidence says vitamin C prevents colds.",
+                            explanation="High-quality evidence shows fewer colds (Study 1). The evidence is strong.",
+                            strength="The evidence is strong (Study 1)."))]
+_strong = verdict.weigh_evidence("Vitamin C prevents colds", [dict(_RCT_COLDS)], "(vitamin C) AND (colds)")
+t("  and a Strong line leaves strong evidence alone",
+  evidence.line_head("true", [_RCT_COLDS], ["RC1"]) == "Strong evidence"
+  and _strong["tldr"].startswith("Strong evidence says vitamin C")
+  and "High-quality evidence shows fewer colds" in _strong["explanation"]
+  and "The evidence is strong" in _strong["explanation"], _strong)
 t("rule 5: the rest of the line is kept, whichever way it opens",
   _line("false", [_COHORT_MA], ["CO1"], "Coffee cures diabetes", effect_label="small", absolute="cure")
   == "Evidence from observational studies (can't show cause) of a small effect, not a cure"
@@ -3232,7 +3293,11 @@ t("  and it leaves a negation, a wish, a denial and any other level alone",
       "They lack strong evidence.", "Strong evidence for the claim is lacking.",
       "It does not strongly suggest a benefit.", "The strongest studies here support this claim."))
   and _tp("There is strong evidence that it works.", "Strong") == "There is strong evidence that it works."
-  and _tp("There is strong evidence that it works.", "Moderate") == "There is strong evidence that it works."
+  and _tp("There is strong evidence that it works.", "Strong evidence")
+  == "There is strong evidence that it works."
+  and _tp("There is strong evidence that it works.", "High certainty evidence")
+  == "There is strong evidence that it works."
+  and _tp("There is strong evidence that it works.", "") == "There is strong evidence that it works."
   and _tp("", "Limited") == "" and _tp(None, "Limited") == "")
 fg.models.script = [Resp(VJ(
     "true", [1], tldr="Strong evidence says coffee lowers the risk of type 2 diabetes.",
