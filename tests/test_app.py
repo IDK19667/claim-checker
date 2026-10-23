@@ -3042,10 +3042,10 @@ t("a figure with three decimals is rounded, and an HbA1c change with no unit is 
 t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its interval",
   _fr("Study 1 showed drops in fasting blood sugar with a weighted mean difference of -21.929 mg/dL "
       "and HbA1c with -1.53.", _ACV_R)
-  == "Study 1 showed drops in fasting blood sugar with an average difference of about -22 mg/dL."
+  == "Study 1 showed drops in fasting blood sugar with an average difference of about 22 mg/dL."
   and _fr("Fasting blood sugar was reduced by -21.929 mg/dL (95% CI: -29.19, -14.67) (Study 1). HbA1c "
           "was reduced by a weighted mean difference of -1.53 (95% CI: -2.65, -0.41) (Study 1).", _ACV_R)
-  == "Fasting blood sugar was reduced by about 22 mg/dL (likely range: 29, 15) (Study 1)."
+  == "Fasting blood sugar was reduced by about 22 mg/dL (likely range 15 to 29) (Study 1)."
   and _fr("In Study 1, fasting blood sugar fell by 21.929 mg/dL, and HbA1c fell by 1.53 "
           "(95% CI -2.65 to -0.41).", _ACV_R) == "In Study 1, fasting blood sugar fell by about 22 mg/dL.")
 t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure to keep",
@@ -3792,16 +3792,60 @@ t("  a fall is not given a minus sign as well, nor is its range or what it is co
   and breakdown.house_style("Triglycerides had a drop of -1.51 mmol per liter compared to -0.66 (Study 8).")
   == "Triglycerides had a drop of 1.51 mmol per liter compared to 0.66 (Study 8)."
   and breakdown.house_style("LDL fell by -0.33 mmol/L (95% CI -0.38 to -0.27) (Study 1).")
-  == "LDL fell by 0.33 mmol/L (likely range 0.38 to 0.27) (Study 1).")
+  == "LDL fell by 0.33 mmol/L (likely range 0.27 to 0.38) (Study 1).")
 t("  but a range that crosses zero keeps every sign, the fall's too",
   breakdown.house_style("Pain fell by -1.2 points (95% CI -2.0 to 0.4) (Study 2).")
   == "Pain fell by -1.2 points (likely range -2.0 to 0.4) (Study 2).")
 t("  a fall written without its sign loses the signs on its range too, unless it crosses zero",
   breakdown.house_style("Fasting blood sugar dropped by about 22 mg/dL (likely range -29 to -15) (Study 2).")
-  == "Fasting blood sugar dropped by about 22 mg/dL (likely range 29 to 15) (Study 2)."
+  == "Fasting blood sugar dropped by about 22 mg/dL (likely range 15 to 29) (Study 2)."
   and breakdown.house_style("Pain fell by 1.2 points (likely range -2.0 to 0.4) (Study 2).")
   == "Pain fell by 1.2 points (likely range -2.0 to 0.4) (Study 2)."
   and breakdown.house_style("Weight fell by 2 kg (Study 3).") == "Weight fell by 2 kg (Study 3).")
+# Holdout #3 page 17: the first fall lost its minus and its range's ("likely
+# range 4.17; 0.88 mmHg", the wrong way round and without a word to join
+# them), while the second, in the same sentence, kept both.
+t("  every fall in a sentence is unsigned, the one without a verb of its own too, ranges smaller end first",
+  breakdown.house_style("Systolic blood pressure decreased by -2.52 mmHg (95% CI -4.17; -0.88 mmHg) and "
+                        "diastolic blood pressure by -1.58 mmHg (95% CI -2.54; -0.62 mmHg) (Study 1).")
+  == "Systolic blood pressure decreased by 2.52 mmHg (likely range 0.88 to 4.17 mmHg) and "
+     "diastolic blood pressure by 1.58 mmHg (likely range 0.62 to 2.54 mmHg) (Study 1)."
+  and breakdown.house_style("LDL fell by -0.3 mmol/L and triglycerides fell by -0.5 mmol/L, and HDL "
+                            "was unchanged (Study 2).")
+  == "LDL fell by 0.3 mmol/L and triglycerides fell by 0.5 mmol/L, and HDL was unchanged (Study 2).")
+t("  a verb with its thing before 'by' is a fall too, and so is 'lower by'",
+  breakdown.house_style("Cocoa reduced systolic blood pressure by -2.52 mmHg (95% CI -4.17 to -0.88) (Study 1).")
+  == "Cocoa reduced systolic blood pressure by 2.52 mmHg (likely range 0.88 to 4.17) (Study 1)."
+  and breakdown.house_style("Weight was lower by -2.1 kg (95% CI -3.0 to -1.2) (Study 4).")
+  == "Weight was lower by 2.1 kg (likely range 1.2 to 3.0) (Study 4)."
+  and breakdown.house_style("Statins lowers LDL by -0.8 mmol/L (Study 3).")
+  == "Statins lower LDL by 0.8 mmol/L (Study 3).")
+t("  a fall by a named difference is not a double negative: 'reduced by an average difference of -22'",
+  breakdown.house_style("Fasting blood sugar was reduced by a weighted mean difference of -21.9 mg/dL (Study 1).")
+  == "Fasting blood sugar was reduced by an average difference of 21.9 mg/dL (Study 1).")
+t("  a figure that is not a fall keeps its minus, and so does a rise after a fall",
+  breakdown.house_style("Blood pressure changed by -2.52 mmHg (95% CI -4.17; -0.88 mmHg) (Study 1).")
+  == "Blood pressure changed by -2.52 mmHg (likely range -4.17 to -0.88 mmHg) (Study 1)."
+  and breakdown.house_style("LDL fell by -0.3 mmol/L and HDL rose by -0.1 mmol/L (Study 2).")
+  == "LDL fell by 0.3 mmol/L and HDL rose by -0.1 mmol/L (Study 2).")
+t("  a clause with its own verb after a fall is left alone, a rise is not made a fall",
+  breakdown.house_style("Pain fell by -1.2 points and sleep improved by -0.5 hours (Study 2).")
+  == "Pain fell by 1.2 points and sleep improved by -0.5 hours (Study 2).")
+# Holdout #3 pages 13, 17 and 18: "95% CI=0.79, 0.88", "95% CI: 0.52, 0.91" and
+# "95% CI, 0.04-0.53" read as a sum or a list, not as the ends of a range.
+t("  the ends of a likely range are joined by 'to' whatever the model wrote between them",
+  breakdown.house_style("The odds were 17% lower (95% CI=0.79, 0.88) (Study 2).")
+  == "The odds were 17% lower (likely range 0.79 to 0.88) (Study 2)."
+  and breakdown.house_style("Smoking fell (95% CI: 0.52, 0.91) (Study 8).")
+  == "Smoking fell (likely range 0.52 to 0.91) (Study 8)."
+  and breakdown.house_style("The effect was small (95% CI, 0.04-0.53) (Study 1).")
+  == "The effect was small (likely range 0.04 to 0.53) (Study 1).")
+t("  a range already said with 'to', a thousand with its comma, and a range with no figures are not touched",
+  breakdown.house_style("Risk was no different (95% CI 0.92 to 1.06) (Study 1).")
+  == "Risk was no different (likely range 0.92 to 1.06) (Study 1)."
+  and breakdown.house_style("People walked more (likely range 1,234 to 1,300 steps) (Study 2).")
+  == "People walked more (likely range 1,234 to 1,300 steps) (Study 2)."
+  and breakdown.house_style("The likely range was wide (Study 3).") == "The likely range was wide (Study 3).")
 t("  and a word the plain name doubled is said once",
   breakdown.house_style("A large pooled pooled review (meta-analysis) found less pain (Study 1).")
   == "A large pooled review (meta-analysis) found less pain (Study 1).")

@@ -2719,11 +2719,34 @@ _SAID_TWICE = re.compile(r"\b(\w{4,})\s+\1\b", re.IGNORECASE)
 # "A drop of -5.31 mm Hg" says the fall twice, once in the word and once in
 # the sign, and read literally it is a rise. After a word that already says
 # down, the minus goes, and so does the minus on the figure it is compared to.
+#
+# The word may have its thing straight after it ("reduced systolic blood
+# pressure by -2.52", "lowered LDL by -0.3"), and the figure may be named
+# first ("by an average difference of about -22", "by a mean difference of
+# -1.2"): a minus there is the same double negative. A word that says up
+# in between means the fall is not what the figure belongs to.
+_FALLING = (r"(?:drop(?:s|ped|ping)?|fall(?:s|ing)?|fell|decreas(?:e|es|ed|ing)|"
+            r"reduc(?:e|es|ed|ing|tions?)|declin(?:e|es|ed|ing)|loss(?:es)?|"
+            r"lower(?:s|ed|ing)?|cut(?:s|ting)?)")
+_RISING_WORD = r"(?:increas|rais|rose|ris[ei]|gain|improv|higher|greater|more)\w*"
+_OBJECT = r"(?:\s+(?:(?!\b" + _RISING_WORD + r")[^,.;:()\d]){1,60}?)?"
+_FIGURE_NAMED = (r"(?:(?:an?|the)\s+(?:(?:weighted|pooled|average|mean|overall|net|total|"
+                 r"standardi[sz]ed|absolute|adjusted)\s+){0,3}"
+                 r"(?:difference|change|reduction|decrease|drop|effect size|SMD|WMD|MD)"
+                 r"\s+(?:of\s+)?)?")
+_APPROX = r"(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+)?"
 _FALL_BY = re.compile(
-    r"\b(?:drop|fall|decrease|reduction|decline|loss|lowering|cut|"
-    r"dropped|fell|decreased|reduced|lowered|declined)"
-    r"(?:\s+(?:in|of)\s+[^,.;:()\d]{1,60}?)?\s+(?:of|by)\s+"
-    r"(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+)?([-\u2212])?(?=\d)", re.IGNORECASE)
+    r"\b" + _FALLING + _OBJECT + r"\s+(?:of|by)\s+" + _FIGURE_NAMED + _APPROX
+    + r"(?P<sign>[-\u2212])?(?=\d)", re.IGNORECASE)
+# "... by -2.52 mmHg and diastolic blood pressure by -1.58 mmHg": the second
+# clause has no verb of its own, so it falls the way the first one did.
+# Only after a fall has been seen, and never when its words have a verb
+# (or an up word) of their own.
+_FALL_ALSO = re.compile(
+    r"(?:,\s*|\s+)(?:and|while|whereas)\s+(?:(?P<what>[^,.;:()\d]{1,60}?)\s+)?by\s+"
+    + _FIGURE_NAMED + _APPROX + r"(?P<sign>[-\u2212])?(?=\d)", re.IGNORECASE)
+_OWN_VERB = re.compile(r"\b(?:\w+ed|rose|fell|" + _RISING_WORD + r"|" + _FALLING + r")\b",
+                       re.IGNORECASE)
 _COMPARED_SIGN = re.compile(r"(\b(?:compared (?:to|with)|versus|vs\.?)\s+)[-\u2212](?=\d)",
                             re.IGNORECASE)
 
@@ -2731,7 +2754,32 @@ _COMPARED_SIGN = re.compile(r"(\b(?:compared (?:to|with)|versus|vs\.?)\s+)[-\u22
 # The bracket straight after it, when every figure in it is negative: the
 # range of the same fall.
 _RANGE_AFTER = re.compile(r"^(\s*[^()\d]{0,30}?\()([^()]*)\)")
-_SIGNED = re.compile(r"[-\u2212](?=\d)")
+# A figure in a range. A hyphen straight after a digit is the dash between
+# the two ends ("0.04-0.53"), not the minus of the second one.
+_RANGE_NUMBER = re.compile(r"(?:(?<![\d.])[-−])?\d+(?:\.\d+)?")
+# What in a bracket is not an end of the range: the 95% of a 95% CI, and a p value.
+_RANGE_SKIP = re.compile(r"\bp\s*[<=>]\s*[\d.]+|\b9[059]\s?(?:%|percent\b|per cent\b)",
+                         re.IGNORECASE)
+_ENDS_JOIN = re.compile(r"\s*(?:,|;|to|and|-|\u2013)\s*", re.IGNORECASE)
+
+
+def _range_numbers(inside: str) -> list:
+    masked = _RANGE_SKIP.sub(lambda m: "#" * len(m.group(0)), inside)
+    return list(_RANGE_NUMBER.finditer(masked))
+
+
+def _as_range(inside: str) -> str:
+    """Two figures that are the ends of one range, the smaller first and
+    joined by "to": "4.17; 0.88 mmHg" is "0.88 to 4.17 mmHg". Anything else
+    in the bracket is left as it is."""
+    found = _range_numbers(inside)
+    if len(found) != 2:
+        return inside
+    a, b = found
+    if not _ENDS_JOIN.fullmatch(inside[a.end():b.start()]):
+        return inside
+    low, high = sorted((a.group(0), b.group(0)), key=lambda s: float(s.replace("−", "-")))
+    return inside[:a.start()] + low + " to " + high + inside[b.end():]
 
 
 def _unsign_range(rest: str) -> str | None:
@@ -2740,38 +2788,75 @@ def _unsign_range(rest: str) -> str | None:
     m = _RANGE_AFTER.match(rest)
     if not m or re.match(r"\s*Stud(?:y|ies)\b", m.group(2)):
         return rest
-    inside = re.sub(r"\b9[059]\s?(?:%|percent\b|per cent\b)", "", m.group(2))
-    numbers = re.findall(r"[-\u2212]?\d+(?:\.\d+)?", re.sub(r"\bp\s*[<=>]\s*[\d.]+", "", inside))
-    if not numbers:
+    inside = m.group(2)
+    found = _range_numbers(inside)
+    if not found:
         return rest
-    if not all(n[0] in "-\u2212" for n in numbers):
+    if not all(n.group(0)[0] in "-−" for n in found):
         return None
-    return m.group(1) + _SIGNED.sub("", m.group(2)) + ")" + rest[m.end():]
+    # Only the minus of each figure goes, never a dash between two of them.
+    pieces, last = [], 0
+    for n in found:
+        pieces.append(inside[last:n.start()] + n.group(0)[1:])
+        last = n.end()
+    pieces.append(inside[last:])
+    return m.group(1) + _as_range("".join(pieces)) + ")" + rest[m.end():]
+
+
+def _unsign_one(sentence: str, m: re.Match) -> tuple[str, int]:
+    """One fall's figure, its range and what it is compared to, unsigned;
+    with where to look for the next fall."""
+    # "Dropped by about 22 mg/dL (likely range -29 to -15)": the figure is
+    # already unsigned, and its range follows it.
+    if m.group("sign"):
+        head, rest = sentence[:m.start("sign")], sentence[m.end("sign"):]
+    else:
+        head, rest = sentence[:m.end()], sentence[m.end():]
+    figure = re.match(r"[\d.,]+\s*[^\s(]*", rest)
+    cut = figure.end() if figure else 0
+    after = _unsign_range(rest[cut:])
+    if after is None:
+        return sentence, m.end()
+    return head + _COMPARED_SIGN.sub(r"\1", rest[:cut] + after), len(head) + cut
 
 
 def _unsign_falls(text: str) -> str:
     out = []
     for sentence in re.split(r"(?<=[.!?])\s+", text):
-        m = _FALL_BY.search(sentence)
-        if m:
-            # "Dropped by about 22 mg/dL (likely range -29 to -15)": the
-            # figure is already unsigned, and its range follows it.
-            if m.group(1):
-                head, rest = sentence[:m.start(1)], sentence[m.start(1) + 1:]
-            else:
-                head, rest = sentence[:m.end()], sentence[m.end():]
-            figure = re.match(r"[\d.,]+\s*[^\s(]*", rest)
-            cut = figure.end() if figure else 0
-            after = _unsign_range(rest[cut:])
-            if after is not None:
-                sentence = _COMPARED_SIGN.sub(r"\1", head + rest[:cut] + after)
+        # Every fall in the sentence, not only the first: a review gives
+        # systolic and diastolic side by side, and the second had kept its
+        # minus and its range's while the first lost them.
+        pos, fell = 0, False
+        while pos < len(sentence):
+            hits = [_FALL_BY.search(sentence, pos)]
+            also = _FALL_ALSO.search(sentence, pos) if fell else None
+            if also and not (also.group("what") and _OWN_VERB.search(also.group("what"))):
+                hits.append(also)
+            hits = [h for h in hits if h]
+            if not hits:
+                break
+            sentence, pos = _unsign_one(sentence, min(hits, key=lambda h: h.start()))
+            fell = True
         out.append(sentence)
     return " ".join(out)
 
 
+# The range of a statistic, said the same way each time. The model writes
+# "95% CI=0.79, 0.88", "95% CI: 0.52, 0.91" and "95% CI, 0.04-0.53", and
+# those read as a sum or a list, not as the ends of a range.
+_LIKELY_RANGE = re.compile(
+    r"\b(?P<lead>likely range)\s*[=:,]?\s*(?P<a>(?:(?<![\d.])[-−])?\d+(?:\.\d+)?)"
+    r"(?:,\s+|\s*;\s*|\s+to\s+|\s+and\s+|\s*-\s*|\s*\u2013\s*)"
+    r"(?P<b>(?:(?<![\d.])[-−])?\d+(?:\.\d+)?)", re.IGNORECASE)
+
+
+def _say_range(text: str) -> str:
+    return _LIKELY_RANGE.sub(lambda m: f"{m.group('lead')} {m.group('a')} to {m.group('b')}", text)
+
+
 def house_style(text: str) -> str:
     """The last pass over prose a reader sees: commas, plain statistics, agreement."""
-    return _SAID_TWICE.sub(r"\1", agree(unjargon(_unsign_falls(thousands(text or "")))))
+    return _SAID_TWICE.sub(r"\1", agree(_say_range(unjargon(_unsign_falls(thousands(text or ""))))))
 
 
 # The effect line points at figures above it only when one is there. A
