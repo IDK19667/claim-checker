@@ -2872,9 +2872,17 @@ _FIGURE_NAMED = (r"(?:(?:an?|the)\s+(?:(?:weighted|pooled|average|mean|overall|n
                  r"(?:difference|change|reduction|decrease|drop|effect size|SMD|WMD|MD)"
                  r"\s+(?:of\s+)?)?")
 _APPROX = r"(?:about\s+|around\s+|roughly\s+|nearly\s+|almost\s+)?"
+# With no "by" ("dropped -3 to -10", "fell -5 mmHg") the minus is the only
+# sign the figure has, so it is taken only when it follows the fall word
+# directly, and the words between may not be ones that start another thought
+# ("lower than -3" is a level, not a fall).
+_NOT_OBJECT = (r"(?:of|by|than|from|to|at|in|on|with|for|between|and|or|but|versus|vs|"
+               r"compared|after|before|over|under|among|across|during|within|when|if|as)")
+_OBJECT_PLAIN = (r"(?:\s+(?:(?!\b(?:" + _RISING_WORD + r"|" + _NOT_OBJECT
+                 + r")\b)[^,.;:()\d]){1,60}?)?")
 _FALL_BY = re.compile(
-    r"\b" + _FALLING + _OBJECT + r"\s+(?:of|by)\s+" + _FIGURE_NAMED + _APPROX
-    + r"(?P<sign>[-\u2212])?(?=\d)", re.IGNORECASE)
+    r"\b" + _FALLING + r"(?:" + _OBJECT + r"\s+(?:of|by)\s+" + _FIGURE_NAMED + _APPROX
+    + r"|" + _OBJECT_PLAIN + r"\s+(?=[-\u2212]\d))(?P<sign>[-\u2212])?(?=\d)", re.IGNORECASE)
 # "... by -2.52 mmHg and diastolic blood pressure by -1.58 mmHg": the second
 # clause has no verb of its own, so it falls the way the first one did.
 # Only after a fall has been seen, and never when its words have a verb
@@ -2897,6 +2905,10 @@ _RANGE_NUMBER = re.compile(r"(?:(?<![\d.])[-−])?\d+(?:\.\d+)?")
 # What in a bracket is not an end of the range: the 95% of a 95% CI, and a p value.
 _RANGE_SKIP = re.compile(r"\bp\s*[<=>]\s*[\d.]+|\b9[059]\s?(?:%|percent\b|per cent\b)",
                          re.IGNORECASE)
+# "fell by -3 to -10 mmHg": the ends of the range stand bare, with the fall's
+# figure as the first end.
+_BARE_RANGE = re.compile(r"(?P<a>\d+(?:,\d{3})*(?:\.\d+)?)\s+to\s+(?P<sign>[-\u2212])?"
+                         r"(?P<b>\d+(?:,\d{3})*(?:\.\d+)?)")
 _ENDS_JOIN = re.compile(r"\s*(?:,|;|to|and|-|\u2013)\s*", re.IGNORECASE)
 
 
@@ -2949,8 +2961,23 @@ def _unsign_one(sentence: str, m: re.Match) -> tuple[str, int]:
         head, rest = sentence[:m.start("sign")], sentence[m.end("sign"):]
     else:
         head, rest = sentence[:m.end()], sentence[m.end():]
-    figure = re.match(r"[\d.,]+\s*[^\s(]*", rest)
-    cut = figure.end() if figure else 0
+    bare = _BARE_RANGE.match(rest)
+    if bare and (m.group("sign") or bare.group("sign")):
+        # "Fell by -3 to -10 mmHg": both ends of the fall lose the minus, the
+        # smaller first. If only one end is negative the range crosses zero
+        # and the signs carry the meaning, so the sentence stays as written.
+        if not (m.group("sign") and bare.group("sign")):
+            return sentence, m.end()
+        low, high = sorted((bare.group("a"), bare.group("b")),
+                           key=lambda n: float(n.replace(",", "")))
+        said = low + " to " + high
+        tail = rest[bare.end():]
+        unit = re.match(r"\s*[^\s(]*", tail)
+        cut = len(said) + (unit.end() if unit else 0)
+        rest = said + tail
+    else:
+        figure = re.match(r"[\d.,]+\s*[^\s(]*", rest)
+        cut = figure.end() if figure else 0
     after = _unsign_range(rest[cut:])
     if after is None:
         return sentence, m.end()

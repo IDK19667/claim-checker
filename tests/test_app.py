@@ -4129,6 +4129,30 @@ t("  a figure that is not a fall keeps its minus, and so does a rise after a fal
 t("  a clause with its own verb after a fall is left alone, a rise is not made a fall",
   breakdown.house_style("Pain fell by -1.2 points and sleep improved by -0.5 hours (Study 2).")
   == "Pain fell by 1.2 points and sleep improved by -0.5 hours (Study 2).")
+t("  a fall over a bare range loses the minus on both ends, smaller first, with or without 'by'",
+  breakdown.house_style("Systolic pressure fell by -3 to -10 mmHg.") == "Systolic pressure fell by 3 to 10 mmHg."
+  and breakdown.house_style("LDL dropped -3 to -10 mg/dL across trials.")
+  == "LDL dropped 3 to 10 mg/dL across trials."
+  and breakdown.house_style("LDL dropped -3.5 mg/dL across trials.") == "LDL dropped 3.5 mg/dL across trials."
+  and breakdown.house_style("Pain fell by -3 to -10 points and sleep fell by -2 to -4 hours.")
+  == "Pain fell by 3 to 10 points and sleep fell by 2 to 4 hours.")
+t("  the same with the minus sign (U+2212) the model sometimes writes",
+  breakdown.house_style("Systolic pressure fell by −3 to −10 mmHg.") == "Systolic pressure fell by 3 to 10 mmHg."
+  and breakdown.house_style("LDL dropped −3 to −10 mg/dL across trials.")
+  == "LDL dropped 3 to 10 mg/dL across trials.")
+t("  a bare range that crosses zero, a rise, a change and a level keep every sign",
+  breakdown.house_style("Pain fell by -3 to 2 points.") == "Pain fell by -3 to 2 points."
+  and breakdown.house_style("Pain fell -3 to 2 points.") == "Pain fell -3 to 2 points."
+  and breakdown.house_style("Pain rose by -3 to -10 points.") == "Pain rose by -3 to -10 points."
+  and breakdown.house_style("Pain rose -3 to -10 points.") == "Pain rose -3 to -10 points."
+  and breakdown.house_style("Blood pressure changed by -3 to -10 mmHg.")
+  == "Blood pressure changed by -3 to -10 mmHg."
+  and breakdown.house_style("Scores were lower than -3 on the scale.") == "Scores were lower than -3 on the scale.")
+t("  a bare range and the bracket after it are both unsigned, unless the bracket crosses zero",
+  breakdown.house_style("LDL fell by -3 to -10 mg/dL (95% CI -12 to -1) (Study 1).")
+  == "LDL fell by 3 to 10 mg/dL (likely range 1 to 12) (Study 1)."
+  and breakdown.house_style("LDL fell by -3 to -10 mg/dL (95% CI -12 to 1) (Study 1).")
+  == "LDL fell by -3 to -10 mg/dL (likely range -12 to 1) (Study 1).")
 # Holdout #3 pages 13, 17 and 18: "95% CI=0.79, 0.88", "95% CI: 0.52, 0.91" and
 # "95% CI, 0.04-0.53" read as a sum or a list, not as the ends of a range.
 t("  the ends of a likely range are joined by 'to' whatever the model wrote between them",
