@@ -4,6 +4,62 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-22: Accuracy round 4, the wording patterns from holdout #3
+
+Holdout #3 got 18 of 20 verdicts right but only 12 pages fully clean. The
+misses were wording, not verdicts. Each fix below is a general rule with
+tests; none names a claim.
+
+**"Strong evidence" means randomized trials that are not small.** The line
+under the chart opens with one helper, `evidence.line_head`. It says Strong
+only when the studies used are randomized trials, or reviews of them, that
+are not small, and no review rates its evidence low on the claim's outcome.
+Small trials or pilots read "Limited evidence". Studies that only watched
+people read "Evidence from observational studies (can't show cause)". A low
+rating keeps both facts: "Low certainty evidence from observational studies
+(can't show cause)". A review's own "moderate" or "high" stands only over
+trial evidence; it never lifts cohorts or pilots. A low rating always shows.
+Two misreadings were found and closed on the way: a sentence calling for
+future trials is not evidence that trials were done, and "the need for
+high-quality evidence" is not a rating. The meter legend says the same.
+
+**The prose follows the line.** `breakdown.temper` runs last in
+`_read_verdict`. When the line opens with anything but Strong or High
+certainty, "strong", "robust", "high-quality" and "high certainty" evidence
+in the takeaway, the explanation, still open and the breakdown become the
+line's own word ("moderate evidence", "low certainty evidence",
+"observational evidence"). Negations and wishes are left alone ("no strong
+evidence", "stronger evidence is needed"). It only swaps words, so it can
+only weaken a sentence.
+
+**Crediting a study with a finding it never tested is a faithfulness
+problem.** The faithfulness check has a fifth kind, "untested": a line
+that credits a study with an outcome, exposure or comparison its abstract
+never says it tested. Naming it in the background or the aims is not
+testing it. A sentence that cites an off-topic study with only background
+studies beside it is now dropped too (`drop_citing`).
+
+**The banned-word list is enforced in code.** `copyrules.py` holds the list
+(robust, leverage, seamless and the rest) and an ordered table of plain
+swaps that keep the grammar ("robust" before a noun is dropped, after a
+linking verb it becomes "consistent"). It runs on every line a reader sees:
+`tidy_prose`, `verdict.finish`, results read back from the database, the
+API response and the share card. Study titles and abstracts are quoted, not
+written by us, and are left alone. Liquid "solutions" are kept.
+
+**Garbled swaps fixed by rule.** "Efficacy" before a noun becomes "effect"
+("the primary effect endpoint"), never "how well it works" in the middle
+of a noun phrase, and "an efficacy trial" keeps its name; eight more slots
+where a plain-word swap broke a sentence are fixed the same way. A still-open line
+that says the question is closed is replaced with a real open question. A
+fall is unsigned wherever it appears ("fell by 5", not "fell by -5"), and a
+range reads as a range.
+
+Known limits, left on purpose: the chart's "strong" count still names the
+design tier, not the line's word; a review of small trials that never says
+its trials were small still reads Strong, because only a stated size can
+vouch either way; reviews of cohorts beside one sizeable trial read Strong.
+
 ## 2026-10-17: High-stakes claims follow plain health guidance
 
 **A safety set of 15 claims gates every merge.** `tests/safety_claims.json`
