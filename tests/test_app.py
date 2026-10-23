@@ -3120,7 +3120,46 @@ t("rule 4: a review's high or moderate word shows only over trials that are not 
   _line("true", [_COHORT_HIGH], ["CH2"], outcome=_V)
   == "Evidence from observational studies (can't show cause) for this claim"
   and _line("true", [_REV_HIGH], ["RH1"], outcome=_V) == "High certainty evidence for this claim"
-  and _line("true", [_COHORT_LOW], ["CL1"], outcome=_V) == "Low certainty evidence for this claim")
+  and _line("true", [_COHORT_LOW], ["CL1"], outcome=_V)
+  == "Low certainty evidence from observational studies (can't show cause) for this claim")
+_COHORT_VL = _study("CV1", "Ginger: a meta-analysis of cohorts", types=["Meta-Analysis"],
+                    abstract="Twelve cohort studies were pooled. Very low certainty evidence shows ginger "
+                             "reduces vomiting.")
+_COHORT_RANGE = _study("CR1", "Ginger: a meta-analysis of cohorts", types=["Meta-Analysis"],
+                       abstract="Twelve cohort studies were pooled. The certainty of the evidence ranged from "
+                                "very low to low.")
+_OBS = "from observational studies (can't show cause)"
+t("  a low rating over observational studies keeps both facts, whatever the branch",
+  _line("true", [_COHORT_VL], ["CV1"], outcome=_V) == f"Very low certainty evidence {_OBS} for this claim"
+  and _line("true", [_COHORT_RANGE], ["CR1"], outcome=_V)
+  == f"Very low to low certainty evidence {_OBS} for this claim"
+  and _line("true", [_COHORT_LOW], ["CL1"], outcome=_V, effect_label="small")
+  == f"Low certainty evidence {_OBS} for this claim, a small effect"
+  and _line("false", [_COHORT_LOW], ["CL1"], outcome=_V) == f"Low certainty evidence {_OBS} against this claim"
+  and _line("false", [_COHORT_LOW], ["CL1"], outcome=_V, effect_label="none")
+  == f"Low certainty evidence {_OBS} of no clear effect"
+  and _line("false", [_COHORT_LOW], ["CL1"], "Ginger cures nausea", outcome=_V, effect_label="small",
+            absolute="cure") == f"Low certainty evidence {_OBS} of a small effect, not a cure"
+  and _line("complicated", [_COHORT_LOW], ["CL1"], outcome=_V)
+  == f"Low certainty evidence {_OBS}, but no plain yes or no"
+  and _line("complicated", [_COHORT_LOW], ["CL1"], outcome=_V, effect_label="none")
+  == f"Low certainty evidence {_OBS} of no clear effect, but no plain yes or no"
+  and _line("complicated", [_COHORT_LOW], ["CL1"], outcome=_V, effect_label="small")
+  == f"Low certainty evidence {_OBS} of a small effect, but no plain yes or no"
+  and _line("complicated", [_study("CK1", "Vitamin D and colds in children: a meta-analysis of cohort studies",
+                                   types=["Meta-Analysis"],
+                                   abstract="Twelve cohort studies in children were pooled. Low certainty "
+                                            "evidence shows vitamin D reduces colds.")],
+            ["CK1"], "Vitamin D stops colds", outcome="(colds)")
+  == f"Low certainty evidence {_OBS}, but only in children"
+  and evidence.level_word([_COHORT_LOW], ["CL1"]) == "Observational")
+fg.models.script = [Resp(VJ("true", [1], tldr="Strong evidence says ginger reduces vomiting.",
+                            explanation="High-quality evidence from cohorts shows less vomiting (Study 1).",
+                            strength="The evidence is strong (Study 1)."))]
+_low_obs = verdict.weigh_evidence("Ginger reduces vomiting", [dict(_COHORT_LOW)], "(ginger) AND (vomiting)")
+t("  and the prose is still held to observational, not strong",
+  "trong" not in json.dumps(_low_obs) and "high-quality" not in json.dumps(_low_obs)
+  and _low_obs["tldr"].startswith("Observational evidence says"), _low_obs)
 t("rule 5: the rest of the line is kept, whichever way it opens",
   _line("false", [_COHORT_MA], ["CO1"], "Coffee cures diabetes", effect_label="small", absolute="cure")
   == "Evidence from observational studies (can't show cause) of a small effect, not a cure"
@@ -3517,7 +3556,8 @@ t("  only a review that rates the outcome low and nowhere higher can cap a true"
   and evidence.review_certainty(_gin_review("R6", _SPLIT), "(sleep)", strict=True) is None)
 t("  and the certainty line gives the review's own range, never Strong",
   evidence.evidence_line("true", [_BRACKETED], ["L5"], _GIN_CLAIM, outcome=_SEVERE)
-  == "Low to moderate certainty evidence for this claim")
+  == "Low to moderate certainty evidence from observational studies (can't show cause) "
+     "for this claim")
 fg.models.script = [Resp(VJ("true", [1], tldr="Ginger prevents vomiting.",
                             evidence=["Ginger prevented vomiting in 80% (Study 1)."]))] * 3
 fg.models.prompts = []

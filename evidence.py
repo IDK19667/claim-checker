@@ -994,7 +994,8 @@ _PROMISES = [
 ]
 
 
-OBSERVATIONAL_HEAD = "Evidence from observational studies (can't show cause)"
+OBSERVATIONAL_TAIL = "observational studies (can't show cause)"
+OBSERVATIONAL_HEAD = f"Evidence from {OBSERVATIONAL_TAIL}"
 
 
 def level_word(studies, cited_pmids=()) -> str:
@@ -1049,6 +1050,10 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # What the line opens with. Observational evidence says what it is and
     # what it cannot show; everything else is "<word> evidence".
     head = OBSERVATIONAL_HEAD if level == "Observational" else f"{level} evidence"
+    # A certainty word replaces the opening, but observational evidence keeps
+    # saying what it is: "Low certainty evidence from observational studies
+    # (can't show cause)". A rating never hides the design.
+    via = f" from {OBSERVATIONAL_TAIL}" if level == "Observational" else ""
     # A lead review that rates its own evidence says how sure it is in its
     # own words, and those words replace the one read off the designs: a
     # meta-analysis of low-certainty evidence is not "strong evidence". But a
@@ -1058,7 +1063,7 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     lead = lead_certainty(studies, cited_pmids, outcome)
     if lead and (lead in ("low", "very low") or evidence_basis(studies, cited_pmids) == "trial"):
         span = certainty_range(lead_review(studies, cited_pmids, outcome), outcome) or lead
-        head = f"{span.capitalize()} certainty evidence"
+        head = f"{span.capitalize()} certainty evidence{via}"
     cap = certainty_cap(studies, cited_pmids, comparative, outcome)
     # A review that puts the link down to other factors weakens the case for
     # the claim, not the case against it. Small trials are already named by
@@ -1068,11 +1073,11 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
               and not (verdict == "false" and cap == CONFOUNDED_REASON)
               and not (cap == SMALL_REASON and level in ("Limited", "Observational")))
     if capped:
-        head = "Low certainty evidence"
+        head = f"Low certainty evidence{via}"
     # Any review that rates the claim's own outcome low says so too, not just
     # the lead one.
     elif lead not in ("low", "very low") and rated_low_on_outcome(studies, cited_pmids, outcome):
-        head = "Low certainty evidence"
+        head = f"Low certainty evidence{via}"
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
                    "what the claim promises") if absolute else ""
