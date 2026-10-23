@@ -1490,6 +1490,95 @@ t("  a long word with a short twin loses nothing, so it is swapped silently",
   breakdown.plain("The association was a substantial reduction in serum "
                   "concentrations across populations.", set())
   == "The link was a large drop in serum levels across groups.")
+t("  'efficacy' that describes a noun after it is the noun 'effect', never 'how well it works endpoint'",
+  breakdown.plain("The trial found vitamin E had no benefit on the primary efficacy endpoint (Study 2).")
+  == "The trial found vitamin E had no benefit on the primary effect endpoint (Study 2)."
+  and breakdown.plain("An efficacy analysis found no difference (Study 3).")
+  == "An effect analysis found no difference (Study 3)."
+  and breakdown.plain("The efficacy data were mixed (Study 3).") == "The effect data were mixed (Study 3)."
+  and breakdown.plain("Efficacy outcomes improved (Study 3).") == "Effect outcomes improved (Study 3)."
+  and breakdown.plain("Several effectiveness measures improved (Study 3).")
+  == "Several effect measures improved (Study 3).")
+t("  and so is 'efficacy and safety', where the clause would sit before an 'and'",
+  breakdown.plain("The trial tested the efficacy and safety of zinc (Study 3).")
+  == "The trial tested the effect and safety of zinc (Study 3)."
+  and breakdown.plain("Reviews accepted efficacy and safety (Study 3).")
+  == "Reviews accepted effect and safety (Study 3).")
+t("  but a clause is still a clause where the term ends its phrase, and a design name keeps its term",
+  breakdown.plain("The trial assessed its efficacy in adults (Study 3).")
+  == "The trial tested how well it works in adults (Study 3)."
+  and breakdown.plain("The trials compared efficacy between groups (Study 3).")
+  == "The trials compared how well it works between groups (Study 3)."
+  and breakdown.plain("A phase 3 efficacy trial found no benefit.") == "A phase 3 efficacy trial found no benefit."
+  and breakdown.plain("The effectiveness studies agree (Study 3).") == "The effectiveness studies agree (Study 3)."
+  and breakdown.plain("A cost-effectiveness analysis found savings (Study 3).")
+  == "A cost-effectiveness analysis found savings (Study 3)."
+  and breakdown.plain("The cost effectiveness of the drug was high (Study 3).")
+  == "The cost effectiveness of the drug was high (Study 3)."
+  and breakdown.plain("The efficacy-related outcomes improved (Study 3).")
+  == "The efficacy-related outcomes improved (Study 3).")
+t("  'additional' is 'extra' before one thing and 'more' before several: never 'each more cup'",
+  breakdown.plain("Each additional cup of coffee was associated with a 7 percent lower risk (Study 2).")
+  == "Each extra cup of coffee was linked to a 7 percent lower risk (Study 2)."
+  and breakdown.plain("An additional trial found no benefit (Study 3).") == "An extra trial found no benefit (Study 3)."
+  and breakdown.plain("There was no additional benefit (Study 3).") == "There was no extra benefit (Study 3)."
+  and breakdown.plain("Additional studies are needed.") == "More studies are needed."
+  and breakdown.plain("Additional research is needed.") == "More research is needed."
+  and breakdown.plain("Two additional trials found no benefit (Study 3).")
+  == "Two more trials found no benefit (Study 3).")
+t("  'reduction' is a drop where something fell, and stays a reduction after 'without' or in a diet",
+  breakdown.plain("A reduction in pain of 5 points was seen (Study 1).") == "A drop in pain of 5 points was seen (Study 1)."
+  and breakdown.plain("Large trials showed no reduction in heart attacks (Study 6).")
+  == "Large trials showed no drop in heart attacks (Study 6)."
+  and breakdown.plain("Reductions in blood pressure were seen (Study 4).") == "Drops in blood pressure were seen (Study 4)."
+  and breakdown.plain("People who continue heavy smoking without reduction (Study 4).")
+  == "People who continue heavy smoking without reduction (Study 4)."
+  and breakdown.plain("Fasting was not superior to regular calorie reduction (Study 1).")
+  == "Fasting was not superior to regular calorie reduction (Study 1)."
+  and breakdown.plain("Weight reduction was seen in both groups (Study 4).")
+  == "Weight loss was seen in both groups (Study 4).")
+t("  the word that says who they were is not followed by 'people': never 'human people'",
+  breakdown.plain("Human participants were studied (Study 1).") == "People were studied (Study 1)."
+  and breakdown.plain("Male participants had a larger effect (Study 1).") == "Men had a larger effect (Study 1)."
+  and breakdown.plain("Female subjects lost more weight (Study 1).") == "Women lost more weight (Study 1)."
+  and breakdown.plain("Male and female participants were included (Study 1).")
+  == "Men and women were included (Study 1)."
+  and breakdown.plain("Participants in the treatment group lost weight (Study 1).")
+  == "People in the treatment group lost weight (Study 1).")
+t("  'general population' and 'population-based' are fixed phrases, not 'general groups'",
+  breakdown.plain("Who was studied: general populations and active smokers (Study 2).")
+  == "Who was studied: general populations and active smokers (Study 2)."
+  and breakdown.plain("Population-based cohorts found no link (Study 1).") == "Population-based cohorts found no link (Study 1)."
+  and breakdown.plain("Studies in diverse populations found no link (Study 1).")
+  == "Studies in diverse groups found no link (Study 1).")
+t("  'vitamin deficiency' has no letter to put the 'low' before, and a long letter code still has one",
+  breakdown.plain("Carotenoids reverse vision loss from vitamin deficiency (Study 7).")
+  == "Carotenoids reverse vision loss from low vitamin levels (deficiency) (Study 7)."
+  and breakdown.plain("People with vitamin B12 deficiency were studied (Study 1).")
+  == "People with low vitamin B12 (deficiency) were studied (Study 1).")
+t("  'mortality' is a death rate, and 'lower' or 'higher' of it is fewer or more deaths, with its verb",
+  breakdown.plain("The mortality rate was lower in the treated group (Study 1).")
+  == "The death rate was lower in the treated group (Study 1)."
+  and breakdown.plain("Lower mortality was linked to exercise (Study 1).")
+  == "Fewer deaths were linked to exercise (Study 1)."
+  and breakdown.plain("Higher mortality was seen in smokers (Study 1).") == "More deaths were seen in smokers (Study 1)."
+  and breakdown.plain("Lower mortality risk was seen (Study 1).") == "Lower death risk was seen (Study 1)."
+  and breakdown.plain("Infant mortality rose (Study 1).") == "Infant deaths rose (Study 1).")
+t("  'concentration' is a level only for an amount; for attention it stays",
+  breakdown.plain("Serum concentrations of vitamin D rose (Study 1).") == "Serum levels of vitamin D rose (Study 1)."
+  and breakdown.plain("Melatonin improved concentration and memory in adults (Study 1).")
+  == "Melatonin improved concentration and memory in adults (Study 1).")
+t("  'including' before a count is a statement of who was in, not an example",
+  breakdown.plain("The trial, including 300 adults, found no effect (Study 1).")
+  == "The trial, including 300 adults, found no effect (Study 1)."
+  and breakdown.plain("Foods, including fish and nuts, were studied (Study 1).")
+  == "Foods, like fish and nuts, were studied (Study 1).")
+t("  'dietary interventions' keeps its plural, 'supplemented groups' its noun, and 'memory and cognitive "
+  "function' says memory once",
+  breakdown.plain("Dietary interventions were studied (Study 1).") == "Diet changes were studied (Study 1)."
+  and breakdown.plain("Supplemented groups improved (Study 1).") == "Groups given supplements improved (Study 1)."
+  and breakdown.plain("Memory and cognitive function improved (Study 1).") == "Memory and thinking improved (Study 1)."
+  and breakdown.plain("Cognitive function improved (Study 1).") == "Thinking and memory improved (Study 1).")
 
 t("natural: the takeaway is a sentence someone would say out loud",
   breakdown.natural("Vitamin D links to colds and flu.")
@@ -1505,6 +1594,10 @@ t("  and 'link' used as a thing is left alone, never 'a small are linked to'",
 t("  nor after a describing word with the verb before it: never 'shows mixed is linked to'",
   breakdown.natural("Red wine shows mixed links to heart health.") == "Red wine shows mixed links to heart health."
   and breakdown.natural("Coffee has conflicting links to cancer.") == "Coffee has conflicting links to cancer.")
+t("  nor after a possessive: never \"Red wine's are linked to heart health is mixed\"",
+  breakdown.natural("Red wine's link to heart health is mixed.") == "Red wine's link to heart health is mixed."
+  and breakdown.natural("Patients' links to care were studied.") == "Patients' links to care were studied."
+  and breakdown.natural("Wine links to heart health.") == "Wine is linked to heart health.")
 
 t("grade: the claim's own words are not counted against the prose",
   breakdown.claim_terms("Taking vitamin D supplements in winter cuts your risk of flu")

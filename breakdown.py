@@ -127,7 +127,9 @@ _PERCENT = re.compile(r"\d+(?:\.\d+)?\s?(?:%|per ?cent)")
 _COMPOUND_BEFORE = {
     "vaccine", "vaccines", "drug", "drugs", "treatment", "treatments", "therapy",
     "intervention", "interventions", "clinical", "real-world", "comparative", "relative",
-    "program", "programme", "screening", "mask", "medication", "booster"}
+    "program", "programme", "screening", "mask", "medication", "booster",
+    # "cost effectiveness" and "real world effectiveness", written without the hyphen
+    "cost", "world"}
 
 
 # Where the sentence needs a noun, the plain one is "effect": "it lacked
@@ -146,19 +148,61 @@ _ARTICLE_AFTER = {"lacked", "lack", "lacks", "showed", "show", "shows", "demonst
                   "confirmed", "confirm", "confirms", "without", "with"}
 
 
-def _how_well(m: re.Match) -> str:
-    before = re.search(r"([\w-]+)\s+$", m.string[:m.start()])
+# "How well it works" is a clause, so it only fits where the term ends its
+# own phrase: before a verb, a preposition, a conjunction or a mark of
+# punctuation. Anywhere else the term is describing a noun that follows it
+# ("the primary efficacy endpoint", "efficacy outcomes", "efficacy and
+# safety"), and a clause there printed "the primary how well it works
+# endpoint". The set is closed on purpose: a word it misses falls to the
+# noun "effect", which is grammatical wherever a clause was not.
+_CLAUSE_ENDS = frozenset("""in on at for against among amongst between across with without
+    within during after before over under to from by as than versus vs compared relative
+    when whether while whereas if because since so but yet which that who whose where
+    not also only was were is are be been being has have had did does do will would may
+    might can could should must remained remains remain seems seemed appears appeared
+    varied differed""".split())
+
+# The noun after the term names a kind of study, so the term is part of the
+# name ("an efficacy trial") and stays as written.
+_STUDY_NOUNS = frozenset("trial trials study studies".split())
+
+
+def _efficacy_form(m: re.Match, det: str = "") -> str:
+    """The plain form of a matched "efficacy" or "effectiveness", with its
+    determiner (the, its, their, this) when it has one."""
+    before_text, after = m.string[:m.start()], m.string[m.end():]
+    # Joined to its neighbour by a hyphen ("cost-effectiveness",
+    # "efficacy-related outcomes"), it is one word and stays one.
+    if (not det and before_text.endswith("-")) or after.startswith("-"):
+        return m.group(0)
+    before = re.search(r"([\w-]+)\s+$", before_text)
     word = before.group(1).lower() if before else ""
     if word in _COMPOUND_BEFORE:
         return m.group(0)
+    nxt = re.match(r"\s+([A-Za-z][\w'-]*)", after)
+    nxt = nxt.group(1).lower() if nxt else ""
+    # "The efficacy and safety of X", "safety and efficacy of X" and "the
+    # primary efficacy endpoint" all need the noun. Only a design noun
+    # ("efficacy trial") keeps the term.
+    if nxt in ("and", "or", "of") or (nxt and nxt not in _CLAUSE_ENDS):
+        if nxt in _STUDY_NOUNS:
+            return m.group(0)
+        return f"{det} effect" if det else "effect"
+    if det:
+        return "how well it works"
     if word in _NOUN_AFTER:
         return "effect"
     if word in _ARTICLE_AFTER:
         return "an effect"
-    # "Safety and efficacy of X" needs a noun too: "safety and effect of X".
-    if re.match(r"\s+of\b", m.string[m.end():]):
-        return "effect"
     return "how well it works"
+
+
+def _how_well(m: re.Match) -> str:
+    return _efficacy_form(m)
+
+
+def _the_how_well(m: re.Match) -> str:
+    return _efficacy_form(m, m.group(1))
 
 
 # "Prevalence" and "incidence" are nouns in nearly every slot they fill:
@@ -181,6 +225,109 @@ def _rate(clause: str):
             return clause
         return "rate"
     return swap
+
+
+def _word_before(m: re.Match) -> str:
+    before = re.search(r"([\w'-]+)\s+$", m.string[:m.start()])
+    return before.group(1).lower() if before else ""
+
+
+def _word_after(m: re.Match) -> str:
+    after = re.match(r"\s+([A-Za-z][\w'-]*)", m.string[m.end():])
+    return after.group(1).lower() if after else ""
+
+
+# "Additional" is "more" before a plural or a mass noun ("more studies",
+# "more research", "2 more trials") and "extra" before one thing ("each extra
+# cup", "an extra trial"), or after "the": "the extra studies". "Each more
+# cup" and "a more trial" are not English.
+_MASS_NOUNS = {"evidence", "research", "data", "information", "work", "follow-up", "testing",
+               "support", "monitoring"}
+
+
+def _additional(m: re.Match) -> str:
+    after = _word_after(m)
+    if _word_before(m) in {"the", "this", "that", "these", "those", "its", "their"}:
+        return "extra"
+    if after in _MASS_NOUNS or (after.endswith("s") and not after.endswith(("ss", "us", "is"))):
+        return "more"
+    return "extra"
+
+
+# A singular word that becomes a plural noun takes its verb with it: "all-cause
+# mortality was reduced" is "all-cause deaths were reduced", and the sentence
+# agreement pass leaves "deaths was reduced" alone (it cannot tell a passive
+# from two verbs in a row).
+_PLURAL_VERB = {"was": "were", "is": "are", "has": "have"}
+
+
+def _plural(noun: str):
+    def swap(m: re.Match) -> str:
+        verb = _PLURAL_VERB.get((m.group(1) or "").lower())
+        return noun + (f" {verb}" if verb else "")
+    return swap
+
+
+# "Reduction" is a "drop" where it is a thing that happened ("a 7 percent
+# drop", "no drop in deaths"). It stays a "reduction" where it stands bare
+# after a preposition ("without reduction") or names something people do,
+# not something that was measured ("calorie reduction", "salt reduction"):
+# "without drop" and "a calorie drop" are not what the study said.
+_BARE_BEFORE = {"without", "with", "of", "for", "to", "and", "or", "from", "by", "after",
+                "through", "via", "than", "as", "at", "on", "upon", "despite", "per",
+                "towards", "toward", "following"}
+_DONE_BY_PEOPLE = {"calorie", "calories", "caloric", "energy", "dietary", "fat", "salt",
+                   "sodium", "sugar", "alcohol", "carbohydrate", "carbohydrates", "carb",
+                   "intake", "portion", "dose", "stress", "harm", "screen", "meat"}
+
+
+def _drop(m: re.Match) -> str:
+    plural = m.group(1)
+    word = _word_before(m)
+    if not plural and (word in _BARE_BEFORE or word in _DONE_BY_PEOPLE):
+        return m.group(0)
+    return "drop" + plural
+
+
+# "Population" is "group" for the people studied. It stays where it is a
+# fixed phrase: "the general population" became "the general group", and
+# "population-based" became "group-based".
+_POPULATION_KEEPS = {"general", "global", "world", "whole", "entire", "total", "human",
+                     "background", "source", "reference"}
+_POPULATION_THEN = {"health", "level", "wide", "size", "growth", "density", "average", "mean",
+                    "attributable", "data", "studies", "study", "trends", "survey", "surveys"}
+
+
+def _group(m: re.Match) -> str:
+    if (_word_before(m) in _POPULATION_KEEPS or _word_after(m) in _POPULATION_THEN
+            or m.string[m.end():].startswith("-")):
+        return m.group(0)
+    return "group" + m.group(1)
+
+
+# "Concentration" is "level" for a measured amount ("serum concentrations of
+# vitamin D") and means attention in a sentence about the mind ("improved
+# concentration and memory"), where "level" is nonsense.
+_ATTENTION = re.compile(r"\b(?:attention|focus|memory|alertness|mood|cognitive|cognition|"
+                        r"mental|thinking|learning|adhd|concentrate|concentrating|difficulty|"
+                        r"trouble)\b", re.IGNORECASE)
+
+
+def _level(m: re.Match) -> str:
+    if _word_after(m) != "of" and _ATTENTION.search(_sentence_around(m)):
+        return m.group(0)
+    return "level" + m.group(1)
+
+
+# "Including" is "like" before an example ("foods including fish"). Before
+# a count ("one trial, including 300 adults") it says who was in the group,
+# and "like 300 adults" says who was not.
+def _like(m: re.Match) -> str:
+    after = m.string[m.end():]
+    opens = re.search(r"(?:^|[.!?]\s+)$", m.string[:m.start()])
+    if opens or re.match(r"\s+(?:\d|data\b|results\b|studies\b|trials\b)", after):
+        return m.group(0)
+    return "like"
 
 
 # Each row is (pattern, replacement, term-to-keep-in-brackets-or-None).
@@ -208,9 +355,12 @@ PLAIN = [
      "systematic review and meta-analysis"),
     (r"\bmeta[- ]?analyses\b", "pooled reviews", "meta-analyses"),
     (r"\bmeta[- ]?analysis\b", "pooled review", "meta-analysis"),
-    (r"\bdietary interventions?\b", "diet change", None),
+    (r"\bdietary interventions\b", "diet changes", None),
+    (r"\bdietary intervention\b", "diet change", None),
     (r"\bintervention(s?)\b", r"treatment\1", None),
-    (r"\bheterogeneity\b", "differences between the studies", None),
+    # Before "between" or "across" the studies are already named.
+    (r"\bheterogeneity(?=\s+(?:between|across|among)\b)", "differences", None),
+    (r"\bheterogeneity\b(?: (was|is|has)\b)?", _plural("differences between the studies"), None),
 
     # Outcomes.
     (r"\bacute respiratory (?:tract )?infections?\b",
@@ -232,7 +382,14 @@ PLAIN = [
      "macular degeneration"),
     (r"\basthenopia\b", "eye strain", "asthenopia"),
     (r"\bvisual fatigue\b", "eye strain", None),
-    (r"\bmortality\b", "deaths", None),
+    # "Lower mortality" is "fewer deaths", never "lower deaths", and a
+    # "mortality rate" is a death rate, never a "deaths rate".
+    (r"\b(?:lower|reduced|decreased|fewer) mortality\b(?! (?:rates?|risk)\b)(?: (was|is|has)\b)?",
+     _plural("fewer deaths"), None),
+    (r"\b(?:higher|increased|elevated|raised|greater) mortality\b(?! (?:rates?|risk)\b)"
+     r"(?: (was|is|has)\b)?", _plural("more deaths"), None),
+    (r"\bmortality (rates?|risk)\b", r"death \1", None),
+    (r"\bmortality\b(?: (was|is|has)\b)?", _plural("deaths"), None),
     (r"\bcomorbidit(?:y|ies)\b", "other illnesses", None),
     (r"\badverse (?:events|effects|reactions)\b", "side effects", None),
 
@@ -240,6 +397,9 @@ PLAIN = [
     # supplementation" reads as a thing you do rather than a thing you are.
     (r"\bsupplementation with\b", "taking", None),
     (r"\bsupplementation\b", "supplement use", None),
+    # "Supplemented groups" is the groups that were given supplements.
+    (r"\bsupplemented (groups?|arms?|participants|people|adults|children|women|men)\b",
+     r"\1 given supplements", None),
     (r"\bsupplemented\b", "given supplements", None),
     (r"\bcaloric restriction\b|\bcalorie restriction\b",
      "eating fewer calories", None),
@@ -248,8 +408,12 @@ PLAIN = [
     # which needs the words the other way round, so it gets its own rule.
     # A callable, so the nutrient keeps its own spelling but not a capital
     # it only had because "Deficiency" happened to open the sentence.
-    (r"\b(vitamin [A-K]\d?|iron|zinc|magnesium|calcium|folate) deficiency\b",
+    (r"\b(vitamin [A-K]\d*|iron|zinc|magnesium|calcium|folate) deficiency\b",
      lambda m: "low " + m.group(1)[0].lower() + m.group(1)[1:], "deficiency"),
+    # No letter to put the "low" in front of: "vitamin deficiency" is "low
+    # vitamin levels", not "vitamin low levels".
+    (r"\b(vitamin|mineral|nutrient|micronutrient) deficiency\b",
+     lambda m: f"low {m.group(1).lower()} levels", "deficiency"),
     (r"\bdeficiency\b", "low levels", "deficiency"),
     # Attributive position needs the whole phrase rebuilt: "deficient" is a
     # predicate in "people who were deficient" and an adjective in "deficient
@@ -264,7 +428,7 @@ PLAIN = [
 
     # The "the X of Y" trap: a noun here, a clause where it stands alone.
     (r"\b(?:the |its )effica(?:cy|ciousness) of\b", "the effect of", None),
-    (r"\b(?:the|its|their|this)\s+(?:efficacy|effectiveness)\b(?!\s+of\b)", "how well it works", None),
+    (r"\b(the|its|their|this)\s+(?:efficacy|effectiveness)\b", _the_how_well, None),
     (r"\befficacy\b", lambda m: _how_well(m), None),
     (r"\b(?:the |its )effectiveness of\b", "the effect of", None),
     (r"\beffectiveness\b", lambda m: _how_well(m), None),
@@ -298,6 +462,13 @@ PLAIN = [
     (r"\bhowever,\s+", "but ", None),
     (r"\bhowever\b", "but", None),
     (r"\btherefore\b", "so", None),
+    # The word that says who they were already says they were people.
+    (r"\bmale and female (?:participants|subjects|individuals)\b", "men and women", None),
+    (r"\bfemale (?:participants|subjects|individuals)\b", "women", None),
+    (r"\bmale (?:participants|subjects|individuals)\b", "men", None),
+    (r"\badult (?:participants|subjects|individuals)\b", "adults", None),
+    (r"\b(?:pediatric|paediatric) (?:participants|subjects|individuals)\b", "children", None),
+    (r"\bhuman (?:participants|subjects|individuals)\b", "people", None),
     (r"\bparticipants\b|\bsubjects\b|\bindividuals\b", "people", None),
     (r"\belevated\b", "raised", None),
     (r"\bglycaemic control\b|\bglycemic control\b", "blood sugar control", None),
@@ -305,7 +476,7 @@ PLAIN = [
     # memory": where the sentence already names memory, thinking is the
     # half that is left to say.
     (r"\bcognitive function\b", lambda m: "thinking" if re.search(
-        r"\bmemory\b", _sentence_around(m)) else "thinking and memory", None),
+        r"\bmemory\b", _sentence_around(m), re.IGNORECASE) else "thinking and memory", None),
     (r"\bimmunomodulatory\b", "immune system", None),
     (r"\bcardiovascular\b", "heart and blood vessel", None),
     (r"\bgastrointestinal\b", "stomach and gut", None),
@@ -319,21 +490,22 @@ PLAIN = [
     (r"\bnutritional supplements?\b", "supplements", None),
     (r"\bassociated with\b", "linked to", None),
     (r"\bassociation(s?)\b", r"link\1", None),
-    (r"\bconcentration(s?)\b", r"level\1", None),
-    (r"\bpopulation(s?)\b", r"group\1", None),
-    (r"\breduction(s?) in\b", r"drop\1 in", None),
-    (r"\breduction(s?)\b", r"drop\1", None),
+    (r"\bconcentration(s?)\b", _level, None),
+    (r"\bpopulation(s?)\b", _group, None),
+    # "Weight reduction" is weight loss; "weight drop" is not a thing.
+    (r"\bweight reduction\b", "weight loss", None),
+    (r"\breduction(s?)\b", _drop, None),
     (r"\bmagnitude\b", "size", None),
     (r"\bconsiderable\b|\bsubstantial\b", "large", None),
     (r"\bpreliminary\b", "early", None),
     (r"\bsubsequent\b", "later", None),
-    (r"\badditional\b", "more", None),
+    (r"\badditional\b", _additional, None),
     (r"\bnumerous\b", "many", None),
     (r"\bbeneficial\b", "helpful", None),
     (r"\bdetrimental\b", "harmful", None),
     (r"\bexhibited\b", "showed", None),
     (r"\bnevertheless\b", "even so", None),
-    (r"\bincluding\b", "like", None),
+    (r"\bincluding\b", _like, None),
 ]
 
 _PLAIN = [(re.compile(p, re.IGNORECASE), r, keep) for p, r, keep in PLAIN]
@@ -1175,9 +1347,12 @@ _LINK_NOUN_AFTER = frozenset("""a an the no any some this that its their one
 
 
 def _link_as_verb(m: re.Match) -> str:
-    before = re.findall(r"[A-Za-z']+", m.string[:m.start()])
+    before = re.findall(r"[A-Za-z'’]+", m.string[:m.start()])
     # One word back or two: "shows mixed links to" has its verb already.
     if any(w.lower() in _LINK_NOUN_AFTER for w in before[-2:]):
+        return m.group(0)
+    # "Red wine's link to heart health": the possessive makes it a noun.
+    if before and re.search(r"['’]s?$", before[-1]):
         return m.group(0)
     return "is linked to" if m.group(1).lower() == "links" else "are linked to"
 
