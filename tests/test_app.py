@@ -3008,13 +3008,13 @@ t("the evidence line says what the evidence is evidence of",
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
-  and _el("false", _ACV, ["A1"], "Vinegar raises blood sugar") == "Strong evidence against this claim"
-  and _el("complicated", _ACV, ["A1"], "Vinegar lowers blood sugar in diabetes", "small")
+  and _el("false", _ACV, ["A1", "A2"], "Vinegar raises blood sugar") == "Strong evidence against this claim"
+  and _el("complicated", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar in diabetes", "small")
   == "Strong evidence of a small effect, but no plain yes or no")
-t("  it names the one group, says low certainty, and is empty with nothing used",
-  _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
+t("  it names the one group, calls a pilot limited, and is empty with nothing used",
+  _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Moderate evidence, but only in children"
   and _el("complicated", [_study("L1", "Pilot trial of vinegar", abstract="A pilot trial in 12 adults.")],
-          ["L1"], "Vinegar lowers blood sugar").startswith("Low certainty evidence")
+          ["L1"], "Vinegar lowers blood sugar").startswith("Limited evidence")
   and _el("insufficient", _ACV, [], _ACV_CLAIM) == "" and _el("false", _ACV, [], _ACV_CLAIM) == "")
 _rec = (ROOT / "static" / "app.js").read_text().split("function recordSentence")[1].split("\nfunction ")[0]
 t("  the record line prints it, and no longer calls the designs 'the evidence'",
@@ -3028,6 +3028,148 @@ _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
   _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence of a partial effect, not a cure", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+# 3b. The line never claims more than the designs behind it support. "Strong"
+# is for randomized trials that are not small; small trials are "Limited";
+# cohort and case-control studies are named for what they are; anything else
+# keeps "Moderate". A review's own certainty word never lifts the first two.
+_RCT_BIG = _study("RB1", "Folic acid and neural tube defects: a randomized trial",
+                  abstract="METHODS: 1,817 women were randomized to folic acid or placebo. RESULTS: Fewer defects.")
+_RCT_SMALL = _study("RS1", "Cocoa and blood pressure: a randomized trial",
+                    abstract="METHODS: 40 adults were randomized to cocoa or placebo for two weeks. RESULTS: Pressure fell.")
+_PILOT_RCT = _study("RP1", "Mouth taping: a pilot study",
+                    abstract="A pilot study of 20 adults who were randomized to tape or none.")
+_REV_SMALL = _study("RV1", "Ginger: a meta-analysis", types=["Meta-Analysis", "Systematic Review"],
+                    abstract="We pooled ten randomized controlled trials. The trials were small and of short duration.")
+_COHORT_MA = _study("CO1", "Coffee and diabetes: a meta-analysis of cohort studies", types=["Meta-Analysis"],
+                    abstract="We pooled twelve prospective cohort studies. Higher intake was linked with lower risk.")
+_CC_REV = _study("CC9", "Deodorant and breast cancer: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="We pooled seven case-control studies.")
+_UMBRELLA = _study("UM1", "Coffee and health: an umbrella review", types=["Systematic Review"],
+                   abstract="We reviewed meta-analyses of coffee intake and health outcomes. Coffee was linked with lower risk.")
+_FUTURE = _study("FU1", "Coffee and diabetes: a systematic review", types=["Systematic Review"],
+                 abstract="We pooled eight cohort studies. These findings warrant further investigation in randomized trials.")
+_ANCILLARY = _study("AN1", "Supplements and survival: a prospective study ancillary to a trial",
+                    abstract="A prospective study ancillary to a trial of 3,000 adults evaluated associations "
+                             "between supplement use and survival, using Cox regression.")
+_CHAPTER = _study("CH1", "Antioxidants: a chapter", types=["Journal Article"], abstract="A narrative chapter.")
+_NONRANDOM = _study("NR1", "Ginger: a non-randomized trial", types=["Clinical Trial"],
+                    abstract="In this non-randomized trial, 300 adults chose ginger and 300 acted as a control group.")
+_SR_UNSAID = _study("SU1", "Ginger for nausea: a systematic review", types=["Systematic Review"],
+                    abstract="We reviewed studies of ginger and nausea.")
+_REV_HIGH = _study("RH1", "Ginger: a meta-analysis", types=["Meta-Analysis"],
+                   abstract="Twelve randomized trials of 4,000 people were pooled. High certainty evidence shows "
+                            "ginger reduces vomiting.")
+_COHORT_HIGH = _study("CH2", "Ginger: a meta-analysis of cohorts", types=["Meta-Analysis"],
+                      abstract="Twelve cohort studies were pooled. High certainty evidence shows ginger reduces vomiting.")
+_SMALL_HIGH = _study("SH1", "Ginger: a meta-analysis", types=["Meta-Analysis"],
+                     abstract="Ten randomized trials were pooled. The trials were small. High certainty evidence "
+                              "shows ginger reduces vomiting.")
+_COHORT_LOW = _study("CL1", "Ginger: a meta-analysis of cohorts", types=["Meta-Analysis"],
+                     abstract="Twelve cohort studies were pooled. Low certainty evidence shows ginger reduces vomiting.")
+_REV_MOD = _study("RM1", "Ginger: a meta-analysis", types=["Meta-Analysis"],
+                  abstract="Twelve randomized trials of 4,000 people were pooled. Moderate certainty evidence "
+                           "shows ginger reduces vomiting.")
+_REV_LOW = _study("RL1", "Ginger: a meta-analysis", types=["Meta-Analysis"],
+                  abstract="Ten randomized trials of 3,000 people were pooled. Low certainty evidence suggests "
+                           "ginger reduces vomiting.")
+_V = "(vomiting)"
+
+
+def _line(verdict, studies, ids, claim="Ginger helps nausea", **kw):
+    return evidence.evidence_line(verdict, studies, ids, claim, **kw)
+
+
+t("rule 1: Strong is for randomized trials that are not small",
+  _line("true", [_RCT_BIG], ["RB1"]) == "Strong evidence for this claim"
+  and _line("true", [_COHORT_MA, _RCT_BIG], ["CO1", "RB1"]) == "Strong evidence for this claim"
+  and _line("true", [_RCT_SMALL, _RCT_BIG], ["RS1", "RB1"]) == "Strong evidence for this claim"
+  and _line("true", [_REV_HIGH], ["RH1"], outcome=_V) == "High certainty evidence for this claim")
+t("  and not when any review used rates its own evidence low on the outcome, not only the lead one",
+  _line("true", [_REV_MOD, _REV_LOW], ["RM1", "RL1"], outcome=_V) == "Low certainty evidence for this claim"
+  and _line("true", [_REV_MOD], ["RM1"], outcome=_V) == "Moderate certainty evidence for this claim"
+  and evidence.rated_low_on_outcome([_REV_MOD, _REV_LOW], ["RM1", "RL1"], _V)
+  and not evidence.rated_low_on_outcome([_REV_MOD, _REV_LOW], ["RM1"], _V))
+t("rule 2: small trials, pilots and reviews of small trials say Limited",
+  _line("true", [_RCT_SMALL], ["RS1"]) == "Limited evidence for this claim"
+  and _line("true", [_PILOT_RCT], ["RP1"]) == "Limited evidence for this claim"
+  and _line("true", [_REV_SMALL], ["RV1"]) == "Limited evidence for this claim"
+  and _line("true", [_REV_SMALL, _RCT_SMALL], ["RV1", "RS1"]) == "Limited evidence for this claim"
+  and _line("complicated", [_PILOT_RCT, _REV_SMALL], ["RP1", "RV1"]) == "Limited evidence, but no plain yes or no")
+t("  a review's high certainty word never lifts small trials above Limited",
+  _line("true", [_SMALL_HIGH], ["SH1"], outcome=_V) == "Limited evidence for this claim")
+t("rule 3: cohort and case-control studies say what they are, in these words",
+  _line("true", [_COHORT_MA], ["CO1"])
+  == "Evidence from observational studies (can't show cause) for this claim"
+  and _line("false", [_CC_REV], ["CC9"], effect_label="none")
+  == "Evidence from observational studies (can't show cause) of no clear effect"
+  and _line("false", [_COHORT_MA], ["CO1"])
+  == "Evidence from observational studies (can't show cause) against this claim")
+t("  a review that never names a design does not undo it, nor do a book chapter or an umbrella review",
+  _line("true", [_COHORT_MA, _UMBRELLA], ["CO1", "UM1"]).startswith("Evidence from observational studies")
+  and _line("false", [_ANCILLARY, _CHAPTER], ["AN1", "CH1"], effect_label="none").startswith(
+      "Evidence from observational studies (can't show cause)"))
+t("  a sentence asking for randomized trials does not make a review of cohorts a review of trials",
+  evidence.line_design(_FUTURE) == "observational"
+  and _line("true", [_FUTURE], ["FU1"]).startswith("Evidence from observational studies"))
+t("  a blinded, placebo-controlled review is never called observational",
+  _line("true", [_COHORT_MA, _study("PB1", "Sugar and behaviour: a meta-analysis", types=["Meta-Analysis"],
+        abstract="Studies that gave sugar or a placebo and blinded the children were pooled.")],
+        ["CO1", "PB1"]) == "Moderate evidence for this claim")
+t("rule 4: a review's high or moderate word shows only over trials that are not small",
+  _line("true", [_COHORT_HIGH], ["CH2"], outcome=_V)
+  == "Evidence from observational studies (can't show cause) for this claim"
+  and _line("true", [_REV_HIGH], ["RH1"], outcome=_V) == "High certainty evidence for this claim"
+  and _line("true", [_COHORT_LOW], ["CL1"], outcome=_V) == "Low certainty evidence for this claim")
+t("rule 5: the rest of the line is kept, whichever way it opens",
+  _line("false", [_COHORT_MA], ["CO1"], "Coffee cures diabetes", effect_label="small", absolute="cure")
+  == "Evidence from observational studies (can't show cause) of a small effect, not a cure"
+  and _line("complicated", [_COHORT_MA], ["CO1"], effect_label="none")
+  == "Evidence from observational studies (can't show cause) of no clear effect, but no plain yes or no"
+  and _line("complicated", [_COHORT_MA], ["CO1"], effect_label="small")
+  == "Evidence from observational studies (can't show cause) of a small effect, but no plain yes or no"
+  and _line("complicated", [_COHORT_MA], ["CO1"])
+  == "Evidence from observational studies (can't show cause), but no plain yes or no"
+  and _line("false", [_RCT_SMALL], ["RS1"], "Cocoa cures hypertension", effect_label="small", absolute="cure")
+  == "Limited evidence of a small effect, not a cure"
+  and _line("false", [_RCT_SMALL], ["RS1"], effect_label="none") == "Limited evidence of no clear effect"
+  and _line("false", [_RCT_SMALL], ["RS1"]) == "Limited evidence against this claim"
+  and _line("complicated", [_RCT_SMALL], ["RS1"], effect_label="small")
+  == "Limited evidence of a small effect, but no plain yes or no")
+t("  the weakest wording opens no line with the word Strong",
+  not any("trong" in _line(v, [x], [x["pmid"]], effect_label=e)
+          for v in ("true", "false", "complicated") for e in (None, "none", "small")
+          for x in (_COHORT_MA, _RCT_SMALL, _PILOT_RCT, _REV_SMALL, _UMBRELLA)))
+t("  a group is named once: a sex label beside a more specific group is dropped",
+  evidence.narrow_populations([_study("P1", "Vitamin A in pregnancy"), _study("P2", "Vitamin A in women")],
+                              ["P1", "P2"]) == ["pregnant women"]
+  and evidence.narrow_populations([_study("P3", "Vitamin A in women")], ["P3"]) == ["women only"])
+t("rule 6: non-randomized controlled trials and reviews that never name a design stay Moderate",
+  _line("true", [_NONRANDOM], ["NR1"]) == "Moderate evidence for this claim"
+  and _line("true", [_SR_UNSAID], ["SU1"]) == "Moderate evidence for this claim"
+  and evidence.evidence_basis([_NONRANDOM], ["NR1"]) == "mixed")
+_HANDWASH = _study("HW1", "Hand washing and infection: a systematic review", types=["Systematic Review"],
+                   abstract="We reviewed studies of hand washing. Causality could not be inferred, and there is "
+                            "a need for high-quality evidence.")
+_HANDWASH_R = _study("HW2", "Hand washing and infection: a systematic review", types=["Systematic Review"],
+                     abstract="We reviewed studies of hand washing. The certainty of the evidence ranged from "
+                              "very low to moderate. More high-quality evidence is needed.")
+t("a wish for better evidence is not a rating: 'need for high-quality evidence' is not 'high'",
+  evidence.review_certainty(_HANDWASH) is None
+  and _line("true", [_HANDWASH], ["HW1"]) == "Moderate evidence for this claim"
+  and _line("true", [_HANDWASH_R], ["HW2"]) == "Very low to moderate certainty evidence for this claim"
+  and evidence.review_certainty(_study("HW3", "Review", types=["Systematic Review"],
+      abstract="High certainty evidence is needed. No high quality evidence was found. Evidence of high "
+               "quality is lacking.")) is None
+  and evidence.review_certainty(_study("HW4", "Review", types=["Systematic Review"],
+      abstract="Mortality did not differ, low certainty evidence.")) == "low")
+_DC = [_study("DC1", "Dark chocolate and blood pressure: a randomized trial",
+              abstract="In 30 adults randomized to dark chocolate or none for two weeks, pressure fell."),
+       _study("DC2", "Cocoa and blood pressure: a meta-analysis", types=["Meta-Analysis"],
+              abstract="We pooled ten randomized trials of 300 people. The trials were small and short.")]
+t("small trials and a review of them are Limited, however the verdict reads",
+  _line("true", _DC, ["DC1", "DC2"], "Dark chocolate lowers blood pressure", effect_label="small")
+  == "Limited evidence for this claim, a small effect")
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
 # measured change keeps its unit, or says it never had one.
@@ -3291,7 +3433,8 @@ _TRIALREV = _study("TR1", "A meta-analysis", types=["Meta-Analysis"],
                    abstract="We pooled twelve randomized controlled trials.")
 t("  and never Strong when the only strong designs pool observational studies",
   evidence.evidence_line("false", [_CASECONTROL], ["CC1"], "Deodorant causes breast cancer",
-                         effect_label="none") == "Moderate evidence of no clear effect"
+                         effect_label="none")
+  == "Evidence from observational studies (can't show cause) of no clear effect"
   and evidence.evidence_line("false", [_CASECONTROL, _TRIALREV], ["CC1", "TR1"], "x",
                              effect_label="none") == "Strong evidence of no clear effect"
   and evidence.observational_only([_CASECONTROL], ["CC1"])

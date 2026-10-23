@@ -338,6 +338,11 @@ def conclusions(studies, cited_pmids=()) -> list[dict]:
     return out
 
 
+# A group that already is one sex. Listed beside it, "women only" adds
+# nothing: "only in pregnant women, women only" says women twice.
+_IMPLIES_SEX = {"pregnant women": "women only", "women after menopause": "women only"}
+
+
 def narrow_populations(studies, cited_pmids=()) -> list[str]:
     """The distinct narrow groups among the studies a verdict leaned on."""
     cited = {str(p) for p in (cited_pmids or ())}
@@ -348,7 +353,10 @@ def narrow_populations(studies, cited_pmids=()) -> list[str]:
         label = population(s)
         if label and label not in seen:
             seen.append(label)
-    return seen
+    # A broader label that a more specific one in the list already covers
+    # is dropped, so the same group is never named twice.
+    covered = {_IMPLIES_SEX[label] for label in seen if label in _IMPLIES_SEX}
+    return [label for label in seen if label not in covered]
 
 
 def narrow_only(studies, cited_pmids=(), claim: str = "") -> bool:
@@ -986,27 +994,43 @@ _PROMISES = [
 ]
 
 
+OBSERVATIONAL_HEAD = "Evidence from observational studies (can't show cause)"
+
+
 def level_word(studies, cited_pmids=()) -> str:
-    """Strong, Moderate or Weak, from the designs of the studies used; ""
-    when none were used. The same rule as the meter's legend."""
+    """
+    How much the studies used can be called evidence of, in one word: Strong
+    (randomized trials, or reviews of them, that are not small), Limited
+    (the trials or pilots used are small), Observational (cohort,
+    case-control or survey studies, which can show a link and not a cause),
+    Moderate (human studies or reviews of no one design, non-randomized
+    trials) or Weak (case reports, letters, opinion). "" when none were
+    used. The meter's legend says the same.
+
+    The tier of the designs sets the ceiling, as it always did, and what the
+    studies actually did can only lower it: a meta-analysis of cohort studies
+    is a strong design on paper and observational evidence in fact.
+    """
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
     if not cited:
         return ""
     tiers = {classify(s.get("publication_types")) for s in cited}
-    if "strong" in tiers:
-        return "Strong"
-    if "moderate" in tiers:
+    if "strong" not in tiers and "moderate" not in tiers:
+        return "Weak"
+    basis = evidence_basis(studies, cited_pmids)
+    if basis == "small":
+        return "Limited"
+    if basis == "observational":
+        return "Observational"
+    if basis == "mixed" or "strong" not in tiers:
         return "Moderate"
-    return "Weak"
+    return "Strong"
 
 
 def observational_only(studies, cited_pmids=()) -> bool:
-    """True when the strong designs used are all reviews of observational
-    studies, so "strong" would describe the paperwork, not the evidence."""
-    cited = set(cited_pmids or ())
-    strong = [s for s in studies or [] if s.get("pmid") in cited
-              and classify(s.get("publication_types")) == "strong"]
-    return bool(strong) and all(is_review(s) and design_rank(s) == "weaker" for s in strong)
+    """True when the studies used are observational and no trial is among
+    them, so "strong" would describe the paperwork, not the evidence."""
+    return evidence_basis(studies, cited_pmids) == "observational"
 
 
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
@@ -1022,43 +1046,52 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
         return ""
-    # A pooled review is a strong design, but pooling case-control studies
-    # does not make them trials: "Strong evidence of no clear effect" on
-    # antiperspirants rested on case-control studies alone. When every strong
-    # design used is a review of observational studies, the line says so.
-    if level == "Strong" and observational_only(studies, cited_pmids):
-        level = "Moderate"
+    # What the line opens with. Observational evidence says what it is and
+    # what it cannot show; everything else is "<word> evidence".
+    head = OBSERVATIONAL_HEAD if level == "Observational" else f"{level} evidence"
     # A lead review that rates its own evidence says how sure it is in its
     # own words, and those words replace the one read off the designs: a
-    # meta-analysis of low-certainty evidence is not "strong evidence".
+    # meta-analysis of low-certainty evidence is not "strong evidence". But a
+    # review's "moderate" or "high" is a word about its trials, so it stands
+    # only over trial evidence that is not small: it never lifts cohort
+    # studies or pilots above what they are. A low rating always shows.
     lead = lead_certainty(studies, cited_pmids, outcome)
-    if lead:
+    if lead and (lead in ("low", "very low") or evidence_basis(studies, cited_pmids) == "trial"):
         span = certainty_range(lead_review(studies, cited_pmids, outcome), outcome) or lead
-        level = f"{span.capitalize()} certainty"
+        head = f"{span.capitalize()} certainty evidence"
     cap = certainty_cap(studies, cited_pmids, comparative, outcome)
     # A review that puts the link down to other factors weakens the case for
-    # the claim, not the case against it.
-    if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
-        level = "Low certainty"
+    # the claim, not the case against it. Small trials are already named by
+    # "Limited" (and cohorts by their own words), so the cap does not say
+    # the same thing twice in a weaker voice.
+    capped = (cap and lead != "very low"
+              and not (verdict == "false" and cap == CONFOUNDED_REASON)
+              and not (cap == SMALL_REASON and level in ("Limited", "Observational")))
+    if capped:
+        head = "Low certainty evidence"
+    # Any review that rates the claim's own outcome low says so too, not just
+    # the lead one.
+    elif lead not in ("low", "very low") and rated_low_on_outcome(studies, cited_pmids, outcome):
+        head = "Low certainty evidence"
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
                    "what the claim promises") if absolute else ""
     if verdict == "true":
-        return f"{level} evidence for this claim" + (f", a {size} effect" if size else "")
+        return f"{head} for this claim" + (f", a {size} effect" if size else "")
     if verdict == "false":
         if effect_label == "none":
-            return f"{level} evidence of no clear effect"
+            return f"{head} of no clear effect"
         if absolute:
-            return f"{level} evidence of a {size or 'partial'} effect, not {promise}"
-        return f"{level} evidence against this claim"
+            return f"{head} of a {size or 'partial'} effect, not {promise}"
+        return f"{head} against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
-        return f"{level} evidence, but only in {', '.join(narrow)}"
+        return f"{head}, but only in {', '.join(narrow)}"
     if effect_label == "none":
-        return f"{level} evidence of no clear effect, but no plain yes or no"
+        return f"{head} of no clear effect, but no plain yes or no"
     if size:
-        return f"{level} evidence of a {size} effect, but no plain yes or no"
-    return f"{level} evidence, but no plain yes or no"
+        return f"{head} of a {size} effect, but no plain yes or no"
+    return f"{head}, but no plain yes or no"
 
 
 # ---------------------------------------------------------------------------
@@ -1311,6 +1344,29 @@ _RATED = re.compile(
     rf"\bGRADE\W{{1,3}}({_LVL})\b", re.IGNORECASE)
 _CLAUSE = re.compile(r"[()\[\]]|(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
 
+# A review asking for better evidence rates nothing: "the need for high-quality
+# evidence", "no high certainty evidence", "high quality evidence is needed".
+# Read from the few words beside the match, never the whole clause, so
+# "no difference in mortality, low certainty evidence" still rates mortality.
+_WANTS_BEFORE = re.compile(
+    r"\b(?:needs?|needed|requires?|required|warrants?|warranted|calls? for|lacks?|lacked|"
+    r"lacking|absence of|more|further|future|additional|robust|await\w*|no|little|"
+    r"without|insufficient|good|better|stronger|sufficient),?"
+    r"(?:\s+(?:of|for|any|the|a|an|enough|such|robust|good|better|stronger|more|further|"
+    r"additional),?)*\s+$", re.IGNORECASE)
+_WANTS_AFTER = re.compile(
+    r"^(?:\s+(?:of\s+)?(?:the\s+)?(?:evidence|studies|trials|research|data)"
+    r"(?:\s+(?:from|of|in|on)\s+(?:\w+\s+){0,3}\w+)?)?"
+    r"\s*(?:(?:is|are|was|were|will be|would be|remains?|remain)\s+)?"
+    r"(?:needed|required|warranted|necessary|lacking|scarce|sparse|to\s+(?:support|inform|"
+    r"guide|confirm|establish|draw|determine|justify))\b", re.IGNORECASE)
+
+
+def _asked_for(clause: str, m) -> bool:
+    """True when a rating-shaped phrase is a wish for better evidence."""
+    return bool(_WANTS_BEFORE.search(clause[:m.start()])
+                or _WANTS_AFTER.match(clause[m.end():m.end() + 60]))
+
 # Words an outcome group shares with every other outcome, so they say
 # nothing about which one a sentence rates.
 _GENERIC_OUTCOME = {
@@ -1365,7 +1421,8 @@ def _ratings(study, outcome: str = "") -> tuple[list[str], list[str]]:
     outcome (empty when no finding names it)."""
     rated = []
     for clause in _clauses(_text(study)):
-        levels = [_level(g) for m in _RATED.finditer(clause) for g in m.groups() if g]
+        levels = [_level(g) for m in _RATED.finditer(clause) if not _asked_for(clause, m)
+                  for g in m.groups() if g]
         if levels:
             rated.append((clause, levels))
     on_outcome = []
@@ -1451,6 +1508,19 @@ def lead_certainty(studies, cited_pmids=(), outcome: str = "",
     return review_certainty(lead, outcome, strict) if lead else None
 
 
+def rated_low_on_outcome(studies, cited_pmids=(), outcome: str = "") -> bool:
+    """
+    True when any review used for the verdict rates the certainty of its own
+    evidence low or very low on the claim's own outcome, and nowhere higher
+    there. Not only the lead review: one review's "moderate" does not cancel
+    another's "low", so the line cannot open with the stronger word.
+    """
+    cited = set(cited_pmids or ())
+    return any(s.get("pmid") in cited and certainty_on_outcome(s, outcome)
+               and review_certainty(s, outcome, strict=True) in ("low", "very low")
+               for s in studies or [])
+
+
 def trial_caveats(study) -> list[str]:
     """What keeps one primary study from carrying a confident answer alone."""
     if is_review(study):
@@ -1489,6 +1559,7 @@ def confounded(study) -> bool:
 
 CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "
                      "much of the link")
+SMALL_REASON = "it rests on small, pilot or uncontrolled studies"
 
 
 def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
@@ -1528,7 +1599,7 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
             solid.append(s)
     if solid or not limited:
         return None
-    return "it rests on small, pilot or uncontrolled studies"
+    return SMALL_REASON
 
 
 # ---------------------------------------------------------------------------
@@ -1583,6 +1654,198 @@ def weaker_kind(study) -> str:
     if _SURVEYED.search(_text(study)):
         return "surveys"
     return "observational studies"
+
+
+# ---------------------------------------------------------------------------
+# What the evidence line may call strong
+#
+# `design_rank` above is loose on purpose: it only has to say which side of
+# a disagreement outranks the other when the verdict is stamped, and one
+# mention of "randomized" is enough. The words on the line under the chart
+# are a claim of their own, and "Strong evidence" printed over observational
+# cohorts, over a handful of pilots, or over a review that says its own
+# causality "could not be inferred" is the line outrunning the studies. So
+# the line reads the designs again, more strictly, and never changes the
+# stamp (that stays with design_rank and certainty_cap).
+#
+# What it does differently from design_rank:
+#   - "non-randomised", "trial registries" and sentences that only call for
+#     more work ("warrant further investigation in randomized trials") are
+#     not evidence of a design;
+#   - a record typed as a trial that says it studied associations in a
+#     trial's patients, with nobody going without, is an observational study;
+#   - a review that names both designs is "mixed" and counts for neither.
+# ---------------------------------------------------------------------------
+
+_NON_RANDOM = re.compile(
+    r"\b(?:non|quasi|pseudo|un)[- ]?randomi[sz]ed\b|\bnot randomi[sz]ed\b|\bnon-?RCTs?\b",
+    re.IGNORECASE)
+_TRIAL_REGISTER = re.compile(
+    r"\b(?:clinical ?)?trials?(?:\.gov)? regist\w+|\bregist\w+ (?:of|for) (?:clinical )?trials\b|"
+    r"\bPROSPERO\b", re.IGNORECASE)
+# A sentence that wishes for, recommends or rules out a design says what
+# the authors want, not what they did.
+_WISHED = re.compile(
+    r"\b(?:further|future|warrant\w*|needs?|needed|should|recommend\w*|call(?:s|ed)? for)\b",
+    re.IGNORECASE)
+_RULED_OUT = re.compile(r"\b(?:exclu\w+|ineligible|not eligible)\b", re.IGNORECASE)
+_WISHED_OR_RULED_OUT = re.compile(_WISHED.pattern + "|" + _RULED_OUT.pattern, re.IGNORECASE)
+# Observational designs, by name. "Questionnaire" is left out: a trial of
+# anxiety measures it as an outcome, and that makes it no survey.
+_SEEN = re.compile(
+    r"\bobservational\b|\bcohorts?\b|\bcase[- ]control\b|\bcross[- ]sectional\b|"
+    r"\becological\b|\bregistry\b|\bregistries\b|\bcase[- ]crossover\b|"
+    r"\bprospective(?:ly)?\s+(?:cohort\s+|observational\s+)?(?:stud\w+|analys\w+)|"
+    r"\bretrospective\b|\blongitudinal\s+(?:cohort\s+|observational\s+)?stud\w+|"
+    r"\bepidemiolog\w+\s+(?:stud\w+|evidence|data)|\bpopulation[- ]based\s+(?:stud\w+|cohort)",
+    re.IGNORECASE)
+# An intervention given against a placebo, to people who did not know which,
+# is a trial in everything but the word "randomized". A review that describes
+# its studies this way never says "randomized", so it reads as design unknown;
+# it still cannot be called observational.
+_BLINDED = re.compile(r"\bplacebo\b|\b(?:double|single|triple)[- ]blind\w*|\bblinded\b",
+                      re.IGNORECASE)
+_ASSOCIATION_WORDS = re.compile(r"\bassociat\w+|\bancillary\b|\bprospective\b|\bcohort\b",
+                                re.IGNORECASE)
+
+
+def _sentences_of(study, skip) -> str:
+    """The record with the sentences set aside that match `skip`."""
+    text = _TRIAL_REGISTER.sub(" ", _NON_RANDOM.sub(" ", _text(study)))
+    return " ".join(s for s in _SENTENCE.split(text) if not skip.search(s))
+
+
+def line_design(study) -> str:
+    """
+    The design of one study as the evidence line reads it: "trial" for a
+    randomized trial or a review of randomized trials only; "observational"
+    for a cohort, case-control, cross-sectional or survey study, or a review
+    of only those; "" for everything else (a review that mixes the designs
+    or never says, a narrative review, a non-randomized trial, an animal
+    study, a record that never says).
+    """
+    if preclinical(study):
+        return ""
+    types = study.get("publication_types") or []
+    rct = bool(_RANDOMIZED.search(_sentences_of(study, _WISHED)))
+    seen = bool(_SEEN.search(_sentences_of(study, _WISHED_OR_RULED_OUT)))
+    if is_review(study):
+        return "trial" if rct and not seen else "observational" if seen and not rct else ""
+    if any(t.startswith("Review") for t in types):
+        return ""
+    if "Randomized Controlled Trial" in types or (is_trial(study) and rct):
+        # "A prospective study ancillary to a trial to evaluate associations
+        # between supplement use and survival" is a cohort study run inside
+        # a trial's patients, whatever PubMed typed it as. It never says its
+        # own people were randomized, and nobody in it went without.
+        if not rct and uncontrolled(study) and _ASSOCIATION_WORDS.search(_text(study)):
+            return "observational"
+        return "trial"
+    if "Observational Study" in types or seen or _SURVEYED.search(_text(study)):
+        return "observational"
+    return ""
+
+
+# A review saying that the trials it pooled were small, few or short. Only
+# its own plain words count: a pooled total of people says how many were
+# counted, not how big each trial was. "Small-study effects" is a bias test,
+# not a statement about the trials, and is not matched.
+_SMALL_SAID = re.compile(
+    r"\b(?:small|limited|modest)\s+(?:sample|number|quantity)s?\b|"
+    r"\bsmall(?:\s+\w+){0,2}\s+(?:trials?|studies|RCTs?|samples?|sample sizes?)\b|"
+    # "The few therapeutic trials" is a subset the review is describing, and
+    # "few studies have looked at" is background; neither is its own trials.
+    r"(?<!the\s)\b(?:only\s+)?(?:a\s+)?few\s+(?:\w+\s+){0,2}(?:trials?|studies|RCTs?)\b(?!\s+have\b)|"
+    r"\bshort(?:[- ]term)?\s+(?:follow[- ]up|duration)\b|\bshort[- ]term\s+(?:trials?|RCTs?)\b|"
+    r"\b(?:trials?|studies|RCTs?)\s+(?:were|was)\s+(?:generally\s+|mostly\s+)?(?:small|short)\b",
+    re.IGNORECASE)
+
+_NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
+_WORDNUM = "(?:" + "|".join(sorted(_NUM_WORDS, key=len, reverse=True)) + ")"
+# "10 randomized controlled trials comprising 297 individuals": the count of
+# trials and the people in them, in one stretch of one sentence. Pairing
+# them is what makes an average per trial possible; a count of trials found
+# anywhere else in an abstract is as likely to be a count of something else.
+_POOL = re.compile(
+    rf"\b({_NUMBER}|{_WORDNUM}(?:[- ]{_WORDNUM})?)\s+(?:[A-Za-z-]+\s+){{0,3}}?"
+    rf"(?:trials?|RCTs?|studies|publications|articles|reports)\b"
+    rf"[^.;]{{0,80}}?(?<![\d.,])({_NUMBER})\s+(?:[A-Za-z-]+\s+){{0,2}}?{_PEOPLE}\b",
+    re.IGNORECASE)
+
+
+def average_trial_size(study) -> float | None:
+    """People per trial in a review that states both counts together, or
+    None when it does not."""
+    best = None
+    for m in _POOL.finditer(_text(study)):
+        token = m.group(1)
+        trials = int(token.replace(",", "")) if token[0].isdigit() else max(
+            (int(v) for v in written_numbers(token)), default=0)
+        people = int(m.group(2).replace(",", ""))
+        if trials and people >= trials:
+            best = people / trials if best is None else min(best, people / trials)
+    return best
+
+
+def _small_trials(study) -> bool:
+    """A study that is itself small or a pilot, or a review that says its
+    trials were."""
+    if is_review(study):
+        return bool(_SMALL_SAID.search(_text(study)))
+    return any(c.startswith(("a pilot", "small,")) for c in trial_caveats(study))
+
+
+def _sizeable_trials(study) -> bool:
+    """A trial of at least SMALL_TRIAL people, or a review whose trials
+    averaged that. Unknown is not sizeable: only a stated size vouches."""
+    if _small_trials(study):
+        return False
+    if is_review(study):
+        size = average_trial_size(study)
+        return size is not None and size >= SMALL_TRIAL
+    size = sample_size(study)
+    return size is not None and size >= SMALL_TRIAL
+
+
+def evidence_basis(studies, cited_pmids=()) -> str:
+    """
+    What kind of evidence the studies used amount to, for the words on the
+    line: "trial" (randomized trials, or reviews of them, that are not
+    small), "small" (the trials or pilots used are small and none is
+    sizeable), "observational" (no trial among them, and at least one
+    cohort, case-control, cross-sectional or survey study), "mixed" (the
+    rest: non-randomized trials, narrative reviews, designs that are never
+    said), or "" when none was used.
+
+    The studies that count are the ones of the strongest tier used, as in
+    `level_word`: an editorial beside a cohort study does not turn it into
+    something else.
+    """
+    cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
+    if not cited:
+        return ""
+    order = [classify(s.get("publication_types")) for s in cited]
+    top = next((t for t in ("strong", "moderate", "weak") if t in order), "")
+    carry = [s for s, t in zip(cited, order) if t == top] if top else cited
+    designs = [line_design(s) for s in carry]
+    trials = [s for s, d in zip(carry, designs) if d == "trial"]
+    others = [s for s, d in zip(carry, designs) if d == ""]
+    small = [s for s in trials + others if _small_trials(s)]
+    # Small trials or pilots are the evidence when no sizeable trial vouches
+    # for them and nothing else sizeable stands beside them. A large review
+    # of mixed or unsaid design beside one small trial is not "limited": it
+    # is just not randomized-only, which is "mixed" below.
+    if small and (trials or "observational" not in designs):
+        if not any(_sizeable_trials(s) for s in trials):
+            return "mixed" if any(_sizeable_trials(s) for s in others) else "small"
+    if trials:
+        return "trial"
+    # A study whose design is unsaid sits quietly beside observational ones
+    # (an umbrella review of cohort meta-analyses never names a design), unless
+    # it describes a blinded or placebo-controlled intervention.
+    if "observational" in designs and not any(_BLINDED.search(_text(s)) for s in others):
+        return "observational"
+    return "mixed"
 
 
 # ---------------------------------------------------------------------------
