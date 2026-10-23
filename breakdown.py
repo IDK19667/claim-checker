@@ -1287,12 +1287,20 @@ _NEGATED_FINDING = re.compile(
     re.IGNORECASE)
 
 
+def _negated_before(m: re.Match) -> str | None:
+    """The sentence up to the match when a negation governs it, else None."""
+    head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
+    clause = re.split(r",\s+(?:and|but|so|while|yet)\s+", head)[-1]
+    if (_NEGATION_BEFORE.search(" ".join(head.split()[-4:]))
+            or _NEGATED_FINDING.search(clause)):
+        return head
+    return None
+
+
 def _soften_unless_negated(weaker):
     def swap(m: re.Match) -> str:
         head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
-        clause = re.split(r",\s+(?:and|but|so|while|yet)\s+", head)[-1]
-        if (_NEGATION_BEFORE.search(" ".join(head.split()[-4:]))
-                or _NEGATED_FINDING.search(clause)):
+        if _negated_before(m) is not None:
             return m.group(0)
         if (m.group(0).lower().startswith("cure")
                 and (_CURE_NOUN_BEFORE.search(head)
@@ -1308,6 +1316,94 @@ def soften(text: str) -> str:
     for pattern, weaker in _SOFTEN:
         t = pattern.sub(_soften_unless_negated(weaker), t)
     # A substitution at the head of a sentence must not leave it lowercase.
+    return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
+                  lambda m: m.group(1) + m.group(2).upper(), t)
+
+
+# ---------------------------------------------------------------------
+# The prose never calls the evidence stronger than the evidence line does.
+#
+# `evidence.level_word` reads the designs behind a verdict and says
+# "Limited" when the trials were small and "Observational" when no trial
+# was among them. A model that has read a cohort meta-analysis still says
+# "strong evidence", and the page would then say Limited in one place and
+# strong in another. Like soften(), every swap here is weaker than what it
+# replaces and is left alone under a negation or a wish ("no strong
+# evidence", "stronger evidence is needed"), so it can only pull a sentence
+# back towards the line.
+# ---------------------------------------------------------------------
+
+_PRAISE = (r"(?:strong|robust|solid|compelling|convincing|conclusive|definitive|"
+           r"high[- ](?:quality|certainty|grade)|good[- ]quality)")
+_PRAISE_ADVERB = r"(?:(?:very|fairly|quite|pretty|reasonably|relatively|extremely|generally)\s+)?"
+_PRAISED_EVIDENCE = re.compile(rf"\b{_PRAISE}\s+(evidence|support|proof)\b", re.IGNORECASE)
+_EVIDENCE_OF_QUALITY = re.compile(
+    r"\bevidence\s+(?:of|with)\s+(?:high|strong|good|robust)\s+(?:certainty|quality)\b",
+    re.IGNORECASE)
+_EVIDENCE_IS_STRONG = re.compile(
+    rf"\b((?:evidence|findings|results|data|support|body of evidence)\s+"
+    rf"(?:is|are|was|were|looks|seems|appears|remains))\s+{_PRAISE_ADVERB}{_PRAISE}\b",
+    re.IGNORECASE)
+_PRAISED_STUDIES = re.compile(
+    rf"\b{_PRAISE}\s+(?=(?:data|findings|results|studies|trials|research|meta-analyses|"
+    rf"reviews|cohorts?|literature|body of evidence)\b)", re.IGNORECASE)
+_STRONGLY = re.compile(
+    r"\bstrongly\s+(?=(?:suggests?|supports?|indicates?|links?|linked|associated|shows?|"
+    r"demonstrates?|points)\b)", re.IGNORECASE)
+# Strong evidence wished for, not claimed: "stronger evidence is needed".
+_WISHED_BEFORE = re.compile(
+    r"\b(?:lacks?|lacking|absence|needs?|needed|requires?|required|more|better|further|future|"
+    r"await\w*|seek\w*|until|without)\b", re.IGNORECASE)
+# ...or denied after the fact: "strong evidence for the claim is lacking".
+_DENIED_AFTER = re.compile(
+    r"^(?:(?!\b(?:and|but|while|yet)\b)[^.;:,]){0,50}?\b(?:is|are|was|were|remains?)\s+(?:still\s+)?"
+    r"(?:lacking|missing|absent|needed|required|wanting|scarce|rare|not)\b", re.IGNORECASE)
+_TEMPER_WORD = {"Limited": "limited", "Observational": "observational"}
+
+
+def temper(text: str, level: str) -> str:
+    """
+    Take "strong evidence" and its relatives out of a sentence when the
+    evidence line says `level` ("Limited" or "Observational"). Any other
+    level leaves the text alone. The words are swapped for the line's own:
+    "There is strong evidence that coffee lowers risk" becomes "There is
+    observational evidence that coffee lowers risk".
+    """
+    t = text or ""
+    if not t or level not in _TEMPER_WORD:
+        return t
+    word = _TEMPER_WORD[level]
+
+    def held(m: re.Match) -> bool:
+        head = re.split(r"[.!?;:]", m.string[:m.start()])[-1]
+        return (_negated_before(m) is not None
+                or bool(_WISHED_BEFORE.search(" ".join(head.split()[-4:])))
+                or bool(_DENIED_AFTER.match(m.string[m.end():])))
+
+    def cased(m: re.Match) -> str:
+        return word.capitalize() if m.group(0)[:1].isupper() else word
+
+    def evidence_noun(m: re.Match) -> str:
+        return m.group(0) if held(m) else f"{cased(m)} {m.group(1).lower()}"
+
+    def of_quality(m: re.Match) -> str:
+        return m.group(0) if held(m) else f"{word} evidence"
+
+    def predicate(m: re.Match) -> str:
+        return m.group(0) if held(m) else f"{m.group(1)} {word}"
+
+    def dropped(m: re.Match) -> str:
+        return m.group(0) if held(m) else ""
+
+    was = t
+    t = _PRAISED_EVIDENCE.sub(evidence_noun, t)
+    t = _EVIDENCE_OF_QUALITY.sub(of_quality, t)
+    t = _EVIDENCE_IS_STRONG.sub(predicate, t)
+    t = _PRAISED_STUDIES.sub(dropped, t)
+    t = _STRONGLY.sub(dropped, t)
+    if t == was:
+        return was
+    # A word dropped from the head of a sentence must not leave it lowercase.
     return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
                   lambda m: m.group(1) + m.group(2).upper(), t)
 

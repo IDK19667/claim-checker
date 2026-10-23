@@ -2118,6 +2118,24 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
             part["assessment"] = readable(part.get("assessment")) or left_out
         deeper = breakdown.settle_effect(deeper)
 
+    # The evidence line says "Limited" when the trials were small and
+    # "Observational" when no trial was among them. The prose follows it,
+    # so the page never says strong in one place and limited in another.
+    # Last of all, after every gate has checked its figures: it only swaps
+    # words and cannot add a number.
+    level = evidence.level_word(studies, cited_pmids)
+    if level in ("Limited", "Observational"):
+        said = lambda text: breakdown.temper(text, level)
+        tldr, explanation, still_open = said(tldr), said(explanation), said(still_open)
+        if deeper is not None:
+            for key in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):
+                if deeper.get(key):
+                    deeper[key] = said(deeper[key])
+            deeper["evidence"] = [said(t) for t in deeper.get("evidence") or []]
+            deeper["says"] = [said(t) for t in deeper.get("says") or []]
+            for part in deeper.get("parts") or []:
+                part["assessment"] = said(part.get("assessment") or "")
+
     return {
         "verdict": verdict,
         "tldr": tldr,

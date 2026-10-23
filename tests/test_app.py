@@ -3171,6 +3171,56 @@ t("small trials and a review of them are Limited, however the verdict reads",
   _line("true", _DC, ["DC1", "DC2"], "Dark chocolate lowers blood pressure", effect_label="small")
   == "Limited evidence for this claim, a small effect")
 
+# The prose follows the line: a model that read cohort studies still says
+# "strong evidence", and the page would say it beside "observational".
+_tp = breakdown.temper
+t("the prose gate swaps strong, high-quality and high certainty for the line's own word",
+  _tp("There is strong evidence that coffee lowers diabetes risk.", "Observational")
+  == "There is observational evidence that coffee lowers diabetes risk."
+  and _tp("Strong evidence shows a small drop (Study 1).", "Limited")
+  == "Limited evidence shows a small drop (Study 1)."
+  and _tp("The review found high certainty evidence of a small effect.", "Observational")
+  == "The review found observational evidence of a small effect."
+  and _tp("High-quality evidence from cohorts suggests a link.", "Observational")
+  == "Observational evidence from cohorts suggests a link."
+  and _tp("The evidence is strong and consistent.", "Limited") == "The evidence is limited and consistent."
+  and _tp("Strong data show a link, and the studies strongly suggest more.", "Observational")
+  == "Data show a link, and the studies suggest more.")
+t("  and it leaves a negation, a wish, a denial and any other level alone",
+  all(_tp(x, "Observational") == x for x in (
+      "There is no strong evidence that it works.", "The evidence is not strong.",
+      "Stronger evidence is needed to be sure.", "More strong evidence is needed.",
+      "They lack strong evidence.", "Strong evidence for the claim is lacking.",
+      "It does not strongly suggest a benefit.", "The strongest studies here support this claim."))
+  and _tp("There is strong evidence that it works.", "Strong") == "There is strong evidence that it works."
+  and _tp("There is strong evidence that it works.", "Moderate") == "There is strong evidence that it works."
+  and _tp("", "Limited") == "" and _tp(None, "Limited") == "")
+fg.models.script = [Resp(VJ(
+    "true", [1], tldr="Strong evidence says coffee lowers the risk of type 2 diabetes.",
+    explanation="A pooled review of cohort studies found high-quality evidence of lower risk (Study 1). "
+                "The evidence is strong.",
+    still_open="Whether strong evidence from trials would agree.",
+    evidence=["A review of twelve cohort studies found a lower risk with more coffee (Study 1)."],
+    strength="The evidence is strong because twelve studies agree (Study 1)."))]
+_obs = verdict.weigh_evidence("Coffee lowers the risk of type 2 diabetes", [dict(_COHORT_MA)],
+                              "(coffee) AND (type 2 diabetes)")
+_said = json.dumps({k: _obs[k] for k in ("tldr", "explanation", "still_open", "breakdown")})
+t("  through a real check, the takeaway, reason and breakdown never call cohort evidence strong",
+  _obs["verdict"] == "true" and "trong" not in _said and "high-quality" not in _said
+  and "Observational evidence says coffee lowers" in _obs["tldr"], _obs)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_COHORT_MA)]
+fg.models.script = [Resp("(coffee) AND (type 2 diabetes)"),
+                    Resp(VJ("true", [1], tldr="There is strong evidence that coffee lowers the risk.",
+                            explanation="High certainty evidence from cohorts shows a lower risk (Study 1).",
+                            evidence=["A review of twelve cohort studies found a lower risk (Study 1)."],
+                            strength="The evidence is strong (Study 1)."))]
+_d = P("Coffee lowers the risk of type 2 diabetes", ip="9.9.4.1").get_json()
+_text = json.dumps({k: v for k, v in _d.items() if k not in ("evidence", "studies")})
+t("  and an observational-only check carries no 'Strong' or 'strong evidence' in its payload",
+  _d["evidence_line"].startswith("Evidence from observational studies (can't show cause)")
+  and "Strong" not in _text and "strong evidence" not in _text and "high certainty" not in _text.lower(), _d)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
 # 4. Figures are rounded for reading after the gate has checked them, and a
 # measured change keeps its unit, or says it never had one.
 _ACV_ABS = ("RESULTS: ACV significantly reduced fasting blood sugar (FBS) (WMD: -21.929 mg/dL, "
