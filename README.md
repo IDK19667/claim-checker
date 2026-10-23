@@ -23,9 +23,12 @@ browser (no app store). One page, no accounts, no tracking.
   opens that study), and a ledger: studies read / used / evidence
   strength. Studies the verdict relied on are literally highlighted in
   the list below.
-- **An evidence meter** (Strong / Moderate / Weak / No direct evidence)
-  computed from the *types* of studies the verdict cited (meta-analysis
-  beats case report), not from the model's opinion. Tap it for the rules.
+- **An evidence line** (Strong / Limited / evidence from observational
+  studies / Moderate / Weak / No direct evidence) computed from the *types*
+  and sizes of the studies the verdict cited (randomized trials that are not
+  small count as strong, small trials and pilots as limited, cohort and
+  case-control studies as observational, a case report as weak), not from
+  the model's opinion. Tap it for the rules.
 - **Deep dive on any study.** Tap a study for its abstract, what kind of
   study it is in plain words, the researchers, registered-data links, and
   a link to more studies on PubMed.

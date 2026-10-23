@@ -430,8 +430,10 @@ function linkStudyRefs(text, count) {
 // shows about the claim, highlighted the way you'd mark the line that
 // matters on a printout. The line is worded on the server
 // (evidence.evidence_line): "Strong evidence of a partial effect, not a
-// cure". A result saved on this device before it existed names the designs
-// instead, which is all the level word ever measured.
+// cure", "Limited evidence ..." over small trials, "Evidence from
+// observational studies (can't show cause) ..." over cohorts. This script
+// never words it. A result saved on this device before it existed names the
+// designs instead, which is all the level word ever measured.
 function recordSentence(n, cited, ev, best, line) {
   const what = `<button type="button" class="what link-btn" id="meter">What does this mean?</button>`;
   if (!n) return `Found nothing on PubMed that matched well enough to weigh. <mark>No direct evidence</mark> either way. ${what}`;
