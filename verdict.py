@@ -1172,6 +1172,13 @@ TLDR_MAX = 160
 EXPLANATION_MAX = 700
 STILL_OPEN_MAX = 200
 
+# What the "still open" line says when the model gave none, or gave one that
+# told the reader the question is closed. With no study used, the open
+# question is whether anyone has tested the claim at all; with studies, that
+# would be false, so it names the one gap every set of studies has.
+STILL_OPEN_UNTESTED = "Whether any study has tested this claim directly."
+STILL_OPEN_GENERAL = "Whether these results hold for people outside the groups studied."
+
 _FILLER = re.compile(
     r"^(?:it(?:'|\u2019)?s|it is)\s+(?:important|worth|crucial|essential)\s+to\s+(?:note|remember|mention|highlight)\s+that\s+"
     r"|^(?:overall|in\s+conclusion|in\s+summary|ultimately|notably|importantly|interestingly|additionally|furthermore|moreover),?\s+",
@@ -2059,7 +2066,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     if forced:
         tldr = UNTESTED_TLDR
         if not still_open:
-            still_open = "Whether any study has tested this claim directly."
+            still_open = STILL_OPEN_UNTESTED
     if not tldr:
         # First sentence of the explanation is a serviceable one-liner.
         tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
@@ -2087,6 +2094,13 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     readable = lambda text: breakdown.for_reading(text, studies)
     left_out = breakdown.UNITLESS_LEFT_OUT
     tldr, explanation, still_open = readable(tldr), readable(explanation), readable(still_open)
+    # "Still open" must leave something open. A line that, after every
+    # rewrite above, says the question is settled ("remains fully mapped
+    # out") is the model's slip or ours; either way it is not shown.
+    if breakdown.says_settled(still_open):
+        _copy_log.warning("the still-open line said the question is closed, so it was replaced: %r",
+                          still_open)
+        still_open = STILL_OPEN_GENERAL if cited_pmids and not forced else STILL_OPEN_UNTESTED
     if not explanation:
         # A reason that is only about a missing unit is no reason at all.
         # With none of the model's own words left, the page says what the

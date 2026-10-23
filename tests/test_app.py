@@ -488,6 +488,24 @@ t("  still_open survives the cache", d2["cached"] is True and d2["still_open"] =
 fg.models.script = [Resp("q"), Resp(VJ("false", []))]
 d = P("uncited again", ip="7.7.7.7").get_json()
 t("forced complicated names the open question", d["still_open"].startswith("Whether any study"), d)
+_slip = "The precise impact across every diverse global population remains fully mapped out."
+_cc = _Catch()
+logging.getLogger("evident.copy").addHandler(_cc)
+fg.models.script = [Resp("q"), Resp(VJ("true", [1], still_open=_slip))]
+d = P("still open slip claim", ip="7.7.9.1").get_json()
+t("still open: through a real check, a line that says the question is closed is replaced by the "
+  "gap every set of studies has",
+  d["still_open"] == verdict.STILL_OPEN_GENERAL and any("still-open line" in x for x in _cc.lines), d)
+fg.models.script = [Resp("q"), Resp(VJ("false", [], still_open=_slip))]
+d = P("still open slip claim with nothing cited", ip="7.7.9.2").get_json()
+t("  and with no study used it is the question of whether anyone has tested it",
+  d["still_open"] == verdict.STILL_OPEN_UNTESTED, d)
+_cc.lines.clear()
+fg.models.script = [Resp("q"), Resp(VJ("true", [1], still_open="Whether the effect remains well established after 12 weeks."))]
+d = P("still open kept claim", ip="7.7.9.3").get_json()
+t("  while a line that names what is open reaches the page as written",
+  d["still_open"] == "Whether the effect remains well established after 12 weeks." and _cc.lines == [], (d, _cc.lines))
+logging.getLogger("evident.copy").removeHandler(_cc)
 html = c.get("/?q=gate%20claim").data.decode()
 t("no dashes in shipped copy", "\u2014" not in html and "\u2013" not in html)
 
@@ -1598,6 +1616,29 @@ t("  nor after a possessive: never \"Red wine's are linked to heart health is mi
   breakdown.natural("Red wine's link to heart health is mixed.") == "Red wine's link to heart health is mixed."
   and breakdown.natural("Patients' links to care were studied.") == "Patients' links to care were studied."
   and breakdown.natural("Wine links to heart health.") == "Wine is linked to heart health.")
+
+t("still open: a line that says the question is closed is not a line about what is open",
+  breakdown.says_settled(_slip)
+  and breakdown.says_settled("How the dose works in children is well established.")
+  and breakdown.says_settled("Long-term safety remains known."))
+t("  and a line that names a gap, a doubt or a future finding is kept",
+  not any(breakdown.says_settled(x) for x in (
+      "The precise impact across every diverse global population remains to be fully mapped out.",
+      "The precise impact across every diverse global population remains not yet fully mapped out.",
+      "The precise impact across every diverse global population has yet to be fully mapped out.",
+      "The precise impact across every diverse global population is not yet fully mapped out.",
+      "Whether it lasts past 12 weeks, since no trial ran longer.",
+      "Whether it works in adults is open, but the effect on blood sugar is fully understood.",
+      "Nothing.", "Open.",
+      "A large trial in older adults that found no effect would reopen the question.",
+      "Trials were tested at a single dose.",
+      "The effect in children is unknown.", "")))
+t("  and none of the likely raw sentences for it loses its 'not' on the way to the page",
+  all(breakdown.for_reading(verdict.tidy_prose(x, verdict.STILL_OPEN_MAX), []) == x for x in (
+      "The precise impact across every diverse global population remains to be fully mapped out.",
+      "The precise impact across every diverse global population remains not yet fully mapped out.",
+      "The precise impact across every diverse global population has yet to be fully mapped out.",
+      "The precise impact across every diverse global population is not yet fully mapped out.")))
 
 t("grade: the claim's own words are not counted against the prose",
   breakdown.claim_terms("Taking vitamin D supplements in winter cuts your risk of flu")

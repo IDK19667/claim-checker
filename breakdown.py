@@ -1886,6 +1886,51 @@ def tell_straight(text: str, studies: list[dict]) -> str:
     return say_nulls(keep_comparison(text, studies), studies)
 
 
+# ---------------------------------------------------------------------
+# The "still open" line has to leave something open
+#
+# Holdout #3 printed "The precise impact across every diverse global
+# population remains fully mapped out" under "Still open": a sentence that
+# says the opposite of what the line is for. The raw model text was not
+# kept and no step in this file turns "remains to be fully mapped out" into
+# it, so the cause is the model dropping a "not". Whatever the cause, the
+# page must never tell the reader a question is closed in the place that
+# lists the open ones. This reads the finished line and nothing else, so it
+# catches the slip wherever it came from.
+# ---------------------------------------------------------------------
+
+# Anything that makes a line a statement of what is not known or not done.
+_OPEN_MARKER = re.compile(
+    r"\b(?:not|no|never|none|nor|neither|without|cannot|unless|until|too|yet|still|only|few|"
+    r"fewer|whether|if|lacks?|lacked|lacking|limited|gaps?|missing|absent|needs?|needed|future|"
+    r"further|reopen\w*|short|small|would|could|might|may|should)\b|n['’]t\b"
+    r"|\bun(?:known|clear|tested|proven|studied|answered|certain|resolved|measured|explored|"
+    r"examined|mapped|confirmed|determined|settled|addressed|verified|established)\b"
+    r"|\b(?:under|poorly)[- ]?(?:studied|explored|researched|represented)\b"
+    r"|\bto be (?:determined|seen|tested|studied|confirmed|shown|established|explored|answered|"
+    r"resolved|mapped|understood|clarified|characteri[sz]ed)\b"
+    r"|\bmore (?:research|studies|trials|data|work|evidence)\b",
+    re.IGNORECASE)
+_DONE_WORDS = (r"(?:mapped(?:\s+out)?|known|established|understood|settled|resolved|"
+               r"characteri[sz]ed|studied|tested|answered|proven|determined|documented|defined|"
+               r"confirmed|explained|explored|quantified|measured|demonstrated|clear|certain)")
+_COMPLETELY = r"(?:(?:now|already|largely|well|fully|completely|entirely|clearly|firmly|thoroughly|widely|sufficiently|adequately|extensively)\s+)"
+# "Remains fully mapped out", "remains known" and "is well established" say
+# the question is closed. "Was tested at one dose" does not: it is a plain
+# fact with no word of completeness, so it is not read as one.
+_SAYS_DONE = re.compile(
+    rf"\b(?:remains?|remained|stands?)\s+{_COMPLETELY}{{0,3}}{_DONE_WORDS}\b"
+    rf"|\b(?:is|are|was|were|has been|have been)\s+{_COMPLETELY}{{1,3}}{_DONE_WORDS}\b",
+    re.IGNORECASE)
+
+
+def says_settled(text: str) -> bool:
+    """Whether a line meant to name what is still open says the question is
+    closed and names nothing open: "remains fully mapped out" with no "not",
+    no "unknown", no "whether" and no "yet" anywhere in it."""
+    return bool(_SAYS_DONE.search(text or "")) and not _OPEN_MARKER.search(text or "")
+
+
 def drop_citing(text: str, skip, count: int, background=()) -> str:
     """
     Every sentence of text except those resting only on studies in skip.
