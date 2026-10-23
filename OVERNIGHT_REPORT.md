@@ -735,3 +735,48 @@ Orchestrator mode: helpers write the code, a separate helper grades.
 - No new settings or packages are needed in production. The only new
   settings lines are in scripts/safety.py, which runs locally.
 - Waiting on you: click Manual Deploy in Render.
+
+### Step 2: the wording patterns from holdout #3 (done)
+
+Branch accuracy-round-4, made from main (c84b477). Five helpers wrote the
+fixes in separate copies of the code; I read every change and ran the
+tests before taking it. A four day pause from usage limits sat in the
+middle of this step; nothing was lost except old scratch files, and the
+holdout #4 claims were recovered byte for byte (checked by fingerprint).
+
+a. "Strong evidence" only over randomized trials (commits 32d67e6,
+   ed75296, 6b399c5, 960a93c, 47ffb5b).
+   - The line under the chart says "Strong evidence" only when the studies
+     used are randomized trials, or reviews of them, that are not small,
+     and no review rates its evidence low.
+   - Small trials or pilots: "Limited evidence".
+   - Only studies that watched people: "Evidence from observational
+     studies (can't show cause)". With a low rating as well, both facts
+     show: "Low certainty evidence from observational studies (can't show
+     cause)".
+   - Two misreadings behind holdout #3 misses were found and closed: a
+     review that only called for future trials was being counted as a
+     trial, and "the need for high-quality evidence" was being read as a
+     high rating.
+   - The written answer follows the line: when the line opens with
+     anything but Strong or High certainty, "strong evidence" and its
+     relatives in the text become the line's own word. "No strong
+     evidence" and "stronger evidence is needed" are left alone.
+   - The "Reading the evidence meter" legend says the same. App version
+     bumped (sw.js v71) so phones pick up the new legend.
+b. The faithfulness check now also catches a line that credits a study
+   with a finding it never tested (commit e1d221c). A sentence resting on
+   an off-topic study with only background beside it is dropped (1fc0b64).
+c. The banned-word list (robust, leverage, seamless and the rest) is
+   enforced in code on every line a reader sees, including saved results
+   and the share card, with swaps that keep the grammar (2ed95ea).
+d. Garbled wording, by general rules with tests: "efficacy" before a noun
+   (1e5f9f8), a "still open" line that says the question is closed
+   (5c62380), minus signs on a fall and ranges (91ae7f7, 8da94ae).
+
+Decisions recorded in DECISIONS.md (4b2a920). Tests: 758 of 758 pass.
+
+Known limits, left on purpose:
+- The chart's "strong" count still names the study design tier.
+- A review of small trials that never says so still reads Strong.
+- Reviews of cohorts beside one sizeable trial read Strong.
