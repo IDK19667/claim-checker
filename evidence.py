@@ -1846,6 +1846,13 @@ def _small_trials(study) -> bool:
     return any(c.startswith(("a pilot", "small,")) for c in trial_caveats(study))
 
 
+def can_outrank(study) -> bool:
+    """A trial, or a review of trials, strong enough to outrank weaker studies
+    on its own: a review that does not say its trials were small, or a trial
+    that is not a pilot, small, uncontrolled or paid for by the maker."""
+    return not trial_caveats(study) and not _small_trials(study)
+
+
 def _sizeable_trials(study) -> bool:
     """A trial of at least SMALL_TRIAL people, or a review whose trials
     averaged that. Unknown is not sizeable: only a stated size vouches."""

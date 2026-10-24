@@ -2262,8 +2262,9 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
     direction of each study is the model's "finding"; its design is read
     off the record (evidence.design_rank). The trials have to agree with
     each other, and at least one has to be able to bear it: a review of
-    trials, or a randomized trial that is not small, a pilot, uncontrolled
-    or paid for by the maker. One small pilot does not outrank a field.
+    trials that does not say its trials were small, or a randomized trial
+    that is not small, a pilot, uncontrolled or paid for by the maker. One
+    small pilot does not outrank a field.
     """
     found = {n: f for n, f in _findings(parsed, studies).items() if f in ("for", "against")}
     trials, weaker = [], []
@@ -2282,9 +2283,7 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
         return None
     direction = directions.pop()
     against = [n for n, f in weaker if f != direction]
-    if not against or not any(evidence.is_review(studies[n - 1])
-                              or not evidence.trial_caveats(studies[n - 1])
-                              for n, _ in trials):
+    if not against or not any(evidence.can_outrank(studies[n - 1]) for n, _ in trials):
         return None
     kinds = list(dict.fromkeys(evidence.weaker_kind(studies[n - 1]) for n in against))
     # A trial that is blinded and placebo-controlled but never says

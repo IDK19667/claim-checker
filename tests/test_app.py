@@ -3966,6 +3966,15 @@ fg.models.script = [Resp(_SG_MIXED)] * 3
 _v = verdict.weigh_evidence(_SG_CLAIM, [dict(x) for x in (_SG_OBS1, _SG_OBS2, _SG_TRIALS)], _SG_Q)
 t("  nor when the trials themselves are unclear about it",
   _v["verdict"] == "complicated" and "fairer test" not in _v["explanation"], _v)
+_SG_SMALL = dict(_SG_TRIALS, abstract=_SG_TRIALS["abstract"] + " The trials were small and short.")
+t("  a review that says its own trials were small cannot outrank anything",
+  evidence.can_outrank(_SG_TRIALS) and not evidence.can_outrank(_SG_SMALL)
+  and not evidence.can_outrank(_TEA_PILOT) and evidence.can_outrank(_TEA_RCT_NO))
+fg.models.script = [Resp(_SG_SAYS)] * 3
+_v = verdict.weigh_evidence(_SG_CLAIM, [dict(x) for x in (_SG_OBS1, _SG_OBS2, _SG_SMALL)], _SG_Q)
+t("  so with small trials against reviews of links the answer stays complicated",
+  _v["verdict"] == "complicated" and "fairer test" not in _v["explanation"]
+  and _v["tldr"] != verdict.CONTROLLED_TLDR["false"], _v)
 
 # ---- the harm guard: a risky answer needs a trial or a major review ---------------
 t("harm guard: which way a claim leans on a protective practice",
