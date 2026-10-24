@@ -1043,6 +1043,134 @@ def denies_absolute(text: str, claim: str) -> bool:
     return bool(_ABSOLUTE_DENIED.search(first))
 
 
+# ---------------------------------------------------------------------
+# A claim that states a requirement for everyone: "you need 8 glasses of
+# water a day", "adults must take 400 IU daily", "you have to walk 10,000
+# steps". It is tested as written, so a takeaway that says the need varies
+# from person to person, or that the number is only a guide, has already
+# said the requirement as worded does not hold.
+# ---------------------------------------------------------------------
+
+# Who the claim is about when it is about everyone. The subject must sit
+# right against the verb: "people with diabetes should" is a group, not
+# everyone, and is left alone.
+_EVERYONE = (r"(?:you|we|everyone|everybody|anyone|people|adults|humans|persons|"
+             r"(?:every|each) (?:adult|person|human|one)|all (?:adults|people|humans|of us)|"
+             r"(?:healthy|normal|average|grown|older|younger) (?:adults|people|humans)|"
+             r"adult humans)")
+_MUST = (r"(?:need(?:s|ed)?(?: to)?|must|(?:have|has|got) to|should|ought to|"
+         r"(?:are|is) (?:required|supposed) to|require)")
+_REQUIRES_OF_ALL = re.compile(
+    rf"\b{_EVERYONE}\s+(?:(?:really|actually|always|all|definitely|absolutely|truly|simply|"
+    rf"just|each|every)\s+)*{_MUST}\b", re.IGNORECASE)
+# "8 hours of sleep is necessary": no subject, and the requirement is for all.
+_IMPERSONAL_MUST = re.compile(
+    r"\b(?:is|are) (?:required|necessary|needed|essential|mandatory)\b|"
+    r"\bit is (?:necessary|essential|required)\b", re.IGNORECASE)
+# A claim that hedges the requirement is not stating it for everyone: the
+# hedge sits just before the subject ("most adults need") or, for a claim
+# with no subject, anywhere in it.
+_HEDGE_BEFORE = re.compile(
+    r"\b(?:most|some|many|only|few|certain|not|never|almost|nearly)\W+(?:\w+\W+)?$",
+    re.IGNORECASE)
+_REQUIRE_HEDGED = re.compile(
+    r"\b(?:may|might|can|could|some|most|many|often|usually|generally|typically|"
+    r"rarely|sometimes|only)\b|n't\b|\b(?:not|never)\b", re.IGNORECASE)
+# The fixed thing: a number, a number word, or an amount per period.
+_FIXED_AMOUNT = re.compile(
+    r"\b\d[\d,.]*\b|"
+    r"\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|"
+    r"thirty|forty|fifty|hundred|thousand|half a|a dozen|twice|once)\b|"
+    r"\b(?:a|per|each|every)\s+(?:day|week|night|month|year|hour|meal|morning)\b|"
+    r"\b(?:daily|nightly|weekly|monthly|yearly|hourly)\b", re.IGNORECASE)
+
+
+def universal_requirement(claim: str) -> bool:
+    """
+    True when the claim says everyone needs, must have or should do a fixed
+    thing: a "need", "must", "have to" or "should" with a universal subject
+    (you, everyone, adults, people) and a fixed amount, number or frequency.
+    A claim that says no ("you don't need 8 glasses"), hedges ("most adults
+    need"), or names a group ("people with diabetes should") is not one, and
+    neither is a claim with no fixed amount ("Drinking water helps weight
+    loss").
+    """
+    text = claim or ""
+    if claim_denies(text) or not _FIXED_AMOUNT.search(text):
+        return False
+    for m in _REQUIRES_OF_ALL.finditer(text):
+        if not _HEDGE_BEFORE.search(text[:m.start()]):
+            return True
+    return bool(_IMPERSONAL_MUST.search(text) and not _REQUIRE_HEDGED.search(text))
+
+
+# What a takeaway says when it rejects a fixed requirement. Anchored on a
+# word for the need itself, so "the effect varies by person" (a result) is
+# not mistaken for "the need varies by person" (a requirement).
+_NEED_WORD = (r"(?:needs?|needed|requirements?|required|requires?|how (?:much|many|long|often)|"
+              r"(?:amount|intake|dose|dosage|quantity)s? (?:needed|required|recommended)|"
+              r"recommended (?:amount|intake|dose|dosage|quantity|number|hours|time)s?|targets?)")
+_VARIES = r"(?:var(?:y|ies|ied|ying)|differ(?:s|ed|ing)?|depend(?:s|ed|ing)?|fluctuat\w+)"
+_NEED_VARIES = re.compile(
+    rf"\b{_NEED_WORD}\b[^.;:]{{0,60}}?\b{_VARIES}\b|"
+    rf"\b{_VARIES}\b[^.;:]{{0,40}}?\b{_NEED_WORD}\b|"
+    r"\bneeds?\s+(?:\w+\s+)?(?:different|varying|varied|differing)\b|"
+    r"\bindividual\w*\s+(?:needs?|requirements?|differences?)\b|"
+    r"\b(?:needs?|requirements?)\s+(?:are|is)\s+(?:individual|personal|unique)\b",
+    re.IGNORECASE)
+_ONLY_A_GUIDE = re.compile(
+    r"\b(?:only|just|merely|simply)\s+(?:a|an)\s+"
+    r"(?:\w+\s+)?(?:guide|guideline|rule of thumb|estimate|average|starting point|"
+    r"ballpark|benchmark)\b|"
+    r"\b(?:rough|general|loose|approximate|crude)\s+(?:guide|guideline|estimate|rule of thumb)\b|"
+    r"\brules? of thumb\b|"
+    r"\bnot (?:a|an) (?:\w+\s+)?(?:strict|hard|hard-and-fast|fixed|firm|universal|magic|rigid|"
+    r"set)\s+(?:rule|requirement|target|number|amount|minimum|threshold|must|limit)\b|"
+    r"\bnot (?:a|an) (?:requirement|rule|must|necessity)\b|"
+    r"\bno\s+(?:single|fixed|set|universal|magic|one[- ]size[- ]fits[- ]all|strict|hard|exact|"
+    r"precise|specific|standard|ideal|optimal)\s+(?:\w+\s+)?(?:amount|number|requirement|rule|"
+    r"target|dose|dosage|figure|quantity|threshold|minimum|duration|time|length|limit|"
+    r"interval|goal|value|level|intake|rate|schedule|answer)\b|"
+    r"\bone[- ]size[- ]fits[- ]all\b", re.IGNORECASE)
+# A "not" or "little" just before "vary" or "guide" turns it round: "needs
+# don't vary much", "not just a rough guide".
+_NOT_JUST_BEFORE = re.compile(
+    r"(?:\bnot|n't|\bnever|\bno|\blittle|\bbarely|\bhardly|\bwithout)\W+(?:\w+\W+){0,3}$",
+    re.IGNORECASE)
+# The takeaway that keeps the number for most people has not dropped it.
+_FITS_MOST = re.compile(
+    r"\b(?:for|to|in|suits?|suited|fits?|covers?|serves?|meets?)\s+(?:the\s+)?"
+    r"(?:most|majority|nearly all|almost all|many)\b|"
+    r"\bmost\s+(?:\w+\s+){0,2}?(?:people|adults|individuals|persons|women|men|humans|"
+    r"users|healthy)\b|\b(?:the )?majority of (?:people|adults)\b|"
+    r"\b(?:nearly|almost) (?:all|everyone)\b", re.IGNORECASE)
+
+
+def says_need_varies(text: str) -> bool:
+    """True when `text` says the need varies from person to person or that
+    the number is only a rough guide, a rule of thumb, or not a strict rule.
+    Not when it also says the number is right for most people."""
+    first = " ".join(sentences(text or "")[:1])
+    if not first or _FITS_MOST.search(text or ""):
+        return False
+    if any(not _NOT_JUST_BEFORE.search(first[:m.start()])
+           for m in _ONLY_A_GUIDE.finditer(first)):
+        return True
+    for m in _NEED_VARIES.finditer(first):
+        word = re.search(_VARIES, m.group(0), re.IGNORECASE)
+        at = m.start() + (word.start() if word else 0)
+        if not _NOT_JUST_BEFORE.search(first[:at]):
+            return True
+    return False
+
+
+def rejects_requirement(text: str, claim: str) -> bool:
+    """True when `claim` states a requirement for everyone and the takeaway
+    `text` says the requirement varies or is only a guide: the takeaway has
+    ruled out the claim as worded."""
+    return universal_requirement(claim) and says_need_varies(text)
+
+
 def stance(text: str, claim: str) -> str:
     """
     What a takeaway commits to about the claim: "yes", "no", "untested" or
@@ -1133,12 +1261,24 @@ _SAYS = {"yes": "a plain yes", "no": "a plain no",
          "untested": "that nothing here tests the claim"}
 
 
+def _stance_under(verdict: str, tldr: str, claim: str) -> str:
+    """
+    `stance`, except under "false": a takeaway that says a fixed requirement
+    varies or is only a guide is the plain no that "false" says, however the
+    screen misreads its words ("just a rough guide" reads as a yes).
+    """
+    said = stance(tldr, claim)
+    if verdict == "false" and said == "yes" and rejects_requirement(tldr, claim):
+        return "no"
+    return said
+
+
 def words_stamp(verdict: str, tldr: str, claim: str) -> str | None:
     """
     The stamp the takeaway commits to, when that is not `verdict`; None when
     the two agree or the takeaway is hedged and commits to none.
     """
-    said = stance(tldr, claim)
+    said = _stance_under(verdict, tldr, claim)
     if said in _AGREES.get(verdict, set()):
         return None
     return STAMP_FOR.get(said)
@@ -1149,7 +1289,7 @@ def stamp_conflict(verdict: str, tldr: str, explanation: str, claim: str) -> str
     Why the stamp and the words disagree, in words a retry prompt can use,
     or None when they agree.
     """
-    said = stance(tldr, claim)
+    said = _stance_under(verdict, tldr, claim)
     where = "the takeaway"
     if said in _AGREES.get(verdict, set()):
         said, where = None, ""

@@ -2761,16 +2761,20 @@ t("  and so does the one-group downgrade",
 _GUIDE = "Daily water needs vary by person and food intake, so 8 glasses is just a rough guide."
 _WATER_S = [_study("H1", "Human water needs: a review of hydration in adults", types=["Systematic Review"])]
 _GUIDE_R = Resp(VJ("complicated", [1], tldr=_GUIDE, evidence=["Water needs varied (Study 1)."]))
+# The same takeaway under a claim that is not a requirement ("is the right
+# amount"), so the rule for a fixed requirement does not decide these and the
+# small call still does; the requirement itself is tested further down.
+_AMOUNT = "8 glasses of water a day is the right amount"
 t("  the code screen misreads 'just a rough guide' as a plain yes",
-  breakdown.words_stamp("complicated", _GUIDE, _WATER) == "true")
+  breakdown.words_stamp("complicated", _GUIDE, _AMOUNT) == "true")
 fg.models.calls = 0
 fg.models.script = [_GUIDE_R, DIR("no"), _GUIDE_R]
-_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+_v = verdict.weigh_evidence(_AMOUNT, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
 t("  so the small call decides, and the stamp becomes 'Likely false', never 'Likely true'",
   _v["verdict"] == "false" and _v["tldr"] == _GUIDE and fg.models.calls == 3, _v)
 fg.models.calls = 0
 fg.models.script = [_GUIDE_R, DIR("mixed")]
-_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+_v = verdict.weigh_evidence(_AMOUNT, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
 t("  the small call is told a fixed rule that 'varies' or is 'a rough guide' is answered no",
   "only a rough guide or rule of thumb" in verdict._direction_prompt(_WATER, _GUIDE)
   and "there is not one" in verdict._direction_prompt(_WATER, _GUIDE))
@@ -2778,9 +2782,16 @@ t("  a reading that agrees with the stamp means a false alarm: no retry, nothing
   _v["verdict"] == "complicated" and fg.models.calls == 2, (_v, fg.models.calls))
 fg.models.calls = 0
 fg.models.script = [_GUIDE_R, Resp("not json")]
-_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+_v = verdict.weigh_evidence(_AMOUNT, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
 t("  and a reading that fails changes nothing either",
   _v["verdict"] == "complicated" and _v["tldr"] == _GUIDE and fg.models.calls == 2, (_v, fg.models.calls))
+fg.models.calls = 0
+fg.models.script = [_GUIDE_R]
+_v = verdict.weigh_evidence(_WATER, [dict(x) for x in _WATER_S], "(water) AND (hydration)")
+t("  for a claim that states a requirement the rule decides at once: 'false', no small call",
+  _v["verdict"] == "false" and _v["tldr"] == _GUIDE and fg.models.calls == 1
+  and breakdown.words_stamp("false", _GUIDE, _WATER) is None
+  and not breakdown.stamp_conflict("false", _GUIDE, "", _WATER), (_v, fg.models.calls))
 t("  the screen reads a reason after ', as' as the reason, not the answer",
   breakdown.stance("Cracking your knuckles does not cause arthritis, as studies show no link.",
                    "Cracking your knuckles causes arthritis") == "no"
@@ -2935,6 +2946,112 @@ fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Cinnamon lowers blood s
 _v = verdict.weigh_evidence("Cinnamon lowers blood sugar", [dict(s) for s in _ACV], "(cinnamon) AND (blood sugar)")
 t("  a claim that promises less is never raised",
   _v["verdict"] == "complicated", _v)
+
+# ---- accuracy round 4 (a claim that says everyone needs a fixed amount) ---------
+# "You need 8 glasses of water a day" came back "It's complicated" over a
+# takeaway that said needs vary and 8 glasses is only a rough guide. The
+# takeaway had already ruled the requirement out as worded, so the stamp
+# follows it, the way it does for a claim that promises a cure.
+t("a claim that says everyone needs, must or has to do a fixed thing is a requirement",
+  all(breakdown.universal_requirement(c) for c in (
+      "You need to drink 8 glasses of water a day", "Everyone needs 8 hours of sleep a night",
+      "Adults must take 1000 mg of calcium daily", "You have to walk 10,000 steps a day",
+      "You should eat five servings of vegetables every day",
+      "Eight hours of sleep is necessary")))
+t("  and a claim that says no, hedges, names a group or has no fixed amount is not",
+  not any(breakdown.universal_requirement(c) for c in (
+      "You don't need 8 glasses of water a day", "Most adults need 8 hours of sleep",
+      "You may need 8 glasses of water a day", "Not everyone needs 8 hours of sleep",
+      "People with diabetes should check their blood sugar daily",
+      "Drinking water helps weight loss", "You need to exercise",
+      "Water is essential for life")))
+t("a takeaway that says the need varies, or the number is a guide, rejects it",
+  all(breakdown.says_need_varies(x) for x in (
+      "Water needs vary a lot by person and food, so 8 glasses is only a rough guide.",
+      "How much sleep a person needs depends on age and health.",
+      "There is no single amount of calcium that everyone needs.",
+      "Eight hours is a rule of thumb, not a strict rule.",
+      "Individual needs differ, so no fixed number of steps fits everyone.",
+      "People need different amounts of vitamin D depending on sun exposure.")))
+t("  and one that keeps the number for most people, denies the variation, or is about a result does not",
+  not any(breakdown.says_need_varies(x) for x in (
+      "Needs vary by person, but 8 hours suits most adults.",
+      "Most adults need 7 to 9 hours, and needs vary a little.",
+      "Sleep needs do not vary much between healthy adults.",
+      "There is no evidence that needs vary.",
+      "Eight glasses is not just a rough guide, it is a firm requirement.",
+      "The effect of vitamin D varies by person.",
+      "Results vary across studies and the certainty is low.",
+      "Daily walking lowers the risk of early death.")))
+
+_REQ = [("You need to drink 8 glasses of water a day", "water", "hydration",
+         "Water needs vary a lot by person and food, so 8 glasses is only a rough guide."),
+        ("Everyone needs 8 hours of sleep a night", "sleep", "duration",
+         "How much sleep a person needs depends on age and health, and no single number fits everyone."),
+        ("Adults must take 1000 mg of calcium daily", "calcium", "intake",
+         "Calcium requirements differ by age, sex and diet, so a daily figure is only a rule of thumb."),
+        ("You have to walk 10,000 steps a day", "steps", "walking",
+         "The 10,000 step goal is not a strict rule, and the benefit varies by person.")]
+
+
+def _req_set(word, other):
+    return [_study("Q1", f"{word.title()} and {other} in healthy adults: a systematic review",
+                   types=["Systematic Review"], abstract=f"We reviewed {word} and {other} in adults."),
+            _study("Q2", f"{word.title()} and {other}: a randomized trial in adults",
+                   abstract=f"Adults were given different amounts of {word}.")]
+
+
+_req_log = []
+_req_handler = logging.Handler()
+_req_handler.emit = lambda rec: _req_log.append(rec.getMessage())
+logging.getLogger("evident.stamp").addHandler(_req_handler)
+for _c, _w, _o, _tl in _REQ:
+    fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_tl,
+                                evidence=[f"Needs differed between people (Study 1)."]))] * 2
+    _req_log.clear()
+    _v = verdict.weigh_evidence(_c, _req_set(_w, _o), f"({_w}) AND ({_o})")
+    t(f"'complicated' over a takeaway that says the need varies becomes 'false': {_c}",
+      _v["verdict"] == "false" and _v["tldr"] == _tl
+      and "The claim states a fixed requirement for everyone" in _v["explanation"]
+      and not re.search("[–—]", json.dumps(_v, ensure_ascii=False)), _v)
+    t("  and the change is logged",
+      any("fixed requirement" in m and "'false'" in m for m in _req_log), _req_log)
+logging.getLogger("evident.stamp").removeHandler(_req_handler)
+
+_water = "You need to drink 8 glasses of water a day"
+_water_tl = _REQ[0][3]
+_water_set = _req_set("water", "hydration")
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Water needs vary by person, but 8 glasses suits most adults.",
+                            evidence=["Needs differed between people (Study 1)."]))] * 2
+_v = verdict.weigh_evidence(_water, [dict(s) for s in _water_set], "(water) AND (hydration)")
+t("  a takeaway that keeps the number for most people leaves the stamp alone",
+  _v["verdict"] == "complicated", _v)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Water intake and hydration studies are mixed and low certainty.",
+                            evidence=["Needs differed between people (Study 1)."]))] * 2
+_v = verdict.weigh_evidence(_water, [dict(s) for s in _water_set], "(water) AND (hydration)")
+t("  and so does one that never says the need varies",
+  _v["verdict"] == "complicated", _v)
+fg.models.script = [Resp(VJ("insufficient", [1, 2], tldr=_water_tl,
+                            evidence=["Needs differed between people (Study 1)."]))] * 2
+_v = verdict.weigh_evidence(_water, [dict(s) for s in _water_set], "(water) AND (hydration)")
+t("  'Not enough evidence' is never raised to 'false'",
+  _v["verdict"] == "insufficient", _v)
+fg.models.script = [Resp(VJ("true", [1, 2], tldr=_water_tl,
+                            evidence=["Needs differed between people (Study 1)."]))] * 2
+_v = verdict.weigh_evidence(_water, [dict(s) for s in _water_set], "(water) AND (hydration)")
+t("  and a 'true' is not touched by this rule",
+  _v["verdict"] != "false", _v)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Water needs vary a lot by person and food.",
+                            evidence=["Needs differed between people (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("Drinking water helps weight loss", [dict(s) for s in _water_set], "(water) AND (weight loss)")
+t("  a claim that is not a requirement is never raised, whatever the takeaway says",
+  _v["verdict"] == "complicated", _v)
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_water_tl,
+                            evidence=["Needs differed between people (Study 1)."]))] * 2
+_v = verdict.weigh_evidence("You don't need 8 glasses of water a day", [dict(s) for s in _water_set],
+                            "(water) AND (hydration)")
+t("  and a claim that already says you do not need it is answered the ordinary way",
+  _v["verdict"] == "complicated" and "fixed requirement" not in _v["explanation"], _v)
 
 # 2. Animal and lab studies are background for a claim about people: never
 # counted as used, whatever the model cited, and grouped on their own.

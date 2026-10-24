@@ -60,6 +60,23 @@ design tier, not the line's word; a review of small trials that never says
 its trials were small still reads Strong, because only a stated size can
 vouch either way; reviews of cohorts beside one sizeable trial read Strong.
 
+- **A claim that everyone needs a fixed amount is false when the takeaway
+  says the need varies or the number is only a guide.** "You need 8 glasses
+  of water a day" came back "It's complicated" over "needs vary a lot by
+  person... only a rough guide". The stamp-follows-the-takeaway screen read
+  that sentence as "mixed", and only a flagged sentence reaches the small
+  call, so nothing ran. `breakdown.rejects_requirement` now pairs a claim
+  with a universal subject (you, everyone, adults, people), need/must/have
+  to/should and a number or an amount per period, with a takeaway that says
+  the need varies or is a rough guide, and `_read_verdict` turns
+  "complicated" into "false" and logs it, under the cure rule's limits (used
+  human evidence, no earlier downgrade, not one group). It leaves "true",
+  "not enough evidence", a claim that says no or hedges, and a takeaway that
+  says the number suits most people alone. This adds no certainty
+  (non-negotiable 1): the model's own takeaway already denies the
+  requirement as worded, so "complicated" was claiming a split in the
+  studies that its own sentence did not describe.
+
 ## 2026-10-17: High-stakes claims follow plain health guidance
 
 **A safety set of 15 claims gates every merge.** `tests/safety_claims.json`

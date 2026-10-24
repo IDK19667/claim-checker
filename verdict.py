@@ -2049,6 +2049,24 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         explanation = (explanation.rstrip() + f' The claim says "{absolute}", and these '
                        f"studies found a smaller effect than that, so as written it is "
                        f"likely false.").strip()
+    # The same step for a claim that says everyone needs a fixed amount or
+    # must do a fixed thing ("you need 8 glasses of water a day"). A takeaway
+    # that says the need varies from person to person, or that the number is
+    # only a guide, has already ruled the requirement out as worded, and
+    # "complicated" over it says the studies are split when they are not.
+    # Same limits as above: only from "complicated", only on used human
+    # evidence, never past a downgrade, never for one group alone.
+    if (verdict == "complicated" and cited_pmids
+            and not (forced or thin or forced_narrow or forced_low)
+            and breakdown.rejects_requirement(tldr, claim)
+            and not evidence.narrow_only(studies, cited_pmids, claim)):
+        _stamp_log.warning("the claim states a fixed requirement and the takeaway says the need "
+                           "varies or is only a guide, so the stamp 'complicated' follows the "
+                           "takeaway to 'false': %r", tldr)
+        verdict = "false"
+        explanation = (explanation.rstrip() + " The claim states a fixed requirement for "
+                       "everyone, and these studies do not support one, so as written it is "
+                       "likely false.").strip()
     # A downgrade made here, in code, leaves the model's takeaway answering
     # the question the stamp no longer answers. The takeaway follows the
     # stamp, so the two never disagree on the reader's screen.
