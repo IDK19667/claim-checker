@@ -519,6 +519,7 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
                                            "not_applies_to", "unknowns")}
     parts = [dict(p) for p in bd.get("parts") or []]
     kept_lines = list(lines)
+    unsized = False
     for item in read.get("lines") or []:
         if not isinstance(item, dict) or item.get("verdict") not in ("rewrite", "drop"):
             continue
@@ -548,14 +549,29 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
         if not 0 < k <= len(lines):
             continue
         old = lines[k - 1]
+        # The plain-words gloss under an effect size ("That is about 17%
+        # lower odds, a small effect") is arithmetic code did on a figure
+        # that already passed the gate, or the abstract's own null
+        # statement. A model's rewrite of it only repeats the figure or,
+        # worse, asserts significance code never computed, so it is dropped
+        # and the figure line above it stands alone.
+        code_gloss = old.startswith(breakdown.TRANSLATION_LEAD)
         new = (_gate_line(str(item.get("rewrite") or ""), studies, allowed, skip)
-               if item.get("verdict") == "rewrite" else "")
+               if item.get("verdict") == "rewrite" and not code_gloss else "")
         # A line that failed is never swapped for a surer one: a rewrite
         # that only loses its hedge goes, and the line with it.
         if new and breakdown.lost_hedge(old, new, claim):
             new = ""
+        # The size words in the gloss were read from bd["effect"], which
+        # also words the evidence line ("a large effect"). A gloss the check
+        # disputed takes that sizing with it.
+        if code_gloss and old in str(bd.get("effect_size") or ""):
+            unsized = True
         _faith_log.warning("a research line did not match its abstract (%s), so it was %s: %r",
-                           item.get("problem"), "rewritten" if new else "dropped", old)
+                           item.get("problem"),
+                           "rewritten" if new else
+                           "dropped, because a model does not rewrite the code's own gloss"
+                           if code_gloss else "dropped", old)
         kept_lines = [new if t == old else t for t in kept_lines]
         explanation = _swap(explanation, old, new)
         evidence_paras = [_swap(p, old, new) for p in evidence_paras]
@@ -578,7 +594,8 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
             p["assessment"] = breakdown.PART_BELOW
     new_bd = breakdown.settle_effect(
         {**bd, **fields, "parts": [p for p in parts if p["assessment"]],
-         "says": kept_lines, "evidence": evidence_paras})
+         "says": kept_lines, "evidence": evidence_paras,
+         **({"effect": {}} if unsized and bd.get("effect") else {})})
     return {**result, "tldr": tldr, "explanation": explanation or tldr, "breakdown": new_bd}
 
 

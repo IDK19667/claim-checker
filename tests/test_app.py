@@ -4676,6 +4676,100 @@ _enum = verdict.FAITHFUL_SCHEMA["properties"]["lines"]["items"]["properties"]["p
 t("  and the reply is allowed to name it",
   _enum == ["none", "direction", "group", "unsupported", "untested"], _enum)
 
+# The plain-words gloss under an effect size is the code's own sentence, built
+# from a figure that passed the gate or from the abstract's null statement.
+# When the check disputes it, a model's rewrite is never taken: it repeated the
+# figure in one live run and asserted significance code never computed in
+# another. The gloss is dropped, the figure line stays, and the size words go
+# from the evidence line with it. Synthetic claim and studies, not a holdout
+# claim.
+_GL_CLAIM = "Cold showers cut sick days"
+_GL_Q = "(cold showers) AND (sick days)"
+_GL = [_study("GL1", "Cold showers and sick days: a randomized trial",
+              abstract="Adults were randomized to cold showers or warm showers; 3000 took part. The odds "
+                       "ratio for taking a sick day was 0.83 (95% CI 0.71 to 0.97; p = 0.02)."),
+       _study("GL2", "Cold showers and sick days: a second randomized trial",
+              abstract="Adults were randomized to cold showers or warm showers; 900 took part. The odds "
+                       "ratio for taking a sick day was 0.89 (95% CI 0.75 to 1.05; p = 0.17).")]
+_GL_FIG = "The odds ratio for a sick day was 0.83 (Study 1)."
+_GL_NULL_FIG = "The odds ratio for a sick day was 0.89 (Study 2)."
+
+
+def _gl_run(effect_size, flag, n=1):
+    """
+    One check on study n with the effect row given, run twice: once to see
+    the research lines, once with the faithfulness reply `flag(says)` gives.
+    """
+    body = Resp(VJ("true", [n], tldr="Cold showers cut sick days.",
+                   explanation=f"Cold showers were tried in a randomized trial (Study {n}).",
+                   effect_size=effect_size,
+                   evidence=[f"Cold showers were tried in a randomized trial (Study {n})."]))
+    fg.models.script = [body, FJ([])]
+    first = verdict.weigh_evidence(_GL_CLAIM, [dict(x) for x in _GL], _GL_Q)
+    fg.models.script = [body, FJ(flag((first["breakdown"] or {}).get("says") or []))]
+    return first, verdict.weigh_evidence(_GL_CLAIM, [dict(x) for x in _GL], _GL_Q)
+
+
+def _gloss_at(says):
+    return next(i + 1 for i, x in enumerate(says) if x.startswith(breakdown.TRANSLATION_LEAD))
+
+
+_REPEAT = "That is an effect size of 0.83 (Study 1)."
+_faith = _Catch()
+logging.getLogger("evident.faithful").addHandler(_faith)
+_first, _v = _gl_run(_GL_FIG, lambda says: [_L(_gloss_at(says), "rewrite", "unsupported", _REPEAT)])
+logging.getLogger("evident.faithful").removeHandler(_faith)
+_bd = _v["breakdown"] or {}
+_first_says = _first["breakdown"]["says"]
+_gloss = _first_says[_gloss_at(_first_says) - 1]
+_figure = _first_says[_gloss_at(_first_says) - 2]
+_first_label = ((_first["breakdown"] or {}).get("effect") or {}).get("label")
+t("faithfulness: a code gloss the check disputes is dropped, not rewritten",
+  _first_label == "small" and "a small effect" in _gloss and "0.83" in _figure
+  and _REPEAT not in json.dumps(_v) and _gloss not in json.dumps(_v)
+  and _figure in _bd["says"] and _bd["effect_size"] == _figure
+  and not any(x.startswith(breakdown.TRANSLATION_LEAD) for x in _bd["says"]), (_gloss, _bd))
+t("  and the log says it was dropped, with the reason",
+  any("(unsupported), so it was dropped" in m for m in _faith.lines), _faith.lines)
+t("  and the size words go from the evidence line too, which is built from the same sizing",
+  _first_label == "small" and not _bd.get("effect")
+  and "a small effect" in evidence.evidence_line("true", _GL, ["GL1", "GL2"], _GL_CLAIM, _first_label)
+  and "small" not in evidence.evidence_line("true", _GL, ["GL1", "GL2"], _GL_CLAIM,
+                                            (_bd.get("effect") or {}).get("label")),
+  (_bd.get("effect"), _first_label))
+
+_REVERSED = ("That is a clear difference between the groups, because the result was "
+             "statistically significant (Study 2).")
+_first, _v = _gl_run(_GL_NULL_FIG, lambda says: [_L(_gloss_at(says), "rewrite", "direction", _REVERSED)], n=2)
+_bd = _v["breakdown"] or {}
+_first_says = _first["breakdown"]["says"]
+_null_gloss = _first_says[_gloss_at(_first_says) - 1]
+_null_figure = _first_says[_gloss_at(_first_says) - 2]
+t("  a null gloss flagged for direction is dropped, never reversed into a significance claim",
+  _null_gloss.startswith("That is no clear difference between the groups") and "0.89" in _null_figure
+  and _REVERSED not in json.dumps(_v) and _null_gloss not in json.dumps(_v)
+  and "statistically significant" not in json.dumps(_v).replace("not statistically significant", "")
+  and _null_figure in _bd["says"] and _bd["effect_size"] == _null_figure, (_null_gloss, _bd))
+t("  and the null sizing goes with it, so the evidence line no longer says no clear effect",
+  ((_first["breakdown"] or {}).get("effect") or {}).get("label") == "none" and not _bd.get("effect")
+  and "no clear effect" in evidence.evidence_line("false", _GL, ["GL2"], _GL_CLAIM, "none")
+  and "no clear effect" not in evidence.evidence_line("false", _GL, ["GL2"], _GL_CLAIM,
+                                                      (_bd.get("effect") or {}).get("label")),
+  (_first["breakdown"].get("effect"), _bd.get("effect")))
+
+# A line the check disputes that is not a gloss is still rewritten as before,
+# and a gloss it leaves alone keeps its words and its sizing.
+_GL_FIX = "Cold showers lowered the odds of a sick day in a randomized trial (Study 1)."
+_first, _v = _gl_run(_GL_FIG, lambda says: [_L(1, "rewrite", "unsupported", _GL_FIX)])
+_bd = _v["breakdown"] or {}
+t("  a disputed line that is not a gloss is still rewritten",
+  _bd["says"][0] == _GL_FIX and _first["breakdown"]["says"][0] != _GL_FIX
+  and _GL_FIX in _v["explanation"], (_first["breakdown"]["says"], _bd["says"]))
+t("  and a gloss nobody disputed keeps its words and its sizing",
+  _bd["says"][1:] == _first["breakdown"]["says"][1:]
+  and any(x.startswith(breakdown.TRANSLATION_LEAD) and "a small effect" in x for x in _bd["says"])
+  and (_bd.get("effect") or {}).get("label") == "small", _bd)
+
 # ---- writing: numbers, statistics, verbs, and the effect line ----------------
 # Synthetic claims and studies only; none of these is a holdout claim.
 _dg = breakdown.digits

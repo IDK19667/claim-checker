@@ -144,6 +144,23 @@ a longer id list in the same efetch. Both Cochrane reviews were present in
 4 of 4 live runs, with the same six studies in all four.
 The merge changes which studies a check reads, so rerun the regression and
 safety sets.
+The faithfulness check never rewrites the code's own gloss. The sentence
+under an effect size that starts "That is " ("That is about 17% lower
+odds, a small effect") is arithmetic done on a figure that already passed
+the gate, or the abstract's own null statement, so there is nothing for a
+model to improve and two live runs showed what a rewrite costs: a gloss
+flagged "unsupported" came back as "That is an effect size of 1.03" under a
+line that said exactly that, and a null gloss flagged "direction" came back
+as "a clear difference ... because the result was statistically
+significant" under three ratios, a significance claim code never computed.
+In `check_faithful` a flagged line that starts with `TRANSLATION_LEAD` now
+takes the "drop" path whatever the model offered, so the figure line stays
+and the gloss leaves every field it was swapped into. The sizing it carried
+goes too: `bd["effect"]` also words the evidence line ("a large effect",
+"no clear effect"), so a dropped gloss clears it and the page does not keep
+saying elsewhere what the check disputed. The takeaway keeps the hedge it
+was given at the time, which only ever weakens a verb and was written
+before the check. Ordinary lines are rewritten as before.
 
 ## 2026-10-17: High-stakes claims follow plain health guidance
 
