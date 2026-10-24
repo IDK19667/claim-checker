@@ -55,6 +55,26 @@ that says the question is closed is replaced with a real open question. A
 fall is unsigned wherever it appears ("fell by 5", not "fell by -5"), and a
 range reads as a range.
 
+From the first regression run of this round ("Sugar makes children
+hyperactive", expected false, came back "complicated"):
+
+- `evidence.design_rank` read a pooled review of double-blind, placebo-controlled
+  studies as design unknown, because it never says "randomized", so the rule
+  that lets trials outrank observational links (`verdict._trials_outweigh`)
+  never saw a trial side. A review (or a study typed as a trial) that describes
+  a placebo or blinded intervention, names no observational design and does not
+  say "non-randomized" now ranks as trials (`blinded_intervention`). The page
+  then says "Controlled trials", not "Randomized trials", when none of them
+  says randomized. "Non-randomized" no longer counts as randomized.
+- A review that says its own trials were small, few or short no longer
+  outranks weaker studies (`evidence.can_outrank`); the answer stays
+  "complicated", as the evidence line ("Limited evidence") already says.
+- "The pooled effect size was 1.22 in one review" printed "in 1 review":
+  `breakdown.digits` took the 2 of "1.22" for a number before "in one". A
+  lone "one" after a decimal, or after "in", stays a word. The bare figure
+  itself stays: an effect size is unitless by design here, and dropping it
+  would change every effect row.
+
 Known limits, left on purpose: the chart's "strong" count still names the
 design tier, not the line's word; a review of small trials that never says
 its trials were small still reads Strong, because only a stated size can

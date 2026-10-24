@@ -2773,9 +2773,12 @@ def digits(text: str) -> str:
         if value is None:
             return m.group(0)
         part = m.group("part")
+        # Beside a number before it too ("ten to one"), but never after the
+        # tail of a decimal, or after "in": "1.22 in one review" is a figure
+        # and then a review, not a ratio, and is not "1.22 in 1 review".
         if (len(words) == 1 and words[0] in ("one", "zero") and not part and not m.group("sign")
                 and not _BESIDE_NUMBER.match(m.string, m.end())
-                and not re.search(rf"(?:\d|\b(?:{_NUMBER_WORD}))\s+(?:in|to|or|and)\s+$",
+                and not re.search(rf"(?:(?<![\d.])\d+|\b(?:{_NUMBER_WORD}))\s+(?:to|or|and)\s+$",
                                   m.string[:m.start()], re.IGNORECASE)):
             return m.group(0)
         out = str(value)

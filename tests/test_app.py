@@ -4256,6 +4256,17 @@ t("  but 'one' and 'zero' as words, and fractions, stay words",
   and _dg("Two-thirds improved, with zero side effects at one point.")
   == "Two-thirds improved, with zero side effects at one point."
   and _dg("About one in four people, over one or two weeks.") == "About 1 in 4 people, over 1 or 2 weeks.")
+t("  and a figure then 'in one review' is a figure and a review, not a ratio",
+  _dg("The pooled effect size was 1.22 in one review (Study 1).")
+  == "The pooled effect size was 1.22 in one review (Study 1)."
+  and _dg("Pain fell by 5 in one trial and by 12 in two others.")
+  == "Pain fell by 5 in one trial and by 12 in 2 others."
+  and _dg("The score was 0.5 and one outlier was dropped.") == "The score was 0.5 and one outlier was dropped."
+  and verdict.tidy_prose("The pooled effect size was 1.22 in one review (Study 1).", 300)
+  == "The pooled effect size was 1.22 in one review (Study 1).")
+t("  while a ratio with a whole number first, said in words or digits, still reads as numbers",
+  _dg("The odds were ten to one, and about one in ten.") == "The odds were 10 to 1, and about 1 in 10."
+  and _dg("The odds were 3 to one.") == "The odds were 3 to 1.")
 _th = breakdown.thousands
 t("writing: a long number gets its commas",
   _th("covering 2481190 adults and 10000 steps") == "covering 2,481,190 adults and 10,000 steps"
