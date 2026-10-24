@@ -14,6 +14,7 @@ is what lets the verdict step weigh a large human trial more heavily
 than a small preliminary study.
 """
 
+import logging
 import os
 import re
 import threading
@@ -37,14 +38,19 @@ TIMEOUT = 15
 # because Flask serves checks on threads and the limit is per client.
 # Spaced a little wider than the limit itself: requests leave 0.35 s apart
 # can still arrive four to a second. And one that is turned away anyway
-# (429), or meets a passing server error, is asked once more after a
-# pause: the review search made a check one call longer, and in the
-# 21-claim run 3 checks in 26 failed on a single refused call.
+# (429), meets a passing server error, or never connects, is asked again
+# after a pause, and once more after a longer one if it still fails: the
+# review search made a check one call longer, and in the 21-claim run 3
+# checks in 26 failed on a single refused call. A call that fails every time
+# is logged and raised, never skipped: a search missing from the merge
+# would change which studies the verdict rests on without a word.
 MIN_INTERVAL = 0.4
 RETRY_AFTER = 1.5
+RETRY_AFTER_LONG = 5.0
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 _last_call = 0.0
 _pace = threading.Lock()
+_log = logging.getLogger("evident.pubmed")
 
 
 def _paced_get(endpoint: str, params: dict):
@@ -57,15 +63,47 @@ def _paced_get(endpoint: str, params: dict):
     return requests.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
 
 
+def _asked(params: dict) -> str:
+    """What a call was for, short enough for a log line. Never the tool
+    parameters: they carry the operator's email."""
+    term = params.get("term")
+    if term:
+        return term if len(term) <= 100 else term[:97] + "..."
+    ids = [i for i in str(params.get("id") or "").split(",") if i]
+    return f"{len(ids)} ids" if len(ids) != 1 else f"id {ids[0]}"
+
+
 def _get(endpoint: str, params: dict):
     """One E-utilities call, no faster than NCBI's published rate, asked
-    once more if NCBI turns it away or has a passing fault."""
-    resp = _paced_get(endpoint, params)
-    if resp.status_code in _RETRY_STATUS:
-        time.sleep(RETRY_AFTER)
-        resp = _paced_get(endpoint, params)
-    resp.raise_for_status()
-    return resp
+    again (after RETRY_AFTER, then after RETRY_AFTER_LONG) if NCBI turns it
+    away, has a passing fault, or cannot be reached. Every failed try is
+    logged. A connection that timed out has already cost up to TIMEOUT
+    seconds, so it gets one more try, not two."""
+    pauses = (RETRY_AFTER, RETRY_AFTER_LONG)
+    failed = 0
+    while True:
+        resp = fault = None
+        try:
+            resp = _paced_get(endpoint, params)
+        except (requests.ConnectionError, requests.Timeout) as e:
+            fault = e
+        if fault is None and resp.status_code not in _RETRY_STATUS:
+            resp.raise_for_status()
+            return resp
+        what = type(fault).__name__ if fault else f"HTTP {resp.status_code}"
+        tries = 2 if fault else len(pauses) + 1
+        failed += 1
+        if failed >= tries:
+            _log.warning("NCBI %s failed %d times (%s), giving up: %s",
+                         endpoint, failed, what, _asked(params))
+            if fault:
+                raise fault
+            resp.raise_for_status()
+            raise requests.HTTPError(f"HTTP {resp.status_code}", response=resp)
+        pause = pauses[failed - 1]
+        _log.warning("NCBI %s failed (%s), asking again in %.1f s: %s",
+                     endpoint, what, pause, _asked(params))
+        time.sleep(pause)
 
 
 def _tool_params():
@@ -517,18 +555,49 @@ def search_merged(query: str, max_results: int = 8) -> list[str]:
     a check nothing but a few hundred milliseconds. Twice the asked-for
     number comes back, because the next step throws away the records that
     have nothing in them to read.
+
+    The order is built so that the same query gives the same list. NCBI's
+    relevance sort is not repeatable: the same search asked twice, seconds
+    apart, with every call answered 200, comes back with a different top
+    sixteen, three or four papers swapped, and a paper that sits near the
+    cut-off of one search is in on one call and out on the next. Cutting
+    each search at a fixed place, as this used to, turned that noise into
+    different evidence: the two papers a high-stakes verdict rested on were
+    found by two of the searches every time, ranked fifth to eleventh, and
+    still missed the list on most calls. So a paper's place now
+    depends on how many of the three searches (strong designs, the claim's
+    own phrase, everything) found it within `depth` places, which a swap of
+    two or three places cannot change, and not on where in a list it was.
+    Ties go to the search it came from, in the old order, and then to the
+    newer record, which no call can reshuffle. The top reviews still lead,
+    among themselves in the same order.
     """
     want = max_results * 2
+    depth = max_results + max_results // 2
     asked = review_query(query)
     reviews = search_pubmed(asked, max_results=REVIEW_SLOTS) if asked else []
     best = search_pubmed(best_evidence_query(query), max_results=want)
     # The phrase search sits between the two: it can only find papers that
     # name a term as written, so what it finds is about the claim.
     phrased = phrase_query(query)
-    exact = search_phrases(phrased, max_results=max_results) if phrased else []
+    exact = search_phrases(phrased, max_results=depth) if phrased else []
     general = search_pubmed(query, max_results=want)
-    return list(dict.fromkeys(reviews[:REVIEW_SLOTS] + best[:max_results] + exact
-                              + best[max_results:] + general))[:want]
+
+    lead = list(dict.fromkeys(reviews[:REVIEW_SLOTS]))
+    tiers = [best[:max_results], exact, best[max_results:], general]
+    found = [set(best[:depth]), set(exact[:depth]), set(general[:depth])]
+    tier_of: dict[str, int] = {}
+    for n, tier in enumerate(tiers):
+        for pmid in tier:
+            tier_of.setdefault(pmid, n)
+    rest = [p for p in tier_of if p not in lead]
+    # Newest first, as numbers (text for an id that is not one), then the
+    # stable sort by agreement and tier: nothing here reads NCBI's order.
+    # Which reviews lead is NCBI's call; the order they lead in is not.
+    for group in (lead, rest):
+        group.sort(key=lambda p: (len(p), p), reverse=True)
+        group.sort(key=lambda p: (-sum(p in f for f in found), tier_of.get(p, len(tiers))))
+    return (lead + rest)[:want]
 
 
 def usable(studies: list[dict]) -> list[dict]:

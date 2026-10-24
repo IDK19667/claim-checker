@@ -137,24 +137,28 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 _real_guideline_view = verdict.guideline_view
 verdict.guideline_view = lambda claim: None
 
-# A refused PubMed call is asked once more before the check gives up.
+# A refused PubMed call is asked again, twice, before the check gives up.
 class _R:
     def __init__(self, code): self.status_code = code
     def raise_for_status(self):
         if self.status_code >= 400:
             raise requests.HTTPError(str(self.status_code))
-_real_get, _real_retry = pubmed.requests.get, pubmed.RETRY_AFTER
-pubmed.RETRY_AFTER = 0
+_real_get, _real_retry = pubmed.requests.get, (pubmed.RETRY_AFTER, pubmed.RETRY_AFTER_LONG)
+pubmed.RETRY_AFTER = pubmed.RETRY_AFTER_LONG = 0
 _codes = [429, 200]
 pubmed.requests.get = lambda *a, **k: _R(_codes.pop(0))
 t("pubmed: a call NCBI turns away (429) is asked once more", pubmed._get("esearch.fcgi", {}).status_code == 200)
-_codes = [503, 503]
+_codes = [503, 503, 200]
+t("  and again after a longer pause when the second try is refused too",
+  pubmed._get("esearch.fcgi", {}).status_code == 200 and not _codes)
+_codes = [503, 503, 503]
 try:
     pubmed._get("esearch.fcgi", {}); _gave_up = False
 except requests.HTTPError:
     _gave_up = True
-t("  and a second refusal still fails, into the check's defined PubMed error", _gave_up and not _codes)
-pubmed.requests.get, pubmed.RETRY_AFTER = _real_get, _real_retry
+t("  and a third refusal still fails, into the check's defined PubMed error", _gave_up and not _codes)
+pubmed.requests.get = _real_get
+pubmed.RETRY_AFTER, pubmed.RETRY_AFTER_LONG = _real_retry
 
 
 def DIR(answer):
@@ -1124,7 +1128,7 @@ _merged = pubmed.search_merged("(sunscreen OR sunblock) AND (skin cancer OR mela
                                max_results=8)
 pubmed.search_pubmed = _real_search
 t("  its top reviews lead the list, however many synonym searches find",
-  _merged[:3] == ["COCHRANE", "OTHER_SR", "THIRD_SR"] and "FOURTH_SR" not in _merged
+  set(_merged[:3]) == {"COCHRANE", "OTHER_SR", "THIRD_SR"} and "FOURTH_SR" not in _merged
   and len(_merged) == 16, _merged)
 t("  and it is one extra search, asked for only the review slots",
   sum(1 for q, _ in _seen if q.endswith("(systematic review OR meta-analysis)")) == 1
@@ -2698,6 +2702,135 @@ t("  a subject PubMed does not know as a phrase is not searched as one",
 t("  an unknown outcome phrase is dropped and the search asked again",
   _outcome == ["KNEE1"] and _asked[-1] == '("knuckle cracking") AND (arthritis)'
   and not pubmed._UNKNOWN_PHRASES, (_outcome, _asked))
+
+# ---- the same query gives the same studies -------------------------------
+# NCBI's relevance sort is not repeatable: the same search, asked twice, with
+# every call answered 200, returns a different top sixteen. A merge that cuts
+# each search at a fixed place turned that into different evidence: two papers
+# a high-stakes claim rested on sat fifth to eleventh in two of the searches,
+# and were in the list on one call and out on the next.
+import random as _random
+_CQ = "(antibiotics OR penicillin) AND (common cold OR rhinovirus)"
+_KEY1, _KEY2 = "37791590", "26785402"
+_JUNK_BEST = [f"10000{i:02d}" for i in range(16)]
+_JUNK_EXACT = [f"20000{i:02d}" for i in range(8)]
+_JUNK_GEN = [f"30000{i:02d}" for i in range(16)]
+_LISTS = {
+    "review": ["30670267", "30718234", "35060618"],
+    "best": list(_JUNK_BEST),
+    # the two papers: ninth and eleventh of the phrase search, sixth and seventh of the plain one
+    "exact": _JUNK_EXACT + [_KEY1, "20000X", _KEY2, "20000Y"],
+    "general": _JUNK_GEN[:5] + [_KEY1, _KEY2] + _JUNK_GEN[5:14],
+}
+
+def _kind(q):
+    if "[pt]" in q: return "best"
+    if q.endswith("AND (systematic review OR meta-analysis)"): return "review"
+    return "exact" if '"' in q else "general"
+
+def _merge_with(lists):
+    def fake(q, max_results=8): return list(lists[_kind(q)])[:max_results]
+    pubmed.search_pubmed = fake
+    try:
+        return pubmed.search_merged(_CQ, max_results=8)
+    finally:
+        pubmed.search_pubmed = _real_search
+
+_merged = _merge_with(_LISTS)
+t("merge: a paper two of the searches find stays in, however far down each ranks it",
+  _KEY1 in _merged[3:6] and _KEY2 in _merged[3:6] and len(_merged) == 16, _merged)
+t("  and the top reviews still lead, ahead of it",
+  set(_merged[:3]) == set(_LISTS["review"]), _merged[:3])
+_rng = _random.Random(11)
+def _jitter(lists):
+    "NCBI's own swaps: the order inside each stretch of a list changes, which stretch it is in does not."
+    out = {k: list(v) for k, v in lists.items()}
+    _rng.shuffle(out["review"])
+    for key, cuts in (("best", (0, 8, 12, 16)), ("exact", (0, 12)), ("general", (0, 12, 16))):
+        L, new = out[key], []
+        for a, b in zip(cuts, cuts[1:]):
+            seg = L[a:b]
+            _rng.shuffle(seg)
+            new += seg
+        out[key] = new + L[cuts[-1]:]
+    return out
+_same = all(_merge_with(_jitter(_LISTS)) == _merged for _ in range(20))
+t("  the list is the same when NCBI reorders each search inside its own stretch, reviews too, 20 times in 20",
+  _same)
+_alt = {**_LISTS, "best": _JUNK_BEST[:7] + ["1000099"] + _JUNK_BEST[8:15] + ["1000098"]}
+_alt_merged = _merge_with(_alt)
+t("  and the two papers survive a different junk paper at the edge of the strong-design search",
+  _KEY1 in _alt_merged[:6] and _KEY2 in _alt_merged[:6], _alt_merged)
+t("  a paper found by one search alone ranks behind one found by two, whatever its rank",
+  _merged.index(_JUNK_BEST[0]) > max(_merged.index(_KEY1), _merged.index(_KEY2)))
+t("  and ties between equal finds go to the newer record, not to NCBI's order",
+  _merge_with({**_LISTS, "best": [], "exact": [], "general": ["5", "9", "7", "12"]})[3:] == ["12", "9", "7", "5"])
+
+# A search that fails is asked again and kept, or logged and raised, never skipped.
+class _Ncbi:
+    "A fake NCBI: one answer per call, by which search it is, then 200 with ids."
+    def __init__(self, plan):
+        self.plan, self.calls = {k: list(v) for k, v in plan.items()}, []
+    def __call__(self, url, params=None, timeout=None):
+        kind = _kind(params["term"])
+        self.calls.append(kind)
+        queue = self.plan.get(kind)
+        step = queue.pop(0) if queue else 200
+        if isinstance(step, Exception):
+            raise step
+        r = _R(step)
+        r.json = lambda: {"esearchresult": {"idlist": list(_LISTS[kind])}}
+        return r
+class _Logs(logging.Handler):
+    def __init__(self): super().__init__(logging.WARNING); self.records = []
+    def emit(self, record): self.records.append(record)
+_plog = logging.getLogger("evident.pubmed")
+def _run_merge(plan, email="ops@example.org"):
+    fake, logs = _Ncbi(plan), _Logs()
+    _plog.addHandler(logs)
+    saved = (pubmed.requests.get, pubmed.MIN_INTERVAL, pubmed.RETRY_AFTER, pubmed.RETRY_AFTER_LONG,
+             os.environ.get("NCBI_EMAIL"))
+    pubmed.requests.get, pubmed.MIN_INTERVAL, pubmed.RETRY_AFTER, pubmed.RETRY_AFTER_LONG = fake, 0, 0, 0
+    os.environ["NCBI_EMAIL"] = email
+    try:
+        out, err = pubmed.search_merged(_CQ, max_results=8), None
+    except requests.RequestException as e:
+        out, err = None, e
+    finally:
+        pubmed.requests.get, pubmed.MIN_INTERVAL, pubmed.RETRY_AFTER, pubmed.RETRY_AFTER_LONG = saved[:4]
+        _plog.removeHandler(logs)
+        if saved[4] is None: os.environ.pop("NCBI_EMAIL", None)
+        else: os.environ["NCBI_EMAIL"] = saved[4]
+    return out, err, fake, [r.getMessage() for r in logs.records]
+
+_ok, _err, _fake, _msgs = _run_merge({})
+t("merge: with NCBI answering, every search runs once and nothing is logged",
+  _err is None and sorted(_fake.calls) == ["best", "exact", "general", "review"] and not _msgs, (_fake.calls, _msgs))
+_out, _err, _fake, _msgs = _run_merge({"review": [429]})
+t("a search that is turned away once is asked again and its papers are kept",
+  _err is None and _out == _merged and set(_out[:3]) == set(_LISTS["review"]) and _fake.calls.count("review") == 2
+  and sorted(set(_fake.calls)) == ["best", "exact", "general", "review"], (_out, _fake.calls))
+t("  and the refusal is logged, naming the search it was for",
+  len(_msgs) == 1 and "429" in _msgs[0] and "(antibiotics) AND (common cold) AND (systematic review" in _msgs[0], _msgs)
+_out, _err, _fake, _msgs = _run_merge({"exact": [503, 503]})
+t("  asked a third time, after a longer pause, when the second try fails too",
+  _err is None and _out == _merged and _fake.calls.count("exact") == 3 and len(_msgs) == 2, (_fake.calls, _msgs))
+_out, _err, _fake, _msgs = _run_merge({"general": [requests.ConnectionError("reset")]})
+t("  a dropped connection is asked again too, and kept",
+  _err is None and _out == _merged and _fake.calls.count("general") == 2
+  and len(_msgs) == 1 and "ConnectionError" in _msgs[0], (_fake.calls, _msgs))
+_out, _err, _fake, _msgs = _run_merge({"review": [500, 500, 500]})
+t("a search that fails every time is logged and raised, never left out of the merge",
+  _out is None and isinstance(_err, requests.HTTPError) and _fake.calls == ["review"] * 3
+  and len(_msgs) == 3 and "giving up" in _msgs[-1] and "(antibiotics) AND (common cold)" in _msgs[-1], (_err, _msgs))
+_out, _err, _fake, _msgs = _run_merge({"best": [requests.Timeout("slow")] * 2})
+t("  a call that timed out has already cost its wait, so it gets one more try, not two",
+  _out is None and isinstance(_err, requests.Timeout) and _fake.calls == ["review", "best", "best"]
+  and "giving up" in _msgs[-1], (_err, _fake.calls, _msgs))
+t("  and no log line carries the operator's email",
+  not any("ops@example.org" in m for m in _msgs) and not any("ops@example.org" in m for m in _run_merge({"review": [429]})[3]))
+t("  the pacing is no looser than before",
+  pubmed.MIN_INTERVAL >= 0.4 and pubmed.RETRY_AFTER >= 1.5 and pubmed.RETRY_AFTER_LONG > pubmed.RETRY_AFTER)
 
 # ---- Before you trust a verdict: the home page's plain answers -----------
 import html as _html

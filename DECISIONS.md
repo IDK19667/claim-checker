@@ -114,6 +114,25 @@ vouch either way; reviews of cohorts beside one sizeable trial read Strong.
   requirement as worded, so "complicated" was claiming a split in the
   studies that its own sentence did not describe.
 
+**The same query now finds the same evidence, as far as NCBI allows.** A
+live safety run flipped "Antibiotics cure the common cold" from "false" to
+"Not enough evidence" because two papers it rested on were missing. No
+call had failed: every call in six diagnostic runs got a 200 and every
+efetch returned every record. The cause was NCBI's relevance sort, which
+is not repeatable (five identical calls, five different top hundreds),
+met by a merge that cut each search at a fixed place: the two papers sat
+fifth to eleventh in two searches and were in or out by the call.
+`search_merged` now orders by how many of the three searches found a paper
+within 1.5 times the slots asked for, then by search, then newest first;
+the top reviews still lead. The two papers were present 0 of 6 runs before
+and 6 of 6 after, with six of eight studies identical in every run; a slot
+or two that no search agrees on still varies, because NCBI does. `_get`
+also asks a failing call a third time after a longer pause, logs each
+failed try on `evident.pubmed`, and still raises if it keeps failing: a
+search left out of the merge would change the evidence without a word.
+The merge changes which studies a check reads, so rerun the regression and
+safety sets.
+
 ## 2026-10-17: High-stakes claims follow plain health guidance
 
 **A safety set of 15 claims gates every merge.** `tests/safety_claims.json`
