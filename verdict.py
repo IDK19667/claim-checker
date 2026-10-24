@@ -695,6 +695,30 @@ _NAMED_DOCUMENT = re.compile(
     r"Statement|Framework|Handbook|Manual|Plan|Programme|Program|Policy)\b")
 
 
+# The page prints "Major health guidelines say: " in front of the line, so
+# a line that opens with the same words, or ends by crediting the same
+# bodies ("... according to major health agencies"), says it twice. Only
+# the generic bodies are cut: a named one ("according to the CDC") is the
+# one thing the line is allowed to credit.
+_BODIES = r"(?:agencies|guidelines|guidance|bodies|organi[sz]ations|experts|authorities)"
+_GENERIC = rf"(?:the |most |all )?(?:major |leading |main )?(?:health )?{_BODIES}"
+_OWN_LEAD = re.compile(
+    rf"^(?:the )?(?:major |leading |main )?(?:health )?{_BODIES}(?: all| widely| generally)?\s+"
+    r"(?:say|agree|state|conclude)\b(?:\s+that\b)?[:,]?\s*|"
+    rf"^according to {_GENERIC}\s*,?\s*", re.IGNORECASE)
+_OWN_TAIL = re.compile(rf"\s*[,;]?\s+according to {_GENERIC}\s*(?P<end>[.!?]?)\s*$", re.IGNORECASE)
+
+
+def without_attribution(says: str) -> str:
+    """`says` without a lead or a tail that repeats "Major health guidelines say:"."""
+    says = (says or "").strip()
+    while True:
+        cut = _OWN_TAIL.sub(lambda m: m.group("end"), _OWN_LEAD.sub("", says, count=1)).strip()
+        if cut == says:
+            return says if re.search(r"\w", says) else ""
+        says = cut
+
+
 def guideline_view(claim: str) -> dict | None:
     """
     {"verdict": "true"|"false", "says": str, "bodies": [...]} when the major
@@ -717,6 +741,7 @@ def guideline_view(claim: str) -> dict | None:
     room = TLDR_MAX - len(GUIDELINE_LEAD)
     says = breakdown.plain(tidy_prose(breakdown._REF.sub("", str(read.get("says") or ""))
                                       .replace(" ()", ""), room)).strip()
+    says = without_attribution(says)
     # Nothing here was read from an abstract, so it may print no figure:
     # there would be nothing on the page to check it against.
     if (not bodies or not says or re.search(r"\d", says) or len(says) > room

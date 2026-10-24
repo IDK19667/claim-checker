@@ -4752,6 +4752,39 @@ t("  a guideline line that names a document (a report, a title, a fact sheet, qu
 t("  but naming who advises is fine, and so is 'reports' as a verb or 'Guidelines' opening the line",
   _reports and _reports["says"].startswith("the CDC reports")
   and _opens and _opens["says"].startswith("guidelines advise"), (_reports, _opens))
+def _says_of(raw, pos="rejects"):
+    fg.models.script = [_GL(pos, raw)]
+    got = verdict.guideline_view("Antibiotics cure the common cold")
+    return got["says"] if got else None
+t("  a line that opens with the page's own 'Major health guidelines say' leads with the finding instead",
+  _says_of("Major health guidelines say that no amount of alcohol is safe during pregnancy.")
+  == "no amount of alcohol is safe during pregnancy."
+  and _says_of("major health guidelines say: major health guidelines say that antibiotics do not work on colds.")
+  == "antibiotics do not work on colds."
+  and _says_of("Health guidelines all agree that people should keep taking statins.")
+  == "people should keep taking statins."
+  and _says_of("Health experts agree antibiotics do not work on colds.") == "antibiotics do not work on colds."
+  and _says_of("According to major health agencies, high dose vitamin C does not cure cancer.")
+  == "high dose vitamin C does not cure cancer.")
+t("  and so does one that ends by crediting the same generic bodies",
+  _says_of("High dose vitamin C does not cure cancer, according to major health agencies.")
+  == "high dose vitamin C does not cure cancer."
+  and _says_of("Antibiotics do not work on colds according to major health guidelines")
+  == "antibiotics do not work on colds."
+  and _says_of("Raw milk can carry dangerous germs, according to health bodies!") == "raw milk can carry dangerous germs!")
+t("  while a named body stays, and 'guidelines advise' is a finding, not a repeat of the lead",
+  _says_of("Antibiotics do not work on colds, according to the CDC and WHO.")
+  == "antibiotics do not work on colds, according to the CDC and WHO."
+  and _says_of("The CDC says antibiotics do not work on colds.") == "the CDC says antibiotics do not work on colds."
+  and _says_of("Guidelines advise against antibiotics for colds.") == "guidelines advise against antibiotics for colds."
+  and _says_of("Major health guidelines say that.") is None)
+t("  and a capital that is part of a name is not lowercased: 'vitamin C', 'hepatitis B', 'HIV'",
+  _says_of("High dose vitamin C does not cure cancer.") == "high dose vitamin C does not cure cancer."
+  and _says_of("Vitamin C and zinc do not cure colds.") == "vitamin C and zinc do not cure colds."
+  and _says_of("The hepatitis B vaccine is safe.", "supports") == "the hepatitis B vaccine is safe."
+  and _says_of("HIV is not cured by a strict diet.") == "HIV is not cured by a strict diet."
+  and _says_of("Vitamin D does not cure cancer, according to major health agencies.")
+  == "vitamin D does not cure cancer.")
 t("  and the prompt itself bans named reports and guideline titles, not only numbers",
   all(w in verdict._guideline_prompt("x") for w in ("never a document", "by its title", "no quotation marks", "no years")))
 
