@@ -1748,16 +1748,26 @@ _ASSOCIATION_WORDS = re.compile(r"\bassociat\w+|\bancillary\b|\bprospective\b|\b
                                 re.IGNORECASE)
 
 
+# The placebo as a subject of discussion, not as an arm of a study: "the placebo
+# effect", "placebo responders", "nocebo". Reviews of acupuncture, pain or
+# homeopathy talk about it without having pooled a single placebo group.
+_PLACEBO_TALK = re.compile(
+    r"\b(?:placebo|nocebo)(?:\s*(?:and|/|-)\s*(?:placebo|nocebo))?[- ]"
+    r"(?:effects?|responses?|responders?|responding|reactions?)\b|\bnocebo\w*",
+    re.IGNORECASE)
+
+
 def blinded_intervention(study) -> bool:
     """
     The record describes an intervention given against a placebo, or to
     people kept blind to what they got, and does not call itself
     non-randomized. A sentence that only wishes for such a design ("future
-    placebo-controlled trials are needed") describes nothing that was done.
+    placebo-controlled trials are needed") describes nothing that was done,
+    and neither does one that only discusses the placebo effect.
     """
     if _NON_RANDOM.search(_text(study)):
         return False
-    return bool(_BLINDED.search(_sentences_of(study, _WISHED)))
+    return bool(_BLINDED.search(_PLACEBO_TALK.sub(" ", _sentences_of(study, _WISHED))))
 
 
 def _sentences_of(study, skip) -> str:

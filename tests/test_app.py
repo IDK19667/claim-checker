@@ -3901,6 +3901,20 @@ t("  but a mention of a placebo is not enough on its own: a wish for such trials
   evidence.design_rank(_blind("Further placebo-controlled trials are needed to settle this.")) == ""
   and evidence.design_rank(_blind("We pooled studies of sugar in children. Future double-blind "
                                   "studies should test it.")) == "")
+t("  talk of the placebo effect, placebo responders or nocebo is not a placebo-controlled study",
+  all(evidence.design_rank(_blind(a)) == "" for a in (
+      "We discuss the placebo effect in acupuncture and how it shapes pain relief.",
+      "Placebo responses are large in pain reviews, and placebo responders differ.",
+      "The nocebo effect, and the placebo-nocebo effects it mirrors, can raise side effects.",
+      "Placebo and nocebo responses were reviewed across these topics.")))
+t("  while a placebo group, placebo-controlled, versus placebo, compared with placebo and double-blind still are",
+  all(evidence.design_rank(_blind(a)) == "trial" for a in (
+      "We pooled studies with a placebo group.",
+      "We pooled placebo-controlled studies of sugar.",
+      "Sugar was tested versus placebo in children.",
+      "Sugar was compared with placebo in these studies.",
+      "We pooled double-blind studies of sugar.",
+      "We discuss the placebo effect. Studies compared sugar with placebo in children.")))
 t("  a review that names an observational design stays the weaker kind, placebo or not",
   evidence.design_rank(_blind("We pooled cohort studies; unlike placebo-controlled trials they "
                               "cannot show cause.")) == "weaker")
