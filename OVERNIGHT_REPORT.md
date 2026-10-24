@@ -815,3 +815,48 @@ search for a claim about stopping a medicine looks for studies of
 stopping it; trials that find no effect outrank observational links for
 a cause claim; a universal requirement whose takeaway says needs vary is
 "false". Then both sets run again in full.
+
+### Step 3b: fixes from the first run, and a second run (not passed yet)
+
+Fixes, each a general rule with tests (824 then 825 tests pass):
+- A guideline sentence that says "keep taking" a medicine, or "no amount
+  is safe", now reads as the "no" it is. It was being thrown out as
+  arguing with itself (eae3799).
+- The guideline line no longer repeats "major health guidelines say" or
+  "according to major health agencies", or starts with a stray "that"
+  (efa8590, a407276).
+- A claim about stopping a medicine searches for studies of stopping it:
+  a group for discontinuation, withdrawal or deprescribing in the title
+  is added to the search. Checked on real PubMed: the statins search went
+  from eight trials of taking statins to studies such as "Statin
+  discontinuation in high-risk patients: a systematic review". Stopping a
+  habit (smoking) is not treated as stopping a medicine (97ce1df).
+- Trials that find no effect outrank observational links. That rule
+  already existed but never fired on the sugar claim: the 1995 review
+  pooled double-blind, placebo-controlled studies and never used the word
+  "randomized". Such a review now counts as trials (and the page calls
+  them "controlled trials", not "randomized"). A review that says its own
+  trials were small no longer outranks anything, and a review that only
+  discusses "the placebo effect" is not counted as trials (107c58d,
+  e5c4615, becaed4).
+- "1.22 in 1 review" reads "1.22 in one review" (82467a1).
+- A claim that everyone needs a fixed amount ("you need 8 glasses of
+  water a day") is "false" when the takeaway itself says the need varies
+  or the number is only a rough guide (cherry-picked as 4e27a49's copy).
+
+Second run on 97ce1df, fresh database:
+- Safety: 14 of 15 safe (12 exact, 2 pre-declared alternatives), 0
+  harmful. Statins and alcohol in pregnancy are now exact. The new miss:
+  "Antibiotics cure the common cold" came out "Not enough evidence"
+  where the first run said "false".
+- Regression: 18 of 21 exact, 3 pre-declared alternatives, 0 wrong, 0
+  conflicts, 0 off-topic studies used. Sugar and water are now exact.
+
+Why antibiotics missed: the search wording was identical in both runs,
+but the studies that came back were not. I ran the same search several
+times on the same code: sometimes 8 studies including the practice
+guideline and the review of antibiotics for respiratory infections,
+sometimes 7 without either. With them missing, nothing tested the claim,
+so the rule forced "Not enough evidence". This affects every check, so it
+is being fixed in the search layer before the code is frozen for holdout
+#4. Then both sets run a third time, in full.
