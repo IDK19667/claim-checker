@@ -75,6 +75,23 @@ hyperactive", expected false, came back "complicated"):
   itself stays: an effect size is unitless by design here, and dropping it
   would change every effect row.
 
+From the safety set's live run (three more rules, each general):
+
+- The guideline self-check no longer misreads a rejection as agreement. "No
+  amount of" and "no safe level of" now read as a no, and "keep taking" or
+  "continue" reads as the opposite of a claim that you can stop a treatment
+  (`breakdown.says_stop`). Findings about people who stop are not turned.
+- The guidance line no longer repeats itself: `verdict.without_attribution`
+  cuts a leading "Major health guidelines say (that)" or "according to major
+  health agencies" and the same as a tail. A named body stays. "vitamin c"
+  was written lowercase by the model; our code only lowers a first letter.
+- A claim about stopping a treatment searches for studies of stopping it.
+  `verdict.stopping_query` ANDs a group onto the query where it is used, so
+  saved searches benefit and `QUERY_PROMPT_VERSION` is untouched. The group
+  asks for its words in the title: in the abstract, "withdrawal" and
+  "stopping" returned eight reviews of statin muscle pain. Broadening drops
+  the outcome first, never this group. Stopping a habit is not a treatment.
+
 Known limits, left on purpose: the chart's "strong" count still names the
 design tier, not the line's word; a review of small trials that never says
 its trials were small still reads Strong, because only a stated size can

@@ -703,6 +703,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
             if cached:
                 yield from_cache(cached, typed)
                 return
+        search_query = verdict.stopping_query(claim, search_query)
         yield {"stage": "query", "query": search_query, "claim": claim if typed else None}
         studies, query_used, broadened = pubmed.search_with_fallback(
             search_query, max_results=8, surrogate=surrogate)

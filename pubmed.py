@@ -326,15 +326,68 @@ def split_and(query: str) -> list[str]:
     return [p for p in parts if p]
 
 
+# A claim about stopping a treatment is tested by studies of stopping it.
+# "Statins after a heart attack" finds the trials of taking them, which say
+# nothing about whether it is safe to quit, so the search carries a group of
+# its own for stopping (see verdict.stopping_query). It goes last, so the
+# first two groups stay the claim's subject and its outcome.
+#
+# The words are asked for in the title. Anywhere in the abstract, "withdrawal"
+# and "stopping" are in every review of a drug's side effects, and a search
+# for statins and stopping came back as eight reviews of statin muscle pain.
+# In the title they are the study's subject: "Discontinuation of statin
+# therapy after myocardial infarction". The stems catch discontinued,
+# stopped and withdrawn.
+DISCONTINUATION_GROUP = ("(discontinu*[ti] OR withdraw*[ti] OR cessation[ti] OR deprescrib*[ti] "
+                         "OR stop*[ti])")
+_STOPPING_TERM = re.compile(r"^(?:discontinu\w*|withdraw\w*|cessation|deprescrib\w*|stop\w*|quit\w*|"
+                            r"interrupt\w*|taper\w*|wean\w*|non-?adheren\w*)$", re.IGNORECASE)
+
+
+def _is_stopping_group(group: str) -> bool:
+    """True for a group made only of words for stopping, field tags and stems included."""
+    terms = [re.sub(r"\[[^\]]*\]$", "", t.strip()).strip('"*')
+             for t in re.split(r"\s+OR\s+", (group or "").strip().strip("()"))]
+    return bool(terms) and all(_STOPPING_TERM.match(t) for t in terms)
+
+
+def has_discontinuation(query: str) -> bool:
+    """True when some term of the query is already about stopping."""
+    return bool(re.search(r"\b(?:discontinu|withdraw|cessation|deprescrib|stopp|stop\b|quit|"
+                          r"interrupt|taper|wean|non-?adheren)", query or "", re.IGNORECASE))
+
+
+def add_discontinuation(query: str) -> str:
+    """
+    The query with a group for stopping ANDed on, so the search is for
+    studies of stopping what the query is about. Unchanged when it already
+    has a term for stopping, or has nothing to add the group to.
+    """
+    if not split_and(query or "") or has_discontinuation(query):
+        return query
+    return f"{query} AND {DISCONTINUATION_GROUP}"
+
+
 def broaden_query(query: str) -> str | None:
     """
     Drop the last top-level AND-term ("a AND b AND c" -> "a AND b").
     Returns None when there's nothing left to drop. Used once, when a
     search comes back empty: the model sometimes over-specifies.
+
+    A group for stopping is never the one dropped: a search that has lost
+    it is no longer about the claim. The outcome goes first instead, and
+    with nothing but the subject and stopping left there is nothing to
+    drop.
     """
     parts = split_and(query)
     if len(parts) < 2:
         return None
+    if _is_stopping_group(parts[-1]):
+        drop = next((i for i in range(len(parts) - 2, 0, -1)
+                     if not _is_stopping_group(parts[i])), None)
+        if drop is None:
+            return None
+        return " AND ".join(p for i, p in enumerate(parts) if i != drop)
     return " AND ".join(parts[:-1])
 
 
@@ -363,10 +416,15 @@ def phrase_query(query: str) -> str | None:
     reach. "knuckle cracking" alone, as a phrase, puts it sixth.
     """
     groups = split_and(query or "")
-    if not groups or any(re.search(r"[\[\]\"]", g) for g in groups):
+    # The group for stopping carries field tags and stems of its own, and is
+    # passed through as it is.
+    if not groups or any(re.search(r"[\[\]\"]", g) for g in groups if not _is_stopping_group(g)):
         return None
     split = []
     for g in groups:
+        if _is_stopping_group(g):
+            split.append([g.strip().strip("()")])
+            continue
         terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
         if not terms or any("(" in t or ")" in t for t in terms):
             return None
@@ -430,15 +488,19 @@ def review_query(query: str) -> str | None:
     gets its publication type once it has been indexed, which takes months,
     and the newest review on a question is often the one that settles it.
     """
-    groups = split_and(query or "")[:2]
+    every = split_and(query or "")
+    groups = every[:2]
     heads = []
     for g in groups:
         terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
         if terms:
-            heads.append(terms[0].strip("()"))
+            heads.append(f"({terms[0].strip('()')})")
     if not heads:
         return None
-    return " AND ".join(f"({h})" for h in heads) + " AND (systematic review OR meta-analysis)"
+    # A claim about stopping asks for reviews of stopping, in all the words
+    # for it: the review is titled "discontinuation of", or "stopping".
+    heads += [g for g in every[2:] if _is_stopping_group(g)]
+    return " AND ".join(heads) + " AND (systematic review OR meta-analysis)"
 
 
 def search_merged(query: str, max_results: int = 8) -> list[str]:

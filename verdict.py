@@ -835,6 +835,21 @@ def _clean_query(raw: str, claim: str) -> str:
     return claim
 
 
+def stopping_query(claim: str, query: str) -> str:
+    """
+    The search for a claim about stopping a medicine or treatment, made to
+    look for studies of stopping it. The model writes the query from the
+    claim and tends to describe taking the treatment ("statins AND heart
+    attack recurrence"), which finds trials of taking it and none of
+    quitting; so, whatever the model wrote, and whether the query is new or
+    saved, the group for stopping is added when the claim is about stopping
+    and the query has no word for it. Any other claim's query is returned
+    as it came. Applied where the query is used, not where it is made, so
+    it needs no new QUERY_PROMPT_VERSION and every saved search benefits.
+    """
+    return pubmed.add_discontinuation(query) if breakdown.stops_treatment(claim) else query
+
+
 def extract_search_terms(claim: str) -> tuple[str, str, str]:
     """
     Turn a casual claim into a decent PubMed search query.

@@ -2767,6 +2767,90 @@ _d = P("Salt raises blood pressure in everyone", ip="9.9.4.2").get_json()
 t("  a re-check reuses it: one call, the verdict, and the same search",
   fg.models.calls == _n0 + 1 and _d["search_query_used"] == "(salt) AND (blood pressure)", _d.get("search_query_used"))
 
+# ---- a claim about stopping a treatment searches for studies of stopping it --
+_SQ_CLAIM = "People who have had a heart attack can safely stop taking statins"
+_SQ = ("(statin OR statins OR HMG-CoA reductase inhibitor) AND (heart attack recurrence OR secondary prevention "
+       "of myocardial infarction OR major adverse cardiovascular events)")
+_SQ_GROUP = pubmed.DISCONTINUATION_GROUP
+t("the stopping group is asked for in the title, with stems, and names no drug",
+  "[ti]" in _SQ_GROUP and "discontinu*" in _SQ_GROUP and "stop*" in _SQ_GROUP and "deprescrib*" in _SQ_GROUP
+  and "cessation" in _SQ_GROUP and "withdraw*" in _SQ_GROUP and pubmed.split_and(_SQ_GROUP) == [_SQ_GROUP])
+t("  a query with no word for stopping gets the group last, and only once",
+  pubmed.add_discontinuation(_SQ) == f"{_SQ} AND {_SQ_GROUP}"
+  and pubmed.add_discontinuation(pubmed.add_discontinuation(_SQ)) == f"{_SQ} AND {_SQ_GROUP}"
+  and pubmed.split_and(pubmed.add_discontinuation(_SQ))[:2] == pubmed.split_and(_SQ))
+t("  a query that already has a term for stopping, or nothing to add to, is left as it is",
+  all(pubmed.add_discontinuation(q) == q for q in (
+      "(antidepressants) AND (withdrawal symptoms OR relapse)", "(statin) AND (discontinuation)",
+      "(insulin) AND (stopping OR skipping)", "(lisinopril) AND (blood pressure) AND (deprescribing)",
+      "(vaccine) AND (booster dose) AND (quitting)", "")))
+t("  verdict.stopping_query adds it for a claim about stopping a treatment, whoever wrote the query",
+  verdict.stopping_query(_SQ_CLAIM, _SQ) == f"{_SQ} AND {_SQ_GROUP}"
+  and verdict.stopping_query("Skipping doses of your treatment is harmless", "(treatment) AND (adherence)")
+  == f"(treatment) AND (adherence) AND {_SQ_GROUP}"
+  and verdict.stopping_query("You can come off the pill without side effects", "(oral contraceptives) AND (side effects)")
+  .endswith(_SQ_GROUP))
+t("  and leaves any other claim's query exactly as it came",
+  all(verdict.stopping_query(cl, _SQ) == _SQ for cl in (
+      "Statins lower the risk of a second heart attack", "Vitamin D stops colds",
+      "Aspirin can stop a second heart attack", "Quitting coffee improves sleep",
+      "Skipping breakfast makes you gain weight", "Statins cause muscle pain")))
+t("  a habit is not a treatment: stopping smoking gets no stopping group",
+  verdict.stopping_query("Stopping smoking lowers blood pressure", "(smoking) AND (blood pressure)")
+  == "(smoking) AND (blood pressure)"
+  and verdict.stopping_query("People can stop taking nicotine patches after a week",
+                             "(nicotine replacement) AND (smoking relapse)").endswith(_SQ_GROUP))
+_SQ_FULL = pubmed.add_discontinuation(_SQ)
+t("  a search that finds nothing is broadened by dropping the outcome, never the stopping group",
+  pubmed.broaden_query(_SQ_FULL) == f"(statin OR statins OR HMG-CoA reductase inhibitor) AND {_SQ_GROUP}"
+  and pubmed.broaden_query(pubmed.broaden_query(_SQ_FULL)) is None
+  and pubmed.broaden_query("(statin) AND (discontinuation OR withdrawal)") is None
+  and pubmed.broaden_query("a AND b AND c") == "a AND b" and pubmed.broaden_query("a AND b") == "a")
+t("  the review and phrase searches keep it, so they are still searches for stopping",
+  _SQ_GROUP in pubmed.review_query(_SQ_FULL) and pubmed.review_query(_SQ_FULL).startswith("(statin) AND (heart attack recurrence)")
+  and pubmed.review_query(_SQ_FULL).endswith("AND (systematic review OR meta-analysis)")
+  and pubmed.review_query(_SQ) == "(statin) AND (heart attack recurrence) AND (systematic review OR meta-analysis)"
+  and pubmed.phrase_query(_SQ_FULL) and pubmed.phrase_query(_SQ_FULL).endswith(_SQ_GROUP)
+  and '"heart attack recurrence"' in pubmed.phrase_query(_SQ_FULL))
+_sq_seen = []
+def _sq_fetch(q, max_results=8, surrogate=''):
+    _sq_seen.append(q)
+    return STUDIES
+pubmed.search_and_fetch = _sq_fetch
+fg.models.script = [Resp(_SQ), Resp(VJ("complicated", [1]))]
+_sq_d = P(_SQ_CLAIM, ip="9.9.4.3").get_json()
+t("through a real check: the search that runs, and the one shown, carry the stopping group",
+  _sq_seen == [_SQ_FULL] and _sq_d["search_query_used"] == _SQ_FULL, (_sq_seen, _sq_d.get("search_query_used")))
+t("  while the search saved for the claim is the model's own, so the rule is not baked into the cache",
+  db.get_cached_query(_SQ_CLAIM.lower() + ".", verdict.QUERY_PROMPT_VERSION) == (_SQ, "", _SQ_CLAIM),
+  db.get_cached_query(_SQ_CLAIM.lower() + ".", verdict.QUERY_PROMPT_VERSION))
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+_sq_seen.clear()
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_n0 = fg.models.calls
+_sq_d2 = P(_SQ_CLAIM, ip="9.9.4.4").get_json()
+t("  and a search saved earlier gets the group too: one call, the verdict, and the same stopping search",
+  fg.models.calls == _n0 + 1 and _sq_seen == [_SQ_FULL] and _sq_d2["search_query_used"] == _SQ_FULL, _sq_seen)
+_sq_seen.clear()
+fg.models.script = [Resp("(salt) AND (blood pressure)"), Resp(VJ("complicated", [1]))]
+P("Salt raises blood pressure for most adults", ip="9.9.4.5")
+t("  while a claim that is not about stopping runs the model's query untouched",
+  _sq_seen == ["(salt) AND (blood pressure)"], _sq_seen)
+_sq_seen.clear()
+def _sq_fetch_broad(q, max_results=8, surrogate=''):
+    _sq_seen.append(q)
+    return [] if len(pubmed.split_and(q)) >= 3 else STUDIES
+pubmed.search_and_fetch = _sq_fetch_broad
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_sq_d3 = P(_SQ_CLAIM, ip="9.9.4.6").get_json()
+t("  and when that finds nothing, the broader search drops the outcome and is still a search for stopping",
+  _sq_seen == [_SQ_FULL, f"(statin OR statins OR HMG-CoA reductase inhibitor) AND {_SQ_GROUP}"]
+  and _sq_d3["search_broadened"] is True, (_sq_seen, _sq_d3.get("search_query_used")))
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
 # ---- accuracy round 4 (one rule for the stamp) --------------------------------
 # The general rule (accuracy round 4): the takeaway's direction pins the
 # stamp. Yes, no and "nothing tested this" each have one stamp; a hedged
