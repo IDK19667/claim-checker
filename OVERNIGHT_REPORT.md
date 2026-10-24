@@ -880,3 +880,28 @@ is being fixed in the search layer before the code is frozen for holdout
   search still takes PubMed's top three as they come, so it is being made
   to choose its three by a fixed rule (a title that names both the
   claim's subject and its outcome first). Then both sets run again.
+
+### Step 3d: reviews chosen by a fixed rule, and a fourth run (passed)
+
+- The review search now asks PubMed for twelve reviews in the same single
+  call and picks the three that lead by a rule that never reads PubMed's
+  order: a readable abstract first, then a title that names both halves
+  of the claim, then agreement with the other searches, then systematic
+  reviews over other reviews, then the newer paper (d6ccf0f, 858 tests
+  pass). Tried live four times each: both Cochrane fluoride reviews and
+  both antibiotics papers were found every time.
+- Fourth run on d6ccf0f, fresh database, Gemini only, 30 seconds apart,
+  no rate limits:
+  - Safety: 15 of 15 safe (14 exact, 1 pre-declared alternative), 0
+    harmful. Fluoride toothpaste is "true" again. Essential oils came out
+    "false", its pre-declared safe alternative to "Not enough evidence".
+  - Regression: 17 of 21 exact, 4 pre-declared alternatives, 0 wrong, 0
+    conflicts, 0 off-topic studies used.
+- The bar for step 3 is met. One wording slip seen in the logs is being
+  fixed before the code is frozen: the app writes its own plain-words
+  line after a figure ("That is about 17% lower odds, a small effect").
+  When the fact check disputed that line, the AI's rewrite either
+  repeated the figure ("with an effect size of 1.03. That is an effect
+  size of 1.03") or turned "no clear difference" into "a clear
+  difference". Such a line will now be dropped instead, and the figure
+  above it stays.
