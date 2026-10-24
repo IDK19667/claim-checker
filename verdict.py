@@ -705,7 +705,10 @@ _GENERIC = rf"(?:the |most |all )?(?:major |leading |main )?(?:health )?{_BODIES
 _OWN_LEAD = re.compile(
     rf"^(?:the )?(?:major |leading |main )?(?:health )?{_BODIES}(?: all| widely| generally)?\s+"
     r"(?:say|agree|state|conclude)\b(?:\s+that\b)?[:,]?\s*|"
-    rf"^according to {_GENERIC}\s*,?\s*", re.IGNORECASE)
+    rf"^according to {_GENERIC}\s*,?\s*|"
+    # The page's "say:" is followed by the finding, so a bare "that" the model
+    # left at the front (it was told to write after "say:") has nothing to join.
+    r"^that\b,?\s+", re.IGNORECASE)
 _OWN_TAIL = re.compile(rf"\s*[,;]?\s+according to {_GENERIC}\s*(?P<end>[.!?]?)\s*$", re.IGNORECASE)
 
 

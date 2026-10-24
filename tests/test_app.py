@@ -4850,6 +4850,16 @@ t("  a line that opens with the page's own 'Major health guidelines say' leads w
   and _says_of("Health experts agree antibiotics do not work on colds.") == "antibiotics do not work on colds."
   and _says_of("According to major health agencies, high dose vitamin C does not cure cancer.")
   == "high dose vitamin C does not cure cancer.")
+t("  and a bare 'that' left at the front goes, while a 'that' further in stays",
+  _says_of("that daily sunscreen use helps lower your risk of developing skin cancer.", "supports")
+  == "daily sunscreen use helps lower your risk of developing skin cancer."
+  and _says_of("That, antibiotics do not work on colds.") == "antibiotics do not work on colds."
+  and _says_of("Major health guidelines say that that antibiotics do not work on colds.")
+  == "antibiotics do not work on colds."
+  and _says_of("antibiotics do not work on colds, so doctors say that they should not be given.")
+  == "antibiotics do not work on colds, so doctors say that they should not be given."
+  and _says_of("people agree that antibiotics do not work on colds.")
+  == "people agree that antibiotics do not work on colds.")
 t("  and so does one that ends by crediting the same generic bodies",
   _says_of("High dose vitamin C does not cure cancer, according to major health agencies.")
   == "high dose vitamin C does not cure cancer."
