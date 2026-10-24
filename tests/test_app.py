@@ -2561,6 +2561,85 @@ t("  'should not stop' is a plain no to 'can safely stop'",
                                "Drinking a little alcohol during pregnancy is safe") is None
   and breakdown.claim_denies("You should not eat eggs every day")
   and not breakdown.claim_denies("People who should not drink milk feel bloated"))
+_STAT_CLAIM = "People who have had a heart attack can safely stop taking statins"
+_ALC_CLAIM = "Drinking a little alcohol during pregnancy is safe"
+t("  'should keep taking X' turns down 'can safely stop taking X', with no 'not' in it",
+  breakdown.stance("Major health guidelines say: people who have had a heart attack should keep taking "
+                   "statins to prevent another one.", _STAT_CLAIM) == "no"
+  and breakdown.stamp_conflict("false", "Major health guidelines say: people who have had a heart attack "
+                               "should keep taking statins to prevent another one.", "", _STAT_CLAIM) is None
+  and breakdown.stamp_conflict("true", "Major health guidelines say: people who have had a heart attack "
+                               "should keep taking statins to prevent another one.", "", _STAT_CLAIM))
+_BP_CLAIM = "You can stop taking blood pressure medication once your numbers look normal"
+_INS_CLAIM = "People with diabetes can skip insulin when they feel well"
+t("  and so does another 'continue' or 'keep using' against 'can stop' or 'can skip'",
+  breakdown.stamp_conflict("false", "Major health guidelines say: people with high blood pressure should "
+                           "continue taking their medicine for life.", "", _BP_CLAIM) is None
+  and breakdown.stamp_conflict("false", "Major health guidelines say: people with diabetes should keep "
+                               "using insulin as prescribed.", "", _INS_CLAIM) is None
+  and breakdown.stamp_conflict("true", "Major health guidelines say: people with diabetes should keep "
+                               "using insulin as prescribed.", "", _INS_CLAIM))
+t("  while a sentence that really does say it is fine to stop still argues with a 'false' stamp",
+  breakdown.stamp_conflict("false", "Major health guidelines say: stopping statins after a heart attack "
+                           "is safe.", "", _STAT_CLAIM)
+  and breakdown.stamp_conflict("false", "Major health guidelines say: stopping blood pressure medication "
+                               "once numbers look normal is fine.", "", _BP_CLAIM)
+  and breakdown.stance("People who have had a heart attack should not stop taking statins.",
+                       _STAT_CLAIM) == "no")
+t("  and 'keeps going' only reverses a claim about stopping: a finding about people who stop is not turned",
+  breakdown.stance("People who keep taking statins have fewer heart attacks.",
+                   "People who stop taking statins have more heart attacks") == "yes"
+  and breakdown.stance("Stopping statins raises the risk, so people should keep taking them.",
+                       "Stopping statins raises the risk of a heart attack") == "yes"
+  and breakdown.stance("People should keep taking aspirin to prevent another heart attack.",
+                       "Aspirin can stop a second heart attack") == "yes"
+  and breakdown.stance("People who have had a heart attack should not keep taking statins.",
+                       _STAT_CLAIM) == "yes"
+  and breakdown.stance("Continued vitamin D supplements are unnecessary in summer.",
+                       "You can stop taking vitamin D supplements in summer") == "yes")
+t("  a claim that says 'do not stop' is agreed with by 'keep taking', since its 'not' turns the answer round",
+  breakdown.stance("People who have had a heart attack should keep taking statins.",
+                   "People who have had a heart attack should not stop taking statins") == "yes"
+  and breakdown.stance("Stopping statins after a heart attack is fine.",
+                       "People who have had a heart attack should not stop taking statins") == "no")
+t("  'no amount of X is safe' is a plain no to 'a little X is safe'",
+  breakdown.stance("Major health guidelines say: major health guidelines say that no amount of alcohol is "
+                   "safe during pregnancy.", _ALC_CLAIM) == "no"
+  and breakdown.stamp_conflict("false", "Major health guidelines say: no amount of alcohol is safe during "
+                               "pregnancy.", "", _ALC_CLAIM) is None
+  and breakdown.stamp_conflict("false", "Major health guidelines say: there is no safe level of alcohol "
+                               "during pregnancy.", "", _ALC_CLAIM) is None
+  and breakdown.stamp_conflict("false", "Major health guidelines say: no level of smoking is safe.", "",
+                               "Smoking a few cigarettes a day is safe") is None
+  and breakdown.stamp_conflict("false", "Major health guidelines say: no safe dose of tanning bed use "
+                               "exists.", "", "A little tanning bed use is safe") is None)
+t("  while 'a little is safe' still argues with a 'false' stamp, and a claim that says 'no amount' reads the other way",
+  breakdown.stamp_conflict("false", "Major health guidelines say: a few cigarettes a day are safe.", "",
+                           "Smoking a few cigarettes a day is safe")
+  and breakdown.claim_denies("No amount of alcohol is safe during pregnancy")
+  and breakdown.stance("There is no safe level of alcohol during pregnancy.",
+                       "No amount of alcohol is safe during pregnancy") == "yes"
+  and not breakdown.claim_denies("People who drink no amount of alcohol feel healthier"))
+t("  what counts as stopping a treatment: a medicine, a dose or a course, not a habit",
+  all(breakdown.stops_treatment(c) for c in (
+      _STAT_CLAIM, _BP_CLAIM, _INS_CLAIM, "Skipping doses of your treatment is harmless", "Stopping antibiotics early is fine",
+      "You can come off the pill without any side effects", "It is safe to quit antidepressants cold turkey",
+      "Discontinuing metformin makes diabetes worse", "People can stop lisinopril once their pressure is low",
+      "Stopping birth control causes infertility", "You can wean yourself off sleeping pills"))
+  and not any(breakdown.stops_treatment(c) for c in (
+      "Stopping smoking lowers blood pressure", "Quitting coffee improves sleep",
+      "Skipping breakfast makes you gain weight", "Statins lower cholesterol", "Vitamin D stops colds",
+      "Aspirin can stop a second heart attack", "Giving up sugar helps acne",
+      "Taking vitamin C prevents colds", "Stopping screen time before bed improves sleep")),
+  [c for c in ("Stopping smoking lowers blood pressure", "Quitting coffee improves sleep",
+               "Skipping breakfast makes you gain weight", "Vitamin D stops colds",
+               "Aspirin can stop a second heart attack", "Giving up sugar helps acne") if breakdown.stops_treatment(c)])
+t("  and 'says stop' means the claim's own action, not a consequence of stopping",
+  all(breakdown.says_stop(c) for c in (_STAT_CLAIM, _BP_CLAIM, "Skipping doses of your treatment is harmless",
+                                       "Stopping antibiotics early is fine", "Just stop taking your pills"))
+  and not any(breakdown.says_stop(c) for c in (
+      "People who stop taking statins have more heart attacks", "Stopping statins raises the risk of a heart attack",
+      "If you stop taking antidepressants you get withdrawal", "Quitting smoking lowers blood pressure")))
 t("  'not more dangerous than' is a plain no to 'more dangerous than'",
   breakdown.stance("The MMR vaccine is not more dangerous than measles, which causes serious complications and death.",
                    "The MMR vaccine is more dangerous than measles itself") == "no"
@@ -4713,6 +4792,23 @@ verdict.guideline_view = _guide("true", "antibiotics do not cure colds.")
 t("  a guideline sentence that argues with its own position is not used",
   verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Antibiotics cure the common cold")
   == _mixed_result)
+_guide_log_lines = []
+class _Catch(logging.Handler):
+    def emit(self, record):
+        _guide_log_lines.append(record.getMessage())
+_catch = _Catch()
+verdict._guide_log.addHandler(_catch)
+verdict.guideline_view = _guide("false", "people who have had a heart attack should keep taking statins "
+                                         "to prevent another one.")
+_stat = verdict.follow_guidelines(dict(_mixed_result), [dict(s) for s in _GUIDE_STUDIES], _STAT_CLAIM)
+verdict.guideline_view = _guide("false", "no amount of alcohol is safe during pregnancy.")
+_alc = verdict.follow_guidelines(dict(_mixed_result), [dict(s) for s in _GUIDE_STUDIES], _ALC_CLAIM)
+verdict._guide_log.removeHandler(_catch)
+t("  but 'keep taking statins' against 'can safely stop' and 'no amount is safe' against 'a little is safe' "
+  "are not arguments with themselves",
+  _stat["verdict"] == "false" and _stat["tldr"].startswith("Major health guidelines say: people who have had")
+  and _alc["verdict"] == "false" and "no amount of alcohol is safe" in _alc["tldr"]
+  and not any("argued with itself" in m for m in _guide_log_lines), (_stat, _alc, _guide_log_lines))
 
 _LAB = [_study("L1", "Antibacterial activity of colloidal silver against bacteria in vitro",
                abstract="Silver nanoparticles inhibited bacterial growth in cultured cells in vitro.",

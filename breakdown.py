@@ -856,7 +856,12 @@ _NEGATED = re.compile(
     r"must not|mustn't|need not|never|no (?:more|"
     r"better)|not (?:better|more effective|any better)|(?:about|just|roughly) as "
     r"(?:well|good|effective) as|no (?:\w+ ){0,2}(?:benefits?|effect|link|"
-    r"difference|advantage|change)|myth)\b", re.IGNORECASE)
+    r"difference|advantage|change)|myth|"
+    # "No amount of alcohol is safe", "there is no safe level": a negation
+    # with no "not" in it, and the plainest way guidance rejects "a little
+    # is fine".
+    r"no (?:(?:safe|known|proven|acceptable|healthy|risk-free) )?"
+    r"(?:amount|level|dose|quantity|degree|threshold)s?)\b", re.IGNORECASE)
 
 # A claim that compares two things is answered by the clause that compares.
 _COMPARATIVE_CLAIM = re.compile(
@@ -970,7 +975,14 @@ def _polarity(clause: str, claim: str = "") -> str:
         return "untested"
     if _HEDGED.search(clause):
         return "mixed"
-    return "no" if _NEGATED.search(clause) else "yes"
+    said = "no" if _NEGATED.search(clause) else "yes"
+    # "People should keep taking statins" has no "not" in it and still turns
+    # down "can safely stop taking statins": keeping going is the opposite
+    # of the action the claim is about. A clause that names stopping itself
+    # ("should not stop") already carries its own negation and is left be.
+    if claim and _KEEPS_GOING.search(clause) and not _STOP_ANY.search(clause) and says_stop(claim):
+        said = "yes" if said == "no" else "no"
+    return said
 
 
 # Words that open a clause about someone or something rather than the
@@ -978,6 +990,95 @@ def _polarity(clause: str, claim: str = "") -> str:
 # they gain weight, and its "don't" is not the claim saying no.
 _SUBORDINATE = frozenset("who whom whose that which if when whenever because "
                          "unless until while".split())
+
+# ---------------------------------------------------------------------
+# Claims about stopping a treatment.
+#
+# "Can safely stop taking statins" is turned down by "should keep taking
+# statins to prevent another one", with no negation anywhere in it. The
+# same detector tells the search to look for studies of stopping (see
+# verdict.stopping_query), so it is one definition of what such a claim is.
+# ---------------------------------------------------------------------
+
+# The verb, in the base form a claim uses for an action ("can stop", "to
+# quit") and in the forms it uses to talk about one.
+_STOP_BASE = r"(?:stop|quit|discontinue|cease|skip|give up|come off|go off|wean (?:\w+ )?off)"
+_STOP_GERUND = (r"(?:stopping|quitting|discontinuing|ceasing|skipping|giving up|coming off|"
+                r"going off|weaning (?:\w+ )?off)")
+_STOP_OTHER = (r"(?:stops|stopped|quits|discontinues|discontinued|ceases|ceased|skips|skipped|"
+               r"gave up|gives up|came off|comes off|went off|goes off|weaned (?:\w+ )?off)")
+_STOP_RE = re.compile(rf"\b(?P<base>{_STOP_BASE})\b|\b(?P<gerund>{_STOP_GERUND})\b|"
+                      rf"\b(?P<other>{_STOP_OTHER})\b", re.IGNORECASE)
+# A clause that says stopping itself, in any form, including the noun.
+_STOP_ANY = re.compile(rf"\b(?:{_STOP_BASE}|{_STOP_GERUND}|{_STOP_OTHER}|discontinuation|"
+                       rf"cessation|withdrawal)\b", re.IGNORECASE)
+
+# What makes the thing stopped a treatment and not a habit: "taking" it, or
+# a word for a medicine, a dose, a course of treatment or a drug class.
+# Quitting smoking and skipping breakfast are not on it, and the surrounding
+# words do the work, so no list of drugs is needed.
+_TAKING = re.compile(r"^(?:[\w'-]+\s+){0,2}taking\b", re.IGNORECASE)
+_TREATMENT = re.compile(
+    r"\b(?:medications?|medicines?|meds?|drugs?|pills?|tablets?|capsules?|doses?|dosage|"
+    r"prescriptions?|treatments?|therap(?:y|ies)|supplements?|vitamins?|vaccin\w+|"
+    r"immuni[sz]ations?|boosters?|insulin|inhalers?|injections?|jabs?|shots?|infusions?|"
+    r"antibiotics?|antidepress\w+|antipsychotics?|anticoagulants?|blood thinners?|steroids?|"
+    r"painkillers?|analgesics?|opioids?|contracepti\w+|birth control|hormones?|chemo\w*|"
+    r"radiotherapy|dialysis|statins?|\w{3,}(?:statin|pril|sartan|olol|prazole|oxetine|formin|"
+    r"cillin|mycin|azole|mab|gliptin|gliflozin|tidine))s?\b", re.IGNORECASE)
+# "Skipping doses is harmless": a verdict on whether to stop, not a finding.
+_RIGHT_TO_STOP = re.compile(
+    r"^[^.;,]*?\b(?:is|are|was|were|isn't|aren't|can be|could be|should be|would be|will be)\s+"
+    r"(?:(?:\w+ly|not|also|just|ever|always|never|generally|usually)\s+)*"
+    r"(?:safe|fine|ok|okay|harmless|acceptable|unnecessary|necessary|advisable|advised|"
+    r"recommended|dangerous|risky|harmful|unsafe|bad|good|wise|unwise|better|worse|best|"
+    r"allowed|permitted|a (?:good|bad|safe|risky|dangerous|smart|poor) (?:idea|move|choice))\b",
+    re.IGNORECASE)
+
+
+def _stops_treatment(claim: str):
+    """Each place a claim stops a treatment: (match, which form of the verb)."""
+    for m in _STOP_RE.finditer(claim or ""):
+        tail = re.split(r"[.;:!?,]", claim[m.end():])[0].strip()
+        near = " ".join(tail.split()[:4])
+        if _TAKING.search(near) or _TREATMENT.search(near):
+            yield m, m.lastgroup
+
+
+def stops_treatment(claim: str) -> str:
+    """
+    The words in which a claim is about stopping a medicine or treatment
+    ("stop taking statins", "skipping doses", "come off the pill"), or ""
+    for any other claim. Stopping a habit is not this: "stopping smoking"
+    names no treatment.
+    """
+    for m, _ in _stops_treatment(claim):
+        return m.group(0).lower()
+    return ""
+
+
+def says_stop(claim: str) -> bool:
+    """
+    True when stopping a treatment is what the claim says to do or that it
+    is fine to do ("can safely stop taking statins", "skipping doses is
+    harmless"), not something it says happens next ("people who stop taking
+    statins have more heart attacks", "stopping statins raises risk").
+    """
+    for m, form in _stops_treatment(claim):
+        if form == "base":
+            before = [w.lower().strip(",'\"") for w in claim[:m.start()].split()[-3:]]
+            if not _SUBORDINATE.intersection(before):
+                return True
+        elif form == "gerund" and _RIGHT_TO_STOP.search(claim[m.end():]):
+            return True
+    return False
+
+
+# Carrying on with something, in the words guidance uses for it.
+_KEEPS_GOING = re.compile(
+    r"\b(?:keep(?:s|ing)?\s+(?:on\s+)?\w+ing|keep(?:s|ing)? on|continu(?:e|es|ing)|"
+    r"carry(?:ing)? on|stay(?:s|ing)? on|remain(?:s|ing)? on|stick(?:s|ing)? (?:with|to))\b",
+    re.IGNORECASE)
 
 
 def claim_denies(claim: str) -> bool:
