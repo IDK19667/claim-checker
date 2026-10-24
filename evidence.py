@@ -1655,18 +1655,33 @@ def design_rank(study) -> str:
     if preclinical(study):
         return "weaker"
     text = _text(study)
-    rct = bool(_RANDOMIZED.search(text))
+    # "Non-randomized" and "quasi-randomized" say the opposite of randomized.
+    rct = bool(_RANDOMIZED.search(_NON_RANDOM.sub(" ", text)))
     seen = bool(_OBSERVED.search(text))
     types = study.get("publication_types") or []
     if is_review(study):
-        return "trial" if rct and not seen else "weaker" if seen and not rct else ""
+        if rct != seen:
+            return "trial" if rct else "weaker"
+        # Neither design is named: a review of interventions given against a
+        # placebo to people who were blind to it still pools trials.
+        return "trial" if not rct and blinded_intervention(study) else ""
     if any(t.startswith("Review") for t in types):
         return ""
     if "Randomized Controlled Trial" in types or (is_trial(study) and rct):
         return "trial"
     if "Observational Study" in types or seen:
         return "weaker"
+    # A study typed as a trial whose record says its people were blind to a
+    # placebo is a trial in everything but the word "randomized".
+    if any(t.startswith(TRIAL_TYPES) for t in types) and blinded_intervention(study):
+        return "trial"
     return ""
+
+
+def says_randomized(study) -> bool:
+    """The record calls itself randomized: typed as such, or says so."""
+    return ("Randomized Controlled Trial" in (study.get("publication_types") or [])
+            or bool(_RANDOMIZED.search(_text(study))))
 
 
 def weaker_kind(study) -> str:
@@ -1731,6 +1746,18 @@ _BLINDED = re.compile(r"\bplacebo\b|\b(?:double|single|triple)[- ]blind\w*|\bbli
                       re.IGNORECASE)
 _ASSOCIATION_WORDS = re.compile(r"\bassociat\w+|\bancillary\b|\bprospective\b|\bcohort\b",
                                 re.IGNORECASE)
+
+
+def blinded_intervention(study) -> bool:
+    """
+    The record describes an intervention given against a placebo, or to
+    people kept blind to what they got, and does not call itself
+    non-randomized. A sentence that only wishes for such a design ("future
+    placebo-controlled trials are needed") describes nothing that was done.
+    """
+    if _NON_RANDOM.search(_text(study)):
+        return False
+    return bool(_BLINDED.search(_sentences_of(study, _WISHED)))
 
 
 def _sentences_of(study, skip) -> str:

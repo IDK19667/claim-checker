@@ -3873,6 +3873,100 @@ t("  an answer that follows the trials but never mentions the dissent gets one s
   _v["verdict"] == "true" and "count for less" in _v["explanation"]
   and _v["tldr"] == "Green tea lowers blood pressure a little.", _v)
 
+# ---- a placebo-controlled, blinded study is a trial though it never says "randomized" ------
+# Synthetic records; none is a holdout claim. The pooled review below describes its trials the
+# way an older review does: a placebo condition, blinded subjects, no mention of randomizing.
+_SG_CLAIM = "Sugar makes children hyperactive"
+_SG_Q = "(sugar) AND (hyperactivity OR ADHD)"
+_SG_TRIALS = _study("S3", "The effect of sugar on behavior in children: a meta-analysis",
+                    types=["Journal Article", "Meta-Analysis"],
+                    abstract="Studies were required to give a known quantity of sugar, to use a placebo "
+                             "condition and to blind the subjects, parents and research staff. Sixteen "
+                             "reports met the criteria. The confidence interval for all 14 mean effect "
+                             "sizes included 0. Sugar does not affect the behavior of children.")
+_SG_OBS1 = _study("S1", "Sugar and ADHD symptoms: a systematic review and meta-analysis",
+                  types=["Journal Article", "Meta-Analysis", "Systematic Review"],
+                  abstract="In this meta-analysis of observational studies, two cross-sectional and two "
+                           "case-control studies were included. Sugar intake was linked with ADHD symptoms.")
+_SG_OBS2 = _study("S2", "Dietary carbohydrates and ADHD symptoms: a systematic review",
+                  types=["Systematic Review", "Journal Article"],
+                  abstract="Thirty-eight observational studies were included. Most reported positive "
+                           "associations between sweets and ADHD symptoms.")
+t("blinded trials: a review of placebo-controlled, blinded studies ranks as trials without the word randomized",
+  [evidence.design_rank(x) for x in (_SG_TRIALS, _SG_OBS1, _SG_OBS2)] == ["trial", "weaker", "weaker"]
+  and not evidence.says_randomized(_SG_TRIALS))
+_blind = lambda abstract, types=("Journal Article", "Meta-Analysis"): _study(
+    "B", "Sugar and behavior in children", types=list(types), abstract=abstract)
+t("  but a mention of a placebo is not enough on its own: a wish for such trials describes nothing done",
+  evidence.design_rank(_blind("Further placebo-controlled trials are needed to settle this.")) == ""
+  and evidence.design_rank(_blind("We pooled studies of sugar in children. Future double-blind "
+                                  "studies should test it.")) == "")
+t("  a review that names an observational design stays the weaker kind, placebo or not",
+  evidence.design_rank(_blind("We pooled cohort studies; unlike placebo-controlled trials they "
+                              "cannot show cause.")) == "weaker")
+t("  one that names both designs, or one that says it was not randomized, counts for neither",
+  evidence.design_rank(_blind("We pooled randomized trials and cohort studies, some placebo-controlled.")) == ""
+  and evidence.design_rank(_blind("We pooled non-randomized, placebo-controlled studies.")) == "")
+t("  a narrative review, and an animal study, are not turned into trials by a placebo group",
+  evidence.design_rank(_blind("A placebo group was used.", types=("Review",))) == ""
+  and evidence.design_rank(dict(_blind("Rats were given a placebo, blinded to the keeper.",
+                                       types=("Journal Article",)), title="Sugar in rats")) == "weaker")
+t("  a single study typed as a trial, double-blind against a placebo, is a trial",
+  evidence.design_rank(_blind("Children took sugar or a placebo, double-blind.",
+                              types=("Clinical Trial",))) == "trial"
+  and evidence.design_rank(_blind("Children took sugar or a placebo, double-blind.",
+                                  types=("Journal Article",))) == ""
+  and evidence.design_rank(_blind("Children took sugar and were watched.",
+                                  types=("Clinical Trial",))) == "")
+t("  a controlled trial that is not marked randomized is called a controlled trial in the ranking",
+  evidence.says_randomized(_SG_TRIALS) is False
+  and evidence.says_randomized(_TEA_RCT_NO) is True)
+
+_SG_SAYS = VJ("complicated", [1, 2, 3], tldr="Older reviews find no effect, but newer studies show a link.",
+              explanation="A pooled review found no effect of sugar (Study 3). Newer reviews report a link "
+                          "with ADHD symptoms (Studies 1, 2).",
+              evidence=["A pooled review found no effect of sugar on behavior (Study 3)."],
+              relevance=[_f(1, "for"), _f(2, "for"), _f(3, "against")])
+fg.models.calls = 0
+fg.models.script = [Resp(_SG_SAYS)] * 3
+_v = verdict.weigh_evidence(_SG_CLAIM, [dict(x) for x in (_SG_OBS1, _SG_OBS2, _SG_TRIALS)], _SG_Q)
+t("  a pooled review of blinded trials that found nothing outranks reviews of observational links",
+  _v["verdict"] == "false" and _v["tldr"] == verdict.CONTROLLED_TLDR["false"], _v)
+t("  and the page says controlled, not randomized, because the trials never said randomized",
+  "Controlled trials (Study 3) found it does not" in _v["explanation"]
+  and "Randomized trials (Study 3)" not in _v["explanation"]
+  and "reviews of observational studies that point the other way (Studies 1 and 2)" in _v["explanation"]
+  and _v["tldr"].startswith("Controlled trials say no"), _v)
+t("  the model was asked once more first, in the same words",
+  fg.models.calls == 3 and "Controlled trials (Study 3) found it does not work" in fg.models.prompts[-2],
+  fg.models.calls)
+t("  a takeaway code wrote for controlled trials is not sent to be checked either",
+  verdict._code_takeaway(verdict.CONTROLLED_TLDR["false"]))
+_SG_RCT = dict(_SG_TRIALS, abstract=_SG_TRIALS["abstract"] + " The studies were randomized.")
+fg.models.script = [Resp(_SG_SAYS)] * 3
+_v = verdict.weigh_evidence(_SG_CLAIM, [dict(x) for x in (_SG_OBS1, _SG_OBS2, _SG_RCT)], _SG_Q)
+t("  one that says it was randomized keeps the word",
+  _v["verdict"] == "false" and _v["tldr"] == verdict.RANKED_TLDR["false"]
+  and "Randomized trials (Study 3) found it does not" in _v["explanation"], _v)
+_SG_FOR = VJ("complicated", [1, 2, 3], tldr="The studies disagree.",
+             explanation="A pooled review found an effect of sugar (Study 3), as did newer reviews "
+                         "(Studies 1, 2).",
+             evidence=["A pooled review found an effect of sugar on behavior (Study 3)."],
+             relevance=[_f(1, "for"), _f(2, "for"), _f(3, "for")])
+fg.models.script = [Resp(_SG_FOR)] * 3
+_v = verdict.weigh_evidence(_SG_CLAIM, [dict(x) for x in (_SG_OBS1, _SG_OBS2, _SG_TRIALS)], _SG_Q)
+t("  and nothing is settled when the trials and the observational reviews point the same way",
+  _v["verdict"] == "complicated" and "fairer test" not in _v["explanation"], _v)
+_SG_MIXED = VJ("complicated", [1, 2, 3], tldr="The studies disagree.",
+               explanation="A pooled review was unclear (Study 3), and newer reviews report a link "
+                           "(Studies 1, 2).",
+               evidence=["A pooled review was unclear on sugar and behavior (Study 3)."],
+               relevance=[_f(1, "for"), _f(2, "for"), _f(3, "mixed")])
+fg.models.script = [Resp(_SG_MIXED)] * 3
+_v = verdict.weigh_evidence(_SG_CLAIM, [dict(x) for x in (_SG_OBS1, _SG_OBS2, _SG_TRIALS)], _SG_Q)
+t("  nor when the trials themselves are unclear about it",
+  _v["verdict"] == "complicated" and "fairer test" not in _v["explanation"], _v)
+
 # ---- the harm guard: a risky answer needs a trial or a major review ---------------
 t("harm guard: which way a claim leans on a protective practice",
   [(evidence.protective_practice(c) or {}).get("against") for c in (

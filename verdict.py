@@ -382,7 +382,7 @@ Return JSON: {{"lines": [{{"line": 0, "verdict": "ok", "problem": "none",
 # study, so there is nothing in an abstract to hold them to.
 def _code_takeaway(tldr: str) -> bool:
     fixed = {UNTESTED_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
-             *RANKED_TLDR.values()}
+             *RANKED_TLDR.values(), *CONTROLLED_TLDR.values()}
     return (tldr in fixed or tldr.startswith((
         "The strongest studies here", "No randomized trial or major review here",
         "The studies found were all in", "Nothing has tested this in people yet",
@@ -1490,7 +1490,7 @@ def _faults(result: dict, claim: str, reported: list[str],
             found.append(clash)
     ranked = result.get("ranked")
     if ranked:
-        found.append(f"Randomized trials ({_refs(ranked['trials'])}) found "
+        found.append(f"{ranked.get('design', 'Randomized')} trials ({_refs(ranked['trials'])}) found "
                      f"{'it works' if ranked['verdict'] == 'true' else 'it does not work'}, and "
                      f"only weaker {ranked['kinds']} ({_refs(ranked['weaker'])}) point the other "
                      f"way. Trials outrank them, so the verdict must be "
@@ -1936,7 +1936,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
                     cited_pmids.append(pmid)
                 if pmid not in leaned_on:
                     leaned_on.append(pmid)
-            tldr = RANKED_TLDR[verdict]
+            tldr = _ranked_tldr(ranked)
             templated = True
         if forced_rank or not _says_weaker(explanation, ranked):
             explanation = (explanation.rstrip() + " " + _ranked_sentence(ranked)).strip()
@@ -2220,6 +2220,7 @@ RANKED_TLDR = {
     "true": "Randomized trials say yes. Some weaker studies disagree, but trials are the fairer test.",
     "false": "Randomized trials say no. Some weaker studies disagree, but trials are the fairer test.",
 }
+CONTROLLED_TLDR = {k: v.replace("Randomized", "Controlled", 1) for k, v in RANKED_TLDR.items()}
 _WEAKER_SAID = re.compile(
     r"\b(?:observational|cohort|case[- ]control|cross[- ]sectional|survey|animal|"
     r"weaker|association|associated|linked)\w*", re.IGNORECASE)
@@ -2286,8 +2287,13 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
                               for n, _ in trials):
         return None
     kinds = list(dict.fromkeys(evidence.weaker_kind(studies[n - 1]) for n in against))
+    # A trial that is blinded and placebo-controlled but never says
+    # "randomized" is a controlled trial, and is called one.
+    design = ("Randomized" if any(evidence.says_randomized(studies[n - 1]) for n, _ in trials)
+              else "Controlled")
     return {"verdict": "true" if direction == "for" else "false",
-            "trials": [n for n, _ in trials], "weaker": against, "kinds": _and(kinds)}
+            "trials": [n for n, _ in trials], "weaker": against, "kinds": _and(kinds),
+            "design": design}
 
 
 def _says_weaker(explanation: str, ranked: dict) -> bool:
@@ -2295,11 +2301,17 @@ def _says_weaker(explanation: str, ranked: dict) -> bool:
     return bool(_WEAKER_SAID.search(explanation or ""))
 
 
+def _ranked_tldr(ranked: dict) -> str:
+    return (RANKED_TLDR if ranked.get("design", "Randomized") == "Randomized"
+            else CONTROLLED_TLDR)[ranked["verdict"]]
+
+
 def _ranked_sentence(ranked: dict) -> str:
     found = "it does" if ranked["verdict"] == "true" else "it does not"
-    return (f"Randomized trials ({_refs(ranked['trials'])}) found {found}, and they are the "
-            f"fairer test. The {ranked['kinds']} that point the other way "
-            f"({_refs(ranked['weaker'])}) count for less, so the verdict follows the trials.")
+    return (f"{ranked.get('design', 'Randomized')} trials ({_refs(ranked['trials'])}) found "
+            f"{found}, and they are the fairer test. The {ranked['kinds']} that point the "
+            f"other way ({_refs(ranked['weaker'])}) count for less, so the verdict follows "
+            f"the trials.")
 
 
 # What the answer says when the harm guard has to act. The risk sentence
