@@ -131,6 +131,7 @@ verdict._gemini_client = fg
 STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", "year": "2020",
             "publication_types": ["Journal Article"], "authors": ["A B"], "data_banks": None, "url": f"u{i}"}
            for i in range(1, 4)]
+_real_search_and_fetch = pubmed.search_and_fetch
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # The guideline check is one more call on high-stakes claims. It is tested
 # on its own near the end, and stays out of every scripted check until then.
@@ -1119,7 +1120,7 @@ _seen = []
 def _fake_search(q, max_results=8):
     _seen.append((q, max_results))
     if q.endswith("(systematic review OR meta-analysis)"):
-        return ["COCHRANE", "OTHER_SR", "THIRD_SR", "FOURTH_SR"][:max_results]
+        return ["70000001", "90000002", "80000003", "60000004"][:max_results]
     if "[pt]" in q:
         return [f"PT{i}" for i in range(16)]
     return [f"GEN{i}" for i in range(16)]
@@ -1128,12 +1129,12 @@ _merged = pubmed.search_merged("(sunscreen OR sunblock) AND (skin cancer OR mela
                                max_results=8)
 pubmed.search_pubmed = _real_search
 t("  its top reviews lead the list, however many synonym searches find",
-  set(_merged[:3]) == {"COCHRANE", "OTHER_SR", "THIRD_SR"} and "FOURTH_SR" not in _merged
+  _merged[:3] == ["90000002", "80000003", "70000001"] and "60000004" not in _merged
   and len(_merged) == 16, _merged)
-t("  and it is one extra search, asked for only the review slots",
+t("  and it is one extra search, asked for a pool of four times the review slots",
   sum(1 for q, _ in _seen if q.endswith("(systematic review OR meta-analysis)")) == 1
   and ("(sunscreen) AND (skin cancer) AND (systematic review OR meta-analysis)",
-       pubmed.REVIEW_SLOTS) in _seen, _seen)
+       pubmed.REVIEW_POOL) in _seen and pubmed.REVIEW_POOL == 4 * pubmed.REVIEW_SLOTS, _seen)
 t("  a third AND group is dropped, whatever the prompt asked for",
   verdict._two_groups("(vitamin D OR cholecalciferol) AND (cold OR flu) "
                       "AND (deficiency OR insufficiency)")
@@ -2831,6 +2832,132 @@ t("  and no log line carries the operator's email",
   not any("ops@example.org" in m for m in _msgs) and not any("ops@example.org" in m for m in _run_merge({"review": [429]})[3]))
 t("  the pacing is no looser than before",
   pubmed.MIN_INTERVAL >= 0.4 and pubmed.RETRY_AFTER >= 1.5 and pubmed.RETRY_AFTER_LONG > pubmed.RETRY_AFTER)
+
+# Which reviews lead. The review search is asked for a pool, and the leads are
+# picked from it by rules that do not read NCBI's order: on one evening NCBI
+# ranked the two Cochrane reviews of fluoride toothpaste below the first three
+# and a check that rested on them fell to "complicated".
+_FQ = ("(fluoride toothpaste OR dentifrice OR fluoride dentifrice) AND "
+       "(dental caries OR tooth decay OR cavity prevention)")
+_COCH_A = "Fluoride toothpastes of different concentrations for preventing dental caries"
+_COCH_B = "Fluoride toothpastes for preventing dental caries in children and adolescents"
+_OFF = "Biomimetic hydroxyapatite toothpastes for caries prevention: a review"
+def _rec(pmid, title, types=("Review",), abstract="Background. Methods. Results."):
+    return {"pmid": pmid, "title": title, "abstract": abstract, "year": 2019,
+            "publication_types": list(types), "authors": [], "journal": "J"}
+_no_votes = lambda p: 0  # noqa: E731
+_recs = {r["pmid"]: r for r in [
+    _rec("34925515", _OFF, ("Systematic Review",)),
+    _rec("30829399", _COCH_A, ("Meta-Analysis", "Systematic Review")),
+    _rec("30290130", "Fluoride toothpaste and dental caries: a narrative overview", ("Review",)),
+    _rec("12535435", _COCH_B, ("Meta-Analysis", "Systematic Review")),
+    _rec("38888888", "Fluoride toothpaste against dental caries, a scoping review", ("Review",)),
+]}
+t("lead: _heads reads the claim as typed, the first term of each group",
+  pubmed._heads(_FQ) == ["fluoride toothpaste", "dental caries"] and pubmed._heads("") == [], pubmed._heads(_FQ))
+t("  a title names a head when it uses every word of it, by stem",
+  pubmed._names(_COCH_A, "fluoride toothpaste") and pubmed._names(_COCH_A, "dental caries")
+  and not pubmed._names(_OFF, "fluoride toothpaste") and not pubmed._names(_OFF, "dental caries")
+  and not pubmed._names("Fluoride toothpaste and tooth decay", "dental caries"))
+_pool = ["34925515", "30290130", "38888888", "30829399", "12535435"]
+t("lead: titles naming both halves of the claim lead, ahead of a review NCBI ranked first",
+  pubmed.lead_reviews(_pool, _FQ, _no_votes, _recs) == ["30829399", "12535435", "38888888"],
+  pubmed.lead_reviews(_pool, _FQ, _no_votes, _recs))
+t("  and the off-topic review does not lead even when all three other searches found it",
+  "34925515" not in pubmed.lead_reviews(_pool, _FQ, lambda p: 3 if p == "34925515" else 0, _recs))
+t("  a systematic review or meta-analysis leads a plain review of the same standing",
+  pubmed.lead_reviews(_pool, _FQ, _no_votes, _recs)[:2] == ["30829399", "12535435"],
+  pubmed.lead_reviews(_pool, _FQ, _no_votes, _recs))
+t("  and the third lead, from reviews of equal standing, is the newer record",
+  pubmed.lead_reviews(_pool, _FQ, _no_votes, _recs)[2] == "38888888",
+  pubmed.lead_reviews(_pool, _FQ, _no_votes, _recs))
+t("  a review the other searches found too leads one they did not, whatever its type",
+  pubmed.lead_reviews(_pool, _FQ, lambda p: 2 if p == "30290130" else 0, _recs)[0] == "30290130",
+  pubmed.lead_reviews(_pool, _FQ, lambda p: 2 if p == "30290130" else 0, _recs))
+_rng2 = _random.Random(3)
+_orders = []
+for _ in range(30):
+    _p = list(_pool)
+    _rng2.shuffle(_p)
+    _orders.append(pubmed.lead_reviews(_p, _FQ, lambda p: 1 if p == "12535435" else 0, _recs))
+t("  the leads are the same whatever order NCBI gave the pool, 30 shuffles in 30",
+  all(o == _orders[0] for o in _orders) and _orders[0][0] == "12535435", _orders[0])
+_noabs = {**_recs, "30829399": _rec("30829399", _COCH_A, ("Meta-Analysis",), abstract="  ")}
+t("  a review with no abstract cannot ground a sentence, so it leads only when nothing else can",
+  "30829399" not in pubmed.lead_reviews(_pool, _FQ, lambda p: 3 if p == "30829399" else 0, _noabs)
+  and pubmed.lead_reviews(["30829399", "34925515"], _FQ, _no_votes, _noabs)[0] == "34925515"
+  and "30829399" in pubmed.lead_reviews(["30829399", "34925515"], _FQ, _no_votes, _noabs),
+  pubmed.lead_reviews(_pool, _FQ, lambda p: 3 if p == "30829399" else 0, _noabs))
+t("  a record that was not fetched sorts with the unreadable, not first",
+  pubmed.lead_reviews(["99999999", "12535435"], _FQ, _no_votes, _recs)[0] == "12535435")
+t("  a title that says systematic review counts for one whose type is not set yet",
+  pubmed._design_tier({"title": "A systematic review of fluoride", "publication_types": []}) == 0
+  and pubmed._design_tier({"title": "x", "publication_types": ["Meta-Analysis"]}) == 0
+  and pubmed._design_tier({"title": "x", "publication_types": ["Review"]}) == 1
+  and pubmed._design_tier({"title": "x", "publication_types": ["Journal Article"]}) == 2)
+t("  before the fetch, with no titles to read, votes and then the newer record decide",
+  pubmed.lead_reviews(["30", "40", "20", "10"], _FQ, lambda p: 1 if p == "10" else 0) == ["10", "40", "30"],
+  pubmed.lead_reviews(["30", "40", "20", "10"], _FQ, lambda p: 1 if p == "10" else 0))
+t("  and a claim with no readable head term still gets leads, by votes and newness",
+  len(pubmed.lead_reviews(_pool, "", _no_votes, _recs)) == 3)
+
+# End to end through search_and_fetch with a fake NCBI: the Cochrane reviews are
+# ninth and eleventh of the review search's twelve, and still lead the studies.
+_COCH_IDS = ["30829399", "12535435"]
+_RPOOL = ([f"4000{i:04d}" for i in range(8)] + [_COCH_IDS[0], "40000008", _COCH_IDS[1], "40000009"])
+_sr_recs = {p: _rec(p, f"Hydroxyapatite and enamel remineralisation, topic {p}", ("Review",)) for p in _RPOOL}
+_sr_recs["30829399"] = _rec("30829399", _COCH_A, ("Meta-Analysis", "Systematic Review"))
+_sr_recs["12535435"] = _rec("12535435", _COCH_B, ("Meta-Analysis", "Systematic Review"))
+_trial_ids = [f"5000{i:04d}" for i in range(30)]
+for _p in _trial_ids:
+    _sr_recs[_p] = _rec(_p, f"Fluoride toothpaste and dental caries in schoolchildren, trial {_p}",
+                        ("Randomized Controlled Trial",))
+_fetched = []
+def _e2e(pool_order, noise=0):
+    def fake(q, max_results=8):
+        if q.endswith("(systematic review OR meta-analysis)"):
+            return list(pool_order)[:max_results]
+        return list(_trial_ids)[:max_results]
+    def fetch(ids):
+        _fetched.append(list(ids))
+        return [dict(_sr_recs[p]) for p in ids if p in _sr_recs]
+    saved = pubmed.search_pubmed, pubmed.fetch_details
+    pubmed.search_pubmed, pubmed.fetch_details = fake, fetch
+    try:
+        return [s["pmid"] for s in _real_search_and_fetch(_FQ, max_results=8)]
+    finally:
+        pubmed.search_pubmed, pubmed.fetch_details = saved
+_e = _e2e(_RPOOL)
+t("lead: reviews NCBI ranked ninth and eleventh of the pool still lead the studies",
+  set(_e[:2]) == set(_COCH_IDS) and len(_e) == 8, _e)
+t("  and it is one fetch, which covers the whole pool as well as the studies",
+  len(_fetched) == 1 and set(_RPOOL) <= set(_fetched[0]) and set(_trial_ids[:8]) <= set(_fetched[0]), _fetched)
+_rng3 = _random.Random(5)
+_runs = []
+for _ in range(10):
+    _o = list(_RPOOL)
+    _rng3.shuffle(_o)
+    _runs.append(_e2e(_o))
+t("  and the studies are the same whichever order NCBI gave the review pool, 10 in 10",
+  all(r == _runs[0] for r in _runs) and set(_runs[0][:2]) == set(_COCH_IDS), _runs[0])
+
+# A fetch that comes back short is logged, naming the papers, and not hidden.
+class _Resp:
+    content = b"<PubmedArticleSet><PubmedArticle><id>1</id></PubmedArticle></PubmedArticleSet>"
+_logs2 = _Logs()
+_plog.addHandler(_logs2)
+_saved_get, _saved_parse = pubmed._get, pubmed._parse_article
+pubmed._get = lambda endpoint, params: _Resp()
+pubmed._parse_article = lambda el: {"pmid": el.findtext("id")}
+try:
+    _got = pubmed.fetch_details(["1", "2", "3"])
+finally:
+    pubmed._get, pubmed._parse_article = _saved_get, _saved_parse
+    _plog.removeHandler(_logs2)
+t("fetch: a record efetch does not return is logged by its id",
+  [r["pmid"] for r in _got] == ["1"] and len(_logs2.records) == 1
+  and "1 of 3" in _logs2.records[0].getMessage() and "2, 3" in _logs2.records[0].getMessage(),
+  [r.getMessage() for r in _logs2.records])
 
 # ---- Before you trust a verdict: the home page's plain answers -----------
 import html as _html

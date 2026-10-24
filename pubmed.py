@@ -249,6 +249,10 @@ def fetch_details(pmids: list[str]) -> list[dict]:
         except Exception:
             # One malformed record shouldn't take down the whole request.
             continue
+    if len(records) < len(set(pmids)):
+        got = {r["pmid"] for r in records}
+        _log.warning("efetch returned %d of %d records, missing: %s", len(records),
+                     len(set(pmids)), ", ".join(p for p in dict.fromkeys(pmids) if p not in got))
     return records
 
 
@@ -267,12 +271,21 @@ def search_and_fetch(query: str, max_results: int = 8,
     the thing claimed and the nearest evidence is worth showing, labelled.
     """
     keep = INDIRECT_SLOTS if surrogate else 0
-    pmids = search_merged(query, max_results=max_results)[:max_results * 2]
+    found = _search_all(query, max_results)
+    # One fetch for all of it: the review candidates, so their titles can
+    # pick the leads, and the first `want` of the rest, which covers the list
+    # whichever reviews lead (taking three out of a list moves its sixteenth
+    # up by at most three).
+    wanted = list(dict.fromkeys(found["pool"] + found["ranked"][:found["want"]]))
+    indirect = []
     if surrogate:
-        for pmid in search_surrogate(query, surrogate, max_results=keep + 1):
-            if pmid not in pmids:
-                pmids.append(pmid)
-    return prioritise(usable(fetch_details(pmids)), query, surrogate)[:max_results]
+        indirect = search_surrogate(query, surrogate, max_results=keep + 1)
+    records = {r["pmid"]: r for r in fetch_details(list(dict.fromkeys(wanted + indirect)))}
+    lead = lead_reviews(found["pool"], query, found["votes"], records)
+    pmids = _with_lead(found, lead)
+    pmids += [p for p in indirect if p not in pmids]
+    return prioritise(usable([records[p] for p in pmids if p in records]),
+                      query, surrogate)[:max_results]
 
 
 # The fewest studies worth narrowing to. Below this, dropping the papers that
@@ -505,8 +518,11 @@ def search_phrases(phrased: str, max_results: int = 8) -> list[str]:
 # How many places at the front of the list the review search may take. Three:
 # the main review on a topic is nearly always in PubMed's top three for its
 # own words, and more would let reviews of neighbouring questions crowd out
-# the trials.
+# the trials. Which three is decided by lead_reviews, from the first
+# REVIEW_POOL that search returns, because the order NCBI gives is not
+# repeatable: the main review is third on one call and sixth on the next.
 REVIEW_SLOTS = 3
+REVIEW_POOL = 4 * REVIEW_SLOTS
 
 
 def review_query(query: str) -> str | None:
@@ -541,6 +557,118 @@ def review_query(query: str) -> str | None:
     return " AND ".join(heads) + " AND (systematic review OR meta-analysis)"
 
 
+# A search "found" a paper when it is within this many times the slots asked
+# for: 2 of 8 is 16, the whole of what the strong-design and plain searches
+# are asked for, so a paper counts wherever in the window NCBI puts it. Replayed
+# over recorded calls, 1.5 (12) was a little steadier on a calm day, but when
+# the ranking is shaken by four or more places it lost the papers that two
+# searches agreed on (present in 75% of runs against 95%). 2.5 (20) was less
+# steady on both, because a bad call's stragglers then vote too. No extra
+# call: the searches already return 16.
+VOTE_DEPTH = 2.0
+
+
+def _heads(query: str) -> list[str]:
+    """The first term of the query's first two groups: the claim as typed."""
+    heads = []
+    for g in split_and(query or "")[:2]:
+        terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
+        if terms:
+            heads.append(terms[0].strip("() "))
+    return heads
+
+
+def _newest_first(ids) -> list[str]:
+    """PMIDs as numbers, newest first (text for an id that is not one). A
+    total order, so what it returns does not depend on what it was given."""
+    return sorted(ids, key=lambda p: (len(p), p), reverse=True)
+
+
+def _design_tier(study: dict) -> int:
+    """0 for a systematic review or meta-analysis, 1 for any other review,
+    2 for the rest. The newest review on a question has no type yet, so the
+    title counts."""
+    types = study.get("publication_types") or []
+    if ("Meta-Analysis" in types or "Systematic Review" in types
+            or re.search(r"\b(?:systematic review|meta-?analys[ie]s)\b",
+                         study.get("title") or "", re.IGNORECASE)):
+        return 0
+    return 1 if any(t.startswith("Review") for t in types) else 2
+
+
+def _names(title: str, head: str) -> bool:
+    """True when the title uses every word of the head term that names
+    something, by its stem: "toothpastes" for "toothpaste", "caries" for
+    "caries". A head of nothing but filler words names nothing."""
+    stems = evidence.outcome_stems(head)
+    return bool(stems) and all(evidence.names_any(title, [s]) for s in stems)
+
+
+def lead_reviews(pool: list[str], query: str, votes, records: dict | None = None) -> list[str]:
+    """
+    The REVIEW_SLOTS reviews that lead the list, picked from the first
+    REVIEW_POOL the review search returned by rules that do not read the
+    order NCBI gave them:
+      1. one a reader can read (its record has an abstract);
+      2. one whose title names both the claim's subject and its outcome,
+         as typed, by stem: "Fluoride toothpastes for preventing dental
+         caries" over "Biomimetic hydroxyapatite and caries prevention";
+      3. one the other searches found too (`votes`, how many of them did);
+      4. a meta-analysis or systematic review over any other review;
+      5. the newer record.
+    Without the records (before the fetch) only 3 and 5 can apply.
+    """
+    heads = _heads(query)
+    ranked = _newest_first(dict.fromkeys(pool))
+
+    def key(p: str):
+        if records is None:
+            return (-votes(p),)
+        rec = records.get(p)
+        if rec is None or not (rec.get("abstract") or "").strip():
+            return (1, 1, -votes(p), 2)
+        named = bool(heads) and all(_names(rec.get("title") or "", h) for h in heads)
+        return (0, 0 if named else 1, -votes(p), _design_tier(rec))
+
+    ranked.sort(key=key)
+    return ranked[:REVIEW_SLOTS]
+
+
+def _search_all(query: str, max_results: int) -> dict:
+    """
+    The four searches, kept apart. `pool` is the review search's candidates;
+    `ranked` is everything the other three found, in the order they earn:
+    by how many of them found it within VOTE_DEPTH, then by which search
+    (strong designs, then the claim's phrase, then the rest), then newest.
+    """
+    want = max_results * 2
+    depth = int(max_results * VOTE_DEPTH)
+    ask = max(want, depth)
+    asked = review_query(query)
+    pool = list(dict.fromkeys(search_pubmed(asked, max_results=REVIEW_POOL))) if asked else []
+    best = search_pubmed(best_evidence_query(query), max_results=ask)
+    # The phrase search sits between the two: it can only find papers that
+    # name a term as written, so what it finds is about the claim.
+    phrased = phrase_query(query)
+    exact = search_phrases(phrased, max_results=depth) if phrased else []
+    general = search_pubmed(query, max_results=ask)
+
+    tiers = [best[:max_results], exact, best[max_results:], general]
+    found = [set(best[:depth]), set(exact[:depth]), set(general[:depth])]
+    votes = lambda p: sum(p in f for f in found)  # noqa: E731
+    tier_of: dict[str, int] = {}
+    for n, tier in enumerate(tiers):
+        for pmid in tier:
+            tier_of.setdefault(pmid, n)
+    ranked = _newest_first(tier_of)
+    ranked.sort(key=lambda p: (-votes(p), tier_of[p]))
+    return {"want": want, "pool": pool, "ranked": ranked, "votes": votes}
+
+
+def _with_lead(found: dict, lead: list[str]) -> list[str]:
+    return (lead + [p for p in found["ranked"] if p not in lead])[:found["want"]]
+
+
 def search_merged(query: str, max_results: int = 8) -> list[str]:
     """
     Four searches, one list. PubMed ranks by relevance alone, so a narrow
@@ -566,38 +694,18 @@ def search_merged(query: str, max_results: int = 8) -> list[str]:
     found by two of the searches every time, ranked fifth to eleventh, and
     still missed the list on most calls. So a paper's place now
     depends on how many of the three searches (strong designs, the claim's
-    own phrase, everything) found it within `depth` places, which a swap of
+    own phrase, everything) found it within VOTE_DEPTH, which a swap of
     two or three places cannot change, and not on where in a list it was.
     Ties go to the search it came from, in the old order, and then to the
-    newer record, which no call can reshuffle. The top reviews still lead,
-    among themselves in the same order.
-    """
-    want = max_results * 2
-    depth = max_results + max_results // 2
-    asked = review_query(query)
-    reviews = search_pubmed(asked, max_results=REVIEW_SLOTS) if asked else []
-    best = search_pubmed(best_evidence_query(query), max_results=want)
-    # The phrase search sits between the two: it can only find papers that
-    # name a term as written, so what it finds is about the claim.
-    phrased = phrase_query(query)
-    exact = search_phrases(phrased, max_results=depth) if phrased else []
-    general = search_pubmed(query, max_results=want)
+    newer record, which no call can reshuffle.
 
-    lead = list(dict.fromkeys(reviews[:REVIEW_SLOTS]))
-    tiers = [best[:max_results], exact, best[max_results:], general]
-    found = [set(best[:depth]), set(exact[:depth]), set(general[:depth])]
-    tier_of: dict[str, int] = {}
-    for n, tier in enumerate(tiers):
-        for pmid in tier:
-            tier_of.setdefault(pmid, n)
-    rest = [p for p in tier_of if p not in lead]
-    # Newest first, as numbers (text for an id that is not one), then the
-    # stable sort by agreement and tier: nothing here reads NCBI's order.
-    # Which reviews lead is NCBI's call; the order they lead in is not.
-    for group in (lead, rest):
-        group.sort(key=lambda p: (len(p), p), reverse=True)
-        group.sort(key=lambda p: (-sum(p in f for f in found), tier_of.get(p, len(tiers))))
-    return (lead + rest)[:want]
+    The reviews that lead are chosen from the review search's first
+    REVIEW_POOL by lead_reviews. Here, without the records, only the votes
+    and the newer record can decide; search_and_fetch decides again with
+    titles in hand.
+    """
+    found = _search_all(query, max_results)
+    return _with_lead(found, lead_reviews(found["pool"], query, found["votes"]))
 
 
 def usable(studies: list[dict]) -> list[dict]:

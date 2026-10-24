@@ -123,13 +123,25 @@ is not repeatable (five identical calls, five different top hundreds),
 met by a merge that cut each search at a fixed place: the two papers sat
 fifth to eleventh in two searches and were in or out by the call.
 `search_merged` now orders by how many of the three searches found a paper
-within 1.5 times the slots asked for, then by search, then newest first;
-the top reviews still lead. The two papers were present 0 of 6 runs before
+within twice the slots asked for (16 of 8), then by search, then newest
+first; the top reviews still lead. The two papers were present 0 of 6 runs before
 and 6 of 6 after, with six of eight studies identical in every run; a slot
 or two that no search agrees on still varies, because NCBI does. `_get`
 also asks a failing call a third time after a longer pause, logs each
 failed try on `evident.pubmed`, and still raises if it keeps failing: a
 search left out of the merge would change the evidence without a word.
+The leading reviews were still "NCBI's call" (the first three of the
+review search), and a live run of "Fluoride toothpaste prevents cavities"
+lost both Cochrane reviews when NCBI ranked them lower, so the review
+search now returns twelve (still one call) and `lead_reviews` picks three
+by a rule that never reads NCBI's order: a title naming both halves of the
+claim by stem, then agreement with the other searches, then systematic
+review or meta-analysis over review, then the newer record; a record with
+no abstract goes last. The vote depth went from 1.5 to 2.0 times the slots
+because replays of recorded searches with added rank noise lost fewer
+papers at 16 than at 12, and 2.5 did worse again; it costs no call, only
+a longer id list in the same efetch. Both Cochrane reviews were present in
+4 of 4 live runs, with the same six studies in all four.
 The merge changes which studies a check reads, so rerun the regression and
 safety sets.
 
