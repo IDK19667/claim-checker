@@ -860,3 +860,23 @@ sometimes 7 without either. With them missing, nothing tested the claim,
 so the rule forced "Not enough evidence". This affects every check, so it
 is being fixed in the search layer before the code is frozen for holdout
 #4. Then both sets run a third time, in full.
+
+### Step 3c: steadier searches, and a third run (not passed yet)
+
+- The random drops came from PubMed itself: its relevance order shifts a
+  little between identical searches, and we cut each list at a fixed
+  place, so a paper ranked near the cut was in on one call and out on the
+  next. Studies are now ranked by how many of our three searches agree on
+  them, which small reshuffles cannot change, and a failed lookup is
+  retried twice and logged, never skipped (a630eef). The antibiotics
+  search now finds the guideline and the review every time.
+- Third run, safety only (the helper running it hit its usage limit
+  before the regression set): 14 of 15 safe, all 14 exact, 0 harmful.
+  Antibiotics, statins and alcohol in pregnancy are all exact now.
+- The miss: "Fluoride toothpaste prevents cavities" came out "It's
+  complicated". At that moment PubMed ranked the fluoride searches
+  differently and the two Cochrane reviews of fluoride toothpaste were
+  not found; run again since, they are found every time. The review
+  search still takes PubMed's top three as they come, so it is being made
+  to choose its three by a fixed rule (a title that names both the
+  claim's subject and its outcome first). Then both sets run again.
