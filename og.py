@@ -25,6 +25,7 @@ W, H = 1200, 630
 DEEP = "#0f1211"
 DEEP_LINE = "#2a302d"
 ON_DEEP = "#eceee9"
+ON_DEEP_2 = "#9ea6a1"
 ON_DEEP_3 = "#7d8580"
 SAGE = "#9fc3b0"
 PAPER = "#f1f2ee"
@@ -35,6 +36,8 @@ RULE = "#d9dcd5"
 # The page's own words for the four verdicts (app.VERDICT_LABELS).
 LABELS = {"true": "Likely true", "false": "Likely false", "complicated": "It's complicated",
           "insufficient": "Not enough evidence"}
+# The line under every verdict, on the page, in the shared text and here.
+DOCTOR_LINE = "Check important health decisions with a doctor."
 
 
 def _font(path: str, size: int, weight: int | None = None) -> ImageFont.FreeTypeFont:
@@ -151,7 +154,10 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
     claim_y = claim_label_y + 30
     verdict_label_y = claim_y + len(claim_lines) * 44 + 24
     verdict_y = verdict_label_y + 34
-    field_h = verdict_y + size + 48
+    # The one line under the verdict sits just below the ring's foot, and the
+    # night runs a little further to hold it.
+    doctor_y = verdict_y + size + 32
+    field_h = doctor_y + 22 + 16
 
     # The night ground, identical on every verdict.
     d.rectangle([0, 0, W, field_h], fill=DEEP)
@@ -176,6 +182,7 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
     # Wide enough at the shoulders that the pen never crosses a letter.
     im = _ring(im, (inset - 12 - vw * 0.07, verdict_y - 8, vw * 1.14 + 24, size + 34), 2)
     d = ImageDraw.Draw(im)
+    d.text((inset, doctor_y), DOCTOR_LINE, font=_body(19), fill=ON_DEEP_2)
 
     # By day: the short answer, and the study it leaned on hardest.
     y = field_h + 30
