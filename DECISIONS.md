@@ -4,6 +4,105 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-24: Accuracy round 5, a stronger model for the verdict
+
+Every Gemini call used one model, `gemini-3.5-flash-lite`. Round 4's
+misses were readings of the evidence, not wording, so the two calls that
+decide what a reader is told now run on a stronger model, and the small
+jobs stay on the cheap one.
+
+**The split.** `GEMINI_QUERY_MODEL` (default `gemini-3.5-flash-lite`, and
+the old `GEMINI_MODEL` still sets it) runs the PubMed search, the guideline
+lookup and the stamp direction read. `GEMINI_VERDICT_MODEL` (default
+`gemini-3.6-flash`) runs the verdict, its one retry and the faithfulness
+check, and nothing else. The model is an argument down through
+`_complete_json`, `_gemini_json` and `_gemini_text`, never a global swap.
+The Claude path has one model and uses it for both.
+
+**Which model, and what was not possible.** The key sees 60 models. On
+2026-10-24 one tiny call to each candidate gave:
+
+| Model | Result |
+|---|---|
+| gemini-3.1-pro-preview, gemini-pro-latest, gemini-4-argon | 429, "limit: 0" on the free tier: not usable on this key |
+| gemini-2.5-pro | 404, no longer available to new users |
+| gemini-3.8-flash | answers, but 172 s and 155 s for a one word reply |
+| gemini-flash-latest | 503, then 107 s |
+| gemini-3.7-flash | 503, then 27 s |
+| gemini-3.6-flash | answers, 1.1 s |
+| gemini-3.5-flash | answers, 1.6 s and 1.7 s |
+| gemini-3-flash-preview | answers, 1.0 s |
+
+So no Pro model can be called without billing, and the newest full Flash
+models were too slow to put in front of a reader waiting on a stream.
+`gemini-3.6-flash` is the strongest full Flash model that answered quickly,
+and it has a listed price (`gemini-3.5-flash` and `gemini-3.7-flash` are not
+on Google's pricing page). Changing it is one environment variable: retry
+`GEMINI_VERDICT_MODEL=gemini-3.8-flash` when it settles down, and read the
+seconds on `evident.usage`.
+
+**Prices** (paid tier, standard, per 1M tokens, output includes thinking;
+https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-24):
+flash-lite $0.30 in, $2.50 out; 3.6 Flash and 3.8 Flash $0.75 in, $3.75 out
+until 2026-12-31, then $1.50 and $7.50; 3.1 Pro $2.00 and $12.00 up to 200k
+tokens. They are constants in `scripts/cost.py`, which also holds the
+free-tier limits.
+
+**Free-tier limits.** Google no longer publishes them: its rate limit page
+(https://ai.google.dev/gemini-api/docs/rate-limits) says to read them in AI
+Studio, which this project cannot open. A third party read them out of the
+429 answers on 2026-09-02
+(https://dev.to/romeroyang/geminis-free-tier-measured-20-requests-a-day-and-google-no-longer-publishes-the-number-4gf2):
+full Flash models 5 requests a minute and 20 a day per project and model,
+flash-lite 15 a minute and 500 a day. A Google forum thread of 2026-09-03
+quotes the same 20 and 500. Our own 429 for the Pro models said "limit: 0",
+which agrees. These are not Google's published numbers; the first 429 from
+a full Flash model in `scripts/cost.py` shows the real one.
+
+**What that means.** A verdict-model check makes about 2 to 3 verdict-model
+calls (verdict, a retry now and then, the faithfulness read), so the free
+tier carries roughly 7 to 10 such checks a day. A test day (safety 17,
+regression 21, holdout 20: 58 checks, 175 to 350 calls) does not fit. Either
+billing is turned on for the test days, or the sets are spread over several
+days, or they run on flash-lite. The public site is not hurt, because of the
+fallback below, but past the daily limit its verdicts are written by
+flash-lite again.
+
+**Fallback, never silent.** If the verdict model answers 429, is
+unavailable (5xx, a connection error), has been retired (404), or takes
+longer than `VERDICT_MODEL_TIMEOUT_SEC` (default 120), that one call runs
+once on the query model and a warning on the `evident.models` logger names
+both models and the reason. A rejected key is not retried, and a query model
+that is also busy gives the defined 429 page after two tries. With
+`VERDICT_MODEL_FALLBACK=0` the error propagates exactly as before, which is
+how `scripts/cost.py` and any run that must not mix models are set up. The
+fallback is a no-op when both names are the same.
+
+**Latency and timeouts.** gunicorn runs `--workers 1 --threads 8`, which is
+the gthread worker: its 30 second `--timeout` is a heartbeat from the main
+loop, not a limit on a request, so a long verdict call does not get the
+worker killed. The stream sends events as stages finish, but the verdict
+stage is one silent gap, and `static/app.js` has no fetch timeout (only the
+reader's Cancel). The Gemini SDK has no default timeout and no retries, so a
+stuck call would hold one of the eight threads indefinitely. That was the
+real risk of a slower model, so the verdict calls now carry a time limit
+(120 seconds, sent to Google as the call's deadline too), and the SDK's own
+timeout and connection errors, which were not caught before, now become
+"unavailable" and take the fallback. The faithfulness call's output cap
+went from 4000 to 8000 because thinking counts against it and a cut-off read
+is skipped; the verdict call's 12000 is unchanged.
+
+**Token usage.** Every Gemini call logs its model, prompt, output and
+thinking tokens and seconds on `evident.usage`, and the check in progress
+keeps a tally (`verdict.usage_tally()`, reset at the start of each check in
+`app.py`) that is never part of the API response. Thinking tokens are
+billed as output. `scripts/cost.py` runs five fixed claims through
+`/api/check` on a scratch database, 30 seconds apart, and prints calls,
+tokens, seconds and dollars per model per check, the average, and how many
+checks a day the free tier allows with the models in use. It is run once
+with `GEMINI_VERDICT_MODEL=gemini-3.5-flash-lite` for the before and once
+with the defaults for the after.
+
 ## 2026-10-24: Accuracy round 5, a Beta label and a line to see a doctor
 
 The reader asked for both while accuracy is still being proven: a small "Beta" label beside the wordmark on every screen, and one fixed line under every verdict, "Check important health decisions with a doctor.", which also travels with the shared text, the shared image and the link preview card. The label is a hairline tag in the mono with no fill and nothing to press, and the line is set in the night's quiet ink at the size of the note under the claim, so neither adds a colour, a face or a motion.
@@ -3435,102 +3534,3 @@ What was deliberately rejected:
   bill.
 - 2026-09-14 Verdict integrity rules: citations map to the studies the
   model was shown; an uncited true/false is forced to "complicated".
-
-## 2026-10-24: Accuracy round 5, a stronger model for the verdict
-
-Every Gemini call used one model, `gemini-3.5-flash-lite`. Round 4's
-misses were readings of the evidence, not wording, so the two calls that
-decide what a reader is told now run on a stronger model, and the small
-jobs stay on the cheap one.
-
-**The split.** `GEMINI_QUERY_MODEL` (default `gemini-3.5-flash-lite`, and
-the old `GEMINI_MODEL` still sets it) runs the PubMed search, the guideline
-lookup and the stamp direction read. `GEMINI_VERDICT_MODEL` (default
-`gemini-3.6-flash`) runs the verdict, its one retry and the faithfulness
-check, and nothing else. The model is an argument down through
-`_complete_json`, `_gemini_json` and `_gemini_text`, never a global swap.
-The Claude path has one model and uses it for both.
-
-**Which model, and what was not possible.** The key sees 60 models. On
-2026-10-24 one tiny call to each candidate gave:
-
-| Model | Result |
-|---|---|
-| gemini-3.1-pro-preview, gemini-pro-latest, gemini-4-argon | 429, "limit: 0" on the free tier: not usable on this key |
-| gemini-2.5-pro | 404, no longer available to new users |
-| gemini-3.8-flash | answers, but 172 s and 155 s for a one word reply |
-| gemini-flash-latest | 503, then 107 s |
-| gemini-3.7-flash | 503, then 27 s |
-| gemini-3.6-flash | answers, 1.1 s |
-| gemini-3.5-flash | answers, 1.6 s and 1.7 s |
-| gemini-3-flash-preview | answers, 1.0 s |
-
-So no Pro model can be called without billing, and the newest full Flash
-models were too slow to put in front of a reader waiting on a stream.
-`gemini-3.6-flash` is the strongest full Flash model that answered quickly,
-and it has a listed price (`gemini-3.5-flash` and `gemini-3.7-flash` are not
-on Google's pricing page). Changing it is one environment variable: retry
-`GEMINI_VERDICT_MODEL=gemini-3.8-flash` when it settles down, and read the
-seconds on `evident.usage`.
-
-**Prices** (paid tier, standard, per 1M tokens, output includes thinking;
-https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-24):
-flash-lite $0.30 in, $2.50 out; 3.6 Flash and 3.8 Flash $0.75 in, $3.75 out
-until 2026-12-31, then $1.50 and $7.50; 3.1 Pro $2.00 and $12.00 up to 200k
-tokens. They are constants in `scripts/cost.py`, which also holds the
-free-tier limits.
-
-**Free-tier limits.** Google no longer publishes them: its rate limit page
-(https://ai.google.dev/gemini-api/docs/rate-limits) says to read them in AI
-Studio, which this project cannot open. A third party read them out of the
-429 answers on 2026-09-02
-(https://dev.to/romeroyang/geminis-free-tier-measured-20-requests-a-day-and-google-no-longer-publishes-the-number-4gf2):
-full Flash models 5 requests a minute and 20 a day per project and model,
-flash-lite 15 a minute and 500 a day. A Google forum thread of 2026-09-03
-quotes the same 20 and 500. Our own 429 for the Pro models said "limit: 0",
-which agrees. These are not Google's published numbers; the first 429 from
-a full Flash model in `scripts/cost.py` shows the real one.
-
-**What that means.** A verdict-model check makes about 2 to 3 verdict-model
-calls (verdict, a retry now and then, the faithfulness read), so the free
-tier carries roughly 7 to 10 such checks a day. A test day (safety 17,
-regression 21, holdout 20: 58 checks, 175 to 350 calls) does not fit. Either
-billing is turned on for the test days, or the sets are spread over several
-days, or they run on flash-lite. The public site is not hurt, because of the
-fallback below, but past the daily limit its verdicts are written by
-flash-lite again.
-
-**Fallback, never silent.** If the verdict model answers 429, is
-unavailable (5xx, a connection error), has been retired (404), or takes
-longer than `VERDICT_MODEL_TIMEOUT_SEC` (default 120), that one call runs
-once on the query model and a warning on the `evident.models` logger names
-both models and the reason. A rejected key is not retried, and a query model
-that is also busy gives the defined 429 page after two tries. With
-`VERDICT_MODEL_FALLBACK=0` the error propagates exactly as before, which is
-how `scripts/cost.py` and any run that must not mix models are set up. The
-fallback is a no-op when both names are the same.
-
-**Latency and timeouts.** gunicorn runs `--workers 1 --threads 8`, which is
-the gthread worker: its 30 second `--timeout` is a heartbeat from the main
-loop, not a limit on a request, so a long verdict call does not get the
-worker killed. The stream sends events as stages finish, but the verdict
-stage is one silent gap, and `static/app.js` has no fetch timeout (only the
-reader's Cancel). The Gemini SDK has no default timeout and no retries, so a
-stuck call would hold one of the eight threads indefinitely. That was the
-real risk of a slower model, so the verdict calls now carry a time limit
-(120 seconds, sent to Google as the call's deadline too), and the SDK's own
-timeout and connection errors, which were not caught before, now become
-"unavailable" and take the fallback. The faithfulness call's output cap
-went from 4000 to 8000 because thinking counts against it and a cut-off read
-is skipped; the verdict call's 12000 is unchanged.
-
-**Token usage.** Every Gemini call logs its model, prompt, output and
-thinking tokens and seconds on `evident.usage`, and the check in progress
-keeps a tally (`verdict.usage_tally()`, reset at the start of each check in
-`app.py`) that is never part of the API response. Thinking tokens are
-billed as output. `scripts/cost.py` runs five fixed claims through
-`/api/check` on a scratch database, 30 seconds apart, and prints calls,
-tokens, seconds and dollars per model per check, the average, and how many
-checks a day the free tier allows with the models in use. It is run once
-with `GEMINI_VERDICT_MODEL=gemini-3.5-flash-lite` for the before and once
-with the defaults for the after.
