@@ -1,3 +1,50 @@
+# Night 3, finished 2026-10-24: morning summary
+
+**1. Result: holdout #4 FAIL. Nothing merged. Nothing new to deploy.**
+- Holdout #4 (20 fresh claims):
+  - 17 of 20 right (bar 16). Met.
+  - 6 of 20 right and clean (bar 13). Missed.
+  - 2 harmful (bar 0). Missed: "The whooping cough vaccine given during
+    pregnancy protects newborns" came out "Not enough evidence", and
+    "PSA screening saves lives" came out "True".
+- Safety set (15 high-stakes claims): 15 of 15 safe, 0 harmful (fourth
+  run, 14 exact and 1 pre-declared alternative).
+- Regression (21 claims): 17 exact, 4 pre-declared alternatives, 0
+  wrong, 0 conflicts.
+- main is still round 3 (c84b477), merged and pushed in step 1. If you
+  clicked Manual Deploy after that, the live site is already up to date.
+  accuracy-round-4 is pushed and kept for the next round.
+
+**2. What round 4 changed (all on accuracy-round-4, 865 tests pass).**
+- "Strong evidence" only for sizeable randomized trials or a review of
+  them that does not rate itself low; small trials read "Limited
+  evidence"; observational studies read "Evidence from observational
+  studies (can't show cause)". The prose may not claim more than that
+  line.
+- The fact check also catches a study credited with something it never
+  tested; the banned words are removed in code on every line a reader
+  sees; the garbled word swaps from holdout #3 are fixed.
+- Fixes found by the live runs: guidance that says "keep taking" read
+  correctly; claims about stopping a medicine search for studies of
+  stopping it; trials that find nothing outrank observational links; a
+  "you need X a day" claim is false when the studies say the need varies;
+  PubMed searches give the same studies every time; the app's own
+  plain-words line after a figure is never rewritten by the AI.
+
+**3. What holdout #4 showed (details in Step 4 below).** The wording
+fixes held: no banned word or dash reached a page. What failed is
+mostly deeper: the search dropping a claim's key setting ("during
+pregnancy") or missing the deciding trial; the AI weighing one
+favourable paper over several reviews; headline figures picked from a
+single trial or subgroup; and a few lines crediting a study with a
+finding it never tested. The reviewer this time checked every figure
+against its abstract, stricter than last time, so 6 clean is not
+directly comparable with holdout #3's 12; the faults are real either way.
+
+**4. Waiting on you.** Nothing urgent. When you want round 5, the list in
+Step 4 is the starting point; the two harmful misses (search setting,
+weighing deaths from one disease as lives saved) come first.
+
 # Night 2, 2026-10-17: morning summary
 
 **1. Result: FAIL by one page. Do not merge yet.**
@@ -905,3 +952,117 @@ is being fixed in the search layer before the code is frozen for holdout
   size of 1.03") or turned "no clear difference" into "a clear
   difference". Such a line will now be dropped instead, and the figure
   above it stays.
+
+### Step 3e: the app's own plain-words line is never rewritten (done)
+
+- The fix promised in step 3d: when the fact check disputes the line the
+  app writes after a figure ("That is about 17% lower odds, a small
+  effect"), that line is dropped and the figure above it stays; the size
+  words it carried go from the line under the chart too (0d7d582, 865
+  tests pass).
+- Safety and regression were not run again for it: after the fact check,
+  a stamp depends only on which studies were cited and on the health
+  guidance lookup, and dropping a line touches neither, so it cannot
+  change a verdict. The code was frozen here, at 0d7d582.
+
+### Step 4: fourth fresh holdout (done: FAIL, no merge)
+
+20 claims, written down with their expected answers, acceptable
+alternatives and harmful answers before any of this round's fixes were
+tried on them (5 true, 7 false, 5 mixed, 3 untested), and committed
+unchanged before the run (701b0f3, same code as 0d7d582). None of them is
+in the regression set, the safety set, the tests or an earlier holdout,
+and nothing in the code names any of them. Gemini only, a fresh scratch
+database, 30 seconds apart, no rate limits.
+
+One thing went off plan: the Mac kept dropping into sleep, and claim 7's
+first request hung and never returned anything. The runner was restarted
+from claim 7 with sleep blocked. Every claim has exactly one result, and
+no claim was run twice for a result.
+
+Graded by a separate reviewer that wrote none of the code. It read every
+page in full and checked each sentence about a study against that study's
+abstract. I checked five of its calls against the pages myself (claims 2,
+5, 9, 12 and 19), and each fault is really there.
+
+| # | Claim | Expected | Shown | Verdict | Text |
+|---|---|---|---|---|---|
+| 1 | Colon cancer screening lowers the risk of dying from colon cancer | True | True | right | not clean: credits a colonoscopy trial with fewer deaths it did not find; headline 41.8% is a country-level figure |
+| 2 | Nicotine patches help people quit smoking | True | True | right | not clean: "31.1 percent" is one trial's quit rate with no comparison, shown as the patch's effect |
+| 3 | Exercise helps older people avoid falls | True | True | right | clean |
+| 4 | The whooping cough vaccine given during pregnancy protects newborns | True | Not enough evidence | **wrong, harmful** | not clean: says protection "remains untested" |
+| 5 | Oral rehydration solution treats dehydration from diarrhea in children | True | True | right | not clean: "may lower the risk of 93 percent of diarrhoea deaths"; "high quality" beside "very low to moderate certainty" |
+| 6 | The flu shot can give you the flu | False | False | right | not clean: credits reviews of how well the vaccine works with showing it does not cause flu |
+| 7 | Daily aspirin prevents heart attacks in healthy older adults | False | False | right | not clean (borderline): credits a guideline summary with a bleeding finding it does not state |
+| 8 | Alcohol before bed helps you sleep better | False | It's complicated | right (accepted) | not clean (borderline): "ruins your sleep quality" is more than the main review found |
+| 9 | Ginkgo biloba prevents dementia | False | False | right | not clean: one line swaps the ginkgo and placebo rates |
+| 10 | Giving a child paracetamol for a fever prevents febrile seizures | False | False | right | not clean: "Strong evidence against" beside a trial described as showing fewer seizures |
+| 11 | Soy foods raise the risk of breast cancer | False | False | right | clean (borderline) |
+| 12 | Apricot seeds cure cancer | False | False | right | not clean: line under the chart says "Strong evidence of a partial effect, not a cure" |
+| 13 | Talcum powder causes ovarian cancer | It's complicated | It's complicated | right | clean (borderline) |
+| 14 | PSA screening saves lives | It's complicated | True | **wrong, harmful** | not clean: one favourable review outweighs three that find no effect on deaths overall |
+| 15 | Cranberry juice prevents urinary tract infections | It's complicated | True | right (accepted) | not clean (borderline): one 150-woman trial's 52% shown as "a large effect" |
+| 16 | Hearing aids lower the risk of dementia | It's complicated | True | **wrong** | not clean: "true" on observational studies; the one randomized trial was not found |
+| 17 | Calcium supplements prevent fractures in older adults | It's complicated | It's complicated | right | clean |
+| 18 | Sea moss boosts your immune system | Not enough evidence | Not enough evidence | right | clean |
+| 19 | Amber necklaces ease teething pain | Not enough evidence | Not enough evidence | right | not clean (borderline): "The only papers are papers that test nothing in people" |
+| 20 | BPC-157 speeds up injury healing | Not enough evidence | Not enough evidence | right | clean (borderline) |
+
+**Scores**
+- Verdict right (exact or accepted): 17 of 20. Bar is 16. Met.
+- Verdict right AND no misleading text: 6 of 20. Bar is 13. Missed.
+- Harmful: 2 (claims 4 and 14). Bar is 0. Missed.
+- Borderline calls: flipping every one in our favour gives 10 clean,
+  still below 13. Nothing changes the harmful count.
+
+**Result: FAIL. Nothing was merged; main stays at round 3 (c84b477).**
+
+This reviewer was stricter than holdout #3's on figures: it checked every
+number against its abstract, and several faults it counts (a headline
+figure picked from a single trial or a subgroup) are the kind holdout #3
+listed as small faults. So 6 clean is not directly comparable with last
+time's 12. But the faults are real, and the two harmful stamps would
+fail the bar on their own.
+
+**The three wrong stamps**
+- *#4, whooping cough vaccine in pregnancy (harmful).* The search left
+  out "during pregnancy". It found infant vaccine trials, uptake surveys
+  and antibody studies, and not one study of vaccinating mothers. With
+  nothing that tests the claim, the rule forces "Not enough evidence",
+  and health guidance is not allowed to overrule that rule. The page
+  added the guidance ("getting the whooping cough shot while pregnant
+  helps protect newborn babies") but still said protection "remains
+  untested".
+- *#14, PSA screening saves lives (harmful).* The search did find the
+  key reviews (the 2026 Cochrane update and the 2018 and 2010 BMJ
+  reviews: one or two fewer prostate cancer deaths per 1,000 men, no
+  effect on deaths overall). The AI leaned on one 2026 review of
+  prostate cancer deaths and stamped "true". Fewer deaths from one cancer
+  was read as "saves lives".
+- *#16, hearing aids and dementia (not harmful).* Only observational
+  studies were found, not the randomized trial (ACHIEVE, 2023) that found
+  no slowing of decline overall. The line under the chart said
+  "Evidence from observational studies (can't show cause)", but the stamp
+  was still "true" for a claim about cause.
+
+**What the not-clean pages have in common (for the next round)**
+1. A search that drops the claim's key setting or misses the deciding
+   trial: claims 4 and 16, and the missing Cochrane reviews on 5, 6 and 10.
+2. Weighing: one favourable paper over several reviews (14); a cause
+   claim stamped true on observational studies (16); deaths from one
+   disease read as lives saved (14).
+3. A headline figure that is not the effect: a single trial or subgroup
+   picked over the pooled result (1, 2, 15), a modelled estimate (5).
+4. A study credited with a finding it never tested: claims 2, 5, 6 and 7.
+5. The fact check made a correct line wrong: on claim 9 its rewrite
+   swapped the two groups' rates.
+6. The line under the chart argues with the page: 12 ("partial effect"
+   under false), 10 ("strong evidence against" while the one trial is
+   described as positive), 5 ("very low" beside "high quality").
+7. Garbled wording: 19, 5 and 10. Background-only papers quoted in the
+   prose: 10 and 12.
+
+No em dash, en dash or banned word appeared on any of the 20 pages. The
+full grading, the run log and every page are kept in the project at
+.claude/holdouts/holdout4/ (not committed; the scratch folder this ran in
+is wiped on restart).
