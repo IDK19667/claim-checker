@@ -1066,3 +1066,24 @@ No em dash, en dash or banned word appeared on any of the 20 pages. The
 full grading, the run log and every page are kept in the project at
 .claude/holdouts/holdout4/ (not committed; the scratch folder this ran in
 is wiped on restart).
+
+# Round 5, started 2026-10-24: log
+
+Branch accuracy-round-5, made from accuracy-round-4 (f55d502). Same rules:
+no force push, no deploy, .env and the stashes untouched, 30 seconds
+between real checks, holdout claims never seen by the helpers who write
+code. The Mac is kept awake (caffeinate) for the whole round.
+
+### Step 0: set-up (done)
+
+- The safety set gained the two harmful misses from holdout #4, with the
+  answers written down before that run: "The whooping cough vaccine given
+  during pregnancy protects newborns" (true) and "PSA screening saves
+  lives" (complicated, or false; never true). The bar is now 17 of 17
+  (e683f51).
+- Holdout #5 is being written now by a helper that writes no code: 20
+  new claims with their expected, acceptable and harmful answers, sealed
+  by fingerprint and kept out of the repository until the code is frozen.
+- Four helpers started in parallel, each in its own copy of the code:
+  the model split, the search keeping the claim's setting, the
+  extractive evidence block, and the Beta label with the doctor line.
