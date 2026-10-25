@@ -4,6 +4,99 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-24: Accuracy round 5, the search keeps the setting
+
+Holdout #4 had two harmful misses, both from the search losing the part of
+the claim that says who it is about or what it means. "The whooping cough
+vaccine given during pregnancy protects newborns" came back with infant
+vaccine trials and uptake surveys, because the model's query dropped
+"during pregnancy", and the check read "Not enough evidence". "PSA
+screening saves lives" was stamped true from prostate-cancer-specific
+deaths, though "saves lives" means deaths from any cause and the reviews
+show no effect on those. Each fix below is general, with tests; none names
+a claim, a PMID or a topic word tied to one claim.
+
+**The code puts the setting back, so the model cannot lose it.** The
+options were to tell the model harder not to drop the setting, or to have
+code read the setting from the claim and add it at the last step. The
+first still fails the day the model forgets, and it moves with every
+prompt edit. We took the second. `verdict.finish_query`, called from
+`app._run_check` where the query is finalised, reads the claim against a
+general vocabulary (`pubmed.SETTINGS`: times such as before bed or during
+pregnancy, conditions, age and life stage, sex) and ANDs on one more
+group, a set of synonyms, for each setting found. The model's saved raw
+query is not touched, so there is no new cache coupling and saved queries
+benefit at once. The query prompt now says the tool adds those words, so
+the model leaves them out of its own two groups. If it writes them anyway,
+nothing breaks.
+
+**The setting groups are protected through every search.** They carry
+`[tiab]` tags, which the model never writes, so `pubmed.is_setting_group`
+tells them from the model's groups with no side data. `broaden_query`
+never drops a protected group, so a broadened search is subject plus
+setting rather than subject alone. `phrase_query` and `review_query` carry
+the setting through, the best-evidence query already extends the query, and
+`search_surrogate` keeps it. `pubmed.core_groups` is the query without the
+protected groups, and everything that reads "the subject" and "the outcome"
+(`prioritise`, the heads for the review search, `verdict.weigh_evidence`)
+reads that, so a setting group is never mistaken for an outcome.
+
+**At most two settings, ranked.** `MAX_SETTINGS = 2`. They are chosen by
+rank (times and conditions, then age and life stage, then sex) and then
+by position in the claim. A setting that another already covers is hidden:
+"preconception" hides "pregnancy", type 1 and type 2 diabetes hide plain
+diabetes. Sex is dropped when both are named, or when the claim is about
+pregnancy or menopause, where it says nothing new. A claim with no setting
+gets no group, and its query is the same string as before.
+
+**"Saves lives" is all-cause mortality.** `pubmed.wants_all_cause` fires on
+the claim's wording for living or dying (saves lives, live longer, prevents
+death, reduces mortality, lowers the risk of dying) and not on a death
+"from", "of" or "due to" a named disease. When it fires,
+`pubmed.add_all_cause` replaces the outcome group with a fixed one: all-cause
+mortality, overall mortality, death from any cause, overall survival. It
+always replaces the model's group rather than adding to it, because the
+model's own all-cause group carried noise terms (longevity, survival
+alone) that pulled in ageing and cancer-survival papers. A disease named
+only in the subject ("colon cancer screening saves lives") still maps to
+all-cause, because the claim promises lives saved, not one cause of death
+avoided; if the screening only lowers deaths from that cancer, the
+disease-specific rule below says so.
+
+**The verdict model is told the two consequences.** One short paragraph in
+`weigh_prompt`: deaths from one disease are a different outcome from deaths
+from any cause, and a study of a different group or time than the claim
+names is indirect evidence. It adds a rule about reading, not a fact about
+any claim.
+
+**A tolerant subject screen, only when there is a setting.** The search with
+a setting group pulls in the maternal-vaccination reviews the strict
+subject check dropped, because a review of "maternal pertussis
+vaccination" does not spell out "whooping cough vaccine". `prioritise` now
+uses `pubmed._names_subject` in place of `evidence.measures` for the
+subject, but only when the query has a setting group, so every other
+claim's ranking is unchanged. It accepts word families (vaccine,
+vaccination, vaccinated) and does not match creatine to creatinine.
+
+**Two synonym lists were widened after live checks.** The bedtime list gained
+at night, nighttime, evening, nocturnal, overnight and nightcap, since
+the first version kept almost none of the alcohol and sleep reviews. The
+preconception list gained "before and during pregnancy" and the planning
+phrases.
+
+Known tradeoffs. A timing setting narrows the pool, and a classic trial
+whose abstract never uses the timing words can drop out (the 1991 folic acid
+trial still appears in the folic acid check; others of its kind may not).
+"Overall survival" is in the all-cause group, so oncology trials that
+report it can appear when the model's subject is loose (the PSA check
+shows some). NCBI's relevance order is not repeatable, so the 8 studies
+differ a little between runs of the same query. `app._outcome_group` still
+reads the second group of the final query by position; on a broadened
+`[subject, setting]` query it would hand `evidence_line` the setting group,
+and should use `pubmed.core_groups` (a one-line follow-up outside this
+change's scope). Bumping the query prompt changes `QUERY_PROMPT_VERSION`,
+so cached queries are rebuilt once.
+
 ## 2026-10-24: Accuracy round 5, a stronger model for the verdict
 
 Every Gemini call used one model, `gemini-3.5-flash-lite`. Round 4's

@@ -1037,6 +1037,41 @@ def stopping_query(claim: str, query: str) -> str:
     return pubmed.add_discontinuation(query) if breakdown.stops_treatment(claim) else query
 
 
+def setting_query(claim: str, query: str) -> str:
+    """
+    The search with the claim's setting in it. The model writes the query from
+    the claim and, told to leave a condition out, tends to leave out who the
+    claim is about and when ("given during pregnancy", "in older adults",
+    "before bed"): a claim about vaccinating mothers was searched as one about
+    vaccinating babies. So the setting is read from the claim by code and
+    ANDed on as a group of its own (pubmed.add_setting), whatever the model
+    wrote and whether the query is new or saved. A claim that names no setting
+    gets its query back as it came.
+    """
+    return pubmed.add_setting(query, claim)
+
+
+def outcome_query(claim: str, query: str) -> str:
+    """
+    The search with the outcome the claim means. "Saves lives", "live longer"
+    and "prevents death", with no disease named, mean death from any cause;
+    the model's synonym list for it ("survival", "cancer mortality") brings
+    back studies of one disease's deaths, which are a different outcome. Any
+    other claim's query is returned as it came.
+    """
+    return pubmed.add_all_cause(query) if pubmed.wants_all_cause(claim) else query
+
+
+def finish_query(claim: str, query: str) -> str:
+    """
+    The query a check searches with: what the model wrote, with the outcome
+    the claim means, the group for stopping when the claim is about stopping,
+    and the claim's setting. Applied where the query is used, not where it is
+    made, so saved searches get it too and it costs no new call.
+    """
+    return setting_query(claim, stopping_query(claim, outcome_query(claim, query)))
+
+
 def extract_search_terms(claim: str) -> tuple[str, str, str]:
     """
     Turn a casual claim into a decent PubMed search query.
@@ -1071,10 +1106,14 @@ def _query_prompt(claim: str) -> str:
         "side of an AND asks for papers that use both words, which throws "
         "away most of the good evidence.\n\n"
         "Never add a third group. A claim often carries a condition (\"but "
-        "only if you are deficient\", \"in older adults\", \"over 12 "
-        "weeks\"). That condition is something to judge from the evidence, "
-        "not something to search for: AND-ing it excludes the very trials "
-        "that would settle whether it is true. Leave it out of the query.\n\n"
+        "only if you are deficient\", \"over 12 weeks\"). That condition is "
+        "something to judge from the evidence, not something to search for: "
+        "AND-ing it excludes the very trials that would settle whether it "
+        "is true. Leave it out of the query. The exception is who the claim "
+        "is about and when it applies (children, older adults, pregnant "
+        "women, \"during pregnancy\", \"before bed\", \"after a heart "
+        "attack\"): the tool adds those to the search itself, as a group of "
+        "its own, so leave them out of both of yours.\n\n"
         "Example for \"vitamin D stops you catching colds\":\n"
         "(vitamin D OR cholecalciferol) AND (respiratory tract infection OR "
         "common cold OR influenza OR acute respiratory infection)\n\n"
@@ -1527,7 +1566,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             verdict="insufficient",
         ), studies, claim), claim)
 
-    groups = pubmed.split_and(query or "")
+    groups = pubmed.core_groups(query)
     subject = groups[0] if groups else ""
     outcome = groups[1] if len(groups) > 1 else ""
     studies_block = "\n\n".join(
@@ -2003,6 +2042,15 @@ including when two of them disagree, which is itself the finding. Never
 write that the condition was not tested when a sentence there reports on
 it. If no such block appears, the abstracts are silent on the condition
 and saying so is correct.
+
+A claim that something saves lives or helps people live longer is about
+deaths from any cause. A study that found fewer deaths from one disease
+measured a different outcome, because a disease's deaths can fall while
+deaths overall do not: say which it measured, and do not rest "true" on
+it alone. A study run in a different group or at a different time from
+the one the claim names (adults for a claim about children, or taking a
+treatment for a claim about starting it before an event) is indirect
+evidence for it: say who or when it covered.
 
 Write for someone scanning a phone. Answer first, details after.
 Plain words, no throat-clearing ("It's important to note", "Overall").

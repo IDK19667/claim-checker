@@ -3087,8 +3087,11 @@ def _sq_fetch(q, max_results=8, surrogate=''):
 pubmed.search_and_fetch = _sq_fetch
 fg.models.script = [Resp(_SQ), Resp(VJ("complicated", [1]))]
 _sq_d = P(_SQ_CLAIM, ip="9.9.4.3").get_json()
-t("through a real check: the search that runs, and the one shown, carry the stopping group",
-  _sq_seen == [_SQ_FULL] and _sq_d["search_query_used"] == _SQ_FULL, (_sq_seen, _sq_d.get("search_query_used")))
+_SQ_LIVE = verdict.finish_query(_SQ_CLAIM, _SQ)
+_SQ_SET = _SQ_LIVE[len(_SQ_FULL) + len(" AND "):]
+t("through a real check: the search that runs, and the one shown, carry the stopping group and the claim's setting",
+  _sq_seen == [_SQ_LIVE] and _sq_d["search_query_used"] == _SQ_LIVE
+  and _SQ_LIVE.startswith(_SQ_FULL + ' AND ("heart attack"[tiab]'), (_sq_seen, _sq_d.get("search_query_used")))
 t("  while the search saved for the claim is the model's own, so the rule is not baked into the cache",
   db.get_cached_query(_SQ_CLAIM.lower() + ".", verdict.QUERY_PROMPT_VERSION) == (_SQ, "", _SQ_CLAIM),
   db.get_cached_query(_SQ_CLAIM.lower() + ".", verdict.QUERY_PROMPT_VERSION))
@@ -3099,7 +3102,7 @@ fg.models.script = [Resp(VJ("complicated", [1]))]
 _n0 = fg.models.calls
 _sq_d2 = P(_SQ_CLAIM, ip="9.9.4.4").get_json()
 t("  and a search saved earlier gets the group too: one call, the verdict, and the same stopping search",
-  fg.models.calls == _n0 + 1 and _sq_seen == [_SQ_FULL] and _sq_d2["search_query_used"] == _SQ_FULL, _sq_seen)
+  fg.models.calls == _n0 + 1 and _sq_seen == [_SQ_LIVE] and _sq_d2["search_query_used"] == _SQ_LIVE, _sq_seen)
 _sq_seen.clear()
 fg.models.script = [Resp("(salt) AND (blood pressure)"), Resp(VJ("complicated", [1]))]
 P("Salt raises blood pressure for most adults", ip="9.9.4.5")
@@ -3108,16 +3111,236 @@ t("  while a claim that is not about stopping runs the model's query untouched",
 _sq_seen.clear()
 def _sq_fetch_broad(q, max_results=8, surrogate=''):
     _sq_seen.append(q)
-    return [] if len(pubmed.split_and(q)) >= 3 else STUDIES
+    return [] if len(pubmed.split_and(q)) >= 4 else STUDIES
 pubmed.search_and_fetch = _sq_fetch_broad
 with db.get_conn() as conn:
     conn.execute("DELETE FROM verdict_cache")
 fg.models.script = [Resp(VJ("complicated", [1]))]
 _sq_d3 = P(_SQ_CLAIM, ip="9.9.4.6").get_json()
-t("  and when that finds nothing, the broader search drops the outcome and is still a search for stopping",
-  _sq_seen == [_SQ_FULL, f"(statin OR statins OR HMG-CoA reductase inhibitor) AND {_SQ_GROUP}"]
+t("  and when that finds nothing, the broader search drops the outcome and is still a search for stopping, in the claim's setting",
+  _sq_seen == [_SQ_LIVE, f"(statin OR statins OR HMG-CoA reductase inhibitor) AND {_SQ_GROUP} AND {_SQ_SET}"]
   and _sq_d3["search_broadened"] is True, (_sq_seen, _sq_d3.get("search_query_used")))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+# ---- accuracy round 5: the search keeps the claim's setting -------------------
+# A claim says who it is about and when. The model's query dropped both, so a
+# claim about vaccinating mothers was searched as one about vaccinating babies.
+# Code reads the setting from the claim and ANDs it on as a group of its own.
+_ST_PREG = "The whooping cough vaccine given during pregnancy protects newborns"
+_ST_KID = "Giving a child paracetamol for a fever prevents febrile seizures"
+_ST_OLD = "Exercise helps older people avoid falls"
+_ST_BED = "Alcohol before bed helps you sleep better"
+_ST_PRE = "Taking folic acid before pregnancy prevents neural tube defects"
+_ST_NONE = "Exercise lowers the risk of depression"
+_ST_Q = "(vaccine OR immunisation) AND (infant illness OR newborn protection)"
+t("the setting is read from the claim: timing, who it is about, and a condition",
+  all([s["key"] for s in pubmed.claim_settings(cl)] == want for cl, want in (
+      (_ST_PREG, ["pregnancy", "infants"]), (_ST_KID, ["children"]), (_ST_OLD, ["older adults"]),
+      (_ST_BED, ["bedtime"]), (_ST_PRE, ["preconception"]),
+      ("Aspirin after a heart attack prevents another one", ["heart attack"]),
+      ("Fasting before surgery lowers complications", ["before surgery"]),
+      ("Metformin helps people with type 2 diabetes lose weight", ["type 2 diabetes"]),
+      ("Probiotics in the first year of life prevent eczema", ["infants"]))),
+  [(cl, [s["key"] for s in pubmed.claim_settings(cl)]) for cl in (_ST_PREG, _ST_KID, _ST_OLD, _ST_BED, _ST_PRE)])
+t("  and the vocabulary is general: populations, life stages and times in everyday words",
+  all(want in [s["key"] for s in pubmed.claim_settings(cl)] for cl, want in (
+      ("Melatonin helps kids fall asleep", "children"), ("Fish oil helps babies develop", "infants"),
+      ("Teenagers need nine hours of sleep", "teenagers"), ("Statins help the elderly live longer", "older adults"),
+      ("Vitamin D helps people over 65 avoid fractures", "older adults"),
+      ("Creatine helps female athletes", "athletes"), ("Iron helps women feel less tired", "women"),
+      ("Zinc helps men with low testosterone", "men"), ("Yoga helps pregnant women sleep", "pregnancy"),
+      ("Walking helps people with high blood pressure", "hypertension"),
+      ("Exercise helps people with depression", "depression"),
+      ("Fibre helps after a stroke", "stroke"), ("Water before meals helps weight loss", "before meals"),
+      ("Protein after a workout builds muscle", "after exercise"),
+      ("Calcium helps women after menopause", "menopause"))))
+t("  a claim that names no setting gets none, and its query comes back exactly as it was",
+  all(pubmed.claim_settings(cl) == [] and pubmed.add_setting(_ST_Q, cl) == _ST_Q for cl in (
+      _ST_NONE, "Vitamin D stops you catching colds", "Sugar causes diabetes", "Measles vaccines prevent severe measles",
+      "Cracking your knuckles causes arthritis", "Taking vitamin C for over 60 days prevents colds",
+      "Red meat raises the risk of cancer", "Dark chocolate with 70% cocoa improves mood", "")))
+t("  at most two settings go in, a time or a condition before who, and one sex only when it adds something",
+  [s["key"] for s in pubmed.claim_settings("Folic acid before pregnancy helps teenagers and older women with diabetes")]
+  == ["preconception", "diabetes"]
+  and "women" not in [s["key"] for s in pubmed.claim_settings("Vitamin D during pregnancy helps women")]
+  and pubmed.claim_settings("Exercise helps men and women sleep") == [])
+_st_out = pubmed.add_setting(_ST_Q, _ST_PREG)
+_st_groups = pubmed.split_and(_st_out)
+t("the setting is ANDed on as groups of their own, after the model's two, whatever the model wrote",
+  len(_st_groups) == 4 and _st_groups[:2] == pubmed.split_and(_ST_Q) and all(pubmed.is_setting_group(g) for g in _st_groups[2:])
+  and "pregnan*[tiab]" in _st_groups[2] and "newborn*[tiab]" in _st_groups[3],
+  _st_out)
+t("  asked for in the paper's own words, never by subject heading, so it cannot be reached by way of 'Infant, Newborn'",
+  all(re.fullmatch(r'\(?(?:"[^"]+"|[^\s"]+)\[tiab\]\)?', term.strip("() ")) for g in _st_groups[2:]
+      for term in re.split(r"\s+OR\s+", g)))
+t("  once only, so a query that already has it comes back as it was",
+  pubmed.add_setting(_st_out, _ST_PREG) == _st_out
+  and verdict.setting_query(_ST_PREG, verdict.setting_query(_ST_PREG, _ST_Q)) == _st_out)
+t("  even when the model's own groups talk about it, and when it wrote the claim back as the query",
+  pubmed.add_setting("(pertussis vaccine in pregnancy OR maternal Tdap) AND (newborn pertussis)", _ST_PREG).count("[tiab]") > 8
+  and pubmed.add_setting(_ST_PREG, _ST_PREG).startswith(_ST_PREG + " AND (pregnan*[tiab]")
+  and pubmed.add_setting("", _ST_PREG) == "")
+t("the model's groups and the setting's are told apart: the model writes no field tags",
+  not any(pubmed.is_setting_group(g) for g in pubmed.split_and(_ST_Q))
+  and not pubmed.is_setting_group(pubmed.DISCONTINUATION_GROUP)
+  and pubmed.core_groups(_st_out) == pubmed.split_and(_ST_Q)
+  and pubmed.setting_groups(_st_out) == _st_groups[2:]
+  and pubmed.core_groups(f"{_ST_Q} AND {pubmed.DISCONTINUATION_GROUP} AND {_st_groups[2]}")[2] == pubmed.DISCONTINUATION_GROUP)
+# broadening, the phrase search, the review search, the filtered search
+_st_b = pubmed.broaden_query(_st_out)
+t("a search that finds nothing is broadened by dropping the outcome, never the setting",
+  _st_b == " AND ".join([pubmed.split_and(_ST_Q)[0]] + _st_groups[2:])
+  and pubmed.broaden_query(_st_b) is None
+  and pubmed.broaden_query(f"(a) AND (b) AND {pubmed.DISCONTINUATION_GROUP} AND {_st_groups[2]}")
+  == f"(a) AND {pubmed.DISCONTINUATION_GROUP} AND {_st_groups[2]}"
+  and pubmed.broaden_query("a AND b AND c") == "a AND b" and pubmed.broaden_query("a AND b") == "a",
+  _st_b)
+_st_tries = []
+def _st_empty_first(q, max_results=8, surrogate=""):
+    _st_tries.append(q)
+    return [] if len(_st_tries) == 1 else STUDIES
+pubmed.search_and_fetch = _st_empty_first
+_st_fb = pubmed.search_with_fallback(_st_out)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+t("  and through search_with_fallback the second search is the broader one, still in the setting",
+  _st_tries == [_st_out, _st_b] and _st_fb[1] == _st_b and _st_fb[2] is True, _st_tries)
+_st_phrase = pubmed.phrase_query(_st_out)
+t("the phrase search quotes the model's words and passes the setting through as it is",
+  _st_phrase == '(vaccine) AND ("infant illness" OR "newborn protection") AND ' + " AND ".join(_st_groups[2:])
+  and pubmed.phrase_query(_ST_Q) == '(vaccine) AND ("infant illness" OR "newborn protection")'
+  and pubmed.phrase_query(f"(a) AND (c) AND {_st_groups[2]}") is None,
+  _st_phrase)
+t("  and the setting alone does not make a one-term query into a different search",
+  pubmed.phrase_query(f"(vaccine) AND (illness) AND {_st_groups[2]}") is None)
+t("the review search keeps it, so it finds reviews of the claim in that setting",
+  pubmed.review_query(_st_out) == "(vaccine) AND (infant illness) AND " + " AND ".join(_st_groups[2:])
+  + " AND (systematic review OR meta-analysis)"
+  and pubmed.review_query(_ST_Q) == "(vaccine) AND (infant illness) AND (systematic review OR meta-analysis)"
+  and pubmed.review_query(_st_b).startswith("(vaccine) AND ") and _st_groups[2] in pubmed.review_query(_st_b)
+  and pubmed._heads(_st_out) == ["vaccine", "infant illness"],
+  pubmed.review_query(_st_out))
+_st_seen = []
+def _st_search(q, max_results=8):
+    _st_seen.append(q)
+    return [f"{1000 + len(_st_seen)}{i}" for i in range(max_results)]
+pubmed.search_pubmed = _st_search
+pubmed.search_merged(_st_out, max_results=8)
+_st_all = list(_st_seen)
+_st_seen.clear()
+_st_surr = pubmed.search_surrogate(_st_out, "antibody titre OR antibodies", max_results=3)
+pubmed.search_pubmed = _real_search
+t("every search a check runs carries it: the reviews, the strong designs, the phrase and everything",
+  len(_st_all) == 4 and all(_st_groups[2] in q and _st_groups[3] in q for q in _st_all), _st_all)
+t("  and so does the search for a stand-in outcome",
+  len(_st_seen) == 1 and _st_groups[2] in _st_seen[0] and "antibody titre" in _st_seen[0]
+  and _st_seen[0].startswith("(vaccine OR immunisation) AND (antibody titre OR antibodies)"), _st_seen)
+_st_studies = [{"pmid": "A1", "title": "Vaccine trial", "abstract": "A vaccine was given to adults."},
+               {"pmid": "A2", "title": "Unrelated", "abstract": "Nothing relevant here at all."},
+               {"pmid": "A3", "title": "Vaccine and newborn protection", "abstract": "Vaccine protects newborn babies."},
+               {"pmid": "A4", "title": "Another vaccine paper", "abstract": "Vaccine immunisation schedule."}]
+t("  the studies are ranked on the claim's subject and outcome, never on the setting's group",
+  [s["pmid"] for s in pubmed.prioritise(_st_studies, _st_out)] == ["A3", "A1", "A4"]
+  and [s["pmid"] for s in pubmed.prioritise(_st_studies, _st_b)] == ["A1", "A3", "A4"],
+  ([s["pmid"] for s in pubmed.prioritise(_st_studies, _st_out)],
+   [s["pmid"] for s in pubmed.prioritise(_st_studies, _st_b)]))
+
+_st_pv = lambda i, title, ab="": {"pmid": f"V{i}", "title": title, "abstract": ab}  # noqa: E731
+_st_lit = [_st_pv(1, "Pertussis vaccine trial", "A pertussis vaccine was given."),
+           _st_pv(2, "Pertussis vaccine safety", "The pertussis vaccine was safe."),
+           _st_pv(3, "Another pertussis vaccine study", "pertussis vaccine again")]
+_st_form = _st_pv(4, "Pertussis vaccination of pregnant women", "Women were vaccinated against pertussis.")
+_st_off = _st_pv(5, "Creatinine clearance in older adults", "Creatinine was measured.")
+_st_grp = "(pertussis vaccine OR Tdap vaccine) AND (infant illness)"
+t("a search that asked for the setting reads the subject as a person would: vaccination is the vaccine",
+  [s_["pmid"] for s_ in pubmed.prioritise(_st_lit + [_st_form, _st_off], pubmed.add_setting(_st_grp, _ST_PREG))]
+  == ["V1", "V2", "V3", "V4"]
+  and pubmed._names_subject(_st_form, "(pertussis vaccine)") and not pubmed._names_subject(_st_off, "(creatine)")
+  and not pubmed._names_subject(_st_pv(6, "Pertussis in infants", "No jab was given."), "(pertussis vaccine)"))
+t("  and any other search is read exactly as it was, the form of a word included",
+  [s_["pmid"] for s_ in pubmed.prioritise(_st_lit + [_st_form, _st_off], _st_grp)] == ["V1", "V2", "V3"])
+
+# "saves lives" is about death from any cause
+_ST_LIVES = ("PSA screening saves lives", "Antioxidant supplements help you live longer", "Walking prevents early death",
+             "Statins reduce mortality", "Flu shots save lives", "Coffee drinkers have a longer life expectancy",
+             "Cutting salt lowers the risk of death", "Fasting extends your lifespan")
+_ST_NOT = (_ST_NONE, "Aspirin prevents death from heart attack", "Screening saves lives from colon cancer",
+           "Statins reduce heart disease deaths", "Smoking causes lung cancer deaths",
+           "Screening lowers the risk of dying from bowel cancer", "Vitamin D prevents colds")
+t("a claim about saving lives, living longer or preventing death means death from any cause",
+  all(pubmed.wants_all_cause(cl) for cl in _ST_LIVES) and not any(pubmed.wants_all_cause(cl) for cl in _ST_NOT),
+  [cl for cl in _ST_LIVES if not pubmed.wants_all_cause(cl)] + [cl for cl in _ST_NOT if pubmed.wants_all_cause(cl)])
+_ST_PSA = "(PSA screening OR prostate-specific antigen screening) AND (mortality OR survival OR death)"
+_st_ac = pubmed.add_all_cause(_ST_PSA)
+t("  its outcome group asks for all-cause or overall mortality, and the subject stays",
+  pubmed.split_and(_st_ac) == ["(PSA screening OR prostate-specific antigen screening)", pubmed.ALL_CAUSE_GROUP]
+  and all(w in pubmed.ALL_CAUSE_GROUP for w in ("all-cause mortality", "overall mortality",
+                                                "death from any cause", "overall survival")),
+  _st_ac)
+t("  replaced and not added to, so the model's 'cancer mortality' cannot bring one disease's deaths back",
+  pubmed.split_and(pubmed.add_all_cause("(screening) AND (prostate cancer mortality OR survival)"))[1]
+  == pubmed.ALL_CAUSE_GROUP and pubmed.add_all_cause(_st_ac) == _st_ac
+  and pubmed.add_all_cause("(a) AND (longevity OR life expectancy OR all-cause mortality OR survival)")
+  == f"(a) AND {pubmed.ALL_CAUSE_GROUP}")
+t("  the group for stopping and the setting keep their place, and a query of one group gets an outcome",
+  pubmed.add_all_cause(f"(a) AND (b) AND {pubmed.DISCONTINUATION_GROUP}")
+  == f"(a) AND {pubmed.ALL_CAUSE_GROUP} AND {pubmed.DISCONTINUATION_GROUP}"
+  and pubmed.add_all_cause("(a)") == f"(a) AND {pubmed.ALL_CAUSE_GROUP}" and pubmed.add_all_cause("") == "")
+t("  verdict.outcome_query does it for those claims only, and every other claim's query is untouched",
+  verdict.outcome_query("PSA screening saves lives", _ST_PSA) == _st_ac
+  and verdict.outcome_query("Antioxidant supplements help you live longer", "(antioxidants) AND (longevity)")
+  == f"(antioxidants) AND {pubmed.ALL_CAUSE_GROUP}"
+  and all(verdict.outcome_query(cl, _ST_PSA) == _ST_PSA for cl in _ST_NOT))
+_st_fin = verdict.finish_query("Taking aspirin after a heart attack saves lives",
+                               "(aspirin) AND (mortality OR survival)")
+t("one function finishes the query: the outcome, the stopping group, then the setting, in that order",
+  pubmed.core_groups(_st_fin) == ["(aspirin)", pubmed.ALL_CAUSE_GROUP]
+  and pubmed.split_and(_st_fin)[-1].startswith('("heart attack"[tiab]')
+  and verdict.finish_query(_SQ_CLAIM, _SQ) == f"{_SQ} AND {_SQ_GROUP} AND {pubmed.claim_settings(_SQ_CLAIM)[0]['group']}"
+  and verdict.finish_query("Salt raises blood pressure for most adults", "(salt) AND (blood pressure)")
+  == "(salt) AND (blood pressure)", _st_fin)
+# through a real check
+_st_run = []
+def _st_fetch(q, max_results=8, surrogate=""):
+    _st_run.append(q)
+    return STUDIES
+pubmed.search_and_fetch = _st_fetch
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+fg.models.script = [Resp(_ST_Q), Resp(VJ("complicated", [1]))]
+_st_d = P(_ST_PREG, ip="9.9.5.1").get_json()
+t("through a real check: the search that runs, and the one shown, carry the setting the model left out",
+  _st_run == [_st_out] and _st_d["search_query_used"] == _st_out, (_st_run, _st_d.get("search_query_used")))
+t("  while the search saved for the claim is the model's own, so the setting is not baked into the cache",
+  db.get_cached_query(_ST_PREG, verdict.QUERY_PROMPT_VERSION) == (_ST_Q, "", _ST_PREG),
+  db.get_cached_query(_ST_PREG, verdict.QUERY_PROMPT_VERSION))
+_st_run.clear()
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_n0 = fg.models.calls
+P(_ST_PREG, ip="9.9.5.2")
+t("  and a search saved earlier gets the setting too: one call, the verdict, the same search",
+  fg.models.calls == _n0 + 1 and _st_run == [_st_out], _st_run)
+_st_run.clear()
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+fg.models.script = [Resp("(exercise) AND (incident depression)"), Resp(VJ("complicated", [1]))]
+P(_ST_NONE, ip="9.9.5.3")
+t("  while a claim with no setting runs the model's query untouched",
+  _st_run == ["(exercise) AND (incident depression)"], _st_run)
+_st_run.clear()
+with db.get_conn() as conn:
+    conn.execute("DELETE FROM verdict_cache")
+fg.models.script = [Resp("(PSA screening) AND (mortality OR survival)"), Resp(VJ("complicated", [1]))]
+P("PSA screening saves lives", ip="9.9.5.4")
+t("  and a claim about saving lives runs a search for death from any cause",
+  _st_run == [f"(PSA screening) AND {pubmed.ALL_CAUSE_GROUP}"], _st_run)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+t("the search prompt hands who and when to the tool, and the weighing prompt reads 'saves lives' as any cause",
+  "adds those to the search itself" in verdict._query_prompt("x") and "in older adults" not in verdict._query_prompt("x")
+  and "deaths from any cause" in verdict.weigh_prompt("x", "y") and "indirect" in verdict.weigh_prompt("x", "y")
+  and chr(0x2014) not in verdict.weigh_prompt("x", "y") and chr(0x2013) not in verdict._query_prompt("x")
+  and re.fullmatch(r"[0-9a-f]{12}", verdict.QUERY_PROMPT_VERSION))
 
 # ---- accuracy round 4 (one rule for the stamp) --------------------------------
 # The general rule (accuracy round 4): the takeaway's direction pins the

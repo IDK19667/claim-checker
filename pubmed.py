@@ -313,13 +313,17 @@ def prioritise(studies: list[dict], query: str, surrogate: str = "") -> list[dic
     surrogate search counts as on-outcome, because measuring the indirect
     route is the whole reason it is here.
     """
-    groups = split_and(query or "")
+    groups = core_groups(query)
     if not groups:
         return list(studies or [])
     subject, outcome = groups[0], (groups[1] if len(groups) > 1 else "")
+    # A search that asked for the claim's setting has already had PubMed hold
+    # every paper to it, so the subject is read the way a person would read it
+    # (see _names_subject). Any other search is read exactly as it was.
+    names = _names_subject if setting_groups(query) else evidence.measures
 
     def band(study) -> int:
-        if not evidence.measures(study, subject):
+        if not names(study, subject):
             return 0
         if not outcome or evidence.measures(study, outcome):
             return 2
@@ -330,6 +334,41 @@ def prioritise(studies: list[dict], query: str, surrogate: str = "") -> list[dic
         bands[band(study)].append(study)
     on_topic = bands[2] + bands[1]
     return on_topic if len(on_topic) >= MIN_ON_TOPIC else on_topic + bands[0]
+
+
+# The endings a word can take and still be the same word: vaccine, vaccines,
+# vaccination, vaccinated. Spelled out, not a prefix, so that "creatine" does
+# not reach "creatinine".
+_WORD_END = re.compile(r"(?:ations?|ion|ing|ed|es|s|e)$")
+_WORD_FAMILY = r"(?:e|es|s|ed|ing|ings|ation|ations|ated|ates|ate|ion|ions)?"
+
+
+def _word_pattern(word: str) -> str:
+    root = word.lower()
+    if len(root) >= 6:
+        stripped = _WORD_END.sub("", root)
+        root = stripped if len(stripped) >= 4 else root
+    return re.escape(root) + _WORD_FAMILY
+
+
+def _names_subject(study: dict, group: str) -> bool:
+    """
+    True when this paper is about the thing `group` names, allowing the other
+    form of a word: a paper on "pertussis vaccination" is about "pertussis
+    vaccine", and evidence.measures, which wants the term as written, says it
+    is not. The paper counts when, for some term of the group, every word of
+    the term is in the title or the opening of the abstract.
+    """
+    if evidence.measures(study, group):
+        return True
+    study = study or {}
+    body = evidence._us(f"{study.get('title') or ''}  "
+                        f"{str(study.get('abstract') or '')[:evidence.SUBJECT_WINDOW]}")
+    for term in re.split(r"\s+OR\s+", (group or "").strip("() ")):
+        words = [w for w in re.findall(r"[A-Za-z0-9]+", evidence._us(term)) if len(w) > 2]
+        if words and all(re.search(r"\b" + _word_pattern(w) + r"\b", body, re.IGNORECASE) for w in words):
+            return True
+    return False
 
 
 # How many of the slots an indirect search may take. Two: enough to show the
@@ -344,15 +383,18 @@ def search_surrogate(query: str, surrogate: str, max_results: int = 4) -> list[s
     the claim's own. "(creatine OR creatine monohydrate) AND (hair loss OR
     alopecia)" becomes "(creatine OR creatine monohydrate) AND
     (dihydrotestosterone OR DHT)", which is how the 2009 trial that measured
-    DHT in rugby players is reached at all: it never says "hair loss".
+    DHT in rugby players is reached at all: it never says "hair loss". The
+    claim's setting stays on it: a stand-in measured in the wrong people is
+    not the route to the claim.
     """
-    groups = split_and(query)
+    groups = core_groups(query)
     if not groups or not surrogate.strip():
         return []
     group = surrogate.strip()
     if not group.startswith("("):
         group = f"({group})"
-    return search_pubmed(f"{groups[0]} AND {group}", max_results=max_results)
+    return search_pubmed(" AND ".join([groups[0], group] + setting_groups(query)),
+                         max_results=max_results)
 
 
 def split_and(query: str) -> list[str]:
@@ -419,27 +461,388 @@ def add_discontinuation(query: str) -> str:
     return f"{query} AND {DISCONTINUATION_GROUP}"
 
 
+# ---------------------------------------------------------------------------
+# The claim's setting: who it is about, and when
+#
+# A claim says who it is about ("in older adults", "newborns") and when
+# ("during pregnancy", "before bed", "after a heart attack"). The search step
+# was told a third group would only exclude trials, so it left the setting
+# out, and a claim about vaccinating mothers was searched as a claim about
+# vaccinating babies: PubMed returned infant vaccine trials and uptake
+# surveys and not one study of vaccinating a mother.
+#
+# So the setting is read from the claim in code, from a general vocabulary of
+# populations, life stages, conditions and times, and ANDed on as a group of
+# its own wherever the query is used (verdict.finish_query), whatever the
+# model wrote and whether the query is new or saved. It cannot be lost by a
+# model that forgets it, because the model is not the one who adds it.
+# It goes after the subject, the outcome and any group for stopping, so the
+# first two groups stay the claim's subject and its outcome; broaden_query
+# never drops it, and the phrase, review and surrogate searches carry it the
+# way they carry the group for stopping.
+#
+# Each term is asked for as the paper's own word in its title or abstract
+# ([tiab]), which is also what marks a group as the setting's: the model
+# writes no field tags, so a group made only of [tiab] terms is one this
+# module added. It keeps the setting honest, too: a study is about mothers
+# when it says so, not when PubMed's subject headings reach it by way of
+# "Infant, Newborn".
+# ---------------------------------------------------------------------------
+
+# At most this many settings go into one search. Every one is another AND, and
+# a third is a guess at which of the claim's words the studies share. The two
+# that say most are kept: a time or a condition first, then who.
+MAX_SETTINGS = 2
+
+# "after a heart attack", "who have had a stroke", "following surgery".
+_AFTER = (r"(?:after|following|post-?|since|had|have\s+had|has\s+had|survivors?\s+of|survived|"
+          r"history\s+of|previous|prior|recent|suffered|second|recurrent|repeat)\s+"
+          r"(?:(?:a|an|your|the|having|their)\s+)*")
+# "people with ...", "patients who have ...", "if you have ...".
+_GROUP_NOUN = (r"(?:people|persons?|patients|adults|children|kids|men|women|those|individuals|anyone|"
+               r"someone|sufferers|folks|seniors|teens|teenagers|elderly|adolescents|smokers|mothers)")
+_WITH = (r"(?:" + _GROUP_NOUN + r"\s+(?:with|having|who\s+(?:have|has|had|suffer\s+from|are\s+diagnosed\s+with)|"
+         r"living\s+with|diagnosed\s+with|suffering\s+from)|"
+         r"(?:if|when|whether)\s+you(?:\s+have|\s+are|['’]re|\s+suffer\s+from))\s+"
+         r"(?:(?:a|an|the|any|chronic|severe|mild|existing|early|advanced|known|established|untreated|"
+         r"uncontrolled)\s+)*")
+# A number that follows "over" or "aged" is an age, unless a unit comes next.
+_UNIT = (r"(?!\s*(?:%|percent|per\s?cent|mg|mcg|g\b|ml|kg|lbs?|mins?|minutes?|hours?|hrs?|days?|weeks?|"
+         r"months?|times|bpm|calories|kcal|reps?|sessions?|mmhg|iu|units?|cm|km|miles?))")
+
+
+def _setting(key: str, rank: int, claim: str, terms: list[str], hides: tuple = ()) -> dict:
+    """
+    One setting: its key, how much it says about the search (0 a time or a
+    condition, 1 an age or a life stage, 2 a sex), the claim wording that
+    names it, the words a paper uses for it, and the settings it makes
+    redundant ("before pregnancy" hides "during pregnancy").
+    """
+    return {"key": key, "rank": rank, "claim": re.compile(claim, re.IGNORECASE),
+            "terms": terms, "hides": hides}
+
+
+SETTINGS = [
+    # --- times and life events -------------------------------------------
+    _setting("preconception", 0,
+             r"\b(?:before|prior\s+to|ahead\s+of)\s+(?:(?:a|an|the|your|their|her)\s+)?"
+             r"(?:pregnan\w*|conception|conceiving)\b|"
+             r"\b(?:try|tries|trying|attempt\w*|plan\w*)\s+(?:to\s+)?(?:conceive|get\s+pregnant|"
+             r"become\s+pregnant)|\btrying\s+for\s+a\s+(?:baby|child)|"
+             r"\b(?:pre|peri)-?conception\w*|\bpre-?pregnancy\b",
+             ["preconception*", "periconception*", "pre-pregnancy", "prepregnancy", "before pregnancy",
+              "before conception", "prior to pregnancy", "prior to conception",
+              "before and during pregnancy", "planning pregnancy", "planning a pregnancy"],
+             hides=("pregnancy",)),
+    _setting("pregnancy", 0,
+             r"\bpregnan\w*|\bexpect(?:ant|ing)\s+(?:mothers?|women|moms?)\b|\bprenatal\b|\bantenatal\b|"
+             r"\bgestation\w*|\btrimester\b|\b(?:mothers?|moms?)[- ]to[- ]be\b|\bmaternal\b",
+             ["pregnan*", "maternal", "prenatal", "antenatal"]),
+    _setting("postpartum", 0,
+             r"\bpost-?partum\b|\bpostnatal\b|\bafter\s+(?:giving\s+birth|delivery|childbirth|"
+             r"having\s+(?:a\s+)?baby)\b|\bnew\s+(?:mothers?|moms?)\b",
+             ["postpartum", "postnatal", "after delivery", "after childbirth", "puerperal"]),
+    _setting("breastfeeding", 0,
+             r"\b(?:while|during|when|whilst)\s+(?:you\s+are\s+|she\s+is\s+)?(?:breast-?feeding|nursing|"
+             r"lactating)\b|\b(?:breast-?feeding|nursing|lactating)\s+(?:mothers?|women|moms?)\b",
+             ["breastfeeding", "breast feeding", "lactation", "lactating"]),
+    _setting("before surgery", 0,
+             r"\b(?:before|prior\s+to|ahead\s+of)\s+(?:(?:a|an|the|your|any)\s+)?"
+             r"(?:surgery|surgeries|operations?)\b|\bpre-?operative\b|\bpre-?surgical\b",
+             ["preoperative", "pre-operative", "perioperative", "presurgical", "before surgery",
+              "prior to surgery"]),
+    _setting("after surgery", 0,
+             r"\b(?:after|following|post-?)\s+(?:(?:a|an|the|your|any)\s+)?(?:surgery|surgeries|operations?)\b|"
+             r"\bpost-?operative\b|\bpost-?surgical\b|\brecovering\s+from\s+surgery\b",
+             ["postoperative", "post-operative", "postsurgical", "after surgery", "following surgery"]),
+    _setting("heart attack", 0,
+             r"\b" + _AFTER + r"(?:heart\s+attacks?|myocardial\s+infarctions?)\b|"
+             r"\bheart\s+attack\s+(?:survivors|patients)\b",
+             ["heart attack", "myocardial infarction", "acute coronary syndrome"]),
+    _setting("stroke", 0,
+             r"\b" + _AFTER + r"strokes?\b|\bstroke\s+(?:survivors|patients)\b",
+             ["stroke", "strokes"]),
+    _setting("bedtime", 0,
+             r"\bbefore\s+(?:going\s+to\s+)?(?:bed|bedtime|sleep|sleeping)\b|\bat\s+bedtime\b|\bbedtime\b|"
+             r"\bnightcap\b",
+             ["bedtime", "before bed", "before sleep", "pre-sleep", "presleep", "before going to bed",
+              "at night", "nighttime", "night-time", "evening", "nocturnal", "overnight", "nightcap"]),
+    _setting("before meals", 0,
+             r"\bbefore\s+(?:a\s+|each\s+|every\s+|your\s+)?(?:meals?|eating|dinner|lunch|breakfast)\b",
+             ["before meals", "before a meal", "before eating", "preprandial", "premeal", "pre-meal",
+              "preload"]),
+    _setting("after meals", 0,
+             r"\bafter\s+(?:a\s+|each\s+|every\s+|your\s+)?(?:meals?|eating|dinner|lunch|breakfast)\b",
+             ["after meals", "after a meal", "after eating", "postprandial", "postmeal", "post-meal"]),
+    _setting("before exercise", 0,
+             r"\bbefore\s+(?:a\s+|your\s+)?(?:workouts?|exercise|training|a\s+run|a\s+race)\b|"
+             r"\bpre-?workout\b",
+             ["before exercise", "before a workout", "pre-exercise", "preexercise", "pre-workout"]),
+    _setting("after exercise", 0,
+             r"\bafter\s+(?:a\s+|your\s+)?(?:workouts?|exercise|training|a\s+run|a\s+race)\b|"
+             r"\bpost-?workout\b|\bpost-?exercise\b",
+             ["after exercise", "after a workout", "post-exercise", "postexercise", "post-workout"]),
+    # --- conditions ("people with ...") --------------------------------------
+    _setting("type 1 diabetes", 0,
+             _WITH + r"(?:type\s+(?:1|one|i)\s+diabet\w*|T1D\w*|juvenile\s+diabetes)",
+             ["type 1 diabetes", "type 1 diabetic", "T1D", "T1DM", "insulin-dependent diabetes"],
+             hides=("diabetes",)),
+    _setting("type 2 diabetes", 0,
+             _WITH + r"(?:type\s+(?:2|two|ii)\s+diabet\w*|T2D\w*)",
+             ["type 2 diabetes", "type 2 diabetic", "T2D", "T2DM", "NIDDM"],
+             hides=("diabetes",)),
+    _setting("diabetes", 0,
+             _WITH + r"(?:pre-?)?diabet\w*|\bdiabetics\b",
+             ["diabetes", "diabetic", "diabetics", "prediabetes"]),
+    _setting("hypertension", 0,
+             _WITH + r"(?:hypertens\w*|high\s+blood\s+pressure)|\bhypertensive\s+(?:patients|people|adults)\b",
+             ["hypertension", "hypertensive", "high blood pressure", "elevated blood pressure"]),
+    _setting("high cholesterol", 0,
+             _WITH + r"(?:high\s+cholesterol|hypercholesterol\w*|dyslipid\w*|elevated\s+(?:LDL|cholesterol))",
+             ["hypercholesterolemia", "hypercholesterolaemia", "high cholesterol", "dyslipidemia",
+              "dyslipidaemia", "elevated cholesterol"]),
+    _setting("obesity", 0,
+             _WITH + r"(?:obes\w*|overweight)|\b(?:obese|overweight)\s+(?:people|adults|patients|"
+             r"children|men|women)\b",
+             ["obesity", "obese", "overweight"]),
+    _setting("heart disease", 0,
+             _WITH + r"(?:(?:heart|cardiovascular|coronary(?:\s+(?:artery|heart))?)\s+disease|CVD|CHD|angina)",
+             ["heart disease", "cardiovascular disease", "coronary heart disease",
+              "coronary artery disease"]),
+    _setting("heart failure", 0,
+             _WITH + r"heart\s+failure",
+             ["heart failure"]),
+    _setting("cancer", 0,
+             _WITH + r"(?:\w+\s+){0,2}?(?:cancers?|tumou?rs?|malignan\w+)|\bcancer\s+(?:patients|survivors)\b",
+             ["cancer", "neoplasm*", "tumor*", "tumour*"]),
+    _setting("asthma", 0,
+             _WITH + r"asthma\w*|\basthmatics?\b",
+             ["asthma", "asthmatic"]),
+    _setting("copd", 0,
+             _WITH + r"(?:COPD|chronic\s+obstructive\s+(?:pulmonary|lung)\s+disease|emphysema)",
+             ["COPD", "chronic obstructive pulmonary disease", "emphysema"]),
+    _setting("depression", 0,
+             _WITH + r"depress\w*",
+             ["depression", "depressive", "depressed"]),
+    _setting("anxiety", 0,
+             _WITH + r"anxiety(?:\s+disorders?)?",
+             ["anxiety", "anxious"]),
+    _setting("kidney disease", 0,
+             _WITH + r"(?:(?:chronic\s+)?kidney\s+(?:disease|failure|damage)|CKD|renal\s+(?:disease|failure|"
+             r"impairment))",
+             ["kidney disease", "chronic kidney disease", "CKD", "renal failure", "renal insufficiency"]),
+    _setting("arthritis", 0,
+             _WITH + r"(?:osteo|rheumatoid\s+)?arthritis",
+             ["arthritis", "osteoarthritis", "rheumatoid"]),
+    _setting("osteoporosis", 0,
+             _WITH + r"(?:osteoporo\w*|osteopenia|low\s+bone\s+(?:density|mass))",
+             ["osteoporosis", "osteoporotic", "osteopenia", "low bone density"]),
+    _setting("dementia", 0,
+             _WITH + r"(?:dementia|alzheimer\w*|cognitive\s+impairment)",
+             ["dementia", "Alzheimer*", "cognitive impairment"]),
+    _setting("hiv", 0,
+             _WITH + r"(?:HIV|AIDS)",
+             ["HIV", "human immunodeficiency virus", "AIDS"]),
+    _setting("epilepsy", 0,
+             _WITH + r"epilep\w*",
+             ["epilepsy", "epileptic"]),
+    _setting("migraine", 0,
+             _WITH + r"migraines?",
+             ["migraine", "migraines"]),
+    # --- age and life stage ----------------------------------------------------
+    _setting("infants", 1,
+             r"\b(?:babies|infants?|newborns?|neonat\w+|infancy|nurslings?)\b|"
+             r"\bbaby\b(?!\s+(?:aspirin|powder|oil|carrots?|corn|boomers?|spinach|wipes|shampoo|lotion))|"
+             r"\bfirst\s+(?:year|12\s+months|six\s+months|6\s+months|months|weeks)\s+of\s+life\b",
+             ["infant", "infants", "newborn*", "neonat*", "baby", "babies", "infancy",
+              "first year of life"]),
+    _setting("children", 1,
+             r"\b(?:children|child|kids?|childhood|pediatric|paediatric|schoolchildren|school-?age\w*|"
+             r"preschool\w*|toddlers?)\b",
+             ["child", "children", "childhood", "pediatric*", "paediatric*", "schoolchild*"]),
+    _setting("teenagers", 1,
+             r"\b(?:teen|teens|teenagers?|teenage|adolescen\w+|youths?)\b",
+             ["adolescent", "adolescents", "adolescence", "teenager*", "teen", "teens", "youth"]),
+    _setting("older adults", 1,
+             r"\bolder\s+(?:adults?|people|persons?|patients|men|women|individuals|folks)\b|"
+             r"\b(?:the\s+)?elderly\b|\bseniors?\b|\bsenior\s+citizens?\b|\bgeriatric\b|\bold\s+age\b|"
+             r"\bin\s+later\s+life\b|"
+             r"\b(?:over|above|older\s+than|aged|age\s+of)\s+(?:[6-9]\d)\b" + _UNIT + r"|\b[6-8]\d\s*\+",
+             ["older adults", "older people", "older persons", "older patients", "older individuals",
+              "older men", "older women", "elderly", "geriatric", "seniors", "older age"]),
+    _setting("menopause", 1,
+             r"\bmenopaus\w*|\bperimenopaus\w*|\bpostmenopaus\w*",
+             ["menopause", "menopausal", "perimenopause", "perimenopausal", "postmenopause",
+              "postmenopausal"]),
+    _setting("athletes", 1,
+             r"\bathletes?\b|\bsports\s*(?:people|men|women|players)\b",
+             ["athlete", "athletes", "sportspeople"]),
+    _setting("smokers", 1,
+             r"\bsmokers\b|\bpeople\s+who\s+smoke\b|\bex-?smokers\b|\bcurrent\s+smokers\b",
+             ["smoker", "smokers", "tobacco users"]),
+    # --- sex ---------------------------------------------------------------------
+    _setting("women", 2,
+             r"\b(?:women|woman|females?)\b",
+             ["women", "woman", "female", "females"]),
+    _setting("men", 2,
+             r"\b(?:men|man|males?)\b",
+             ["men", "man", "male", "males"]),
+]
+
+_BOTH_SEXES = re.compile(
+    r"\b(?:men|man|males?|boys?)\b.{0,30}\b(?:women|woman|females?|girls?)\b|"
+    r"\b(?:women|woman|females?|girls?)\b.{0,30}\b(?:men|man|males?|boys?)\b|"
+    r"\bboth\s+sexes\b|\bgender\b", re.IGNORECASE)
+_SEX_KEYS = ("women", "men")
+# Women asked about for their pregnancy or their menopause are not asked about
+# as "women" too.
+_IMPLIES_WOMEN = ("pregnancy", "preconception", "postpartum", "breastfeeding", "menopause")
+
+
+def _tag(term: str) -> str:
+    """One term asked for in the paper's own words: pregnan*[tiab],
+    "older adults"[tiab]."""
+    t = term.strip()
+    return f'"{t}"[tiab]' if re.search(r"[\s-]", t) else f"{t}[tiab]"
+
+
+for _s in SETTINGS:
+    _s["group"] = "(" + " OR ".join(_tag(t) for t in _s["terms"]) + ")"
+del _s
+
+
+def is_setting_group(group: str) -> bool:
+    """True for a group of nothing but terms asked for in the title or
+    abstract, which is how a setting's group is written (and how the model
+    never writes a group)."""
+    terms = [t.strip() for t in re.split(r"\s+OR\s+", (group or "").strip().strip("()"))]
+    return bool(terms) and all(t.endswith("[tiab]") for t in terms)
+
+
+def _is_protected(group: str) -> bool:
+    """A group the broadening never drops: stopping, or the claim's setting."""
+    return _is_stopping_group(group) or is_setting_group(group)
+
+
+def core_groups(query: str) -> list[str]:
+    """The query's groups without the setting's: the claim's subject first,
+    its outcome second, then any group for stopping."""
+    return [g for g in split_and(query or "") if not is_setting_group(g)]
+
+
+def setting_groups(query: str) -> list[str]:
+    """Only the setting's groups, in the order they sit in the query."""
+    return [g for g in split_and(query or "") if is_setting_group(g)]
+
+
+def claim_settings(claim: str) -> list[dict]:
+    """
+    The settings this claim names, at most MAX_SETTINGS, in the order they
+    are ANDed on: the times and conditions first, then the age or life
+    stage, then the sex, and in the claim's own order within each. Empty for
+    a claim that names none. Only what the claim says: that measles vaccines
+    are given to children is not a setting the claim named.
+    """
+    text = str(claim or "")
+    hits = {}
+    for s in SETTINGS:
+        m = s["claim"].search(text)
+        if m:
+            hits[s["key"]] = (s["rank"], m.start(), s)
+    for _, _, s in list(hits.values()):
+        for key in s["hides"]:
+            hits.pop(key, None)
+    if _BOTH_SEXES.search(text):
+        for key in _SEX_KEYS:
+            hits.pop(key, None)
+    elif any(key in hits for key in _IMPLIES_WOMEN):
+        hits.pop("women", None)
+    return [s for _, _, s in sorted(hits.values(), key=lambda h: h[:2])][:MAX_SETTINGS]
+
+
+def add_setting(query: str, claim: str) -> str:
+    """
+    The query with a group ANDed on for each setting the claim names. Unchanged
+    for a claim that names none, for a query with nothing to add the group to,
+    and for a group already there, so it can be applied twice.
+    """
+    if not split_and(query or ""):
+        return query
+    out = query
+    for setting in claim_settings(claim):
+        if setting["group"] not in out:
+            out = f"{out} AND {setting['group']}"
+    return out
+
+
+# What "saves lives" means. A claim that something saves lives, lets people
+# live longer or prevents death, with no disease named, is about death from
+# any cause. A review that finds fewer deaths from one disease has found a
+# different outcome (screening can lower deaths from the disease it looks for
+# and leave deaths overall where they were), so the outcome the search asks
+# for is death from any cause. A claim that names its disease keeps its own.
+ALL_CAUSE_GROUP = "(all-cause mortality OR overall mortality OR death from any cause OR overall survival)"
+_LIVES = re.compile(
+    r"\bsav(?:e|es|ed|ing)\s+(?:\w+\s+){0,2}?lives?\b|\blife-?saving\b|\blives?\s+(?:are\s+)?saved\b|"
+    r"\b(?:live|lives|living)\s+longer\b|\blonger\s+(?:life|lives|lifespan)\b|"
+    r"\b(?:extend|extends|extended|extending|prolong|prolongs|prolonged|prolonging|shorten|shortens)\s+"
+    r"(?:\w+\s+){0,2}?(?:life|lives|lifespan)\b|\blife\s*span\b|\blife\s+expectancy\b|\blongevity\b|"
+    r"\bdie\s+(?:younger|earlier|sooner)\b|\bpremature\s+deaths?\b", re.IGNORECASE)
+_DEATHS = re.compile(
+    r"\b(?:prevent\w*|avoid\w*|reduc\w*|lower\w*|cut\w*|decreas\w*|increas\w*|rais\w*|stop\w*|delay\w*|"
+    r"postpone\w*|caus\w*|protect\w*\s+against|guard\w*\s+against)\s+"
+    r"(?:(?:the|your|a|an|overall|total|early|premature|risk\s+of|chance\s+of|odds\s+of|rate\s+of|"
+    r"number\s+of|risk\s+for)\s+)*(?:deaths?|dying|mortality|death\s+rates?)\b", re.IGNORECASE)
+# A death from something: "dying from colon cancer", "mortality due to stroke".
+_DEATH_FROM = re.compile(
+    r"\b(?:deaths?|dying|die[sd]?|mortality|fatalit\w+|lives?)\s+(?:from|due\s+to|of|caused\s+by|related|"
+    r"attributable|owing|secondary\s+to|lost\s+to)\b", re.IGNORECASE)
+
+
+def wants_all_cause(claim: str) -> bool:
+    """True for a claim about saving lives, living longer or preventing death
+    that names no cause of death."""
+    text = str(claim or "")
+    return bool((_LIVES.search(text) or _DEATHS.search(text)) and not _DEATH_FROM.search(text))
+
+
+def add_all_cause(query: str) -> str:
+    """
+    The query with its outcome group asking for death from any cause. The
+    subject stays; the outcome group is replaced, not added to, even when the
+    model's own group says "all-cause" somewhere: beside it sit "survival"
+    and "longevity", which bring back studies of ageing and of one disease's
+    deaths. A group for stopping or for the setting keeps its place.
+    """
+    parts = split_and(query or "")
+    plain = [i for i, p in enumerate(parts) if not _is_protected(p)]
+    if not plain:
+        return query
+    if len(plain) >= 2:
+        parts[plain[1]] = ALL_CAUSE_GROUP
+    else:
+        parts.insert(plain[0] + 1, ALL_CAUSE_GROUP)
+    return " AND ".join(parts)
+
+
 def broaden_query(query: str) -> str | None:
     """
     Drop the last top-level AND-term ("a AND b AND c" -> "a AND b").
     Returns None when there's nothing left to drop. Used once, when a
     search comes back empty: the model sometimes over-specifies.
 
-    A group for stopping is never the one dropped: a search that has lost
-    it is no longer about the claim. The outcome goes first instead, and
-    with nothing but the subject and stopping left there is nothing to
-    drop.
+    A group for stopping or for the claim's setting is never the one dropped:
+    a search that has lost it is no longer about the claim. The outcome goes
+    first instead, and with nothing but the subject and those groups left
+    there is nothing to drop.
     """
     parts = split_and(query)
     if len(parts) < 2:
         return None
-    if _is_stopping_group(parts[-1]):
-        drop = next((i for i in range(len(parts) - 2, 0, -1)
-                     if not _is_stopping_group(parts[i])), None)
-        if drop is None:
-            return None
-        return " AND ".join(p for i, p in enumerate(parts) if i != drop)
-    return " AND ".join(parts[:-1])
+    drop = next((i for i in range(len(parts) - 1, 0, -1) if not _is_protected(parts[i])), None)
+    if drop is None:
+        return None
+    return " AND ".join(p for i, p in enumerate(parts) if i != drop)
 
 
 # The designs that answer a general health claim: pooled evidence first,
@@ -467,13 +870,13 @@ def phrase_query(query: str) -> str | None:
     reach. "knuckle cracking" alone, as a phrase, puts it sixth.
     """
     groups = split_and(query or "")
-    # The group for stopping carries field tags and stems of its own, and is
-    # passed through as it is.
-    if not groups or any(re.search(r"[\[\]\"]", g) for g in groups if not _is_stopping_group(g)):
+    # The groups for stopping and for the setting carry field tags and stems
+    # of their own, and are passed through as they are.
+    if not groups or any(re.search(r"[\[\]\"]", g) for g in groups if not _is_protected(g)):
         return None
     split = []
     for g in groups:
-        if _is_stopping_group(g):
+        if _is_protected(g):
             split.append([g.strip().strip("()")])
             continue
         terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
@@ -481,7 +884,8 @@ def phrase_query(query: str) -> str | None:
             return None
         split.append([f'"{t}"' if " " in t else t for t in terms])
     head = split[0][:1]
-    if len(split[0]) == 1 and not any(t.startswith('"') for g in split for t in g):
+    quoted = any(t.startswith('"') for g, raw in zip(split, groups) if not _is_protected(raw) for t in g)
+    if len(split[0]) == 1 and not quoted:
         return None
     return " AND ".join("(" + " OR ".join(g) + ")" for g in [head] + split[1:])
 
@@ -543,7 +947,7 @@ def review_query(query: str) -> str | None:
     and the newest review on a question is often the one that settles it.
     """
     every = split_and(query or "")
-    groups = every[:2]
+    groups = [g for g in every if not _is_protected(g)][:2]
     heads = []
     for g in groups:
         terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
@@ -552,8 +956,10 @@ def review_query(query: str) -> str | None:
     if not heads:
         return None
     # A claim about stopping asks for reviews of stopping, in all the words
-    # for it: the review is titled "discontinuation of", or "stopping".
-    heads += [g for g in every[2:] if _is_stopping_group(g)]
+    # for it: the review is titled "discontinuation of", or "stopping". A
+    # claim about a setting asks for reviews in it, in all the words for it:
+    # the review of vaccinating mothers says "pregnancy" and not "mothers".
+    heads += [g for g in every if _is_protected(g)]
     return " AND ".join(heads) + " AND (systematic review OR meta-analysis)"
 
 
@@ -571,7 +977,7 @@ VOTE_DEPTH = 2.0
 def _heads(query: str) -> list[str]:
     """The first term of the query's first two groups: the claim as typed."""
     heads = []
-    for g in split_and(query or "")[:2]:
+    for g in core_groups(query)[:2]:
         terms = [t.strip() for t in re.split(r"\s+OR\s+", g.strip().strip("()")) if t.strip()]
         if terms:
             heads.append(terms[0].strip("() "))
