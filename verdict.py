@@ -19,12 +19,14 @@ used to improve their products. The paid tier does not. Worth knowing
 before pointing a classroom at it.
 """
 
+import contextvars
 import difflib
 import hashlib
 import json
 import logging
 import os
 import re
+import time
 
 import breakdown
 import copyrules
@@ -37,10 +39,23 @@ import pubmed
 VALID_VERDICTS = ("true", "false", "complicated", "insufficient")
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+# Two Gemini models. The query model does the small jobs (the PubMed query,
+# the guideline lookup, the stamp direction read); the verdict model does
+# the two that decide what a reader is told (the verdict itself, with its
+# one retry, and the faithfulness check). GEMINI_QUERY_MODEL falls back to
+# the older GEMINI_MODEL variable, so a deployment that set that one keeps
+# working. See DECISIONS.md, "Accuracy round 5".
+GEMINI_QUERY_MODEL = (os.environ.get("GEMINI_QUERY_MODEL")
+                      or os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite")
+GEMINI_VERDICT_MODEL = os.environ.get("GEMINI_VERDICT_MODEL") or "gemini-3.6-flash"
+GEMINI_MODEL = GEMINI_QUERY_MODEL  # the old name, kept for scripts/ that import it
 
 _anthropic_client = None
 _gemini_client = None
+
+_models_log = logging.getLogger("evident.models")
+_usage_log = logging.getLogger("evident.usage")
 
 
 class ProviderError(Exception):
@@ -48,12 +63,14 @@ class ProviderError(Exception):
     Normalized failure from whichever provider is in use, so app.py can
     map it to a sensible HTTP response without knowing the provider.
     kind: "auth" | "rate_limit" | "unavailable" | "other"
+    code: the provider's HTTP status when it gave one, else None.
     """
 
-    def __init__(self, kind: str, detail: str = ""):
+    def __init__(self, kind: str, detail: str = "", code: int | None = None):
         super().__init__(detail or kind)
         self.kind = kind
         self.detail = detail
+        self.code = code
 
 
 def _key(name: str) -> str | None:
@@ -80,7 +97,13 @@ def provider() -> str:
 
 
 def model_name() -> str:
-    return GEMINI_MODEL if provider() == "gemini" else ANTHROPIC_MODEL
+    """The model(s) in use, for logs and reports: "query / verdict" when
+    Gemini runs two."""
+    if provider() != "gemini":
+        return ANTHROPIC_MODEL
+    if GEMINI_VERDICT_MODEL == GEMINI_QUERY_MODEL:
+        return GEMINI_QUERY_MODEL
+    return f"{GEMINI_QUERY_MODEL} (query) / {GEMINI_VERDICT_MODEL} (verdict)"
 
 
 def provider_label() -> str:
@@ -140,6 +163,7 @@ def _anthropic_text(prompt: str, max_tokens: int, temperature: float | None = No
     extra = {} if temperature is None else {"temperature": temperature}
 
     def go():
+        started = time.monotonic()
         m = client.messages.create(
             model=ANTHROPIC_MODEL,
             max_tokens=max_tokens,
@@ -149,6 +173,7 @@ def _anthropic_text(prompt: str, max_tokens: int, temperature: float | None = No
             messages=[{"role": "user", "content": prompt}],
             **extra,
         )
+        _anthropic_usage(m, time.monotonic() - started)
         return _anthropic_text_of(m)
 
     return _anthropic_wrap(go)
@@ -160,6 +185,7 @@ def _anthropic_json(prompt: str, schema: dict, max_tokens: int, temperature: flo
     client = _anthropic()
 
     def go():
+        started = time.monotonic()
         m = client.messages.create(
             model=ANTHROPIC_MODEL,
             # Thinking is on by default for this model and counts against
@@ -168,6 +194,7 @@ def _anthropic_json(prompt: str, schema: dict, max_tokens: int, temperature: flo
             messages=[{"role": "user", "content": prompt}],
             output_config={"format": {"type": "json_schema", "schema": schema}},
         )
+        _anthropic_usage(m, time.monotonic() - started)
         if m.stop_reason == "refusal":
             return "", "declined to answer this one"
         if m.stop_reason == "max_tokens":
@@ -193,6 +220,7 @@ def _gemini():
 
 
 def _gemini_wrap(fn):
+    import httpx
     from google.genai import errors
 
     try:
@@ -209,18 +237,98 @@ def _gemini_wrap(fn):
             raise ProviderError("auth", "The GEMINI_API_KEY in .env was rejected. "
                                         "Check it at aistudio.google.com.")
         if code == 429:
-            raise ProviderError("rate_limit", "The free Gemini tier is rate-limited right now.")
-        raise ProviderError("other", f"The AI service returned an error ({code}).")
+            # Which quota ran out (per minute or per day, and for which
+            # model) is in the provider's message. Not shown to a reader.
+            _models_log.info("Gemini answered 429: %s", msg[:400])
+            raise ProviderError("rate_limit", "The free Gemini tier is rate-limited right now.", code)
+        raise ProviderError("other", f"The AI service returned an error ({code}).", code)
     except errors.ServerError as e:
-        raise ProviderError("unavailable", f"The AI service is having trouble ({getattr(e, 'code', '?')}).")
+        raise ProviderError("unavailable", f"The AI service is having trouble ({getattr(e, 'code', '?')}).",
+                            getattr(e, "code", None))
     except errors.APIError as e:
-        raise ProviderError("other", f"The AI service returned an error ({getattr(e, 'code', '?')}).")
-    except (ConnectionError, TimeoutError, OSError):
+        raise ProviderError("other", f"The AI service returned an error ({getattr(e, 'code', '?')}).",
+                            getattr(e, "code", None))
+    except (ConnectionError, TimeoutError, OSError, httpx.TransportError):
+        # httpx (a dependency of the Gemini SDK) raises its own timeout and
+        # connection errors, which are not OSErrors.
         raise ProviderError("unavailable", "Couldn't reach the AI service.")
 
 
-def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
+# ---------------------------------------------------------------------
+# Token usage. Every call logs what it used on "evident.usage" and adds a
+# row to a tally that belongs to the check in progress. app.py resets the
+# tally at the start of each check; nothing here reaches the API response.
+# ---------------------------------------------------------------------
+
+_usage_tally: contextvars.ContextVar = contextvars.ContextVar("evident_usage_tally", default=None)
+
+
+def reset_usage() -> list:
+    """Start an empty tally for the check about to run, and return it."""
+    calls: list = []
+    _usage_tally.set(calls)
+    return calls
+
+
+def usage_tally() -> list[dict]:
+    """The calls made since reset_usage(), oldest first. Each row:
+    model, prompt_tokens, output_tokens, thinking_tokens, seconds."""
+    return list(_usage_tally.get() or [])
+
+
+def usage_by_model(calls: list[dict] | None = None) -> dict[str, dict]:
+    """The tally summed per model: calls, prompt, output (thinking not
+    included), thinking, seconds."""
+    out: dict[str, dict] = {}
+    for row in (usage_tally() if calls is None else calls):
+        m = out.setdefault(row["model"], {"calls": 0, "prompt_tokens": 0, "output_tokens": 0,
+                                          "thinking_tokens": 0, "seconds": 0.0})
+        m["calls"] += 1
+        for k in ("prompt_tokens", "output_tokens", "thinking_tokens", "seconds"):
+            m[k] += row[k]
+    return out
+
+
+def log_usage_summary() -> None:
+    """One line on "evident.usage" for the check that just ran: its calls
+    and tokens per model. Silent when the check made no call."""
+    for model, m in usage_by_model().items():
+        _usage_log.info("check total, %s: %d calls, %d prompt, %d output, %d thinking tokens, %.1fs",
+                        model, m["calls"], m["prompt_tokens"], m["output_tokens"],
+                        m["thinking_tokens"], m["seconds"])
+
+
+def _count(meta, name: str) -> int:
+    value = getattr(meta, name, None)
+    return value if isinstance(value, int) else 0
+
+
+def _record_usage(model: str, prompt: int, output: int, thinking: int, seconds: float) -> None:
+    row = {"model": model, "prompt_tokens": prompt, "output_tokens": output,
+           "thinking_tokens": thinking, "seconds": round(seconds, 2)}
+    calls = _usage_tally.get()
+    if calls is not None:
+        calls.append(row)
+    _usage_log.info("%s: %d prompt, %d output, %d thinking tokens, %.1fs",
+                    model, prompt, output, thinking, seconds, extra={"usage": row})
+
+
+def _gemini_usage(model: str, response, seconds: float) -> None:
+    meta = getattr(response, "usage_metadata", None)
+    _record_usage(model, _count(meta, "prompt_token_count"), _count(meta, "candidates_token_count"),
+                  _count(meta, "thoughts_token_count"), seconds)
+
+
+def _anthropic_usage(message, seconds: float) -> None:
+    # Claude reports thinking inside output_tokens, so it is not split out.
+    meta = getattr(message, "usage", None)
+    _record_usage(ANTHROPIC_MODEL, _count(meta, "input_tokens"), _count(meta, "output_tokens"), 0, seconds)
+
+
+def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None,
+                 model: str | None = None) -> str:
     client = _gemini()
+    model = model or GEMINI_QUERY_MODEL
     config = {
         "max_output_tokens": max_tokens,
         # No tools here; this just silences the SDK's AFC warning.
@@ -233,24 +341,32 @@ def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None)
             config["seed"] = 0
 
     def go():
+        started = time.monotonic()
         r = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=prompt,
             config=config,
         )
+        _gemini_usage(model, r, time.monotonic() - started)
         return (r.text or "").strip()
 
     return _gemini_wrap(go)
 
 
-def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
+def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None,
+                 model: str | None = None, timeout_s: float | None = None):
     client = _gemini()
+    model = model or GEMINI_QUERY_MODEL
     config = {
         "max_output_tokens": max_tokens,
         "response_mime_type": "application/json",
         "response_json_schema": schema,
         "automatic_function_calling": {"disable": True},
     }
+    if timeout_s:
+        # The SDK waits forever by default (and does not retry). The value is
+        # in milliseconds, and it is also sent to Google as the call's deadline.
+        config["http_options"] = {"timeout": int(timeout_s * 1000)}
     if temperature is not None:
         config["temperature"] = temperature
         if temperature == 0:
@@ -258,11 +374,13 @@ def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float 
             config["seed"] = 0
 
     def go():
+        started = time.monotonic()
         r = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=prompt,
             config=config,
         )
+        _gemini_usage(model, r, time.monotonic() - started)
         text = (r.text or "").strip()
         finish = None
         try:
@@ -278,9 +396,13 @@ def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float 
     return _gemini_wrap(go)
 
 
-def _complete_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
-    return (_gemini_text if provider() == "gemini" else _anthropic_text)(
-        prompt, max_tokens, temperature)
+def _complete_text(prompt: str, max_tokens: int, temperature: float | None = None,
+                   model: str | None = None) -> str:
+    """One text call. `model` names the Gemini model (the query model when
+    left out); the Anthropic path has one model and ignores it."""
+    if provider() == "gemini":
+        return _gemini_text(prompt, max_tokens, temperature, model)
+    return _anthropic_text(prompt, max_tokens, temperature)
 
 
 # ---------------------------------------------------------------------
@@ -499,8 +621,10 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
     tldr = result.get("tldr") or ""
     check_tldr = tldr if tldr and not _code_takeaway(tldr) else ""
     try:
-        raw, stop = _complete_json(_faithful_prompt(claim, check_tldr, lines, numbers, studies),
-                                   FAITHFUL_SCHEMA, max_tokens=4000, temperature=0)
+        # The cap counts thinking tokens, and the verdict model thinks before
+        # it answers; a read cut off at the cap is skipped (the `stop` below).
+        raw, stop = _complete_verdict_json(_faithful_prompt(claim, check_tldr, lines, numbers, studies),
+                                           FAITHFUL_SCHEMA, max_tokens=8000, temperature=0)
         if stop:
             return result
         read = json.loads(raw.replace("```json", "").replace("```", "").strip())
@@ -827,9 +951,52 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
             "explanation": explanation or line, "breakdown": bd}
 
 
-def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
-    return (_gemini_json if provider() == "gemini" else _anthropic_json)(
-        prompt, schema, max_tokens, temperature)
+def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None,
+                   model: str | None = None, timeout_s: float | None = None):
+    """One JSON call. `model` names the Gemini model (the query model when
+    left out); the Anthropic path has one model and ignores it."""
+    if provider() == "gemini":
+        return _gemini_json(prompt, schema, max_tokens, temperature, model, timeout_s)
+    return _anthropic_json(prompt, schema, max_tokens, temperature)
+
+
+def _fallback_on() -> bool:
+    return (os.environ.get("VERDICT_MODEL_FALLBACK") or "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _verdict_timeout() -> float:
+    """Seconds one verdict-model call may take before it counts as unavailable
+    (VERDICT_MODEL_TIMEOUT_SEC; 0 means no limit). A stronger model thinks for
+    longer, and the SDK would otherwise wait for it forever on a request thread."""
+    try:
+        return max(0.0, float(os.environ.get("VERDICT_MODEL_TIMEOUT_SEC") or 120))
+    except ValueError:
+        return 120.0
+
+
+def _complete_verdict_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
+    """
+    A JSON call on the verdict model: the verdict itself, its one retry and
+    the faithfulness check. When that model is rate-limited, down, gone or
+    too slow, the same call runs once on the query model, and the warning on
+    "evident.models" says which model answered and why, so the public site
+    keeps working on a busy day and a run that mixed models can tell. With
+    VERDICT_MODEL_FALLBACK=0 the error propagates, as it did before there
+    were two models. Claude has one model, so this is _complete_json there.
+    """
+    if provider() != "gemini":
+        return _complete_json(prompt, schema, max_tokens, temperature)
+    try:
+        return _complete_json(prompt, schema, max_tokens, temperature, model=GEMINI_VERDICT_MODEL,
+                              timeout_s=_verdict_timeout())
+    except ProviderError as e:
+        gone = e.kind == "other" and e.code == 404
+        if (not (e.kind in ("rate_limit", "unavailable") or gone) or not _fallback_on()
+                or GEMINI_VERDICT_MODEL == GEMINI_QUERY_MODEL):
+            raise
+        _models_log.warning("the verdict model %s could not answer (%s: %s), so this call ran on %s instead",
+                            GEMINI_VERDICT_MODEL, e.kind, e.detail, GEMINI_QUERY_MODEL)
+        return _complete_json(prompt, schema, max_tokens, temperature, model=GEMINI_QUERY_MODEL)
 
 
 # ---------------------------------------------------------------------
@@ -1373,7 +1540,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
 
     # Temperature 0, like the search: the same claim over the same studies
     # should read the same way every time it is checked.
-    raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
+    raw, stop_note = _complete_verdict_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
     result = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome, surrogate=surrogate)
     kept = raw, stop_note
     read = {}
@@ -1386,8 +1553,8 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # answer is no better the first one stands.
     faults = _faults(result, claim, reported, studies, said)
     if faults:
-        raw, stop_note = _complete_json(prompt + _redo_note(faults),
-                                        VERDICT_SCHEMA, max_tokens=12000, temperature=0)
+        raw, stop_note = _complete_verdict_json(prompt + _redo_note(faults),
+                                                VERDICT_SCHEMA, max_tokens=12000, temperature=0)
         again = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome, surrogate=surrogate)
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,

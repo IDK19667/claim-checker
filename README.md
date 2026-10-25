@@ -60,6 +60,23 @@ browser (no app store). One page, no accounts, no tracking.
    cp .env.example .env    # then paste your key in place of the placeholder
    ```
 
+   **Two models.** Gemini does two kinds of work. The small jobs (the PubMed
+   search, the guideline lookup, the stamp direction read) run on
+   `GEMINI_QUERY_MODEL` (default `gemini-3.5-flash-lite`; the older
+   `GEMINI_MODEL` name still works for it). The verdict, its one retry and
+   the faithfulness check run on `GEMINI_VERDICT_MODEL` (default
+   `gemini-3.6-flash`, a stronger model). Set the two to the same name to run
+   everything on one. If the verdict model is rate-limited, unavailable,
+   retired or slower than `VERDICT_MODEL_TIMEOUT_SEC` (default 120), that one
+   call runs again on the query model and a warning on the `evident.models`
+   logger says which model answered and why; `VERDICT_MODEL_FALLBACK=0` turns
+   that off and shows the error instead. Every Gemini call logs its tokens on
+   `evident.usage`, and `scripts/cost.py` measures a check's tokens, seconds
+   and dollars. The free tier allows a full Flash model far fewer requests a
+   day than Flash-Lite, so on the free tier most checks fall back to
+   Flash-Lite once the day's verdict-model requests run out; see the
+   "Accuracy round 5" entry in `DECISIONS.md`.
+
 3. **Start it:**
    ```bash
    .venv/bin/python app.py

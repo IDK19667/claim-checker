@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import secrets
 from datetime import datetime
@@ -28,6 +29,14 @@ import verdict
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
+
+# Token usage per AI call and per check goes to stderr, which is the host's
+# log, at INFO. Counts and model names only: no claim, no key, no visitor.
+_usage_handler = logging.StreamHandler()
+_usage_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+logging.getLogger("evident.usage").addHandler(_usage_handler)
+logging.getLogger("evident.usage").setLevel(logging.INFO)
+logging.getLogger("evident.usage").propagate = False
 
 # How long a verdict for a given claim is reused before re-checking.
 # 0 disables caching.
@@ -647,6 +656,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
     Everything request-bound (ip, base_url) is passed in: when streamed,
     this generator runs after the request context has ended.
     """
+    verdict.reset_usage()  # this check's own token tally, see verdict.usage_tally()
     if not claim:
         yield {"stage": "error", "status": 400, "error": "Type a health claim to check."}
         return
@@ -732,6 +742,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
                "error": f"Something went wrong while checking this claim: {e}"}
         return
 
+    verdict.log_usage_summary()
     db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
                           result["cited_studies"], studies, tldr=result["tldr"],
                           still_open=result.get("still_open", ""),

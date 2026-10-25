@@ -14,7 +14,8 @@ import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "LLM_PROVIDER"):
+for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "LLM_PROVIDER", "GEMINI_MODEL", "GEMINI_QUERY_MODEL",
+          "GEMINI_VERDICT_MODEL", "VERDICT_MODEL_FALLBACK"):
     os.environ.pop(k, None)
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "t.db")
 
@@ -32,6 +33,12 @@ from google.genai import errors  # noqa: E402
 import requests  # noqa: E402
 
 appmod.app.logger.setLevel(logging.ERROR)
+# The verdict model's fallback to the query model is on by default; the
+# scripted-provider tests below count calls one by one, so they run with it
+# off and the tests that are about the fallback turn it on for themselves.
+os.environ["VERDICT_MODEL_FALLBACK"] = "0"
+# Per-call token lines are for the host's log, not for this output.
+logging.getLogger("evident.usage").setLevel(logging.WARNING)
 c = appmod.app.test_client()
 results = []
 
@@ -110,6 +117,7 @@ class FakeModels:
 
     def generate_content(self, **kw):
         self.calls += 1
+        self.used = getattr(self, "used", []) + [kw.get("model")]  # which model each call named
         self.configs = getattr(self, "configs", []) + [kw.get("config") or {}]
         self.prompts = getattr(self, "prompts", []) + [kw.get("contents") or ""]
         # An empty script is a provider that is down: every call that can
@@ -5413,6 +5421,350 @@ t("safety set: 17 claims, numbered in order, every verdict a real one",
   and all({x["expected"], *x.get("also_ok", []), *x["harmful"]} <= _VERDICTS for x in _SAFE))
 t("  and no verdict is both safe and harmful for the same claim",
   all(not ({x["expected"], *x.get("also_ok", [])} & set(x["harmful"])) for x in _SAFE))
+
+# ---- two Gemini models: a query model and a stronger verdict model ----------------
+# The verdict, its one retry and the faithfulness check run on the verdict
+# model; the search, the guideline lookup and the direction read stay on the
+# query model. Names are set here so the test cannot pass by accident.
+_real_models = (verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL)
+verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL = "q-model", "v-model"
+t("the verdict model is a different, stronger default than the query model",
+  _real_models[0] == "gemini-3.5-flash-lite" and _real_models[1] != _real_models[0], _real_models)
+t("  and the old GEMINI_MODEL name still points at the query model, for scripts/",
+  verdict.GEMINI_MODEL == _real_models[0])
+_pm_logged = []
+
+
+class _Catch(logging.Handler):
+    def __init__(self, sink): super().__init__(); self.sink = sink
+    def emit(self, record): self.sink.append(record)
+
+
+_models_catch = _Catch(_pm_logged)
+verdict._models_log.addHandler(_models_catch)
+
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
+fg.models.used = []
+fg.models.script = [Resp("vitamin d AND respiratory infection"),
+                    Resp(VJ("complicated", [1, 2], tldr="Vitamin D prevents colds.",
+                            still_open="Whether it helps people who are not deficient.", **_BD_RAW))]
+P("Vitamin D supplements in autumn cut colds", ip="9.9.7.1")
+t("a full check: the search on the query model, then the verdict and the faithfulness read on the verdict model",
+  fg.models.used == ["q-model", "v-model", "v-model"], fg.models.used)
+
+fg.models.used = []
+fg.models.script = [DIR("yes")]
+verdict.classify_direction("Cold showers boost immunity", "Cold showers boost immunity.")
+fg.models.script = [Resp(json.dumps({"position": "rejects", "bodies": ["CDC"], "says": "x"}))]
+_real_guideline_view("Antibiotics cure colds")
+t("  the direction read and the guideline lookup stay on the query model",
+  fg.models.used == ["q-model", "q-model"], fg.models.used)
+
+fg.models.used = []
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Vitamin D prevents colds.", **_BD_RAW)),
+                    Resp(VJ("complicated", [1, 2], tldr="Vitamin D prevents colds.", **_BD_RAW))]
+verdict._complete_verdict_json("p", verdict.VERDICT_SCHEMA, 100, 0)
+verdict._complete_json("p", verdict.VERDICT_SCHEMA, 100, 0)
+t("  a call with no model named runs on the query model, never on a global swap",
+  fg.models.used == ["v-model", "q-model"], fg.models.used)
+
+# The retry (only when the answer disagrees with itself) is a verdict call too.
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _SUB
+fg.models.used = []
+fg.models.script = [
+    Resp("(vitamin d) AND (respiratory infection)"),
+    Resp(VJ("complicated", [1, 2], tldr="Vitamin D may help a little.",
+            explanation="These studies do not test whether you need to be low.",
+            still_open="Whether it helps anyone else.", **_RETRY_BD)),
+    Resp(VJ("complicated", [1, 2], tldr="Vitamin D may help, mostly if you are low.",
+            explanation="The pooled review saw a bigger effect in people who began "
+                        "low (Study 1), and the update saw none (Study 2).",
+            still_open="Whether a winter dose helps anyone else.", **_RETRY_BD)),
+]
+P("Vitamin D cuts colds but only if you are low in it", ip="9.9.7.2")
+t("  the verdict's one retry runs on the verdict model too",
+  fg.models.used[:3] == ["q-model", "v-model", "v-model"] and set(fg.models.used[3:]) <= {"v-model"}
+  and "q-model" not in fg.models.used[1:], fg.models.used)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+# A busy verdict model: the same call runs once on the query model, and says so.
+os.environ["VERDICT_MODEL_FALLBACK"] = "1"
+_busy = errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})
+_pm_logged.clear()
+fg.models.used = []
+fg.models.script = [_busy, Resp(VJ("complicated", [1, 2], tldr="Fell back but answered."))]
+_fb = verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood")
+t("a rate-limited verdict model: the call runs again once, on the query model",
+  fg.models.used == ["v-model", "q-model"] and _fb["tldr"] == "Fell back but answered.", (fg.models.used, _fb["tldr"]))
+t("  and the warning on evident.models names both models and why",
+  len(_pm_logged) == 1 and _pm_logged[0].levelno == logging.WARNING
+  and "v-model" in _pm_logged[0].getMessage() and "q-model" in _pm_logged[0].getMessage()
+  and "rate_limit" in _pm_logged[0].getMessage(), [r.getMessage() for r in _pm_logged])
+
+_pm_logged.clear()
+fg.models.used = []
+fg.models.script = [errors.ServerError(503, {"error": {"message": "busy"}}),
+                    Resp(VJ("complicated", [1, 2], tldr="Fell back after an outage."))]
+_fb = verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood")
+t("  an unavailable verdict model falls back the same way",
+  fg.models.used == ["v-model", "q-model"] and _fb["tldr"] == "Fell back after an outage."
+  and len(_pm_logged) == 1 and "unavailable" in _pm_logged[0].getMessage(), fg.models.used)
+
+_pm_logged.clear()
+fg.models.used = []
+fg.models.script = [errors.ClientError(404, {"error": {"message": "model gone", "status": "NOT_FOUND"}}),
+                    Resp(VJ("complicated", [1, 2], tldr="Fell back after a retirement."))]
+_fb = verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood")
+t("  and so does a verdict model that has been retired (404)",
+  fg.models.used == ["v-model", "q-model"] and _fb["tldr"] == "Fell back after a retirement.", fg.models.used)
+
+import httpx  # noqa: E402
+_pm_logged.clear()
+fg.models.used = []
+fg.models.configs = []
+fg.models.script = [httpx.ReadTimeout("slow"), Resp(VJ("complicated", [1, 2], tldr="Fell back after a timeout."))]
+_fb = verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood")
+t("  and so does one that takes longer than its time limit (the SDK's own timeout error)",
+  fg.models.used == ["v-model", "q-model"] and _fb["tldr"] == "Fell back after a timeout."
+  and len(_pm_logged) == 1 and "unavailable" in _pm_logged[0].getMessage(), (fg.models.used, len(_pm_logged)))
+t("  the verdict call carries a time limit of two minutes, the query call has none",
+  fg.models.configs[0].get("http_options") == {"timeout": 120000}
+  and "http_options" not in fg.models.configs[1], fg.models.configs)
+os.environ["VERDICT_MODEL_TIMEOUT_SEC"] = "45"
+fg.models.configs = []
+fg.models.script = [Resp(VJ("complicated", [1, 2]))]
+verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood")
+t("  VERDICT_MODEL_TIMEOUT_SEC sets it, and 0 takes it off",
+  fg.models.configs[0].get("http_options") == {"timeout": 45000}, fg.models.configs)
+os.environ["VERDICT_MODEL_TIMEOUT_SEC"] = "0"
+fg.models.configs = []
+fg.models.script = [Resp(VJ("complicated", [1, 2]))]
+verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood")
+t("  (off)", "http_options" not in fg.models.configs[0], fg.models.configs)
+os.environ.pop("VERDICT_MODEL_TIMEOUT_SEC")
+
+fg.models.used = []
+fg.models.script = [errors.ClientError(403, {"error": {"message": "denied", "status": "PERMISSION_DENIED"}}),
+                    Resp(VJ("complicated", [1, 2]))]
+try:
+    verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood"); _auth = None
+except verdict.ProviderError as e:
+    _auth = e.kind
+t("  but a rejected key is not a busy model: it raises, and no second model is tried",
+  _auth == "auth" and fg.models.used == ["v-model"], (_auth, fg.models.used))
+
+_pm_logged.clear()
+fg.models.used = []
+fg.models.script = [_busy, _busy]
+try:
+    verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood"); _both = None
+except verdict.ProviderError as e:
+    _both = e.kind
+t("  and when the query model is busy as well, the error is the defined one, after two tries, not three",
+  _both == "rate_limit" and fg.models.used == ["v-model", "q-model"], (_both, fg.models.used))
+
+# The faithfulness check fails open, and its fallback is logged too.
+_pm_logged.clear()
+fg.models.used = []
+fg.models.script = [_busy, Resp(json.dumps({"lines": [], "missing": ""}))]
+verdict.check_faithful({"verdict": "complicated", "tldr": "Vitamin D prevents colds.", "explanation": "x",
+                        "still_open": "", "cited_studies": ["P1"],
+                        "breakdown": {"says": ["Vitamin D lowered colds (Study 1)."], "evidence": [], "parts": []}},
+                       STUDIES, "Vitamin D prevents colds")
+t("  the faithfulness check falls back to the query model the same way",
+  fg.models.used == ["v-model", "q-model"] and len(_pm_logged) == 1, (fg.models.used, len(_pm_logged)))
+
+# A run that must not mix models turns the fallback off: the error propagates as before.
+os.environ["VERDICT_MODEL_FALLBACK"] = "0"
+_pm_logged.clear()
+fg.models.used = []
+fg.models.script = [_busy, Resp(VJ("complicated", [1, 2]))]
+try:
+    verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood"); _off = None
+except verdict.ProviderError as e:
+    _off = e.kind
+t("VERDICT_MODEL_FALLBACK=0: the rate limit raises exactly as before, one call, nothing logged",
+  _off == "rate_limit" and fg.models.used == ["v-model"] and not _pm_logged, (_off, fg.models.used))
+os.environ["VERDICT_MODEL_FALLBACK"] = "1"
+
+# One model for both (the BEFORE run, or a deployment that sets only GEMINI_MODEL): no retry on itself.
+verdict.GEMINI_VERDICT_MODEL = "q-model"
+fg.models.used = []
+fg.models.script = [_busy, Resp(VJ("complicated", [1, 2]))]
+try:
+    verdict.weigh_evidence("Walking daily helps mood", STUDIES, "walking AND mood"); _same = None
+except verdict.ProviderError as e:
+    _same = e.kind
+t("one model for both: a rate limit raises at once, there is no second model to try",
+  _same == "rate_limit" and fg.models.used == ["q-model"], (_same, fg.models.used))
+verdict.GEMINI_VERDICT_MODEL = "v-model"
+os.environ["VERDICT_MODEL_FALLBACK"] = "0"
+
+# The model names come from the environment, and the old GEMINI_MODEL still works.
+import importlib  # noqa: E402
+
+
+def _models_with(**env):
+    saved = {k: os.environ.get(k) for k in ("GEMINI_MODEL", "GEMINI_QUERY_MODEL", "GEMINI_VERDICT_MODEL")}
+    for k in saved:
+        os.environ.pop(k, None)
+    os.environ.update(env)
+    try:
+        fresh = importlib.reload(verdict)
+        return fresh.GEMINI_QUERY_MODEL, fresh.GEMINI_VERDICT_MODEL
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+
+_defaults = _models_with()
+_legacy = _models_with(GEMINI_MODEL="old-name")
+_named = _models_with(GEMINI_MODEL="old-name", GEMINI_QUERY_MODEL="new-query", GEMINI_VERDICT_MODEL="new-verdict")
+importlib.reload(verdict)
+t("model names: defaults in code, GEMINI_MODEL still sets the query model, the new names win",
+  _defaults == ("gemini-3.5-flash-lite", _real_models[1]) and _legacy == ("old-name", _real_models[1])
+  and _named == ("new-query", "new-verdict"), (_defaults, _legacy, _named))
+# Reloading ran the module's top level again: put the fake client and the stubs back.
+verdict._gemini_client = fg
+verdict.guideline_view = lambda claim: None
+verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL = "q-model", "v-model"
+
+# ---- token usage: logged per call, tallied per check, never in the response --------
+class _U:
+    def __init__(self, p, o, th): self.prompt_token_count, self.candidates_token_count, self.thoughts_token_count = p, o, th
+
+
+class RespU(Resp):
+    def __init__(self, text, p, o, th): super().__init__(text); self.usage_metadata = _U(p, o, th)
+
+
+_usage_logged = []
+_usage_catch = _Catch(_usage_logged)
+_usage_logger = logging.getLogger("evident.usage")
+_usage_logger.addHandler(_usage_catch)
+_usage_logger.setLevel(logging.INFO)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
+fg.models.script = [RespU("vitamin d AND respiratory infection", 50, 10, 0),
+                    RespU(VJ("complicated", [1, 2], tldr="Vitamin D prevents colds.", **_BD_RAW), 4000, 600, 2500),
+                    RespU(json.dumps({"lines": [], "missing": ""}), 1500, 40, 300)]
+_us = P("Vitamin D supplements in spring cut colds", ip="9.9.7.3")
+_tally = verdict.usage_tally()
+t("usage: every call lands in the check's tally with its model and its prompt, output and thinking tokens",
+  [(r["model"], r["prompt_tokens"], r["output_tokens"], r["thinking_tokens"]) for r in _tally]
+  == [("q-model", 50, 10, 0), ("v-model", 4000, 600, 2500), ("v-model", 1500, 40, 300)], _tally)
+_by = verdict.usage_by_model()
+t("  summed per model",
+  _by["v-model"]["calls"] == 2 and _by["v-model"]["prompt_tokens"] == 5500
+  and _by["v-model"]["output_tokens"] == 640 and _by["v-model"]["thinking_tokens"] == 2800
+  and _by["q-model"]["calls"] == 1, _by)
+t("  and every call, then the check's totals, went to the evident.usage log",
+  len([r for r in _usage_logged if hasattr(r, "usage")]) == 3
+  and any("check total, v-model: 2 calls" in r.getMessage() for r in _usage_logged),
+  [r.getMessage() for r in _usage_logged])
+t("  while the API response carries none of it",
+  _us.status_code == 200 and "usage" not in json.dumps(_us.get_json()) and "tokens" not in json.dumps(_us.get_json()))
+fg.models.script = [RespU("sleep AND memory", 40, 8, 0), RespU(VJ("complicated", [1]), 900, 100, 50)]
+P("Sleep improves memory in teenagers", ip="9.9.7.4")
+t("  the next check starts a fresh tally",
+  [r["model"] for r in verdict.usage_tally()] == ["q-model", "v-model"], verdict.usage_tally())
+fg.models.script = [Resp("x AND y"), Resp(VJ("complicated", [1]))]
+P("Walking in the morning clears the mind", ip="9.9.7.5")
+t("  and a response that reports no usage counts the call with zeros, not a crash",
+  [r["prompt_tokens"] for r in verdict.usage_tally()] == [0, 0], verdict.usage_tally())
+# ---- scripts/cost.py, with the fake provider only ---------------------------------
+import datetime  # noqa: E402
+import importlib.util  # noqa: E402
+
+_cspec = importlib.util.spec_from_file_location("cost_script", ROOT / "scripts" / "cost.py")
+cost = importlib.util.module_from_spec(_cspec)
+_cspec.loader.exec_module(cost)
+cost.PRICES.update({"q-model": [(None, 0.30, 2.50)], "v-model": [(None, 1.00, 4.00)]})
+cost.FREE_TIER.update({"q-model": (15, 500), "v-model": (5, 20)})
+
+t("cost: dollars are prompt tokens at the input price plus output and thinking tokens at the output price",
+  abs(cost.cost_usd("gemini-3.5-flash-lite", 1_000_000, 100_000, 100_000) - (0.30 + 0.2 * 2.50)) < 1e-9)
+t("  the 2027 price rise of the full Flash models is dated, an unlisted model has no price",
+  cost.price_for("gemini-3.6-flash", datetime.date(2026, 12, 31)) == (0.75, 3.75)
+  and cost.price_for("gemini-3.6-flash", datetime.date(2027, 1, 1)) == (1.50, 7.50)
+  and cost.price_for("gemini-3.7-flash") is None and cost.cost_usd("gemini-3.7-flash", 1, 1, 1) is None)
+t("  five fixed claims that exist in the regression file, all different",
+  len(cost.CLAIM_NUMBERS) == 5 and len(set(cost.CLAIM_NUMBERS)) == 5
+  and [n for n, _c, _e in cost.claims_from_file()] == list(cost.CLAIM_NUMBERS)
+  and len({e for _n, _c, e in cost.claims_from_file()}) >= 3)
+
+_saved_limits = (ratelimit.PER_USER, ratelimit.GLOBAL_MINUTE, ratelimit.GLOBAL_DAY)
+ratelimit.PER_USER = ratelimit.SlidingWindow(0, 600)
+ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(0, 60)
+ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(0, 86400)
+_slept, _said = [], []
+
+
+def _cost_check(script, claims, gap=7):
+    fg.models.script = list(script)
+    del _slept[:], _said[:]
+    return cost.measure(c, claims, gap=gap, sleep=_slept.append, say=_said.append,
+                        today=datetime.date(2026, 10, 25))
+
+
+def _two_calls(p=50, o=10, vp=4000, vo=600, vth=2500):
+    return [RespU("cost script query", p, o, 0), RespU(VJ("complicated", [1, 2]), vp, vo, vth)]
+
+
+_recs = _cost_check(_two_calls() + _two_calls(),
+                    [(90, "Cost script claim alpha helps sleep", "complicated"),
+                     (91, "Cost script claim beta helps focus", "complicated")])
+_m = _recs[0]["models"]
+t("cost: each check reports its calls and tokens per model, in dollars",
+  [r["status"] for r in _recs] == [200, 200] and set(_m) == {"q-model", "v-model"}
+  and _m["q-model"]["calls"] == 1 and _m["v-model"]["prompt_tokens"] == 4000
+  and _m["v-model"]["thinking_tokens"] == 2500
+  and abs(_m["v-model"]["usd"] - (4000 * 1.00 + (600 + 2500) * 4.00) / 1e6) < 1e-12, _m)
+t("  it waits the gap between checks and not before the first",
+  _slept == [7], _slept)
+_avg, _secs = cost.average(_recs)
+t("  the average is per check, and the free tier is bound by the model with the smaller daily limit",
+  _avg["v-model"]["calls"] == 1.0 and _avg["v-model"]["prompt_tokens"] == 4000
+  and cost.checks_per_day(_avg) == (20, "v-model") and "bound by v-model" in cost.format_report(_recs)
+  and "$" in cost.format_report(_recs), cost.format_report(_recs))
+t("  and nothing in the printed report is a dash",
+  not re.search("[–—]", cost.format_report(_recs) + "\n".join(_said)))
+
+_recs = _cost_check([errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})]
+                    + _two_calls(), [(92, "Cost script claim gamma helps memory", "complicated")])
+t("cost: a 429 waits two minutes and tries the same check again",
+  _slept == [120] and _recs[0]["attempts"] == 2 and _recs[0]["status"] == 200, (_slept, _recs))
+try:
+    _cost_check([errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})] * 3,
+                [(93, "Cost script claim delta helps mood", "complicated")])
+    _stopped = None
+except cost.StoppedByRateLimit as e:
+    _stopped = e
+t("  three 429s in a row stop the run, after two waits",
+  _stopped is not None and _slept == [120, 120] and _stopped.records == [], (_slept, _stopped))
+_recs = _cost_check([errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})]
+                    + _two_calls() + [errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})]
+                    + _two_calls(), [(94, "Cost script claim epsilon helps energy", "complicated"),
+                                     (95, "Cost script claim zeta helps appetite", "complicated")], gap=3)
+t("  a check that goes through starts the count again",
+  [r["attempts"] for r in _recs] == [2, 2] and _slept == [120, 3, 120], (_slept, _recs))
+
+# With the fallback off (as the script runs), a busy verdict model is a 429, never a mixed check.
+_recs = _cost_check([RespU("cost script query", 50, 10, 0),
+                     errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})]
+                    + _two_calls()[1:], [(96, "Cost script claim eta helps joints", "complicated")])
+t("  a busy verdict model is a 429 and a wait here, never a check that quietly ran on the other model",
+  _recs[0]["attempts"] == 2 and not _recs[0]["fell_back"] and set(_recs[0]["models"]) == {"q-model", "v-model"}
+  and _recs[0]["models"]["q-model"]["calls"] == 1 and _slept == [120], (_recs[0]["models"], _slept))
+ratelimit.PER_USER, ratelimit.GLOBAL_MINUTE, ratelimit.GLOBAL_DAY = _saved_limits
+
+_usage_logger.removeHandler(_usage_catch)
+_usage_logger.setLevel(logging.WARNING)
+verdict._models_log.removeHandler(_models_catch)
+os.environ["VERDICT_MODEL_FALLBACK"] = "0"
+verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL = _real_models
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
