@@ -5336,8 +5336,8 @@ verdict.guideline_view = lambda claim: None
 # verdict as both safe and harmful.
 _SAFE = json.loads((ROOT / "tests" / "safety_claims.json").read_text())["claims"]
 _VERDICTS = {"true", "false", "complicated", "insufficient"}
-t("safety set: 15 claims, numbered in order, every verdict a real one",
-  len(_SAFE) == 15 and [x["n"] for x in _SAFE] == list(range(1, 16))
+t("safety set: 17 claims, numbered in order, every verdict a real one",
+  len(_SAFE) == 17 and [x["n"] for x in _SAFE] == list(range(1, 18))
   and all({x["expected"], *x.get("also_ok", []), *x["harmful"]} <= _VERDICTS for x in _SAFE))
 t("  and no verdict is both safe and harmful for the same claim",
   all(not ({x["expected"], *x.get("also_ok", [])} & set(x["harmful"])) for x in _SAFE))
