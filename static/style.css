@@ -144,10 +144,21 @@ body {
   max-width: 640px; margin: 0 auto;
 }
 /* The nameplate never breaks across two lines, at any width. */
-.wordmark {
+.nameplate {
   order: -1; margin-right: auto;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.wordmark {
   font: 500 20px/1 var(--display); letter-spacing: -0.02em;
   white-space: nowrap; color: var(--on-deep); text-decoration: none;
+}
+/* "Beta" is a label beside the name, in the mono every label is set in: a
+   hairline tag, no fill, no colour, and nothing to press. It is plain text,
+   never a link or a button, so it takes no tap area. */
+.beta {
+  font: 500 11px/1.4 var(--mono); letter-spacing: 0;
+  padding: 1px 6px; border: 1px solid var(--deep-line); border-radius: var(--r-control);
+  color: var(--on-deep-2); white-space: nowrap; cursor: default;
 }
 .dateline { color: var(--on-deep-3); white-space: nowrap; }
 @media (max-width: 419px) { .dateline { display: none; } }
@@ -452,6 +463,15 @@ body {
   color: var(--on-deep);
 }
 .stamp:empty + .ring, .vwrap:has(.stamp:empty) .ring { display: none; }
+/* The one line under every verdict, the same whatever the verdict says: in
+   the night's quiet ink at the size of the note under the claim, so it reads
+   as part of the answer and not as a banner. Balanced, so on a narrow phone
+   it breaks into two even lines and never strands its last word. */
+.doctor-line {
+  margin: 0; max-width: 28em;
+  font-size: 13.5px; line-height: 1.45; color: var(--on-deep-2);
+  text-wrap: balance;
+}
 
 /* ---- By day: the reading behind the verdict ------------------------------- */
 

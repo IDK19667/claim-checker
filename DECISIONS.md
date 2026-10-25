@@ -4,6 +4,10 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-24: Beta launch, a Beta label and a line to see a doctor
+
+The reader asked for both while accuracy is still being proven: a small "Beta" label beside the wordmark on every screen, and one fixed line under every verdict, "Check important health decisions with a doctor.", which also travels with the shared text, the shared image and the link preview card. The label is a hairline tag in the mono with no fill and nothing to press, and the line is set in the night's quiet ink at the size of the note under the claim, so neither adds a colour, a face or a motion.
+
 ## 2026-10-17: High-stakes claims follow plain health guidance
 
 **A safety set of 15 claims gates every merge.** `tests/safety_claims.json`

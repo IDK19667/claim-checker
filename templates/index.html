@@ -82,7 +82,7 @@
   <div class="band">
     <header class="top">
       <p class="dateline"><span>{{ today }}</span></p>
-      <a class="wordmark" href="/" aria-label="Evident home">Evident</a>
+      <div class="nameplate"><a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span></div>
       <div class="top-actions">
         <button class="ghost" id="how-btn" type="button">How it works</button>
         <button class="install" id="install-btn" type="button" hidden>Install</button>
@@ -323,6 +323,10 @@
               <span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span>
               <svg class="ring" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M58 9 C 150 0, 292 8, 296 40 S 210 80, 140 79 S 2 70, 4 41 S 70 4, 168 6"/></svg>
             </div>
+            {# One plain line under every verdict, set the same whatever the
+               verdict says. Shown whenever a verdict shows (app.js keeps it
+               in step), and already in the HTML for a shared link. #}
+            <p class="doctor-line" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
           </div>
         </div>
       </div>

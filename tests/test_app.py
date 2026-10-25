@@ -3617,6 +3617,78 @@ t("  with no dash anywhere in what the reader sees",
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 verdict.guideline_view = lambda claim: None
 
+# ---- A Beta label beside the wordmark, and one line under every verdict --------
+# Both asked for while accuracy is still being proven: "Beta" on every screen
+# that has a masthead, and "Check important health decisions with a doctor."
+# directly under the verdict, in the page's own HTML (so a shared link and a
+# crawler get it with no script), in the shared text and on the link card.
+_DOC = "Check important health decisions with a doctor."
+_BETA = '<a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span>'
+_mast = {p: c.get(p).get_data(as_text=True) for p in ("/", "/privacy", "/no-such-page")}
+t("every masthead carries a Beta label right after the wordmark: home, privacy, 404",
+  all(_BETA in h for h in _mast.values()), {p: _BETA in h for p, h in _mast.items()})
+t("  it is plain text, not a link, a button or a tab stop",
+  all(_re.search(r'<span class="beta">Beta</span>', h) and not _re.search(r'<(a|button)[^>]*>\s*Beta\s*<', h)
+      for h in _mast.values()))
+_beta_css = (ROOT / "static" / "style.css").read_text().split(".beta {")[1].split("}")[0]
+t("  set in the mono, on the night's quiet ink, with no fill and no motion",
+  "var(--mono)" in _beta_css and "var(--on-deep-2)" in _beta_css and "background" not in _beta_css
+  and "animation" not in _beta_css and "transition" not in _beta_css, _beta_css)
+
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in STUDIES]
+fg.models.script = [Resp("sleep AND memory"),
+                    Resp(VJ("complicated", [1, 2], tldr="The evidence on sleep and memory is mixed.",
+                            explanation="One trial found a small gain (Study 1). Another found no "
+                                        "difference (Study 2)."))]
+_dl = P("Sleeping eight hours improves memory", ip="7.7.7.41").get_json()
+_dl_page = c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
+_i_stamp = _dl_page.find('id="stamp"')
+_i_doc = _dl_page.find('<p class="doctor-line" id="doctor-line">' + _DOC + "</p>")
+t("a server-rendered result carries the doctor line, after the verdict stamp and before the answer",
+  0 < _i_stamp < _i_doc < _dl_page.find('<section class="answer">'), (_i_stamp, _i_doc))
+t("  exactly once, and visible: no hidden attribute on a page that has a verdict",
+  _dl_page.count(_DOC) == 1 and 'id="doctor-line" hidden' not in _dl_page)
+_cold = c.get("/?q=never%20checked%20for%20the%20line").get_data(as_text=True)
+t("  an unchecked page keeps the line hidden until a verdict shows",
+  '<p class="doctor-line" id="doctor-line" hidden>' + _DOC in _cold)
+_js = (ROOT / "static" / "app.js").read_text()
+_rr = _js.split("function renderResult(data) {")[1].split("\nfunction ")[0]
+_rp = _js.split("function renderPending(claim) {")[1].split("\nfunction ")[0]
+t("  a live check shows it with the verdict and hides it while a check runs",
+  '$("doctor-line").hidden = false' in _rr and '$("doctor-line").hidden = true' in _rp)
+t("  the page and the script say the same sentence, and it has no dash",
+  f'const DOCTOR_LINE = "{_DOC}";' in _js and not _re.search("[–—]", _DOC))
+
+# The shared text ends on the line. Run the real function under node when there
+# is one (no browser is needed), so what is tested is what ships.
+import shutil as _shutil  # noqa: E402
+import subprocess as _subprocess  # noqa: E402
+_share_src = _js.split("function shareText(r) {")[1].split("\n}\n")[0]
+t("the shared text is built with the doctor line in the script", "DOCTOR_LINE" in _share_src)
+if _shutil.which("node"):
+    _labels = _js.split("const VERDICT_LABELS = ")[1].split("};")[0] + "}"
+    _prog = (f"const VERDICT_LABELS = {_labels}; const DOCTOR_LINE = {json.dumps(_DOC)};"
+             "function shareText(r) {" + _share_src + "\n}"
+             "console.log(JSON.stringify(["
+             "shareText({claim:'Sleep helps memory',verdict:'complicated',tldr:'It is mixed.',still_open:'Long term effects'}),"
+             "shareText({claim:'Sleep helps memory',verdict:'insufficient',tldr:'Too little to say.'})]));")
+    _out = json.loads(_subprocess.run(["node", "-e", _prog], capture_output=True, text=True, check=True).stdout)
+    t("  with a still open line, the text ends on it, each sentence closed",
+      _out[0] == "“Sleep helps memory”: It's complicated. It is mixed. Still open: Long term effects. " + _DOC, _out[0])
+    t("  and without one, it still ends on it",
+      _out[1].endswith("Too little to say. " + _DOC) and not _re.search("[–—]", _out[1]), _out[1])
+
+# The link preview card: the line stands under the ring on the night, and it
+# is drawn (light pixels where it sits) for a one-line claim.
+from PIL import Image as _Image  # noqa: E402
+import io as _io  # noqa: E402
+t("the card module carries the same sentence", og.DOCTOR_LINE == _DOC)
+_card_im = _Image.open(_io.BytesIO(og.render_card("Sleep helps memory", "true", "It is mixed.", 3))).convert("L")
+_strip = _card_im.crop((94, 344, 520, 368))
+t("  and it is drawn under the ringed verdict, on the night, at the card's left margin",
+  max(_strip.getdata()) > 130 and _card_im.getpixel((8, 350)) < 30 and _card_im.size == (1200, 630))
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
 # The safety set (scripts/safety.py) is a merge gate, so its file is checked
 # here: every verdict it names is a real one, and no claim lists the same
 # verdict as both safe and harmful.

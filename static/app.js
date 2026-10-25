@@ -703,6 +703,7 @@ function renderResult(data) {
   block.dataset.verdict = data.verdict;
 
   $("stamp").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
+  $("doctor-line").hidden = false;
   fitRing();
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
@@ -805,6 +806,7 @@ function renderPending(claim) {
   const says = $("says-sec");
   if (says) says.hidden = true;
   document.querySelector(".verdict-block").dataset.verdict = "";
+  $("doctor-line").hidden = true;
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
   $("feedback").hidden = true;
@@ -1286,8 +1288,12 @@ async function copyText(str) {
   } catch { return false; }
 }
 
+// The one line under every verdict: on the page (templates/index.html), in the
+// shared text and on the shared image. Mirrored in og.py for the link preview.
+const DOCTOR_LINE = "Check important health decisions with a doctor.";
+
 const CARD = {
-  deep: "#0f1211", deepLine: "#2a302d", onDeep: "#eceee9", onDeep3: "#7d8580", sage: "#9fc3b0",
+  deep: "#0f1211", deepLine: "#2a302d", onDeep: "#eceee9", onDeep2: "#9ea6a1", onDeep3: "#7d8580", sage: "#9fc3b0",
   paper: "#f1f2ee", ink: "#121514", ink2: "#434a46", ink3: "#5d6560", rule: "#d9dcd5", wood: "#2b2622",
   cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#434a46" },
   // each cloth at 18% on the paper, mixed in oklab as style.css mixes it: the
@@ -1350,7 +1356,10 @@ async function renderShareCard(r) {
   }
   const claimTop = 196, verdictLabelY = claimTop + 34 + claimLines.length * 54 + 30;
   const verdictY = verdictLabelY + 34 + vSize * 0.9;
-  const nightH = verdictY + 70;
+  // The doctor line stands just under the ring's foot (the ring ends 0.3 of
+  // the verdict's size below its baseline), and the night runs on to hold it.
+  const doctorY = verdictY + vSize * 0.3 + 34;
+  const nightH = doctorY + 26;
 
   ctx.fillStyle = CARD.deep; ctx.fillRect(0, 0, S, nightH);
   ctx.fillStyle = CARD.onDeep; ctx.font = `500 36px ${DISPLAY}`;
@@ -1374,10 +1383,12 @@ async function renderShareCard(r) {
   const vw = ctx.measureText(label).width;
   ctx.strokeStyle = CARD.sage; ctx.lineWidth = 2.5; ctx.lineCap = "round";
   ctx.stroke(ringPath(inset - 22, verdictY - vSize * 0.92, vw + 44, vSize * 1.22));
+  ctx.font = `400 26px ${BODY}`; ctx.fillStyle = CARD.onDeep2;
+  ctx.fillText(DOCTOR_LINE, inset, doctorY);
 
   // Day: the short answer, what is still open, the shelf.
   ctx.fillStyle = CARD.paper; ctx.fillRect(0, nightH, S, S - nightH);
-  y = nightH + 70;
+  y = nightH + 52;
   if (r.tldr) {
     ctx.font = `400 32px ${BODY}`; ctx.fillStyle = CARD.ink;
     for (const line of wrapLines(ctx, r.tldr, S - pad * 2, 3)) { ctx.fillText(line, pad, y); y += 44; }
@@ -1430,8 +1441,11 @@ function strongestCited(studies) {
 }
 
 function shareText(r) {
-  const still = r.still_open ? ` Still open: ${r.still_open}` : "";
-  return `“${r.claim}”: ${VERDICT_LABELS[r.verdict] || r.verdict}. ${r.tldr || r.explanation}${still}`;
+  // Each sentence ends on its own full stop, so the doctor line never runs on
+  // from the last word of what is still open.
+  const end = (t) => (/[.!?]$/.test(t) ? t : `${t}.`);
+  const still = r.still_open ? ` Still open: ${end(r.still_open.trim())}` : "";
+  return `“${r.claim}”: ${VERDICT_LABELS[r.verdict] || r.verdict}. ${end((r.tldr || r.explanation || "").trim())}${still} ${DOCTOR_LINE}`;
 }
 
 async function shareResult() {

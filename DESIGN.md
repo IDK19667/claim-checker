@@ -248,6 +248,15 @@ components:
   night-label:
     backgroundColor: "{colors.deep}"
     textColor: "{colors.on-deep-3}"
+  beta-tag:
+    backgroundColor: "{colors.deep}"
+    textColor: "{colors.on-deep-2}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+  doctor-line:
+    backgroundColor: "{colors.deep}"
+    textColor: "{colors.on-deep-2}"
+    typography: "{typography.note}"
   night-well:
     backgroundColor: "{colors.deep-2}"
     textColor: "{colors.on-deep}"
@@ -486,7 +495,12 @@ the shape of the evidence before opening a check.
 
 ## Structure
 
-- **The masthead:** night, the wordmark, the date in mono, "How it works".
+- **The masthead:** night, the wordmark with "Beta" beside it, the date in
+  mono, "How it works". **Beta** is a label, not a control: a hairline tag
+  (`--deep-line`, `--r-control`, no fill) set in the mono at 11px in
+  `--on-deep-2`, on the wordmark's baseline, outside the link, on every
+  screen that has a masthead (the front page, a result, the privacy page
+  and the 404). It is not tracked, not coloured and not clickable.
 - **The front page:** the fly-through first (see **The footage**), then
   the ask on night: the question as a 44px headline ("Heard a health
   claim?" with "Check it against the research." a step quieter), the lede,
@@ -543,9 +557,17 @@ the shape of the evidence before opening a check.
 - **Documents** (privacy, the 404): the masthead, a 44px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
   again and the latest checks.
+- **The doctor line:** directly under the ringed verdict on the report's
+  night head, "Check important health decisions with a doctor.", 13.5px
+  Instrument Sans in `--on-deep-2`, balanced so it never strands a word.
+  It is the same words and the same setting whatever the verdict says. It
+  is in the server-rendered HTML, so a shared link has it before any
+  script runs, and it shows only while a verdict shows (hidden during a
+  check). The same line ends the shared text.
 - **Cards:** the share image (1080 square, drawn in the browser) and the
   link preview (1200x630, drawn by `og.py`) are one composition: night on
-  top with the wordmark, the thread, the claim and the ringed verdict;
+  top with the wordmark, the thread, the claim, the ringed verdict and the
+  doctor line under it;
   day below with the short answer, what is still open, the mini shelf;
   a mono colophon with "Not medical advice".
 
