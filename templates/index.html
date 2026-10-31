@@ -55,9 +55,12 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   {% if flight %}
   <!-- One image, 17KB, is the whole of the first paint's imagery. The frame
-       sequence is 23MB and does not start loading until the page is
-       interactive, so it can never be what the reader is waiting for. -->
-  <link rel="preload" as="image" href="{{ flight.base }}/{{ flight.poster }}" fetchpriority="high" />
+       sequence is 23MB and does not start loading until the reader's first
+       scroll, touch or key. Phones and slow connections never load it: the
+       preload's media query is the same gate as the stills in flight.css, so
+       a phone does not fetch a poster it will not paint. -->
+  <link rel="preload" as="image" href="{{ flight.base }}/{{ flight.poster }}" fetchpriority="high"
+        media="not ((max-width: 700px) or ((orientation: landscape) and (pointer: coarse) and (max-height: 560px)) or (prefers-reduced-motion: reduce))" />
   <link rel="stylesheet" href="{{ url_for('static', filename='flight.css') }}" />
   {% endif %}
 </head>

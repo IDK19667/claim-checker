@@ -94,7 +94,7 @@ const AUDIT = () => {
       }
     }
     const r = el.getBoundingClientRect();
-    if (r.right > innerWidth + 1 && cs.overflowX !== "auto" && cs.position !== "fixed") {
+    if (r.right > innerWidth + 1 && cs.overflowX !== "auto" && cs.position !== "fixed" && !el.closest(".still-row")) {
       overflow.push(`${el.tagName}.${String(el.className).slice(0, 24)} extends to ${Math.round(r.right)}px`);
     }
   }
@@ -190,9 +190,16 @@ for (const v of VIEWS) {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${base}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__flightStats && window.__flightStats.frameCount > 0, null, { timeout: 20000 });
+  // Nothing is fetched until the reader's first input (page weight work), so a
+  // page sitting untouched has no frames: check that, then give it a wheel.
+  const early = await page.evaluate(() => performance.getEntriesByType("resource")
+    .filter((e) => /\.(avif|bundle)(\?|$)/.test(e.name) && !/frame-0000/.test(e.name)).length);
+  if (early) note(where, "page weight", `${early} frame/bundle request(s) before any input`);
+  await page.evaluate(() => window.dispatchEvent(new Event("wheel")));
   const idle = [];
   await page.waitForFunction(() => { const p = document.getElementById("flight-progress"); return p && p.hidden; },
     null, { timeout: 90000 }).catch(() => note(where, "footage", "still loading after 90s"));
+  await page.waitForTimeout(4000);   // the idle pre-decode that follows the download
 
   // A page sitting still asks for no animation frames: not at rest inside the
   // fly-through, not scrolled past it, not parked behind a check. Momentum and
@@ -290,7 +297,13 @@ for (const v of VIEWS) {
     await page.goto(`${base}/`, { waitUntil: "load" });
     return { ctx, page, errors, asked };
   };
-  const drawn = (page, where) => page.waitForFunction(() =>
+  const drawn = async (page, where) => {
+    // The listener for the first input is attached once the manifest is in.
+    await page.waitForFunction(() => window.__flightStats && window.__flightStats.frameCount > 0, null, { timeout: 20000 }).catch(() => {});
+    await page.evaluate(() => window.dispatchEvent(new Event("wheel")));
+    return drawnWait(page, where);
+  };
+  const drawnWait = (page, where) => page.waitForFunction(() =>
     document.getElementById("flight-canvas").hasAttribute("data-drawn"), null, { timeout: 30000 })
     .catch(() => note(where, "footage", "no frame drawn within 30s"));
 
@@ -335,21 +348,21 @@ for (const v of VIEWS) {
     await ctx.close();
   }
 
-  // A phone opened on its side gets the stills and fetches no footage; turned
-  // upright, it gets the fly-through (its own phone cut, after a scroll).
+  // A phone, on its side or upright, gets the stills and fetches no footage:
+  // no frame, no bundle, not even a manifest.
   {
     const where = "phone on its side";
     const { ctx, page, errors, asked } = await open({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await page.waitForTimeout(800);
     stillsShown(where, await look(page), "landscape-phone");
-    if (asked.some((u) => /manifest[^/]*\.json/.test(u))) note(where, "footage", "fetched the fly-through while showing the stills");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
     await page.evaluate(() => window.scrollTo(0, 1));
-    await drawn(page, where + ", turned upright");
-    await page.waitForTimeout(800);
-    footageShown(where + ", turned upright", await look(page), 390);
-    if (!asked.some((u) => /manifest-phone\.json/.test(u))) note(where, "footage", "upright, it did not load the phone cut");
+    await page.waitForTimeout(1200);
+    stillsShown(where + ", turned upright", await look(page), "phone");
+    if (asked.some((u) => /\/footage\/[0-9a-f]+\/(?!still-)|manifest[^/]*\.json|\.(avif|bundle)/.test(u))) {
+      note(where, "page weight", "a phone requested a frame, bundle or manifest");
+    }
     errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
     await ctx.close();
   }
@@ -517,12 +530,31 @@ for (const view of [
       return m ? new URL(m[1], location.href).href : "";
     });
     const early = frames.filter((u) => u !== poster);
-    if (early.length) note(where, "phone budget", `${early.length} footage request(s) before the first scroll, e.g. ${early[0]}`);
+    if (early.length) note(where, "page weight", `${early.length} frame/bundle request(s) on a phone, e.g. ${early[0]}`);
     await page.tap("#claim-input");
     if (!(await page.evaluate(() => document.activeElement && document.activeElement.id === "claim-input"))) {
       note(where, "touch", "tapping the claim box did not focus it");
     }
     await page.evaluate(() => document.activeElement.blur());
+    // A phone gets the stills: scroll, wheel and touch fetch no frame either,
+    // and the stills are on screen, so there is no footage to walk.
+    await page.evaluate(() => { window.scrollTo(0, 400); window.dispatchEvent(new Event("touchstart")); });
+    await page.waitForTimeout(1500);
+    if (frames.length) note(where, "page weight", `${frames.length} frame/bundle request(s) after scrolling on a phone`);
+    const onPhone = await page.evaluate(() => ({
+      off: document.documentElement.getAttribute("data-flight-off"),
+      stills: [...document.querySelectorAll(".stills img")].every((i) => i.naturalWidth > 0 || !i.complete || i.loading === "lazy"),
+      canvas: getComputedStyle(document.getElementById("flight-canvas")).display !== "none",
+      overflow: document.documentElement.scrollWidth > innerWidth + 1,
+    }));
+    if (onPhone.off !== "phone") note(where, "gate", `expected the stills for the phone gate, got ${onPhone.off}`);
+    if (onPhone.canvas) note(where, "gate", "the canvas shows on a phone");
+    if (onPhone.overflow) note(where, "overflow", "the stills overflow a 375px screen");
+    await page.screenshot({ path: "/tmp/qa-phone-stills.png" });
+    console.log("flicks, touch phone: the stills, no frame, bundle or manifest requested, claim box usable");
+    errors.forEach((e) => note(where, "console error", e.slice(0, 120)));
+    await ctx.close();
+    continue;
   }
   await page.evaluate(() => window.scrollTo(0, 1));
   await page.waitForFunction(() => document.getElementById("flight-canvas").hasAttribute("data-drawn"), null, { timeout: 30000 })

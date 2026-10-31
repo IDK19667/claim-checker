@@ -108,6 +108,7 @@
        failed sequence. The four stages, in normal page flow. #}
     <div class="stills">
       <div class="after"><div class="inner">
+        <div class="still-row">
         {% for still in flight.stills %}
         <figure>
           <img src="{{ flight.base }}/{{ still.file }}"
@@ -115,6 +116,7 @@
           <figcaption>{{ still.caption }}</figcaption>
         </figure>
         {% endfor %}
+        </div>
         <p class="flight-note" style="position: static; color: var(--ink-3)">
           Illustrative footage. A real check, replayed, {{ flight.check.checkedAt_long }}.
           Not medical advice.

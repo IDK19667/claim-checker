@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import sys
 import tempfile
 
@@ -143,10 +144,21 @@ t("the poster is set on the stage, so the first screen has a picture "
   "before any frame is decoded",
   "--poster:" in flight_tpl)
 flight_js = (ROOT / "static" / "flight.js").read_text()
-t("frames are not downloaded until the page is interactive",
-  "whenInteractive" in flight_js)
-t("a 2g or 3g connection gets the motion tier only",
-  "slowNetwork" in flight_js and "slow-2g" in flight_js)
+t("frames are not downloaded until the reader's first input",
+  "afterFirstInput(loadFootage)" in flight_js and "whenInteractive" not in flight_js
+  and all(f'"{n}"' in flight_js for n in ("scroll", "wheel", "touchstart", "keydown")))
+t("  the lores window runs from the start of loading, not from page load",
+  "loresFrom = performance.now();" in flight_js and "now - loresFrom" in flight_js)
+t("a slow connection (2g, 3g, or under 1.5Mbps downlink) or Save-Data gets "
+  "the stills and no manifest request",
+  "slow-2g" in flight_js and "conn.downlink < 1.5" in flight_js
+  and 'giveUp(saveData ? "save-data" : slowNetwork' in flight_js
+  and flight_js.index("giveUp(saveData") < flight_js.index("function start() {"))
+_PHONE_Q = "(max-width: 700px)"
+t("a phone is a gate in flight.js, so start() is never called for one",
+  '"' + _PHONE_Q + '"' in flight_js and '"phone"' in flight_js)
+t("  and the same query shows the stills from the stylesheet, before any JS",
+  ("(prefers-reduced-motion: reduce), " + _PHONE_Q + " {") in _first_css)
 t("flight.js keeps a main-thread decode path for browsers without Worker",
   'typeof Worker !== "function"' in flight_js and "MAIN_DECODE_MAX" in flight_js)
 t("the low-res tier is retired after its window rather than drawn forever",
@@ -188,6 +200,9 @@ sw = (ROOT / "static" / "sw.js").read_text()
 t("the fly-through's stylesheet and script are shell files now that it is "
   "the home page",
   '"/static/flight.css"' in sw and '"/static/flight.js"' in sw)
+t("the service worker's shell has no frame, bundle or manifest in it",
+  not any(x in " ".join(re.findall(r'^\s*"[^"]+",', sw.split("const SHELL")[1].split("];")[0], re.M))
+          for x in ("\"/footage/", "/static/flight/", ".avif", ".bundle", "manifest-")))
 t("the frames themselves are never cached by the service worker",
   'url.pathname.startsWith("/static/flight/")' in sw
   and 'url.pathname.startsWith("/footage/")' in sw)
@@ -585,7 +600,7 @@ t("a phone over the footage budget is held to it (about 5MB)",
 t("  and gets the motion tier alone: no low-res pass, never the hi-res copy",
   "if (!phoneBudget) loadLores()" in _start and "!phoneBudget) return hiresStore.preloadBytes()" in _start)
 t("  and none of it until the reader first scrolls",
-  "if (phoneBudget) afterFirstScroll(loadFootage)" in _start and "function afterFirstScroll" in _fj)
+  "afterFirstInput(loadFootage)" in _start and "function afterFirstInput" in _fj)
 t("  and its loading label counts the one tier it is fetching",
   "phoneBudget\n" in _prog and "motionStore.countLoaded / manifest.count" in _prog)
 if (FLIGHT / "manifest-phone.json").exists():
@@ -618,9 +633,10 @@ t("  and a browser without clip keeps the sticky stage working",
 # visit, and the stylesheet and the script agree on when it applies.
 _gates = re.findall(r'"(\([^"]+\))"', _fj.split("var GATES = [")[1].split("];")[0])
 _gate_css = flight_css.split("/* ---- the still version's live gates")[1]
-t("the still version has two live gates: reduced motion and a phone on its side",
+t("the still version has three live gates: reduced motion, a phone on its side, any phone",
   _gates == ["(prefers-reduced-motion: reduce)",
-             "(orientation: landscape) and (pointer: coarse) and (max-height: 560px)"], _gates)
+             "(orientation: landscape) and (pointer: coarse) and (max-height: 560px)",
+             "(max-width: 700px)"], _gates)
 t("  and flight.css applies the stills on exactly the same query strings",
   all(g in _gate_css.split("{")[0] for g in _gates))
 t("  in a block last in the file, so it outranks the phone-width rules",
@@ -655,6 +671,20 @@ t("  and the timeline is built from the stretched sizes, not the raw beat height
   and "beatVh(b) * vh" not in _layout)
 t("  the floor is measured on the whole caption, across beats that share it",
   "function captionRuns()" in _fj and "READ_PX / held" in _fj.split("function beatSizes(")[1][:1200])
+
+# ---- the home page serves no frame request of its own ----------------------
+_c = _app.app.test_client()
+_html = _c.get("/").get_data(as_text=True)
+if 'id="flight"' in _html:
+    import re as _re
+    _pre = _re.findall(r'<link rel="preload" as="image"[^>]*>', _html)
+    t("exactly one image is preloaded, the poster, and only for non-phones",
+      len(_pre) == 1 and "frame-0000" in _pre[0] and "media=" in _pre[0]
+      and "max-width: 700px" in _pre[0] and "2560" not in _pre[0], _pre)
+    t("the home page HTML links no frame, bundle or manifest outside the poster",
+      not _re.search(r'(?:src|href)="[^"]*(?:\.bundle|manifest[^"]*\.json|/motion/|/lores/)', _html))
+    t("the stills are lazy, so a phone fetches them as it scrolls",
+      _html.count('loading="lazy"') >= len(_app._FLIGHT_STILLS))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
