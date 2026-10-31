@@ -35,6 +35,7 @@
 
     <h2 class="section-label">Where a claim goes</h2>
     <p>To check a claim we send its text to two services: PubMed (the U.S. National Library of Medicine) to find studies, and {{ provider }} to turn the claim into a search and to weigh the studies. On Google's free tier, Google's terms say submitted text may be used to improve their products. Don't paste anything you would not want read.</p>
+    <p>The AI provider is sent the claim and the abstracts of the studies found, from our server, never from your device: it does not get your IP address or anything else that identifies you. The verdict is written by that AI, checked by code against the studies, and can still be wrong. If we change AI providers, this page will name the new one.</p>
 
     <h2 class="section-label">Rate limits</h2>
     <p>To keep the free AI quota fair, the server counts checks per IP address for ten minutes in memory. Nothing is written to disk, and the count disappears when the server restarts.</p>

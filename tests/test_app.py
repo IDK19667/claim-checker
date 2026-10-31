@@ -729,6 +729,9 @@ t("llms.txt describes the rules and links recent claims",
 # ---- privacy page ----------------------------------------------------------------
 r = c.get("/privacy")
 t("privacy page", r.status_code == 200 and b"No tracking" in r.data and b"Not medical advice" in r.data)
+t("  it says what the AI provider is sent, that it gets nothing that identifies you, and that the verdict can be wrong",
+  b"The AI provider is sent the claim and the abstracts" in r.data and b"does not get your IP address" in r.data
+  and b"can still be wrong" in r.data)
 
 # ---- security headers ------------------------------------------------------------
 # The design forbids third-party requests and the privacy page promises a claim
