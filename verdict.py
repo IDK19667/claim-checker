@@ -31,6 +31,7 @@ import time
 import breakdown
 import copyrules
 import evidence
+import extractive
 import pubmed
 
 # "insufficient" is "Not enough evidence": nothing found tests the claim.
@@ -506,8 +507,9 @@ Return JSON: {{"lines": [{{"line": 0, "verdict": "ok", "problem": "none",
 # study, so there is nothing in an abstract to hold them to.
 def _code_takeaway(tldr: str) -> bool:
     fixed = {UNTESTED_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
+             extractive.OBSERVATIONAL_TLDR,
              *RANKED_TLDR.values(), *CONTROLLED_TLDR.values()}
-    return (tldr in fixed or tldr.startswith((
+    return (tldr in fixed or extractive.is_template_tldr(tldr) or tldr.startswith((
         "The strongest studies here", "No randomized trial or major review here",
         "The studies found were all in", "Nothing has tested this in people yet",
         "No published studies on this yet", GUIDELINE_LEAD)))
@@ -682,8 +684,11 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
         # worse, asserts significance code never computed, so it is dropped
         # and the figure line above it stands alone.
         code_gloss = old.startswith(breakdown.TRANSLATION_LEAD)
+        # A line code wrote from checked fields is dropped when the check
+        # disputes it, never rewritten: a rewrite would be the model's prose.
         new = (_gate_line(str(item.get("rewrite") or ""), studies, allowed, skip)
-               if item.get("verdict") == "rewrite" and not code_gloss else "")
+               if item.get("verdict") == "rewrite" and not code_gloss
+               and not bd.get("templated") else "")
         # A line that failed is never swapped for a surer one: a rewrite
         # that only loses its hedge goes, and the line with it.
         if new and breakdown.lost_hedge(old, new, claim):
@@ -705,7 +710,8 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
         for p in parts:
             p["assessment"] = _swap(p.get("assessment") or "", old, new)
     kept_lines = [t for t in kept_lines if t]
-    missing = _gate_line(str(read.get("missing") or ""), studies, allowed, skip)
+    missing = ("" if bd.get("templated")
+               else _gate_line(str(read.get("missing") or ""), studies, allowed, skip))
     if missing and not any(missing.lower()[:40] in t.lower() for t in kept_lines):
         kept_lines = kept_lines[:breakdown.SAYS_MAX - 1] + [missing]
     # With every line gone the page falls back to the explanation, so that
@@ -740,6 +746,7 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
 # ---------------------------------------------------------------------
 
 _guide_log = logging.getLogger("evident.guideline")
+_extract_log = logging.getLogger("evident.extractive")
 GUIDELINE_LEAD = "Major health guidelines say: "
 
 _GUIDELINE_TOPIC = re.compile(
@@ -1417,9 +1424,10 @@ VERDICT_SCHEMA = {
             },
         },
         **breakdown.SCHEMA_PROPERTIES,
+        **extractive.SCHEMA_PROPERTIES,
     },
     "required": ["verdict", "tldr", "explanation", "still_open", "cited_study_numbers",
-                 "relevance"] + breakdown.SCHEMA_REQUIRED,
+                 "relevance"] + breakdown.SCHEMA_REQUIRED + extractive.SCHEMA_REQUIRED,
     "additionalProperties": False,
 }
 
@@ -1623,6 +1631,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # chart leaves them out of its strong count, and says why.
     off = result.pop("off_topic", None) or {}
     back = result.pop("background", None) or {}
+    ex = result.pop("_ex", None) or {}
     result.pop("ranked", None)
     result.pop("guarded", None)
     for s in studies:
@@ -1633,7 +1642,69 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    return finish(follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim), claim)
+    result, found = _extractive_stage(result, studies, claim, ex)
+    result = check_faithful(result, studies, claim, outcome)
+    result = follow_guidelines(result, studies, claim)
+    return finish(result, claim)
+
+
+def _extractive_stage(result: dict, studies: list[dict], claim: str, ex: dict):
+    """
+    Replace the model's prose with sentences code writes from the fields the
+    model picked (extractive.py). The short answer, the explanation, "What
+    the research says", the evidence paragraphs, the open question and the
+    rest of the fold are all built here, from entries that passed the check
+    against their own abstract. Returns (result, the entries that passed).
+
+    A model that sent no `findings` at all (a malformed reply) leaves the
+    result as the older gates made it, with a warning in the log; one that
+    sent entries that all failed leaves a page with no summary rather than
+    one that cannot be checked.
+    """
+    if ex.get("raw") is None:
+        if ex and result.get("cited_studies"):
+            _extract_log.warning("the verdict came back without `findings`, so its prose "
+                                 "was not replaced by templates")
+        return result, []
+    verdict = result["verdict"]
+    cited = list(result.get("cited_studies") or ())
+    built = extractive.build(ex["raw"], studies, cited, skip=ex.get("off") or set(),
+                             background=ex.get("back") or set())
+    found = built["found"]
+    if built["dropped"]:
+        _extract_log.warning("%d finding(s) did not match their abstracts and were dropped",
+                             built["dropped"])
+    fields = extractive.lines(built, studies)
+    notes = ex.get("notes") or ""
+    stance = ex.get("stance") or {}
+
+    tldr = result.get("tldr") or ""
+    if not _code_takeaway(tldr):
+        tldr = extractive.tldr(verdict, found, stance)
+    says = fields["says"]
+    body = " ".join(says) if says else (extractive.NO_FINDINGS if cited else "")
+    explanation = " ".join(x for x in (body, notes) if x).strip() or NO_REASON_LEFT
+
+    if cited:
+        still = extractive.still_open(studies, cited, claim, ex.get("pick") or "", found,
+                                      fallback=STILL_OPEN_GENERAL)
+    else:
+        still = STILL_OPEN_UNTESTED
+
+    bd = result.get("breakdown")
+    if cited and (bd or found or built["background"]):
+        gaps = extractive.gaps(studies, cited, claim, found)
+        bd = {**(bd or {}), "evidence": fields["evidence"], "says": says,
+              "effect_size": fields["effect_size"], "strength": fields["strength"],
+              "applies_to": fields["applies_to"], "not_applies_to": "",
+              "unknowns": " ".join(gaps), "parts": [], "templated": True,
+              "rests_on": len(cited),
+              "findings": [{k: f[k] for k in ("study", "population", "outcome", "direction",
+                                              "size", "noun", "quote")} for f in found]}
+        if not bd.get("populations"):
+            bd["populations"] = evidence.narrow_populations(studies, cited)
+    return {**result, "tldr": tldr, "explanation": explanation, "still_open": still,
+            "breakdown": bd}, found
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:
@@ -2063,6 +2134,8 @@ write it in digits: "60 adults", not "sixty adults".
 
 {breakdown.PROMPT}
 
+{extractive.PROMPT}
+
 Respond with JSON in this exact shape:
 {{
   "verdict": "true" | "false" | "complicated" | "insufficient",
@@ -2072,6 +2145,7 @@ Respond with JSON in this exact shape:
   "cited_study_numbers": [1, 2],
   "relevance": [{{"study": 1, "subject": true, "outcome": true, "in_people": true, "finding": "for"}}, {{"study": 2, "subject": true, "outcome": false, "in_people": true, "finding": "unclear"}}],
 {breakdown.PROMPT_SHAPE}
+{extractive.PROMPT_SHAPE}
 }}"""
 
 
@@ -2188,6 +2262,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     if follow:
         verdict = follow
 
+    base_expl = explanation  # what the gates below add to it are code's own sentences
     # Randomized trials outrank weaker studies. When the trials point one
     # way and observational studies, surveys or animal work the other, the
     # verdict follows the trials and the answer says the rest disagree: a
@@ -2310,6 +2385,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
                            f"low, because {forced_low}, so it can't be rated likely "
                            f"true.").strip()
 
+    forced_obs = False
     # A claim that promises the whole thing ("cures diabetes") is tested as
     # written. When the model's own takeaway says the whole thing does not
     # happen ("it lowers blood sugar a bit, but it does not cure it") and it
@@ -2386,6 +2462,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # and a measured change gets its unit back (breakdown.for_reading).
     # A figure no abstract gave a unit for is left out, and a field that was
     # nothing but that figure says so rather than going blank.
+    notes = explanation[len(base_expl):].strip() if explanation.startswith(base_expl) else ""
     readable = lambda text: breakdown.for_reading(text, studies)
     left_out = breakdown.UNITLESS_LEFT_OUT
     tldr, explanation, still_open = readable(tldr), readable(explanation), readable(still_open)
@@ -2450,6 +2527,16 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         "guarded": guarded if guarded and not guarded.get("kept") else None,
         "off_topic": off,
         "background": reasons,
+        # What the extractive stage needs and the page never sees: the
+        # model's field entries (None when it gave no `findings` at all),
+        # its for/against reading of each study, the sentences the gates
+        # above added in code's own words, and the model's pick from the
+        # fixed list of open questions.
+        "_ex": {"raw": parsed.get("findings") if isinstance(parsed.get("findings"), list) else None,
+                "stance": _findings(parsed, studies), "notes": notes,
+                "pick": str(parsed.get("open_question") or ""),
+                "off": off_numbers, "back": background_numbers,
+                "obs": forced_obs},
     }
 
 

@@ -1106,7 +1106,12 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
         if effect_label == "none":
             return f"{head} of no clear effect"
         if absolute:
-            return f"{head} of a {size or 'partial'} effect, not {promise}"
+            # With a measured size the line states it. Without one it does not
+            # call the effect "partial": a False stamp over "evidence of a
+            # partial effect" reads as the evidence supporting the claim.
+            if size:
+                return f"{head} of a {size} effect, not {promise}"
+            return f"{head} that it is not {promise}"
         return f"{head} against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):

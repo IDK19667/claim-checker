@@ -3778,7 +3778,7 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # false" read as strong evidence for the cure.
 _el = evidence.evidence_line
 t("the evidence line says what the evidence is evidence of",
-  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence of a partial effect, not a cure"
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence that it is not a cure"
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
@@ -3800,7 +3800,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence of a partial effect, not a cure", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence that it is not a cure", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 3b. The line never claims more than the designs behind it support. "Strong"
@@ -5991,6 +5991,201 @@ verdict._models_log.removeHandler(_models_catch)
 os.environ["VERDICT_MODEL_FALLBACK"] = "0"
 verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL = _real_models
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+
+# ==== ROUND5-ITEM1: extractive evidence =========================================
+import extractive
+
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+verdict.guideline_view = lambda claim: None
+_ABS_RCT = ("BACKGROUND: Sleep problems are common. METHODS: We randomized 120 adults with insomnia to "
+            "melatonin or placebo for 8 weeks. RESULTS: Sleep quality improved in the melatonin group "
+            "(odds ratio 0.88, 95% CI 0.81 to 0.96) compared with placebo. CONCLUSIONS: Melatonin may "
+            "help adults with insomnia sleep better.")
+_RCT = {"pmid": "X1", "title": "Melatonin for insomnia in adults", "abstract": _ABS_RCT, "journal": "J",
+        "year": "2021", "publication_types": ["Randomized Controlled Trial", "Journal Article"],
+        "authors": ["A"], "data_banks": None, "url": "u"}
+_ABS_COHORT = ("We followed 40,000 adults for 9 years. Adults who drank coffee had a lower risk of "
+               "type 2 diabetes (hazard ratio 0.85, 95% CI 0.80 to 0.90) than adults who did not. "
+               "This association may reflect other habits.")
+_COH = {"pmid": "X2", "title": "Coffee and type 2 diabetes in a cohort of adults", "abstract": _ABS_COHORT,
+        "journal": "J", "year": "2019", "publication_types": ["Observational Study", "Journal Article"],
+        "authors": ["B"], "data_banks": None, "url": "u"}
+_ABS_CLINICAL = ("Forty adults with knee pain took ginger for 4 weeks in an open study. Knee pain scores "
+                 "fell after treatment. There was no control group.")
+_CLIN = {"pmid": "X3", "title": "Ginger for knee pain in adults", "abstract": _ABS_CLINICAL, "journal": "J",
+         "year": "2018", "publication_types": ["Clinical Trial", "Journal Article"], "authors": ["C"],
+         "data_banks": None, "url": "u"}
+_ABS_MICE = ("Mice fed a melatonin diet slept longer. Sleep time rose in treated mice compared with controls "
+             "in this in vivo experiment.")
+_MICE = {"pmid": "X4", "title": "Melatonin and sleep in mice", "abstract": _ABS_MICE, "journal": "J",
+         "year": "2017", "publication_types": ["Journal Article"], "authors": ["D"], "data_banks": None,
+         "url": "u"}
+_Q_RCT = "Sleep quality improved in the melatonin group (odds ratio 0.88, 95% CI 0.81 to 0.96) compared with placebo."
+_Q_COH = ("Adults who drank coffee had a lower risk of type 2 diabetes (hazard ratio 0.85, 95% CI 0.80 to "
+          "0.90) than adults who did not.")
+
+
+def _F(n=1, population="adults with insomnia", outcome="sleep quality", direction="improved",
+       size="odds ratio 0.88, 95% CI 0.81 to 0.96", quote=_Q_RCT, study_type="randomized trial"):
+    return {"study": n, "population": population, "outcome": outcome, "direction": direction,
+            "size": size, "study_type": study_type, "quote": quote}
+
+
+def _wev(claim, studies, v, nums, findings, query=None, **extra):
+    fg.models.script = [Resp(VJ(v, nums, findings=findings, **extra))]
+    query = query or ("(coffee) AND (type 2 diabetes)" if "offee" in claim else
+                      "(ginger) AND (knee pain)" if "inger" in claim else "(melatonin) AND (insomnia)")
+    return verdict.weigh_evidence(claim, [dict(x) for x in studies], query)
+
+
+_r = _wev("Melatonin helps adults with insomnia sleep better", [_RCT], "true", [1], [_F()],
+          tldr="MODEL TLDR", explanation="MODEL EXPLANATION", still_open="MODEL OPEN",
+          open_question="How long any effect lasts.")
+_ST = "A randomized trial in adults with insomnia found sleep quality improved, reporting odds ratio 0.88, 95% CI 0.81 to 0.96 (Study 1)."
+t("extractive: a trial's finding is one fixed sentence built from its fields",
+  _r["breakdown"]["says"][0] == _ST and _r["verdict"] == "true", _r)
+t("  the short answer is a template keyed on the stamp and the strongest study",
+  _r["tldr"] == "Studies point towards yes: a randomized trial in adults with insomnia found sleep quality improved.", _r["tldr"])
+t("  no sentence of the model's own prose reaches the page",
+  "MODEL" not in json.dumps(_r), _r)
+t("  the evidence paragraph, effect line and who-was-studied line are templated too",
+  _r["breakdown"]["evidence"][0] == _ST
+  and _r["breakdown"]["effect_size"] == "Study 1 reported odds ratio 0.88, 95% CI 0.81 to 0.96."
+  and _r["breakdown"]["applies_to"] == "Study 1 was in adults with insomnia."
+  and _r["breakdown"]["strength"].startswith("This rests on 1 randomized trial (Study 1)."), _r["breakdown"])
+t("  the explanation is the same sentences, the open question comes from code gaps and the fixed list",
+  _r["explanation"] == _ST and _r["still_open"] == "Follow-up was short: the longest study here ran 8 weeks. How long any effect lasts.",
+  (_r["explanation"], _r["still_open"]))
+t("  parts, which only a model could write, are gone from the fold",
+  _r["breakdown"]["parts"] == [] and _r["breakdown"]["templated"] is True)
+
+_o = _wev("Coffee drinking is linked to a lower risk of type 2 diabetes", [_COH], "true", [1],
+          [_F(1, "adults", "type 2 diabetes risk", "improved", "hazard ratio 0.85, 95% CI 0.80 to 0.90", _Q_COH,
+              "cohort study")])
+t("  an observational study can only be linked, never found to work",
+  _o["breakdown"]["says"][0] == "An observational study in adults found type 2 diabetes risk was linked to "
+  "improvement, reporting hazard ratio 0.85, 95% CI 0.80 to 0.90 (Study 1)."
+  or _o["breakdown"]["says"][0].startswith("A cohort study in adults"), _o["breakdown"]["says"])
+_q = ("Knee pain scores fell after treatment.")
+_c = _wev("Ginger helps knee pain", [_CLIN], "complicated", [1],
+          [_F(1, "adults with knee pain", "knee pain scores", "improved", "", _q, "non-randomized trial")])
+t("  a trial that was not randomized is 'followed by', never 'found ... improved'",
+  _c["breakdown"]["says"][0] == "A trial in adults with knee pain found knee pain scores was followed by "
+  "improvement (Study 1).", _c["breakdown"]["says"])
+_dirs = {d: _wev("Melatonin helps adults with insomnia sleep better", [_RCT], "complicated", [1],
+                 [_F(direction=d, size="")])["breakdown"]["says"][0]
+         for d in ("worsened", "no clear difference", "mixed")}
+t("  worsened, no clear difference and mixed each have their own form",
+  _dirs == {"worsened": "A randomized trial in adults with insomnia found sleep quality got worse (Study 1).",
+            "no clear difference": "A randomized trial in adults with insomnia found no clear difference in sleep quality (Study 1).",
+            "mixed": "A randomized trial in adults with insomnia found mixed results for sleep quality (Study 1)."}, _dirs)
+
+# a quote that says nothing was found cannot be filed as improved
+_ABS_NULL = ("We randomized 80 adults with insomnia to melatonin or placebo for 6 weeks. There was no "
+             "significant difference in sleep quality between groups (P=0.41).")
+_NULLS = dict(_RCT, abstract=_ABS_NULL)
+_QN = "There was no significant difference in sleep quality between groups (P=0.41)."
+_n = _wev("Melatonin helps adults with insomnia sleep better", [_NULLS], "false", [1],
+          [_F(direction="no clear difference", size="P=0.41", quote=_QN)])
+t("  no clear difference reads as such, and the short answer follows the stamp",
+  _n["breakdown"]["says"][0] == "A randomized trial in adults with insomnia found no clear difference in sleep quality, "
+  "reporting P=0.41 (Study 1)." and _n["tldr"].startswith("Studies point towards no:"), _n)
+
+# the drop rule: every field is checked against its own abstract and nothing is repaired
+def _kept(**kw):
+    r = _wev("Melatonin helps adults with insomnia sleep better", [_RCT], "true", [1], [_F(**kw)])
+    return bool(r["breakdown"]["findings"]) if r.get("breakdown") else False
+
+t("extractive: a quote that is not in the abstract drops the sentence",
+  not _kept(quote="Sleep quality improved a great deal in everyone who took melatonin.") and _kept())
+t("  punctuation and spacing in the quote do not matter",
+  _kept(quote="sleep quality IMPROVED in the melatonin group   (odds ratio 0.88, 95% CI 0.81 to 0.96) compared, with placebo"))
+t("  a figure that is not inside the quote drops it, and so does one that is rounded",
+  not _kept(size="odds ratio 0.9") and not _kept(size="OR 0.88") and not _kept(size="0.8"))
+t("  a figure must be whole: 0.88 is not found inside 10.885",
+  extractive.verify(_F(size="0.88", quote="Sleep quality was 10.885 in the melatonin group overall twice."),
+                    [dict(_RCT, abstract="Sleep quality was 10.885 in the melatonin group overall twice.")]) is None)
+t("  a group or outcome whose words are in neither the quote nor the title drops it",
+  not _kept(population="elderly diabetics in Norway") and not _kept(outcome="blood pressure readings"))
+t("  a number in the group that no abstract printed drops it",
+  not _kept(population="500 adults with insomnia"))
+_SIGQ = "Melatonin significantly improved sleep quality compared with placebo (P<0.01)."
+_SIG = dict(_RCT, abstract="We randomized 90 adults with insomnia. " + _SIGQ)
+t("  a direction that argues with the quote drops it, both ways",
+  extractive.verify(_F(direction="improved", size="P=0.41", quote=_QN), [_NULLS]) is None
+  and extractive.verify(_F(direction="no clear difference", size="", quote=_SIGQ), [_SIG]) is None
+  and extractive.verify(_F(direction="improved", size="", quote=_SIGQ), [_SIG]) is not None)
+t("  a study number out of range, or a direction outside the list, drops it",
+  not _kept(n=9) and not _kept(direction="got better"))
+_two = _wev("Melatonin helps adults with insomnia sleep better", [_RCT, _COH], "true", [1],
+            [_F(), _F(2, "adults", "type 2 diabetes risk", "improved", "", _Q_COH, "cohort study")])
+t("  an entry for a study the verdict does not rely on is dropped",
+  [f["study"] for f in _two["breakdown"]["findings"]] == [1])
+t("  an entry on a study cited with a failing field is dropped and the others stay",
+  len(_wev("Melatonin helps adults with insomnia sleep better", [_RCT], "true", [1],
+           [_F(quote="not in there at all, not even close to it"), _F()])["breakdown"]["findings"]) == 1)
+_bg = _wev("Melatonin helps adults with insomnia sleep better", [_RCT, _MICE], "true", [1, 2],
+           [_F(), _F(2, "mice", "sleep time", "improved", "", "Sleep time rose in treated mice compared with controls in this in vivo experiment.", "animal or lab study")])
+t("  an animal study never gets a finding sentence about people; it is listed as background only",
+  [f["study"] for f in _bg["breakdown"]["findings"]] == [1]
+  and any(x.startswith("Background only: Study 2 is an animal or lab study.") for x in _bg["breakdown"]["says"]), _bg["breakdown"])
+
+# the short answer
+_f = [dict(extractive.verify(_F(), [_RCT]))]
+t("extractive: the short answer is a template whatever the stamp",
+  extractive.tldr("true", _f) == "Studies point towards yes: a randomized trial in adults with insomnia found sleep quality improved."
+  and extractive.tldr("false", _f).startswith("Studies point towards no: ")
+  and extractive.tldr("complicated", _f).startswith("The studies found are mixed or limited: ")
+  and extractive.tldr("insufficient", _f) == "The studies found do not settle this."
+  and extractive.tldr("true", []) == "Studies point towards yes.")
+t("  it never runs past the room, dropping the group first and the finding last",
+  all(len(extractive.tldr("true", [dict(_f[0], population="adults with insomnia and many other things at once", outcome="the quality of sleep reported by people in the morning")])) <= 160 for _ in "x")
+  and len(extractive.tldr("true", [dict(_f[0], outcome="x" * 78, population="y" * 78)])) <= 160)
+_st = [dict(_f[0], study=1, kind="observational", noun="cohort study"), dict(_f[0], study=2)]
+t("  it picks the strongest study that leans the way the stamp does",
+  "randomized trial" in extractive.tldr("true", _st, {1: "for", 2: "for"})
+  and "cohort study" in extractive.tldr("false", _st, {1: "against", 2: "for"}))
+
+# what is still open
+t("extractive: the open question is code-found gaps plus a pick from the fixed list",
+  extractive.still_open([_COH], ["X2"], "", "Whether the link is a cause or only a pattern.")
+  == "Whether the link is a cause, since only observational studies were found."
+  and extractive.still_open([_COH], ["X2"], "", "How long any effect lasts.") ==
+  "Whether the link is a cause, since only observational studies were found. How long any effect lasts."
+  and extractive.still_open([_COH], ["X2"], "", "A made-up question that is not on the list.")
+  == "Whether the link is a cause, since only observational studies were found."
+  and extractive.still_open([], [], "", "", fallback="Whether anyone has tested it.") == "Whether anyone has tested it.")
+t("  no randomized trial, a narrow group and a short follow-up are gaps code finds",
+  extractive.gaps([_CLIN], ["X3"])[0] == "No randomized trial among these studies tested this directly."
+  and extractive.gaps([_RCT], ["X1"]) == ["Follow-up was short: the longest study here ran 8 weeks."])
+
+# the second gate: a rewrite of a templated line is a drop, never the model's prose
+fg.models.script = [Resp(VJ("true", [1], findings=[_F()])),
+                    Resp(json.dumps({"lines": [{"line": 1, "verdict": "rewrite", "problem": "direction",
+                                                "rewrite": "Melatonin cures insomnia (Study 1)."}], "missing": "Melatonin is a miracle (Study 1)."}))]
+_g = verdict.weigh_evidence("Melatonin helps adults with insomnia sleep better", [dict(_RCT)], "(melatonin) AND (insomnia)")
+t("extractive: the faithfulness check can drop a templated line but never rewrite it or add one",
+  "cures" not in json.dumps(_g) and "miracle" not in json.dumps(_g) and _g["breakdown"]["says"] == [], _g)
+
+# no findings at all: the older gates stand, and it is logged
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_old = verdict.weigh_evidence("Melatonin helps adults with insomnia sleep better", [dict(_RCT)], "(melatonin) AND (insomnia)")
+t("extractive: a reply with no findings key at all falls back to the older gates",
+  _old["tldr"] == "Short take." and not (_old.get("breakdown") or {}).get("templated"), _old)
+
+# end to end through the route, and on the server-rendered page
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_RCT)]
+fg.models.script = [Resp("(melatonin) AND (insomnia)"), Resp(VJ("true", [1], findings=[_F()], tldr="MODEL TLDR"))]
+_d = P("Melatonin helps adults with insomnia sleep better", ip="9.9.5.1").get_json()
+_html = c.get("/?q=" + "Melatonin helps adults with insomnia sleep better").data.decode()
+t("extractive: the route returns the templated short answer, and the shared page renders it",
+  _d["tldr"].startswith("Studies point towards yes:") and _d["breakdown"]["says"][0] == _ST
+  and "Studies point towards yes: a randomized trial" in _html and _ST in _html and "MODEL TLDR" not in _html, _d)
+t("  every sentence carries no dash",
+  "\u2014" not in _html and "\u2013" not in _html)
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

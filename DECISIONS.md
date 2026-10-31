@@ -4,6 +4,22 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-31: Accuracy round 5, item 1: code writes the evidence
+
+Drift in the verdict came from the free model writing the sentences. Now
+it only fills fixed fields per relied-on study (`extractive.py`): study
+number, population, outcome, a direction from a fixed list, a size copied
+from the abstract, and one quote. Code checks each field against that
+study's own abstract and drops an entry that fails; it never rewords one.
+Code then writes every sentence of "What the research says" and the deeper
+fold from templates, sets the study type from the publication types, and
+builds `still_open` from gaps it can detect plus a pick from a fixed list.
+The takeaway is kept only when code wrote it, otherwise it is a template.
+`check_faithful` stays as the second gate and leaves templated lines
+alone. The options were a stronger model (rejected: free tier) or tighter
+prompting (rejected: it drifts); constraining the output is the fix that
+does not depend on the model behaving. Cost: a larger output per check.
+
 ## 2026-10-31: Accuracy round 5, back to one free model
 
 The stronger verdict model (entry below) needs billing or a larger quota,
