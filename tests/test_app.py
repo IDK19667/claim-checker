@@ -4080,8 +4080,8 @@ fg.models.script = [Resp(VJ(
     still_open="Whether strong evidence from trials would agree.",
     evidence=["A review of twelve cohort studies found a lower risk with more coffee (Study 1)."],
     strength="The evidence is strong because twelve studies agree (Study 1)."))]
-_obs = verdict.weigh_evidence("Coffee lowers the risk of type 2 diabetes", [dict(_COHORT_MA)],
-                              "(coffee) AND (type 2 diabetes)")
+_obs = verdict.weigh_evidence("Coffee drinking is linked to a lower risk of type 2 diabetes",
+                              [dict(_COHORT_MA)], "(coffee) AND (type 2 diabetes)")
 _said = json.dumps({k: _obs[k] for k in ("tldr", "explanation", "still_open", "breakdown")})
 t("  through a real check, the takeaway, reason and breakdown never call cohort evidence strong",
   _obs["verdict"] == "true" and "trong" not in _said and "high-quality" not in _said
@@ -4402,7 +4402,8 @@ fg.models.script = [Resp(VJ("true", [1], tldr="Ginger prevents vomiting.",
 fg.models.prompts = []
 _v = verdict.weigh_evidence(_GIN_CLAIM, [dict(_BRACKETED)], "(ginger) AND " + _SEVERE)
 t("  through a real verdict, a narrower question's low rating neither caps it nor flags the review",
-  _v["verdict"] == "true" and "Twelve cohorts were pooled" in fg.models.prompts[0]
+  "certainty of this evidence is low" not in _v["explanation"]
+  and "Twelve cohorts were pooled" in fg.models.prompts[0]
   and "LOW CERTAINTY: this review" not in fg.models.prompts[0], _v)
 fg.models.script = [Resp(VJ("true", [1], tldr="Ginger reduces vomiting.",
                             evidence=["Ginger reduced vomiting (Study 1)."]))] * 3
@@ -6185,6 +6186,80 @@ t("extractive: the route returns the templated short answer, and the shared page
 t("  every sentence carries no dash",
   "\u2014" not in _html and "\u2013" not in _html)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+
+# ==== ROUND5-ITEM2: wording rules in code =======================================
+_ABS_HEDGE = ("We followed 20,000 adults for 6 years. Coffee drinking was associated with a lower risk of "
+              "type 2 diabetes, with a hazard ratio of 12.5% fewer cases per 1,000 adults.")
+_HQ = ("Coffee drinking was associated with a lower risk of type 2 diabetes, with a hazard ratio of "
+       "12.5% fewer cases per 1,000 adults.")
+_HEDGED = dict(_COH, abstract=_ABS_HEDGE)
+_hf = extractive.verify(_F(1, "adults", "type 2 diabetes", "improved", "12.5% fewer cases per 1,000 adults", _HQ,
+                           "cohort study"), [_HEDGED])
+t("wording: a hedge in the source is kept, as the verb 'suggested'",
+  _hf is not None and extractive.sentence(_hf).startswith("A cohort study in adults suggested type 2 diabetes was linked to improvement"), _hf)
+t("  and a quote without a hedge is 'found'",
+  "found" in extractive.sentence(extractive.verify(_F(), [_RCT])) and not extractive.hedged(_Q_RCT)
+  and all(extractive.hedged(x) for x in ("It may help.", "This might work.", "Results suggest a benefit.",
+                                         "It was associated with less pain.", "Possibly helpful.")))
+t("  a figure is copied exactly: no rounding, no unit change, no percentage made from a ratio",
+  "12.5% fewer cases per 1,000 adults" in extractive.sentence(_hf)
+  and set(re.findall(r"\d[\d.,]*\d|\d", extractive.sentence(_hf).replace("(Study 1)", "")))
+  <= set(re.findall(r"\d[\d.,]*\d|\d", _HQ)))
+t("  a range printed with a dash is written 'to', digits unchanged",
+  extractive.sentence(dict(extractive.verify(_F(), [_RCT]), size="12\u201320 mmHg")).endswith("reporting 12 to 20 mmHg (Study 1)."))
+
+t("wording: cure, prove and prevent in every form are caught, 'was linked to' and 'followed by' are not",
+  all(extractive.causal_words(x) for x in ("cures", "cured", "curing", "proves", "proven", "prevents",
+                                            "prevented", "preventing", "prevention", "causes", "caused"))
+  and not any(extractive.causal_words(x) for x in ("was linked to", "was followed by", "found no clear difference",
+                                                   "improved", "procure", "curtain")))
+t("  they may stand only over randomized trials, meta-analyses and systematic reviews",
+  extractive.wording_ok("cures colds", True) and not extractive.wording_ok("cures colds", False)
+  and extractive.design(_RCT)["may_cause"] and not extractive.design(_COH)["may_cause"]
+  and extractive.design(dict(_RCT, publication_types=["Meta-Analysis"]))["may_cause"]
+  and extractive.design(dict(_RCT, publication_types=["Systematic Review"]))["may_cause"]
+  and not extractive.design(_CLIN)["may_cause"])
+_pq = "Melatonin prevention of insomnia was seen in treated adults compared with untreated adults."
+_pabs = dict(_RCT, abstract="We studied 100 adults. " + _pq)
+t("  so a model field that carries one is dropped for an observational study and kept for a trial",
+  extractive.verify(_F(outcome="prevention of insomnia", size="", quote=_pq), [_pabs]) is not None
+  and extractive.verify(_F(outcome="prevention of insomnia", size="", quote=_pq),
+                        [dict(_pabs, publication_types=["Observational Study"])]) is None)
+t("  and the templates themselves never use one",
+  not any(extractive.causal_words(extractive.sentence(dict(extractive.verify(_F(), [_RCT]), kind=k, noun=n, direction=d)))
+          for k, n in (("pooled", "meta-analysis"), ("randomized", "randomized trial"), ("observational", "cohort study"),
+                       ("trial", "trial"), ("case", "case report"), ("other", "study"))
+          for d in extractive.DIRECTIONS))
+t("  animal, lab and in vitro studies are design 'background', never given a finding sentence",
+  extractive.design(_MICE)["kind"] == "background"
+  and extractive.design(dict(_MICE, abstract="Cells grown in vitro released more melatonin. No people took part."))["kind"] == "background"
+  and "Background only" in extractive.background_sentence(2))
+
+# a causal claim on observational studies alone cannot be true
+_coffee_claims = {"Coffee prevents type 2 diabetes": True, "Coffee lowers the risk of type 2 diabetes": True,
+                  "Coffee causes diabetes": True, "Coffee drinking is linked to a lower risk of type 2 diabetes": False,
+                  "Coffee is associated with less diabetes": False, "Is coffee good for you": True,
+                  "Coffee drinkers live in cities": False}
+t("wording: the code tells a causal claim from a claim about a link",
+  all(extractive.causal_claim(k) is v for k, v in _coffee_claims.items()),
+  [k for k, v in _coffee_claims.items() if extractive.causal_claim(k) is not v])
+_cf = _F(1, "adults", "type 2 diabetes risk", "improved", "hazard ratio 0.85, 95% CI 0.80 to 0.90", _Q_COH, "cohort study")
+_obs_c = _wev("Coffee prevents type 2 diabetes", [_COH], "true", [1], [_cf])
+t("  observational studies alone take a causal 'true' to 'complicated', in code, with the reason said",
+  _obs_c["verdict"] == "complicated" and _obs_c["tldr"] == extractive.OBSERVATIONAL_TLDR
+  and extractive.OBSERVATIONAL_NOTE in _obs_c["explanation"], _obs_c)
+_obs_l = _wev("Coffee drinking is linked to a lower risk of type 2 diabetes", [_COH], "true", [1], [_cf])
+t("  a claim about a link, on the same studies, stays true",
+  _obs_l["verdict"] == "true", _obs_l["verdict"])
+_obs_f = _wev("Coffee prevents type 2 diabetes", [_COH], "false", [1], [_cf])
+t("  and a 'false' on observational studies is not raised or lowered by this rule",
+  _obs_f["verdict"] == "false")
+_trial_c = _wev("Melatonin cures insomnia in adults", [_RCT], "true", [1], [_F()])
+t("  a randomized trial still carries a causal claim to true",
+  _trial_c["verdict"] == "true" and _trial_c["tldr"].startswith("Studies point towards yes"), _trial_c["verdict"])
+t("  an observational downgrade is a code takeaway, so the faithfulness check leaves it alone",
+  verdict._code_takeaway(extractive.OBSERVATIONAL_TLDR))
 
 
 print(f"\n{sum(results)}/{len(results)} passed")

@@ -4,6 +4,22 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-31: Accuracy round 5, item 2: wording rules live in code
+
+Strong verbs and units were the model's choice, so they drifted. Now
+`extractive.py` decides them. "Cure", "prove", "prevent" and their forms
+appear only over a randomized trial, meta-analysis or systematic review;
+over anything else the sentence uses the fixed verbs "was linked to" or
+"was followed by", and a hedge in the source ("suggested") is kept.
+Numbers and units are copied exactly: a size must appear as a whole token
+in the quote, so nothing is rounded, converted or turned into a
+percentage. Animal, lab and in-vitro studies are labelled "Background
+only" and never carry a finding sentence about people. A causal claim
+resting only on observational studies cannot be stamped True: it goes to
+complicated with a fixed note, decided in `_read_verdict` beside the
+existing forcing rules. A claim worded as an association ("linked to") is
+not treated as causal. A guideline that backs the claim can still raise it.
+
 ## 2026-10-31: Accuracy round 5, item 1: code writes the evidence
 
 Drift in the verdict came from the free model writing the sentences. Now

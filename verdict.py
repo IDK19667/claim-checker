@@ -2385,7 +2385,22 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
                            f"low, because {forced_low}, so it can't be rated likely "
                            f"true.").strip()
 
+    # And a causal claim cannot be "true" on observational studies alone.
+    # Cohorts, case-control studies and surveys can show a link; whether one
+    # thing makes the other happen takes a trial. The claim goes to
+    # "complicated" with the reason said in code's own words. A major health
+    # guideline that backs the claim can still raise it afterwards, in
+    # follow_guidelines, because that is evidence of a different kind.
     forced_obs = False
+    if (not forced and verdict == "true" and not forced_low and cited_pmids
+            and extractive.causal_claim(claim)
+            and evidence.observational_only(studies, cited_pmids)):
+        verdict = "complicated"
+        forced_obs = True
+        templated = True
+        tldr = extractive.OBSERVATIONAL_TLDR
+        explanation = (explanation.rstrip() + " " + extractive.OBSERVATIONAL_NOTE).strip()
+
     # A claim that promises the whole thing ("cures diabetes") is tested as
     # written. When the model's own takeaway says the whole thing does not
     # happen ("it lowers blood sugar a bit, but it does not cure it") and it
