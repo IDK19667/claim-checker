@@ -33,6 +33,7 @@ import copyrules
 import evidence
 import extractive
 import pubmed
+import safety
 
 # "insufficient" is "Not enough evidence": nothing found tests the claim.
 # It is not a softer "complicated", which is for real evidence that is
@@ -507,7 +508,7 @@ Return JSON: {{"lines": [{{"line": 0, "verdict": "ok", "problem": "none",
 # study, so there is nothing in an abstract to hold them to.
 def _code_takeaway(tldr: str) -> bool:
     fixed = {UNTESTED_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
-             extractive.OBSERVATIONAL_TLDR,
+             extractive.OBSERVATIONAL_TLDR, *safety.CODE_TLDRS,
              *RANKED_TLDR.values(), *CONTROLLED_TLDR.values()}
     return (tldr in fixed or extractive.is_template_tldr(tldr) or tldr.startswith((
         "The strongest studies here", "No randomized trial or major review here",
@@ -780,7 +781,7 @@ def guideline_topic(claim: str) -> bool:
     pasteurization): the ones where a wrong verdict can hurt someone."""
     claim = str(claim or "")
     return bool(_GUIDELINE_TOPIC.search(claim) or _STOPPING_TREATMENT.search(claim)
-                or evidence.protective_practice(claim))
+                or evidence.protective_practice(claim) or safety.topics(claim))
 
 
 GUIDELINE_SCHEMA = {
@@ -925,8 +926,13 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     if not guideline_topic(claim):
         return result
     view = guideline_view(claim)
-    if not view or view["verdict"] == result.get("verdict"):
+    if not view:
         return result
+    # Guidance that agrees with the stamp is strong evidence for it, and the
+    # safety gate reads this mark; guidance that disagrees changes the stamp
+    # below, and the mark follows.
+    if view["verdict"] == result.get("verdict"):
+        return {**result, "guideline": view["verdict"]}
     line = GUIDELINE_LEAD + view["says"]
     verdict = result.get("verdict") or ""
     tldr = result.get("tldr") or ""
@@ -957,7 +963,8 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     if bd:
         bd = {**bd, "says": [t for t in bd.get("says") or [] if not against(t)]}
     return {**result, "verdict": view["verdict"], "tldr": line,
-            "explanation": explanation or line, "breakdown": bd}
+            "explanation": explanation or line, "breakdown": bd,
+            "guideline": view["verdict"]}
 
 
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None,
@@ -1645,6 +1652,12 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     result, found = _extractive_stage(result, studies, claim, ex)
     result = check_faithful(result, studies, claim, outcome)
     result = follow_guidelines(result, studies, claim)
+    # The safety gate comes last, because a guideline that backs the stamp is
+    # part of what lets a confident answer on a risky topic stand.
+    result = safety.gate(result, studies, claim, query, ex.get("stance"),
+                         {f["study"]: f["direction"] for f in reversed(found)})
+    for key in ("guideline", "safety"):
+        result.pop(key, None)
     return finish(result, claim)
 
 

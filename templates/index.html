@@ -346,6 +346,10 @@
           <section class="answer">
             <p class="section-label">The short answer</p>
             <p class="tldr" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
+            {# On a topic where a wrong answer can hurt and the answer is not a
+               plain yes or no (safety.py). Worked out on the server, so a
+               shared link carries it; renderResult in app.js mirrors it. #}
+            <p class="see-doctor" id="see-doctor"{% if not (result and result.see_a_doctor) %} hidden{% endif %}>{% if result and result.see_a_doctor %}{{ result.see_a_doctor }}{% endif %}</p>
           </section>
 
           {# Always visible, never folded. Every sentence here has already

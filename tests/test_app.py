@@ -5499,7 +5499,8 @@ t("  and it is a code-written takeaway, so the faithfulness check leaves it alon
   verdict._code_takeaway(_fl["tldr"]))
 _agree = dict(_mixed_result, verdict="false", tldr="No, antibiotics don't cure colds.")
 t("  a verdict that already agrees is left exactly as it was",
-  verdict.follow_guidelines(dict(_agree), _GUIDE_STUDIES, "Antibiotics cure the common cold") == _agree)
+  verdict.follow_guidelines(dict(_agree), _GUIDE_STUDIES, "Antibiotics cure the common cold")
+  == dict(_agree, guideline="false"))
 _said.clear()
 t("  and a claim outside those topics never makes the call",
   verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Cold showers boost immunity")
@@ -6261,6 +6262,149 @@ t("  a randomized trial still carries a causal claim to true",
 t("  an observational downgrade is a code takeaway, so the faithfulness check leaves it alone",
   verdict._code_takeaway(extractive.OBSERVATIONAL_TLDR))
 
+
+# ==== ROUND5-ITEM3: safety gate for harmful-risk topics =========================
+import safety
+
+_PQ = "(pertussis vaccine OR whooping cough vaccine) AND (newborns OR infants)"
+_PCLAIM = "The whooping cough vaccine given during pregnancy protects newborns"
+
+
+def _pstudy(pmid, types, text, title="Pertussis vaccine in pregnancy and newborn outcomes"):
+    return {"pmid": pmid, "title": title, "abstract": text, "journal": "J", "year": "2020",
+            "publication_types": types, "authors": ["P"], "data_banks": None, "url": "u"}
+
+
+_PCOH = _pstudy("V1", ["Observational Study"],
+                "In this cohort of 5,000 pregnant women, pertussis vaccine in pregnancy was followed by "
+                "fewer cases of whooping cough in newborns.")
+_PRCT1 = _pstudy("V2", ["Randomized Controlled Trial"],
+                 "We randomized 600 pregnant women to pertussis vaccine or placebo. Newborns of vaccinated "
+                 "women had fewer cases of whooping cough.")
+_PRCT2 = _pstudy("V3", ["Randomized Controlled Trial"],
+                 "We randomized 800 pregnant women to pertussis vaccine or placebo. Newborns of vaccinated "
+                 "women had fewer cases of whooping cough.")
+_PRCT_NO = _pstudy("V4", ["Randomized Controlled Trial"],
+                   "We randomized 700 pregnant women to pertussis vaccine or placebo. Newborns of vaccinated "
+                   "women had the same number of cases of whooping cough.")
+
+
+def _rel(*pairs):
+    return [{"study": n, "subject": True, "outcome": True, "in_people": True, "finding": f} for n, f in pairs]
+
+
+def _safe(claim, studies, v, nums, rel, guide=None, query=_PQ, **extra):
+    verdict.guideline_view = (lambda c: guide) if guide else (lambda c: None)
+    fnd = []
+    for n in nums:
+        ab = studies[n - 1]["abstract"]
+        outc = next((o for o in ("cases of whooping cough", "deaths from breast cancer", "autism") if o in ab), "")
+        pop = next((o for o in ("pregnant women", "women", "children") if o in ab), "")
+        fnd.append(_F(n, population=pop, outcome=outc, direction="improved", size="",
+                      quote=ab.split(". ")[0].rstrip(".") + "."))
+    fg.models.script = [Resp(VJ(v, nums, relevance=rel, findings=fnd, **extra))] * 3
+    try:
+        return verdict.weigh_evidence(claim, [dict(x) for x in studies], query)
+    finally:
+        verdict.guideline_view = lambda claim: None
+
+
+t("safety: the risky topics are read from the claim and the search terms, by vocabulary and not by claim",
+  safety.topics(_PCLAIM) == ["vaccine", "pregnancy", "children"]
+  and safety.topics("Vaccines cause autism") == ["vaccine"]
+  and safety.topics("Mammograms save lives") == ["cancer"]
+  and safety.topics("Chemotherapy cures cancer") == ["cancer"]
+  and safety.topics("Stopping statins is safe") == ["medication"]
+  and safety.topics("You can halve your blood pressure pills dose") == ["medication"]
+  and safety.topics("Kids need 9 hours of sleep") == ["children"]
+  and safety.topics("Is it safe while pregnant") == ["pregnancy"]
+  and safety.topics("Coffee lowers diabetes risk") == []
+  and safety.topics("Statins lower cholesterol") == []
+  and safety.topics("it helps", "(vaccine) AND (infants)") == ["vaccine", "children"])
+_LINKED = "Pertussis vaccine in pregnancy is linked to fewer cases of whooping cough in newborns"
+_MAMC = "Regular mammograms are linked to fewer breast cancer deaths in women"
+_MAMQ = "(mammography OR mammogram) AND (breast cancer mortality)"
+_MAM = _pstudy("M1", ["Observational Study"],
+               "In this cohort of 40,000 women, those who had regular mammograms had fewer deaths from breast cancer.",
+               "Mammography screening and breast cancer mortality")
+_thin = _safe(_MAMC, [_MAM], "true", [1], _rel((1, "for")), query=_MAMQ)
+t("safety: a confident true resting on one observational study is forced to 'Not enough evidence'",
+  _thin["verdict"] == "insufficient" and _thin["tldr"] == safety.THIN_TLDR
+  and safety.THIN_NOTE in _thin["explanation"], _thin)
+_guided = _safe(_LINKED, [_PCOH], "true", [1], _rel((1, "for")),
+                guide={"verdict": "true", "says": "the whooping cough vaccine is advised in every pregnancy.", "bodies": ["CDC", "WHO"]})
+t("  but the same claim stays true when a major guideline backs it: guidance counts as strong",
+  _guided["verdict"] == "true" and "guideline" not in _guided and "safety" not in _guided, _guided)
+_two = _safe(_PCLAIM, [_PRCT1, _PRCT2], "true", [1, 2], _rel((1, "for"), (2, "for")))
+t("  and stays true on two randomized trials that agree, with no guideline at all",
+  _two["verdict"] == "true", _two)
+_one_ma = _safe(_PCLAIM, [dict(_PRCT1, publication_types=["Meta-Analysis"])], "true", [1], _rel((1, "for")))
+t("  one pooled review is enough: a meta-analysis is not 'thin'",
+  _one_ma["verdict"] == "true", _one_ma)
+_one_rct = _safe(_PCLAIM, [_PRCT1], "true", [1], _rel((1, "for")))
+t("  but one trial alone is thin on a topic like this",
+  _one_rct["verdict"] == "insufficient" and _one_rct["tldr"] == safety.THIN_TLDR, _one_rct)
+_mixed = _safe(_PCLAIM, [_PRCT1, _PRCT_NO], "true", [1, 2], _rel((1, "for"), (2, "against")))
+t("  mixed: trials that point different ways cannot support a confident true",
+  _mixed["verdict"] == "insufficient" and _mixed["tldr"] == safety.MIXED_TLDR
+  and safety.MIXED_NOTE in _mixed["explanation"], _mixed)
+_mixed_g = _safe(_PCLAIM, [_PRCT1, _PRCT_NO], "true", [1, 2], _rel((1, "for"), (2, "against")),
+                 guide={"verdict": "true", "says": "the whooping cough vaccine is advised in every pregnancy.", "bodies": ["CDC"]})
+t("  unless a guideline backs the stamp",
+  _mixed_g["verdict"] == "true", _mixed_g)
+_aut = _pstudy("A1", ["Observational Study"],
+               "In a cohort of 600,000 children, the MMR vaccine was not associated with autism.",
+               "MMR vaccine and autism in children")
+_aq = "(MMR vaccine OR vaccines) AND (autism)"
+_af = _safe("Vaccines cause autism", [_aut], "false", [1], _rel((1, "against")), query=_aq)
+_afg = _safe("Vaccines cause autism", [_aut], "false", [1], _rel((1, "against")), query=_aq,
+             guide={"verdict": "false", "says": "vaccines do not cause autism.", "bodies": ["CDC", "WHO"]})
+t("  'Vaccines cause autism' is forced to Not enough evidence on one cohort alone, and stays False with a guideline",
+  _af["verdict"] == "insufficient" and _afg["verdict"] == "false", (_af["verdict"], _afg["verdict"]))
+t("  a guideline that opposes the stamp does not rescue it: it turns the stamp instead",
+  _safe(_LINKED, [_PCOH], "true", [1], _rel((1, "for")),
+        guide={"verdict": "false", "says": "the vaccine is not advised.", "bodies": ["CDC"]})["verdict"] == "false")
+_free = _safe("Melatonin helps adults with insomnia sleep better", [_RCT], "true", [1], _rel((1, "for")),
+              query="(melatonin) AND (insomnia)")
+t("  a claim on none of these topics is never touched by the gate, however thin",
+  _free["verdict"] == "true", _free["verdict"])
+_comp = _safe(_PCLAIM, [_PCOH], "complicated", [1], _rel((1, "mixed")))
+t("  a verdict that is already complicated or insufficient is left as the evidence made it",
+  _comp["verdict"] == "complicated")
+_dir = safety.judge([_PRCT1, _PRCT2], ["V2", "V3"], {1: "unclear", 2: "unclear"}, {1: "improved", 2: "worsened"})
+t("  the checked directions of the findings can show a mix as well as the model's reading",
+  _dir == "mixed" and safety.judge([_PRCT1, _PRCT2], ["V2", "V3"], {}, {1: "improved", 2: "improved"}) == "")
+t("  reviews of observational studies that point the other way do not make trials 'mixed'",
+  safety.judge([_PRCT1, _PRCT2, dict(_PRCT_NO, publication_types=["Meta-Analysis"],
+                                     abstract="A meta-analysis of cohort studies found no link.")],
+               ["V2", "V3", "V4"], {1: "for", 2: "for", 3: "against"}) == "")
+
+# the see-a-doctor line, in the payload and on the server-rendered page
+t("safety: the see-a-doctor line shows on a risky topic when the answer is not a plain yes or no",
+  safety.see_doctor(_PCLAIM, "", "insufficient") == safety.SEE_DOCTOR
+  and safety.see_doctor(_PCLAIM, "", "complicated") == safety.SEE_DOCTOR
+  and safety.see_doctor(_PCLAIM, "", "true") is None and safety.see_doctor(_PCLAIM, "", "false") is None
+  and safety.see_doctor("Coffee lowers diabetes risk", "", "insufficient") is None
+  and "\u2014" not in safety.SEE_DOCTOR and safety.SEE_DOCTOR == "This touches a health decision: talk to a doctor before acting on it.")
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_MAM)]
+verdict.guideline_view = lambda claim: None
+fg.models.script = [Resp(_MAMQ)] + [Resp(VJ("true", [1], relevance=_rel((1, "for")), findings=[_F(1, "women", "deaths from breast cancer", "improved", "", _MAM["abstract"].split(". ")[0] + ".")]))] * 3
+_sd = P(_MAMC, ip="9.9.6.1").get_json()
+_shtml = c.get("/?q=" + _MAMC).data.decode()
+t("  the route carries it, and the shared page renders it on the server",
+  _sd["verdict"] == "insufficient" and _sd["see_a_doctor"] == safety.SEE_DOCTOR
+  and 'id="see-doctor">This touches a health decision: talk to a doctor before acting on it.<' in _shtml
+  and "Check important health decisions with a doctor." in _shtml, _sd.get("see_a_doctor"))
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_RCT)]
+fg.models.script = [Resp("(melatonin) AND (insomnia)"), Resp(VJ("insufficient", [], relevance=[], findings=[]))]
+_nd = P("Melatonin helps adults with insomnia sleep a bit better", ip="9.9.6.2").get_json()
+_nhtml = c.get("/?q=Melatonin helps adults with insomnia sleep a bit better").data.decode()
+t("  and a claim off these topics gets none, hidden in the page",
+  _nd["see_a_doctor"] is None and 'id="see-doctor" hidden>' in _nhtml)
+t("  the client renders the same field",
+  'getElementById("see-doctor")' in (ROOT / "static" / "app.js").read_text() or '$("see-doctor")' in (ROOT / "static" / "app.js").read_text())
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+verdict.guideline_view = lambda claim: None
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

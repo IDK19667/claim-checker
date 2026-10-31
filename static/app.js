@@ -429,7 +429,7 @@ function linkStudyRefs(text, count) {
 // What was read and relied on, as one sentence, then what that evidence
 // shows about the claim, highlighted the way you'd mark the line that
 // matters on a printout. The line is worded on the server
-// (evidence.evidence_line): "Strong evidence of a partial effect, not a
+// (evidence.evidence_line): "Strong evidence of a small effect, not a
 // cure", "Limited evidence ..." over small trials, "Evidence from
 // observational studies (can't show cause) ..." over cohorts. This script
 // never words it. A result saved on this device before it existed names the
@@ -710,6 +710,8 @@ function renderResult(data) {
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
   $("tldr").textContent = data.tldr || "";
+  $("see-doctor").hidden = !data.see_a_doctor;
+  $("see-doctor").textContent = data.see_a_doctor || "";
   renderSays(data);
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
@@ -809,6 +811,7 @@ function renderPending(claim) {
   if (says) says.hidden = true;
   document.querySelector(".verdict-block").dataset.verdict = "";
   $("doctor-line").hidden = true;
+  $("see-doctor").hidden = true;
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
   $("feedback").hidden = true;

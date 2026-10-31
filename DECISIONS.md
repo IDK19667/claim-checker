@@ -4,6 +4,23 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-31: Accuracy round 5, item 3: a safety gate on risky topics
+
+A confident True or False on a topic where a wrong answer can hurt (cancer
+screening or treatment, vaccines, medication changes, pregnancy, children)
+now needs strong support. `safety.py` finds the topic from the claim and
+the search terms, by vocabulary and not by claim. Thin means fewer than
+two relied-on people studies with no pooled review, or no randomized trial,
+meta-analysis or systematic review. Mixed means the relied-on studies point
+different ways. Either forces "Not enough evidence" with a fixed line, and
+any non-yes-or-no answer on these topics shows "This touches a health
+decision: talk to a doctor before acting on it." on the server page and in
+`renderResult`. A major guideline that backs the stamp counts as strong,
+so a guideline-backed pregnancy vaccine claim stays True and "Vaccines
+cause autism" stays False. The gate only forces True or False stamps; a
+complicated answer is already cautious. Adding children and medication
+changes to the guideline topics costs one extra model call on those claims.
+
 ## 2026-10-31: Accuracy round 5, item 2: wording rules live in code
 
 Strong verbs and units were the model's choice, so they drifted. Now

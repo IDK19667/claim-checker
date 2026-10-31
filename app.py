@@ -24,6 +24,7 @@ import og
 import pubmed
 import nextsteps
 import ratelimit
+import safety
 import suggest as suggest_mod
 import verdict
 
@@ -608,6 +609,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         "tldr": tldr,
         "explanation": explanation,
         "still_open": still_open or "",
+        # On a topic where a wrong answer can hurt (safety.py), a verdict
+        # that is not a plain yes or no sends the reader to a doctor. Worked
+        # out from the claim and the search, so a cached check has it too.
+        "see_a_doctor": safety.see_doctor(claim, search_query, verdict_value),
         # The deeper layer, or None. Collapsed wherever it is rendered, and
         # absent on results cached before it existed.
         "breakdown": breakdown,
