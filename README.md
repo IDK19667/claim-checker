@@ -64,8 +64,9 @@ browser (no app store). One page, no accounts, no tracking.
    search, the guideline lookup, the stamp direction read) run on
    `GEMINI_QUERY_MODEL` (default `gemini-3.5-flash-lite`; the older
    `GEMINI_MODEL` name still works for it). The verdict, its one retry and
-   the faithfulness check run on `GEMINI_VERDICT_MODEL` (default
-   `gemini-3.6-flash`, a stronger model). Set the two to the same name to run
+   the faithfulness check run on `GEMINI_VERDICT_MODEL` (default: the
+   same model as `GEMINI_QUERY_MODEL`, so everything runs on the free
+   flash-lite tier; name a stronger model to split them). Set the two to the same name to run
    everything on one. If the verdict model is rate-limited, unavailable,
    retired or slower than `VERDICT_MODEL_TIMEOUT_SEC` (default 120), that one
    call runs again on the query model and a warning on the `evident.models`

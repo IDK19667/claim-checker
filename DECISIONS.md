@@ -4,6 +4,15 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-31: Accuracy round 5, back to one free model
+
+The stronger verdict model (entry below) needs billing or a larger quota,
+and the beta runs on the free tier with no billing. Both model settings
+now default to `gemini-3.5-flash-lite`. The split stays in the code as an
+opt-in: set `GEMINI_VERDICT_MODEL` to name a stronger model. Round 5 fixes
+drift by constraining the writing (fields picked by the model, sentences
+written by code), not by a stronger model.
+
 ## 2026-10-24: Accuracy round 5, the search keeps the setting
 
 Holdout #4 had two harmful misses, both from the search losing the part of

@@ -5651,8 +5651,8 @@ t("  and no verdict is both safe and harmful for the same claim",
 # query model. Names are set here so the test cannot pass by accident.
 _real_models = (verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL)
 verdict.GEMINI_QUERY_MODEL, verdict.GEMINI_VERDICT_MODEL = "q-model", "v-model"
-t("the verdict model is a different, stronger default than the query model",
-  _real_models[0] == "gemini-3.5-flash-lite" and _real_models[1] != _real_models[0], _real_models)
+t("both models default to the free flash-lite model; a stronger verdict model is opt-in",
+  _real_models == ("gemini-3.5-flash-lite", "gemini-3.5-flash-lite"), _real_models)
 t("  and the old GEMINI_MODEL name still points at the query model, for scripts/",
   verdict.GEMINI_MODEL == _real_models[0])
 _pm_logged = []
@@ -5847,7 +5847,7 @@ _legacy = _models_with(GEMINI_MODEL="old-name")
 _named = _models_with(GEMINI_MODEL="old-name", GEMINI_QUERY_MODEL="new-query", GEMINI_VERDICT_MODEL="new-verdict")
 importlib.reload(verdict)
 t("model names: defaults in code, GEMINI_MODEL still sets the query model, the new names win",
-  _defaults == ("gemini-3.5-flash-lite", _real_models[1]) and _legacy == ("old-name", _real_models[1])
+  _defaults == ("gemini-3.5-flash-lite", "gemini-3.5-flash-lite") and _legacy == ("old-name", "old-name")
   and _named == ("new-query", "new-verdict"), (_defaults, _legacy, _named))
 # Reloading ran the module's top level again: put the fake client and the stubs back.
 verdict._gemini_client = fg

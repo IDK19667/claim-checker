@@ -48,7 +48,9 @@ ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 # working. See DECISIONS.md, "Accuracy round 5".
 GEMINI_QUERY_MODEL = (os.environ.get("GEMINI_QUERY_MODEL")
                       or os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite")
-GEMINI_VERDICT_MODEL = os.environ.get("GEMINI_VERDICT_MODEL") or "gemini-3.6-flash"
+# Both default to the free flash-lite model: a stronger verdict model is
+# opt-in (round 5 runs on the free tier, no billing).
+GEMINI_VERDICT_MODEL = os.environ.get("GEMINI_VERDICT_MODEL") or GEMINI_QUERY_MODEL
 GEMINI_MODEL = GEMINI_QUERY_MODEL  # the old name, kept for scripts/ that import it
 
 _anthropic_client = None
