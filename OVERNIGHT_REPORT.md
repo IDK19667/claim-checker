@@ -1,3 +1,9 @@
+# Round 5 summary (2026-11-01): FAIL, not merged
+
+Holdout #5 on 5f89983: right 18/20 (bar 16, met), clean 6/20 (bar 13, missed), harmful 1 (bar 0, missed: vertebroplasty stamped true; the search found no sham-controlled trials). Safety 17/17 and regression 0 wrong passed first. Only the Beta label, the see-a-doctor line and the privacy line went to main (7189013). Full grading: .claude/holdouts/holdout5/grading.md.
+
+Why the pages are not clean: the evidence line ("Strong evidence for/against") is still computed from study design and ignores what the cited abstracts concluded (1, 6, 9, 12, 13), and two templates read badly ("Study 1 is a study", "IQ scores was linked to worsening"). The sentences themselves no longer invent figures.
+
 # Night 3, finished 2026-10-24: morning summary
 
 **1. Result: holdout #4 FAIL. Nothing merged. Nothing new to deploy.**
