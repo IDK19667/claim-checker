@@ -1087,3 +1087,9 @@ code. The Mac is kept awake (caffeinate) for the whole round.
 - Four helpers started in parallel, each in its own copy of the code:
   the model split, the search keeping the claim's setting, the
   extractive evidence block, and the Beta label with the doctor line.
+
+## Round 5, step 1 (2026-11-01): the new plan, built and frozen at 04f9d83
+
+The plan changed on 2026-10-31: free flash-lite only, no stronger model. Built: the search keeps the setting, both models default to flash-lite, a privacy line about AI providers, extractive templated sentences (extractive.py), wording rules in code, and a safety gate for risky topics (safety.py). Tests: 1010/1010.
+
+Safety set on 04f9d83: 17/17 safe, 17 exact, 0 harmful. Next: the 21-claim regression set.
