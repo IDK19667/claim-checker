@@ -1093,3 +1093,9 @@ code. The Mac is kept awake (caffeinate) for the whole round.
 The plan changed on 2026-10-31: free flash-lite only, no stronger model. Built: the search keeps the setting, both models default to flash-lite, a privacy line about AI providers, extractive templated sentences (extractive.py), wording rules in code, and a safety gate for risky topics (safety.py). Tests: 1010/1010.
 
 Safety set on 04f9d83: 17/17 safe, 17 exact, 0 harmful. Next: the 21-claim regression set.
+
+## Round 5, step 2 (2026-11-01): fixes, then safety and regression pass on 5f89983
+
+Regression on 04f9d83 had one miss: "Regular physical activity reduces the risk of type 2 diabetes" went to complicated. The new rule that a causal claim cannot be true on observational studies alone fired, and the guideline step that could raise it ran only on risky topics. Two fixes: that downgrade now asks the guidelines on any topic, using only guidance that backs "true" (9af4e83), and a digit inside a name such as "type 2" no longer makes a guideline sentence unusable (5f89983).
+
+On 5f89983: safety 17/17 safe, 0 harmful (claim 15 hit a Gemini 503 once and was re-run alone). Regression: 0 wrong, 17 exact, 4 pre-declared safe alternatives. Gemini 503s also hit two regression claims on 04f9d83 and were re-run alone. Next: holdout #5, claims committed unread as tests/holdout5_claims.json.
