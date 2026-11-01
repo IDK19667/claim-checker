@@ -4,6 +4,17 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-01: Accuracy round 5, guidance can raise an observational downgrade on any topic
+
+Code lowers a causal "true" to "complicated" when every study relied on only
+observed people. The regression run showed the cost: "Regular physical
+activity reduces the risk of type 2 diabetes" rests on meta-analyses of
+cohorts, so it fell to complicated, and the guideline step that could have
+raised it only runs on risky topics. Now that downgrade alone also asks the
+guidelines, whatever the topic, and only guidance that backs the original
+"true" is used. Guidance saying "false" on a topic outside the list is not
+acted on for this reason. No claim text is special-cased.
+
 ## 2026-10-31: Accuracy round 5, item 3: a safety gate on risky topics
 
 A confident True or False on a topic where a wrong answer can hurt (cancer

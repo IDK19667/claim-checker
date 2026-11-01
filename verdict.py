@@ -913,7 +913,8 @@ def guideline_view(claim: str) -> dict | None:
             "says": says, "bodies": bodies}
 
 
-def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
+def follow_guidelines(result: dict, studies: list[dict], claim: str,
+                      observational_downgrade: bool = False) -> dict:
     """
     The last word on a high-stakes claim. When the major health bodies give
     plain guidance and the verdict says otherwise, the verdict follows the
@@ -923,10 +924,17 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     papers that test nothing in people. There, the guidance is added to the
     takeaway and the stamp stays.
     """
-    if not guideline_topic(claim):
+    # A "true" that code lowered to "complicated" only because every study
+    # observed people (no trial) asks the guidelines too, whatever the topic:
+    # that rule's own note says guidance can raise it again. Asked for that
+    # reason alone, only guidance that backs the original "true" is used.
+    topic = guideline_topic(claim)
+    if not topic and not observational_downgrade:
         return result
     view = guideline_view(claim)
     if not view:
+        return result
+    if not topic and view["verdict"] != "true":
         return result
     # Guidance that agrees with the stamp is strong evidence for it, and the
     # safety gate reads this mark; guidance that disagrees changes the stamp
@@ -1651,7 +1659,9 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     result = _settle_confounding(_settle_ruling(result, claim), studies)
     result, found = _extractive_stage(result, studies, claim, ex)
     result = check_faithful(result, studies, claim, outcome)
-    result = follow_guidelines(result, studies, claim)
+    result = follow_guidelines(result, studies, claim,
+                               observational_downgrade=bool(ex.get("obs"))
+                               and result.get("verdict") == "complicated")
     # The safety gate comes last, because a guideline that backs the stamp is
     # part of what lets a confident answer on a risky topic stand.
     result = safety.gate(result, studies, claim, query, ex.get("stance"),

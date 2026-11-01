@@ -5505,6 +5505,19 @@ _said.clear()
 t("  and a claim outside those topics never makes the call",
   verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Cold showers boost immunity")
   == _mixed_result and not _said)
+_obs_result = dict(_mixed_result, tldr="The studies found a link.", explanation="A link (Study 1).",
+                   breakdown={"says": ["A link (Study 1)."]})
+verdict.guideline_view = _guide("true", "regular physical activity lowers the risk of type 2 diabetes.")
+_said.clear()
+_raised = verdict.follow_guidelines(dict(_obs_result), _GUIDE_STUDIES, "Walking lowers blood sugar",
+                                    observational_downgrade=True)
+t("  outside those topics, a true lowered only for observational studies asks the guidelines, and backing guidance raises it",
+  _said == ["Walking lowers blood sugar"] and _raised["verdict"] == "true"
+  and _raised["tldr"].startswith(verdict.GUIDELINE_LEAD), _raised)
+verdict.guideline_view = _guide("false", "it does not.")
+t("  but asked for that reason alone, guidance that says false is not used",
+  verdict.follow_guidelines(dict(_obs_result), _GUIDE_STUDIES, "Walking lowers blood sugar",
+                            observational_downgrade=True) == _obs_result)
 verdict.guideline_view = _guide("true", "antibiotics do not cure colds.")
 t("  a guideline sentence that argues with its own position is not used",
   verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Antibiotics cure the common cold")
