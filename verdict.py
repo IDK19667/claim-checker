@@ -873,6 +873,16 @@ def without_attribution(says: str) -> str:
         says = cut
 
 
+# A digit that is part of a name ("type 2 diabetes", "COVID-19", "H1N1") is
+# not a figure; any other digit is.
+_NAME_WITH_DIGIT = re.compile(r"\btype\s+[12]\b|\b(?=[\w-]*[A-Za-z])(?=[\w-]*\d)[\w]+(?:-[\w]+)*\b",
+                              re.IGNORECASE)
+
+
+def _has_figure(text: str) -> bool:
+    return bool(re.search(r"\d", _NAME_WITH_DIGIT.sub("", text)))
+
+
 def guideline_view(claim: str) -> dict | None:
     """
     {"verdict": "true"|"false", "says": str, "bodies": [...]} when the major
@@ -898,7 +908,7 @@ def guideline_view(claim: str) -> dict | None:
     says = without_attribution(says)
     # Nothing here was read from an abstract, so it may print no figure:
     # there would be nothing on the page to check it against.
-    if (not bodies or not says or re.search(r"\d", says) or len(says) > room
+    if (not bodies or not says or _has_figure(says) or len(says) > room
             or _NAMED_DOCUMENT.search(says)):
         _guide_log.warning("the guideline answer could not be used as it was: %r", read)
         return None

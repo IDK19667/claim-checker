@@ -15,6 +15,11 @@ guidelines, whatever the topic, and only guidance that backs the original
 "true" is used. Guidance saying "false" on a topic outside the list is not
 acted on for this reason. No claim text is special-cased.
 
+The second run showed the guidance was asked and agreed, then thrown away:
+the clean-up step writes "type two" as "type 2", and a guideline sentence
+may print no figure. A digit inside a name ("type 2 diabetes", "COVID-19",
+"H1N1") is now not a figure; any other digit still is.
+
 ## 2026-10-31: Accuracy round 5, item 3: a safety gate on risky topics
 
 A confident True or False on a topic where a wrong answer can hurt (cancer

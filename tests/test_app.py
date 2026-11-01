@@ -5522,6 +5522,9 @@ verdict.guideline_view = _guide("true", "antibiotics do not cure colds.")
 t("  a guideline sentence that argues with its own position is not used",
   verdict.follow_guidelines(dict(_mixed_result), _GUIDE_STUDIES, "Antibiotics cure the common cold")
   == _mixed_result)
+t("guideline sentences: a digit in a name (type 2, COVID-19, H1N1) is not a figure, any other digit is",
+  not any(verdict._has_figure(x) for x in ("helps prevent type 2 diabetes.", "COVID-19 vaccines are safe.", "H1N1 shots work."))
+  and all(verdict._has_figure(x) for x in ("cuts risk by 30 percent.", "2 doses are needed.", "type 2 diabetes risk falls 50%.")))
 _guide_log_lines = []
 class _Catch(logging.Handler):
     def emit(self, record):
