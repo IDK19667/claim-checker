@@ -3763,5 +3763,39 @@ t("safety set: 15 claims, numbered in order, every verdict a real one",
 t("  and no verdict is both safe and harmful for the same claim",
   all(not ({x["expected"], *x.get("also_ok", [])} & set(x["harmful"])) for x in _SAFE))
 
+# Guidance that tells people to keep a treatment going answers a claim to stop or
+# replace it with a no, however much its words overlap the claim.
+_STATIN = "People who have had a heart attack can safely stop taking statins"
+_STATIN_SAYS = ("people who have had a heart attack should keep taking statins "
+                "to prevent another one.")
+_INSULIN = "People with type 1 diabetes can replace insulin with diet"
+_INSULIN_SAYS = "people with type 1 diabetes need insulin every day and cannot replace it with diet."
+t("keep-the-treatment guidance: 'should keep taking statins' is a no to a claim to stop them, not a conflict",
+  breakdown.stance("Major health guidelines say: " + _STATIN_SAYS, _STATIN) == "no"
+  and breakdown.stamp_conflict("false", "Major health guidelines say: " + _STATIN_SAYS, "", _STATIN) is None)
+t("  and 'need insulin ... cannot replace it with diet' is a no to replacing insulin",
+  breakdown.stance("Major health guidelines say: " + _INSULIN_SAYS, _INSULIN) == "no"
+  and breakdown.stamp_conflict("false", "Major health guidelines say: " + _INSULIN_SAYS, "", _INSULIN) is None)
+t("  and 'should not stop', 'do not stop' and 'never stop' all read as no",
+  all(breakdown.stance(f"Guidelines say people {w} statins.", _STATIN) == "no"
+      for w in ("should not stop", "do not stop", "don't stop", "must not stop", "never stop")))
+t("  but guidance that really says 'safe to stop' is still a yes, so the conflict guard still drops it",
+  breakdown.stance("Major health guidelines say: it is safe to stop statins after a heart attack.", _STATIN) == "yes"
+  and breakdown.stamp_conflict("false", "Major health guidelines say: it is safe to stop statins "
+                               "after a heart attack.", "", _STATIN))
+t("  and a claim that is not about stopping a treatment is read as before",
+  not breakdown._keeps_treatment("Major health guidelines say: people should keep taking statins.",
+                                 "Statins lower cholesterol"))
+_stop_fg = verdict.guideline_view
+verdict.guideline_view = lambda claim: {"verdict": "false", "bodies": ["WHO"],
+                                        "says": _STATIN_SAYS}
+_stop_res = verdict.follow_guidelines(
+    {"verdict": "insufficient", "tldr": "Not enough evidence.", "explanation": "", "still_open": "",
+     "cited_studies": [], "breakdown": None}, [], _STATIN)
+verdict.guideline_view = _stop_fg
+t("  and end to end: the statins guidance turns an insufficient stamp into false",
+  _stop_res["verdict"] == "false"
+  and "keep taking statins" in _stop_res["tldr"], _stop_res)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

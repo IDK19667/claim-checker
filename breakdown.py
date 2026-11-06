@@ -871,12 +871,39 @@ def denies_absolute(text: str, claim: str) -> bool:
     return bool(_ABSOLUTE_DENIED.search(first))
 
 
+# A sentence that tells people to keep a treatment going: "should keep taking",
+# "continue", "stay on", "need insulin", "must not stop", "cannot replace it".
+# Its words overlap a claim to stop or replace that treatment, but it answers
+# that claim with a no. "safe to stop" and "no need to" are not in it.
+_KEEPS_TREATMENT = re.compile(
+    r"\b(?:keep(?:\s+on)?\s+(?:taking|using|up|it|them)|continu\w*|stay(?:ing)?\s+on|"
+    r"remain(?:ing)?\s+on|should\s+(?:take|use))\b|"
+    r"(?<!not )(?<!n't )(?<!no )(?<!longer )\bneeds?\b|"
+    r"\b(?:(?:should|must|do|does|can|could|will)\s*(?:not|n't|never)|don't|never|cannot|can't|"
+    r"shouldn't|mustn't)\s+(?:safely\s+)?(?:stop|quit|skip|replace|come\s+off|go\s+off|give\s+up|"
+    r"ditch|swap|substitute)\b|"
+    r"\bnot\s+(?:safe|advisable|recommended|wise)\s+to\s+(?:stop|quit|skip|replace|come\s+off|"
+    r"go\s+off|give\s+up|ditch|swap)\b", re.IGNORECASE)
+
+
+def _keeps_treatment(text: str, claim: str) -> bool:
+    """True when `claim` says to stop, skip or replace a treatment or medicine
+    and the first sentence of `text` says to keep it up."""
+    import verdict  # late: verdict imports this module
+    if verdict.forgoes_treatment(claim) != "forgo":
+        return False
+    first = (sentences(text or "") or [""])[0]
+    return bool(_KEEPS_TREATMENT.search(first))
+
+
 def stance(text: str, claim: str) -> str:
     """
     What a takeaway commits to about the claim: "yes", "no", "untested" or
     "mixed". Only the first sentence is read: the takeaway is one sentence,
     and an explanation's first sentence is where it states its answer.
     """
+    if _keeps_treatment(text, claim):
+        return "no"
     said = _plain_stance(text, claim)
     if said in ("yes", "no") and claim_denies(claim):
         return "no" if said == "yes" else "yes"
