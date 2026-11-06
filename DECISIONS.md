@@ -4,6 +4,33 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-05: Guidance that plainly rejects a forgo-treatment claim is not "Not enough evidence"
+
+**"People who have had a heart attack can safely stop taking statins" was
+stamped "Not enough evidence"**, with a line saying nothing tests it. A reader
+can take that as "maybe it's fine to stop". The guideline check had already
+rejected the claim, but `follow_guidelines` only appended its line to an
+"insufficient" stamp that cited nothing or cited papers that test nothing in
+people.
+
+* **A narrow exception to "a verdict with no citations is forced to
+  insufficient".** When the claim is to stop, skip, replace or go without an
+  established treatment or named medicine, or says a named medicine cures or
+  treats something (`verdict.forgoes_treatment`, wording only, never one
+  claim's text), and the guideline view is "false", an "insufficient" or
+  "complicated" stamp becomes "false". The takeaway is the guideline line plus
+  one doctor sentence ("Stopping a prescribed medicine without a doctor's advice
+  can be risky." or, for a cure claim, "Check treatment decisions with a
+  doctor."). `still_open` stays non-empty and is reset to "Whether any study has
+  tested this claim directly." if it would argue with a False.
+* **Applies even with nothing cited.** The stamp rests on the guidance, not on a
+  study, and the takeaway says so.
+* **Nothing else changes.** A "supports" view, a mixed or missing view, and any
+  claim outside the predicate behave as before (an ordinary "insufficient" keeps
+  its stamp and gets the guidance line added).
+* `follow_guidelines` is the last step on both the normal path and the
+  no-studies path, so nothing downstream rewrites the stamp.
+
 ## 2026-10-31: Phones get the stills, and desktop waits for the first input
 
 **The home page was fetching 555 frames and bundles before anyone had touched

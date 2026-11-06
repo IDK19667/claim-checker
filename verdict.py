@@ -614,6 +614,29 @@ _STOPPING_TREATMENT = re.compile(
     r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
     r"giv(?:e|ing) up|ditch\w*)\b.{0,40}\b(?:treatments?|therap(?:y|ies)|doses?)\b",
     re.IGNORECASE)
+# The medicine group of _GUIDELINE_TOPIC, by name, plus inhalers.
+_MEDICINE = (r"(?:medicines?|medications?|drugs?|pills?|antibiotics?|antivirals?|statins?|insulin|"
+             r"chemo\w*|radiotherapy|aspirin|ibuprofen|paracetamol|acetaminophen|antidepressants?|"
+             r"metformin|ivermectin|hydroxychloroquine|steroids?|opioids?|painkillers?|inhalers?)")
+_FORGO_MEDICINE = re.compile(
+    r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
+    r"go(?:ing)? without|giv(?:e|ing) up|ditch\w*|(?:do(?:es)?n[\u2019']?t|do(?:es)? not|no longer) need)\b"
+    r".{0,40}\b" + _MEDICINE + r"\b", re.IGNORECASE)
+_MEDICINE_CURES = re.compile(
+    r"\b" + _MEDICINE + r"\b.{0,40}\b(?:cur(?:e|es|ed|ing)|treat(?:s|ed|ing)?|heal(?:s|ed|ing)?)\b",
+    re.IGNORECASE)
+FORGO_DOCTOR = "Stopping a prescribed medicine without a doctor's advice can be risky."
+CURE_DOCTOR = "Check treatment decisions with a doctor."
+
+
+def forgoes_treatment(claim: str) -> str:
+    """"forgo" for a claim to stop, skip or replace an established treatment
+    or medicine, "cure" for one saying a named medicine cures or treats
+    something, else "". Wording only, never one claim's text."""
+    claim = str(claim or "")
+    if _STOPPING_TREATMENT.search(claim) or _FORGO_MEDICINE.search(claim):
+        return "forgo"
+    return "cure" if _MEDICINE_CURES.search(claim) else ""
 
 
 def guideline_topic(claim: str) -> bool:
@@ -749,6 +772,25 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
         _guide_log.warning("a guideline answer argued with itself, so it was not used: %r (%s)",
                            line, view["verdict"])
         return result
+    kind = forgoes_treatment(claim)
+    if kind and view["verdict"] == "false" and verdict in ("insufficient", "complicated"):
+        # The one exception to "no citations, no rating": guidance that plainly
+        # rejects stopping a treatment, or a medicine curing something, must
+        # not read as "maybe it's fine". Applies even with nothing cited.
+        _guide_log.warning("health guidance (%s) rejects a forgo-treatment claim, so the %r "
+                           "becomes false: %r", ", ".join(view["bodies"]), verdict, line)
+        against = lambda t: breakdown.stamp_conflict("false", "", t, claim)
+        explanation = " ".join(t for t in breakdown.sentences(result.get("explanation") or "")
+                               if not against(t)).strip()
+        bd = result.get("breakdown")
+        if bd:
+            bd = {**bd, "says": [t for t in bd.get("says") or [] if not against(t)]}
+        still = str(result.get("still_open") or "").strip()
+        if not still or against(still):
+            still = "Whether any study has tested this claim directly."
+        doctor = FORGO_DOCTOR if kind == "forgo" else CURE_DOCTOR
+        return {**result, "verdict": "false", "tldr": f"{line} {doctor}",
+                "explanation": explanation or line, "still_open": still, "breakdown": bd}
     cited = list(result.get("cited_studies") or ())
     reasons = {s["pmid"]: s["background"] for s in studies if s.get("background")}
     if not cited or (verdict == "insufficient"

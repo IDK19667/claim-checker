@@ -3561,7 +3561,7 @@ _fl = verdict.follow_guidelines(dict(_mixed_result), [dict(s) for s in _GUIDE_ST
                                 "Antibiotics cure the common cold")
 t("guideline check: a verdict that conflicts with plain guidance follows it, and the takeaway says so",
   _fl["verdict"] == "false" and _fl["tldr"] == "Major health guidelines say: antibiotics do not work on "
-  "colds, which are caused by viruses." and _fl["cited_studies"] == ["G1", "G2"]
+  "colds, which are caused by viruses. Check treatment decisions with a doctor." and _fl["cited_studies"] == ["G1", "G2"]
   and _fl["still_open"] == _mixed_result["still_open"], _fl)
 t("  and a research line or explanation sentence that rules against the new stamp goes",
   "did not shorten colds" in _fl["explanation"] and "supports the claim" not in _fl["explanation"]
@@ -3618,6 +3618,66 @@ t("guideline check: through a real check, the page and the cache both carry the 
 t("  with no dash anywhere in what the reader sees",
   not re.search("[–—]", json.dumps(_sun, ensure_ascii=False)))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+verdict.guideline_view = lambda claim: None
+
+# ---- Guidance that rejects a forgo-treatment or medicine-cures claim is a False ----
+_FG_SAYS = "this is not safe, and the medicine is still advised."
+_FG_LINE = "Major health guidelines say: " + _FG_SAYS
+_FG_DOC = "Stopping a prescribed medicine without a doctor's advice can be risky."
+_FG_CURE_DOC = "Check treatment decisions with a doctor."
+_FG_CASES = [("People who have had a heart attack can safely stop taking statins", _FG_DOC),
+             ("People with type 1 diabetes can replace insulin with a strict diet", _FG_DOC),
+             ("Antibiotics cure the common cold", _FG_CURE_DOC)]
+_fg_insuff = {"verdict": "insufficient", "tldr": "Nothing here tests this claim.",
+              "explanation": "No study tests it.", "still_open": "Whether anyone has tested it.",
+              "cited_studies": [], "breakdown": None}
+verdict.guideline_view = _guide("false", _FG_SAYS)
+for _claim, _doc in _FG_CASES:
+    for _label, _res, _studs in (("no study cited", dict(_fg_insuff), []),
+                                 ("an insufficient result citing lab papers",
+                                  dict(_fg_insuff, cited_studies=["L1"]), [dict(s) for s in _LAB])):
+        _o = verdict.follow_guidelines(_res, _studs, _claim)
+        t(f"forgo guard: {_claim!r} with {_label} ends false, with the guidance and the doctor sentence",
+          _o["verdict"] == "false" and _o["tldr"] == f"{_FG_LINE} {_doc}" and _o["still_open"].strip(), _o)
+_o = verdict.follow_guidelines(dict(_fg_insuff, still_open=""), [],
+                               "People can safely stop taking statins")
+t("  and an empty still_open is filled, never left empty",
+  _o["still_open"] == "Whether any study has tested this claim directly.", _o)
+_o = verdict.follow_guidelines(dict(_fg_insuff, verdict="complicated"), [], FG := "Antibiotics cure the common cold")
+t("  a 'complicated' stamp on a cure claim the guidance rejects also becomes false", _o["verdict"] == "false", _o)
+_ord = verdict.follow_guidelines(dict(_fg_insuff), [], "Colloidal silver cures infections")
+t("  control: an ordinary claim with insufficient and a rejecting view keeps insufficient, guidance appended",
+  verdict.forgoes_treatment("Colloidal silver cures infections") == ""
+  and _ord["verdict"] == "insufficient" and _ord["tldr"].endswith(_FG_LINE), _ord)
+_ord2 = verdict.follow_guidelines(dict(_fg_insuff), [], "Cold showers boost immunity to infections")
+t("  control: another ordinary claim, same", _ord2["verdict"] == "insufficient" and _ord2["tldr"].endswith(_FG_LINE), _ord2)
+for _name, _gv in (("mixed", lambda claim: None),
+                   ("supports", lambda claim: {"verdict": "true", "says": "this is advised.", "bodies": ["CDC"]})):
+    verdict.guideline_view = _gv
+    _o = verdict.follow_guidelines(dict(_fg_insuff), [], "People can safely stop taking statins")
+    t(f"  control: a {_name} view changes nothing for a statins claim"
+      if _name == "mixed" else "  control: a supports view leaves an insufficient forgo claim alone",
+      _o["verdict"] == "insufficient" and _o["tldr"].startswith(_fg_insuff["tldr"])
+      and (_name == "supports" or _o["tldr"] == _fg_insuff["tldr"]), _o)
+t("  the predicate catches the plain wordings and not unrelated claims",
+  all(verdict.forgoes_treatment(x) for x in ("You can skip chemotherapy", "Use honey instead of antibiotics",
+                                             "Asthma patients don't need their inhaler", "Quit taking metformin"))
+  and not verdict.forgoes_treatment("Vitamin D prevents infections"))
+# Through the normal path: no-studies route and the API.
+verdict.guideline_view = _guide("false", _FG_SAYS)
+_nf = verdict.weigh_evidence("People who have had a heart attack can safely stop taking statins", [], "")
+t("  with PubMed finding nothing, the stamp is false, not forced back to insufficient",
+  _nf["verdict"] == "false" and _nf["tldr"] == f"{_FG_LINE} {_FG_DOC}" and _nf["still_open"], _nf)
+fg.models.script = [Resp("statins AND heart attack"),
+                    Resp(VJ("insufficient", [], tldr="Nothing here tests whether heart attack patients can "
+                                                      "safely stop taking statins.",
+                            explanation="No study here tests stopping statins."))]
+_st = P("People who have had a heart attack can safely stop taking statins", ip="7.7.7.41").get_json()
+_st_cached = db.get_cached_verdict("People who have had a heart attack can safely stop taking statins", 24)
+t("  through /api/check the stamp is false, with the guidance and doctor sentence, and it is cached so",
+  _st.get("verdict") == "false" and _st.get("tldr") == f"{_FG_LINE} {_FG_DOC}" and _st.get("still_open")
+  and _st_cached and _st_cached["verdict"] == "false", _st)
+t("  with no dash anywhere in what the reader sees", not re.search("[\u2013\u2014]", json.dumps(_st, ensure_ascii=False)))
 verdict.guideline_view = lambda claim: None
 
 # ---- A Beta label beside the wordmark, and one line under every verdict --------
