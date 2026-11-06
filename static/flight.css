@@ -505,15 +505,16 @@
 }
 
 /* ---- the still version's live gates ------------------------------------- */
-/* Reduced motion, and a phone held on its side (a stage too short for the
-   panels over it), get the stills from the stylesheet itself, before any
+/* Reduced motion, any phone (narrow, or a small touch screen: it gets the
+   stills and no frame at all), and a phone held on its side (a stage too
+   short for the panels over it), get the stills from the stylesheet itself, before any
    script has run and the moment a setting changes. These two queries are
    GATES in flight.js, character for character, so the script stops the
    footage at the same moment this starts the stills; .no-flight above stays
    for the cases only the script can know (Save-Data, no canvas, footage that
    would not load). Last in the file so it outranks the phone-width rules. */
 
-@media (orientation: landscape) and (pointer: coarse) and (max-height: 560px), (prefers-reduced-motion: reduce) {
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 560px), (prefers-reduced-motion: reduce), (max-width: 700px) {
   .flight { height: auto; background: var(--paper); }
   .flight-stage {
     position: static;
@@ -526,4 +527,29 @@
   .chapter-zone { display: none; }
   .stills { display: block; }
   .flight-overlay { display: none; }
+}
+
+/* ---- phones: the stills as a swipeable strip ------------------------------
+   A phone never loads the footage (DECISIONS.md, page weight), so what it
+   sees first is these. Five stills stacked would put the headline and the
+   claim field 2000px down; as a strip one picture and the edge of the next
+   sit above the checker, which is on the first screen. The standing line
+   stays outside the strip, always on screen. */
+
+@media (max-width: 700px) {
+  .after { padding: 8px 0 4px; }
+  .stills figcaption { font-size: 19px; margin-top: 10px; padding-top: 10px; }
+  .still-row {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 0 20px 4px;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 20px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .still-row::-webkit-scrollbar { display: none; }
+  .still-row figure { flex: 0 0 68%; margin: 0; scroll-snap-align: start; }
+  .stills .flight-note { padding: 12px 20px 0; }
 }

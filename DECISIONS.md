@@ -4,6 +4,52 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-10-31: Phones get the stills, and desktop waits for the first input
+
+**The home page was fetching 555 frames and bundles before anyone had touched
+it.** A reader arriving from Instagram on mobile data paid for 23MB of footage
+(10MB on a narrow window) they had not asked to scrub, ahead of the one thing
+they came for. Target: under 3MB on first load at every width, well under on
+phones.
+
+* **Phones and slow connections get the stills and no footage request at
+  all.** A viewport up to 700px wide (a third live gate in `GATES`, the same
+  query in `flight.css`, so the stylesheet shows the stills before any script
+  runs and there is no blank hero), Save-Data, an `effectiveType` of slow-2g,
+  2g or 3g, or a `downlink` under 1.5Mbps. `start()` is never called: not a
+  frame, not a bundle, not the frame manifest. The old "motion tier only on 3g"
+  path is gone; if the connection is too slow for 23MB it is too slow for 6MB.
+* **The stills on a phone are a swipeable strip,** not five pictures stacked.
+  Stacked, the headline and the claim box sat 2000px down; as a strip, one
+  picture and the edge of the next sit above the headline, and the claim box
+  is at the fold. The standing line ("Not medical advice") sits outside the
+  strip. Desktop with reduced motion keeps the stacked stills.
+* **Desktop fetches no frame until the first scroll, wheel, touch, pointer
+  press or key.** Before that: the poster (17KB, preloaded) and the two small
+  JSON manifests. After that it loads exactly as before (lores, motion, hi-res,
+  same freeze guarantees). The lores window now runs from the start of loading
+  rather than from page load, or it would already be closed. A page restored
+  part-way down counts as having had input.
+* **The poster preload carries the same media query as the stills,** so a
+  phone does not fetch a poster it will not paint. The service worker still
+  never touches `/footage/`; the shell holds no frame, bundle or manifest.
+* Tablets (701px and up) get the desktop path, now lazy.
+
+Measured with `scripts/page_weight.mjs` (cold load of `/`, 10s untouched, every
+request including workers and the service worker; load event at Fast 3G,
+1.6Mbps, 150ms RTT):
+
+| viewport | before: requests / MB / load | after: requests / MB / load |
+|---|---|---|
+| 375x812 touch phone | 19 / 0.70 / 1.9s (waited for first scroll) | 15 / 0.73 / 2.1s, 0 footage requests |
+| 375x812 plain window | 573 / 10.6 / 1.9s | 15 / 0.73 / 2.1s, 0 footage requests |
+| 1440x900 | 573 / 23.6 / 1.9s | 19 / 0.71 / 1.9s |
+
+The load event never waited on frames, so Fast 3G load time does not move; what
+moved is the bytes and the contention behind it. After the first input a
+desktop makes about 550 requests, as before. The phone's 0.7MB is the shell,
+fonts, five small stills and the band's clips lower on the page.
+
 ## 2026-10-24: Beta launch, a Beta label and a line to see a doctor
 
 The reader asked for both while accuracy is still being proven: a small "Beta" label beside the wordmark on every screen, and one fixed line under every verdict, "Check important health decisions with a doctor.", which also travels with the shared text, the shared image and the link preview card. The label is a hairline tag in the mono with no fill and nothing to press, and the line is set in the night's quiet ink at the size of the note under the claim, so neither adds a colour, a face or a motion.

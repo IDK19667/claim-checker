@@ -129,8 +129,14 @@
 
   var conn = navigator.connection || {};
   var saveData = !!conn.saveData;
-  if (saveData || !canvas) {
-    giveUp(saveData ? "save-data" : "no-canvas");
+  // Slow connections get the stills, never the frames: a reader on 2g, 3g or
+  // under about 1.5Mbps would wait minutes for footage they cannot use. The
+  // stills are five small images in normal page flow. Not even the manifest
+  // is asked for.
+  var slowNetwork = /^(slow-2g|2g|3g)$/.test(conn.effectiveType || "") ||
+    (typeof conn.downlink === "number" && conn.downlink > 0 && conn.downlink < 1.5);
+  if (saveData || slowNetwork || !canvas) {
+    giveUp(saveData ? "save-data" : slowNetwork ? "slow-network" : "no-canvas");
     return;
   }
 
@@ -142,11 +148,15 @@
   // the same moment. Listened to rather than read once: reduced motion
   // switched on mid-visit drops to the stills, switched off brings the footage
   // back, and a phone turned upright gets it too.
+  // The third is every phone: a narrow viewport, or a touch screen of phone or
+  // small-tablet size. Phones get the stills and request no frame, bundle or
+  // frame manifest at all (DECISIONS.md, page weight).
   var GATES = [
     "(prefers-reduced-motion: reduce)",
-    "(orientation: landscape) and (pointer: coarse) and (max-height: 560px)"
+    "(orientation: landscape) and (pointer: coarse) and (max-height: 560px)",
+    "(max-width: 700px)"
   ];
-  var GATE_NAMES = ["reduced-motion", "landscape-phone"];
+  var GATE_NAMES = ["reduced-motion", "landscape-phone", "phone"];
   // Kept referenced: older browsers have dropped listeners on lists that were not.
   var gateLists = GATES.map(function (q) { return window.matchMedia(q); });
   var armed = false;        // the footage is the version on screen
@@ -157,11 +167,6 @@
   var onArm = [];
   function whenArmed(fn) { if (armed) fn(); else onArm.push(fn); }
 
-  // A connection that reports 2g or 3g gets the motion tier and nothing else:
-  // 6MB instead of 23MB, still sharp enough to read at any scroll speed, and
-  // the hi-res tier that a stopped reader would otherwise get is simply not
-  // worth 17MB on a connection like that.
-  var slowNetwork = /^(slow-2g|2g|3g)$/.test(conn.effectiveType || "");
   // Set once the manifest is in: a touch phone whose full set is over budget.
   var phoneBudget = false;
 
@@ -175,6 +180,9 @@
   var manifest = null;
   var beats = null;
   var startedAt = performance.now();
+  // When the footage began loading. The lores window is measured from here,
+  // not from page load, because nothing loads until the reader's first input.
+  var loresFrom = Infinity;
   var pad4 = function (i) {
     var n = String(i);
     while (n.length < 4) n = "0" + n;
@@ -649,7 +657,7 @@
   // few frames off but moving beats a correct frame that is frozen.
   function resolveFrame(target, widen) {
     var now = performance.now();
-    var loresAllowed = !loresRetired && now - startedAt < LORES_WINDOW_MS;
+    var loresAllowed = !loresRetired && now - loresFrom < LORES_WINDOW_MS;
     var first = fastMode ? motionStore : hiresStore;
     var second = fastMode ? hiresStore : motionStore;
 
@@ -741,7 +749,7 @@
     if (!stats.seen[f0.index]) { stats.seen[f0.index] = 1; stats.distinct++; }
     if (f0.tier === "lores") {
       stats.loresDraws++;
-      if (performance.now() - startedAt >= LORES_WINDOW_MS) stats.loresAfterWindow++;
+      if (performance.now() - loresFrom >= LORES_WINDOW_MS) stats.loresAfterWindow++;
     } else if (f0.tier === "motion") stats.motionDraws++;
     else stats.hiresDraws++;
     if (f1) {
@@ -910,30 +918,18 @@
         }, 60);
       };
 
-  // "After the page is interactive": the load event has fired and the browser
-  // has reported an idle moment. ric's own 1500ms timeout is the backstop, so a
-  // page that never goes idle still gets its footage.
-  function whenInteractive(fn) {
-    var go = function () {
-      if (typeof window.requestIdleCallback === "function") {
-        window.requestIdleCallback(fn, { timeout: 1500 });
-      } else {
-        setTimeout(fn, 200);
-      }
-    };
-    if (document.readyState === "complete") go();
-    else window.addEventListener("load", go, { once: true });
-  }
-
-  // A page restored part-way down (back, or a reload) has already been
-  // scrolled, so that counts as the first scroll.
-  function afterFirstScroll(fn) {
+  // The reader's first sign of life: a scroll, wheel, touch, pointer press or
+  // key. Until then nothing but the poster and the small manifests has been
+  // fetched. A page restored part-way down (back, or a reload) has already
+  // been scrolled, so that counts as the first input.
+  var INPUTS = ["scroll", "wheel", "touchstart", "pointerdown", "keydown"];
+  function afterFirstInput(fn) {
     if (window.scrollY > 0) { fn(); return; }
     var go = function () {
-      window.removeEventListener("scroll", go);
+      INPUTS.forEach(function (n) { window.removeEventListener(n, go); });
       fn();
     };
-    window.addEventListener("scroll", go, { passive: true });
+    INPUTS.forEach(function (n) { window.addEventListener(n, go, { passive: true }); });
   }
 
   var idleScheduled = false;
@@ -1226,7 +1222,7 @@
     // interpolated pixels it saves, and a fling crosses the threshold twice per
     // leg.
 
-    if (!loresRetired && now - startedAt >= LORES_WINDOW_MS) retireLores();
+    if (!loresRetired && now - loresFrom >= LORES_WINDOW_MS) retireLores();
 
     var target = Math.round(wantedFrame);
 
@@ -1451,7 +1447,6 @@
       }
       // The lores window closes on a timer too, since a resting loop may not be
       // running when it does.
-      setTimeout(retireLores, Math.max(0, startedAt + LORES_WINDOW_MS - performance.now()));
       onScroll();
 
       var phone = variant === "phone" && window.matchMedia("(pointer: coarse)").matches;
@@ -1461,24 +1456,20 @@
       stats.phoneBudget = phoneBudget;
 
       function loadFootage() {
+        loresFrom = performance.now();
+        setTimeout(retireLores, LORES_WINDOW_MS);
         if (!phoneBudget) loadLores();
         motionStore.preload(manifest.motionBundle, manifest.motionOffsets).then(function () {
           scheduleIdlePredecode();
-          if (!slowNetwork && !phoneBudget) return hiresStore.preloadBytes();
+          if (!phoneBudget) return hiresStore.preloadBytes();
         });
       }
 
-      // Frames start downloading only once the page is interactive. The claim
-      // field is the reason anyone is here, and 23MB of footage queued ahead of
-      // it would make the one control that matters wait on the one thing that
-      // does not. The poster is already painted by then (17KB, preloaded in the
-      // head), so there is something on screen throughout. A phone waits longer
-      // still, for the first scroll: someone who reads the first screen and
-      // types a claim has spent nothing on footage at all.
-      whenArmed(function () {
-        if (phoneBudget) afterFirstScroll(loadFootage);
-        else whenInteractive(loadFootage);
-      });
+      // Frames start downloading only at the reader's first input. A visitor
+      // who reads the first screen and types a claim has spent nothing on
+      // footage at all, and the poster (17KB, preloaded in the head) is on
+      // screen throughout. Once loading starts it is exactly as before.
+      whenArmed(function () { afterFirstInput(loadFootage); });
       ready = true;
     }).catch(function () {
       giveUp("manifest-failed");
