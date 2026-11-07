@@ -73,7 +73,9 @@ for icon in ("icon-192.png", "icon-512.png", "icon-512-maskable.png", "apple-tou
 t("empty claim 400", P("").status_code == 400)
 t("500+ char claim 400", P("x" * 501).status_code == 400)
 r = P("x")
-t("no keys -> 500 w/ instructions", r.status_code == 500 and "aistudio" in r.get_json()["error"])
+t("no keys -> 500, with the operator's instructions kept out of the page",
+  r.status_code == 500 and r.get_json()["error"] == appmod.UNAVAILABLE_MESSAGE
+  and "aistudio" not in r.get_json()["error"] and ".env" not in r.get_json()["error"])
 
 # ---- provider selection -----------------------------------------------------
 os.environ["ANTHROPIC_API_KEY"] = "a"
@@ -253,7 +255,9 @@ ratelimit.PER_USER = ratelimit.SlidingWindow(100, 600)
 fg.models.script = [errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})]
 r = P("err a"); t("gemini 429 -> 429 w/ retry_after", r.status_code == 429 and r.get_json()["retry_after"] == 20)
 fg.models.script = [errors.ClientError(400, {"error": {"message": "API key not valid.", "status": "INVALID_ARGUMENT"}})]
-r = P("err b"); t("gemini bad key -> 500 + msg", r.status_code == 500 and "aistudio" in r.get_json()["error"])
+r = P("err b"); t("gemini bad key -> 500, and the page says only that the checker is unavailable",
+  r.status_code == 500 and r.get_json()["error"] == appmod.UNAVAILABLE_MESSAGE
+  and "aistudio" not in r.get_json()["error"] and ".env" not in r.get_json()["error"])
 fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})]
 t("gemini 503 -> 502", P("err c").status_code == 502)
 fg.models.script = [Resp("q"), Resp("not json")]
@@ -395,8 +399,9 @@ t("robots.txt allows crawlers and names the sitemap",
   r.status_code == 200 and "Disallow: /api/" in r.data.decode() and "Sitemap:" in r.data.decode()
   and "ClaudeBot" in r.data.decode())
 r = c.get("/sitemap.xml")
-t("sitemap lists cached claims", r.status_code == 200 and r.mimetype == "application/xml"
-  and "streamed%20claim" in r.data.decode() and "/privacy" in r.data.decode())
+t("sitemap lists the static pages only, never a claim somebody typed", r.status_code == 200
+  and r.mimetype == "application/xml" and "streamed%20claim" not in r.data.decode()
+  and "?q=" not in r.data.decode() and "/privacy" in r.data.decode())
 r = c.get("/llms.txt")
 t("llms.txt describes the rules and links recent claims",
   r.status_code == 200 and "ClaimReview" in r.data.decode() and "not medical advice" in r.data.decode().lower()
@@ -3796,6 +3801,186 @@ verdict.guideline_view = _stop_fg
 t("  and end to end: the statins guidance turns an insufficient stamp into false",
   _stop_res["verdict"] == "false"
   and "keep taking statins" in _stop_res["tldr"], _stop_res)
+
+# ---- Site audit: errors, retry, reports, sitemap, stats ---------------------------
+# What a visitor can read when something fails, the way out, an anonymous report
+# of a wrong answer, and the read-only stats report.
+import re as _re2  # noqa: E402
+import sqlite3 as _sq  # noqa: E402
+import subprocess as _sp  # noqa: E402
+
+_DASH = _re2.compile("[\u2013\u2014]")
+_jsrc = (ROOT / "static" / "app.js").read_text()
+_tpl = (ROOT / "templates" / "index.html").read_text()
+
+# 1. No raw exception text, key name or .env hint in anything a visitor reads.
+_real_swf = pubmed.search_with_fallback
+def _explode(*a, **k):
+    raise ValueError("secret internal detail 0xDEADBEEF")
+pubmed.search_with_fallback = _explode
+appmod.app.logger.setLevel(logging.CRITICAL)   # the traceback it logs is the point, not output
+fg.models.script = [Resp("sleep AND memory")]
+_r = P("an unexpected failure claim", ip="7.7.9.1")
+_body = _r.get_json()
+t("an unexpected failure is a plain 500 with a way out, not the exception text",
+  _r.status_code == 500 and "0xDEADBEEF" not in json.dumps(_body) and "ValueError" not in json.dumps(_body)
+  and "Try again" in _body["error"], _body)
+fg.models.script = [Resp("sleep AND memory")]
+_st, _evs = stream("an unexpected failure claim two", ip="7.7.9.2")
+t("  the streamed check says the same",
+  _evs[-1]["stage"] == "error" and "0xDEADBEEF" not in json.dumps(_evs[-1]) and _evs[-1]["status"] == 500, _evs[-1])
+pubmed.search_with_fallback = _real_swf
+appmod.app.logger.setLevel(logging.ERROR)
+t("  and no visitor-facing error string has a dash",
+  not _DASH.search(appmod.UNAVAILABLE_MESSAGE) and not _DASH.search(_body["error"]))
+
+# 2. Wrong verbs and crashes on a page route are friendly, in HTML or JSON.
+_r = c.get("/api/feedback")
+t("a GET to the feedback address is a JSON 405, not the framework's page",
+  _r.status_code == 405 and "error" in _r.get_json())
+_r = c.post("/privacy")
+t("a POST to a page is the friendly 404 page with a 405 status, home link and the notice",
+  _r.status_code == 405 and 'href="/"' in _r.get_data(as_text=True)
+  and "Not medical advice" in _r.get_data(as_text=True))
+with appmod.app.test_request_context("/somewhere"):
+    _r5 = appmod.server_error(None)
+_b5 = _r5.get_data(as_text=True)
+t("the 500 page is plain, says it was our side, links home and keeps the notice, with no dash",
+  _r5.status_code == 500 and "Back to Evident" in _b5 and "Not medical advice" in _b5
+  and "Traceback" not in _b5 and not _DASH.search(_b5))
+with appmod.app.test_request_context("/api/check"):
+    _r5 = appmod.server_error(None)
+t("  and an API route's 500 is JSON the page can read", _r5[1] == 500 and "error" in _r5[0].get_json())
+_r = c.get("/favicon.ico")
+t("/favicon.ico answers with an image, not a 404", _r.status_code == 200 and _r.mimetype == "image/png")
+
+# 3. The front end: a slow check says so, a failed one offers Retry, both are announced.
+t("the page has a polite live region for 'still working', errors and the verdict",
+  'id="announce" role="status" aria-live="polite"' in _tpl and 'function announce(' in _jsrc
+  and "announce(SLOW_TEXT)" in _jsrc and "announce(message)" in _jsrc and "announce(`Verdict:" in _jsrc)
+t("  a silent check shows static 'still working' text after a delay and gives up later with Retry",
+  "const SLOW_MS = 12000" in _jsrc and "const GIVE_UP_MS = 90000" in _jsrc
+  and "taking longer than it should" in _jsrc and 'id="error-retry"' in _tpl and "Retry this claim" in _tpl
+  and "li.slow" in _jsrc)
+t("  Retry runs the same claim again, and a claim the server refused to read gets no Retry",
+  'check(lastClaim)' in _jsrc and "final.status !== 400" in _jsrc)
+_strings = _re2.findall(r'"([^"\n]{12,})"', _jsrc.split("const SLOW_MS")[1].split("async function checkStreamed")[0])
+t("  none of that copy has a dash", not any(_DASH.search(x) for x in _strings) and not _DASH.search(_tpl.split('id="error"')[1].split("</section>")[0]))
+
+# 4. Report a wrong answer: on every result, anonymous, through /api/feedback.
+_srv = c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
+t("a server-rendered result has the Report a wrong answer button and its form",
+  "Report a wrong answer" in _srv and 'id="report-form"' in _srv and 'id="report-open"' in _srv)
+t("  and the script posts it to /api/feedback and resets it for every result",
+  "report: true" in _jsrc and "function resetReport()" in _jsrc and "resetReport();" in _jsrc.split("function renderResult(data) {")[1].split("\nfunction ")[0])
+_before = _sq.connect(os.environ["DB_PATH"]).execute("select count(*) from feedback").fetchone()[0]
+_r = c.post("/api/feedback", json={"claim": _dl["claim"], "verdict": "true", "report": True,
+                                    "note": "  The   study says\nthe opposite.  "},
+            environ_base={"REMOTE_ADDR": "9.9.9.9"})
+_row = _sq.connect(os.environ["DB_PATH"]).execute(
+    "select claim_key, verdict, helpful, note, created_at from feedback order by id desc limit 1").fetchone()
+t("a report is stored as a thumbs down whose note starts 'wrong answer: ', whitespace tidied",
+  _r.status_code == 200 and _row[1] == "true" and _row[2] == 0 and _row[3] == "wrong answer: The study says the opposite.", _row)
+_cols = [r[1] for r in _sq.connect(os.environ["DB_PATH"]).execute("pragma table_info(feedback)")]
+t("  and nothing that identifies the sender is stored: no address in any column or value",
+  _cols == ["id", "claim_key", "verdict", "helpful", "note", "created_at"] and "9.9.9.9" not in " ".join(map(str, _row)))
+_r = c.post("/api/feedback", json={"claim": "x" * 900, "verdict": "<script>", "report": True, "note": "n" * 900})
+_row = _sq.connect(os.environ["DB_PATH"]).execute("select claim_key, verdict, note from feedback order by id desc limit 1").fetchone()
+t("  an oversized claim and note are cut, and a verdict that is not one of ours is dropped",
+  _r.status_code == 200 and len(_row[0]) <= 500 and _row[1] is None and len(_row[2]) <= 300, (len(_row[0]), _row[1], len(_row[2])))
+t("  a report with no claim is a plain 400", c.post("/api/feedback", json={"report": True}).status_code == 400)
+t("  a thumb still works as before",
+  c.post("/api/feedback", json={"claim": "thumb claim", "verdict": "false", "helpful": True}).status_code == 200
+  and _sq.connect(os.environ["DB_PATH"]).execute("select helpful, note from feedback order by id desc limit 1").fetchone() == (1, ""))
+t("  and a body that is not JSON is a 400, not a 500",
+  c.post("/api/feedback", data="nope", content_type="text/plain").status_code == 400)
+_priv = c.get("/privacy").get_data(as_text=True)
+t("the privacy page says a report's note is kept, anonymously", "report a wrong answer" in _priv)
+
+# 5. The sitemap lists static pages only; a claim somebody typed never appears.
+_sm = c.get("/sitemap.xml").get_data(as_text=True)
+t("the sitemap has the three static pages, absolute, and no claim",
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")) and "?q=" not in _sm)
+_rb = c.get("/robots.txt").get_data(as_text=True)
+t("robots.txt points at the sitemap with an absolute URL", "Sitemap: http://localhost/sitemap.xml" in _rb)
+
+# 6. Page identity: /checks has its own title and canonical; every result has a card.
+_ck = c.get("/checks").get_data(as_text=True)
+_home_t = _re2.search("<title>(.*?)</title>", c.get("/").get_data(as_text=True)).group(1)
+_ck_t = _re2.search("<title>(.*?)</title>", _ck).group(1)
+t("/checks has its own title and canonical, and the same card tags as home",
+  _home_t != _ck_t and 'rel="canonical" href="http://localhost/checks"' in _ck
+  and 'name="twitter:card" content="summary_large_image"' in _ck and 'property="og:image" content="http://localhost/og/_.png"' in _ck)
+_png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_dl["claim"]), safe="") + ".png")
+from PIL import Image as _Im2  # noqa: E402
+import io as _io2  # noqa: E402
+t("a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twitter:card too",
+  f'property="og:image" content="http://localhost/og/' in _srv and 'name="twitter:card" content="summary_large_image"' in _srv
+  and _png.status_code == 200 and _Im2.open(_io2.BytesIO(_png.data)).size == (1200, 630))
+
+# 7. Beta and the doctor line are on the first screen of the ask, the 404 and the error screen.
+_ask = c.get("/checks").get_data(as_text=True)
+t("the ask screen carries Not medical advice and the doctor sentence right under its introduction",
+  'class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
+t("  so do the 404 page and the error screen, and the footage's first screen carries Beta too",
+  'class="ask-note">Not medical advice. Ask a doctor' in c.get("/nope-nope").get_data(as_text=True)
+  and 'class="error-note">Not medical advice. Ask a doctor' in _tpl
+  and "Evident Beta. Illustrative footage" in (ROOT / "templates" / "_flythrough.html").read_text())
+t("  and every result's head has the notice in the same row as the case line",
+  'class="case case-nma">Not medical advice</p>' in _srv)
+
+# 8. scripts/stats.py: read-only, from the table that already exists.
+_sdb = os.path.join(tempfile.mkdtemp(), "s.db")
+_con = _sq.connect(_sdb)
+_con.executescript(db.SCHEMA)
+_nowd = datetime.now(timezone.utc) if "datetime" in dir() else None
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td  # noqa: E402
+_now2 = _dt.now(_tz.utc)
+for _i, (_txt, _age) in enumerate([("Zinc cures colds", 0), ("Zinc cures colds", 0), ("zinc cures colds", 1),
+                                    ("Garlic cures colds", 1), ("Old claim", 45)]):
+    _con.execute("INSERT INTO checks (claim_key, claim_text, verdict, explanation, cached, studies_json, checked_at) "
+                 "VALUES (?, ?, 'false', '', 0, '[]', ?)", (_txt.lower(), _txt, (_now2 - _td(days=_age)).isoformat()))
+_con.commit(); _con.close()
+_size = os.path.getsize(_sdb)
+_out = _sp.run([sys.executable, str(ROOT / "scripts" / "stats.py"), "--db", _sdb], capture_output=True, text=True)
+_lines = _out.stdout.splitlines()
+t("stats.py prints checks per day for 30 days and the top claims, from the checks table",
+  _out.returncode == 0 and "Checks per day, last 30 days" in _out.stdout
+  and sum(1 for l in _lines if _re2.match(r"\d{4}-\d\d-\d\d  +\d+$", l)) == 30
+  and _re2.search(r"\n\s+3  (Z|z)inc cures colds", _out.stdout) and "Garlic cures colds" in _out.stdout, _out.stdout[-300:])
+t("  it counts today and yesterday separately, and leaves out what is older than 30 days from the daily list",
+  any(l.startswith(_now2.strftime("%Y-%m-%d")) and l.strip().endswith("2") for l in _lines)
+  and any(l.startswith((_now2 - _td(days=1)).strftime("%Y-%m-%d")) and l.strip().endswith("2") for l in _lines)
+  and "All checks in this database: 5" in _out.stdout)
+t("  it is read-only: the file is unchanged and no table is added",
+  os.path.getsize(_sdb) == _size
+  and {r[0] for r in _sq.connect(_sdb).execute("select name from sqlite_master where type='table'")}
+  == {r[0] for r in _sq.connect(os.environ["DB_PATH"]).execute("select name from sqlite_master where type='table'")})
+_miss = _sp.run([sys.executable, str(ROOT / "scripts" / "stats.py"), "--db", _sdb + ".nope"], capture_output=True, text=True)
+t("  with no database it says so plainly and creates nothing",
+  _miss.returncode == 1 and "No database" in _miss.stderr and not os.path.exists(_sdb + ".nope"))
+_src = (ROOT / "scripts" / "stats.py").read_text()
+t("  and it has no way to write: no INSERT, UPDATE, DELETE, CREATE or db.init_db",
+  not _re2.search(r"\b(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\b", _src.split('"""', 2)[2]) and "init_db" not in _src)
+
+# ---- Text is sent gzipped to a browser that accepts it -------------------------------
+import gzip as _gz  # noqa: E402
+_plain = c.get("/static/app.js")
+_zip = c.get("/static/app.js", headers={"Accept-Encoding": "gzip, br"})
+t("a script is gzipped for a browser that accepts it, and decompresses to the same bytes",
+  _zip.headers.get("Content-Encoding") == "gzip" and _gz.decompress(_zip.data) == _plain.data
+  and len(_zip.data) < len(_plain.data) / 2 and "Accept-Encoding" in _zip.headers.get("Vary", ""))
+t("  and is left alone for one that does not",
+  "Content-Encoding" not in _plain.headers)
+_hz = c.get("/", headers={"Accept-Encoding": "gzip"})
+t("  the home page is gzipped too, and still HTML once decoded",
+  _hz.headers.get("Content-Encoding") == "gzip" and b"<!doctype html>" in _gz.decompress(_hz.data))
+_ss = c.post("/api/check/stream", json={"claim": ""}, headers={"Accept-Encoding": "gzip"})
+t("  the event stream is never compressed, and images are not either",
+  "Content-Encoding" not in _ss.headers
+  and "Content-Encoding" not in c.get("/static/icons/icon-192.png", headers={"Accept-Encoding": "gzip"}).headers)
+t("  a conditional request still answers 304 with no body",
+  c.get("/static/app.js", headers={"Accept-Encoding": "gzip", "If-None-Match": _plain.headers["ETag"]}).status_code in (200, 304))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

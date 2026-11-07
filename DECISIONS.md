@@ -4,6 +4,61 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-06: Counting checks without collecting more, and what the site audit changed
+
+**The queue asked for "free, privacy-friendly analytics" (a counter of checks per
+day and top claims). The answer is no new collection.** Non-negotiable 7 says no
+analytics, and the privacy page promises "No analytics scripts, no advertising, no
+cookies" and that only the claim text, verdict and studies are kept, anonymously.
+Any page-view counter, new table, client script or endpoint would make one of
+those sentences false. So nothing was added to the site. What was added is
+`scripts/stats.py`: a read-only report, run by the owner, over the anonymous
+`checks` table that already exists. It prints checks per day for the last 30 days
+and the top 20 claims, for whatever `DB_PATH` points at, opens the file read-only
+and writes nothing. It counts checks (including repeats served from the cache),
+not visitors: there is nothing that could tell one visitor from another. **Limit:**
+`render.yaml` runs the free plan with no disk, so the database is wiped on every
+restart and deploy; on production the numbers cover only the time since the last
+restart. Run it against a copy of a persistent database, or accept that limit.
+
+**Other changes from the same audit, each a decision of its own:**
+
+- *Errors say the problem and the way out, and never the cause.* The catch-all in
+  `_run_check` used to put the exception's text on the page, and a rejected API key
+  put ".env" and the provider's console URL there. Both now go to the log; the
+  page says "The checker is not available right now" or "Something went wrong
+  while checking this claim. Try again in a moment." A page route that crashes, or
+  is called with the wrong verb, gets a plain page with a way home; `/api/` routes
+  answer in JSON.
+- *A slow check says so, and a dead one stops.* After 12 seconds with no step from
+  the server the log gains one static line ("Still working. The first check after
+  a quiet spell can take up to a minute."), also read out through a polite live
+  region; after 90 seconds of silence the check is cancelled and the error screen
+  offers "Retry this claim", which runs the same claim again. Every error that is
+  not "the server could not read this claim" (400) gets that button. No new motion.
+- *Reporting a wrong answer reuses the feedback table.* "Report a wrong answer"
+  posts to `/api/feedback` with `report: true`. It is stored as a thumbs down whose
+  note starts "wrong answer: ", up to 280 characters, with no new column. The
+  address is used only by the in-memory rate limiter, as before. The privacy page
+  now says a report's note is kept, anonymously, and to leave anything personal out.
+- *The sitemap lists static pages only.* It used to list the last 200 cached claims,
+  which are things people typed. `llms.txt` still lists recent claims and the home
+  page still shows "Latest checks": both are the public ledger the product shows on
+  purpose, and were left alone; say so if that should change too.
+- *The origin gzips its own text.* The audit's additions (the report form, the retry and
+  still-working copy, the notices) added about 9KB of HTML, CSS and JS, which on the raw,
+  uncompressed measure (scripts' perf run) pushed the home page from 0.7356MB to 0.7437MB
+  and a result from 0.3488MB to 0.3566MB, over the 0.74 and 0.35 budgets. Rather than cut
+  the features or strip comments from files meant to be read, `app.py` now sends text
+  (HTML, CSS, JS, JSON, SVG) gzipped to a browser that accepts it, with the standard
+  library only; images, fonts, video and the event stream are left alone. Measured the same
+  way: home 0.56MB, result 0.20MB. Behind Cloudflare production was already compressed, so
+  the real-world change there is small; a free instance reached directly gains the most.
+- *Beta and "Not medical advice" are on every first screen.* The fly-through's first
+  screen, the ask screen, a result's head, the error screen and the 404 each carry
+  both the notice and a sentence about asking a doctor, in the existing mono and
+  quiet ink. The verdict's own doctor line is unchanged.
+
 ## 2026-11-05: Guidance that plainly rejects a forgo-treatment claim is not "Not enough evidence"
 
 **"People who have had a heart attack can safely stop taking statins" was

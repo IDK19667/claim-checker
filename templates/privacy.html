@@ -9,6 +9,12 @@
   <meta name="color-scheme" content="light" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="{{ url_for('static', filename='icons/icon.svg') }}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}" />
+  <link rel="canonical" href="{{ base_url }}/privacy" />
+  <meta property="og:title" content="Privacy · Evident" />
+  <meta property="og:description" content="What Evident keeps, what it sends where, and what it never collects." />
+  <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body class="page-doc">
@@ -28,7 +34,7 @@
 
     <h2 class="section-label">What we keep</h2>
     <p>The text of each claim, the verdict, and the studies that were read, stored anonymously. That is what makes the trending list and the 24-hour cache work. There is no user record: no name, no email, no account, no IP address stored with a check.</p>
-    <p>An anonymous thumbs up or down when you give one, tied to the claim, not to you.</p>
+    <p>An anonymous thumbs up or down when you give one, and the short note if you report a wrong answer, tied to the claim, not to you. Leave anything personal out of a note.</p>
 
     <h2 class="section-label">What stays on your phone</h2>
     <p>Your recent checks live only in your browser's storage so they open offline. Clearing them on the home screen, or clearing site data, removes them. We never see that list.</p>
@@ -38,7 +44,7 @@
     <p>The AI provider is sent the claim and the abstracts of the studies found, from our server, never from your device: it does not get your IP address or anything else that identifies you. The verdict is written by that AI, checked by code against the studies, and can still be wrong. If we change AI providers, this page will name the new one.</p>
 
     <h2 class="section-label">Rate limits</h2>
-    <p>To keep the free AI quota fair, the server counts checks per IP address for ten minutes in memory. Nothing is written to disk, and the count disappears when the server restarts.</p>
+    <p>To keep the free AI quota fair, the server counts checks, lookups and reports per IP address in memory, for ten minutes to an hour. Nothing is written to disk, and the count disappears when the server restarts.</p>
 
     <h2 class="section-label">No tracking</h2>
     <p>No analytics scripts, no advertising, no cookies. Fonts and images are served from this site, not from a third party.</p>

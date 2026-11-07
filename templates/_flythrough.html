@@ -41,7 +41,7 @@
          is on every screen. The field is at the end of the footage ("Now
          check yours") and under it (the checker). #}
       <div class="flight-work" data-stage="claim">
-        <p class="first-note">Illustrative footage. Not medical advice.</p>
+        <p class="first-note">Evident Beta. Illustrative footage. Not medical advice. Ask a doctor before you change a treatment.</p>
         <div class="work-deck">
 
           <div class="work-layer flight-chip" data-layer="work">
@@ -96,7 +96,7 @@
         <div class="flight-chip flight-foot">
           <p class="flight-note">
             Illustrative footage. A real check, replayed,
-            {{ flight.check.checkedAt_long }}. Not medical advice.
+            {{ flight.check.checkedAt_long }}. Not medical advice. Ask a doctor before you change a treatment.
             {% if flight.credits %}{% for c in flight.credits %}{{ c.credit }} {% endfor %}{% endif %}
           </p>
           <a class="skip-checker" href="#ask">Skip to the checker</a>
@@ -119,7 +119,7 @@
         </div>
         <p class="flight-note" style="position: static; color: var(--ink-3)">
           Illustrative footage. A real check, replayed, {{ flight.check.checkedAt_long }}.
-          Not medical advice.
+          Not medical advice. Ask a doctor before you change a treatment.
           {% if flight.credits %}{% for c in flight.credits %}{{ c.credit }} {% endfor %}{% endif %}
         </p>
       </div></div>

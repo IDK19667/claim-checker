@@ -10,6 +10,7 @@
   <meta name="robots" content="noindex" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="{{ url_for('static', filename='icons/icon.svg') }}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}" />
   <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/bricolagegrotesque-opsz96-300-500.woff2') }}" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/instrumentsans-normal-400-600.woff2') }}" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
@@ -27,6 +28,7 @@
       The link may be old, or mistyped. Nothing is broken on your side, and
       nothing you typed was recorded.
     </p>
+    <p class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>
 
     <form class="claim-form" action="/" method="get">
       <label class="sr-only" for="claim-input">The health claim to check</label>

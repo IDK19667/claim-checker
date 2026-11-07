@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import json
 import os
@@ -41,6 +42,10 @@ TRUST_PROXY = os.environ.get("TRUST_PROXY", "") in ("1", "true", "yes")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
 
 MAX_CLAIM_CHARS = 500
+
+# What a reader sees when the checker itself is not set up or its key was
+# refused. The specifics are logged; they are not the reader's to fix.
+UNAVAILABLE_MESSAGE = "The checker is not available right now. Try again in a little while."
 
 VERDICT_LABELS = {"true": "Likely true", "false": "Likely false", "complicated": "It's complicated",
                   "insufficient": "Not enough evidence"}
@@ -107,6 +112,35 @@ def _security_headers(response: Response) -> Response:
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
         )
     return response
+
+# Text is sent gzipped to a browser that accepts it. The origin used to send
+# the shell raw and rely on whatever sat in front of it, so a page's weight
+# (and the numbers scripts/perf measures) depended on the host, and a free
+# instance reached directly sent every byte. Standard library only. Images,
+# fonts and video are already compressed and are left alone, as is the event
+# stream (it has to flush each event) and anything partial.
+_GZIP_TYPES = {"text/html", "text/css", "text/plain", "text/javascript", "application/javascript", "application/json",
+               "application/manifest+json", "application/xml", "image/svg+xml"}
+
+
+@app.after_request
+def _compress(response: Response) -> Response:
+    if (response.status_code != 200 or response.mimetype not in _GZIP_TYPES
+            or "Content-Encoding" in response.headers or "Range" in request.headers
+            or "gzip" not in request.headers.get("Accept-Encoding", "").lower()):
+        return response
+    response.direct_passthrough = False
+    data = response.get_data()
+    if len(data) < 600:
+        return response
+    response.set_data(gzip.compress(data, compresslevel=6, mtime=0))
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers.add("Vary", "Accept-Encoding")
+    tag = response.get_etag()[0]
+    if tag:
+        response.set_etag(tag, weak=True)  # the bytes differ from the plain copy's
+    return response
+
 
 db.init_db()
 
@@ -262,7 +296,7 @@ def _trust_example():
         return None
 
 
-def _render_home(with_flight: bool):
+def _render_home(with_flight: bool, checks_page: bool = False):
     claim = _claim_from_query_args()
     preview = None
     cached = None
@@ -313,7 +347,7 @@ def _render_home(with_flight: bool):
                            ledger=ledger, latest=latest, flight=flight,
                            band_still=band_still,
                            example=None if cached else _trust_example(),
-                           provider=verdict.provider_label(),
+                           provider=verdict.provider_label(), checks_page=checks_page,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 
@@ -330,7 +364,7 @@ def checks():
     page used to be. Same ledger, same recent checks, same everything, for
     anyone who wants the tool and not the film.
     """
-    return _render_home(with_flight=False)
+    return _render_home(with_flight=False, checks_page=True)
 
 
 @app.route("/flight")
@@ -365,9 +399,10 @@ def robots():
 @app.route("/sitemap.xml")
 def sitemap():
     base = _base_url()
+    # Static pages only. A typed claim is something a person wrote; listing
+    # it here would publish it to every crawler, which the privacy page
+    # does not say and the product does not want.
     urls = [(f"{base}/", "1.0"), (f"{base}/checks", "0.8"), (f"{base}/privacy", "0.3")]
-    for row in db.recent_cached(200):
-        urls.append((f"{base}/?q={quote(row['claim_text'])}", "0.7"))
     body = "".join(
         f"<url><loc>{escape(u)}</loc><priority>{p}</priority></url>" for u, p in urls
     )
@@ -431,6 +466,44 @@ def not_found(_e):
     except sqlite3.Error:
         latest = []
     return render_template("404.html", latest=latest, labels=VERDICT_LABELS), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(_e):
+    """A wrong verb is a dead end like a wrong path: say so, and never as a stack page."""
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "That is not something this address accepts."}), 405
+    return not_found(_e)[0], 405
+
+
+@app.errorhandler(500)
+def server_error(_e):
+    """
+    The last line of defence for any page route: a plain page with a way
+    out, never the framework's error page. The cause goes to the log (Flask
+    has already logged it); nothing about it is shown. The API routes answer
+    in JSON the front end can read.
+    """
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Something went wrong on our side. Try again in a moment."}), 500
+    body = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<meta name="robots" content="noindex"><title>Something went wrong · Evident</title>'
+            '<link rel="stylesheet" href="/static/style.css"></head><body class="page-doc">'
+            '<main class="wrap doc"><h1 class="hero">Something went wrong.</h1>'
+            '<p class="lede">That was on our side, not yours. Try again in a moment.</p>'
+            '<p><a class="link-btn" href="/">Back to Evident</a></p>'
+            '<p class="fine">Not medical advice. This summarizes published research and can be wrong. '
+            'For your own health, talk to a clinician.</p></main></body></html>')
+    return Response(body, status=500, mimetype="text/html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    """Browsers and crawlers ask for this path whatever the page's <link> says."""
+    resp = send_from_directory(app.static_folder, "icons/icon-192.png", mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 @app.route("/privacy")
@@ -704,13 +777,20 @@ def _run_check(claim: str, client_ip: str, base_url: str):
             yield {"stage": "weigh"}
         result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
     except RuntimeError as e:
-        # Missing/misconfigured API key -> tell the operator plainly, don't 500.
-        yield {"stage": "error", "status": 500, "error": str(e)}
+        # Missing/misconfigured API key: the operator's problem, not the
+        # reader's. The detail goes to the log; the page says what to do.
+        app.logger.error("Check could not run: %s", e)
+        yield {"stage": "error", "status": 500, "error": UNAVAILABLE_MESSAGE}
         return
     except verdict.ProviderError as e:
         status = {"auth": 500, "rate_limit": 429, "unavailable": 502}.get(e.kind, 502)
         suffix = " Wait a few seconds and try again." if e.kind == "rate_limit" else ""
-        ev = {"stage": "error", "status": status, "error": e.detail + suffix}
+        # A rejected key names .env and the provider's console: for the
+        # operator's log, never for the page.
+        shown = UNAVAILABLE_MESSAGE if e.kind == "auth" else e.detail + suffix
+        if e.kind == "auth":
+            app.logger.error("The AI provider rejected its key: %s", e.detail)
+        ev = {"stage": "error", "status": status, "error": shown}
         if e.kind == "rate_limit":
             ev["retry_after"] = 20
         yield ev
@@ -719,9 +799,11 @@ def _run_check(claim: str, client_ip: str, base_url: str):
         yield {"stage": "error", "status": 502,
                "error": "Couldn't reach PubMed right now. Try again in a minute."}
         return
-    except Exception as e:  # noqa: BLE001 — last line of defence; never crash a check
+    except Exception:  # noqa: BLE001 — last line of defence; never crash a check
+        # The exception text is for the log. A reader gets the problem and a way out.
+        app.logger.exception("Check failed")
         yield {"stage": "error", "status": 500,
-               "error": f"Something went wrong while checking this claim: {e}"}
+               "error": "Something went wrong while checking this claim. Try again in a moment."}
         return
 
     db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
@@ -823,18 +905,38 @@ def api_suggest():
     return jsonify({"suggestions": suggest_mod.suggest(q, claims)})
 
 
+# What a "Report a wrong answer" note starts with in the feedback table. The
+# table has no kind column and gets none: a report is a thumbs-down whose
+# note begins with this, so nothing about the schema or what is stored changes.
+REPORT_PREFIX = "wrong answer: "
+MAX_NOTE_CHARS = 280
+
+
 @app.route("/api/feedback", methods=["POST"])
 def api_feedback():
-    payload = request.get_json(force=True, silent=True) or {}
-    claim = (payload.get("claim") or "").strip()
-    if not claim or "helpful" not in payload:
-        return jsonify({"error": "claim and helpful are required."}), 400
+    """
+    Anonymous. A thumb, or a report that an answer is wrong, tied to the claim
+    and never to the sender: no cookie, no account, and the rate limiter's
+    in-memory key (the address) is never written down.
+    """
+    payload = request.get_json(force=True, silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+    claim = str(payload.get("claim") or "").strip()[:MAX_CLAIM_CHARS]
+    report = payload.get("report") is True
+    if not claim or ("helpful" not in payload and not report):
+        return jsonify({"error": "Say which claim this is about."}), 400
     allowed, _ = ratelimit.FEEDBACK.check(f"ip:{_client_ip()}")
     if not allowed:
         return jsonify({"ok": True})  # silently drop floods; nothing for the user to do
+    verdict_value = payload.get("verdict")
+    if verdict_value not in VERDICT_LABELS:
+        verdict_value = None
+    note = " ".join(str(payload.get("note") or "").split())[:MAX_NOTE_CHARS]
+    if report:
+        note = (REPORT_PREFIX + note).strip()
     try:
-        db.add_feedback(claim, payload.get("verdict"), bool(payload.get("helpful")),
-                        str(payload.get("note") or ""))
+        db.add_feedback(claim, verdict_value, False if report else bool(payload.get("helpful")), note)
     except sqlite3.Error as e:
         app.logger.warning("Could not save feedback: %s", e)
     return jsonify({"ok": True})

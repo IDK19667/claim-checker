@@ -7,7 +7,7 @@
 <html lang="en"{% if result %} data-screen="result"{% endif %}>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   {% if preview %}
   <title>{{ preview.title }} · Evident</title>
   <meta name="description" content="{{ preview.description }}" />
@@ -18,15 +18,26 @@
   <meta property="og:image:height" content="630" />
   <meta property="og:url" content="{{ preview.url }}" />
   <meta name="twitter:card" content="summary_large_image" />
+  {% elif checks_page %}
+  <title>Check a health claim · Evident</title>
+  <meta name="description" content="The Evident checker on its own: paste a health claim and get a verdict from the studies on PubMed, with the studies shown." />
+  <meta property="og:title" content="Check a health claim · Evident" />
+  <meta property="og:description" content="Saw a health claim? Check it against the research." />
+  <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   {% else %}
   <title>Evident: check a health claim against real research</title>
   <meta name="description" content="Paste a health claim you saw online. Evident searches real medical studies on PubMed, weighs how strong they are, and gives you a straight answer with sources." />
   <meta property="og:title" content="Evident" />
   <meta property="og:description" content="Saw a health claim? Check it against the research." />
   <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   {% endif %}
-  {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
+  {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% elif checks_page %}<link rel="canonical" href="{{ base_url }}/checks" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
   {% if jsonld %}<script type="application/ld+json" nonce="{{ csp_nonce }}">{{ jsonld | tojson }}</script>{% endif %}
   <meta property="og:type" content="website" />
@@ -101,6 +112,7 @@
           Paste it in. We read the studies on PubMed, weigh how strong they
           are, and stamp a verdict you can send back.
         </p>
+        <p class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>
         {% if ledger and ledger.studies_read %}
         <dl class="ledger">
           <div><dt>Studies read</dt><dd>{{ "{:,}".format(ledger.studies_read) }}</dd></div>
@@ -308,7 +320,10 @@
         <button class="back" id="back-btn" type="button">
           <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
         </button>
-        <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
+        <div class="case-row">
+          <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
+          <p class="case case-nma">Not medical advice</p>
+        </div>
         {# The thread: one fine line in the gutter from the claim down to its
            verdict, so the two read as one thing. The pen ring round the
            verdict is the same shape whatever it says: it marks where the
@@ -507,6 +522,21 @@
         <button class="thumb" data-helpful="1" type="button" aria-label="Yes, helpful"><svg width="20" height="20" aria-hidden="true"><use href="#i-up"/></svg></button>
         <button class="thumb" data-helpful="0" type="button" aria-label="No, not helpful"><svg width="20" height="20" aria-hidden="true"><use href="#i-down"/></svg></button>
       </div>
+      {# A report is anonymous like a thumb: it goes to /api/feedback tied to
+         the claim and nothing else. The note is optional and short. #}
+      <div class="report" id="report">
+        <button class="ghost report-open" id="report-open" type="button" aria-expanded="false" aria-controls="report-form">Report a wrong answer</button>
+        <form class="report-form" id="report-form" hidden novalidate>
+          <label for="report-note">What is wrong with this answer? (optional)</label>
+          <textarea id="report-note" rows="3" maxlength="280" autocomplete="off"></textarea>
+          <p class="fine">Leave out anything personal. Reports are anonymous and tied only to the claim.</p>
+          <div class="report-actions">
+            <button class="secondary" id="report-send" type="submit">Send report</button>
+            <button class="ghost" id="report-cancel" type="button">Cancel</button>
+          </div>
+        </form>
+        <p class="report-done" id="report-done" role="status" hidden></p>
+      </div>
 
       <div class="evidence">
         <div class="section-row">
@@ -571,7 +601,11 @@
     <section id="error" hidden>
       <p class="error-msg" id="error-msg"></p>
       <p class="countdown" id="countdown" hidden></p>
-      <button class="secondary" id="error-back" type="button">Try again</button>
+      <div class="error-actions">
+        <button class="secondary" id="error-retry" type="button" hidden>Retry this claim</button>
+        <button class="ghost" id="error-back" type="button">Check another claim</button>
+      </div>
+      <p class="error-note">Not medical advice. Ask a doctor before you change a treatment.</p>
     </section>
 
   </main>
@@ -645,6 +679,8 @@
       </div>
     </div>
   </dialog>
+
+  <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
   <footer class="foot wrap">
     <p>

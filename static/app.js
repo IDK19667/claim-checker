@@ -778,6 +778,7 @@ function renderResult(data) {
   $("more-link").href = data.pubmed_url || "#";
   $("toast").textContent = "";
   renderFeedbackState(data.claim);
+  resetReport();
 
   $("bar-sticky").hidden = false;
   document.body.classList.add("has-bar");
@@ -861,14 +862,22 @@ function endPending() {
   document.querySelector(".evidence").hidden = false;
 }
 
+// What the reader is told while the screen reader's live region says it too.
+function announce(text) { const el = $("announce"); if (el) el.textContent = text || ""; }
+
 let countdownTimer = null;
-function renderError(message, retryAfter) {
+// `retry` puts a button on the screen that runs the same claim again. It is
+// off for a claim the server refused to read (empty, too long), where running
+// the same words again cannot change the answer.
+function renderError(message, retryAfter, retry = false) {
   // Nothing found, rate limited, provider down: same band, same sheet, same
   // way out. Only what the sheet says changes.
   screenState.settle("error");
   $("error-msg").textContent = message;
+  announce(message);
   const cd = $("countdown");
-  const back = $("error-back");
+  const back = $("error-retry");
+  back.hidden = !(retry && lastClaim);
   clearInterval(countdownTimer);
   if (retryAfter && retryAfter > 0) {
     let left = retryAfter;
@@ -892,10 +901,39 @@ function renderError(message, retryAfter) {
 
 let inFlight = false;
 let controller = null;
+let lastClaim = "";
+
+// A check can be slow for good reasons: a cold start on the free host can hold
+// the first byte for a minute, and PubMed or the model can take their time.
+// After SLOW_MS of silence the page says it is still working, in words, with
+// no new motion. After GIVE_UP_MS of silence it stops and offers a retry.
+const SLOW_MS = 12000;
+const GIVE_UP_MS = 90000;
+let slowTimer = null, giveUpTimer = null, gaveUp = false;
+const SLOW_TEXT = "Still working. The first check after a quiet spell can take up to a minute.";
+function clearSlow() {
+  clearTimeout(slowTimer); clearTimeout(giveUpTimer);
+  const old = $("reading").querySelector("li.slow");
+  if (old) old.remove();
+}
+function armWatchdog() {
+  clearSlow();
+  slowTimer = setTimeout(() => {
+    const log = $("reading");
+    const row = log.querySelector(".cancel-row");
+    const li = document.createElement("li");
+    li.className = "slow";
+    li.textContent = SLOW_TEXT;
+    log.insertBefore(li, row);
+    announce(SLOW_TEXT);
+  }, SLOW_MS);
+  giveUpTimer = setTimeout(() => { gaveUp = true; if (controller) controller.abort(); }, GIVE_UP_MS);
+}
 
 // One event, one line, one move of the footage. Short labels: the picture is
 // carrying the story and the panel only has to name the step.
 function handleStage(ev) {
+  armWatchdog();
   if (ev.stage === "query" && ev.claim) {
     const typed = $("claim-echo").textContent;
     $("claim-echo").textContent = ev.claim;
@@ -946,7 +984,7 @@ async function checkPlain(claim) {
   });
   let data = null;
   try { data = await resp.json(); } catch { /* non-JSON error page */ }
-  if (!resp.ok || !data) return { stage: "error", error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after };
+  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after };
   return { stage: "done", result: data };
 }
 
@@ -987,14 +1025,18 @@ async function check(claim) {
   if (!navigator.onLine) {
     const saved = loadRecent().find((r) => r.claim.toLowerCase() === claim.toLowerCase() && r.result);
     if (saved) { renderResult({ ...saved.result, restored: true }); return; }
-    renderError("You're offline. Checking a claim needs a connection.");
+    lastClaim = claim;
+    renderError("You're offline. Checking a claim needs a connection.", 0, true);
     return;
   }
 
   inFlight = true;
+  lastClaim = claim;
+  gaveUp = false;
   controller = new AbortController();
   setWorking(true);
   renderPending(claim);
+  armWatchdog();
   try {
     let final;
     try { final = await checkStreamed(claim); }
@@ -1005,7 +1047,7 @@ async function check(claim) {
 
     if (final.stage === "error") {
       endPending();
-      renderError(final.error, final.retry_after);
+      renderError(final.error, final.retry_after, final.status !== 400);
     } else {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays
@@ -1017,9 +1059,10 @@ async function check(claim) {
       try {
         renderResult(final.result);
         remember(final.result);
+        announce(`Verdict: ${VERDICT_LABELS[final.result.verdict] || final.result.verdict}. ${final.result.tldr || ""}`);
       } catch (err) {
         console.error("Rendering the verdict failed:", err);
-        renderError("The verdict came back, but this page could not draw it. Reload and try again.");
+        renderError("The verdict came back, but this page could not draw it. Retry to see it again.", 0, true);
         return;
       }
       // The address carries the claim as checked: a misspelled one comes
@@ -1032,9 +1075,11 @@ async function check(claim) {
     }
   } catch (err) {
     endPending();
-    if (err && err.name === "AbortError") { screenState.leave(); show(askSection); focusClaim(); }
-    else renderError("Couldn't reach the server. Check your connection and try again.");
+    if (err && err.name === "AbortError" && gaveUp) renderError("This check is taking longer than it should. Nothing is wrong on your side. Retry in a moment.", 0, true);
+    else if (err && err.name === "AbortError") { screenState.leave(); show(askSection); focusClaim(); }
+    else renderError("Couldn't reach the server. Check your connection, then retry.", 0, true);
   } finally {
+    clearSlow();
     inFlight = false;
     controller = null;
     setWorking(false);
@@ -1056,6 +1101,16 @@ for (const f of document.querySelectorAll(".flight-ask")) {
     e.preventDefault();
     input.value = field.value;
     check(field.value);
+  });
+}
+
+// When an on-screen keyboard opens it shrinks the visual viewport. If that
+// leaves the claim field under it, bring the field back to the middle.
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", () => {
+    if (document.activeElement !== input) return;
+    const r = input.getBoundingClientRect();
+    if (r.bottom > visualViewport.height - 12 || r.top < 0) input.scrollIntoView({ block: "center" });
   });
 }
 
@@ -1185,6 +1240,7 @@ window.addEventListener("popstate", () => {
   if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult); return; }
   goHome();
 });
+$("error-retry").addEventListener("click", () => { if (lastClaim) { input.value = lastClaim; check(lastClaim); } });
 $("error-back").addEventListener("click", () => {
   setTitle(null); screenState.leave(); show(askSection); focusClaim();
 });
@@ -1514,6 +1570,53 @@ $("feedback").addEventListener("click", async (e) => {
     await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ claim: currentResult.claim, verdict: currentResult.verdict, helpful }) });
   } catch { /* best effort */ }
+});
+
+// ---- Report a wrong answer ----------------------------------------------------
+// Anonymous like a thumb: the claim, the verdict shown and an optional short
+// note go to /api/feedback, and nothing that identifies the sender.
+
+const reportOpen = $("report-open");
+const reportForm = $("report-form");
+const reportDone = $("report-done");
+
+function resetReport() {
+  reportForm.hidden = true;
+  reportDone.hidden = true;
+  reportDone.textContent = "";
+  reportOpen.hidden = false;
+  reportOpen.setAttribute("aria-expanded", "false");
+  $("report-note").value = "";
+  $("report-send").disabled = false;
+}
+
+reportOpen.addEventListener("click", () => {
+  reportForm.hidden = false;
+  reportOpen.hidden = true;
+  reportOpen.setAttribute("aria-expanded", "true");
+  $("report-note").focus();
+});
+$("report-cancel").addEventListener("click", () => { resetReport(); reportOpen.focus(); });
+reportForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentResult) return;
+  const send = $("report-send");
+  send.disabled = true;
+  let ok = false;
+  try {
+    const res = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ claim: currentResult.claim, verdict: currentResult.verdict, report: true,
+                             note: $("report-note").value.trim() }) });
+    ok = res.ok;
+  } catch { ok = false; }
+  reportDone.hidden = false;
+  if (ok) {
+    reportForm.hidden = true;
+    reportDone.textContent = "Thanks. Your report was sent, with no name or address attached.";
+  } else {
+    send.disabled = false;
+    reportDone.textContent = "The report did not send. Check your connection and send it again.";
+  }
 });
 
 // ---- Study sheet (the deep dive) -------------------------------------------

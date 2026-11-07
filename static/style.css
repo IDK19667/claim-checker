@@ -150,8 +150,10 @@ body {
 }
 .wordmark {
   font: 500 20px/1 var(--display); letter-spacing: -0.02em;
-  white-space: nowrap; color: var(--on-deep); text-decoration: none;
+  white-space: nowrap; color: var(--on-deep); text-decoration: none; position: relative;
 }
+/* The name stays 20px tall; the thumb target around it does not. */
+.wordmark::after { content: ""; position: absolute; inset: -12px -6px; }
 /* "Beta" is a label beside the name, in the mono every label is set in: a
    hairline tag, no fill, no colour, and nothing to press. It is plain text,
    never a link or a button, so it takes no tap area. */
@@ -242,6 +244,8 @@ body {
   color: var(--ink-3); padding: 8px; font-family: inherit;
 }
 .clear { right: 42px; } .mic { right: 6px; }
+/* Small marks, 44px to touch: the target grows, the mark and the layout do not. */
+.clear::after, .mic::after { content: ""; position: absolute; inset: -3px -5px; }
 .mic.listening { color: var(--green); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.25; } }
 
@@ -288,7 +292,7 @@ body {
 .chip {
   font-size: 14px; font-weight: 400; line-height: 1.3;
   background: var(--panel); color: var(--ink); border: 1px solid var(--rule);
-  padding: 9px 12px;
+  padding: 9px 12px; min-height: 44px;
 }
 .chip:hover { border-color: var(--ink); }
 
@@ -391,7 +395,11 @@ body {
 .report-head > .back { display: flex; width: 100%; margin-bottom: 12px; color: var(--on-deep-2); }
 .report-head > .back:hover { color: var(--on-deep); }
 .report-head { padding: 0 0 52px; }
-.case { margin: 0 0 26px; color: var(--on-deep-3); }
+.case { margin: 0; color: var(--on-deep-3); }
+/* The case line and the standing "Not medical advice" share one row, so the
+   notice is on the first screen of every result without taking a line. */
+.case-row { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; margin: 0 0 26px; }
+.case-row .case-nma { color: var(--on-deep-2); }
 
 /* The thread: a fine line from the claim down to its verdict, in the gutter,
    with a knot at each end. It is the one line that says these two belong to
@@ -472,6 +480,14 @@ body {
   font-size: 13.5px; line-height: 1.45; color: var(--on-deep-2);
   text-wrap: balance;
 }
+/* The same quiet line on the screens that have no verdict yet: under the
+   claim field's introduction, on a dead end, and on an error. */
+.ask-note, .error-note {
+  margin: 12px 0 0; max-width: 28em;
+  font-size: 13.5px; line-height: 1.45; color: var(--on-deep-2); text-wrap: balance;
+}
+.doc .ask-note { color: var(--ink-2); }
+.error-note { margin-top: 20px; }
 
 /* ---- By day: the reading behind the verdict ------------------------------- */
 
@@ -663,7 +679,8 @@ body {
 #result.checking .deeper,
 #result.checking .actions,
 #result.checking .toast,
-#result.checking .feedback { display: none; }
+#result.checking .feedback,
+#result.checking .report { display: none; }
 #result.checking .report-head { min-height: 46vh; }
 
 .ref {
@@ -764,7 +781,7 @@ mark, .key-mark, .hl {
   padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
   font-size: 14px;
 }
-.thumb { margin-left: 0; background: transparent; border: 1px solid var(--rule-2); padding: 8px 11px; color: var(--ink); }
+.thumb { margin-left: 0; background: transparent; border: 1px solid var(--rule-2); padding: 8px 11px; min-height: 44px; color: var(--ink); }
 .thumb:first-of-type { margin-left: auto; }
 .thumb:hover, .thumb[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--panel); }
 
@@ -915,6 +932,23 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .dive-links a { display: inline-flex; align-items: center; gap: 5px; color: var(--green); }
 .dive-sub { margin: 18px 0 6px; }
 
+/* "Report a wrong answer": under the thumbs, a plain outlined button that
+   opens a short anonymous note. 44px tall, the page's own controls, no new
+   colour. The form is shut until asked for. */
+.report { margin: 16px 0 0; }
+.report-open { min-height: 44px; font-size: 14px; padding: 10px 16px; }
+.report-form { margin: 12px 0 0; }
+.report-form[hidden], .report-done[hidden] { display: none; }
+.report-form label { display: block; font-size: 14px; margin: 0 0 6px; }
+.report-form textarea {
+  display: block; width: 100%; box-sizing: border-box; resize: vertical; min-height: 84px;
+  padding: 10px 12px; font: 400 16px/1.45 var(--body); color: var(--ink);
+  background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--r-control);
+}
+.report-actions { display: flex; gap: 8px; margin: 8px 0 0; }
+.report-actions .secondary, .report-actions .ghost { min-height: 44px; }
+.report-done { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
+
 /* ---- Status, errors, the wait -------------------------------------------- */
 
 .status { font-size: 13px; color: var(--ink-3); }
@@ -929,6 +963,11 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 #error .countdown { color: var(--on-deep-2); }
 #error .secondary { margin-top: 24px; background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
 #error .secondary:hover { background: var(--panel); }
+.error-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 0; }
+#error .error-actions > button { margin-top: 0; min-height: 44px; }
+#error .ghost { color: var(--on-deep); border-color: var(--deep-line); }
+#error .ghost:hover { background: var(--deep-2); }
+#error .ghost:disabled { color: var(--on-deep-2); }
 #error :focus-visible { outline-color: var(--sage); }
 /* While the countdown runs the way out is shown, but plainly not yet open. */
 #error .secondary:disabled { background: transparent; color: var(--on-deep-2); border-color: var(--deep-line); }

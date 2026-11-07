@@ -135,7 +135,7 @@ _first_css = (ROOT / "static" / "flight.css").read_text()
 t("the first screen of the footage carries no panel: the footage, its "
   "headline, and one small line that keeps 'Not medical advice' on screen",
   'data-layer="claim"' not in flight_tpl and "scroll-cue" not in flight_tpl
-  and '<p class="first-note">Illustrative footage. Not medical advice.</p>' in flight_tpl
+  and '<p class="first-note">Evident Beta. Illustrative footage. Not medical advice. Ask a doctor before you change a treatment.</p>' in flight_tpl
   and '.flight-work[data-stage="claim"] .flight-foot { opacity: 0; visibility: hidden; }'
   in _first_css
   and '.flight-work[data-stage="claim"] .first-note { opacity: 1; visibility: visible; }'
