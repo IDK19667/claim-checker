@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import time
 
 import breakdown
 import evidence
@@ -191,11 +192,29 @@ def _gemini():
     return _gemini_client
 
 
+# Seconds to wait before the second and the third try of one Gemini call.
+GEMINI_RETRY_PAUSES = (1.0, 3.0)
+_provider_log = logging.getLogger("evident.provider")
+
+
 def _gemini_wrap(fn):
     from google.genai import errors
 
     try:
-        return fn()
+        # A busy (5xx) or rate-limited (429) call is asked again, up to twice.
+        # Anything else, a bad key included, fails on the first try as before.
+        for attempt in range(len(GEMINI_RETRY_PAUSES) + 1):
+            try:
+                return fn()
+            except (errors.ServerError, errors.ClientError) as e:
+                code = getattr(e, "code", None)
+                retryable = isinstance(e, errors.ServerError) or code == 429
+                if not retryable or attempt >= len(GEMINI_RETRY_PAUSES):
+                    raise
+                pause = GEMINI_RETRY_PAUSES[attempt]
+                _provider_log.warning("Gemini returned %s; trying again in %ss (try %d of %d)",
+                                      code, pause, attempt + 2, len(GEMINI_RETRY_PAUSES) + 1)
+                time.sleep(pause)
     except errors.ClientError as e:
         code = getattr(e, "code", None)
         status = str(getattr(e, "status", "") or "")

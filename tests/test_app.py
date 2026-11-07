@@ -9,6 +9,7 @@ import logging
 import os
 import pathlib
 import sys
+import types
 import tempfile
 import urllib.parse
 
@@ -29,6 +30,11 @@ import ratelimit  # noqa: E402
 import verdict  # noqa: E402
 from google.genai import errors  # noqa: E402
 import requests  # noqa: E402
+
+# Gemini calls are retried after a pause. No test waits for it: verdict's
+# clock is a recorder, and the retry tests below read what it was asked for.
+PAUSES = []
+verdict.time = types.SimpleNamespace(sleep=PAUSES.append)
 
 appmod.app.logger.setLevel(logging.ERROR)
 c = appmod.app.test_client()
@@ -114,9 +120,11 @@ class FakeModels:
         self.configs = getattr(self, "configs", []) + [kw.get("config") or {}]
         self.prompts = getattr(self, "prompts", []) + [kw.get("contents") or ""]
         # An empty script is a provider that is down: every call that can
-        # fail open (the faithfulness check, the direction read) does.
+        # fail open (the faithfulness check, the direction read) does. It is
+        # a dropped connection, which is not retried, so each call that finds
+        # the script empty still counts once.
         if not self.script:
-            raise errors.ServerError(503, {"error": {"message": "script empty"}})
+            raise ConnectionError("script empty")
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -252,13 +260,13 @@ t("sse rate limit -> error 429 w/ retry_after", evs[-1]["stage"] == "error" and 
 ratelimit.PER_USER = ratelimit.SlidingWindow(100, 600)
 
 # ---- gemini error mapping -----------------------------------------------------
-fg.models.script = [errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})]
+fg.models.script = [errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})] * 3
 r = P("err a"); t("gemini 429 -> 429 w/ retry_after", r.status_code == 429 and r.get_json()["retry_after"] == 20)
 fg.models.script = [errors.ClientError(400, {"error": {"message": "API key not valid.", "status": "INVALID_ARGUMENT"}})]
 r = P("err b"); t("gemini bad key -> 500, and the page says only that the checker is unavailable",
   r.status_code == 500 and r.get_json()["error"] == appmod.UNAVAILABLE_MESSAGE
   and "aistudio" not in r.get_json()["error"] and ".env" not in r.get_json()["error"])
-fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})]
+fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})] * 3
 t("gemini 503 -> 502", P("err c").status_code == 502)
 fg.models.script = [Resp("q"), Resp("not json")]
 t("non-JSON -> complicated", P("err d").get_json()["verdict"] == "complicated")
@@ -269,6 +277,57 @@ fg.models.script = [Resp("q")]
 r = P("err f"); t("PubMed down -> 502", r.status_code == 502 and "PubMed" in r.get_json()["error"])
 t("failed checks not cached", all(db.get_cached_verdict(x, 24) is None for x in ("err a", "err b", "err c", "err f")))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+# ---- gemini retries -----------------------------------------------------------
+def _scripted(*items):
+    seq, calls = list(items), []
+
+    def go():
+        calls.append(1)
+        item = seq.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+    return go, calls
+
+
+def _run_wrap(*items):
+    go, calls = _scripted(*items)
+    del PAUSES[:]
+    try:
+        return verdict._gemini_wrap(go), None, len(calls), list(PAUSES)
+    except verdict.ProviderError as e:
+        return None, e, len(calls), list(PAUSES)
+
+
+def _e503(): return errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}})
+def _e500(): return errors.ServerError(500, {"error": {"message": "oops", "status": "INTERNAL"}})
+def _e429(): return errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})
+
+
+_v, _e, _n, _p = _run_wrap(_e503(), _e503(), "ok")
+t("gemini retry: 503, 503, then success returns the answer after 3 tries, pausing 1s then 3s",
+  _v == "ok" and _e is None and _n == 3 and _p == [1.0, 3.0], (_v, _e, _n, _p))
+_v, _e, _n, _p = _run_wrap(_e503(), _e503(), _e503())
+t("  503 three times: the same 'unavailable' error and message as before, after 3 tries",
+  _e is not None and _e.kind == "unavailable" and _e.detail == "The AI service is having trouble (503)."
+  and _n == 3 and _p == [1.0, 3.0], (_e, _n, _p))
+_v, _e, _n, _p = _run_wrap(_e429(), "ok")
+t("  429 then success returns the answer, pausing 1s once", _v == "ok" and _n == 2 and _p == [1.0], (_v, _n, _p))
+_v, _e, _n, _p = _run_wrap(_e429(), _e429(), _e429())
+t("  429 three times: 'rate_limit' after 3 tries", _e is not None and _e.kind == "rate_limit" and _n == 3, (_e, _n))
+_v, _e, _n, _p = _run_wrap(errors.ClientError(400, {"error": {"message": "API key not valid.", "status": "INVALID_ARGUMENT"}}), "ok")
+t("  a rejected key is never retried: 'auth' after 1 try, no pause",
+  _e is not None and _e.kind == "auth" and _n == 1 and _p == [], (_e, _n, _p))
+_v, _e, _n, _p = _run_wrap(errors.ClientError(404, {"error": {"message": "no model", "status": "NOT_FOUND"}}), "ok")
+t("  any other 4xx is never retried: 'other' after 1 try, no pause",
+  _e is not None and _e.kind == "other" and _n == 1 and _p == [], (_e, _n, _p))
+_v, _e, _n, _p = _run_wrap(_e500(), "ok")
+t("  any 5xx is retried, not just 503", _v == "ok" and _n == 2 and _p == [1.0], (_v, _n, _p))
+_v, _e, _n, _p = _run_wrap(ConnectionError("down"), "ok")
+t("  a dropped connection is not retried", _e is not None and _e.kind == "unavailable" and _n == 1 and _p == [], (_e, _n, _p))
+del PAUSES[:]
+
 
 # ---- trending -----------------------------------------------------------------
 for _ in range(2):

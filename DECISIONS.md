@@ -4,6 +4,33 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-07: A busy or rate-limited Gemini call is asked twice more
+
+**About 2 of 12 live checks failed with "The AI service is having trouble
+(503)"**, a blip that a second try usually clears. `_gemini_wrap` in
+`verdict.py` now makes up to 3 tries in all for each Gemini call, pausing 1 s
+before the second and 3 s before the third (`GEMINI_RETRY_PAUSES`). Each
+retry is logged as a warning on `evident.provider` with the code and the
+pause, never the prompt, the key or the response body.
+
+* **Retried:** any 5xx (`ServerError`) and a 429 (`ClientError`).
+* **Not retried:** a rejected key (400 "API key", 401, 403), any other 4xx,
+  any other `APIError`, and a dropped connection, timeout or `OSError`. They
+  fail on the first try with the same error kind and message as before, and
+  so does a call that fails all 3 tries.
+* **Why 429 now:** an earlier unmerged round chose not to retry it. Here the
+  free tier's short bursts are the common cause, and two more tries cost at
+  most two calls.
+* **Worst case:** 4 s of added waiting per call. One check makes at most 7
+  Gemini calls (search, verdict, its one redo, faithfulness, guidance, and up
+  to two direction reads), so at most 28 s added; the longest stretch with no
+  event from the server is the weigh stage, with 6 calls and 24 s added.
+  The page gives up after 90 s of silence, so the waits alone stay well
+  under it, though a run of slow model calls plus retries could still near it.
+* The test fake's "script empty" provider is now a dropped connection, so it
+  is not retried and call counts in the tests stay as they were. Tests never
+  sleep: `verdict.time` is a recorder.
+
 ## 2026-11-07: Plain guidance decides pregnancy and child-safety claims
 
 **"Drinking a little alcohol during pregnancy is safe" was stamped "It's
