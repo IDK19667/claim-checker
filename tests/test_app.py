@@ -3685,6 +3685,120 @@ t("  through /api/check the stamp is false, with the guidance and doctor sentenc
 t("  with no dash anywhere in what the reader sees", not re.search("[\u2013\u2014]", json.dumps(_st, ensure_ascii=False)))
 verdict.guideline_view = lambda claim: None
 
+# ---- Plain guidance decides pregnancy and child-safety claims -------------------
+_PD, _CD = verdict.PREGNANCY_DOCTOR, verdict.CHILD_DOCTOR
+_ALC = "Drinking a little alcohol during pregnancy is safe"
+_ALC_SAYS = "no amount of alcohol is safe during pregnancy."
+_ALC_LINE = "Major health guidelines say: " + _ALC_SAYS
+t("pregnancy: the doctor lines are the ones asked for",
+  _PD == "Ask a doctor or midwife about this." and _CD == "Ask your child's doctor about this.")
+t("  vulnerable_group and says_safe read the wording",
+  verdict.vulnerable_group(_ALC) == "pregnancy" and verdict.vulnerable_group("Honey is safe for babies") == "child"
+  and verdict.vulnerable_group("Kids who eat breakfast do better in school") == ""
+  and verdict.vulnerable_group("Antibiotics cure the common cold") == ""
+  and verdict.says_safe(_ALC) and verdict.says_safe("Honey is okay for babies")
+  and not any(verdict.says_safe(x) for x in ("Alcohol is not safe in pregnancy", "Smoking is never safe",
+                                             "It isn't safe for babies", "Alcohol is unsafe in pregnancy")))
+t("  a child claim with safety wording is a guideline topic; one without is not, so it costs no call",
+  verdict.guideline_topic("Honey is safe for babies")
+  and not verdict.guideline_topic("Kids who eat breakfast do better in school"))
+
+_p_cited = dict(_mixed_result, cited_studies=["G1", "G2"])
+_p_none = {"verdict": "insufficient", "tldr": "Nothing here tests this claim.", "explanation": "No study tests it.",
+           "still_open": "Whether anyone has tested it.", "cited_studies": [], "breakdown": None}
+verdict.guideline_view = _guide("false", _ALC_SAYS)
+for _label, _res, _studs in (("complicated with a study cited", dict(_p_cited), [dict(s) for s in _GUIDE_STUDIES]),
+                             ("insufficient with nothing cited", dict(_p_none), [])):
+    _o = verdict.follow_guidelines(_res, _studs, _ALC)
+    t(f"  alcohol, {_label}: false, the lead once, the doctor line, still_open set",
+      _o["verdict"] == "false" and _o["tldr"] == f"{_ALC_LINE} {_PD}"
+      and _o["tldr"].count("Major health guidelines say") == 1 and _o["still_open"].strip(), _o)
+verdict.guideline_view = _guide("false", "smoking during pregnancy harms the baby and is never safe.")
+_o = verdict.follow_guidelines(dict(_p_none), [], "Smoking a few cigarettes during pregnancy is safe")
+t("  smoking: false with the pregnancy doctor line",
+  _o["verdict"] == "false" and _o["tldr"].endswith(_PD) and "never safe" in _o["tldr"], _o)
+verdict.guideline_view = _guide("true", "getting the whooping cough shot while pregnant helps protect "
+                                        "newborn babies from getting sick.")
+_o = verdict.follow_guidelines(dict(_p_none), [], "The whooping cough vaccine given during pregnancy protects newborns")
+t("  whooping cough: insufficient with nothing cited becomes true, with the pregnancy doctor line",
+  _o["verdict"] == "true" and _o["tldr"].endswith(" " + _PD) and "helps protect newborn babies" in _o["tldr"], _o)
+verdict.guideline_view = _guide("false", "babies under one year old should not be given honey.")
+_o = verdict.follow_guidelines(dict(_p_none), [], "Honey is safe for babies")
+t("  honey for babies: false with the child doctor line",
+  _o["verdict"] == "false" and _o["tldr"].endswith(" " + _CD), _o)
+# Guards
+verdict.guideline_view = _guide("true", "eating sushi during pregnancy is fine.")
+_o = verdict.follow_guidelines(dict(_p_none), [], "Eating sushi during pregnancy is safe")
+t("  guard: guidance alone never makes 'safe in pregnancy' true; the line is only appended",
+  _o["verdict"] == "insufficient" and _o["tldr"].endswith("is fine."), _o)
+verdict.guideline_view = _guide("false", "pregnant women can safely drink a little, but should avoid binge drinking.")
+t("  guard: a line that argues with itself is not used, the verdict stays complicated",
+  verdict.follow_guidelines(dict(_p_cited), [dict(s) for s in _GUIDE_STUDIES], _ALC) == _p_cited)
+verdict.guideline_view = lambda claim: None
+t("  guard: no guidance leaves a pregnancy claim unchanged",
+  verdict.follow_guidelines(dict(_p_cited), _GUIDE_STUDIES, _ALC) == _p_cited)
+_ord_ins = verdict.follow_guidelines(dict(_p_none), [], "Colloidal silver cures infections")
+t("  guard: a claim outside both groups keeps its stamp", _ord_ins["verdict"] == "insufficient")
+
+_PNS = [("no amount of alcohol is safe during pregnancy.", True),
+        ("there is no known safe amount of alcohol to drink while pregnant.", True),
+        ("no level of alcohol is known to be safe during pregnancy.", True),
+        ("no alcohol is safe during pregnancy.", True),
+        ("drinking alcohol while pregnant is not known to be safe.", True),
+        ("it is not okay to drink alcohol while pregnant.", True),
+        ("smoking during pregnancy harms the baby and is never safe.", True),
+        ("pregnant women should not take any risks with alcohol.", True),
+        ("no amount is safe, and even a little can harm the baby.", True),
+        ("the vaccine does not cause harm to the baby.", False),
+        ("there is no harm in a small amount.", False),
+        ("a little alcohol does not hurt the baby.", False),
+        ("pregnant women can safely drink a little, but should avoid binge drinking.", False),
+        ("alcohol can cause lifelong problems for the baby.", None)]
+_pns_bad = [(x, w, verdict._plain_not_safe(x)) for x, w in _PNS if verdict._plain_not_safe(x) is not w]
+t("  _plain_not_safe: plain no, argues with itself, or no cue, by table", not _pns_bad, _pns_bad)
+_SS = [("Drinking a little alcohol during pregnancy is safe", True), ("Drinking a little alcohol won't hurt the baby", True),
+       ("A glass of wine doesn't harm your baby during pregnancy", True),
+       ("There is no risk in eating sushi while pregnant", True),
+       ("Alcohol is not harmful during pregnancy in small amounts", True), ("Honey is safe for babies", True),
+       ("Honey is okay for babies", True), ("No amount of alcohol is safe during pregnancy", False),
+       ("Smoking while pregnant is not safe", False), ("Smoking is never safe", False),
+       ("It isn't safe for babies", False), ("Alcohol is unsafe in pregnancy", False),
+       ("The whooping cough vaccine given during pregnancy protects newborns", False)]
+_ss_bad = [(x, w) for x, w in _SS if verdict.says_safe(x) is not w]
+t("  says_safe: asserts safety or not, by table", not _ss_bad, _ss_bad)
+verdict.guideline_view = _guide("false", "no level of alcohol is known to be safe during pregnancy.")
+_o = verdict.follow_guidelines(dict(_p_cited), [dict(s) for s in _GUIDE_STUDIES], _ALC)
+t("  alcohol with 'no level of alcohol is known to be safe' becomes false, with the doctor line",
+  _o["verdict"] == "false" and _o["tldr"].endswith(" " + _PD), _o)
+verdict.guideline_view = _guide("false", "the vaccine does not cause harm to the baby.")
+t("  a 'rejects' line that says no harm is not used",
+  verdict.follow_guidelines(dict(_p_cited), [dict(s) for s in _GUIDE_STUDIES], _ALC) == _p_cited)
+verdict.guideline_view = _guide("true", "this is fine.")
+_o = verdict.follow_guidelines(dict(_p_none), [], "A glass of wine doesn't harm your baby during pregnancy")
+t("  guidance alone never stamps 'won't harm' wording true", _o["verdict"] == "insufficient", _o)
+
+# The lead, repeated by the model, is stripped
+for _rep in ("Major health guidelines say that no amount of alcohol is safe during pregnancy.",
+             "major health guidelines say: no amount of alcohol is safe during pregnancy.",
+             "Guidelines say that no amount of alcohol is safe during pregnancy."):
+    fg.models.script = [_GL("rejects", _rep)]
+    verdict.guideline_view = _real_guideline_view
+    _lv = verdict.guideline_view(_ALC)
+    t(f"  guideline_view strips a repeated lead: {_rep[:28]!r}",
+      _lv and _lv["says"] == _ALC_SAYS, _lv)
+
+# Through a real check
+verdict.guideline_view = _guide("false", _ALC_SAYS)
+fg.models.script = [Resp("alcohol AND pregnancy"),
+                    Resp(VJ("complicated", [1, 2], tldr="The evidence on alcohol in pregnancy is mixed.",
+                            explanation="One study found no harm at low levels (Study 1). Another found "
+                                        "some risk (Study 2)."))]
+_alc = P(_ALC, ip="7.7.7.51").get_json()
+t("  through a real check the alcohol claim is false, with the doctor line and a still_open",
+  _alc.get("verdict") == "false" and _alc.get("tldr") == f"{_ALC_LINE} {_PD}" and _alc.get("still_open")
+  and not re.search("[–—]", json.dumps(_alc, ensure_ascii=False)), _alc)
+verdict.guideline_view = lambda claim: None
+
 # ---- A Beta label beside the wordmark, and one line under every verdict --------
 # Both asked for while accuracy is still being proven: "Beta" on every screen
 # that has a masthead, and "Check important health decisions with a doctor."

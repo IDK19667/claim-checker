@@ -4,6 +4,55 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-07: Plain guidance decides pregnancy and child-safety claims
+
+**"Drinking a little alcohol during pregnancy is safe" was stamped "It's
+complicated"**, though the CDC, WHO and NHS say no amount of alcohol is known
+to be safe in pregnancy. Three things failed together, all seen in real runs:
+
+* **The guideline answer was thrown away as "arguing with itself".** The
+  consistency check reads "no amount of alcohol is safe" as a yes to a claim
+  that alcohol is safe, so a plain rejection looked like a contradiction. The
+  same happened for "smoking during pregnancy harms the baby and is never safe".
+  `breakdown.stance()` is shared with the main verdict path, so it is not
+  changed here.
+* **The line repeated its lead**, so a takeaway would have read "Major health
+  guidelines say: major health guidelines say: ...". `guideline_view` now strips
+  a repeated lead ("guidelines say that", "major health guidelines say:").
+* **Guidance that backs a protective claim could not lift "Not enough evidence".**
+  "The whooping cough vaccine given during pregnancy protects newborns" found
+  studies that were not about pregnancy, so it stayed "Not enough evidence" with
+  the guidance only appended, which can read as "maybe it does not work".
+
+**The rule.** `vulnerable_group(claim)` says "pregnancy" (the pregnancy words
+already in the guideline topic, one shared pattern) or "child" (child, baby,
+infant, toddler, newborn and kin, only when the claim also has safety wording,
+so "Kids who eat breakfast do better in school" makes no extra call). When the
+guidance is plain and disagrees, an "insufficient" or "complicated" stamp
+becomes the guidance's verdict even with nothing cited, and the takeaway is the
+guideline line plus "Ask a doctor or midwife about this." or "Ask your child's
+doctor about this." The forgo-treatment exception still comes first. Both paths
+share one cleanup of the explanation, research lines and still_open.
+
+**Guidance alone never stamps "Likely true" on a claim that something is safe.**
+The costly mistake on a pregnancy or child claim is calling something safe, so
+that still needs a study the answer used. This covers "won't hurt", "doesn't
+harm" and "no risk" wording as well as "safe" (`says_safe`). If such a claim
+meets supporting guidance, the line is only appended to an "insufficient"
+stamp, as before. The other direction is on purpose: plain guidance alone can
+stamp "Likely false" on a claim that something is dangerous, because a vaccine
+wrongly called dangerous in pregnancy must not read "Not enough evidence".
+For safety claims whose guidance says no, a line counts as a plain no when it
+negates safety ("not safe", "not known to be safe", "no amount is safe", "no
+level is known to be safe", "never safe") or has a plain no cue (avoid, should
+not, harm, risk, dangerous) and still affirms nothing. Affirmation is checked
+first and includes negated harm, so "does not cause harm" and "women can safely
+drink a little, but should avoid binge drinking" argue with themselves and are
+not used. Every other claim keeps the existing check.
+
+**Not fixed here:** the PubMed search still drops "during pregnancy" from some
+claims, which is why the studies found are often not about pregnancy.
+
 ## 2026-11-06: Counting checks without collecting more, and what the site audit changed
 
 **The queue asked for "free, privacy-friendly analytics" (a counter of checks per

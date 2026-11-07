@@ -591,6 +591,7 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
 _guide_log = logging.getLogger("evident.guideline")
 GUIDELINE_LEAD = "Major health guidelines say: "
 
+_PREGNANCY_WORDS = r"pregnan\w*|prenatal|antenatal|f(?:o)?etus|f(?:o)?etal|miscarriage|breastfe\w*"
 _GUIDELINE_TOPIC = re.compile(
     r"\b(?:"
     # medicine and treatment
@@ -607,7 +608,7 @@ _GUIDELINE_TOPIC = re.compile(
     # cancer
     r"cancers?|tumou?rs?|leuk(?:a)?emia|lymphoma|melanoma|carcinoma|oncolog\w*|"
     # pregnancy
-    r"pregnan\w*|prenatal|antenatal|f(?:o)?etus|f(?:o)?etal|miscarriage|breastfe\w*"
+    + _PREGNANCY_WORDS +
     r")\b", re.IGNORECASE)
 # "Stopping treatment": going without a therapy or a dose, by any name.
 _STOPPING_TREATMENT = re.compile(
@@ -638,6 +639,73 @@ def forgoes_treatment(claim: str) -> str:
         return "forgo"
     return "cure" if _MEDICINE_CURES.search(claim) else ""
 
+# Who the claim is about: a pregnancy or a small child, where calling
+# something safe on the wrong evidence is the costly mistake.
+PREGNANCY_DOCTOR = "Ask a doctor or midwife about this."
+CHILD_DOCTOR = "Ask your child's doctor about this."
+_PREGNANCY = re.compile(r"\b(?:" + _PREGNANCY_WORDS + r")\b", re.IGNORECASE)
+_CHILD = re.compile(r"\b(?:child|children|kids?|baby|babies|infants?|toddlers?|newborns?)\b",
+                    re.IGNORECASE)
+_SAFETY_WORDS = re.compile(
+    r"\b(?:safe|safely|safer|unsafe|harmless|harm|harms|harmful|hurt|hurts|fine|okay|ok|alright|"
+    r"all right|dangerous|risky|risk-free)\b", re.IGNORECASE)
+_A = r"[\u2019']"
+_SAFE_W = r"(?:safe|okay|ok|fine|alright|all right|harmless)\b"
+# Phrases that negate safety; removed before looking for an affirmation.
+_SAFE_NO = re.compile(
+    r"\bunsafe\b|\bnever safe\b"
+    r"|\bnot\s+(?:\w+\s+){0,3}?" + _SAFE_W +
+    r"|\b(?:is|are|was|were)n" + _A + r"t\s+(?:\w+\s+){0,3}?" + _SAFE_W +
+    r"|\bno\s+(?:\w+\s+){0,6}?(?:is|are)\s+(?:(?:known|considered|proven|shown|thought)\s+)?"
+    r"(?:to be\s+)?safe\b"
+    r"|\bno\s+(?:known\s+)?safe\s+(?:amount|level|limit|time|dose|quantity|way)s?\b",
+    re.IGNORECASE)
+# Anything that affirms safety, including negated harm.
+_SAFE_YES = re.compile(
+    r"\b(?:safe|safely|harmless|fine|okay|ok|alright|all right|risk-free)\b"
+    r"|\b(?:no|without)\s+(?:known\s+)?(?:harm|risk|danger)s?\b"
+    r"|\bnot\s+(?:\w+\s+)?(?:harmful|dangerous|risky)\b"
+    r"|(?:\b(?:does|do|did|will|would|can|could)\s+not|n" + _A + r"t)\s+(?:\w+\s+)?"
+    r"(?:harm|hurt|damage|endanger)\w*", re.IGNORECASE)
+# Plain no words for a line answering a safety claim.
+_NO_CUE = re.compile(
+    r"\b(?:avoid\w*|should not|shouldn" + _A + r"t|must not|mustn" + _A + r"t|do not|don" + _A + r"t|"
+    r"harm|harms|harmed|harmful|hurt|hurts|damage\w*|dangerous|danger|risk|risks|risky|toxic)\b",
+    re.IGNORECASE)
+_LEAD_REPEAT = re.compile(r"^(?:major\s+)?(?:health\s+)?guidelines\s+say\s*(?:that\b|:)?\s*",
+                          re.IGNORECASE)
+
+
+def vulnerable_group(claim: str) -> str:
+    """"pregnancy" for a claim about pregnancy or nursing, "child" for one
+    about a baby or child that makes a safety statement, else "". Wording
+    only, never one claim's text."""
+    claim = str(claim or "")
+    if _PREGNANCY.search(claim):
+        return "pregnancy"
+    if _CHILD.search(claim) and _SAFETY_WORDS.search(claim):
+        return "child"
+    return ""
+
+
+def says_safe(claim: str) -> bool:
+    """True when the claim asserts that something IS safe (safe, harmless,
+    fine, okay, risk-free, or harm negated: "won't hurt", "no risk"), and not
+    negated ("not safe", "never safe", "no amount is safe")."""
+    return bool(_SAFE_YES.search(_SAFE_NO.sub(" ", str(claim or ""))))
+
+
+def _plain_not_safe(line: str) -> bool | None:
+    """For a line answering a "this is safe" claim: True when it is a plain
+    "not safe", False when it still affirms safety (it argues with itself),
+    None when it has no such cue. An affirmation is looked for first, so
+    "does not cause harm" argues."""
+    if _SAFE_YES.search(_SAFE_NO.sub(" ", line)):
+        return False
+    if _SAFE_NO.search(line) or _NO_CUE.search(line):
+        return True
+    return None
+
 
 def guideline_topic(claim: str) -> bool:
     """A claim about medicine, vaccines, infections, cancer, pregnancy or
@@ -645,6 +713,7 @@ def guideline_topic(claim: str) -> bool:
     pasteurization): the ones where a wrong verdict can hurt someone."""
     claim = str(claim or "")
     return bool(_GUIDELINE_TOPIC.search(claim) or _STOPPING_TREATMENT.search(claim)
+                or vulnerable_group(claim) == "child"
                 or evidence.protective_practice(claim))
 
 
@@ -732,6 +801,8 @@ def guideline_view(claim: str) -> dict | None:
     room = TLDR_MAX - len(GUIDELINE_LEAD)
     says = breakdown.plain(tidy_prose(breakdown._REF.sub("", str(read.get("says") or ""))
                                       .replace(" ()", ""), room)).strip()
+    # The model sometimes repeats the lead; the takeaway adds it once.
+    says = _LEAD_REPEAT.sub("", says).strip()
     # Nothing here was read from an abstract, so it may print no figure:
     # there would be nothing on the page to check it against.
     if (not bodies or not says or re.search(r"\d", says) or len(says) > room
@@ -767,7 +838,12 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     line = GUIDELINE_LEAD + view["says"]
     verdict = result.get("verdict") or ""
     tldr = result.get("tldr") or ""
-    if breakdown.stamp_conflict(view["verdict"], line, "", claim):
+    plain = _plain_not_safe(view["says"]) if says_safe(claim) and view["verdict"] == "false" else None
+    if plain is None:
+        argues = breakdown.stamp_conflict(view["verdict"], line, "", claim)
+    else:
+        argues = not plain
+    if argues:
         # A sentence that argues with its own position is no guidance.
         _guide_log.warning("a guideline answer argued with itself, so it was not used: %r (%s)",
                            line, view["verdict"])
@@ -779,18 +855,17 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
         # not read as "maybe it's fine". Applies even with nothing cited.
         _guide_log.warning("health guidance (%s) rejects a forgo-treatment claim, so the %r "
                            "becomes false: %r", ", ".join(view["bodies"]), verdict, line)
-        against = lambda t: breakdown.stamp_conflict("false", "", t, claim)
-        explanation = " ".join(t for t in breakdown.sentences(result.get("explanation") or "")
-                               if not against(t)).strip()
-        bd = result.get("breakdown")
-        if bd:
-            bd = {**bd, "says": [t for t in bd.get("says") or [] if not against(t)]}
-        still = str(result.get("still_open") or "").strip()
-        if not still or against(still):
-            still = "Whether any study has tested this claim directly."
         doctor = FORGO_DOCTOR if kind == "forgo" else CURE_DOCTOR
-        return {**result, "verdict": "false", "tldr": f"{line} {doctor}",
-                "explanation": explanation or line, "still_open": still, "breakdown": bd}
+        return _restamp(result, "false", line, doctor, claim)
+    group = vulnerable_group(claim)
+    group_doctor = PREGNANCY_DOCTOR if group == "pregnancy" else CHILD_DOCTOR
+    if (group and verdict in ("insufficient", "complicated")
+            and not (says_safe(claim) and view["verdict"] == "true")):
+        # Guidance alone may say "not safe" (or that a vaccine protects) for a
+        # pregnancy or a child, never "safe": that still needs a study.
+        _guide_log.warning("health guidance (%s) is plain on a %s claim, so the %r becomes %s: %r",
+                           ", ".join(view["bodies"]), group, verdict, view["verdict"], line)
+        return _restamp(result, view["verdict"], line, group_doctor, claim)
     cited = list(result.get("cited_studies") or ())
     reasons = {s["pmid"]: s["background"] for s in studies if s.get("background")}
     if not cited or (verdict == "insufficient"
@@ -803,17 +878,31 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     _guide_log.warning("the verdict %r conflicted with health guidance (%s), so it follows the "
                        "guidance as %r: %r (was %r)", verdict, ", ".join(view["bodies"]),
                        view["verdict"], line, tldr)
-    # The research lines and the explanation still describe the studies; a
-    # sentence in them that rules against the new stamp goes, as it would
-    # against any stamp.
-    against = lambda t: breakdown.stamp_conflict(view["verdict"], "", t, claim)
+    return _restamp(result, view["verdict"], line, group_doctor if group else "", claim,
+                    keep_still=True)
+
+
+def _restamp(result: dict, stamp: str, line: str, doctor: str, claim: str,
+             keep_still: bool = False) -> dict:
+    """The result with a new stamp and the guidance line as its takeaway (plus
+    a doctor line). The research lines and the explanation still describe the
+    studies; a sentence in them that rules against the new stamp goes, as it
+    would against any stamp. An empty still_open, or one that argues with the
+    stamp, is reset, unless keep_still."""
+    against = lambda t: breakdown.stamp_conflict(stamp, "", t, claim)
     explanation = " ".join(t for t in breakdown.sentences(result.get("explanation") or "")
                            if not against(t)).strip()
     bd = result.get("breakdown")
     if bd:
         bd = {**bd, "says": [t for t in bd.get("says") or [] if not against(t)]}
-    return {**result, "verdict": view["verdict"], "tldr": line,
-            "explanation": explanation or line, "breakdown": bd}
+    out = {**result, "verdict": stamp, "tldr": f"{line} {doctor}".strip(),
+           "explanation": explanation or line, "breakdown": bd}
+    if not keep_still:
+        still = str(result.get("still_open") or "").strip()
+        if not still or against(still):
+            still = "Whether any study has tested this claim directly."
+        out["still_open"] = still
+    return out
 
 
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
