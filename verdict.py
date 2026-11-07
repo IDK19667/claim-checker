@@ -672,8 +672,14 @@ _NO_CUE = re.compile(
     r"\b(?:avoid\w*|should not|shouldn" + _A + r"t|must not|mustn" + _A + r"t|do not|don" + _A + r"t|"
     r"harm|harms|harmed|harmful|hurt|hurts|damage\w*|dangerous|danger|risk|risks|risky|toxic)\b",
     re.IGNORECASE)
-_LEAD_REPEAT = re.compile(r"^(?:major\s+)?(?:health\s+)?guidelines\s+say\s*(?:that\b|:)?\s*",
-                          re.IGNORECASE)
+# The repeated lead, then at most one "that" that only joins it to the claim.
+# "that" before a verb is a pronoun ("that is not safe", "that isn't safe",
+# "that won't hurt") and stays, as does "that's", "that," and "that.".
+_LEAD_REPEAT = re.compile(
+    r"^(?:(?:major\s+)?(?:health\s+)?guidelines\s+say\s*:?\s*)?"
+    r"(?:that(?!\s+(?:is|was|are|were|has|had|does|did|can|could|will|would|should|may|might|"
+    r"must|won)(?:n['\u2019]t)?\b)\s+(?=\w))?",
+    re.IGNORECASE)
 
 
 def vulnerable_group(claim: str) -> str:

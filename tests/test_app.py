@@ -3780,12 +3780,24 @@ t("  guidance alone never stamps 'won't harm' wording true", _o["verdict"] == "i
 # The lead, repeated by the model, is stripped
 for _rep in ("Major health guidelines say that no amount of alcohol is safe during pregnancy.",
              "major health guidelines say: no amount of alcohol is safe during pregnancy.",
-             "Guidelines say that no amount of alcohol is safe during pregnancy."):
+             "Guidelines say that no amount of alcohol is safe during pregnancy.",
+             "Major health guidelines say: that no amount of alcohol is safe during pregnancy.",
+             "that no amount of alcohol is safe during pregnancy.",
+             "That no amount of alcohol is safe during pregnancy."):
     fg.models.script = [_GL("rejects", _rep)]
     verdict.guideline_view = _real_guideline_view
     _lv = verdict.guideline_view(_ALC)
     t(f"  guideline_view strips a repeated lead: {_rep[:28]!r}",
       _lv and _lv["says"] == _ALC_SAYS, _lv)
+# A "that" that is a pronoun before a verb is part of the sentence, not a joiner
+for _pron in ("that is not safe during pregnancy.", "that isn't safe during pregnancy.",
+              "that doesn't harm the baby.", "that won't hurt the baby.",
+              "that, the CDC says, is unsafe."):
+    fg.models.script = [_GL("rejects", _pron)]
+    verdict.guideline_view = _real_guideline_view
+    _lv = verdict.guideline_view(_ALC)
+    t(f"  guideline_view keeps a pronoun 'that' before a verb: {_pron[:24]!r}",
+      _lv and _lv["says"] == _pron, _lv)
 
 # Through a real check
 verdict.guideline_view = _guide("false", _ALC_SAYS)
