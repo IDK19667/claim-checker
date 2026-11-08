@@ -4,6 +4,35 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-08: Saved answers, the check log and feedback live in Turso
+
+**Render's free plan wipes the local SQLite file on every deploy and every
+sleep** (about 15 idle minutes), so "Report a wrong answer" notes, saved
+answers and the usage log kept vanishing. The tables now live in Turso, a
+hosted libSQL database, when `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are
+both set; with either missing nothing changes and the local file is used.
+
+* **Why Turso:** free with no card; it speaks SQLite's dialect, so the SQL in
+  `db.py` is unchanged; and no new dependency, because it is reached over its
+  HTTP API (`POST /v2/pipeline`) with `urllib`.
+* **Free terms the owner checked:** 5 GB of storage, 500M row reads and 10M
+  row writes a month.
+* **One layer:** `_routed` wraps every public function in `db.py`. It runs the
+  function against Turso, or against the local file when Turso is not
+  configured, is in a cool-down, or has just failed. `get_conn()` hands the
+  function either connection. `ledger` and the table setup send their
+  statements in one request. Each check is a handful of round trips.
+* **Never a failed check:** each call has a 4 s timeout. A failure (network,
+  HTTP error, bad reply) is logged as a warning with the error kind only,
+  never the token or the SQL, and that call runs against the local file: a
+  cache read becomes a miss, a write lands locally. Three failures in a row
+  skip Turso for 60 s so a dead Turso does not add 4 s to every request.
+  The first healthy call after that creates the tables if boot could not.
+* **Same data:** no IPs and no new fields. `/healthz` makes no Turso call.
+* **Risk:** Turso is reported to be joining Supabase, so the free terms may
+  change. The fallback keeps the site working, only forgetful, if they do.
+  Exporting is easy: it is a SQLite database.
+
 ## 2026-11-08: /healthz says which commit is deployed
 
 **A push to main does not deploy by itself** (the owner clicks Manual Deploy),

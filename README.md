@@ -78,9 +78,14 @@ works (Render, Railway, Fly.io, a $5 VPS). What it needs:
 - **One worker process** (`--workers 1 --threads 8`, already in the
   `Procfile`). The rate limiter is in-memory; multiple processes would each
   keep their own counters.
-- A persistent disk for `health_claim_checker.db` if you want the verdict
-  cache to survive restarts (set `DB_PATH` to a path on it). Without one
-  the app still works, it just re-checks claims after each deploy.
+- Storage that survives restarts. On a free host the local SQLite file is
+  wiped on every deploy and sleep, so use Turso (free, no card): create a
+  database and a token at turso.tech, then set `TURSO_DATABASE_URL`
+  (`libsql://name-org.turso.io`) and `TURSO_AUTH_TOKEN`. The same tables
+  then live there, reached over its HTTP API with no extra dependency. If
+  Turso is unreachable a call falls back to the local file, so a check
+  never fails because of it. With neither variable set everything uses the
+  local file (or a persistent disk: set `DB_PATH` to a path on it).
 - HTTPS (every host above provides it). Service workers and the install
   prompt require it.
 

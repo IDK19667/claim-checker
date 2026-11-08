@@ -26,7 +26,7 @@ accounts, installable as a PWA. See `PRODUCT.md`.
 | Thing | Choice | Don't |
 |---|---|---|
 | Server | Flask, one process | add a framework or an ORM |
-| Storage | SQLite via `db.py` | add a second datastore |
+| Storage | SQLite via `db.py`, in Turso when `TURSO_*` is set | add another datastore |
 | AI | `verdict.py` behind one interface (Gemini default, Claude optional) | call a provider SDK from anywhere else |
 | Evidence | `pubmed.py` (E-utilities) | scrape, or add a second source without a decision entry |
 | Front end | vanilla JS + CSS, no bundler | add React, Tailwind, or a component library |

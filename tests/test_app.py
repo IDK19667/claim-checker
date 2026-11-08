@@ -4186,5 +4186,204 @@ t("  the event stream is never compressed, and images are not either",
 t("  a conditional request still answers 304 with no body",
   c.get("/static/app.js", headers={"Accept-Encoding": "gzip", "If-None-Match": _plain.headers["ETag"]}).status_code in (200, 304))
 
+# ---- Turso storage: the same tables in a hosted database, with a fallback ----------------
+import urllib.error  # noqa: E402
+import sqlite3 as _sq3
+import io as _io3
+
+_SECRET = "tok-SECRET-abc123"
+_URL = "libsql://evident-test.turso.io"
+
+
+class FakeTurso:
+    """Stands in for db._http_post: runs each statement on an in-memory SQLite
+    and answers in Turso's pipeline format (integers as strings)."""
+
+    def __init__(self):
+        self.con = _sq3.connect(":memory:", check_same_thread=False)
+        self.calls = []          # (url, token, body)
+        self.fail = None         # an exception to raise instead of answering
+
+    def __call__(self, url, token, body, timeout):
+        self.calls.append((url, token, body))
+        if self.fail:
+            raise self.fail
+        out = []
+        for r in body["requests"]:
+            if r["type"] == "close":
+                out.append({"type": "ok", "response": {"type": "close"}})
+                continue
+            args = []
+            for a in r["stmt"]["args"]:
+                if a["type"] == "null":
+                    args.append(None)
+                elif a["type"] == "integer":
+                    assert isinstance(a["value"], str)
+                    args.append(int(a["value"]))
+                elif a["type"] == "float":
+                    args.append(float(a["value"]))
+                else:
+                    assert a["type"] == "text"
+                    args.append(a["value"])
+            cur = self.con.execute(r["stmt"]["sql"], args)
+            self.con.commit()
+            cols = [{"name": d[0], "decltype": None} for d in (cur.description or [])]
+            rows = []
+            for row in cur.fetchall():
+                cells = []
+                for v in row:
+                    if v is None:
+                        cells.append({"type": "null"})
+                    elif isinstance(v, int):
+                        cells.append({"type": "integer", "value": str(v)})
+                    elif isinstance(v, float):
+                        cells.append({"type": "float", "value": v})
+                    else:
+                        cells.append({"type": "text", "value": v})
+                rows.append(cells)
+            out.append({"type": "ok", "response": {"type": "execute", "result": {
+                "cols": cols, "rows": rows, "affected_row_count": 0, "last_insert_rowid": None}}})
+        return {"baton": None, "base_url": None, "results": out}
+
+
+_real_post = db._http_post
+_ft = FakeTurso()
+_logbuf = _io3.StringIO()
+_lh = logging.StreamHandler(_logbuf)
+logging.getLogger().addHandler(_lh)
+_oldlvl = logging.getLogger().level
+logging.getLogger().setLevel(logging.DEBUG)
+
+
+def _local_count(table):
+    return _sq.connect(os.environ["DB_PATH"]).execute(f"select count(*) from {table}").fetchone()[0]
+
+
+# 1. Nothing configured: the HTTP function is never called.
+os.environ.pop("TURSO_DATABASE_URL", None); os.environ.pop("TURSO_AUTH_TOKEN", None)
+db._http_post = _ft
+db._reset_turso_state()
+db.init_db(); db.add_feedback("no turso claim", "true", True, "x"); db.get_cached_verdict("no turso claim", 24); db.ledger()
+t("turso: with no env vars nothing calls the HTTP function", _ft.calls == [])
+os.environ["TURSO_DATABASE_URL"] = _URL
+t("  nor with only the URL set", db._turso_config() is None)
+os.environ.pop("TURSO_DATABASE_URL"); os.environ["TURSO_AUTH_TOKEN"] = _SECRET
+db.add_feedback("no turso claim 2", None, False, "y")
+t("  nor with only the token set", db._turso_config() is None and _ft.calls == [])
+
+# 2. Configured: libsql:// becomes https://, and the token goes only in the header.
+os.environ["TURSO_DATABASE_URL"] = _URL
+db._reset_turso_state()
+t("turso: libsql:// is turned into https://", db._turso_config() == ("https://evident-test.turso.io", _SECRET))
+os.environ["TURSO_DATABASE_URL"] = "https://already.turso.io/"
+t("  an https URL is kept, without a trailing slash", db._turso_config()[0] == "https://already.turso.io")
+os.environ["TURSO_DATABASE_URL"] = _URL
+_local_fb = _local_count("feedback")
+db.init_db()
+t("  init_db creates the tables in Turso too",
+  {r[0] for r in _ft.con.execute("select name from sqlite_master where type='table'")}
+  >= {"verdict_cache", "query_cache", "checks", "feedback"})
+_ft.calls.clear()
+db.add_feedback("Turso claim", "false", True, "a note")
+t("  feedback is written to Turso, not the local file",
+  _ft.con.execute("select claim_key, verdict, helpful, note from feedback").fetchall() == [("turso claim", "false", 1, "a note")]
+  and _local_count("feedback") == _local_fb)
+_url, _tok, _body = _ft.calls[-1]
+t("  one request to /v2/pipeline with the bearer token, a close and typed args",
+  len(_ft.calls) == 1 and _url == "https://evident-test.turso.io/v2/pipeline" and _tok == _SECRET
+  and _body["requests"][-1] == {"type": "close"}
+  and [a["type"] for a in _body["requests"][0]["stmt"]["args"]] == ["text", "text", "integer", "text", "text"]
+  and _body["requests"][0]["stmt"]["args"][2] == {"type": "integer", "value": "1"})
+db.add_feedback("Turso claim", None, False, "")
+t("  None is sent as a null arg",
+  _ft.calls[-1][2]["requests"][0]["stmt"]["args"][1] == {"type": "null"})
+db.put_cached_verdict("Turso Claim.", "q AND r", "complicated", "Because.", ["P1"], STUDIES,
+                      tldr="Short.", still_open="Open.", breakdown={"a": 1})
+_got = db.get_cached_verdict("turso claim", 24)
+t("  a saved answer round-trips through Turso, integers and JSON decoded",
+  _got and _got["verdict"] == "complicated" and _got["still_open"] == "Open."
+  and _got["breakdown"] == {"a": 1} and _got["cited_studies"] == ["P1"] and _got["studies"] == STUDIES
+  and _ft.con.execute("select count(*) from verdict_cache").fetchone()[0] == 1)
+db.log_check("Turso claim", "complicated", "Because.", STUDIES, cached=True)
+t("  the check log goes to Turso with its integer and AUTOINCREMENT id",
+  _ft.con.execute("select cached, claim_key from checks").fetchall() == [(1, "turso claim")]
+  and db.recent_checks(5)[0]["cached"] == 1 and isinstance(db.recent_checks(5)[0]["id"], int))
+db.put_cached_query("Turso claim", "v1", "q AND r", "sur", "understood")
+t("  the saved search round-trips",
+  db.get_cached_query("turso claim", "v1") == ("q AND r", "sur", "understood") and db.get_cached_query("turso claim", "v2") is None)
+_ft.calls.clear()
+_led = db.ledger()
+t("  ledger sends its three reads in one request and decodes the counts",
+  len(_ft.calls) == 1 and _led["claims"] == 1 and _led["checks"] == 1 and _led["studies_read"] == 3)
+t("  recent_verdicts, all_claims, recent_cached, get_cached_by_key and trending read from Turso",
+  db.recent_verdicts(3)[0]["claim_text"] == "Turso Claim."
+  and db.all_claims()[0]["claim_text"] == "Turso Claim." and db.recent_cached(3)[0]["verdict"] == "complicated"
+  and db.get_cached_by_key("turso claim")["claim_text"] == "Turso Claim." and db.trending(min_checks=1)[0]["checks"] == 1)
+
+# 3. A failing Turso: the check still works, from the local file, and the token is never logged.
+_logbuf.truncate(0); _logbuf.seek(0)
+db._reset_turso_state(); _ft.fail = OSError("boom " + _SECRET)
+_fb_local = _local_count("feedback")
+db.init_db()
+fg.models.script = [Resp("turso AND fallback"), Resp(VJ("complicated", [1, 3]))]
+r = P("Turso fallback check claim", ip="7.7.7.7")
+t("turso down: a check still returns 200", r.status_code == 200 and r.get_json()["verdict"] == "complicated", r.get_data(as_text=True)[:200])
+t("  and was saved to the local file instead",
+  _sq.connect(os.environ["DB_PATH"]).execute("select count(*) from verdict_cache where claim_key='turso fallback check claim'").fetchone()[0] == 1)
+db.add_feedback("fallback fb", "true", True, "kept locally")
+t("  feedback lands in the local file when Turso fails", _local_count("feedback") == _fb_local + 1)
+t("  a bad HTTP status or a bad reply also falls back, never raises",
+  (setattr(_ft, "fail", urllib.error.HTTPError("u", 500, "x", {}, None)) or db.get_cached_verdict("zzz", 24)) is None)
+db._reset_turso_state()
+_ft.fail = None
+db._http_post = lambda *a, **k: {"nonsense": True}
+t("  a reply with the wrong shape is a miss and a logged warning", db.get_cached_verdict("zzz", 24) is None)
+db._http_post = lambda *a, **k: {"results": [{"type": "error", "error": {"message": "no such table: " + _SECRET}}]}
+t("  a statement the server rejects is a miss too", db.get_cached_verdict("zzz", 24) is None)
+db._http_post = _ft
+_logs = _logbuf.getvalue()
+t("  the token appears in no log line, and a warning was logged",
+  _SECRET not in _logs and "Turso call failed" in _logs, _logs[-300:])
+
+# 4. The cool-down: after repeated failures Turso is skipped for a while.
+db._reset_turso_state(); _ft.fail = OSError("down"); _ft.calls.clear()
+_clock = [1000.0]
+_real_mono = db.time.monotonic
+db.time.monotonic = lambda: _clock[0]
+db._schema_ready = True
+for _ in range(db.TURSO_FAIL_LIMIT):
+    db.get_cached_verdict("cool", 24)
+_n = len(_ft.calls)
+t("turso cool-down: it is tried until the failure limit", _n == db.TURSO_FAIL_LIMIT)
+for _ in range(5):
+    db.get_cached_verdict("cool", 24)
+t("  then skipped: further calls do not reach it", len(_ft.calls) == _n)
+_clock[0] += db.TURSO_COOLDOWN + 1
+db.get_cached_verdict("cool", 24)
+t("  after the cool-down it is tried once, and one more failure skips it again",
+  len(_ft.calls) == _n + 1 and (db.get_cached_verdict("cool", 24), len(_ft.calls) == _n + 1)[1])
+_clock[0] += db.TURSO_COOLDOWN + 1
+_ft.fail = None
+db.get_cached_verdict("cool", 24)
+t("  and a success clears the count", db._failures == 0 and len(_ft.calls) == _n + 2)
+db.time.monotonic = _real_mono
+
+# 5. Boot with Turso down, then up: the first healthy call creates the tables.
+_ft2 = FakeTurso(); db._http_post = _ft2; db._reset_turso_state(); _ft2.fail = OSError("down")
+db.init_db()
+t("turso: init_db with Turso down does not raise", db._schema_ready is False)
+_ft2.fail = None; db._reset_turso_state(); db._schema_ready = False
+db.add_feedback("late tables", "true", True, "")
+t("  once it is up the first call creates the tables and the write lands there",
+  _ft2.con.execute("select count(*) from feedback").fetchone()[0] == 1)
+
+# 6. Clean up: the rest of the suite sees plain local SQLite again.
+db._http_post = _real_post
+os.environ.pop("TURSO_DATABASE_URL", None); os.environ.pop("TURSO_AUTH_TOKEN", None)
+db._reset_turso_state()
+logging.getLogger().removeHandler(_lh); logging.getLogger().setLevel(_oldlvl)
+t("turso: with the variables removed, storage is local again",
+  db._turso_usable() is False and db.get_cached_verdict("turso fallback check claim", 24) is not None)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

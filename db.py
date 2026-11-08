@@ -1,5 +1,5 @@
 """
-SQLite storage. Two tables:
+SQLite storage, optionally kept in Turso. Tables:
 
   verdict_cache  one row per distinct (normalized) claim, so a viral claim
                  checked by thousands of people costs one AI round-trip.
@@ -12,12 +12,29 @@ SQLite storage. Two tables:
                  future "deep dive" feature (related studies / open
                  datasets / researcher contact) so building it later
                  doesn't require re-plumbing how checks are saved.
+
+  query_cache, feedback  see the schema below.
+
+Where it lives. By default in a local SQLite file (DB_PATH). On a host whose
+disk is wiped on every restart, set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN
+and the same tables live in Turso (hosted libSQL, SQLite's dialect) instead,
+spoken to over its HTTP API with the standard library. The SQL is identical
+either way; every public function goes through `_routed`, which runs it
+against Turso when that is configured and healthy, and against the local
+file otherwise. Turso being down never fails a check: see `_routed`.
 """
 
+import base64
+import functools
 import json
+import logging
 import os
 import re
 import sqlite3
+import threading
+import time
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -82,8 +99,166 @@ CREATE TABLE IF NOT EXISTS feedback (
 """
 
 
+log = logging.getLogger("evident.db")
+
+# ---- Turso ----------------------------------------------------------------------
+
+TURSO_TIMEOUT = 4          # seconds, for one call
+TURSO_FAIL_LIMIT = 3       # consecutive failures before Turso is set aside
+TURSO_COOLDOWN = 60        # seconds Turso is skipped after that
+
+_tl = threading.local()    # which backend the current call is using
+_lock = threading.Lock()   # guards the three values below
+_failures = 0
+_skip_until = 0.0
+_schema_ready = False
+
+
+class TursoError(Exception):
+    """A Turso call that did not work. The message never holds the token."""
+
+
+def _turso_config():
+    """(base https url, token) when both env vars are set, else None."""
+    url = (os.environ.get("TURSO_DATABASE_URL") or "").strip()
+    token = (os.environ.get("TURSO_AUTH_TOKEN") or "").strip()
+    if not url or not token:
+        return None
+    if url.startswith("libsql://"):
+        url = "https://" + url[len("libsql://"):]
+    return url.rstrip("/"), token
+
+
+def _http_post(url: str, token: str, body: dict, timeout: float) -> dict:
+    """POST JSON, return the parsed reply. Tests replace this with a fake."""
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(), method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _arg(v) -> dict:
+    if v is None:
+        return {"type": "null"}
+    if isinstance(v, bool):
+        return {"type": "integer", "value": str(int(v))}
+    if isinstance(v, int):
+        return {"type": "integer", "value": str(v)}
+    if isinstance(v, float):
+        return {"type": "float", "value": v}
+    return {"type": "text", "value": str(v)}
+
+
+def _cell(c: dict):
+    kind = c.get("type")
+    if kind == "null":
+        return None
+    if kind == "integer":
+        return int(c["value"])
+    if kind == "float":
+        return float(c["value"])
+    if kind == "blob":
+        return base64.b64decode(c.get("base64") or "")
+    return c.get("value")
+
+
+class _Rows:
+    """What a Turso statement returns: the little of sqlite3's cursor we use."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class _TursoConn:
+    """Looks enough like a sqlite3 connection for the functions below. Every
+    statement is its own request, committed as it runs; `batch` sends several
+    in one request. Rows are dicts, so row["name"] and dict(row) both work."""
+
+    def __init__(self, base: str, token: str):
+        self._base, self._token = base, token
+
+    def batch(self, stmts) -> list[_Rows]:
+        reqs = [{"type": "execute", "stmt": {"sql": sql, "args": [_arg(a) for a in params]}}
+                for sql, params in stmts]
+        reqs.append({"type": "close"})
+        try:
+            reply = _http_post(self._base + "/v2/pipeline", self._token,
+                               {"requests": reqs}, TURSO_TIMEOUT)
+            results = reply["results"]
+            if len(results) < len(stmts):
+                raise TursoError("short reply")
+            out = []
+            for r in results[:len(stmts)]:
+                if r.get("type") != "ok":
+                    raise TursoError("statement rejected")
+                res = r["response"]["result"]
+                names = [col.get("name") for col in res.get("cols") or []]
+                out.append(_Rows([dict(zip(names, (_cell(c) for c in row)))
+                                  for row in res.get("rows") or []]))
+            return out
+        except TursoError:
+            raise
+        except urllib.error.HTTPError as e:
+            raise TursoError(f"HTTP {e.code}") from None
+        except Exception as e:  # network, timeout, bad JSON, bad shape
+            raise TursoError(type(e).__name__) from None
+
+    def execute(self, sql: str, params=()) -> _Rows:
+        return self.batch([(sql, tuple(params))])[0]
+
+    def executescript(self, script: str):
+        lines = [ln for ln in script.splitlines() if not ln.lstrip().startswith("--")]
+        stmts = [x.strip() for x in "\n".join(lines).split(";") if x.strip()]
+        self.batch([(x, ()) for x in stmts])
+
+
+def _turso_usable() -> bool:
+    if _turso_config() is None:
+        return False
+    with _lock:
+        return time.monotonic() >= _skip_until
+
+
+def _turso_ok():
+    global _failures
+    with _lock:
+        _failures = 0
+
+
+def _turso_failed(err: Exception):
+    """Count it; after TURSO_FAIL_LIMIT in a row, skip Turso for a while. One
+    more failure after that skips it again, one success clears the count."""
+    global _failures, _skip_until
+    with _lock:
+        _failures += 1
+        tripped = _failures >= TURSO_FAIL_LIMIT
+        if tripped:
+            _skip_until = time.monotonic() + TURSO_COOLDOWN
+            _failures = TURSO_FAIL_LIMIT - 1
+    log.warning("Turso call failed (%s); using local SQLite for this call%s", err,
+                f", and skipping Turso for {TURSO_COOLDOWN}s" if tripped else "")
+
+
+def _reset_turso_state():
+    """For tests: forget failures, cool-down and whether Turso has its tables."""
+    global _failures, _skip_until, _schema_ready
+    with _lock:
+        _failures, _skip_until, _schema_ready = 0, 0.0, False
+
+
 @contextmanager
 def get_conn():
+    if getattr(_tl, "turso", False):
+        base, token = _turso_config()
+        yield _TursoConn(base, token)
+        return
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -93,24 +268,79 @@ def get_conn():
         conn.close()
 
 
+def _routed(fn):
+    """
+    Run a storage function against Turso when it is configured and not being
+    skipped, and against the local SQLite file otherwise. If Turso fails
+    (network, HTTP error, bad reply) the failure is logged without the token
+    and the same function runs again against the local file: a read there is
+    at worst a miss, a write lands there. Nothing raises because Turso is down.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        global _schema_ready
+        if _turso_usable():
+            _tl.turso = True
+            try:
+                if not _schema_ready:
+                    with get_conn() as conn:
+                        _init_schema(conn)
+                    _schema_ready = True
+                result = fn(*args, **kwargs)
+                _turso_ok()
+                return result
+            except Exception as e:  # Turso, or a reply we cannot read
+                _turso_failed(TursoError(type(e).__name__) if not isinstance(e, TursoError) else e)
+            finally:
+                _tl.turso = False
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def _run_many(conn, stmts) -> list[_Rows]:
+    """Several reads: one request to Turso, one after another locally."""
+    if isinstance(conn, _TursoConn):
+        return conn.batch(stmts)
+    return [conn.execute(sql, params) for sql, params in stmts]
+
+
+def _init_schema(conn):
+    conn.executescript(SCHEMA)
+    # Lightweight migration for databases created before claim_key existed.
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(checks)").fetchall()}
+    if "claim_key" not in cols:
+        conn.execute("ALTER TABLE checks ADD COLUMN claim_key TEXT")
+    vcols = {r["name"] for r in conn.execute("PRAGMA table_info(verdict_cache)").fetchall()}
+    if "tldr" not in vcols:
+        conn.execute("ALTER TABLE verdict_cache ADD COLUMN tldr TEXT")
+    if "still_open" not in vcols:
+        conn.execute("ALTER TABLE verdict_cache ADD COLUMN still_open TEXT")
+    if "breakdown_json" not in vcols:
+        conn.execute("ALTER TABLE verdict_cache ADD COLUMN breakdown_json TEXT")
+    conn.execute(
+        "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS checks_key_time ON checks (claim_key, checked_at)")
+
+
 def init_db():
+    """Create the tables locally always (the fallback needs them) and in
+    Turso too when it is configured. A Turso failure here is not fatal: the
+    first call that finds Turso healthy creates the tables then."""
+    global _schema_ready
     with get_conn() as conn:
-        conn.executescript(SCHEMA)
-        # Lightweight migration for databases created before claim_key existed.
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(checks)").fetchall()}
-        if "claim_key" not in cols:
-            conn.execute("ALTER TABLE checks ADD COLUMN claim_key TEXT")
-        vcols = {r["name"] for r in conn.execute("PRAGMA table_info(verdict_cache)").fetchall()}
-        if "tldr" not in vcols:
-            conn.execute("ALTER TABLE verdict_cache ADD COLUMN tldr TEXT")
-        if "still_open" not in vcols:
-            conn.execute("ALTER TABLE verdict_cache ADD COLUMN still_open TEXT")
-        if "breakdown_json" not in vcols:
-            conn.execute("ALTER TABLE verdict_cache ADD COLUMN breakdown_json TEXT")
-        conn.execute(
-            "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS checks_key_time ON checks (claim_key, checked_at)")
+        _init_schema(conn)
+    if _turso_usable():
+        _tl.turso = True
+        try:
+            with get_conn() as conn:
+                _init_schema(conn)
+            _schema_ready = True
+            _turso_ok()
+        except Exception as e:
+            _turso_failed(TursoError(type(e).__name__) if not isinstance(e, TursoError) else e)
+        finally:
+            _tl.turso = False
 
 
 def _now():
@@ -127,6 +357,7 @@ def normalize_claim(claim: str) -> str:
     return key
 
 
+@_routed
 def get_cached_query(claim: str, prompt_version: str) -> tuple[str, str, str] | None:
     """(search query, surrogate, claim as understood) this claim was given
     before, or None."""
@@ -140,6 +371,7 @@ def get_cached_query(claim: str, prompt_version: str) -> tuple[str, str, str] | 
     return row["search_query"], row["surrogate"] or "", row["understood"] or claim
 
 
+@_routed
 def put_cached_query(claim: str, prompt_version: str, search_query: str,
                      surrogate: str, understood: str):
     with get_conn() as conn:
@@ -151,6 +383,7 @@ def put_cached_query(claim: str, prompt_version: str, search_query: str,
              understood or claim, _now()))
 
 
+@_routed
 def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
     """Return a cached check for this claim if one exists and is fresh enough."""
     if max_age_hours <= 0:
@@ -197,6 +430,7 @@ def _breakdown(row) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+@_routed
 def put_cached_verdict(
     claim: str,
     search_query: str,
@@ -232,6 +466,7 @@ def put_cached_verdict(
 
 # ---- Anonymous check log -------------------------------------------------
 
+@_routed
 def log_check(claim_text: str, verdict: str, explanation: str,
               studies: list[dict], cached: bool = False):
     with get_conn() as conn:
@@ -244,6 +479,7 @@ def log_check(claim_text: str, verdict: str, explanation: str,
         )
 
 
+@_routed
 def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
     """
     Claims checked by several people recently, newest-popular first. The
@@ -267,6 +503,7 @@ def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
         return [{"claim": r["claim_text"], "verdict": r["verdict"], "checks": r["n"]} for r in rows]
 
 
+@_routed
 def recent_cached(limit: int = 200) -> list[dict]:
     """Cached claims, newest first. Used for the sitemap and llms.txt."""
     with get_conn() as conn:
@@ -277,6 +514,7 @@ def recent_cached(limit: int = 200) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+@_routed
 def get_cached_by_key(claim_key: str) -> dict | None:
     """Cached verdict by normalized key, any age. Used for link previews."""
     with get_conn() as conn:
@@ -300,6 +538,7 @@ def get_cached_by_key(claim_key: str) -> dict | None:
 
 # ---- Feedback ----------------------------------------------------------------
 
+@_routed
 def add_feedback(claim: str, verdict: str | None, helpful: bool, note: str = ""):
     with get_conn() as conn:
         conn.execute(
@@ -308,6 +547,7 @@ def add_feedback(claim: str, verdict: str | None, helpful: bool, note: str = "")
         )
 
 
+@_routed
 def recent_checks(limit: int = 50) -> list[dict]:
     """Newest first. Not exposed publicly yet; here for ops/debugging."""
     with get_conn() as conn:
@@ -318,6 +558,7 @@ def recent_checks(limit: int = 50) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+@_routed
 def ledger() -> dict:
     """
     Real counts for the front page. Every number here is a fact about this
@@ -325,11 +566,12 @@ def ledger() -> dict:
     distinct PubMed records actually fetched and shown, not fetch attempts.
     """
     with get_conn() as conn:
-        claims = conn.execute("SELECT COUNT(*) n FROM verdict_cache").fetchone()["n"]
-        checks = conn.execute("SELECT COUNT(*) n FROM checks").fetchone()["n"]
-        rows = conn.execute(
-            "SELECT studies_json FROM verdict_cache WHERE studies_json IS NOT NULL"
-        ).fetchall()
+        a, b, c = _run_many(conn, [
+            ("SELECT COUNT(*) n FROM verdict_cache", ()),
+            ("SELECT COUNT(*) n FROM checks", ()),
+            ("SELECT studies_json FROM verdict_cache WHERE studies_json IS NOT NULL", ()),
+        ])
+        claims, checks, rows = a.fetchone()["n"], b.fetchone()["n"], c.fetchall()
     pmids, pooled = set(), set()
     for r in rows:
         try:
@@ -348,6 +590,7 @@ def ledger() -> dict:
             "studies_read": len(pmids), "pooled": len(pooled)}
 
 
+@_routed
 def recent_verdicts(limit: int = 12) -> list[dict]:
     """
     Cached verdicts newest first, with the studies behind each one so the
@@ -375,6 +618,7 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
     return out
 
 
+@_routed
 def all_claims(limit: int = 500) -> list[dict]:
     """
     Every cached claim with its verdict, newest first, and nothing else.

@@ -2,10 +2,11 @@
 # service definition instead of asking you to fill in a form.
 #
 # One deliberate choice worth knowing: `disk` is commented out. A free
-# instance has an ephemeral filesystem, so the SQLite cache is wiped on every
-# restart and redeploy. That is survivable (the app just re-checks claims and
-# the front page refills) and it keeps the cost at zero. Uncomment the disk,
-# on a paid instance, when losing the cache starts to matter.
+# instance has an ephemeral filesystem, so the local SQLite file is wiped on
+# every restart and redeploy. The saved answers, check log and feedback live
+# in Turso instead (TURSO_* below), which is free and needs no disk. Without
+# those two variables the app falls back to the local file, which still
+# works but forgets everything on restart.
 
 services:
   - type: web
@@ -34,12 +35,19 @@ services:
       # field anyone has to handle.
       - key: FLASK_SECRET_KEY
         generateValue: true
+      # Permanent storage (Turso). Set both in the dashboard, never in this
+      # file. If either is missing the app uses the local SQLite file.
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: NCBI_EMAIL
         sync: false
       - key: PYTHON_VERSION
         value: "3.12.7"
 
-    # A cache that outlives restarts. Needs a paid instance.
+    # A local file that outlives restarts. Needs a paid instance; Turso above
+    # does this job for free.
     # disk:
     #   name: data
     #   mountPath: /var/data
