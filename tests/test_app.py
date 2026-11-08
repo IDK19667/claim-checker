@@ -4452,5 +4452,43 @@ logging.getLogger().removeHandler(_lh); logging.getLogger().setLevel(_oldlvl)
 t("turso: with the variables removed, storage is local again",
   db._turso_usable() is False and db.get_cached_verdict("turso fallback check claim", 24) is not None)
 
+# The paragraph on why the verdict is what it is credits only the studies the
+# verdict relied on: the melatonin check named a study it had not used.
+t("relied_only takes an uncited study out of a list of citations",
+  breakdown.relied_only("It rests on pooled reviews (Studies 1, 2, 4, 6).", {1, 2, 6}, 8)
+  == "It rests on pooled reviews (Studies 1, 2, 6).")
+t("  drops a sentence that cites only studies not relied on",
+  breakdown.relied_only("Reviews agree (Studies 1, 2). One noted no effect (Study 4).", {1, 2}, 8)
+  == "Reviews agree (Studies 1, 2).")
+t("  says Study, not Studies, when one is left",
+  breakdown.relied_only("It rests on reviews (Studies 1, 4).", {1}, 8)
+  == "It rests on reviews (Study 1).")
+t("  and leaves text that cites nothing alone",
+  breakdown.relied_only("Nothing here cites a study.", {1}, 8) == "Nothing here cites a study.")
+_RO = [dict(_BD_STUDIES[0]), dict(_BD_STUDIES[1])]
+_ro_raw = json.dumps({
+    "verdict": "true", "tldr": "Vitamin D lowers infections a little.",
+    "explanation": "Pooled trials found a small drop (Study 1).",
+    "cited_study_numbers": [1],
+    "evidence": ["A meta-analysis of 25 trials with 11,321 people found an odds ratio of 0.88 (Study 1)."],
+    "strength": "One pooled review found a small drop (Study 1). A trial found no change (Study 2).",
+    "parts": [], "effect_size": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
+_ro = verdict._read_verdict(_ro_raw, None, _RO, "Vitamin D lowers infections")
+t("the verdict's 'why' paragraph never credits a study it did not rely on",
+  _ro["cited_studies"] == ["D1"] and "Study 2" not in _ro["breakdown"]["strength"]
+  and "Study 1" in _ro["breakdown"]["strength"], _ro["breakdown"]["strength"])
+_ro2 = verdict._read_verdict(_ro_raw.replace('"cited_study_numbers": [1]', '"cited_study_numbers": []'),
+                             None, _RO, "Vitamin D lowers infections")
+t("  but a verdict that relied on nothing keeps its paragraph as written",
+  "Study 2" in (_ro2["breakdown"] or {}).get("strength", "Study 2"), _ro2.get("breakdown"))
+# The line's strength word reads only the relied-on studies.
+_LINE = [{"pmid": "S1", "publication_types": ["Journal Article"]},
+         {"pmid": "S2", "publication_types": ["Meta-Analysis"]}]
+t("the evidence line never takes its strength word from a study the verdict did not use",
+  evidence.evidence_line("true", _LINE, ["S1"]).startswith("Moderate evidence")
+  and evidence.evidence_line("true", _LINE, ["S2"]).startswith("Strong evidence")
+  and evidence.evidence_line("true", _LINE, ["S1", "S2"]).startswith("Strong evidence"),
+  evidence.evidence_line("true", _LINE, ["S1"]))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

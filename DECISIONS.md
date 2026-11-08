@@ -72,6 +72,25 @@ two disagreed on one page.
   forced "insufficient" read the same code as before. Only `kind`, which
   feeds the shelf, spine word and chart counts, changed.
 
+## 2026-11-08: Why the verdict is what it is credits only the studies it relied on
+
+**The melatonin check's "why" paragraph named Study 4**, a review the verdict
+had not cited, and a sentence about it. `breakdown.ground` only drops sentences
+resting on off-topic studies, so the model's own citations of an uncited study
+passed. `breakdown.relied_only` now takes uncited studies out of the `strength`
+text: a sentence citing only such studies goes, a mixed citation keeps the
+studies relied on ("Studies 1, 2, 4, 6" becomes "Studies 1, 2, 6"). It runs in
+`verdict._read_verdict` after the cited list is final and before `rests_on` and
+"what the research says" are read, so those no longer count the study either.
+A verdict that relied on nothing keeps its text, since it names what was read.
+
+The evidence line's strength word already read only the cited studies
+(`level_word`, `certainty_cap` and `lead_review` take `cited_pmids`); the saved
+melatonin line recomputes to the same "Strong evidence for this claim" because
+the three cited reviews are themselves strong. A test now pins that. Not
+changed: `applies_to`, `not_applies_to`, `unknowns` and the parts can still
+name an uncited study.
+
 ## 2026-11-07: A busy or rate-limited Gemini call is asked twice more
 
 **About 2 of 12 live checks failed with "The AI service is having trouble

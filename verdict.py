@@ -2211,6 +2211,13 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # "Who this applies to", where a reader is asking exactly this.
     if deeper is not None:
         deeper["populations"] = narrow
+        # The paragraph on why the verdict is what it is credits only the
+        # studies it rested on. A verdict with nothing relied on (not enough
+        # evidence) keeps its text: there it names what was read and why none
+        # of it counted.
+        if cited_pmids and deeper.get("strength"):
+            relied = {i + 1 for i, s in enumerate(studies) if s["pmid"] in cited_pmids}
+            deeper["strength"] = breakdown.relied_only(deeper["strength"], relied, len(studies))
         # "What the research says" on the result screen: three to five
         # sentences picked from prose that has already passed the gate, so
         # the block costs no extra call and cannot outrun the evidence.

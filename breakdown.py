@@ -1746,6 +1746,31 @@ def drop_citing(text: str, skip, count: int) -> str:
                     if not (refs(sentence, count) and set(refs(sentence, count)) <= set(skip)))
 
 
+def relied_only(text: str, relied, count: int) -> str:
+    """
+    `text` with every citation of a study the verdict did not rely on taken
+    out: a sentence that cites only such studies goes, and one that cites a
+    mix keeps the studies relied on, so "(Studies 1, 2, 4, 6)" becomes
+    "(Studies 1, 2, 6)". Text that cites nothing is left as it was.
+    """
+    relied = set(relied or ())
+    drop = {n for n in range(1, count + 1) if n not in relied}
+    kept = []
+    for sentence in sentences(text or ""):
+        cited = refs(sentence, count)
+        if cited and set(cited) <= drop:
+            continue
+
+        def fix(m: re.Match) -> str:
+            nums = [int(n) for n in re.findall(r"\d+", m.group(1))
+                    if int(n) not in drop or int(n) > count]
+            return (f"Study {nums[0]}" if len(nums) == 1
+                    else "Studies " + ", ".join(str(n) for n in nums))
+
+        kept.append(_REF.sub(fix, sentence) if cited else sentence)
+    return " ".join(kept)
+
+
 def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "") -> bool:
     """
     True when a figure is about some other outcome than the claim's: it
