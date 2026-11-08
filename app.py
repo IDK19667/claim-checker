@@ -564,7 +564,7 @@ DEPLOYED_COMMIT = _deployed_commit()
 
 @app.route("/healthz")
 def healthz():
-    return jsonify({"ok": True, "commit": DEPLOYED_COMMIT})
+    return jsonify({"ok": True, "commit": DEPLOYED_COMMIT, "store": db.store_status()})
 
 
 # "How a check works": a scroll fly-through of one real, cached check,

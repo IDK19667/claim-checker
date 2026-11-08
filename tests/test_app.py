@@ -74,7 +74,7 @@ t("sw.js at root w/ js type", s.status_code == 200 and "javascript" in s.content
 _hz = c.get("/healthz")
 t("healthz", _hz.status_code == 200 and _hz.get_json()["ok"] is True)
 t("healthz reports a short commit string",
-  isinstance(_hz.get_json().get("commit"), str) and set(_hz.get_json()) == {"ok", "commit"})
+  isinstance(_hz.get_json().get("commit"), str) and set(_hz.get_json()) == {"ok", "commit", "store"})
 _old_env = os.environ.get("RENDER_GIT_COMMIT")
 os.environ["RENDER_GIT_COMMIT"] = "d4a682d9f3c1b2a0e8e7d6c5b4a39281706f5e4d"
 t("commit is the 7-character prefix of RENDER_GIT_COMMIT", appmod._deployed_commit() == "d4a682d")
@@ -4376,6 +4376,30 @@ _ft2.fail = None; db._reset_turso_state(); db._schema_ready = False
 db.add_feedback("late tables", "true", True, "")
 t("  once it is up the first call creates the tables and the write lands there",
   _ft2.con.execute("select count(*) from feedback").fetchone()[0] == 1)
+
+# 7. /healthz "store": in-memory state only, four states, nothing leaked.
+os.environ["TURSO_DATABASE_URL"] = _URL; os.environ["TURSO_AUTH_TOKEN"] = _SECRET
+db._http_post = _ft; _ft.fail = None; _ft.calls.clear(); db._reset_turso_state()
+_n0 = len(_ft.calls)
+_hzr = c.get("/healthz"); _hzj = _hzr.get_json()
+t("healthz store: configured but never called is turso-unused, and healthz made no call",
+  _hzj["store"] == "turso-unused" and len(_ft.calls) == _n0 and set(_hzj) == {"ok", "commit", "store"})
+db.get_cached_verdict("store status claim", 24)
+t("healthz store: after a successful call it is turso", c.get("/healthz").get_json()["store"] == "turso")
+_ft.fail = OSError("down " + _SECRET)
+db.get_cached_verdict("store status claim", 24)
+_hzr = c.get("/healthz"); _body = _hzr.get_data(as_text=True)
+t("healthz store: after a failed call it is turso-failing, and leaks no token, URL or error",
+  _hzr.get_json()["store"] == "turso-failing" and _SECRET not in _body and "turso.io" not in _body and "down" not in _body)
+_ft.fail = None
+db._schema_ready = True
+db.get_cached_verdict("store status claim", 24)
+t("healthz store: it recovers to turso after a good call", c.get("/healthz").get_json()["store"] == "turso")
+db._reset_turso_state(); db._last_ok = True; db._skip_until = db.time.monotonic() + 30
+t("healthz store: in cool-down it is turso-failing", c.get("/healthz").get_json()["store"] == "turso-failing")
+os.environ.pop("TURSO_DATABASE_URL"); os.environ.pop("TURSO_AUTH_TOKEN"); db._reset_turso_state()
+t("healthz store: with Turso not configured it is local", c.get("/healthz").get_json()["store"] == "local")
+db._http_post = _real_post
 
 # 6. Clean up: the rest of the suite sees plain local SQLite again.
 db._http_post = _real_post

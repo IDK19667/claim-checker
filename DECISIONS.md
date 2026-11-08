@@ -33,6 +33,11 @@ both set; with either missing nothing changes and the local file is used.
   change. The fallback keeps the site working, only forgetful, if they do.
   Exporting is easy: it is a SQLite database.
 
+* **Verifying it from outside:** `/healthz` carries a `store` field, computed
+  from in-memory state only (never a Turso call): `local`, `turso`,
+  `turso-failing` or `turso-unused` (configured, nothing has called it yet).
+  It leaks no URL, token or error text.
+
 ## 2026-11-08: /healthz says which commit is deployed
 
 **A push to main does not deploy by itself** (the owner clicks Manual Deploy),

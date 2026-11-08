@@ -112,6 +112,7 @@ _lock = threading.Lock()   # guards the three values below
 _failures = 0
 _skip_until = 0.0
 _schema_ready = False
+_last_ok = None            # None: no Turso call yet; True/False: how the latest went
 
 
 class TursoError(Exception):
@@ -227,16 +228,18 @@ def _turso_usable() -> bool:
 
 
 def _turso_ok():
-    global _failures
+    global _failures, _last_ok
     with _lock:
         _failures = 0
+        _last_ok = True
 
 
 def _turso_failed(err: Exception):
     """Count it; after TURSO_FAIL_LIMIT in a row, skip Turso for a while. One
     more failure after that skips it again, one success clears the count."""
-    global _failures, _skip_until
+    global _failures, _skip_until, _last_ok
     with _lock:
+        _last_ok = False
         _failures += 1
         tripped = _failures >= TURSO_FAIL_LIMIT
         if tripped:
@@ -248,9 +251,22 @@ def _turso_failed(err: Exception):
 
 def _reset_turso_state():
     """For tests: forget failures, cool-down and whether Turso has its tables."""
-    global _failures, _skip_until, _schema_ready
+    global _failures, _skip_until, _schema_ready, _last_ok
     with _lock:
-        _failures, _skip_until, _schema_ready = 0, 0.0, False
+        _failures, _skip_until, _schema_ready, _last_ok = 0, 0.0, False, None
+
+
+def store_status() -> str:
+    """Where storage is going, from in-memory state only (no Turso call):
+    "local", "turso", "turso-failing" or "turso-unused". Leaks nothing else."""
+    if _turso_config() is None:
+        return "local"
+    with _lock:
+        if _last_ok is None:
+            return "turso-unused"
+        if _last_ok is False or time.monotonic() < _skip_until:
+            return "turso-failing"
+        return "turso"
 
 
 @contextmanager
