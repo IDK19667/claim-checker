@@ -4,6 +4,19 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-08: /healthz says which commit is deployed
+
+**A push to main does not deploy by itself** (the owner clicks Manual Deploy),
+so there was no way to tell from outside whether the live site ran the latest
+code. `GET /healthz` now returns `{"ok": true, "commit": "d4a682d"}`.
+
+* **Source:** the first 7 characters of `RENDER_GIT_COMMIT` (set by Render);
+  locally, `git rev-parse --short=7 HEAD` run once at import with a 2 s
+  timeout. Any failure gives `"unknown"`; it cannot crash start-up or the route.
+* **Cheap:** computed once at import, so the route does no work, and calls
+  neither Gemini nor PubMed. Status code and the `ok` field are unchanged.
+* **Leaks nothing:** a short sha of public code, no paths, keys or env.
+
 ## 2026-11-07: A busy or rate-limited Gemini call is asked twice more
 
 **About 2 of 12 live checks failed with "The AI service is having trouble

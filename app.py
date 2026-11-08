@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import secrets
+import subprocess
 from datetime import datetime
 import sqlite3
 from html import escape
@@ -538,9 +539,32 @@ def service_worker():
     return resp
 
 
+def _deployed_commit():
+    """Short sha of the running code, so a deploy can be checked from outside.
+
+    Render sets RENDER_GIT_COMMIT (the full sha); locally, ask git once.
+    Any failure gives "unknown". Never raises."""
+    try:
+        sha = os.environ.get("RENDER_GIT_COMMIT", "").strip()
+        if sha:
+            return sha[:7]
+        out = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, timeout=2, check=True,
+        ).stdout.strip()
+        return out[:7] or "unknown"
+    except Exception:
+        return "unknown"
+
+
+# Computed once at import, never per request.
+DEPLOYED_COMMIT = _deployed_commit()
+
+
 @app.route("/healthz")
 def healthz():
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "commit": DEPLOYED_COMMIT})
 
 
 # "How a check works": a scroll fly-through of one real, cached check,

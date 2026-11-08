@@ -71,7 +71,26 @@ t("llms.txt was renamed along with everything else",
 t("manifest share_target + shortcuts", mj["share_target"]["params"]["text"] == "text" and mj["shortcuts"][0]["url"] == "/?focus=1")
 s = c.get("/sw.js")
 t("sw.js at root w/ js type", s.status_code == 200 and "javascript" in s.content_type)
-t("healthz", c.get("/healthz").get_json() == {"ok": True})
+_hz = c.get("/healthz")
+t("healthz", _hz.status_code == 200 and _hz.get_json()["ok"] is True)
+t("healthz reports a short commit string",
+  isinstance(_hz.get_json().get("commit"), str) and set(_hz.get_json()) == {"ok", "commit"})
+_old_env = os.environ.get("RENDER_GIT_COMMIT")
+os.environ["RENDER_GIT_COMMIT"] = "d4a682d9f3c1b2a0e8e7d6c5b4a39281706f5e4d"
+t("commit is the 7-character prefix of RENDER_GIT_COMMIT", appmod._deployed_commit() == "d4a682d")
+os.environ.pop("RENDER_GIT_COMMIT")
+_real_run = appmod.subprocess.run
+
+
+def _git_fails(*a, **k):
+    raise FileNotFoundError("git")
+
+
+appmod.subprocess.run = _git_fails
+t("commit is unknown with no env var and git failing", appmod._deployed_commit() == "unknown")
+appmod.subprocess.run = _real_run
+if _old_env is not None:
+    os.environ["RENDER_GIT_COMMIT"] = _old_env
 for icon in ("icon-192.png", "icon-512.png", "icon-512-maskable.png", "apple-touch-icon.png", "icon.svg"):
     t(f"icon {icon}", c.get(f"/static/icons/{icon}").status_code == 200)
 
