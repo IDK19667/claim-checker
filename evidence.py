@@ -884,23 +884,37 @@ def indirect(study, outcome: str, surrogate: str) -> str | None:
     return None
 
 
+# How the chart's description counts each kind of study. The count follows
+# `kind`, the same call that colours the shelf, so "human studies" is never a
+# default bucket for whatever is left over.
+KIND_COUNT_LABELS = {
+    "strong": ("strong design", "strong designs"),
+    "human": ("human study", "human studies"),
+    "lab": ("animal or lab study", "animal or lab studies"),
+    "weak": ("opinion or single case", "opinion or single cases"),
+    "retracted": ("retracted paper", "retracted papers"),
+}
+
+
 def mix(studies) -> list[dict]:
     """
-    The evidence bar: one segment per tier that actually occurs, with the
-    share it takes. Tiers with no studies are dropped rather than drawn as
-    zero-width slivers.
+    The evidence bar: one segment per kind that actually occurs, with the
+    share it takes. Kinds with no studies are dropped rather than drawn as
+    zero-width slivers. Counted by `kind`, so an animal or lab paper is never
+    called a human study.
     """
     studies = studies or []
     total = len(studies)
     if not total:
         return []
-    counts = {tier: 0 for tier in TIERS}
+    counts = {k: 0 for k in KINDS}
     for s in studies:
-        counts[classify(s.get("publication_types"))] += 1
+        counts[kind(s)] += 1
     return [
-        {"tier": tier, "label": tier_label(tier, counts[tier]),
-         "count": counts[tier], "percent": round(counts[tier] * 100 / total)}
-        for tier in TIERS if counts[tier]
+        {"tier": k, "kind": k,
+         "label": KIND_COUNT_LABELS[k][0 if counts[k] == 1 else 1],
+         "count": counts[k], "percent": round(counts[k] * 100 / total)}
+        for k in KINDS if counts[k]
     ]
 
 
@@ -2118,6 +2132,33 @@ KIND_LABELS = {
 }
 
 
+# Positive signs that a study was run on people, beyond the people words
+# `_HUMANS` already knows: the groups and designs a human abstract names.
+_HUMAN_SIGNAL = re.compile(
+    r"\b(?:randomi[sz]ed|placebo|double-blind|cohorts?|case[- ]control|cross[- ]sectional|"
+    r"clinical (?:trial|stud(?:y|ies))|epidemiolog\w*|survey(?:ed)?|adolescents?|"
+    r"infants?|elderly|older adults?|pregnan\w*|mothers?|males?|females?|boys|girls|"
+    r"students|athletes|residents|consumers|respondents|healthy (?:controls|individuals)|"
+    r"in humans|human (?:subjects|studies|trials|participants|volunteers))\b",
+    re.IGNORECASE)
+
+
+def in_people(study) -> bool:
+    """
+    A study counts as a human study only on positive evidence: PubMed tags a
+    trial or observational design, or the record names the people in it. A
+    record with no abstract at all says nothing either way and is not judged
+    off its silence.
+    """
+    types = study.get("publication_types") or []
+    if any(t.startswith(TRIAL_TYPES + ("Observational Study",)) for t in types):
+        return True
+    text = _text(study)
+    if _HUMANS.search(text) or _HUMAN_SIGNAL.search(text):
+        return True
+    return not str(study.get("abstract") or "").strip()
+
+
 def kind(study) -> str:
     """The cloth for one study's spine."""
     tier = classify(study.get("publication_types"))
@@ -2125,7 +2166,11 @@ def kind(study) -> str:
         return tier
     if preclinical(study):
         return "lab"
-    return "strong" if tier == "strong" else "human"
+    if tier == "strong":
+        return "strong"
+    # A paper that never says it was run on people is not a human study:
+    # most animal and dish papers are tagged only "Journal Article".
+    return "human" if in_people(study) else "lab"
 
 
 # The word lettered on a spine: the design, in a reader's words, short

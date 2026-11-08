@@ -552,6 +552,49 @@ t("empty input gives an empty mix, not a crash", evidence.snapshot([])["mix"] ==
 t("tier labels are singular for one and plural for many",
   evidence.tier_label("strong", 1) == "strong design" and evidence.tier_label("strong", 4) == "strong designs")
 
+# The chart's "By study design" counts follow the same kind() that colours the
+# shelf, so an animal or lab paper is never described as a human study.
+_MOUSE = {"pmid": "K1", "title": "Anti-inflammatory effect of celery leaf extract in murine colitis",
+          "abstract": "Colitis was induced in C57BL/6 mice. Mice given the extract had lower "
+                      "TNF-alpha and less colon damage than controls.",
+          "publication_types": ["Journal Article", "Research Support, Non-U.S. Gov't"]}
+_DISH = {"pmid": "K2", "title": "Apigenin and gastric cancer cells",
+         "abstract": "In vitro, apigenin reduced growth of the AGS cell line and altered "
+                     "expression of several pathway proteins.",
+         "publication_types": ["Journal Article"]}
+_VESICLES = {"pmid": "K3", "title": "Characterisation of plant-derived vesicles",
+             "abstract": "This study aimed to characterise the physical and proteomic properties "
+                         "of vesicles isolated from the root.",
+             "publication_types": ["Journal Article"]}
+_RCT = {"pmid": "K4", "title": "Nitrate intake and inflammatory markers in hypertension",
+        "abstract": "We assessed in 60 adults with hypertension whether one week of beetroot "
+                    "juice lowered inflammatory markers.",
+        "publication_types": ["Randomized Controlled Trial", "Journal Article"]}
+_COHORT = {"pmid": "K5", "title": "Fruit and vegetable intake and CRP",
+           "abstract": "In a cohort of 4,000 women followed for ten years, higher intake was "
+                       "linked to lower C-reactive protein.",
+           "publication_types": ["Journal Article"]}
+_BARE = {"pmid": "K6", "title": "Celery and inflammation", "abstract": "",
+         "publication_types": ["Journal Article"]}
+t("a mouse study tagged only Journal Article is an animal or lab study",
+  evidence.kind(_MOUSE) == "lab" and evidence.kind(_DISH) == "lab")
+t("  and so is a paper that never says it was run on people",
+  evidence.kind(_VESICLES) == "lab")
+t("  while a human randomized trial stays strong and an untagged human cohort stays human",
+  evidence.kind(_RCT) == "strong" and evidence.kind(_COHORT) == "human")
+t("  and a record with no abstract is not judged off its silence",
+  evidence.kind(_BARE) == "human")
+_cm = {m["kind"]: m for m in evidence.mix([_MOUSE, _DISH, _VESICLES, _RCT, _COHORT])}
+t("the design mix counts animal and lab papers as such, not as human studies",
+  _cm["lab"]["count"] == 3 and _cm["lab"]["label"] == "animal or lab studies"
+  and _cm["human"]["count"] == 1 and _cm["human"]["label"] == "human study"
+  and _cm["strong"]["count"] == 1, _cm)
+t("  and the chart's sentence says so",
+  "3 animal or lab studies" in evidence.snapshot([_MOUSE, _DISH, _VESICLES, _RCT, _COHORT])["described"]
+  and "7 human studies" not in evidence.snapshot([_MOUSE, _DISH, _VESICLES, _RCT, _COHORT])["described"])
+t("  and the mix still adds up to the studies read",
+  sum(m["count"] for m in evidence.mix([_MOUSE, _DISH, _RCT, _COHORT])) == 4)
+
 # The same table lives in static/app.js for the streaming path. If the two ever
 # disagree, a streamed check and its cached page would grade the same study
 # differently, so this fails loudly rather than letting them drift.

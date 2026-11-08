@@ -51,6 +51,27 @@ code. `GET /healthz` now returns `{"ok": true, "commit": "d4a682d"}`.
   neither Gemini nor PubMed. Status code and the `ok` field are unchanged.
 * **Leaks nothing:** a short sha of public code, no paths, keys or env.
 
+## 2026-11-08: The chart counts animal and lab papers as what they are
+
+**"Celery juice reduces inflammation" read "1 strong design, 7 human studies"**
+while five of those papers were animal or lab work and two more never tested
+people. The chart's counts came from `classify`, which files every paper PubMed
+gives no design to under "moderate", and "moderate" was worded "human studies".
+The shelf already coloured those papers "Animal or lab" through `kind`, so the
+two disagreed on one page.
+
+* `evidence.mix` now counts by `kind`, the call that colours the shelf, so the
+  description, the aria label and the books agree.
+* `kind` calls a paper human only on positive evidence (`in_people`): a trial or
+  observational publication type, or people named in the title or abstract
+  (the existing `_HUMANS` words plus the groups and designs in `_HUMAN_SIGNAL`).
+  A paper that is not animal by `preclinical` but never mentions people, such as
+  a plant-vesicle characterisation or a review of a compound's pharmacology, is
+  "animal or lab". A record with no abstract is not judged off its silence.
+* Verdict logic is untouched: `preclinical`, `background_reasons` and the
+  forced "insufficient" read the same code as before. Only `kind`, which
+  feeds the shelf, spine word and chart counts, changed.
+
 ## 2026-11-07: A busy or rate-limited Gemini call is asked twice more
 
 **About 2 of 12 live checks failed with "The AI service is having trouble
