@@ -5136,5 +5136,23 @@ t("F10: a result carries the line, and the server-rendered page shows it before 
 t("F10: renderResult fills the same line",
   'data.review_line' in pathlib.Path("static/app.js").read_text())
 
+# ---- B6 F8: a corrections route --------------------------------------------------
+_co = c.get("/corrections")
+_cot = _co.get_data(as_text=True)
+_cov = _re7.sub(r"\{#.*?#\}|<!--.*?-->|<[^>]+>", " ", _cot, flags=_re7.S)
+t("F8: /corrections exists, points to the existing report button, and carries the disclaimer",
+  _co.status_code == 200 and "Report a wrong answer" in _cot and "Not medical advice" in _cot)
+t("F8: it promises no response time and no placeholder shows",
+  not _re7.search(r"\bwithin\b|\bdays?\b(?! later)|\bhours?\b|\bweeks?\b", _cov)
+  and "[" not in _cov and "\u2014" not in _cov and "\u2013" not in _cov, _cov[:200])
+t("F8: the report form, /about and /method link to it",
+  'href="/corrections"' in c.get("/").get_data(as_text=True).split('id="report-form"')[1].split("</form>")[0]
+  and 'href="/corrections"' in _abt and 'href="/corrections"' in _met)
+_fbr = c.post("/api/feedback", json={"claim": "review dates render", "report": True, "note": "wrong"},
+              environ_base={"REMOTE_ADDR": "9.9.9.1"})
+t("F8: reports still go through the one anonymous feedback route, and set no cookie",
+  _fbr.status_code == 200 and _fbr.get_json() == {"ok": True} and "Set-Cookie" not in _fbr.headers
+  and "Set-Cookie" not in _co.headers)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

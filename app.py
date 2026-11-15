@@ -481,6 +481,11 @@ def method():
                            max_studies=MAX_STUDIES)
 
 
+@app.route("/corrections")
+def corrections():
+    return render_template("corrections.html", base_url=_base_url())
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label())
