@@ -5546,5 +5546,18 @@ _bare3 = lambda x: _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", x).replace("St
 _lost3 = [x for x, w in _ORIG17 if _bare3(breakdown.held_to_sources(x, _h8, {1, 2}, who=w)) != _bare3(x)]
 t("second fix 3: every originally dropped warning from the review still stays on the page", not _lost3, _lost3)
 
+# ---- Second review, optional: free-tier wording only on Gemini; /about says what is sent
+_og_prov = verdict.provider
+try:
+    verdict.provider = lambda: "anthropic"
+    _hA, _pA = c.get("/").get_data(as_text=True), c.get("/privacy").get_data(as_text=True)
+    verdict.provider = lambda: "gemini"
+    _hG, _pG = c.get("/").get_data(as_text=True), c.get("/privacy").get_data(as_text=True)
+finally:
+    verdict.provider = _og_prov
+t("optional: the free tier and Google's terms are mentioned only when checks go to Gemini",
+  "free tier" not in _hA and "Google" not in _pA.split("Don't paste")[0][-200:]
+  and "free tier" in _hG and "Google's free tier" in _pG and "usage limit" in _hA)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

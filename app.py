@@ -294,7 +294,7 @@ def _render_home(checks_page: bool = False):
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
                            ledger=ledger, latest=latest,
                            example=None if cached else _trust_example(),
-                           provider=verdict.provider_label(), checks_page=checks_page,
+                           provider=verdict.provider_label(), on_gemini=_on_gemini(), checks_page=checks_page,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 
@@ -493,7 +493,8 @@ def corrections():
 
 @app.route("/privacy")
 def privacy():
-    return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label())
+    return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label(),
+                           on_gemini=_on_gemini())
 
 
 _INFO_PAGES = {
