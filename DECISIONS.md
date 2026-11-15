@@ -22,10 +22,30 @@ in `_check_response`, so cached checks get them too. No prompt change.
   cited records do not give. Kept: sentences that say why studies were set
   aside, safety warnings ("can injure"), stated absences ("children were not
   in either trial"), uncited sentences, and everything when nothing was
-  relied on. "Still open" is never touched. Measured on 97 local cached
-  rows before shipping: about 50 sentences dropped, most citing only
-  unrelied studies. Postpartum studies are labelled "people after giving
-  birth", never "pregnant women".
+  relied on. "Still open" is never touched. Postpartum studies are labelled
+  "people after giving birth", never "pregnant women".
+- **The gate after review (fixes 1 to 11).** An independent review found the
+  first gate dropped safety warnings. Now: a sentence with a harm word
+  (injur, burn, toxic, poison, teratogen, unsafe, not safe, should not, do
+  not stop, contraindicat, outbreak, infection, bleed, death, interact,
+  overdose, abnormalit, side effect, adverse, harm, danger, warn, caution,
+  avoid) or a "not tested" statement is never dropped; at most it loses the
+  citation of a study not relied on. On "does not apply to" the group and
+  clause rules do not run; on "applies to" only the failing clause goes.
+  Numbers: space-grouped thousands, group-size totals ("n = 25", "n = 29"
+  give 54), counts rounded to two figures, the claim's own numbers and names
+  like "type 2" all pass. A cached or listed "true" gets the same
+  low-certainty cap as a fresh check. An emptied explanation stays empty.
+  Measured on a fresh copy of the local database (97 cached rows), 15
+  November 2026, with the review's own script (`f3_repro.py`, which runs
+  both "who" lines in the stricter mode and counts a removed citation as a
+  drop): 56 sentences changed or dropped in 25 rows, 33 rewrites, 23 fields
+  emptied; 14 of the 56 hold a harm word, and every one of them is still on
+  the page with only a citation removed or reformatted. With the real modes
+  and counting a removed citation as a rewrite: 36 sentences dropped in 19
+  rows (26 cite only studies not relied on, 4 "thousands"/"millions" with no
+  count that size, 3 groups, 2 numbers, 1 clause), 49 rewrites, 23 fields
+  emptied, 0 drops holding a harm word.
 - **/about, /method, /corrections (F7, F9, F8).** Copy says only what is true
   in the code today. Owner name, country, funding and contact are shown on
   /about only when set (`EVIDENT_OWNER`, `EVIDENT_WHO`, `EVIDENT_COUNTRY`,
