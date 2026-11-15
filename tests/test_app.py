@@ -4916,5 +4916,62 @@ t("who: with only a 'does not apply' sentence, the heading says so and no empty 
   "Who this does not apply to" in _tpl_who and "{%- if who_yes %}<p class=\"section-label label-2\">" in _tpl_who
   and "Who this does not apply to" in _js and "(yes ? `<p class=\"section-label label-2\">" in (ROOT / "static" / "app.js").read_text())
 
+# ---- B6 F1: one certainty per page --------------------------------------------
+# The apple cider vinegar page said "low certainty" in the short answer,
+# "Strong evidence of a small effect" in the evidence line and "moderate
+# evidence" in the breakdown. Built from that page's shape.
+_ACV = [
+    {"pmid": "V1", "title": "Apple cider vinegar and body composition: a meta-analysis",
+     "abstract": "Ten trials with 789 adults. Body weight fell (SMD -0.39).",
+     "journal": "J", "year": "2025", "publication_types": ["Meta-Analysis"],
+     "authors": ["A"], "data_banks": None, "url": "uV1"},
+    {"pmid": "V2", "title": "Vinegar and glycaemic control in type 2 diabetes",
+     "abstract": "Seven studies. Fasting blood sugar fell by 21.9 mg/dL.",
+     "journal": "J", "year": "2024", "publication_types": ["Systematic Review", "Meta-Analysis"],
+     "authors": ["B"], "data_banks": None, "url": "uV2"},
+]
+_ACV_BD = {"strength": "The reviews and trials provide moderate evidence for blood sugar "
+                       "improvements (Studies 1, 2).",
+           "says": ["Strong evidence shows fasting blood sugar fell by 21.9 mg/dL (Study 2)."],
+           "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
+           "not_applies_to": "", "unknowns": "", "effect": {"label": "small"}}
+_acv = appmod._check_response(
+    "apple cider vinegar helps diabetes", "vinegar AND diabetes", "complicated",
+    "It may lower blood sugar a little, but the studies are mixed and low certainty.",
+    "Two reviews found small drops (Studies 1, 2).", ["V1", "V2"], _ACV, "http://x",
+    breakdown=_ACV_BD)
+_acv_words = " ".join([_acv["tldr"], _acv["evidence_line"], _acv["breakdown"]["strength"],
+                       *_acv["breakdown"]["says"]]).lower()
+t("F1: the evidence line is never surer than the short answer's stated certainty",
+  _acv["evidence_line"].startswith("Low certainty evidence"), _acv["evidence_line"])
+t("F1: the short answer, the evidence line and the breakdown state one certainty level",
+  evidence.stated_certainty(_acv["tldr"]) == evidence.line_certainty(_acv["evidence_line"])
+  == evidence.stated_certainty(_acv["breakdown"]["strength"])
+  == evidence.stated_certainty(*_acv["breakdown"]["says"]) == "low"
+  and "moderate evidence" not in _acv_words and "strong evidence" not in _acv_words,
+  (_acv["evidence_line"], _acv["breakdown"]["strength"], _acv["breakdown"]["says"]))
+t("F1: a capped phrase keeps its sentence and its capital letter",
+  _acv["breakdown"]["says"][0].startswith("Low certainty evidence shows fasting blood sugar"),
+  _acv["breakdown"]["says"])
+t("F1: a negated certainty phrase is neither counted nor rewritten",
+  evidence.stated_certainty("There is no high-quality evidence for this.") is None
+  and evidence.cap_certainty("There is no strong evidence for this.", "low")
+  == "There is no strong evidence for this.")
+t("F1: nothing is ever rewritten upwards",
+  evidence.cap_certainty("The studies are low certainty.", "high") == "The studies are low certainty.")
+t("F1: a review's own lower rating caps the line even when it is not the first review",
+  evidence.evidence_line("complicated", _ACV + [
+      {"pmid": "V3", "title": "Vinegar review", "publication_types": ["Meta-Analysis"],
+       "abstract": "The certainty of evidence was very low."}], ["V1", "V2", "V3"])
+  .startswith("Very low certainty"))
+db.put_cached_verdict("apple cider vinegar helps diabetes", "vinegar AND diabetes", "complicated",
+                      "Two reviews found small drops (Studies 1, 2).", ["V1", "V2"], _ACV,
+                      tldr="It may lower blood sugar a little, but the studies are mixed and low certainty.",
+                      breakdown=_ACV_BD)
+_acv_html = c.get("/?q=apple%20cider%20vinegar%20helps%20diabetes").data.decode()
+t("F1: the server-rendered page carries no surer certainty phrase than the short answer",
+  "moderate evidence" not in _acv_html.lower() and "Strong evidence shows" not in _acv_html
+  and "low certainty evidence for blood sugar" in _acv_html.lower())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

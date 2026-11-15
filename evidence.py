@@ -1025,13 +1025,16 @@ def observational_only(studies, cited_pmids=()) -> bool:
 
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
-                  comparative: bool = False, outcome: str = "") -> str:
+                  comparative: bool = False, outcome: str = "",
+                  stated: str | None = None) -> str:
     """
     What the evidence used shows about the claim, as one short line with no
     full stop, or "" when nothing was used (the page says "no direct
     evidence" there). `absolute` is the claim's promise ("cure"), from
     breakdown.absolute_claim; `effect_label` is the breakdown's size label;
-    `outcome` is the query's outcome group.
+    `outcome` is the query's outcome group; `stated` is the lowest certainty
+    the page's own prose already states (stated_certainty), and the line is
+    never surer than it.
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1054,6 +1057,18 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # the claim, not the case against it.
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
+    # One certainty for the whole page. The line is never surer than the
+    # least sure thing the page already says: the lowest rating any review
+    # it relied on gives its own evidence, or a certainty word in the prose
+    # above it. The audit found one page saying "low certainty" in the short
+    # answer, "Strong evidence" here and "moderate evidence" in the breakdown.
+    floors = [x for x in (lowest_review_certainty(studies, cited_pmids, outcome), stated) if x]
+    if floors:
+        floor = min(floors, key=_rank)
+        now = line_certainty(level)
+        if now is None or _rank(floor) < _rank(now) or (
+                _rank(floor) == _rank(now) and not level.endswith("certainty")):
+            level = f"{floor.capitalize()} certainty"
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
                    "what the claim promises") if absolute else ""
@@ -1463,6 +1478,110 @@ def lead_certainty(studies, cited_pmids=(), outcome: str = "",
     # review down.
     lead = lead_review(studies, cited_pmids, outcome)
     return review_certainty(lead, outcome, strict) if lead else None
+
+
+# ---------------------------------------------------------------------------
+# One certainty per page
+#
+# A result page states how sure it is in three places: the short answer and
+# the breakdown (the model's words) and the evidence line (code's words).
+# The audit found all three disagreeing on one page. The rule, in code: the
+# page's certainty is the lowest of (a) the level read off the designs, (b)
+# the lowest rating any relied-on review gives its own evidence, and (c) any
+# certainty the prose itself states. The evidence line is worded from that
+# level, and any certainty phrase in the prose that is surer than it is
+# rewritten down to it. Nothing is ever rewritten upwards, and a phrase that
+# is negated ("no high-quality evidence") is neither counted nor touched.
+# ---------------------------------------------------------------------------
+
+_DESIGN_LEVEL = {"strong": "high", "moderate": "moderate", "weak": "low"}
+# "Strong evidence", "moderate evidence", "weak evidence": the design words
+# the evidence line itself uses, said in prose.
+_PLAIN_STATED = re.compile(r"(?<![\w-])(weak|moderate|strong)\s+(evidence)\b", re.IGNORECASE)
+_NEGATED_STATED = re.compile(
+    r"\b(?:no|not|nor|without|lacks?|lacking|lack of|little|never|absence of|"
+    r"isn[’']t|aren[’']t|wasn[’']t|weren[’']t)\s+(?:\w+\s+){0,2}$",
+    re.IGNORECASE)
+
+
+def lowest_review_certainty(studies, cited_pmids=(), outcome: str = "") -> str | None:
+    """The lowest rating any review the verdict relied on gives its own
+    evidence on this outcome (review_certainty), or None when none rates it."""
+    cited = set(cited_pmids or ())
+    levels = [review_certainty(s, outcome) for s in studies or [] if s.get("pmid") in cited]
+    levels = [x for x in levels if x]
+    return min(levels, key=_rank) if levels else None
+
+
+def _stated_spans(text: str) -> list[tuple[int, int, str, str]]:
+    """
+    Every certainty a piece of prose states, as (start, end, level, kind):
+    the span is the level words themselves, or for a range ("low to
+    moderate certainty") both ends; `kind` is "rated" for the review words
+    ("low certainty", "certainty of evidence was low") and "plain" for the
+    design words ("moderate evidence"). Negated phrases are left out.
+    """
+    text = text or ""
+    out = []
+    for m in _RATED.finditer(text):
+        if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
+            continue
+        spans = [m.span(i) for i, g in enumerate(m.groups(), 1) if g]
+        levels = [_level(g) for g in m.groups() if g]
+        if spans:
+            out.append((spans[0][0], spans[-1][1], min(levels, key=_rank), "rated"))
+    for m in _PLAIN_STATED.finditer(text):
+        if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
+            continue
+        if any(a <= m.start() < b for a, b, _, _ in out):
+            continue
+        out.append((m.start(1), m.end(1), _DESIGN_LEVEL[m.group(1).lower()], "plain"))
+    return sorted(out)
+
+
+def stated_certainty(*texts) -> str | None:
+    """The lowest certainty any of these texts states, or None."""
+    levels = [lvl for t in texts for _, _, lvl, _ in _stated_spans(str(t or ""))]
+    return min(levels, key=_rank) if levels else None
+
+
+def line_certainty(line: str) -> str | None:
+    """The certainty an evidence line (or its level word) states, read at
+    its low end: "Low to moderate certainty ..." is low, "Strong
+    evidence ..." is high. None when it states none."""
+    head = (line or "").strip().lower()
+    for level in sorted(CERTAINTY_LEVELS, key=len, reverse=True):
+        if head.startswith(level + " certainty") or head.startswith(level + " to "):
+            return level
+    word = head.split(" ", 1)[0]
+    return _DESIGN_LEVEL.get(word)
+
+
+def cap_certainty(text: str, level: str | None) -> str:
+    """
+    `text` with every certainty phrase surer than `level` rewritten down to
+    it: "moderate certainty" becomes "low certainty", "strong evidence"
+    becomes "low certainty evidence", a range collapses to the one level.
+    Phrases at or below `level`, negated phrases and every other word are
+    left exactly as they were.
+    """
+    if not text or not level or level not in CERTAINTY_LEVELS:
+        return text or ""
+    out, last = [], 0
+    for start, end, stated, kind in _stated_spans(text):
+        span = text[start:end]
+        # A range is surer than `level` when its top end is.
+        top = max((_level(x) for x in re.findall(r"very[- ]low|low|moderate|high", span, re.I)),
+                  key=_rank, default=stated)
+        if _rank(top) <= _rank(level):
+            continue
+        new = f"{level} certainty" if kind == "plain" else level
+        if span[:1].isupper():
+            new = new[:1].upper() + new[1:]
+        out.append(text[last:start] + new)
+        last = end
+    out.append(text[last:])
+    return "".join(out)
 
 
 def trial_caveats(study) -> list[str]:

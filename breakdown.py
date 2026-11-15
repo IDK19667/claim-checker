@@ -2615,6 +2615,46 @@ def shows_effect(text: str) -> bool:
     return False
 
 
+PROSE_FIELDS = ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns")
+
+
+def prose_of(bd: dict | None) -> list[str]:
+    """Every string of prose the breakdown prints, the quoted conclusions
+    excepted (those are the authors' own words)."""
+    if not bd:
+        return []
+    out = list(bd.get("says") or []) + list(bd.get("evidence") or [])
+    out += [bd.get(k) or "" for k in PROSE_FIELDS]
+    out += [p.get("assessment") or "" for p in bd.get("parts") or []]
+    return [t for t in out if t]
+
+
+def map_prose(bd: dict | None, fn) -> dict | None:
+    """
+    The breakdown with `fn` applied to every string of prose it prints
+    (prose_of). A list item or part that `fn` empties goes; a part whose
+    answer went points at the paragraphs below when there are any, as the
+    gate does; an effect row left pointing at nothing goes (settle_effect).
+    """
+    if not bd:
+        return bd
+    out = dict(bd)
+    out["says"] = [x for x in (fn(t) for t in bd.get("says") or []) if x]
+    out["evidence"] = [x for x in (fn(t) for t in bd.get("evidence") or []) if x]
+    for k in PROSE_FIELDS:
+        if bd.get(k):
+            out[k] = fn(bd[k])
+    parts = []
+    for p in bd.get("parts") or []:
+        p = {**p, "assessment": fn(p.get("assessment") or "")}
+        if not p["assessment"] and out["evidence"]:
+            p["assessment"] = PART_BELOW
+        if p["assessment"]:
+            parts.append(p)
+    out["parts"] = parts
+    return settle_effect(out)
+
+
 def settle_effect(bd: dict | None) -> dict | None:
     """
     Take the effect line out when it points at figures that are no longer

@@ -268,6 +268,10 @@ def _render_home(checks_page: bool = False):
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
                 breakdown=cached.get("breakdown"))
+            # The link preview and the markup say what the page says, with
+            # the page's one certainty (the short answer can be capped above).
+            preview["description"] = cached["tldr"] or cached["explanation"]
+            jsonld["reviewRating"]["ratingExplanation"] = cached["tldr"] or cached["explanation"]
     # The front page carries the work instead of describing it: real counts
     # and the most recent verdicts with the evidence behind each. Both are
     # best-effort; an empty database must still render a usable page.
@@ -484,7 +488,13 @@ def og_image(key):
     cached = db.get_cached_by_key(key)
     if cached:
         receipt = og.strongest_cited(cached["studies"], cached["cited_studies"])
-        png = og.render_card(cached["claim_text"], cached["verdict"], cached["tldr"], len(cached["studies"]), receipt)
+        # The card's short answer is the page's, with the page's certainty.
+        page = _check_response(
+            cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
+            cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
+            _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
+            breakdown=cached.get("breakdown"))
+        png = og.render_card(cached["claim_text"], cached["verdict"], page["tldr"], len(cached["studies"]), receipt)
     else:
         png = og.render_card("Saw a health claim? Check it against the research.", "complicated", "", 0)
     return Response(png, mimetype="image/png", headers={"Cache-Control": "public, max-age=3600"})
@@ -619,6 +629,23 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None):
     cited = set(cited_studies or [])
+    outcome = _outcome_group(search_query)
+    # One certainty for the whole page, settled on the way out so a check
+    # cached before the rule existed gets it too. The evidence line is never
+    # surer than the least sure thing the page says, and a certainty phrase
+    # in the prose that is surer than the line is rewritten down to it.
+    stated = evidence.stated_certainty(tldr, explanation, *breakdown_mod.prose_of(breakdown))
+    evidence_line = evidence.evidence_line(
+        verdict_value, studies, cited, claim,
+        ((breakdown or {}).get("effect") or {}).get("label"),
+        breakdown_mod.absolute_claim(claim),
+        bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
+        outcome, stated=stated)
+    level = evidence.line_certainty(evidence_line)
+    if level:
+        tldr = evidence.cap_certainty(tldr, level)
+        explanation = evidence.cap_certainty(explanation, level)
+        breakdown = breakdown_mod.map_prose(breakdown, lambda t: evidence.cap_certainty(t, level))
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in
@@ -658,12 +685,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # What that evidence shows about the claim, for the line under the
         # chart: "Strong evidence of a partial effect, not a cure". The level
         # word alone described the designs, not the claim.
-        "evidence_line": evidence.evidence_line(
-            verdict_value, studies, cited, claim,
-            ((breakdown or {}).get("effect") or {}).get("label"),
-            breakdown_mod.absolute_claim(claim),
-            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-            _outcome_group(search_query)),
+        "evidence_line": evidence_line,
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
