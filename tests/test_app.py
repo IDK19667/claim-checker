@@ -4952,7 +4952,7 @@ t("F1: the short answer, the evidence line and the breakdown state one certainty
   and "moderate evidence" not in _acv_words and "strong evidence" not in _acv_words,
   (_acv["evidence_line"], _acv["breakdown"]["strength"], _acv["breakdown"]["says"]))
 t("F1: a capped phrase keeps its sentence and its capital letter",
-  _acv["breakdown"]["says"][0].startswith("Low certainty evidence shows fasting blood sugar"),
+  _acv["breakdown"]["says"][0].startswith("Weak evidence shows fasting blood sugar"),
   _acv["breakdown"]["says"])
 t("F1: a negated certainty phrase is neither counted nor rewritten",
   evidence.stated_certainty("There is no high-quality evidence for this.") is None
@@ -4972,7 +4972,7 @@ db.put_cached_verdict("apple cider vinegar helps diabetes", "vinegar AND diabete
 _acv_html = c.get("/?q=apple%20cider%20vinegar%20helps%20diabetes").data.decode()
 t("F1: the server-rendered page carries no surer certainty phrase than the short answer",
   "moderate evidence" not in _acv_html.lower() and "Strong evidence shows" not in _acv_html
-  and "low certainty evidence for blood sugar" in _acv_html.lower())
+  and "weak evidence for blood sugar" in _acv_html.lower())
 
 # ---- B6 F2: the label never exceeds the main review's own rating ---------------
 # "exercise helps depression" said "Moderate certainty evidence" while its main
@@ -5234,6 +5234,21 @@ t("fix 3: prose can never raise the line",
 _mar = dict(_ma, abstract="Meta-analysis of 30 RCTs. Pain fell (low certainty evidence).")
 t("fix 3: 'certainty' wording comes only from a review's own rating",
   evidence.evidence_line("true", [_mar], ["M"], "x helps pain").startswith("Low certainty"))
+
+# ---- Review fix 4: cap_certainty rewrites only the prose's own word on the body --
+t("fix 4: 'More high-quality evidence is needed' is left alone, and states no level",
+  evidence.cap_certainty("More high-quality evidence is needed.", "low") == "More high-quality evidence is needed."
+  and evidence.stated_certainty("More high-quality evidence is needed.") is None)
+t("fix 4: 'would' and 'larger ... needed' sentences are never rewritten",
+  evidence.cap_certainty("A larger trial would give strong evidence.", "low") == "A larger trial would give strong evidence."
+  and evidence.cap_certainty("Larger trials with moderate certainty are needed.", "low")
+  == "Larger trials with moderate certainty are needed.")
+t("fix 4: a phrase credited to a study or review is never rewritten",
+  evidence.cap_certainty("Study 2 found moderate certainty evidence.", "low") == "Study 2 found moderate certainty evidence."
+  and evidence.cap_certainty("The review rated the evidence high certainty.", "low")
+  == "The review rated the evidence high certainty.")
+t("fix 4: the prose's own statement about the evidence is still brought down, in a design word",
+  evidence.cap_certainty("There is strong evidence it helps (Study 1).", "low") == "There is weak evidence it helps (Study 1).")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

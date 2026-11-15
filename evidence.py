@@ -1553,12 +1553,16 @@ def _stated_spans(text: str) -> list[tuple[int, int, str, str]]:
     for m in _RATED.finditer(text):
         if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
             continue
+        if _NOT_YET.search(_sentence_around(text, m.start(), m.end())):
+            continue
         spans = [m.span(i) for i, g in enumerate(m.groups(), 1) if g]
         levels = [_level(g) for g in m.groups() if g]
         if spans:
             out.append((spans[0][0], spans[-1][1], min(levels, key=_rank), "rated"))
     for m in _PLAIN_STATED.finditer(text):
         if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
+            continue
+        if _NOT_YET.search(_sentence_around(text, m.start(), m.end())):
             continue
         if any(a <= m.start() < b for a, b, _, _ in out):
             continue
@@ -1584,13 +1588,37 @@ def line_certainty(line: str) -> str | None:
     return _DESIGN_LEVEL.get(word)
 
 
+# A certainty phrase cap_certainty leaves alone: one a study or review is
+# credited with, and one about evidence that does not exist yet ("more
+# high-quality evidence is needed", "a larger trial would give strong
+# evidence").
+_ATTRIBUTED = re.compile(
+    r"\bstud(?:y|ies) \d|\bauthors?\b|\bGRADE\b|\bCINeMA\b|\brated\b|\bgraded\b|\bjudged\b|"
+    r"\baccording to\b|\b(?:review|trial|meta-?analysis|study)s? (?:\w+ )?(?:found|finds|reported|reports|"
+    r"rated|rates|concluded|concludes|says|said|states|stated|describes|described|called)\b",
+    re.IGNORECASE)
+_NOT_YET = re.compile(
+    r"\b(?:more|larger|further|better|additional|bigger|longer|new)\b[^.]{0,60}?\b(?:needed|required)\b|"
+    r"\bneeded\b|\bwould\b|\bcould\b|\bmight\b", re.IGNORECASE)
+
+
+def _sentence_around(text: str, start: int, end: int) -> str:
+    a = max(text.rfind(". ", 0, start), text.rfind("? ", 0, start), text.rfind("! ", 0, start))
+    b = min([i for i in (text.find(". ", end), text.find("? ", end), text.find("! ", end)) if i >= 0]
+            or [len(text)])
+    return text[a + 1 if a >= 0 else 0:b + 1]
+
+
 def cap_certainty(text: str, level: str | None) -> str:
     """
     `text` with every certainty phrase surer than `level` rewritten down to
-    it: "moderate certainty" becomes "low certainty", "strong evidence"
-    becomes "low certainty evidence", a range collapses to the one level.
-    Phrases at or below `level`, negated phrases and every other word are
-    left exactly as they were.
+    it, but only where the prose speaks for itself about the body of
+    evidence: "moderate certainty" becomes "low certainty", "strong
+    evidence" becomes "weak evidence", a range collapses to the one level.
+    Left exactly as they were: phrases at or below `level`, negated phrases,
+    any phrase in a sentence that credits a study, review or trial, and any
+    phrase about evidence still to come ("more high-quality evidence is
+    needed", "would").
     """
     if not text or not level or level not in CERTAINTY_LEVELS:
         return text or ""
@@ -1602,7 +1630,13 @@ def cap_certainty(text: str, level: str | None) -> str:
                   key=_rank, default=stated)
         if _rank(top) <= _rank(level):
             continue
-        new = f"{level} certainty" if kind == "plain" else level
+        sentence = _sentence_around(text, start, end)
+        # A bracketed citation is where a sentence comes from, not who it
+        # credits the certainty to.
+        bare = re.sub(r"\([^)]*\)", " ", sentence)
+        if _ATTRIBUTED.search(bare) or _NOT_YET.search(bare):
+            continue
+        new = _STATED_WORD[level].lower() if kind == "plain" else level
         if span[:1].isupper():
             new = new[:1].upper() + new[1:]
         out.append(text[last:start] + new)
