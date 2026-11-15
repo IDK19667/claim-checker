@@ -1800,10 +1800,23 @@ _SETS_ASIDE = re.compile(
 # review found the first version of this gate removing "undiluted vinegar can
 # injure the oesophagus" and "antibiotics should not be used for the common
 # cold".
+# Whole words only: "pharmacological" holds "harm" and "cytotoxic" holds
+# "toxic", and neither is a warning. These words are a warning on their own.
 HARM = re.compile(
-    r"injur|burn|toxic|poison|teratogen|unsafe|not safe|should not|shouldn[\u2019']t|"
-    r"do not stop|don[\u2019']t stop|contraindicat|outbreak|infection|bleed|death|fatal|interact|"
-    r"overdose|abnormalit|side effect|adverse|harm|danger|warn|caution|avoid", re.IGNORECASE)
+    r"\b(?:injur\w*|burn(?:s|ed|t|ing)?|toxic\w*|poison\w*|teratogen\w*|unsafe|not safe|"
+    r"should not|shouldn[\u2019']t|must not|do not stop|don[\u2019']t stop|contraindicat\w*|"
+    r"bleed\w*|deaths?|died|fatal\w*|overdos\w*|side[- ]effects?|adverse|harm\w*|dangers?|"
+    r"dangerous\w*|warn\w*|caution\w*)\b", re.IGNORECASE)
+# These name a hazard only in a warning frame: "linked to outbreaks",
+# "infections are caused by viruses", "can interact with warfarin". Without
+# one, "children with infections lost 99 kg" and "it avoids weight gain" are
+# ordinary claims and are held to their sources like any other.
+_HAZARD = re.compile(r"\b(?:infections?|infectious|outbreaks?|interact\w*|avoid\w*|abnormalit\w*)\b",
+                     re.IGNORECASE)
+_WARNING_FRAME = re.compile(
+    r"\b(?:risks?|risky|cause[sd]?|causing|linked|lead(?:s)? to|led to|can|could|may|might|should|"
+    r"carr(?:y|ies)|spread\w*|transmi\w*|associated|increase[sd]?|raise[sd]?|must|need to|"
+    r"not be used|exposure|exposed)\b", re.IGNORECASE)
 
 # A sentence saying the studies did not test the claim is the honest answer to
 # it, and is never dropped either: "Neither tested whether diabetes went away".
@@ -1812,9 +1825,25 @@ _UNTESTED = re.compile(
     r"\b(?:not|never|n[\u2019']t)\s+(?:\w+\s+){0,2}?test(?:ed|s)?\b", re.IGNORECASE)
 
 
-def never_dropped(sentence: str) -> bool:
+def is_warning(sentence: str, who: str = "") -> bool:
+    """A harm warning: a word that is one by itself, or a hazard word in a
+    warning frame. On the "does not apply to" line a hazard word is enough:
+    "bacterial infections" there says who must not rely on the answer."""
+    body = _REF.sub(" ", sentence or "")
+    if HARM.search(body):
+        return True
+    return bool(_HAZARD.search(body) and (who == "not" or _WARNING_FRAME.search(body)))
+
+
+def never_dropped(sentence: str, who: str = "") -> bool:
     """A harm warning or a statement that the claim went untested."""
-    return bool(HARM.search(sentence) or _UNTESTED.search(sentence))
+    return bool(is_warning(sentence, who) or _UNTESTED.search(_REF.sub(" ", sentence or "")))
+
+
+def uncited(sentence: str) -> str:
+    """`sentence` with its bracketed citations taken off."""
+    out = _PAREN_REF.sub("", sentence)
+    return re.sub(r"\s+([.,;:!?])", r"\1", out).strip()
 
 
 _PAREN_REF = re.compile(
@@ -2087,8 +2116,10 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: st
       to" line (`who="not"`), the group and clause rules do not run.
 
     Never dropped: a warning about harm, and a statement that the claim was
-    not tested (never_dropped). If such a sentence cites only studies not
-    relied on, the bracketed citation is taken off and the sentence stays.
+    not tested (never_dropped). If such a sentence cites studies not relied
+    on, their bracketed citations are taken off; if what is left still
+    gives a group or a figure its cited records do not, the citation goes
+    too, so no study is credited with it, and the warning stays.
 
     `relied` is the set of study numbers the verdict relied on. With none
     relied on (not enough evidence), the text names what was read and why
@@ -2107,8 +2138,12 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: st
         if not cited:
             kept.append(sentence)
             continue
-        if never_dropped(sentence):
-            kept.append(strip_unrelied(sentence, relied, count))
+        if never_dropped(sentence, who or ""):
+            sentence = strip_unrelied(sentence, relied, count)
+            left = refs(sentence, count)
+            if left and _fails_sources(sentence, studies, left, who or "", claim):
+                sentence = uncited(sentence)
+            kept.append(sentence)
             continue
         if not _SETS_ASIDE.search(sentence):
             using = [n for n in cited if n in relied]

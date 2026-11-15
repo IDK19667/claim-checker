@@ -5181,11 +5181,13 @@ _HARMS = {
         "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure.",
     "Most acute nose and throat infections are caused by viruses, not bacteria (Study 3).":
         "Most acute nose and throat infections are caused by viruses, not bacteria.",
-    "It is unsafe in pregnancy (Study 1).": "It is unsafe in pregnancy (Study 1).",
+    # Study 1 never mentions pregnancy or diabetes, nor 99 mL or 12,000: the
+    # warning stays, without crediting a study with it (second review fix 3).
+    "It is unsafe in pregnancy (Study 1).": "It is unsafe in pregnancy.",
     "People with diabetes should not stop their medicine (Study 1).":
-        "People with diabetes should not stop their medicine (Study 1).",
+        "People with diabetes should not stop their medicine.",
     "Doses of 99 mL a day burned the throat in 12,000 people (Studies 1, 3).":
-        "Doses of 99 mL a day burned the throat in 12,000 people (Study 1).",
+        "Doses of 99 mL a day burned the throat in 12,000 people.",
 }
 for _hin, _hout in _HARMS.items():
     _hgot = breakdown.held_to_sources(_hin, _h8, {1, 2})
@@ -5499,6 +5501,50 @@ t("second fix 2: the same rows without the guidance lead are still capped",
                          ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")["verdict"] == "complicated")
 t("second fix 2: /method says the verdict follows the guidance, and the code lets it",
   "the verdict follows it" in c.get("/method").get_data(as_text=True))
+
+# ---- Second review fix 3: harm words are whole words in a warning, and warnings are still checked
+_p3st = [_study("A", "Vinegar in adults", abstract="We randomised 1,937 adults aged 30 to 50 years to 15 mL vinegar or placebo "
+                "for twelve weeks. Weight fell by 20% in 2019."),
+         _study("C", "Oesophageal injury from vinegar", types=["Case Reports"],
+                abstract="A 54-year-old woman had oesophageal injury after drinking undiluted vinegar.")]
+_k3 = lambda x, who="": breakdown.held_to_sources(x, _p3st, {1}, who=who)
+for _b3 in ["Pregnant women lost 12 kg on pharmacological doses (Study 1).",
+            "Children with infections lost 99 kg (Study 1).",
+            "It avoids weight gain in 40,000 children (Study 1)."]:
+    t(f"second fix 3: not a warning, so held to its source and dropped: {_b3[:40]}",
+      _k3(_b3) == "", _k3(_b3))
+t("second fix 3: substrings are not harm words, and a hazard word needs a warning frame",
+  not breakdown.is_warning("Pharmacological doses were used.") and not breakdown.is_warning("It is cytotoxic in cells.")
+  and not breakdown.is_warning("Children with infections lost weight.")
+  and breakdown.is_warning("Raw milk is linked to outbreaks.") and breakdown.is_warning("St John's wort can interact with warfarin.")
+  and breakdown.is_warning("Bacterial infections such as sinusitis.", who="not"))
+for _w3 in ["It is unsafe in pregnancy (Study 1).", "People with diabetes should not stop their medicine (Study 1).",
+            "Undiluted vinegar can injure the throat in children (Study 2).",
+            "Undiluted vinegar can injure the oesophagus (Study 2).",
+            "Neither tested whether diabetes went away, and Study 2 is a reminder that undiluted vinegar can injure the oesophagus."]:
+    _o3 = _k3(_w3)
+    t(f"second fix 3: a real warning stays on the page: {_w3[:44]}",
+      _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", _o3).rstrip(".") == _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", _w3).rstrip("."), _o3)
+t("second fix 3: a warning with a figure its study lacks keeps the warning and loses the citation",
+  _k3("Vinegar burned the throat of 300 adults (Study 1).") == "Vinegar burned the throat of 300 adults.")
+_ORIG17 = [
+    ("Heavy drinkers, people with contraindications to alcohol, and those outside the studied age ranges (Study 1).", "not"),
+    ("Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).", ""),
+    ("Antibiotics should not be used for the common cold or influenza (Study 3).", ""),
+    ("Most acute nose and throat infections are caused by viruses, not bacteria (Study 3).", ""),
+    ("Evidence states that antibiotics should not be used for the common cold (Study 3).", ""),
+    ("Bacterial infections such as acute bacterial sinusitis or group A streptococcal pharyngitis (Studies 2, 3).", "not"),
+    ("Viruses cause most nose and throat infections and antibiotics should not be used for them (Study 3).", ""),
+    ("Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).", ""),
+    ("Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure (Study 3).", ""),
+    ("Patients with other viral infections or those taking ivermectin strictly for parasitic conditions (Study 8).", "not"),
+    ("People with chronic illnesses or those seeking a guaranteed way to avoid infections (Study 1).", "not"),
+    ("Men, people without desk jobs, and people with severe spinal injuries (Studies 1, 2, 7).", "not"),
+    ("Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.", ""),
+]
+_bare3 = lambda x: _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", x).replace("Study 6, Study 8", "").rstrip(". ")
+_lost3 = [x for x, w in _ORIG17 if _bare3(breakdown.held_to_sources(x, _h8, {1, 2}, who=w)) != _bare3(x)]
+t("second fix 3: every originally dropped warning from the review still stays on the page", not _lost3, _lost3)
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
