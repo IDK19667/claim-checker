@@ -5439,5 +5439,12 @@ t("extra: an explanation the gate empties is empty, not the short answer again",
 t("extra: the server-rendered page then hides the research block instead of printing the short answer twice",
   _esays.lstrip().startswith("hidden") and "Ginger may reduce vomiting a little." not in _esays, _esays[:120])
 
+# ---- Review extra: /corrections lists everything a report stores ----------------
+_cor = c.get("/corrections").get_data(as_text=True)
+_fbcols = {r[1] for r in _sq.connect(os.environ["DB_PATH"]).execute("pragma table_info(feedback)")}
+t("extra: /corrections says the time of a report is stored, as the feedback table does",
+  "created_at" in _fbcols and "the date and time of the report" in _cor
+  and _fbcols <= {"id", "claim_key", "verdict", "helpful", "note", "created_at"}, _fbcols)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
