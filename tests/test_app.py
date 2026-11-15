@@ -5395,5 +5395,33 @@ t("fix 11: the verbatim dropped sentence from the review now stays",
       [_n11[1], {**_n11[0], "abstract": "A randomized controlled trial compared usual care (n = 25) with a 13-week mHealth intervention (n = 29). HbA1c and blood pressure fell in adults with type 2 diabetes."}],
       {2}) != "")
 
+# ---- Review extra: a cached "true" follows the same certainty cap as a fresh check
+_xc = "Ginger stops vomiting for good in adults"
+db.put_cached_verdict(_xc, _GIN_Q, "true", "Ginger reduces vomiting (Study 1).",
+                      ["L1"], [_LOWREV], tldr="Ginger reduces vomiting.", still_open="Doses vary.")
+_xa = P(_xc, "9.9.9.8").get_json() or {}
+_xh = c.get("/", query_string={"q": _xc}).get_data(as_text=True)
+_xseen = {}
+_xcard = appmod.og.render_card
+def _xspy(claim, verdict_value, *a, **k):
+    _xseen["stamp"] = verdict_value
+    return _xcard(claim, verdict_value, *a, **k)
+appmod.og.render_card = _xspy
+try:
+    c.get(f"/og/{db.normalize_claim(_xc)}.png")
+finally:
+    appmod.og.render_card = _xcard
+t("extra: a cached 'true' over a low-rated lead review is shown as complicated, with the low line",
+  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").startswith("Low certainty")
+  and "certainty of that evidence is low" in (_xa.get("tldr") or ""), (_xa.get("verdict"), _xa.get("evidence_line"), _xa.get("tldr")))
+t("extra: the shared page, its markup and its card never say Likely true over that line",
+  not _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">" + appmod.VERDICT_LABELS["true"], _xh)
+  and _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">", _xh)
+  and f"<title>{appmod.VERDICT_LABELS['true']}" not in _xh
+  and f"{appmod.VERDICT_LABELS['true']}: \u201c{_xc}" not in _xh
+  and f"<title>{__import__('markupsafe').escape(appmod.VERDICT_LABELS['complicated'])}: \u201c{_xc}" in _xh
+  and f'"alternateName": "{appmod.VERDICT_LABELS["true"]}"' not in _xh and _xseen.get("stamp") == "complicated",
+  [_xh[max(0, m.start() - 120):m.end() + 40] for m in _re7.finditer(appmod.VERDICT_LABELS["true"], _xh)][:4])
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

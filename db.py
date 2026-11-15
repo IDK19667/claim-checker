@@ -639,7 +639,7 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
     with get_conn() as conn:
         a, b = _run_many(conn, [
             ("SELECT COUNT(*) n FROM verdict_cache", ()),
-            ("SELECT claim_text, verdict, tldr, still_open, studies_json, cited_json, created_at "
+            ("SELECT claim_text, search_query, verdict, tldr, still_open, studies_json, cited_json, created_at "
              "FROM verdict_cache ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)),
         ])
         total, rows = a.fetchone()["n"], b.fetchall()
@@ -651,6 +651,7 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
         except (ValueError, TypeError):
             studies, cited = [], []
         out.append({"issue": total - i, "claim_text": r["claim_text"],
+                    "search_query": r["search_query"] or "",
                     "verdict": r["verdict"], "tldr": r["tldr"] or "",
                     "still_open": r["still_open"] or "",
                     "created_at": r["created_at"],

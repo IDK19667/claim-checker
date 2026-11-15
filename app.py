@@ -2,6 +2,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import secrets
 import subprocess
 from datetime import datetime, timezone
@@ -271,8 +272,12 @@ def _render_home(checks_page: bool = False):
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
                 breakdown=cached.get("breakdown"))
             # The link preview and the markup say what the page says, with
-            # the page's one certainty (the short answer can be capped above).
+            # the page's one certainty and stamp (both can be capped above).
+            label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
+            preview["title"] = f"{label}: “{cached['claim']}”"
             preview["description"] = cached["tldr"] or cached["explanation"]
+            jsonld["reviewRating"]["ratingValue"] = RATING.get(cached["verdict"], 3)
+            jsonld["reviewRating"]["alternateName"] = label
             jsonld["reviewRating"]["ratingExplanation"] = cached["tldr"] or cached["explanation"]
     # The front page carries the work instead of describing it: real counts
     # and the most recent verdicts with the evidence behind each. Both are
@@ -281,7 +286,7 @@ def _render_home(checks_page: bool = False):
         ledger = db.ledger()
         latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
                        shelf=evidence.shelf(v["studies"], v["cited"]))
-                  for v in db.recent_verdicts(10)]
+                  for v in map(_listed, db.recent_verdicts(10))]
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
@@ -408,7 +413,7 @@ def not_found(_e):
     render the page rather than turning a 404 into a 500.
     """
     try:
-        latest = db.recent_verdicts(5)
+        latest = [_listed(v) for v in db.recent_verdicts(5)]
     except sqlite3.Error:
         latest = []
     return render_template("404.html", latest=latest, labels=VERDICT_LABELS), 404
@@ -528,15 +533,18 @@ def og_image(key):
         # If the gate cannot run on an old or odd row, the card still renders,
         # with the stored short answer: a link preview must never be a 500.
         try:
-            short = _check_response(
+            page = _check_response(
                 cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
-                breakdown=cached.get("breakdown"))["tldr"]
+                breakdown=cached.get("breakdown"))
+            short, stamp = page["tldr"], page["verdict"]
         except Exception as e:  # noqa: BLE001
             app.logger.warning("Card for %s fell back to the stored short answer: %s", key, type(e).__name__)
             short = cached.get("tldr") or ""
-        png = og.render_card(cached["claim_text"], cached["verdict"], short, len(cached["studies"]), receipt)
+            # The stored stamp, but never "true" without the cap having run.
+            stamp = "complicated" if cached["verdict"] == "true" else cached["verdict"]
+        png = og.render_card(cached["claim_text"], stamp, short, len(cached["studies"]), receipt)
     else:
         png = og.render_card("Saw a health claim? Check it against the research.", "complicated", "", 0)
     return Response(png, mimetype="image/png", headers={"Cache-Control": "public, max-age=3600"})
@@ -691,6 +699,24 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         breakdown_mod.absolute_claim(claim),
         bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
         outcome, stated=stated)
+    # The stamp follows the same cap a fresh check gets in verdict.py: a
+    # "true" the evidence cannot carry (the lead review rates itself low, or
+    # only small and pilot trials) is not shown as likely true, and nor is a
+    # "true" over a line that says low certainty. A check cached before the
+    # cap existed, or before its line was scoped, gets it here.
+    if _capped_true(verdict_value, claim, studies, cited, outcome, evidence_line):
+        verdict_value = "complicated"
+        if not re.search(r"\bcertainty\b[^.]*\blow\b", tldr or "", re.IGNORECASE):
+            leaned = f"{(tldr or '').rstrip().rstrip('.')}, but the certainty of that evidence is low."
+            tldr = (leaned if tldr and len(leaned) <= verdict.TLDR_MAX
+                    and not breakdown_mod.stamp_conflict(verdict_value, leaned, "", claim)
+                    else verdict.LOW_CERTAINTY_TLDR)
+        evidence_line = evidence.evidence_line(
+            verdict_value, studies, cited, claim,
+            ((breakdown or {}).get("effect") or {}).get("label"),
+            breakdown_mod.absolute_claim(claim),
+            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
+            outcome, stated=stated)
     level = evidence.line_certainty(evidence_line)
     if level:
         tldr = evidence.cap_certainty(tldr, level)
