@@ -1786,16 +1786,63 @@ def relied_only(text: str, relied, count: int) -> str:
 # ---------------------------------------------------------------------
 
 # A sentence that names studies in order to say they were set aside, or count
-# for less, is honest about them, and keeps its citation. So does a warning
-# about harm: a safety note is never dropped for citing a study the verdict
-# did not rest on ("undiluted vinegar can injure the oesophagus").
+# for less, is honest about them, and keeps its citation.
 _SETS_ASIDE = re.compile(
     r"\b(?:count(?:s|ed)? for less|point(?:s|ed)? the other way|set aside|not relied on|"
-    r"(?:did|does|do) not (?:test|measure|study|look at)|don[’']t (?:test|measure)|"
-    r"off topic|not (?:a )?tests? of|retracted|reminder|cautions?|warns?|warning|injur\w*|harms?|"
-    r"unsafe|dangers?|side effects?|adverse|"
+    r"(?:did|does|do) not (?:test|measure|study|look at)|don[\u2019']t (?:test|measure)|"
+    r"off topic|not (?:a )?tests? of|retracted|"
     r"(?:animal|lab|laboratory|preclinical|in vitro|cell|rat|mouse|mice) (?:studies|study|work|"
     r"research|models?|experiments?))\b", re.IGNORECASE)
+
+# A warning about harm is never dropped. If its only fault is citing a study
+# the verdict did not rely on, that citation is taken off and the warning
+# stays; the group, figure and who rules are never applied to it. The audit
+# review found the first version of this gate removing "undiluted vinegar can
+# injure the oesophagus" and "antibiotics should not be used for the common
+# cold".
+HARM = re.compile(
+    r"injur|burn|toxic|poison|teratogen|unsafe|not safe|should not|shouldn[\u2019']t|"
+    r"do not stop|don[\u2019']t stop|contraindicat|outbreak|infection|bleed|death|fatal|interact|"
+    r"overdose|abnormalit|side effect|adverse|harm|danger|warn|caution|avoid", re.IGNORECASE)
+
+# A sentence saying the studies did not test the claim is the honest answer to
+# it, and is never dropped either: "Neither tested whether diabetes went away".
+_UNTESTED = re.compile(
+    r"\b(?:neither|none|no (?:study|trial|review)s?|nothing)\b[^.]{0,60}?\btest|"
+    r"\b(?:not|never|n[\u2019']t)\s+(?:\w+\s+){0,2}?test(?:ed|s)?\b", re.IGNORECASE)
+
+
+def never_dropped(sentence: str) -> bool:
+    """A harm warning or a statement that the claim went untested."""
+    return bool(HARM.search(sentence) or _UNTESTED.search(sentence))
+
+
+_PAREN_REF = re.compile(
+    r"\s*\(\s*((?:stud(?:y|ies)\s+\d+(?:\s*(?:,|,?\s*and\b|&)\s*\d+)*\s*[,;]?\s*)+)\)",
+    re.IGNORECASE)
+
+
+def strip_unrelied(sentence: str, relied, count: int) -> str:
+    """`sentence` with the bracketed citations of studies not relied on taken
+    off, keeping any relied-on study in the same brackets. A citation that is
+    part of the sentence itself ("study 4 is a reminder") cannot be taken off
+    without rewriting it, so the sentence is then left exactly as it was."""
+    relied = set(relied or ())
+
+    def fix(m: re.Match) -> str:
+        nums = [int(n) for n in re.findall(r"\d+", m.group(1))]
+        keep = [n for n in nums if n in relied or n > count]
+        if not keep:
+            return ""
+        return " (Study %d)" % keep[0] if len(keep) == 1 else \
+            " (Studies " + ", ".join(str(n) for n in keep) + ")"
+
+    out = _PAREN_REF.sub(fix, sentence)
+    out = re.sub(r"\s+([.,;:!?])", r"\1", out).strip()
+    if any(n not in relied for n in refs(out, count)):
+        return sentence
+    return out
+
 
 # Who a study was run in. A sentence that names one of these groups must cite
 # a study whose own record names it: the exercise page said "pregnant women"
@@ -1815,6 +1862,8 @@ _GROUP_TERMS = [(re.compile(said, re.IGNORECASE), re.compile(source, re.IGNORECA
     (r"\bdiabet\w*", r"\bdiabet\w*|\bT2DM?\b|\bT1DM?\b"),
     (r"\bathletes?\b", r"\bathlet\w*|\bsports?\w*|\bplayers?\b|\btrained\b|\brunners?\b|\bmarathon\w*|"
      r"\bphysical stress\b|\bsoldiers?\b|\bexercis\w*"),
+    (r"\bfo?etus(?:es)?\b|\bfo?etal\b|\bunborn\b",
+     r"\bfo?etus(?:es)?\b|\bfo?etal\b|\bunborn\b|\bprenatal\b|\bpregnan\w*"),
     (r"\bpostmenopausal\b|\bafter menopause\b", r"\bmenopaus\w*|\bpostmenopaus\w*"),
     (r"\bobes\w*|\boverweight\b", r"\bobes\w*|\boverweight\b|\bBMI\b|\bbody mass\b"),
     (r"\bsmokers?\b", r"\bsmok\w*|\btobacco\b|\bcigarette\w*"),
@@ -1830,7 +1879,7 @@ _GROUP_TERMS = [(re.compile(said, re.IGNORECASE), re.compile(source, re.IGNORECA
 _LEFT_OUT = re.compile(
     r"\b(?:not|never|no)\b(?:\s+[\w-]+){0,3}?\s+(?:included|include|includes|studied|study|"
     r"enrolled|enrol|enroll|tested|test|covered|cover|targeted|target|focus|represented|"
-    r"part of|among|appear|in (?:either|any|these|this|the|those))\b|"
+    r"part of|among|appear|apply|applies|in)\b|\bdoes(?:n[\u2019']t| not) cover\b|"
     r"\b(?:did|do|does|were|was|are|is)n[\u2019']t\b(?:\s+[\w-]+){0,3}?\s+(?:included|include|"
     r"studied|study|enrolled|tested|test|covered|cover|target|in|among)\b|\bexcluded\b",
     re.IGNORECASE)
@@ -1853,6 +1902,7 @@ likely may might studied study studies evidence research trial trials data apply
 applies applied claim this being been were what when where while into onto about
 general healthy population populations type types kind kinds form forms find found
 taking take takes using used use doing does done among across between within based
+finding findings result results like such including include includes generally broadly
 """.split())
 
 
@@ -1905,13 +1955,48 @@ def _unsupported_who(sentence: str, source: str) -> bool:
     return False
 
 
-def _fails_sources(sentence: str, studies, numbers, who: bool) -> bool:
-    """Whether a sentence says something the studies it cites do not."""
+def _clause_fails(clause: str, source: str, have: set) -> bool:
+    """A "who it applies to" clause its cited records do not support. A clause
+    that names a known group is judged by the group alone ("pregnant women"
+    for a study of alcohol use during pregnancy is fine); any other clause
+    needs one word that starts the same as a word in the records."""
+    named = [(said, src) for said, src in _GROUP_TERMS if said.search(clause)]
+    if named:
+        return not all(src.search(source) for _said, src in named)
+    words = [w.lower() for w in re.findall(r"[A-Za-z]{4,}", clause) if w.lower() not in _GENERIC_WHO]
+    return bool(words) and not any(w[:5] in have for w in words)
+
+
+def _who_clauses(sentence: str, studies, numbers) -> str:
+    """An "applies to" sentence with only its unsupported clauses taken out:
+    "Adults, older women and smokers (Study 1)" keeps what Study 1 names.
+    "" when no clause is left."""
+    source = _studies_text(studies, numbers)
+    m = re.search(r"\s*\([^)]*\)\s*\.?\s*$", sentence)
+    body, tail = (sentence[:m.start()], sentence[m.start():]) if m else (sentence.rstrip(". "), ".")
+    parts = [p.strip() for p in re.split(r",\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+", body) if p.strip()]
+    have = {w.lower()[:5] for w in re.findall(r"[A-Za-z]{4,}", source)}
+    keep = [p for p in parts if not _clause_fails(p, source, have)]
+    if len(keep) == len(parts):
+        return sentence
+    if not keep:
+        return ""
+    joined = keep[0] if len(keep) == 1 else ", ".join(keep[:-1]) + " and " + keep[-1]
+    return joined[:1].upper() + joined[1:] + (tail if tail.strip() else ".")
+
+
+def _fails_sources(sentence: str, studies, numbers, who: str = "") -> bool:
+    """Whether a sentence says something the studies it cites do not. `who`
+    is "applies" or "not" for the two "who it applies to" lines: the groups
+    a "does not apply to" line names are, as expected, groups its records do
+    not mention, so neither the group rule nor the clause rule runs there,
+    and an "applies to" line has its clauses checked one by one elsewhere."""
     source = _studies_text(studies, numbers)
     left_out = bool(_LEFT_OUT.search(sentence))
-    for said, named in _GROUP_TERMS:
-        if not left_out and said.search(sentence) and not named.search(source):
-            return True
+    if not who:
+        for said, named in _GROUP_TERMS:
+            if not left_out and said.search(sentence) and not named.search(source):
+                return True
     if not sentence.startswith(TRANSLATION_LEAD):
         known = _known_in(studies, numbers)
         if ungrounded_numbers(sentence, known):
@@ -1920,10 +2005,10 @@ def _fails_sources(sentence: str, studies, numbers, who: bool) -> bool:
     for pattern, least in _VAGUE_COUNTS:
         if pattern.search(sentence) and not any(n >= least for n in counts):
             return True
-    return bool(who and not left_out and _unsupported_who(sentence, source))
+    return False
 
 
-def held_to_sources(text: str, studies: list[dict], relied, who: bool = False) -> str:
+def held_to_sources(text: str, studies: list[dict], relied, who=False) -> str:
     """
     `text` with every cited sentence held to the studies it cites:
 
@@ -1934,45 +2019,62 @@ def held_to_sources(text: str, studies: list[dict], relied, who: bool = False) -
       cancer") must be named in a cited record;
     - every figure must be in a cited record (rounded as the page rounds);
     - "thousands", "hundreds" of people need a count that size in one;
-    - with `who` (the "who it applies to" lines), every clause must share a
-      word with a cited record.
+    - on the "applies to" line (`who="applies"`), a clause its records give
+      no word for is taken out, not the whole line; on the "does not apply
+      to" line (`who="not"`), the group and clause rules do not run.
+
+    Never dropped: a warning about harm, and a statement that the claim was
+    not tested (never_dropped). If such a sentence cites only studies not
+    relied on, the bracketed citation is taken off and the sentence stays.
 
     `relied` is the set of study numbers the verdict relied on. With none
     relied on (not enough evidence), the text names what was read and why
-    none of it counted, so the first two rules are not applied to it. A
-    sentence that cites nothing is left exactly as it was.
+    none of it counted, so it is left as it was. A sentence that cites
+    nothing is left exactly as it was.
     """
+    if who is True:
+        who = "applies"
     count = len(studies or [])
     relied = set(relied or ())
+    if not relied:
+        return text or ""
     kept = []
     for sentence in sentences(text or ""):
         cited = refs(sentence, count)
         if not cited:
             kept.append(sentence)
             continue
-        if relied and not _SETS_ASIDE.search(sentence):
+        if never_dropped(sentence):
+            kept.append(strip_unrelied(sentence, relied, count))
+            continue
+        if not _SETS_ASIDE.search(sentence):
             using = [n for n in cited if n in relied]
             if not using:
                 continue
             if len(using) < len(cited):
                 sentence = relied_only(sentence, relied, count)
                 cited = using
-        if _fails_sources(sentence, studies, cited, who):
+        if _fails_sources(sentence, studies, cited, who or ""):
             continue
+        if who == "applies" and not _LEFT_OUT.search(sentence):
+            sentence = _who_clauses(sentence, studies, cited)
+            if not sentence:
+                continue
         kept.append(sentence)
     return " ".join(kept)
 
 
 def hold_breakdown(bd: dict | None, studies: list[dict], relied) -> dict | None:
     """held_to_sources over every string of prose the breakdown prints, with
-    the "who it applies to" lines held to the clause rule as well."""
+    the two "who it applies to" lines held to their own rules."""
     if not bd:
         return bd
     who = {k: bd.get(k) for k in ("applies_to", "not_applies_to")}
     out = map_prose(bd, lambda t: held_to_sources(t, studies, relied))
     for k, v in who.items():
-        if v and out.get(k):
-            out[k] = held_to_sources(v, studies, relied, who=True)
+        if v:
+            out[k] = held_to_sources(v, studies, relied,
+                                     who="applies" if k == "applies_to" else "not")
     return settle_effect(out)
 
 

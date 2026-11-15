@@ -5067,7 +5067,7 @@ t("F3: a who-line citing a study not relied on is removed, an honest absence is 
   _f3r["breakdown"]["not_applies_to"])
 t("F3: 'still open' is never touched",
   _f3r["still_open"] == "Whether it lasts (Study 3).", _f3r["still_open"])
-t("F3: a safety warning keeps its citation even to a study not relied on",
+t("F3: a safety warning is never dropped for citing a study not relied on",
   "injure" in breakdown.held_to_sources(
       "Undiluted vinegar can injure the throat (Study 3).", _f3s, {1, 2}))
 t("F3: with nothing relied on, the reasons studies were set aside stay",
@@ -5160,6 +5160,63 @@ _rv = db.recent_verdicts(500)
 t("F13: the newest entry's number equals the Claims checked count, with no gaps",
   _rv and _rv[0]["issue"] == _lg and sorted(r["issue"] for r in _rv) == list(range(1, _lg + 1)),
   (_lg, [r["issue"] for r in _rv[:3]]))
+
+# ---- Review fix 1: harm warnings are never dropped -------------------------------
+# The first gate removed safety warnings (the review's f3_drops.json). Each of
+# these is verbatim from that list, or from the review's brief.
+_h8 = _f3s + [{"pmid": f"H{i}", "title": "Background paper", "abstract": "A narrative review.",
+               "journal": "J", "year": "2020", "publication_types": ["Review"], "authors": ["x"],
+               "data_banks": None, "url": "u"} for i in range(4, 9)]
+_HARMS = {
+    "Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.":
+        "Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.",
+    "Antibiotics should not be used for the common cold or influenza (Study 3).":
+        "Antibiotics should not be used for the common cold or influenza.",
+    "Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).":
+        "Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus.",
+    "Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).":
+        "Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis.",
+    "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure (Study 3).":
+        "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure.",
+    "Most acute nose and throat infections are caused by viruses, not bacteria (Study 3).":
+        "Most acute nose and throat infections are caused by viruses, not bacteria.",
+    "It is unsafe in pregnancy (Study 1).": "It is unsafe in pregnancy (Study 1).",
+    "People with diabetes should not stop their medicine (Study 1).":
+        "People with diabetes should not stop their medicine (Study 1).",
+    "Doses of 99 mL a day burned the throat in 12,000 people (Studies 1, 3).":
+        "Doses of 99 mL a day burned the throat in 12,000 people (Study 1).",
+}
+for _hin, _hout in _HARMS.items():
+    _hgot = breakdown.held_to_sources(_hin, _h8, {1, 2})
+    t(f"fix 1: a harm warning stays, at most losing a citation of a study not relied on: {_hin[:48]}",
+      _hgot == _hout, _hgot)
+t("fix 1: the harm rule also holds inside the breakdown",
+  breakdown.hold_breakdown({"says": ["Antibiotics should not be used for the common cold or influenza (Study 3)."],
+                            "evidence": [], "parts": [], "strength": "", "effect_size": "",
+                            "applies_to": "", "not_applies_to": "", "unknowns": ""},
+                           _h8, {1, 2})["says"] == ["Antibiotics should not be used for the common cold or influenza."])
+
+# ---- Review fix 2: the two "who" lines, and untested claims ----------------------
+_na = ("Heavy drinkers, people with contraindications to alcohol, and those outside the "
+       "studied age ranges (Study 1).")
+t("fix 2: a 'does not apply to' line naming groups its record never mentions is kept",
+  breakdown.held_to_sources(_na, _h8, {1, 2}, who="not") == _na
+  and breakdown.held_to_sources("Pregnant women (Study 1).", _h8, {1, 2}, who="not") == "Pregnant women (Study 1).")
+t("fix 2: a 'does not apply to' line citing only a study not relied on still goes",
+  breakdown.held_to_sources("Adults with untreated kidney failure (Study 3).", _h8, {1, 2}, who="not") == "")
+_ap = breakdown.held_to_sources("Adults and smokers (Study 1).", _h8, {1, 2}, who="applies")
+t("fix 2: an 'applies to' line loses only the clause its record does not support",
+  _ap == "Adults (Study 1).", _ap)
+t("fix 2: an absence stated as 'does not apply to' or 'not in' is never held to naming the group",
+  breakdown.held_to_sources("The results do not apply to pregnant women (Study 1).", _h8, {1, 2})
+  == "The results do not apply to pregnant women (Study 1)."
+  and breakdown.held_to_sources("The trial does not cover smokers (Study 1).", _h8, {1, 2})
+  == "The trial does not cover smokers (Study 1).")
+t("fix 2: a statement that the claim was not tested is never dropped",
+  breakdown.held_to_sources("Neither tested whether diabetes went away (Study 3).", _h8, {1, 2})
+  == "Neither tested whether diabetes went away."
+  and breakdown.held_to_sources("No trial tested whether smokers lost weight (Study 1).", _h8, {1, 2})
+  == "No trial tested whether smokers lost weight (Study 1).")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
