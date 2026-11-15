@@ -5265,5 +5265,20 @@ t("fix 5: confidence in the evidence, or with CINeMA named, still counts",
   evidence.review_certainty(dict(_ma, abstract="Meta-analysis. Confidence in the evidence was low.")) == "low"
   and evidence.review_certainty(dict(_ma, abstract="Meta-analysis. Confidence according to CINeMA was moderate.")) == "moderate")
 
+# ---- Review fix 6: the method and about pages say only what is true -------------
+_met6 = c.get("/method").get_data(as_text=True)
+_abt6 = c.get("/about").get_data(as_text=True)
+t("fix 6: /method says the prose check covers the explanation and breakdown, not the short answer",
+  "In the explanation and the breakdown, though not in the short answer" in _met6)
+t("fix 6: /method says guidance can decide some claims with no study cited, and never says 'safe' alone",
+  "even when no study is cited" in _met6 and "never on its own that something is safe" in _met6)
+t("fix 6: the harm sentence on /method is backed by the gate",
+  "A warning about harm is never removed" in _met6
+  and breakdown.held_to_sources("It is unsafe in pregnancy (Study 3).", _h8, {1, 2}) == "It is unsafe in pregnancy.")
+t("fix 6: /about names the guidance exception instead of 'whatever the model wrote'",
+  "whatever the model wrote" not in _abt6 and "without a study" in _abt6)
+t("fix 6: guidance really can stamp a forgo-treatment claim with nothing cited (the exception /method states)",
+  "Applies even with nothing cited" in pathlib.Path("verdict.py").read_text())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
