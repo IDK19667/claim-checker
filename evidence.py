@@ -93,7 +93,12 @@ def strongest_label(publication_types) -> str:
 POPULATIONS = [
     (r"\bcritically ill|\bintensive care|\bICU\b", "people in intensive care"),
     (r"\bpreterm|\bneonat|\binfants?\b", "newborn babies"),
-    (r"\bpregnan|\bpostpartum", "pregnant women"),
+    # Pregnancy and the months after birth are different groups: a review of
+    # postpartum exercise was labelled "pregnant women" (audit D3).
+    (r"\bpregnan\w*\b.{0,80}\b(?:postpartum|postnatal)|\b(?:postpartum|postnatal)\b.{0,80}\bpregnan|"
+     r"\bperinatal", "people during or after pregnancy"),
+    (r"\bpostpartum|\bpostnatal|\bafter (?:giving )?birth", "people after giving birth"),
+    (r"\bpregnan", "pregnant women"),
     (r"\bprediabet", "people with prediabetes"),
     (r"\btype [12] diabet|\bdiabetic", "people with diabetes"),
     (r"\bdialysis|\bchronic kidney|\brenal failure", "people with kidney failure"),
@@ -183,7 +188,10 @@ NATURAL_GROUPS = [
      r"\bteething|\bschool", ("children", "newborn babies")),
     (r"\bautis[mt]", ("children",)),
     (r"\bbreast.?fe|\bbab(?:y|ies)\b|\binfants?\b|\bnewborns?\b", ("newborn babies",)),
-    (r"\bpregnan|\bmorning sickness|\bpre.?eclampsia|\bgestational", ("pregnant women",)),
+    (r"\bpregnan|\bmorning sickness|\bpre.?eclampsia|\bgestational",
+     ("pregnant women", "people during or after pregnancy")),
+    (r"\bpostpartum|\bpostnatal|\bafter (?:giving )?birth|\bnew mothers?\b",
+     ("people after giving birth", "people during or after pregnancy")),
     (r"\bmenopaus|\bhot (?:flash|flush)", ("women after menopause",)),
     (r"\bosteoporosis", ("women after menopause", "older adults")),
     (r"\bperiod pain|\bmenstrua|\bPCOS\b|\bpolycystic ovar", ("women only",)),

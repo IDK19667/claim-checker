@@ -1771,6 +1771,211 @@ def relied_only(text: str, relied, count: int) -> str:
     return " ".join(kept)
 
 
+# ---------------------------------------------------------------------
+# Held to its sources
+#
+# A sentence that cites a study has to be a sentence that study can carry.
+# The audit found four that were not: "pregnant women" for a study of people
+# after birth, a "who it does not apply to" line its study never mentions,
+# a study cited in the prose but listed as "Read, not relied on", and "15 to
+# 30 mL" credited to studies that give 20 and 30. Each rule below looks only
+# at the studies a sentence cites, not at every abstract fetched, and when a
+# sentence fails, it goes: a sentence the reader never sees cannot mislead
+# them, and the rest of the page still answers the question. Runs on the way
+# out, so cached checks are held to it too. Never touches "still open".
+# ---------------------------------------------------------------------
+
+# A sentence that names studies in order to say they were set aside, or count
+# for less, is honest about them, and keeps its citation. So does a warning
+# about harm: a safety note is never dropped for citing a study the verdict
+# did not rest on ("undiluted vinegar can injure the oesophagus").
+_SETS_ASIDE = re.compile(
+    r"\b(?:count(?:s|ed)? for less|point(?:s|ed)? the other way|set aside|not relied on|"
+    r"(?:did|does|do) not (?:test|measure|study|look at)|don[’']t (?:test|measure)|"
+    r"off topic|not (?:a )?tests? of|retracted|reminder|cautions?|warns?|warning|injur\w*|harms?|"
+    r"unsafe|dangers?|side effects?|adverse|"
+    r"(?:animal|lab|laboratory|preclinical|in vitro|cell|rat|mouse|mice) (?:studies|study|work|"
+    r"research|models?|experiments?))\b", re.IGNORECASE)
+
+# Who a study was run in. A sentence that names one of these groups must cite
+# a study whose own record names it: the exercise page said "pregnant women"
+# of a study of people after birth.
+_GROUP_TERMS = [(re.compile(said, re.IGNORECASE), re.compile(source, re.IGNORECASE)) for said, source in (
+    (r"\bpregnan\w*|\bexpectant mothers?\b|\bprenatal\b|\bantenatal\b",
+     r"\bpregnan\w*|\bprenatal\b|\bantenatal\b|\bgestation\w*|\bexpectant\b"),
+    (r"\bpostpartum\b|\bpostnatal\b|\bafter (?:giving )?birth\b|\bnew mothers?\b",
+     r"\bpostpartum\b|\bpostnatal\b|\bafter (?:giving )?birth\b|\bnew mothers?\b|\bpuerper\w*"),
+    (r"\bolder (?:adults?|people|women|men|groups?)\b|\belderly\b|\bseniors?\b",
+     r"\bolder\b|\belderly\b|\bseniors?\b|\bag(?:e|ed|ing)\b|\bgeriatric\b|\b(?:6[0-9]|[7-9][0-9]) years\b"),
+    (r"\bchildren\b|\bchild\b|\bkids?\b|\badolescen\w*|\bteenagers?\b|\binfants?\b|\bbabies\b",
+     r"\bchild\w*|\bkids?\b|\badolescen\w*|\bteen\w*|\binfan\w*|\bbab(?:y|ies)\b|\bpa?ediatric\b|"
+     r"\byouth\b|\bschool\w*|\bnewborns?\b|\bneonat\w*|\baged 0\b"),
+    (r"\bcancers?\b|\boncolog\w*|\bchemotherapy\b|\btumou?rs?\b",
+     r"\bcancers?\b|\boncolog\w*|\bchemotherapy\b|\btumou?r\w*|\bcarcino\w*|\bmalignan\w*|\bneoplas\w*"),
+    (r"\bdiabet\w*", r"\bdiabet\w*|\bT2DM?\b|\bT1DM?\b"),
+    (r"\bathletes?\b", r"\bathlet\w*|\bsports?\w*|\bplayers?\b|\btrained\b|\brunners?\b|\bmarathon\w*|"
+     r"\bphysical stress\b|\bsoldiers?\b|\bexercis\w*"),
+    (r"\bpostmenopausal\b|\bafter menopause\b", r"\bmenopaus\w*|\bpostmenopaus\w*"),
+    (r"\bobes\w*|\boverweight\b", r"\bobes\w*|\boverweight\b|\bBMI\b|\bbody mass\b"),
+    (r"\bsmokers?\b", r"\bsmok\w*|\btobacco\b|\bcigarette\w*"),
+    (r"\bstudents?\b", r"\bstudents?\b|\bundergraduates?\b|\buniversity\b|\bcollege\b"),
+    (r"\bnursing homes?\b|\bcare homes?\b", r"\bnursing homes?\b|\bcare homes?\b|\blong.term care\b|\bresidential\b"),
+    (r"\bheart (?:disease|failure)\b", r"\bheart\b|\bcardi\w*|\bcoronary\b"),
+    (r"\bkidney\b|\brenal\b|\bdialysis\b", r"\bkidney\w*|\brenal\b|\bdialysis\b|\bnephr\w*"),
+    (r"\bdementia\b|\balzheimer\w*", r"\bdementia\b|\balzheimer\w*|\bcognitive (?:decline|impairment)\b"),
+)]
+# A sentence that says a group was left out of the studies ("children were
+# not in either trial") is true because the records do not name them, so it
+# is not held to naming them.
+_LEFT_OUT = re.compile(
+    r"\b(?:not|never|no)\b(?:\s+[\w-]+){0,3}?\s+(?:included|include|includes|studied|study|"
+    r"enrolled|enrol|enroll|tested|test|covered|cover|targeted|target|focus|represented|"
+    r"part of|among|appear|in (?:either|any|these|this|the|those))\b|"
+    r"\b(?:did|do|does|were|was|are|is)n[\u2019']t\b(?:\s+[\w-]+){0,3}?\s+(?:included|include|"
+    r"studied|study|enrolled|tested|test|covered|cover|target|in|among)\b|\bexcluded\b",
+    re.IGNORECASE)
+# "Thousands of people" needs a count that size in a study it cites: the
+# creatine page said "thousands" of a review of 1,937.
+_VAGUE_COUNTS = [(re.compile(r"\btens of thousands\b", re.I), 20000),
+                 (re.compile(r"\b(?<!tens of )thousands\b", re.I), 2000),
+                 (re.compile(r"\bhundreds\b", re.I), 200),
+                 (re.compile(r"\bmillions\b", re.I), 2000000)]
+_PEOPLE_AFTER = re.compile(r"\s*(?:[A-Za-z-]+\s+){0,3}?(?:participants|adults|patients|subjects|"
+                           r"individuals|people|persons|men|women|children|cases|volunteers)\b",
+                           re.IGNORECASE)
+# Words any "who it applies to" clause can use without the study saying them.
+_GENERIC_WHO = frozenset("""
+people person persons adult adults those these them they their individual individuals
+group groups participant participants patient patients anyone everyone someone with
+without who whom whose that which have having from under over more less than specific
+certain other others some many most such also only especially mainly generally usually
+likely may might studied study studies evidence research trial trials data apply
+applies applied claim this being been were what when where while into onto about
+general healthy population populations type types kind kinds form forms find found
+taking take takes using used use doing does done among across between within based
+""".split())
+
+
+def _studies_text(studies, numbers) -> str:
+    return " ".join(f"{studies[n - 1].get('title') or ''} {studies[n - 1].get('abstract') or ''}"
+                    for n in numbers if 0 < n <= len(studies))
+
+
+def _counts_in(text: str) -> list[int]:
+    """The whole numbers a record gives that can be counts of people: a bare
+    year (1900 to 2099 with no people word after it) is not one."""
+    out = []
+    for m in re.finditer(r"(?<![\d.])(\d{1,3}(?:,\d{3})+|\d+)(?![\d.])", text or ""):
+        n = int(m.group(1).replace(",", ""))
+        if 1900 <= n <= 2099 and "," not in m.group(1) and not _PEOPLE_AFTER.match(text, m.end()):
+            continue
+        out.append(n)
+    return out + [int(x) for x in evidence.written_numbers(text) if str(x).isdigit()]
+
+
+def _known_in(studies, numbers) -> set:
+    """Every number the cited records give, and each as the page rounds it
+    (for_reading): "21.929" is printed as "about 22", "7.44" can be "7"."""
+    # "11 321" with a thin space is 11,321.
+    bag = corpus([{**studies[n - 1], "abstract": re.sub(
+        r"(?<=\d)[\u2009\u202f\xa0 ](?=\d{3}(?!\d))", ",", str(studies[n - 1].get("abstract") or ""))}
+        for n in numbers if 0 < n <= len(studies)])
+    for num in list(bag):
+        if "." in num:
+            try:
+                bag.add(_canon(str(Decimal(num).quantize(Decimal(1), ROUND_HALF_UP))))
+            except (ArithmeticError, ValueError):
+                continue
+            r = _rounded(num)
+            if r:
+                bag.add(_canon(r[0].lstrip("-−")))
+    return bag
+
+
+def _unsupported_who(sentence: str, source: str) -> bool:
+    """True when some clause of a "who it applies to" sentence shares no
+    word with the records it cites: "those with specific untreated medical
+    conditions (Study 7)", from a study that never mentions a condition."""
+    body = re.sub(r"\([^)]*\)", " ", _REF.sub(" ", sentence))
+    have = {_stem(w) for w in re.findall(r"[A-Za-z]{3,}", source)}
+    for clause in re.split(r",|;|:|\bor\b|\band\b|\bbut\b|\bnor\b", body, flags=re.IGNORECASE):
+        words = [w for w in re.findall(r"[A-Za-z]{4,}", clause) if w.lower() not in _GENERIC_WHO]
+        if words and not any(_stem(w) in have for w in words):
+            return True
+    return False
+
+
+def _fails_sources(sentence: str, studies, numbers, who: bool) -> bool:
+    """Whether a sentence says something the studies it cites do not."""
+    source = _studies_text(studies, numbers)
+    left_out = bool(_LEFT_OUT.search(sentence))
+    for said, named in _GROUP_TERMS:
+        if not left_out and said.search(sentence) and not named.search(source):
+            return True
+    if not sentence.startswith(TRANSLATION_LEAD):
+        known = _known_in(studies, numbers)
+        if ungrounded_numbers(sentence, known):
+            return True
+    counts = _counts_in(source)
+    for pattern, least in _VAGUE_COUNTS:
+        if pattern.search(sentence) and not any(n >= least for n in counts):
+            return True
+    return bool(who and not left_out and _unsupported_who(sentence, source))
+
+
+def held_to_sources(text: str, studies: list[dict], relied, who: bool = False) -> str:
+    """
+    `text` with every cited sentence held to the studies it cites:
+
+    - a sentence citing only studies the verdict did not rely on goes;
+    - one citing a mix keeps only the studies relied on, and then has to
+      pass the checks below on those alone, or it goes;
+    - a group of people it names ("pregnant women", "older adults with
+      cancer") must be named in a cited record;
+    - every figure must be in a cited record (rounded as the page rounds);
+    - "thousands", "hundreds" of people need a count that size in one;
+    - with `who` (the "who it applies to" lines), every clause must share a
+      word with a cited record.
+
+    `relied` is the set of study numbers the verdict relied on. With none
+    relied on (not enough evidence), the text names what was read and why
+    none of it counted, so the first two rules are not applied to it. A
+    sentence that cites nothing is left exactly as it was.
+    """
+    count = len(studies or [])
+    relied = set(relied or ())
+    kept = []
+    for sentence in sentences(text or ""):
+        cited = refs(sentence, count)
+        if not cited:
+            kept.append(sentence)
+            continue
+        if relied and not _SETS_ASIDE.search(sentence):
+            using = [n for n in cited if n in relied]
+            if not using:
+                continue
+            if len(using) < len(cited):
+                sentence = relied_only(sentence, relied, count)
+                cited = using
+        if _fails_sources(sentence, studies, cited, who):
+            continue
+        kept.append(sentence)
+    return " ".join(kept)
+
+
+def hold_breakdown(bd: dict | None, studies: list[dict], relied) -> dict | None:
+    """held_to_sources over every string of prose the breakdown prints, with
+    the "who it applies to" lines held to the clause rule as well."""
+    if not bd:
+        return bd
+    who = {k: bd.get(k) for k in ("applies_to", "not_applies_to")}
+    out = map_prose(bd, lambda t: held_to_sources(t, studies, relied))
+    for k, v in who.items():
+        if v and out.get(k):
+            out[k] = held_to_sources(v, studies, relied, who=True)
+    return settle_effect(out)
+
+
 def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "") -> bool:
     """
     True when a figure is about some other outcome than the claim's: it

@@ -630,6 +630,14 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
                     typed=None):
     cited = set(cited_studies or [])
     outcome = _outcome_group(search_query)
+    # Every sentence that cites a study is held to the studies it cites, on
+    # the way out, so a cached check is held to it too: none may lean on a
+    # study the verdict did not rely on, name a group, a figure or a count
+    # its studies do not give. "Still open" is never touched.
+    relied = {i + 1 for i, s in enumerate(studies or []) if s.get("pmid") in cited}
+    if relied:
+        explanation = breakdown_mod.held_to_sources(explanation, studies, relied) or tldr
+        breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied)
     # One certainty for the whole page, settled on the way out so a check
     # cached before the rule existed gets it too. The evidence line is never
     # surer than the least sure thing the page says, and a certainty phrase

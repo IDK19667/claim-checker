@@ -5018,5 +5018,61 @@ _exv = verdict._read_verdict(json.dumps({
 t("F2: the existing rule then holds: a main review rated low cannot carry 'Likely true'",
   _exv["verdict"] == "complicated", _exv["verdict"])
 
+# ---- B6 F3: prose is held to the studies it cites ------------------------------
+# D3: a postpartum-only study was rendered "pregnant women". D4: a who-line
+# cited a study not relied on. D5: prose linked studies listed as read, not
+# relied on. D6: "15 to 30 mL" credited to studies giving 20 and 30, and
+# "thousands of people" of a review of 1,937.
+t("F3: a postpartum-only study is labelled people after giving birth, never 'pregnant'",
+  "pregnan" not in (evidence.population(_EXD[1]) or "").lower()
+  and "birth" in (evidence.population(_EXD[1]) or ""), evidence.population(_EXD[1]))
+_f3s = [
+    {"pmid": "P1", "title": "Apple cider vinegar and glucose: a randomised trial",
+     "abstract": "120 adults took 20 mL or 30 mL of vinegar daily for 12 weeks. Fasting glucose fell.",
+     "journal": "J", "year": "2021", "publication_types": ["Randomized Controlled Trial"],
+     "authors": ["A"], "data_banks": None, "url": "u1"},
+    {"pmid": "P2", "title": "Vinegar intake and weight in adults",
+     "abstract": "A review of 9 trials with 1,937 adults. Vinegar lowered weight slightly.",
+     "journal": "J", "year": "2023", "publication_types": ["Systematic Review"],
+     "authors": ["B"], "data_banks": None, "url": "u2"},
+    {"pmid": "P3", "title": "Vinegar in a mouse model of obesity",
+     "abstract": "Mice fed 15 mL/kg vinegar gained less fat. Postpartum mice were studied.",
+     "journal": "J", "year": "2019", "publication_types": ["Journal Article"],
+     "authors": ["C"], "data_banks": None, "url": "u3"},
+]
+_f3r = appmod._check_response(
+    "apple cider vinegar helps weight loss", "vinegar AND weight", "complicated",
+    "Small trials found small changes.",
+    "A trial gave 20 mL or 30 mL a day (Study 1). People took 15 to 30 mL a day (Studies 1, 2). "
+    "A review pooled thousands of people (Study 2). Mice gained less fat (Study 3). "
+    "Pregnant women gained less weight (Study 1).",
+    ["P1", "P2"], _f3s, "http://x", still_open="Whether it lasts (Study 3).",
+    breakdown={"says": [], "evidence": [], "parts": [], "strength": "", "effect_size": "",
+               "applies_to": "Adults (Study 1).",
+               "not_applies_to": "Adults with untreated kidney failure (Study 3). Children were not in either trial (Study 1)."})
+_f3e = _f3r["explanation"]
+t("F3: a sentence whose figures are in the study it cites is kept",
+  "20 mL or 30 mL a day (Study 1)" in _f3e, _f3e)
+t("F3: '15 to 30 mL' credited to studies that give 20 and 30 is dropped",
+  "15 to 30" not in _f3e, _f3e)
+t("F3: 'thousands of people' of a review of 1,937 is dropped",
+  "thousands" not in _f3e, _f3e)
+t("F3: prose links only studies the verdict relied on",
+  "Study 3" not in _f3e and "Mice" not in _f3e, _f3e)
+t("F3: a group the cited study never names ('pregnant women') is dropped",
+  "Pregnant" not in _f3e, _f3e)
+t("F3: a who-line citing a study not relied on is removed, an honest absence is kept",
+  "kidney" not in _f3r["breakdown"]["not_applies_to"]
+  and "Children were not in either trial" in _f3r["breakdown"]["not_applies_to"],
+  _f3r["breakdown"]["not_applies_to"])
+t("F3: 'still open' is never touched",
+  _f3r["still_open"] == "Whether it lasts (Study 3).", _f3r["still_open"])
+t("F3: a safety warning keeps its citation even to a study not relied on",
+  "injure" in breakdown.held_to_sources(
+      "Undiluted vinegar can injure the throat (Study 3).", _f3s, {1, 2}))
+t("F3: with nothing relied on, the reasons studies were set aside stay",
+  breakdown.held_to_sources("Mice gained less fat (Study 3).", _f3s, set())
+  == "Mice gained less fat (Study 3).")
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
