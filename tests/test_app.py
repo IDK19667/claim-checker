@@ -5423,5 +5423,9 @@ t("extra: the shared page, its markup and its card never say Likely true over th
   and f'"alternateName": "{appmod.VERDICT_LABELS["true"]}"' not in _xh and _xseen.get("stamp") == "complicated",
   [_xh[max(0, m.start() - 120):m.end() + 40] for m in _re7.finditer(appmod.VERDICT_LABELS["true"], _xh)][:4])
 
+_xs = c.get("/api/suggest", query_string={"q": "Ginger stops vomiting"}).get_json() or {}
+t("extra: type-ahead shows the capped stamp too, not the stored 'true'",
+  any(r["claim_text"] == _xc and r["verdict"] == "complicated" for r in _xs.get("suggestions", [])), _xs)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

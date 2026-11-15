@@ -1001,7 +1001,24 @@ def api_suggest():
     except sqlite3.Error as e:
         app.logger.warning("Could not read claims for suggestions: %s", e)
         return jsonify({"suggestions": []})
-    return jsonify({"suggestions": suggest_mod.suggest(q, claims)})
+    return jsonify({"suggestions": [_suggested(r) for r in suggest_mod.suggest(q, claims)]})
+
+
+def _suggested(r: dict) -> dict:
+    """A suggestion with the stamp its page would show. Only a "true" can be
+    capped, and at most a handful are offered, so only those few rows are read."""
+    if r.get("verdict") != "true":
+        return r
+    try:
+        row = db.get_cached_by_key(db.normalize_claim(r["claim_text"]))
+        if not row:
+            return r
+        shown = _listed({"claim_text": row["claim_text"], "verdict": row["verdict"],
+                         "search_query": row.get("search_query") or "",
+                         "studies": row["studies"], "cited": row["cited_studies"]})
+        return dict(r, verdict=shown["verdict"])
+    except Exception:  # noqa: BLE001
+        return dict(r, verdict="complicated")
 
 
 # What a "Report a wrong answer" note starts with in the feedback table. The
