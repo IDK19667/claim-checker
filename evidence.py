@@ -1354,15 +1354,42 @@ _RATED = re.compile(
     rf"\bGRADE\W{{1,3}}({_LVL})\b|"
     # CINeMA, the GRADE of network meta-analyses, says "confidence": "confidence
     # in accordance with CINeMA was low for walking or jogging and very low for
-    # other treatments". A confidence interval is never a rating.
-    rf"\bconfidence(?![- ]intervals?)"
-    rf"(?: (?:in|of) (?:the )?(?:evidence|findings|estimates?|results?|effect estimates?))?"
+    # other treatments". Bare "confidence was high" is not a rating (it can be
+    # the participants'), so it counts only as confidence in the evidence,
+    # findings or estimates, or with CINeMA or GRADE named in the clause.
+    rf"\bconfidence (?:in|of) (?:the )?(?:evidence|findings|estimates?|results?|effect estimates?)"
     rf"(?: (?:in accordance with|according to|using|by|with|from) (?:the )?(?:CINeMA|GRADE)"
     rf"(?: approach| tool| framework)?)?,? (?:was|is|were|ranged from|ranging from) "
     rf"(?:rated |judged |graded |considered |assessed )?(?:as )?(?:to be )?({_LVL})"
     rf"(?:(?: to | for [^.;,]{{1,60}}? and )({_LVL}))?\b|"
+    rf"\bconfidence (?:in accordance with|according to|using|by|with|from) (?:the )?(?:CINeMA|GRADE)"
+    rf"(?: approach| tool| framework)?,? (?:was|is|were|ranged from|ranging from) "
+    rf"(?:rated |judged |graded |considered |assessed )?(?:as )?(?:to be )?({_LVL})"
+    rf"(?:(?: to | for [^.;,]{{1,60}}? and )({_LVL}))?\b|"
     rf"\b({_LVL})[- ]confidence in (?:the )?(?:evidence|findings|estimates?|results?)\b",
     re.IGNORECASE)
+# Words that may stand before a CINeMA "confidence": anything else makes it
+# someone's confidence ("participants' confidence", "patient confidence",
+# "self-confidence"), not a rating of the evidence.
+_BEFORE_CONFIDENCE = {"the", "overall", "our", "and", "with", "of", "in", "that", "but", "while",
+                      "whereas", "cinema", "grade", "however", "evidence", "where", "which"}
+
+
+def rated_matches(text: str):
+    """_RATED's matches in `text`, without someone's own "confidence"."""
+    for m in _RATED.finditer(text or ""):
+        if m.group(0)[:10].lower() == "confidence":
+            before = text[:m.start()]
+            if before.endswith("-"):
+                continue
+            stripped = before.rstrip()
+            if stripped and stripped[-1] not in ".;:(,[":
+                word = re.search(r"([\w'\u2019-]+)$", stripped)
+                if not word or word.group(1).lower() not in _BEFORE_CONFIDENCE:
+                    continue
+        yield m
+
+
 _CLAUSE = re.compile(r"[()\[\]]|(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
 
 # Words an outcome group shares with every other outcome, so they say
@@ -1419,7 +1446,7 @@ def _ratings(study, outcome: str = "") -> tuple[list[str], list[str]]:
     outcome (empty when no finding names it)."""
     rated = []
     for clause in _clauses(_text(study)):
-        levels = [_level(g) for m in _RATED.finditer(clause) for g in m.groups() if g]
+        levels = [_level(g) for m in rated_matches(clause) for g in m.groups() if g]
         if levels:
             rated.append((clause, levels))
     on_outcome = []
@@ -1550,7 +1577,7 @@ def _stated_spans(text: str) -> list[tuple[int, int, str, str]]:
     """
     text = text or ""
     out = []
-    for m in _RATED.finditer(text):
+    for m in rated_matches(text):
         if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
             continue
         if _NOT_YET.search(_sentence_around(text, m.start(), m.end())):

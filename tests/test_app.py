@@ -5250,5 +5250,20 @@ t("fix 4: a phrase credited to a study or review is never rewritten",
 t("fix 4: the prose's own statement about the evidence is still brought down, in a design word",
   evidence.cap_certainty("There is strong evidence it helps (Study 1).", "low") == "There is weak evidence it helps (Study 1).")
 
+# ---- Review fix 5: a CINeMA "confidence" needs CINeMA, GRADE or the evidence -----
+_cA = dict(_ma, pmid="A", abstract="Meta-analysis of 20 RCTs. Participants' confidence was high after treatment. Pain fell.")
+_cB = dict(_ma, pmid="B", abstract="Meta-analysis of 12 RCTs. Pain fell (low certainty evidence).")
+t("fix 5: an earlier review's 'confidence was high' cannot displace a later low-rated lead review",
+  evidence.lead_certainty([_cA, _cB], ["A", "B"], "", strict=True) == "low"
+  and evidence.certainty_cap([_cA, _cB], ["A", "B"]) is not None)
+t("fix 5: self-confidence and someone's confidence are not ratings",
+  all(evidence.review_certainty(dict(_ma, abstract=a)) is None for a in (
+      "Meta-analysis. Self-confidence was high in the exercise group.",
+      "Meta-analysis. Patient confidence in the results was high.",
+      "Meta-analysis. Confidence was high after training.")))
+t("fix 5: confidence in the evidence, or with CINeMA named, still counts",
+  evidence.review_certainty(dict(_ma, abstract="Meta-analysis. Confidence in the evidence was low.")) == "low"
+  and evidence.review_certainty(dict(_ma, abstract="Meta-analysis. Confidence according to CINeMA was moderate.")) == "moderate")
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
