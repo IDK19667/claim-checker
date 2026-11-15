@@ -4973,5 +4973,50 @@ t("F1: the server-rendered page carries no surer certainty phrase than the short
   "moderate evidence" not in _acv_html.lower() and "Strong evidence shows" not in _acv_html
   and "low certainty evidence for blood sugar" in _acv_html.lower())
 
+# ---- B6 F2: the label never exceeds the main review's own rating ---------------
+# "exercise helps depression" said "Moderate certainty evidence" while its main
+# review (a network meta-analysis) rated confidence low to very low in CINeMA's
+# words, which the certainty reader did not know; a smaller review's "moderate
+# certainty" stood in for it.
+_EXD = [
+    {"pmid": "E1", "title": "Effect of exercise for depression: systematic review and network meta-analysis",
+     "abstract": "218 unique studies with 14170 participants. Walking or jogging reduced depression "
+                 "(g -0.62). Only one study met the Cochrane criteria for low risk of bias. As a "
+                 "result, confidence in accordance with CINeMA was low for walking or jogging and "
+                 "very low for other treatments.",
+     "journal": "BMJ", "year": "2024", "publication_types": ["Systematic Review", "Network Meta-Analysis"],
+     "authors": ["N"], "data_banks": None, "url": "uE1"},
+    {"pmid": "E6", "title": "Impact of postpartum physical activity on maternal depression",
+     "abstract": "35 studies. Moderate certainty evidence from RCTs showed that exercise reduced "
+                 "the severity of postpartum depressive symptoms (SMD -0.52).",
+     "journal": "BJSM", "year": "2025", "publication_types": ["Systematic Review", "Meta-Analysis"],
+     "authors": ["D"], "data_banks": None, "url": "uE6"},
+]
+t("F2: CINeMA's 'confidence ... was low for X and very low for Y' is read as the review's own rating",
+  evidence.review_certainty(_EXD[0]) == "very low"
+  and evidence.certainty_range(_EXD[0]) == "very low to low", evidence.certainty_range(_EXD[0]))
+t("F2: a confidence interval is never read as a rating",
+  evidence.review_certainty({"publication_types": ["Meta-Analysis"],
+                             "abstract": "The 95% confidence interval was 0.8 to 1.2 with high heterogeneity."})
+  is None)
+_exl = evidence.evidence_line("true", _EXD, ["E1", "E6"], "exercise helps depression")
+t("F2: a main review rated low or very low never yields a Moderate or Strong label",
+  not _exl.startswith(("Moderate", "Strong", "High")) and _exl.startswith("Very low"), _exl)
+_exr = appmod._check_response("exercise helps depression", "exercise AND depression", "true",
+                              "Exercise helps depression.", "Reviews found less depression (Studies 1, 2).",
+                              ["E1", "E6"], _EXD, "http://x",
+                              breakdown={"strength": "Moderate certainty evidence supports it (Studies 1, 2).",
+                                         "says": [], "evidence": [], "parts": []})
+t("F2: the breakdown's 'moderate certainty' is brought down to the main review's rating",
+  "Moderate certainty" not in _exr["breakdown"]["strength"]
+  and _exr["breakdown"]["strength"].startswith("Very low certainty"), _exr["breakdown"]["strength"])
+_exv = verdict._read_verdict(json.dumps({
+    "verdict": "true", "tldr": "Exercise helps depression.",
+    "explanation": "Pooled studies found less depression (Studies 1, 2).", "still_open": "Best dose.",
+    "cited_study_numbers": [1, 2], "evidence": [], "parts": [], "strength": "", "effect_size": "",
+    "applies_to": "", "not_applies_to": "", "unknowns": ""}), None, _EXD, "exercise helps depression")
+t("F2: the existing rule then holds: a main review rated low cannot carry 'Likely true'",
+  _exv["verdict"] == "complicated", _exv["verdict"])
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -1337,7 +1337,18 @@ _RATED = re.compile(
     rf"(?:was|is|were|ranged from|ranging from) (?:rated |judged |graded |considered |assessed )?"
     rf"(?:as )?(?:to be )?(?:being )?({_LVL})(?: to ({_LVL}))?\b|"
     rf"\bevidence (?:was|is|were) of ({_LVL}) (?:certainty|quality)\b|"
-    rf"\bGRADE\W{{1,3}}({_LVL})\b", re.IGNORECASE)
+    rf"\bGRADE\W{{1,3}}({_LVL})\b|"
+    # CINeMA, the GRADE of network meta-analyses, says "confidence": "confidence
+    # in accordance with CINeMA was low for walking or jogging and very low for
+    # other treatments". A confidence interval is never a rating.
+    rf"\bconfidence(?![- ]intervals?)"
+    rf"(?: (?:in|of) (?:the )?(?:evidence|findings|estimates?|results?|effect estimates?))?"
+    rf"(?: (?:in accordance with|according to|using|by|with|from) (?:the )?(?:CINeMA|GRADE)"
+    rf"(?: approach| tool| framework)?)?,? (?:was|is|were|ranged from|ranging from) "
+    rf"(?:rated |judged |graded |considered |assessed )?(?:as )?(?:to be )?({_LVL})"
+    rf"(?:(?: to | for [^.;,]{{1,60}}? and )({_LVL}))?\b|"
+    rf"\b({_LVL})[- ]confidence in (?:the )?(?:evidence|findings|estimates?|results?)\b",
+    re.IGNORECASE)
 _CLAUSE = re.compile(r"[()\[\]]|(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
 
 # Words an outcome group shares with every other outcome, so they say
