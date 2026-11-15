@@ -5480,5 +5480,25 @@ t("second fix 1: a lead review rated low (turmeric shape) or CINeMA low (exercis
   _tur1["verdict"] == "complicated" and _exp1["verdict"] == "complicated"
   and "certainty of that evidence is low" in _tur1["tldr"], (_tur1["verdict"], _exp1["verdict"], _exp1["evidence_line"]))
 
+# ---- Second review fix 2: a stamp set by health guidance is never capped ----------
+_g2c = "Measles vaccine protects children from measles"
+_g2t = verdict.GUIDELINE_LEAD + "The measles vaccine protects children from measles."
+_g2p = appmod._check_response(_g2c, "(measles vaccine) AND (measles)", "true", _g2t, "It helps (Study 1).",
+                              ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+_g2l = appmod._listed({"claim_text": _g2c, "verdict": "true", "search_query": "(measles vaccine) AND (measles)",
+                       "tldr": _g2t, "studies": [_LOWREV], "cited": ["L1"]})
+db.put_cached_verdict(_g2c, "(measles vaccine) AND (measles)", "true", "It helps (Study 1).", ["L1"], [_LOWREV],
+                      tldr=_g2t, still_open="Doses vary.")
+_g2s = c.get("/api/suggest", query_string={"q": "Measles vaccine protects"}).get_json() or {}
+t("second fix 2: a guidance 'true' over a low-rated review keeps its stamp and its guidance takeaway",
+  _g2p["verdict"] == "true" and _g2p["tldr"] == _g2t and _g2l["verdict"] == "true"
+  and any(r["claim_text"] == _g2c and r["verdict"] == "true" for r in _g2s.get("suggestions", [])),
+  (_g2p["verdict"], _g2p["tldr"], _g2l["verdict"]))
+t("second fix 2: the same rows without the guidance lead are still capped",
+  appmod._check_response(_g2c, "(measles vaccine) AND (measles)", "true", "It protects.", "It helps (Study 1).",
+                         ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")["verdict"] == "complicated")
+t("second fix 2: /method says the verdict follows the guidance, and the code lets it",
+  "the verdict follows it" in c.get("/method").get_data(as_text=True))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
