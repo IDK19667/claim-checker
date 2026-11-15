@@ -5559,5 +5559,8 @@ t("optional: the free tier and Google's terms are mentioned only when checks go 
   "free tier" not in _hA and "Google" not in _pA.split("Don't paste")[0][-200:]
   and "free tier" in _hG and "Google's free tier" in _pG and "usage limit" in _hA)
 
+t("optional: /about says the claim and the studies' published details are sent",
+  "the published details of the studies, such as their titles and abstracts" in c.get("/about").get_data(as_text=True))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
