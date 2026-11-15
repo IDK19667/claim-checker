@@ -5115,5 +5115,26 @@ t("F9: the How it works sheet and every result link to /method",
   'href="/method"' in c.get("/").get_data(as_text=True)
   and 'href="/method"' in c.get("/?q=conclusions+render").get_data(as_text=True))
 
+# ---- B6 F10: review dates on results ---------------------------------------------
+_rl = appmod._review_line("2026-11-14T09:00:00+00:00",
+                          [{"pmid": "a", "year": "2019"}, {"pmid": "b", "year": "2025"},
+                           {"pmid": "c", "year": "2001"}], {"a", "b"})
+t("F10: the line gives the check date and the years of the studies relied on, not those read",
+  _rl == "Checked 14 November 2026, from studies published 2019 to 2025.", _rl)
+t("F10: one study, one year, and none are each worded plainly",
+  appmod._review_line("2026-11-14T09:00:00+00:00", [{"pmid": "a", "year": "2024"}], {"a"})
+  == "Checked 14 November 2026, from a study published in 2024."
+  and appmod._review_line("2026-11-14T09:00:00+00:00", [{"pmid": "a", "year": "2024"}], set())
+  == "Checked 14 November 2026.")
+db.put_cached_verdict("review dates render", "q", "complicated", "Because (Study 1).",
+                      ["C1", "C2"], _CON_STUDIES, tldr="Short take.", still_open="Open.")
+_rlp = P("review dates render", ip="4.4.4.5").get_json()
+_rlh = c.get("/?q=review+dates+render").get_data(as_text=True)
+t("F10: a result carries the line, and the server-rendered page shows it before any script",
+  str(_rlp.get("review_line")).startswith("Checked ") and str(_rlp.get("review_line")) in _rlh
+  and 'id="review-line"' in _rlh, (_rlp.get("error"), sorted(_rlp)[:6]))
+t("F10: renderResult fills the same line",
+  'data.review_line' in pathlib.Path("static/app.js").read_text())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

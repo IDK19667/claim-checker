@@ -4,7 +4,7 @@ import json
 import os
 import secrets
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 import sqlite3
 from html import escape
 from urllib.parse import quote
@@ -730,6 +730,27 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
         "studies": [_study_payload(s, cited) for s in studies],
     }
+
+
+def _review_line(cached_at, studies, cited) -> str:
+    """The dated line under the verdict: when the check ran, and the years of
+    the studies it relied on. "Checked 14 November 2026, from studies
+    published 2019 to 2025." Built here once, so the page a shared link
+    renders and a streamed check say the same thing."""
+    try:
+        when = datetime.fromisoformat(cached_at) if cached_at else datetime.now(timezone.utc)
+    except (TypeError, ValueError):
+        when = datetime.now(timezone.utc)
+    line = f"Checked {when.day} {when.strftime('%B %Y')}"
+    used = [s for s in studies or [] if s.get("pmid") in cited]
+    years = sorted({int(y) for y in (str(s.get("year") or "")[:4] for s in used) if y.isdigit()})
+    if not years:
+        return line + "."
+    if len(used) == 1:
+        return f"{line}, from a study published in {years[0]}."
+    if len(years) == 1:
+        return f"{line}, from studies published in {years[0]}."
+    return f"{line}, from studies published {years[0]} to {years[-1]}."
 
 
 def _outcome_group(search_query) -> str:

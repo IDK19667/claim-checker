@@ -498,6 +498,8 @@ body {
 }
 /* The same quiet line on the screens that have no verdict yet: under the
    claim field's introduction, on a dead end, and on an error. */
+/* When the check ran, under the doctor line: a margin note, not a banner. */
+.review-line { margin-top: 10px; }
 .ask-note, .error-note {
   margin: 12px 0 0; max-width: 28em;
   font-size: 13.5px; line-height: 1.45; color: var(--on-deep-2); text-wrap: balance;
