@@ -686,7 +686,9 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # its studies do not give. "Still open" is never touched.
     relied = {i + 1 for i, s in enumerate(studies or []) if s.get("pmid") in cited}
     if relied:
-        explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim) or tldr
+        # An explanation the gate empties stays empty: the short answer is
+        # already on the page, and repeating it would pass it off as reasoning.
+        explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim)
         breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
     # One certainty for the whole page, settled on the way out so a check
     # cached before the rule existed gets it too. The evidence line is never

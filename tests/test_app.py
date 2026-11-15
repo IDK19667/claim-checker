@@ -5427,5 +5427,17 @@ _xs = c.get("/api/suggest", query_string={"q": "Ginger stops vomiting"}).get_jso
 t("extra: type-ahead shows the capped stamp too, not the stored 'true'",
   any(r["claim_text"] == _xc and r["verdict"] == "complicated" for r in _xs.get("suggestions", [])), _xs)
 
+# ---- Review extra: an emptied explanation does not repeat the short answer --------
+_ec = "Ginger cures every kind of vomiting in adults"
+db.put_cached_verdict(_ec, _GIN_Q, "complicated", "Ginger helped 99% of people (Study 1).",
+                      ["L3"], [_MODREV], tldr="Ginger may reduce vomiting a little.", still_open="Doses vary.")
+_ea = P(_ec, "9.9.9.7").get_json() or {}
+_eh = c.get("/", query_string={"q": _ec}).get_data(as_text=True)
+_esays = _eh.split('id="says-sec"')[1].split("</section>")[0]
+t("extra: an explanation the gate empties is empty, not the short answer again",
+  _ea.get("explanation") == "" and _ea.get("tldr") == "Ginger may reduce vomiting a little.", _ea.get("explanation"))
+t("extra: the server-rendered page then hides the research block instead of printing the short answer twice",
+  _esays.lstrip().startswith("hidden") and "Ginger may reduce vomiting a little." not in _esays, _esays[:120])
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
