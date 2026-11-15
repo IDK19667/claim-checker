@@ -525,12 +525,18 @@ def og_image(key):
     if cached:
         receipt = og.strongest_cited(cached["studies"], cached["cited_studies"])
         # The card's short answer is the page's, with the page's certainty.
-        page = _check_response(
-            cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
-            cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
-            _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
-            breakdown=cached.get("breakdown"))
-        png = og.render_card(cached["claim_text"], cached["verdict"], page["tldr"], len(cached["studies"]), receipt)
+        # If the gate cannot run on an old or odd row, the card still renders,
+        # with the stored short answer: a link preview must never be a 500.
+        try:
+            short = _check_response(
+                cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
+                cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
+                _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
+                breakdown=cached.get("breakdown"))["tldr"]
+        except Exception as e:  # noqa: BLE001
+            app.logger.warning("Card for %s fell back to the stored short answer: %s", key, type(e).__name__)
+            short = cached.get("tldr") or ""
+        png = og.render_card(cached["claim_text"], cached["verdict"], short, len(cached["studies"]), receipt)
     else:
         png = og.render_card("Saw a health claim? Check it against the research.", "complicated", "", 0)
     return Response(png, mimetype="image/png", headers={"Cache-Control": "public, max-age=3600"})

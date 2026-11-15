@@ -5345,5 +5345,23 @@ t("fix 9: the streamed check reads the review on the claim's outcome (moderate, 
 t("fix 9: the shared link prints the same evidence line as the streamed check",
   _f9line and _f9line in _f9h and "Low certainty evidence" not in _f9h)
 
+# ---- Review fix 10: a card never 500s when the gate fails -------------------------
+_f10k = db.normalize_claim(_f9c)
+_f10orig, _f10seen = appmod._check_response, {}
+def _f10boom(*a, **k):
+    raise ValueError("gate broke")
+_f10card = appmod.og.render_card
+def _f10spy(claim, verdict_value, tldr, *a, **k):
+    _f10seen["tldr"] = tldr
+    return _f10card(claim, verdict_value, tldr, *a, **k)
+appmod._check_response, appmod.og.render_card = _f10boom, _f10spy
+try:
+    _f10r = c.get(f"/og/{_f10k}.png")
+finally:
+    appmod._check_response, appmod.og.render_card = _f10orig, _f10card
+t("fix 10: a card whose gate raises still renders a PNG with the stored short answer",
+  _f10r.status_code == 200 and _f10r.mimetype == "image/png" and _f10seen.get("tldr") == "Ginger may reduce vomiting.",
+  (_f10r.status_code, _f10seen))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
