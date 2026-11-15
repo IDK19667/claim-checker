@@ -46,6 +46,20 @@ in `_check_response`, so cached checks get them too. No prompt change.
   rows (26 cite only studies not relied on, 4 "thousands"/"millions" with no
   count that size, 3 groups, 2 numbers, 1 clause), 49 rewrites, 23 fields
   emptied, 0 drops holding a harm word.
+- **The gate after the second review.** Harm words now match whole words
+  ("pharmacological" and "cytotoxic" are not warnings). Infection, outbreak,
+  interact, avoid and abnormality count only in a warning frame (risk,
+  cause, linked, can, may, should, carries, exposure and the like), except
+  on the "does not apply to" line. A warning is still held to the group and
+  figure rules: a failure takes its citation off, never the sentence. On a
+  fresh copy (97 rows) the review's `harm3.py` finds 70 cited harm or
+  "not tested" sentences and loses 0. The cached stamp cap is now exactly
+  verdict.py's strict `certainty_cap`: a line like "Low to moderate" is a
+  range, not a low rating, and capping on it had turned the measles and HPV
+  vaccine answers into "It's complicated, but the certainty is low". Both
+  are "Likely true" again; turmeric and exercise for depression stay capped
+  on the page, the lists and type-ahead (`cons.py`). A stamp set by health
+  guidance (takeaway starts "Major health guidelines say:") is never capped.
 - **/about, /method, /corrections (F7, F9, F8).** Copy says only what is true
   in the code today. Owner name, country, funding and contact are shown on
   /about only when set (`EVIDENT_OWNER`, `EVIDENT_WHO`, `EVIDENT_COUNTRY`,
