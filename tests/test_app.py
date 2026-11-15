@@ -5331,5 +5331,19 @@ t("fix 8: work grows about linearly with rows (8x rows, well under 20x steps), n
 t("fix 8: all_claims (type-ahead) does no numbering at all: one statement, no issue field",
   _b8[5] == 1 and "issue" not in _b8[3][0] and _b8[4] < 20 * max(_s8[4], 1), (_b8[5], _b8[3][0]))
 
+# ---- Review fix 9: a shared link scopes certainty to the outcome, like a check ---
+_f9c = "Ginger reduces vomiting in adults"
+db.put_cached_verdict(_f9c, _GIN_Q, "complicated", "Ginger may reduce vomiting (Study 1).",
+                      ["L3"], [_MODREV], tldr="Ginger may reduce vomiting.", still_open="Doses vary.")
+_f9k = db.get_cached_by_key(db.normalize_claim(_f9c))
+_f9a = P(_f9c, "9.9.9.9")
+_f9line = (_f9a.get_json() or {}).get("evidence_line", "")
+_f9h = c.get("/", query_string={"q": _f9c}).get_data(as_text=True)
+t("fix 9: get_cached_by_key returns the stored search query", _f9k and _f9k["search_query"] == _GIN_Q)
+t("fix 9: the streamed check reads the review on the claim's outcome (moderate, not the lowest)",
+  _f9line.startswith("Moderate"), _f9line)
+t("fix 9: the shared link prints the same evidence line as the streamed check",
+  _f9line and _f9line in _f9h and "Low certainty evidence" not in _f9h)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
