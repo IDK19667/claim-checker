@@ -450,6 +450,23 @@ def favicon():
     return resp
 
 
+# Who runs Evident. Each is shown on /about only when set, so the page never
+# carries a placeholder and never says anything the owner has not decided.
+ABOUT = {
+    "owner": os.environ.get("EVIDENT_OWNER", "").strip() or None,
+    "who": os.environ.get("EVIDENT_WHO", "").strip() or None,
+    "country": os.environ.get("EVIDENT_COUNTRY", "").strip() or None,
+    "funding": os.environ.get("EVIDENT_FUNDING", "").strip() or None,
+    "contact": os.environ.get("EVIDENT_CONTACT", "").strip() or None,
+}
+
+
+@app.route("/about")
+def about():
+    return render_template("about.html", base_url=_base_url(), provider=verdict.provider_label(),
+                           about=ABOUT, labels=VERDICT_LABELS)
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label())

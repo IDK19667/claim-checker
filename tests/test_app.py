@@ -5074,5 +5074,29 @@ t("F3: with nothing relied on, the reasons studies were set aside stay",
   breakdown.held_to_sources("Mice gained less fat (Study 3).", _f3s, set())
   == "Mice gained less fat (Study 3).")
 
+# ---- B6 F7: who runs Evident -----------------------------------------------------
+# "Is it biased? Who made it?" was answered only "an independent project". The
+# page says what is true now and shows owner details only once they are set.
+import re as _re7
+_ab = c.get("/about")
+_abt = _ab.get_data(as_text=True)
+_abv = _re7.sub(r"\{#.*?#\}|<!--.*?-->|<[^>]+>", " ", _abt, flags=_re7.S)
+t("F7: /about exists, says who checks a result, how it is paid for, and carries the disclaimer",
+  _ab.status_code == 200 and "No doctor or scientist reviews each result" in _abt
+  and "shows no ads" in _abt and "Not medical advice" in _abt)
+t("F7: /about ships no visible placeholder and no dashes",
+  "[" not in _abv and "\u2014" not in _abv and "\u2013" not in _abv)
+t("F7: home, a result and the privacy page all link to /about",
+  'href="/about"' in c.get("/").get_data(as_text=True)
+  and 'href="/about"' in c.get("/privacy").get_data(as_text=True)
+  and 'href="/about"' in c.get("/?q=conclusions+render").get_data(as_text=True))
+_old_about = dict(appmod.ABOUT)
+appmod.ABOUT.update(owner="Test Owner", country="Testland")
+_abo = c.get("/about").get_data(as_text=True)
+appmod.ABOUT.clear(); appmod.ABOUT.update(_old_about)
+t("F7: an owner set in config is named, and none is named until then",
+  "Evident is run by Test Owner." in _abo and "It is based in Testland." in _abo
+  and "Evident is run by" not in _abt)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Who runs Evident · Evident</title>
+  <meta name="description" content="Who runs Evident, how it is paid for, what it will not do, and how to reach it." />
+  <meta name="theme-color" content="#0f1211" />
+  <meta name="color-scheme" content="light" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon.svg') }}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}" />
+  <link rel="canonical" href="{{ base_url }}/about" />
+  <meta property="og:title" content="Who runs Evident · Evident" />
+  <meta property="og:description" content="Who runs Evident, how it is paid for, what it will not do, and how to reach it." />
+  <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="page-doc">
+  {#
+    Owner details. Every line below that names a person, a country, who pays
+    or a contact is shown only when it is set in app.py's ABOUT (from the
+    environment: EVIDENT_OWNER, EVIDENT_COUNTRY, EVIDENT_FUNDING,
+    EVIDENT_CONTACT). Until then the page says only what is already true.
+    Suggested wording from the audit (research/report_evident_improvement.md
+    section 3.1), for the owner to decide:
+      owner:   "[name of person or organisation]"
+      who:     "[who they are, and whether they have medical or research training]"
+      country: "[country]"
+      funding: "[who pays the running costs]" and whether Evident takes money
+               from supplement or food companies, and how any paid service
+               (Evident Pro) is kept apart from the free checker.
+      contact: "[a contact route, for example an email address]"
+      promise: "We will not change a verdict because someone paid us or
+               asked us to." Not shown until the owner makes it.
+  #}
+  <div class="band">
+    <header class="top">
+      <div class="nameplate"><a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span></div>
+    </header>
+  </div>
+  <main class="wrap doc">
+    <h1 class="hero">Who runs Evident</h1>
+    <p class="lede">{% if about.owner %}Evident is run by {{ about.owner }}.{% else %}Evident is an independent project.{% endif %}{% if about.country %} It is based in {{ about.country }}.{% endif %}</p>
+
+    <h2 class="section-label">Who checks a result</h2>
+    {% if about.who %}<p>{{ about.who }}</p>{% endif %}
+    <p>No doctor or scientist reviews each result before you see it. Each verdict is written by an AI model ({{ provider }}) from the studies it was shown, and checked by rules in the code before it reaches the page. <a href="/method">How a verdict is reached</a></p>
+
+    <h2 class="section-label">Money</h2>
+    {% if about.funding %}<p>{{ about.funding }}</p>{% endif %}
+    <p>Evident shows no ads, sells nothing and has no accounts. It keeps no record of who you are, so there is no data about you to sell. It runs on the free tier of an AI service.</p>
+
+    <h2 class="section-label">What it will not do</h2>
+    <p>It will not claim more certainty than the studies give. A verdict may cite only studies the model was shown, and a verdict that cites none becomes “{{ labels.insufficient }}” in the code, whatever the model wrote.</p>
+
+    <h2 class="section-label">Contact</h2>
+    {% if about.contact %}<p>{{ about.contact }}</p>{% endif %}
+    <p>To report a wrong answer, use the button under any result. <a href="/corrections">How corrections work</a></p>
+
+    <p class="fine">Not medical advice. This tool summarizes published research and can be wrong. For your own health, talk to a clinician.</p>
+    <p><a href="/">Back to Evident</a></p>
+  </main>
+  <footer class="foot">
+    <p><strong>Not medical advice.</strong> This summarizes published research and can be wrong. For your own health, talk to a clinician.</p>
+    <p class="fine"><a href="/method">Method</a> &middot; <a href="/corrections">Corrections</a> &middot; <a href="/privacy">Privacy</a></p>
+  </footer>
+</body>
+</html>
