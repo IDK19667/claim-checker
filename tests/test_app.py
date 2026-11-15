@@ -4942,8 +4942,9 @@ _acv = appmod._check_response(
     breakdown=_ACV_BD)
 _acv_words = " ".join([_acv["tldr"], _acv["evidence_line"], _acv["breakdown"]["strength"],
                        *_acv["breakdown"]["says"]]).lower()
-t("F1: the evidence line is never surer than the short answer's stated certainty",
-  _acv["evidence_line"].startswith("Low certainty evidence"), _acv["evidence_line"])
+t("F1: the evidence line is never surer than the short answer's stated certainty, in its own design word",
+  _acv["evidence_line"].startswith("Weak evidence")
+  and evidence.line_certainty(_acv["evidence_line"]) == "low", _acv["evidence_line"])
 t("F1: the short answer, the evidence line and the breakdown state one certainty level",
   evidence.stated_certainty(_acv["tldr"]) == evidence.line_certainty(_acv["evidence_line"])
   == evidence.stated_certainty(_acv["breakdown"]["strength"])
@@ -5217,6 +5218,22 @@ t("fix 2: a statement that the claim was not tested is never dropped",
   == "Neither tested whether diabetes went away."
   and breakdown.held_to_sources("No trial tested whether smokers lost weight (Study 1).", _h8, {1, 2})
   == "No trial tested whether smokers lost weight (Study 1).")
+
+# ---- Review fix 3: prose may only lower the line, in design words -------------
+_ma = {"pmid": "M", "title": "X for pain: a meta-analysis",
+       "abstract": "Meta-analysis of 30 randomised placebo-controlled trials with 9000 adults. Pain fell.",
+       "journal": "J", "year": "2022", "publication_types": ["Meta-Analysis", "Systematic Review"],
+       "authors": ["a"], "data_banks": None, "url": "u"}
+t("fix 3: prose stating the same level keeps the design word",
+  evidence.evidence_line("true", [_ma], ["M"], "x helps pain", stated="high") == "Strong evidence for this claim")
+t("fix 3: prose stating a lower level lowers the line in a design word, never 'certainty'",
+  evidence.evidence_line("true", [_ma], ["M"], "x helps pain", stated="low") == "Weak evidence for this claim")
+t("fix 3: prose can never raise the line",
+  evidence.evidence_line("true", [dict(_ma, publication_types=["Case Reports"])], ["M"], "x helps pain",
+                         stated="high").startswith("Weak"))
+_mar = dict(_ma, abstract="Meta-analysis of 30 RCTs. Pain fell (low certainty evidence).")
+t("fix 3: 'certainty' wording comes only from a review's own rating",
+  evidence.evidence_line("true", [_mar], ["M"], "x helps pain").startswith("Low certainty"))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

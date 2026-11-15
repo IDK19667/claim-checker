@@ -1070,13 +1070,19 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # it relied on gives its own evidence, or a certainty word in the prose
     # above it. The audit found one page saying "low certainty" in the short
     # answer, "Strong evidence" here and "moderate evidence" in the breakdown.
-    floors = [x for x in (lowest_review_certainty(studies, cited_pmids, outcome), stated) if x]
-    if floors:
-        floor = min(floors, key=_rank)
-        now = line_certainty(level)
-        if now is None or _rank(floor) < _rank(now) or (
-                _rank(floor) == _rank(now) and not level.endswith("certainty")):
-            level = f"{floor.capitalize()} certainty"
+    # A review's own rating may lower the line, and then supplies the
+    # "certainty" wording. The prose may only lower it, and in the line's own
+    # design words: "low certainty" is a review's phrase, never the model's.
+    # A floor equal to the level changes nothing.
+    floor = lowest_review_certainty(studies, cited_pmids, outcome)
+    now = line_certainty(level)
+    if floor and now and _rank(floor) < _rank(now):
+        level = f"{floor.capitalize()} certainty"
+    now = line_certainty(level)
+    if stated and now and _rank(stated) < _rank(now):
+        word = _STATED_WORD[stated]
+        if _rank(line_certainty(word)) < _rank(now):
+            level = word
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
                    "what the claim promises") if absolute else ""
@@ -1514,6 +1520,8 @@ def lead_certainty(studies, cited_pmids=(), outcome: str = "",
 # ---------------------------------------------------------------------------
 
 _DESIGN_LEVEL = {"strong": "high", "moderate": "moderate", "weak": "low"}
+# The design word the line uses for a level the prose states.
+_STATED_WORD = {"high": "Strong", "moderate": "Moderate", "low": "Weak", "very low": "Weak"}
 # "Strong evidence", "moderate evidence", "weak evidence": the design words
 # the evidence line itself uses, said in prose.
 _PLAIN_STATED = re.compile(r"(?<![\w-])(weak|moderate|strong)\s+(evidence)\b", re.IGNORECASE)
