@@ -1906,9 +1906,18 @@ finding findings result results like such including include includes generally b
 """.split())
 
 
+# "1 279 804" or "11 321" (a space, thin space or no-break space between
+# groups of three) is one number, written 1,279,804.
+_SPACED_THOUSANDS = re.compile(r"(?<=\d)[\u2009\u202f\xa0 ](?=\d{3}(?!\d))")
+
+
+def _ungroup(text: str) -> str:
+    return _SPACED_THOUSANDS.sub(",", text or "")
+
+
 def _studies_text(studies, numbers) -> str:
-    return " ".join(f"{studies[n - 1].get('title') or ''} {studies[n - 1].get('abstract') or ''}"
-                    for n in numbers if 0 < n <= len(studies))
+    return _ungroup(" ".join(f"{studies[n - 1].get('title') or ''} {studies[n - 1].get('abstract') or ''}"
+                             for n in numbers if 0 < n <= len(studies)))
 
 
 def _counts_in(text: str) -> list[int]:
@@ -1926,10 +1935,12 @@ def _counts_in(text: str) -> list[int]:
 def _known_in(studies, numbers) -> set:
     """Every number the cited records give, and each as the page rounds it
     (for_reading): "21.929" is printed as "about 22", "7.44" can be "7"."""
-    # "11 321" with a thin space is 11,321.
-    bag = corpus([{**studies[n - 1], "abstract": re.sub(
-        r"(?<=\d)[\u2009\u202f\xa0 ](?=\d{3}(?!\d))", ",", str(studies[n - 1].get("abstract") or ""))}
-        for n in numbers if 0 < n <= len(studies)])
+    # "11 321" with a thin space is 11,321, in the title as in the abstract.
+    picked = [studies[n - 1] for n in numbers if 0 < n <= len(studies)]
+    bag = corpus([{**st, "title": _ungroup(str(st.get("title") or "")),
+                   "abstract": _ungroup(str(st.get("abstract") or ""))} for st in picked])
+    source = " ".join(f"{st.get('title') or ''} {st.get('abstract') or ''}" for st in picked)
+    bag |= _supported_counts(_ungroup(source))
     for num in list(bag):
         if "." in num:
             try:
@@ -1940,6 +1951,44 @@ def _known_in(studies, numbers) -> set:
             if r:
                 bag.add(_canon(r[0].lstrip("-−")))
     return bag
+
+
+# Group sizes a record gives as "n = 25" or "(n=29)": their sum is the
+# trial's total, which a sentence may give ("54 adults") though the record
+# never prints it.
+_GROUP_N = re.compile(r"\bn\s*=\s*(\d{1,3}(?:,\d{3})+|\d+)", re.IGNORECASE)
+
+
+def _supported_counts(source: str) -> set:
+    """Counts a record supports without printing them: the sum of its group
+    sizes, and each large count as a reader rounds it, to two significant
+    figures ("1,279,804" is "1,300,000", and "1.3 million" is read as that
+    before it is looked up; "36,352" is "36,000")."""
+    out = set()
+    groups = [int(g.replace(",", "")) for g in _GROUP_N.findall(source)]
+    if 2 <= len(groups) <= 6:
+        out.add(str(sum(groups)))
+    for m in re.finditer(r"(?<![\d.])(\d{1,3}(?:,\d{3})+|\d{4,})(?![\d.])", source):
+        n = int(m.group(1).replace(",", ""))
+        if n < 1000:
+            continue
+        digits = len(str(n))
+        r = round(n, -(digits - 2))
+        out.add(str(r))
+    return out
+
+
+_SCALED = re.compile(r"(?<![\d.,])(\d+(?:\.\d+)?)\s+(thousand|million|billion)\b", re.IGNORECASE)
+_SCALE = {"thousand": 1000, "million": 1000000, "billion": 1000000000}
+
+
+def _unscaled(sentence: str) -> str:
+    """ "1.3 million people" read as "1300000 people", so a count written in
+    words is checked as the number it is, not as a bare 1.3."""
+    def whole(m):
+        v = Decimal(m.group(1)) * _SCALE[m.group(2).lower()]
+        return str(int(v)) if v == v.to_integral_value() else m.group(0)
+    return _SCALED.sub(whole, sentence)
 
 
 def _unsupported_who(sentence: str, source: str) -> bool:
@@ -1985,7 +2034,16 @@ def _who_clauses(sentence: str, studies, numbers) -> str:
     return joined[:1].upper() + joined[1:] + (tail if tail.strip() else ".")
 
 
-def _fails_sources(sentence: str, studies, numbers, who: str = "") -> bool:
+def _from_claim_or_name(sentence: str, figure_at: int, figure: str, claim: str) -> bool:
+    """A number the gate does not ask a record for: one the claim itself
+    gives ("8 glasses of water"), or one that is part of a name ("type 2
+    diabetes", "COVID-19", "phase 3")."""
+    if _NAME_NUMBER.search(sentence[:figure_at]):
+        return True
+    return _canon(figure) in {_canon(m.group(0)) for m in _NUMERAL.finditer(claim or "")}
+
+
+def _fails_sources(sentence: str, studies, numbers, who: str = "", claim: str = "") -> bool:
     """Whether a sentence says something the studies it cites do not. `who`
     is "applies" or "not" for the two "who it applies to" lines: the groups
     a "does not apply to" line names are, as expected, groups its records do
@@ -1999,7 +2057,10 @@ def _fails_sources(sentence: str, studies, numbers, who: str = "") -> bool:
                 return True
     if not sentence.startswith(TRANSLATION_LEAD):
         known = _known_in(studies, numbers)
-        if ungrounded_numbers(sentence, known):
+        bare = _unscaled(_REF.sub(" ", sentence))
+        if any(_canon(m.group(0)) not in known
+               and not _from_claim_or_name(bare, m.start(), m.group(0), claim)
+               for m in _NUMERAL.finditer(bare)):
             return True
     counts = _counts_in(source)
     for pattern, least in _VAGUE_COUNTS:
@@ -2008,7 +2069,7 @@ def _fails_sources(sentence: str, studies, numbers, who: str = "") -> bool:
     return False
 
 
-def held_to_sources(text: str, studies: list[dict], relied, who=False) -> str:
+def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: str = "") -> str:
     """
     `text` with every cited sentence held to the studies it cites:
 
@@ -2017,7 +2078,9 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False) -> str:
       pass the checks below on those alone, or it goes;
     - a group of people it names ("pregnant women", "older adults with
       cancer") must be named in a cited record;
-    - every figure must be in a cited record (rounded as the page rounds);
+    - every figure must be in a cited record (rounded as the page rounds,
+      or as a total or a rounded count the record supports), unless the
+      claim itself gives it or it is part of a name ("type 2");
     - "thousands", "hundreds" of people need a count that size in one;
     - on the "applies to" line (`who="applies"`), a clause its records give
       no word for is taken out, not the whole line; on the "does not apply
@@ -2054,7 +2117,7 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False) -> str:
             if len(using) < len(cited):
                 sentence = relied_only(sentence, relied, count)
                 cited = using
-        if _fails_sources(sentence, studies, cited, who or ""):
+        if _fails_sources(sentence, studies, cited, who or "", claim):
             continue
         if who == "applies" and not _LEFT_OUT.search(sentence):
             sentence = _who_clauses(sentence, studies, cited)
@@ -2064,17 +2127,17 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False) -> str:
     return " ".join(kept)
 
 
-def hold_breakdown(bd: dict | None, studies: list[dict], relied) -> dict | None:
+def hold_breakdown(bd: dict | None, studies: list[dict], relied, claim: str = "") -> dict | None:
     """held_to_sources over every string of prose the breakdown prints, with
     the two "who it applies to" lines held to their own rules."""
     if not bd:
         return bd
     who = {k: bd.get(k) for k in ("applies_to", "not_applies_to")}
-    out = map_prose(bd, lambda t: held_to_sources(t, studies, relied))
+    out = map_prose(bd, lambda t: held_to_sources(t, studies, relied, claim=claim))
     for k, v in who.items():
         if v:
             out[k] = held_to_sources(v, studies, relied,
-                                     who="applies" if k == "applies_to" else "not")
+                                     who="applies" if k == "applies_to" else "not", claim=claim)
     return settle_effect(out)
 
 

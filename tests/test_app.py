@@ -5363,5 +5363,37 @@ t("fix 10: a card whose gate raises still renders a PNG with the stored short an
   _f10r.status_code == 200 and _f10r.mimetype == "image/png" and _f10seen.get("tldr") == "Ginger may reduce vomiting.",
   (_f10r.status_code, _f10seen))
 
+# ---- Review fix 11: number matching reads counts as the records give them --------
+_n11 = [{"pmid": "N1", "title": "Coffee and cardiovascular disease: a dose-response meta-analysis",
+         "abstract": "Thirty-six studies were included with 1 279 804 participants and 36 352 CVD cases. "
+                     "In a trial, usual care (n = 25) was compared with an app (n = 29).",
+         "journal": "J", "year": "2020", "publication_types": ["Meta-Analysis"], "authors": ["x"],
+         "data_banks": None, "url": "u"},
+        {"pmid": "N2", "title": "Walking in adults with diabetes",
+         "abstract": "Adults with diabetes walked daily for a year; HbA1c fell.",
+         "journal": "J", "year": "2021", "publication_types": ["Randomized Controlled Trial"],
+         "authors": ["x"], "data_banks": None, "url": "u"}]
+_H11 = lambda x, claim="": breakdown.held_to_sources(x, _n11, {1, 2}, claim=claim)
+t("fix 11: space-grouped thousands in a record match the comma form",
+  _H11("The review pooled 1,279,804 participants (Study 1).") != ""
+  and _H11("There were 36,352 cases (Study 1).") != "")
+t("fix 11: a rounded count the record supports is kept (1.3 million, 36,000)",
+  _H11("The review pooled about 1.3 million people (Study 1).") != ""
+  and _H11("About 36,000 cases were seen (Study 1).") != "")
+t("fix 11: a trial's total from its group sizes is kept (25 + 29 = 54)",
+  _H11("A trial of 54 adults tested the app (Study 1).") != "")
+t("fix 11: 'type 2' is a name, not a figure the record must give",
+  _H11("Adults with type 2 diabetes walked daily (Study 2).") != "")
+t("fix 11: a number the claim itself gives is not held against the record",
+  _H11("Drinking 8 glasses a day was not tested (Study 2).", "You need to drink 8 glasses of water a day") != ""
+  and _H11("Walking 8 hours a day lowered HbA1c (Study 2).", "You need to drink 8 glasses of water a day") != "")
+t("fix 11: a figure in no record still goes, and so does a wrong rounding",
+  _H11("Risk fell 55% (Study 1).") == "" and _H11("The review pooled 2.5 million people (Study 1).") == ""
+  and _H11("A trial of 60 adults tested the app (Study 1).") == "")
+t("fix 11: the verbatim dropped sentence from the review now stays",
+  breakdown.held_to_sources("Study 2 found a 13-week mobile intervention reduced HbA1c and blood pressure in 54 adults with type 2 diabetes.",
+      [_n11[1], {**_n11[0], "abstract": "A randomized controlled trial compared usual care (n = 25) with a 13-week mHealth intervention (n = 29). HbA1c and blood pressure fell in adults with type 2 diabetes."}],
+      {2}) != "")
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
