@@ -137,7 +137,8 @@ for (const v of VIEWS) {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("pageerror", (e) => errors.push(String(e)));
 
-  for (const [label, url] of [["home", `${base}/${q()}`], ["result", `${base}/${q("q=" + encodeURIComponent(claim))}`], ["about", `${base}/about`], ["privacy", `${base}/privacy`]]) {
+  for (const [label, url] of [["home", `${base}/${q()}`], ["result", `${base}/${q("q=" + encodeURIComponent(claim))}`],
+                               ["about", `${base}/about`], ["method", `${base}/method`], ["corrections", `${base}/corrections`], ["privacy", `${base}/privacy`]]) {
     await page.goto(url, { waitUntil: "networkidle" });
     await page.waitForTimeout(700);
     const a = await page.evaluate(AUDIT);
@@ -159,7 +160,7 @@ for (const v of VIEWS) {
     if (a.bodyBg.replace(/\s/g, "") !== a.paperToken.replace(/\s/g, "")) {
       note(where, "background is not paper", `${a.bodyBg} vs --paper ${a.paperToken}`);
     }
-    await page.screenshot({ path: `/tmp/qa-${v.name.replace(/\s/g, "-")}-${label}.png`, fullPage: label === "result" });
+    await page.screenshot({ path: `/tmp/qa-${v.name.replace(/\s/g, "-")}-${label}.png`, fullPage: label !== "home" });
 
     // The type-ahead only exists while someone is typing, so a page load
     // never sees it. Open it deliberately and audit it like any other

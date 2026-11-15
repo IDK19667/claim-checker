@@ -4,6 +4,42 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-15: Audit fixes B6: one certainty, prose held to its sources, four trust pages
+
+From `research/report_evident_improvement.md`. All gates run on the way out
+in `_check_response`, so cached checks get them too. No prompt change.
+
+- **One certainty per page (F1).** The evidence line is never surer than the
+  lowest rating any relied-on review gives, nor than any certainty word the
+  prose states; prose surer than the line is rewritten down to it, never up.
+- **A review's CINeMA "confidence" counts as its rating (F2).** Consequence:
+  a check whose main review rates confidence low turns "Likely true" into
+  "It's complicated" by the existing cap when it is next re-checked. The
+  "about as well as therapy" comparison wording was not removed: a mechanical
+  rewrite of the takeaway is unsafe.
+- **Prose held to its sources (F3).** A cited sentence goes if it cites only
+  studies not relied on, or names a group, a figure or a "thousands" its
+  cited records do not give. Kept: sentences that say why studies were set
+  aside, safety warnings ("can injure"), stated absences ("children were not
+  in either trial"), uncited sentences, and everything when nothing was
+  relied on. "Still open" is never touched. Measured on 97 local cached
+  rows before shipping: about 50 sentences dropped, most citing only
+  unrelied studies. Postpartum studies are labelled "people after giving
+  birth", never "pregnant women".
+- **/about, /method, /corrections (F7, F9, F8).** Copy says only what is true
+  in the code today. Owner name, country, funding and contact are shown on
+  /about only when set (`EVIDENT_OWNER`, `EVIDENT_WHO`, `EVIDENT_COUNTRY`,
+  `EVIDENT_FUNDING`, `EVIDENT_CONTACT`); suggested wording sits in a template
+  comment. /corrections makes no response-time promise and lists no
+  corrections, because no corrections log or "Corrected on" field exists.
+  /method carries `METHOD_VERSION` and `METHOD_CHANGED`: bump both when a rule
+  it states changes.
+- **Review dates (F10).** One line under the verdict: the check date and the
+  years of the studies relied on. No "next check" date: a saved answer is only
+  re-checked when someone asks after a day, so a date would be a promise.
+- **List numbers (F13).** "No." is the row's place in check order, not its
+  rowid, so the newest matches the "Claims checked" count.
+
 ## 2026-11-08: Saved answers, the check log and feedback live in Turso
 
 **Render's free plan wipes the local SQLite file on every deploy and every
