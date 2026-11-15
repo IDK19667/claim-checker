@@ -5446,5 +5446,39 @@ t("extra: /corrections says the time of a report is stored, as the feedback tabl
   "created_at" in _fbcols and "the date and time of the report" in _cor
   and _fbcols <= {"id", "claim_key", "verdict", "helpful", "note", "created_at"}, _fbcols)
 
+# ---- Second review fix 1: the stamp cap is verdict.py's strict cap, not the line --
+_VAX_Q = "(vaccine OR vaccination) AND (severe measles OR measles complications)"
+_vaxrev = _study("V1", "Vaccines for measles, mumps, rubella, and varicella in children", types=["Systematic Review", "Meta-Analysis"],
+                 abstract="Certainty of evidence was rated using GRADE. We included 138 studies (23,480,668 participants). "
+                          "One dose prevented measles (moderate certainty evidence) and hospital admission for measles "
+                          "complications fell (low certainty evidence).")
+_hpvrev = _study("V2", "HPV vaccines: a network meta-analysis", types=["Systematic Review", "Network Meta-Analysis"],
+                 abstract="We assessed the certainty of evidence using the GRADE approach. We included 60 studies. "
+                          "Serious adverse events were similar (high-certainty evidence); CIN2+ fell (moderate-certainty); "
+                          "rare outcomes were uncertain (low-certainty evidence).")
+_r1 = []
+for _cl1, _q1, _rv1, _tl1 in [
+        ("Vaccines reduce the risk of severe measles", _VAX_Q, _vaxrev, "Vaccines help reduce the risk of severe measles in children."),
+        ("The HPV vaccine is safe", "(HPV vaccine) AND (safety OR toxicity)", _hpvrev,
+         "The HPV vaccine is safe and provides strong protection against HPV related diseases.")]:
+    _p1 = appmod._check_response(_cl1, _q1, "true", _tl1, "It works (Study 1).", [_rv1["pmid"]], [_rv1], "http://x",
+                                 cached_at="2026-11-01T00:00:00+00:00")
+    _r1.append((_cl1, _tl1, _p1, appmod._listed({"claim_text": _cl1, "verdict": "true", "search_query": _q1,
+                                                 "studies": [_rv1], "cited": [_rv1["pmid"]]})))
+t("second fix 1: vaccine-shaped rows rated over a range stay Likely true with the short answer unchanged",
+  all(p["verdict"] == "true" and p["tldr"] == tl and lst["verdict"] == "true" for _cl, tl, p, lst in _r1),
+  [(p["verdict"], p["evidence_line"], p["tldr"]) for _c, _t, p, _l in _r1])
+t("second fix 1: their lines still read as ranges that start low, which is not a low rating",
+  all(evidence.line_certainty(p["evidence_line"]) == "low" and " to " in p["evidence_line"] for _c, _t, p, _l in _r1),
+  [p["evidence_line"] for _c, _t, p, _l in _r1])
+_tur1 = appmod._check_response("Turmeric eases joint pain", "(turmeric) AND (joint pain)", "true", "Turmeric eases joint pain.",
+                               "It helps (Study 1).", ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+_exd1 = _gin_review("E1", "Network meta-analysis of 200 trials. Walking reduced depression. Confidence in accordance with CINeMA was low.")
+_exp1 = appmod._check_response("Exercise reduces depression", "(exercise) AND (depression)", "true", "Exercise reduces depression.",
+                               "It helps (Study 1).", ["E1"], [_exd1], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+t("second fix 1: a lead review rated low (turmeric shape) or CINeMA low (exercise shape) is still capped",
+  _tur1["verdict"] == "complicated" and _exp1["verdict"] == "complicated"
+  and "certainty of that evidence is low" in _tur1["tldr"], (_tur1["verdict"], _exp1["verdict"], _exp1["evidence_line"]))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

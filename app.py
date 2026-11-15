@@ -706,7 +706,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # only small and pilot trials) is not shown as likely true, and nor is a
     # "true" over a line that says low certainty. A check cached before the
     # cap existed, or before its line was scoped, gets it here.
-    if _capped_true(verdict_value, claim, studies, cited, outcome, evidence_line):
+    if _capped_true(verdict_value, claim, studies, cited, outcome):
         verdict_value = "complicated"
         if not re.search(r"\bcertainty\b[^.]*\blow\b", tldr or "", re.IGNORECASE):
             leaned = f"{(tldr or '').rstrip().rstrip('.')}, but the certainty of that evidence is low."
