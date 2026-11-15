@@ -632,22 +632,25 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
     row's place in check order, counted from the rows there now, so the
     newest is always numbered the same as the "Claims checked" count: rowid
     left gaps where a row was replaced, and the list began at No. 18 under
-    a count of 17.
+    a count of 17. One COUNT(*) and the row's place in the list give the
+    number, so the cost does not grow with every row (a correlated count
+    per row made the home page quadratic in the table's size).
     """
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT (SELECT COUNT(*) FROM verdict_cache v2 WHERE v2.created_at < vc.created_at OR (v2.created_at = vc.created_at AND v2.rowid <= vc.rowid)) AS issue, claim_text, verdict, tldr, still_open, "
-            "       studies_json, cited_json, created_at "
-            "FROM verdict_cache vc ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
+        a, b = _run_many(conn, [
+            ("SELECT COUNT(*) n FROM verdict_cache", ()),
+            ("SELECT claim_text, verdict, tldr, still_open, studies_json, cited_json, created_at "
+             "FROM verdict_cache ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)),
+        ])
+        total, rows = a.fetchone()["n"], b.fetchall()
     out = []
-    for r in rows:
+    for i, r in enumerate(rows):
         try:
             studies = json.loads(r["studies_json"] or "[]")
             cited = json.loads(r["cited_json"] or "[]")
         except (ValueError, TypeError):
             studies, cited = [], []
-        out.append({"issue": r["issue"], "claim_text": r["claim_text"],
+        out.append({"issue": total - i, "claim_text": r["claim_text"],
                     "verdict": r["verdict"], "tldr": r["tldr"] or "",
                     "still_open": r["still_open"] or "",
                     "created_at": r["created_at"],
@@ -660,11 +663,12 @@ def all_claims(limit: int = 500) -> list[dict]:
     """
     Every cached claim with its verdict, newest first, and nothing else.
     Deliberately light: this feeds type-ahead, so it must not drag the
-    studies blob along for the ride.
+    studies blob along for the ride, and it carries no list number either:
+    nothing that reads it shows one, and counting costs a query per keystroke.
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT (SELECT COUNT(*) FROM verdict_cache v2 WHERE v2.created_at < vc.created_at OR (v2.created_at = vc.created_at AND v2.rowid <= vc.rowid)) AS issue, claim_text, verdict FROM verdict_cache vc "
-            "ORDER BY created_at DESC LIMIT ?", (limit,)
+            "SELECT claim_text, verdict FROM verdict_cache "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in rows]

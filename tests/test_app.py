@@ -5287,5 +5287,49 @@ t("fix 7: the 'sells' promise is limited to this site, ads, accounts and data",
   "sells nothing" not in _abt7 and "This site shows no ads, has no accounts and sells no data." in _abt7
   and "sells nothing" not in c.get("/").get_data(as_text=True))
 
+# ---- Review fix 8: list numbers cost one count, not one per row ------------------
+import contextlib as _cl8
+def _work8(n):
+    """VM steps and statements for recent_verdicts(n) and all_claims() on a fresh n-row table."""
+    _old_path, _old_conn = db.DB_PATH, db.get_conn
+    db.DB_PATH = os.path.join(tempfile.mkdtemp(), "f8.db")
+    _con = _sq.connect(db.DB_PATH); _con.executescript(db.SCHEMA)
+    _con.executemany("INSERT INTO verdict_cache (claim_key, claim_text, verdict, explanation, created_at) "
+                     "VALUES (?, ?, 'complicated', 'x', ?)",
+                     [(f"k{i}", f"Claim {i}", f"2026-01-01T00:00:{i % 7:02d}") for i in range(n)])
+    _con.commit(); _con.close()
+    tally = {"steps": 0, "sql": []}
+    @_cl8.contextmanager
+    def _counting():
+        conn = _sq.connect(db.DB_PATH); conn.row_factory = _sq.Row
+        conn.set_trace_callback(tally["sql"].append)
+        def _tick():
+            tally["steps"] += 1
+            return 0
+        conn.set_progress_handler(_tick, 100)
+        try:
+            yield conn
+        finally:
+            conn.close()
+    db.get_conn = _counting
+    try:
+        rv = db.recent_verdicts(n)
+        rv_steps, rv_sql = tally["steps"], len(tally["sql"])
+        tally["steps"], tally["sql"] = 0, []
+        ac = db.all_claims(n)
+        return rv, rv_steps, rv_sql, ac, tally["steps"], len(tally["sql"])
+    finally:
+        db.DB_PATH, db.get_conn = _old_path, _old_conn
+_s8 = _work8(60)
+_b8 = _work8(480)
+t("fix 8: numbers still run newest = count down to 1 with ties broken by insertion",
+  [r["issue"] for r in _b8[0]] == list(range(480, 0, -1)), [r["issue"] for r in _b8[0][:3]])
+t("fix 8: recent_verdicts issues two statements whatever the table size",
+  _s8[2] == 2 and _b8[2] == 2, (_s8[2], _b8[2]))
+t("fix 8: work grows about linearly with rows (8x rows, well under 20x steps), not quadratically",
+  _b8[1] < 20 * max(_s8[1], 1), (_s8[1], _b8[1]))
+t("fix 8: all_claims (type-ahead) does no numbering at all: one statement, no issue field",
+  _b8[5] == 1 and "issue" not in _b8[3][0] and _b8[4] < 20 * max(_s8[4], 1), (_b8[5], _b8[3][0]))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
