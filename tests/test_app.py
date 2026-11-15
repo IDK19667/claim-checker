@@ -5154,5 +5154,12 @@ t("F8: reports still go through the one anonymous feedback route, and set no coo
   _fbr.status_code == 200 and _fbr.get_json() == {"ok": True} and "Set-Cookie" not in _fbr.headers
   and "Set-Cookie" not in _co.headers)
 
+# ---- B6 F13: the count and the list numbers agree --------------------------------
+_lg = db.ledger()["claims"]
+_rv = db.recent_verdicts(500)
+t("F13: the newest entry's number equals the Claims checked count, with no gaps",
+  _rv and _rv[0]["issue"] == _lg and sorted(r["issue"] for r in _rv) == list(range(1, _lg + 1)),
+  (_lg, [r["issue"] for r in _rv[:3]]))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

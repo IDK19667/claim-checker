@@ -629,13 +629,16 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
     """
     Cached verdicts newest first, with the studies behind each one so the
     front page can show the evidence rather than describe it. `issue` is the
-    row's insertion order, which makes every check a numbered one.
+    row's place in check order, counted from the rows there now, so the
+    newest is always numbered the same as the "Claims checked" count: rowid
+    left gaps where a row was replaced, and the list began at No. 18 under
+    a count of 17.
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT rowid AS issue, claim_text, verdict, tldr, still_open, "
+            "SELECT (SELECT COUNT(*) FROM verdict_cache v2 WHERE v2.created_at < vc.created_at OR (v2.created_at = vc.created_at AND v2.rowid <= vc.rowid)) AS issue, claim_text, verdict, tldr, still_open, "
             "       studies_json, cited_json, created_at "
-            "FROM verdict_cache ORDER BY created_at DESC LIMIT ?", (limit,)
+            "FROM verdict_cache vc ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
     out = []
     for r in rows:
@@ -661,7 +664,7 @@ def all_claims(limit: int = 500) -> list[dict]:
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT rowid AS issue, claim_text, verdict FROM verdict_cache "
+            "SELECT (SELECT COUNT(*) FROM verdict_cache v2 WHERE v2.created_at < vc.created_at OR (v2.created_at = vc.created_at AND v2.rowid <= vc.rowid)) AS issue, claim_text, verdict FROM verdict_cache vc "
             "ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in rows]
