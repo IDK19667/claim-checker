@@ -5098,5 +5098,22 @@ t("F7: an owner set in config is named, and none is named until then",
   "Evident is run by Test Owner." in _abo and "It is based in Testland." in _abo
   and "Evident is run by" not in _abt)
 
+# ---- B6 F9: a linkable method page -----------------------------------------------
+_me = c.get("/method")
+_met = _me.get_data(as_text=True)
+_mev = _re7.sub(r"\{#.*?#\}|<!--.*?-->|<[^>]+>", " ", _met, flags=_re7.S)
+t("F9: /method exists with a version and a last-changed date",
+  _me.status_code == 200 and f"Method version {appmod.METHOD_VERSION}, last changed {appmod.METHOD_CHANGED}" in _met)
+t("F9: /method states the number of abstracts the code actually reads",
+  f"up to {appmod.MAX_STUDIES} abstracts" in _met and appmod.MAX_STUDIES == 8)
+t("F9: /method names the code's own rules: no citation means Not enough evidence; label capped by the review",
+  "becomes \u201cNot enough evidence\u201d" in _met and "never higher than the lowest rating" in _met
+  and "Not medical advice" in _met)
+t("F9: /method has no placeholder and no dashes",
+  "[" not in _mev and "\u2014" not in _mev and "\u2013" not in _mev)
+t("F9: the How it works sheet and every result link to /method",
+  'href="/method"' in c.get("/").get_data(as_text=True)
+  and 'href="/method"' in c.get("/?q=conclusions+render").get_data(as_text=True))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -33,6 +33,8 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 
 # How long a verdict for a given claim is reused before re-checking.
 # 0 disables caching.
+# How many PubMed records a check reads. /method states it.
+MAX_STUDIES = 8
 VERDICT_CACHE_HOURS = float(os.environ.get("VERDICT_CACHE_HOURS", "24"))
 
 # Set TRUST_PROXY=1 when running behind a reverse proxy / hosting platform
@@ -467,6 +469,18 @@ def about():
                            about=ABOUT, labels=VERDICT_LABELS)
 
 
+# The method page's own version. Bump both when a rule it describes changes.
+METHOD_VERSION = "1"
+METHOD_CHANGED = "15 November 2026"
+
+
+@app.route("/method")
+def method():
+    return render_template("method.html", base_url=_base_url(), provider=verdict.provider_label(),
+                           labels=VERDICT_LABELS, version=METHOD_VERSION, changed=METHOD_CHANGED,
+                           max_studies=MAX_STUDIES)
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label())
@@ -798,7 +812,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
                 return
         yield {"stage": "query", "query": search_query, "claim": claim if typed else None}
         studies, query_used, broadened = pubmed.search_with_fallback(
-            search_query, max_results=8, surrogate=surrogate)
+            search_query, max_results=MAX_STUDIES, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
         if studies:
             yield {"stage": "weigh"}
