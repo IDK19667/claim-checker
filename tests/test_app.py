@@ -5280,5 +5280,12 @@ t("fix 6: /about names the guidance exception instead of 'whatever the model wro
 t("fix 6: guidance really can stamp a forgo-treatment claim with nothing cited (the exception /method states)",
   "Applies even with nothing cited" in pathlib.Path("verdict.py").read_text())
 
+# ---- Review fix 7: the Money sentence on /about stays true -----------------------
+_abt7 = c.get("/about").get_data(as_text=True)
+t("fix 7: /about no longer promises a free tier it cannot know", "free tier" not in _abt7)
+t("fix 7: the 'sells' promise is limited to this site, ads, accounts and data",
+  "sells nothing" not in _abt7 and "This site shows no ads, has no accounts and sells no data." in _abt7
+  and "sells nothing" not in c.get("/").get_data(as_text=True))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
