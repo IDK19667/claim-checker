@@ -1811,8 +1811,25 @@ HARM = re.compile(
 # "infections are caused by viruses", "can interact with warfarin". Without
 # one, "children with infections lost 99 kg" and "it avoids weight gain" are
 # ordinary claims and are held to their sources like any other.
-_HAZARD = re.compile(r"\b(?:infections?|infectious|outbreaks?|interact\w*|avoid\w*|abnormalit\w*)\b",
+_HAZARD = re.compile(r"\b(?:infections?|infectious|outbreaks?|interact\w*|abnormalit\w*)\b",
                      re.IGNORECASE)
+# "Avoid" warns only as advice: "pregnant women should avoid raw milk",
+# "Avoid undiluted vinegar". "It avoids weight gain" is a benefit claim.
+_AVOID_ADVICE = re.compile(
+    r"\b(?:should|must|need to|needs to|advised to|best to|told to|ought to)\s+(?:\w+\s+){0,2}?avoid\w*\b|"
+    r"^\W*avoid\b|\b(?:best|should be|must be|is|are) avoided\b", re.IGNORECASE)
+# A harm word under a negation is a reassurance ("no harm", "no serious
+# adverse events", "not harmful", "without side effects"), and one under a
+# reduction is a benefit ("cut outbreaks by 90%", "the risk of infections
+# fell"). Neither is a warning; both are held to their sources.
+_NEGATES = re.compile(r"\b(?:no|not|without|never|nor|neither|free of|zero|none)\s+(?:[\w-]+\s+){0,2}$",
+                      re.IGNORECASE)
+_REDUCES_BEFORE = re.compile(
+    r"\b(?:cut|cuts|cutting|reduc\w*|lower\w*|decreas\w*|prevent\w*|fewer|less|avoid\w*|protect\w*|"
+    r"lessen\w*|halv\w*|limit\w*|curb\w*)\s+(?:[\w-]+\s+){0,3}$", re.IGNORECASE)
+_REDUCES_AFTER = re.compile(
+    r"^\s+(?:[\w-]+\s+){0,3}?(?:fell|falls?|dropped|drops|declined|declines|decreased|decreases|halved|"
+    r"(?:was|were|is|are) (?:reduced|lower|lowered|cut|prevented|fewer|less))\b", re.IGNORECASE)
 _WARNING_FRAME = re.compile(
     r"\b(?:risks?|risky|cause[sd]?|causing|linked|lead(?:s)? to|led to|can|could|may|might|should|"
     r"carr(?:y|ies)|spread\w*|transmi\w*|associated|increase[sd]?|raise[sd]?|must|need to|"
@@ -1830,9 +1847,19 @@ def is_warning(sentence: str, who: str = "") -> bool:
     warning frame. On the "does not apply to" line a hazard word is enough:
     "bacterial infections" there says who must not rely on the answer."""
     body = _REF.sub(" ", sentence or "")
-    if HARM.search(body):
+    if who == "not":
+        return bool(HARM.search(body) or _HAZARD.search(body) or _AVOID_ADVICE.search(body))
+
+    def warns(m: re.Match) -> bool:
+        before, after = body[:m.start()], body[m.end():]
+        if m.group(0).lower().split()[0] not in ("not", "should", "shouldn\u2019t", "shouldn't", "must",
+                                                 "do", "don't", "don\u2019t") and _NEGATES.search(before):
+            return False
+        return not (_REDUCES_BEFORE.search(before) or _REDUCES_AFTER.search(after))
+
+    if any(warns(m) for m in HARM.finditer(body)) or _AVOID_ADVICE.search(body):
         return True
-    return bool(_HAZARD.search(body) and (who == "not" or _WARNING_FRAME.search(body)))
+    return bool(_WARNING_FRAME.search(body) and any(warns(m) for m in _HAZARD.finditer(body)))
 
 
 def never_dropped(sentence: str, who: str = "") -> bool:
@@ -1844,6 +1871,31 @@ def uncited(sentence: str) -> str:
     """`sentence` with its bracketed citations taken off."""
     out = _PAREN_REF.sub("", sentence)
     return re.sub(r"\s+([.,;:!?])", r"\1", out).strip()
+
+
+_NUMS = r"\d+(?:\s*(?:,|,?\s*and\b|&)\s*\d+)*"
+# A study named in the sentence itself, as the one saying it: "Study 1
+# found that", "Studies 1 and 2 show", "In Study 1,", "in Study 1", "study 4
+# is a reminder that". Taken out, the warning says the same and credits no
+# study with what its record does not give.
+_INLINE_ATTRIBUTION = [
+    re.compile(rf"^\s*(?:in|according to|from)\s+stud(?:y|ies)\s+{_NUMS}\s*,\s*", re.IGNORECASE),
+    re.compile(rf"\bstud(?:y|ies)\s+{_NUMS}\s+(?:\w+\s+){{0,2}}?(?:found|finds|find|shows?|showed|shown|"
+               rf"reported|reports?|suggests?|suggested|notes?|noted|says|said|is a reminder|was a reminder|"
+               rf"are a reminder|warns?|warned)\s+(?:that\s+)?", re.IGNORECASE),
+    re.compile(rf"\s*,?\s*\b(?:in|from|by|according to)\s+stud(?:y|ies)\s+{_NUMS}\b", re.IGNORECASE),
+]
+
+
+def unattributed(sentence: str) -> str:
+    """`sentence` with no study named in it: bracketed citations off, inline
+    naming taken out, and any study still named reworded to "a study"."""
+    out = uncited(sentence)
+    for pattern in _INLINE_ATTRIBUTION:
+        out = pattern.sub(lambda m: "" if not m.group(0).startswith((" ", ",")) else "", out)
+    out = _REF.sub(lambda m: "studies" if re.search(r"\d\D+\d", m.group(1)) else "a study", out)
+    out = re.sub(r"\s{2,}", " ", re.sub(r"\s+([.,;:!?])", r"\1", out)).strip()
+    return out[:1].upper() + out[1:]
 
 
 _PAREN_REF = re.compile(
@@ -2143,6 +2195,16 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: st
             left = refs(sentence, count)
             if left and _fails_sources(sentence, studies, left, who or "", claim):
                 sentence = uncited(sentence)
+                # Named in the sentence itself: only the clause that names the
+                # study is its claim ("Neither tested whether diabetes went
+                # away, and study 4 is a reminder that vinegar can injure the
+                # oesophagus" credits study 4 with the injury, not diabetes).
+                # If that clause gives what its record does not, the naming
+                # comes out, so the hazard stays and no study is credited.
+                named = [cl for cl in re.split(r",\s*(?:and|but)\s+|;\s*|\s+but\s+", sentence)
+                         if refs(cl, count)]
+                if any(_fails_sources(cl, studies, refs(cl, count), who or "", claim) for cl in named):
+                    sentence = unattributed(sentence)
             kept.append(sentence)
             continue
         if not _SETS_ASIDE.search(sentence):

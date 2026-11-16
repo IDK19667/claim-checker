@@ -5562,5 +5562,35 @@ t("optional: the free tier and Google's terms are mentioned only when checks go 
 t("optional: /about says the claim and the studies' published details are sent",
   "the published details of the studies, such as their titles and abstracts" in c.get("/about").get_data(as_text=True))
 
+# ---- Third review: reassurances and benefits are not warnings; inline naming comes out
+_P4 = ["Study 1 found vinegar may avoid infections in 5000 pregnant women.",
+       "In Study 1, the risk of infections fell by 75% in 9,000 children.",
+       "Studies 1 and 2 show it could cut outbreaks by 90% in children.",
+       "Study 1 shows it reduces side effects by 90% in 5000 children.",
+       "Study 1 found no harm in 9,000 pregnant women.",
+       "There were no adverse events in 12,000 children in Study 1."]
+for _p4 in _P4:
+    _o4 = breakdown.held_to_sources(_p4, _p3st, {1, 2})
+    t(f"third review: a reassurance or benefit with figures its study lacks is dropped: {_p4[:44]}", _o4 == "", _o4)
+t("third review: negated or reduced harm is not a warning; advice to avoid and plain hazards are",
+  not breakdown.is_warning("There were no serious adverse events.") and not breakdown.is_warning("It was not harmful.")
+  and not breakdown.is_warning("It reduces side effects.") and not breakdown.is_warning("The risk of infections fell.")
+  and not breakdown.is_warning("It avoids weight gain.")
+  and breakdown.is_warning("Pregnant women should avoid raw milk.") and breakdown.is_warning("Antibiotics should not be used.")
+  and breakdown.is_warning("It is not safe in pregnancy.") and breakdown.is_warning("It can cause side effects such as nausea."))
+_w4 = {"Study 1 found vinegar can burn the throat in 5000 children.": "Vinegar can burn the throat in 5000 children.",
+       "In Study 2, undiluted vinegar injured the oesophagus in 300 children.": "Undiluted vinegar injured the oesophagus in 300 children.",
+       "Studies 1 and 2 warn that vinegar can injure the throat of 9,000 pregnant women.":
+           "Vinegar can injure the throat of 9,000 pregnant women.",
+       "Raw milk can carry harmful bacteria and caused 40 outbreaks in Study 1.":
+           "Raw milk can carry harmful bacteria and caused 40 outbreaks."}
+for _wi, _wo in _w4.items():
+    _go = breakdown.held_to_sources(_wi, _p3st, {1, 2})
+    t(f"third review: a real warning named inline keeps the hazard, credits no study with the figure: {_wi[:40]}",
+      _go == _wo and not breakdown.refs(_go, 2), _go)
+t("third review: a supported inline warning is left exactly as written",
+  breakdown.held_to_sources("Study 2 is a reminder that undiluted vinegar can injure the oesophagus.", _p3st, {1, 2})
+  == "Study 2 is a reminder that undiluted vinegar can injure the oesophagus.")
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
