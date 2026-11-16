@@ -71,6 +71,39 @@ in `_check_response`, so cached checks get them too. No prompt change.
   naming taken out, so no study is credited with the figure. The review's
   probe4 sentences are all dropped; `harm3.py` on a fresh copy: 70 cited
   harm or "not tested" sentences, 0 lost.
+- **Warnings after the fourth review: a principle, not word lists.** Every
+  cited sentence is held to its sources first (`breakdown._gate`). The
+  "never dropped" protection applies only to a sentence that fails, and
+  only if it is positively a caution (`is_warning`): a clause with a
+  strong caution frame ("can|may|could ... cause|injure|burn|be fatal",
+  "caused ... deaths", "should not", "must not", "do not take", "not
+  safe", "unsafe", "no safe dose", "never safe", "dangerous", "toxic" (not
+  cytotoxic, not "non-toxic"), "teratogen", "contraindicated", advice to
+  avoid, "not free of", "not harmless", "no evidence it is safe"), or a
+  weak frame that names a hazard as a risk ("linked to outbreaks",
+  "bleeding rose", "the risk of bleeding", "raised the risk of") with no
+  reassurance in the same clause. Reassurances count only un-negated:
+  "harmless", "safe", "well tolerated", "rare", "uncommon", "no higher",
+  "no more", "similar to placebo", "no|without|zero|free of" + harm, and a
+  reducer applied to the hazard ("fewer side effects", "infections
+  fell"). A negated reducer ("did not reduce", "does not prevent") and a
+  reducer applied to the treatment, with a modal or copula before the harm
+  ("reducing insulin can be fatal"), reassure no one. A strong frame beside
+  a reassurance is still a caution ("safe in adults but should not be
+  used in pregnancy"). Anything else that fails goes. A caution kept this
+  way names no study: bracketed citations off, inline naming out
+  (`unattributed`). Taking the naming out never leaves a clause without a
+  verb: "Study 1 found it harmless in ..." becomes "A study found it
+  harmless in ..." only if that clause passes its sources, and otherwise
+  the clause goes. One exception, required by the review: a study named
+  inline is credited only with its own clause, so if every naming clause
+  passes, the naming stays ("Neither tested whether diabetes went away, and
+  study 4 is a reminder that undiluted vinegar can injure the oesophagus").
+  The "does not apply to" line keeps its own rule: a harm or hazard word
+  there names who must not rely on the answer. /method says this. Known
+  cost: a single-clause caution that names its study as a small clause and
+  fails ("Study 1 found it unsafe in 9,000 pregnant women.") has no verb
+  once unnamed and is dropped, as the brief's grammar rule requires.
 - **/about, /method, /corrections (F7, F9, F8).** Copy says only what is true
   in the code today. Owner name, country, funding and contact are shown on
   /about only when set (`EVIDENT_OWNER`, `EVIDENT_WHO`, `EVIDENT_COUNTRY`,
