@@ -5592,5 +5592,19 @@ t("third review: a supported inline warning is left exactly as written",
   breakdown.held_to_sources("Study 2 is a reminder that undiluted vinegar can injure the oesophagus.", _p3st, {1, 2})
   == "Study 2 is a reminder that undiluted vinegar can injure the oesophagus.")
 
+_ogp = verdict.provider
+try:
+    def _nokey():
+        raise RuntimeError("no key")
+    verdict.provider = _nokey
+    _hN = c.get("/").get_data(as_text=True)
+    verdict.provider = lambda: "gemini"
+    _hG2 = c.get("/").get_data(as_text=True)
+finally:
+    verdict.provider = _ogp
+t("third review: with no key the home page does not read 'An AI model (an AI model API)'",
+  "An AI model (an AI model API)" not in _hN and "An AI model reads those abstracts" in _hN
+  and "An AI model (Google&#39;s Gemini API) reads" in _hG2)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
