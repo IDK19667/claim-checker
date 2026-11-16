@@ -5275,7 +5275,7 @@ t("fix 6: /method says the prose check covers the explanation and breakdown, not
 t("fix 6: /method says guidance can decide some claims with no study cited, and never says 'safe' alone",
   "even when no study is cited" in _met6 and "never on its own that something is safe" in _met6)
 t("fix 6: the harm sentence on /method is backed by the gate",
-  "A warning about harm is never removed" in _met6
+  "stays only if it is plainly a caution" in _met6 and "without naming any study" in _met6
   and breakdown.held_to_sources("It is unsafe in pregnancy (Study 3).", _h8, {1, 2}) == "It is unsafe in pregnancy.")
 t("fix 6: /about names the guidance exception instead of 'whatever the model wrote'",
   "whatever the model wrote" not in _abt6 and "without a study" in _abt6)
@@ -5605,6 +5605,58 @@ finally:
 t("third review: with no key the home page does not read 'An AI model (an AI model API)'",
   "An AI model (an AI model API)" not in _hN and "An AI model reads those abstracts" in _hN
   and "An AI model (Google&#39;s Gemini API) reads" in _hG2)
+
+# ---- Fourth review: a failing sentence stays only if it is positively a caution
+_p4st = _p3st + [_study("L", "Supplement and the liver",
+                        abstract="In 200 adults taking the supplement, 12 developed liver injury and bleeding rose.")]
+_k4 = lambda x: breakdown.held_to_sources(x, _p4st, {1, 2, 3})
+for _c4 in ["It does not prevent bleeding and can cause it in pregnant women (Study 3).",
+            "It did not reduce the risk of bleeding in older adults, which rose (Study 3).",
+            "It is not free of side effects in children (Study 3).",
+            "Stopping or reducing insulin can be fatal in children (Study 1).",
+            "Cutting insulin can cause dangerous high blood sugar in children (Study 1).",
+            "There is no safe dose in pregnancy (Study 1).",
+            "Stopping insulin is never safe (Study 1).",
+            "Not harmless: it can cause liver injury (Study 3).",
+            "It should not be used to prevent infections in children (Study 1).",
+            "No evidence it is safe in pregnancy (Study 1)."]:
+    _o5 = _k4(_c4)
+    t(f"fourth review: a caution stays, naming no study: {_c4[:46]}",
+      _o5 in (_c4, breakdown.uncited(_c4)) and (_o5 == _c4 or not breakdown.refs(_o5, 3)) and breakdown.is_warning(_c4), _o5)
+for _d4 in ["It was harmless in 9,000 pregnant women.", "Side effects were rare in 6,000 children.",
+            "Serious harm was uncommon among 9,000 pregnant women.", "Deaths were no higher among 9,000 pregnant women.",
+            "Adverse events were similar to placebo in 9,000 children.",
+            "The risk of bleeding was no higher in 4,000 pregnant women."]:
+    _o6 = _k4(_d4[:-1] + " (Study 1).")
+    t(f"fourth review: a reassurance its study does not carry is dropped: {_d4[:46]}",
+      _o6 == "" and not breakdown.is_warning(_d4), _o6)
+_o7 = _k4("Study 1 found it harmless in 9,000 pregnant women.")
+t("fourth review: an inline reassurance its study does not carry is dropped, never 'It harmless in'",
+  _o7 == "", _o7)
+_lost4 = [p for p in _P4 if _k4(p) != ""]
+t("fourth review: the six probes of the third review are still dropped", not _lost4, _lost4)
+t("fourth review: a reassurance beside an explicit caution leaves a caution, naming no study",
+  _k4("It was safe in adults but should not be used in 9,000 pregnant women (Study 1).")
+  == "It was safe in adults but should not be used in 9,000 pregnant women.")
+t("fourth review: a negated caution word is not a caution",
+  not any(breakdown.is_warning(x) for x in [
+      "It is not dangerous.", "It is non-toxic.", "There is no evidence it can cause harm.",
+      "It did not cause bleeding.", "Deaths fell.", "It lowered the risk of bleeding.",
+      "It is linked to fewer infections.", "It cannot cause harm."]))
+t("fourth review: a risk named with nothing to cancel it is a caution",
+  all(breakdown.is_warning(x) for x in [
+      "Bleeding rose.", "It is linked to infections.", "It raised the risk of bleeding.",
+      "It caused bleeding in 300 children.", "Tobacco smoking causes 30 to 40 percent of deaths from cancer."]))
+t("fourth review: taking out the naming never leaves a clause without a verb",
+  breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women.") == ""
+  and breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women.", passes=lambda cl: True)
+  == "A study found it harmless in 9,000 pregnant women."
+  and breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women, but it can cause liver injury.")
+  == "It can cause liver injury."
+  and breakdown.unattributed("Study 1 found vinegar can burn the throat in 5000 children.")
+  == "Vinegar can burn the throat in 5000 children.")
+t("fourth review: /method says a failing sentence stays only as a caution, naming no study",
+  "only if it is plainly a caution" in c.get("/method").get_data(as_text=True))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
