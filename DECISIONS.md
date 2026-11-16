@@ -60,6 +60,17 @@ in `_check_response`, so cached checks get them too. No prompt change.
   are "Likely true" again; turmeric and exercise for depression stay capped
   on the page, the lists and type-ahead (`cons.py`). A stamp set by health
   guidance (takeaway starts "Major health guidelines say:") is never capped.
+- **Warnings after the third review.** A harm word under a negation ("no
+  harm", "no serious adverse events", "not harmful") is a reassurance, and
+  one under a reduction ("cut outbreaks", "reduces side effects", "the risk
+  of infections fell") is a benefit; "avoid" warns only as advice ("should
+  avoid", "Avoid ..."). None of these is a warning, so each is held to its
+  sources and dropped when it gives a figure or group they lack. A real
+  warning that names its study inline ("Study 1 found ...", "In Study 2,")
+  and whose naming clause fails the sources keeps the hazard with the
+  naming taken out, so no study is credited with the figure. The review's
+  probe4 sentences are all dropped; `harm3.py` on a fresh copy: 70 cited
+  harm or "not tested" sentences, 0 lost.
 - **/about, /method, /corrections (F7, F9, F8).** Copy says only what is true
   in the code today. Owner name, country, funding and contact are shown on
   /about only when set (`EVIDENT_OWNER`, `EVIDENT_WHO`, `EVIDENT_COUNTRY`,
