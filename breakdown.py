@@ -1843,7 +1843,14 @@ _SOFTENERS = re.compile(
     # a benefit claim is not a harm, and "can" must not carry one through
     r"treat\w*|cur(?:e|es|ed|ing)|heal\w*|reliev\w*|relief|eas(?:e|es|ed|ing)|stop|stops|stopped|stopping|"
     r"control\w*|manag\w*|restor\w*|boost\w*|support\w*|help\w*|benefit\w*|fight\w*|shrink\w*|"
-    r"slow\w*|eliminat\w*|revers\w*|destroy\w*|clear\w*|eradicat\w*|target\w*)\b", re.IGNORECASE)
+    r"slow\w*|eliminat\w*|revers\w*|destroy\w*|clear\w*|eradicat\w*|target\w*|"
+    # minimisers: the harm is said to be tiny, however it is worded
+    r"scarc\w+|practically|virtually|essentially|insignificant|trivial|isolated|sporadic|nil|"
+    r"unheard of|handful|modest|limited|just|merely)\b", re.IGNORECASE)
+# A rarity figure: "under 1%", "fewer than 5 in 1,000", "3 in 10,000", "up to 2".
+_RARITY = re.compile(
+    r"\b(?:under|below|less than|fewer than|at most|up to)\s+[\d.,]+|\b\d[\d,.]*\s+in\s+[\d,]{3,}\b|"
+    r"\b\d[\d,.]*\s+(?:per|out of)\s+[\d,]{3,}\b", re.IGNORECASE)
 # Killing germs or cells is a benefit claim, not a harm.
 _KILLS_GERMS = re.compile(
     r"\b(?:kill|destroy|attack)\w*\s+(?:\w+\s+){0,3}?(?:cells?|bacteri\w*|germs?|microbes?|viruses|virus|"
@@ -1878,7 +1885,7 @@ def is_warning(sentence: str, who: str = "") -> bool:
     is enough, if nothing softens it."""
     body = _REF.sub(" ", sentence or "")
     rest = _PROHIBITION.sub(" ", body)
-    if _SOFTENERS.search(rest) or _KILLS_GERMS.search(rest):
+    if _SOFTENERS.search(rest) or _KILLS_GERMS.search(rest) or _RARITY.search(rest):
         return False
     if who == "not":
         return bool(HARM.search(body) or _HAZARD.search(body))

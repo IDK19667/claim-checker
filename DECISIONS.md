@@ -4,6 +4,19 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: The caution rule, last round: minimisers and rarity figures
+
+Closes the class "the harm is tiny": scarcely, practically, virtually,
+essentially, insignificant, trivial, isolated, sporadic, nil, unheard of,
+handful, modest, limited, just, merely join the softeners (minor, minimal,
+negligible, few, low, small, slight, mild, only, hardly, barely were
+already there). A rarity figure also softens: under, below, less than,
+fewer than, at most or up to a number, and "3 in 10,000" or "3 per 10,000".
+Cost: a real warning such as "Up to 40 children died" is now dropped when
+it fails its sources. 21 new must-drop tests; blind set still 29 of 30
+harms kept, 0 of 30 reassurances kept. /about now says plain warnings of
+harm are the exception to removing unsupported sentences.
+
 ## 2026-11-17: Review fixes: reassurances by absence, and /method and /about made exact
 
 Negation list gained absence and denial words (absent, absence, ruled out,

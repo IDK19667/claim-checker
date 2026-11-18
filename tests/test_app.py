@@ -5778,6 +5778,19 @@ for _x7 in ["Kidney harm was absent in all 200 participants.", "Birth defects we
             "The drug is clear of poison.", "Hospitalisation can be ruled out."]:
     t(f"reassurance by absence or denial is dropped: {_x7[:50]}", not breakdown.is_warning(_x7), _x7)
 
+# Minimisers and rarity figures: all dropped.
+for _x8 in ["Miscarriages were scarcely reported.", "Deaths were practically nonexistent in the trial.",
+            "Seizures occurred in under 2% of children.", "Strokes were virtually nil.",
+            "Liver damage was trivial.", "Bleeding episodes were isolated.", "Overdoses were sporadic.",
+            "Allergic reactions were essentially unknown in 500 adults.", "Heart attacks were insignificant.",
+            "Only a handful of seizures occurred.", "Poisoning was merely theoretical.",
+            "Kidney injury occurred in 3 in 10,000 users.", "Fewer than 5 deaths occurred in 9,000 people.",
+            "Birth defects were seen in at most 1 in 1,000 pregnancies.", "Adverse events were limited.",
+            "Serious harm was modest.", "Fatalities were unheard of.", "Side effects were just nausea in a few people.",
+            "Hospitalisation occurred in below 1% of patients.", "Toxic effects were minimal in 700 adults.",
+            "Burns happened in up to 4 children."]:
+    t(f"minimiser or rarity figure is dropped: {_x8[:50]}", not breakdown.is_warning(_x8), _x8)
+
 # Blind sentences: written by someone who never saw the caution rule.
 _blind = json.loads((pathlib.Path(__file__).parent / "blind_caution_sentences.json").read_text())
 _blind_strip = lambda s: _re.sub(r"\s*\(Study[^)]*\)\s*$", "", s).strip()
