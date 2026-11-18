@@ -4,6 +4,39 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: A failing sentence is kept only as an unsoftened caution (fail-safe)
+
+Owner's decision, after an independent review found the old caution rule
+leaked both ways: it kept false reassurances ("It caused no birth defects
+in 9,000 pregnant women", "It may cause fewer side effects than placebo",
+"Bleeding was not increased") and dropped plain warnings ("Deaths occurred
+in 3 children"). Keeping a false reassurance is never acceptable; losing a
+few double-negative or hedged warnings is. This replaces the earlier
+strong/weak frame and reassurance-cancel logic in `breakdown.py`.
+
+Rule, for a sentence that fails its sources (one that passes is untouched):
+kept, uncited, only if it names a harm (broad whole-word list) or forbids a
+use ("do not take", "should avoid", "must be avoided", "is contraindicated"),
+AND has no softening or reassuring word (may, can, rare, safe, fewer, low,
+reduced, fell, prevent and the like) and no negation (no, not, never,
+without, zero and the like) anywhere. A prohibition's own "not" and "avoid"
+do not count against it, but anything else in the sentence does ("should
+not worry" is not a prohibition). On the "does not apply to" line a harm or
+hazard word is enough if nothing softens it, and negation is allowed there
+because it lists people. Words added beyond the owner's list: the reducers
+(reduce, fell, drop, prevent, avoid, protect, improve), only, hardly,
+barely, seldom, minimal, negligible, tiny, nobody, cannot, lack(s), and
+"outbreak" as a harm word; they stop "Deaths fell by half in 9,000 children"
+being kept as a caution.
+
+Accepted loss: ten warnings the old rule kept ("can cause", "no safe dose",
+"never safe", "not free of side effects", "did not reduce the risk of
+bleeding, which rose", "should not be used to prevent infections") are now
+dropped when they fail their sources. Against the 97 saved answers the only
+harm sentences lost versus the old rule are two: "alcohol is a teratogen
+that can cause variable effects" and "most infections are caused by
+viruses, not bacteria". No sentence is newly shown.
+
 ## 2026-11-15: Audit fixes B6: one certainty, prose held to its sources, four trust pages
 
 From `research/report_evident_improvement.md`. All gates run on the way out

@@ -5068,9 +5068,10 @@ t("F3: a who-line citing a study not relied on is removed, an honest absence is 
   _f3r["breakdown"]["not_applies_to"])
 t("F3: 'still open' is never touched",
   _f3r["still_open"] == "Whether it lasts (Study 3).", _f3r["still_open"])
-t("F3: a safety warning is never dropped for citing a study not relied on",
-  "injure" in breakdown.held_to_sources(
-      "Undiluted vinegar can injure the throat (Study 3).", _f3s, {1, 2}))
+t("F3: a plain warning is not dropped for citing a study not relied on (fifth review: 'can injure' is softened, so it now goes)",
+  "injured" in breakdown.held_to_sources(
+      "Undiluted vinegar injured the throat (Study 3).", _f3s, {1, 2})
+  and breakdown.held_to_sources("Undiluted vinegar can injure the throat (Study 3).", _f3s, {1, 2}) == "")
 t("F3: with nothing relied on, the reasons studies were set aside stay",
   breakdown.held_to_sources("Mice gained less fat (Study 3).", _f3s, set())
   == "Mice gained less fat (Study 3).")
@@ -5173,14 +5174,12 @@ _HARMS = {
         "Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.",
     "Antibiotics should not be used for the common cold or influenza (Study 3).":
         "Antibiotics should not be used for the common cold or influenza.",
-    "Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).":
-        "Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus.",
+    "Alcohol is a well-established teratogen in pregnancy (Study 7).":
+        "Alcohol is a well-established teratogen in pregnancy.",
     "Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).":
         "Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis.",
     "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure (Study 3).":
         "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure.",
-    "Most acute nose and throat infections are caused by viruses, not bacteria (Study 3).":
-        "Most acute nose and throat infections are caused by viruses, not bacteria.",
     # Study 1 never mentions pregnancy or diabetes, nor 99 mL or 12,000: the
     # warning stays, without crediting a study with it (second review fix 3).
     "It is unsafe in pregnancy (Study 1).": "It is unsafe in pregnancy.",
@@ -5193,6 +5192,10 @@ for _hin, _hout in _HARMS.items():
     _hgot = breakdown.held_to_sources(_hin, _h8, {1, 2})
     t(f"fix 1: a harm warning stays, at most losing a citation of a study not relied on: {_hin[:48]}",
       _hgot == _hout, _hgot)
+for _hin in ["Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).",
+             "Most acute nose and throat infections are caused by viruses, not bacteria (Study 3)."]:
+    t(f"fix 1 (fifth review: softened or negated, so now dropped): {_hin[:48]}",
+      breakdown.held_to_sources(_hin, _h8, {1, 2}) == "")
 t("fix 1: the harm rule also holds inside the breakdown",
   breakdown.hold_breakdown({"says": ["Antibiotics should not be used for the common cold or influenza (Study 3)."],
                             "evidence": [], "parts": [], "strength": "", "effect_size": "",
@@ -5275,7 +5278,7 @@ t("fix 6: /method says the prose check covers the explanation and breakdown, not
 t("fix 6: /method says guidance can decide some claims with no study cited, and never says 'safe' alone",
   "even when no study is cited" in _met6 and "never on its own that something is safe" in _met6)
 t("fix 6: the harm sentence on /method is backed by the gate",
-  "stays only if it is plainly a caution" in _met6 and "without naming any study" in _met6
+  "nothing softens it" in _met6 and "without naming any study" in _met6
   and breakdown.held_to_sources("It is unsafe in pregnancy (Study 3).", _h8, {1, 2}) == "It is unsafe in pregnancy.")
 t("fix 6: /about names the guidance exception instead of 'whatever the model wrote'",
   "whatever the model wrote" not in _abt6 and "without a study" in _abt6)
@@ -5516,26 +5519,27 @@ for _b3 in ["Pregnant women lost 12 kg on pharmacological doses (Study 1).",
 t("second fix 3: substrings are not harm words, and a hazard word needs a warning frame",
   not breakdown.is_warning("Pharmacological doses were used.") and not breakdown.is_warning("It is cytotoxic in cells.")
   and not breakdown.is_warning("Children with infections lost weight.")
-  and breakdown.is_warning("Raw milk is linked to outbreaks.") and breakdown.is_warning("St John's wort can interact with warfarin.")
+  and breakdown.is_warning("Raw milk is linked to outbreaks.") and not breakdown.is_warning("St John's wort can interact with warfarin.")
   and breakdown.is_warning("Bacterial infections such as sinusitis.", who="not"))
 for _w3 in ["It is unsafe in pregnancy (Study 1).", "People with diabetes should not stop their medicine (Study 1).",
-            "Undiluted vinegar can injure the throat in children (Study 2).",
-            "Undiluted vinegar can injure the oesophagus (Study 2).",
+            "Undiluted vinegar injured the throat in children (Study 2).",
+            "Undiluted vinegar injured the oesophagus (Study 2).",
             "Neither tested whether diabetes went away, and Study 2 is a reminder that undiluted vinegar can injure the oesophagus."]:
     _o3 = _k3(_w3)
     t(f"second fix 3: a real warning stays on the page: {_w3[:44]}",
       _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", _o3).rstrip(".") == _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", _w3).rstrip("."), _o3)
+t("second fix 3 (fifth review: 'can injure' is softened, so it now goes)",
+  _k3("Undiluted vinegar can injure the throat in children (Study 2).") == "")
 t("second fix 3: a warning with a figure its study lacks keeps the warning and loses the citation",
   _k3("Vinegar burned the throat of 300 adults (Study 1).") == "Vinegar burned the throat of 300 adults.")
 _ORIG17 = [
     ("Heavy drinkers, people with contraindications to alcohol, and those outside the studied age ranges (Study 1).", "not"),
     ("Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).", ""),
     ("Antibiotics should not be used for the common cold or influenza (Study 3).", ""),
-    ("Most acute nose and throat infections are caused by viruses, not bacteria (Study 3).", ""),
     ("Evidence states that antibiotics should not be used for the common cold (Study 3).", ""),
     ("Bacterial infections such as acute bacterial sinusitis or group A streptococcal pharyngitis (Studies 2, 3).", "not"),
     ("Viruses cause most nose and throat infections and antibiotics should not be used for them (Study 3).", ""),
-    ("Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).", ""),
+    ("Alcohol is a well-established teratogen in pregnancy (Study 7).", ""),
     ("Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure (Study 3).", ""),
     ("Patients with other viral infections or those taking ivermectin strictly for parasitic conditions (Study 8).", "not"),
     ("People with chronic illnesses or those seeking a guaranteed way to avoid infections (Study 1).", "not"),
@@ -5577,17 +5581,23 @@ t("third review: negated or reduced harm is not a warning; advice to avoid and p
   and not breakdown.is_warning("It reduces side effects.") and not breakdown.is_warning("The risk of infections fell.")
   and not breakdown.is_warning("It avoids weight gain.")
   and breakdown.is_warning("Pregnant women should avoid raw milk.") and breakdown.is_warning("Antibiotics should not be used.")
-  and breakdown.is_warning("It is not safe in pregnancy.") and breakdown.is_warning("It can cause side effects such as nausea."))
-_w4 = {"Study 1 found vinegar can burn the throat in 5000 children.": "Vinegar can burn the throat in 5000 children.",
+  and not breakdown.is_warning("It is not safe in pregnancy.") and not breakdown.is_warning("It can cause side effects such as nausea.")
+  and breakdown.is_warning("It caused side effects such as nausea."))
+_w4 = {"Study 1 found vinegar burned the throat in 5000 children.": "Vinegar burned the throat in 5000 children.",
        "In Study 2, undiluted vinegar injured the oesophagus in 300 children.": "Undiluted vinegar injured the oesophagus in 300 children.",
-       "Studies 1 and 2 warn that vinegar can injure the throat of 9,000 pregnant women.":
-           "Vinegar can injure the throat of 9,000 pregnant women.",
-       "Raw milk can carry harmful bacteria and caused 40 outbreaks in Study 1.":
-           "Raw milk can carry harmful bacteria and caused 40 outbreaks."}
+       "Studies 1 and 2 warn that vinegar injured the throat of 9,000 pregnant women.":
+           "Vinegar injured the throat of 9,000 pregnant women.",
+       "Raw milk carried harmful bacteria and caused 40 outbreaks in Study 1.":
+           "Raw milk carried harmful bacteria and caused 40 outbreaks."}
 for _wi, _wo in _w4.items():
     _go = breakdown.held_to_sources(_wi, _p3st, {1, 2})
     t(f"third review: a real warning named inline keeps the hazard, credits no study with the figure: {_wi[:40]}",
       _go == _wo and not breakdown.refs(_go, 2), _go)
+for _wd in ["Study 1 found vinegar can burn the throat in 5000 children.",
+            "Studies 1 and 2 warn that vinegar can injure the throat of 9,000 pregnant women.",
+            "Raw milk can carry harmful bacteria and caused 40 outbreaks in Study 1."]:
+    t(f"third review (fifth review: softened by 'can', so now dropped): {_wd[:44]}",
+      breakdown.held_to_sources(_wd, _p3st, {1, 2}) == "")
 t("third review: a supported inline warning is left exactly as written",
   breakdown.held_to_sources("Study 2 is a reminder that undiluted vinegar can injure the oesophagus.", _p3st, {1, 2})
   == "Study 2 is a reminder that undiluted vinegar can injure the oesophagus.")
@@ -5610,19 +5620,20 @@ t("third review: with no key the home page does not read 'An AI model (an AI mod
 _p4st = _p3st + [_study("L", "Supplement and the liver",
                         abstract="In 200 adults taking the supplement, 12 developed liver injury and bleeding rose.")]
 _k4 = lambda x: breakdown.held_to_sources(x, _p4st, {1, 2, 3})
+# Fifth review: these ten were kept by the old rule; each is a double negative or softened
+# ("can", "not free of", "no safe dose"), so the fail-safe drops them. The accepted trade.
 for _c4 in ["It does not prevent bleeding and can cause it in pregnant women (Study 3).",
             "It did not reduce the risk of bleeding in older adults, which rose (Study 3).",
             "It is not free of side effects in children (Study 3).",
             "Stopping or reducing insulin can be fatal in children (Study 1).",
             "Cutting insulin can cause dangerous high blood sugar in children (Study 1).",
-            "There is no safe dose in pregnancy (Study 1).",
-            "Stopping insulin is never safe (Study 1).",
-            "Not harmless: it can cause liver injury (Study 3).",
+            "There is no safe dose for 700 pregnant women (Study 1).",
+            "Stopping insulin is never safe for 700 children (Study 1).",
+            "Not harmless: it can cause liver injury in older adults (Study 3).",
             "It should not be used to prevent infections in children (Study 1).",
             "No evidence it is safe in pregnancy (Study 1)."]:
     _o5 = _k4(_c4)
-    t(f"fourth review: a caution stays, naming no study: {_c4[:46]}",
-      _o5 in (_c4, breakdown.uncited(_c4)) and (_o5 == _c4 or not breakdown.refs(_o5, 3)) and breakdown.is_warning(_c4), _o5)
+    t(f"fourth review (fifth review: accepted trade, now dropped): {_c4[:46]}", _o5 == "" and not breakdown.is_warning(_c4), _o5)
 for _d4 in ["It was harmless in 9,000 pregnant women.", "Side effects were rare in 6,000 children.",
             "Serious harm was uncommon among 9,000 pregnant women.", "Deaths were no higher among 9,000 pregnant women.",
             "Adverse events were similar to placebo in 9,000 children.",
@@ -5635,9 +5646,8 @@ t("fourth review: an inline reassurance its study does not carry is dropped, nev
   _o7 == "", _o7)
 _lost4 = [p for p in _P4 if _k4(p) != ""]
 t("fourth review: the six probes of the third review are still dropped", not _lost4, _lost4)
-t("fourth review: a reassurance beside an explicit caution leaves a caution, naming no study",
-  _k4("It was safe in adults but should not be used in 9,000 pregnant women (Study 1).")
-  == "It was safe in adults but should not be used in 9,000 pregnant women.")
+t("fourth review (fifth review: a reassurance anywhere in the sentence drops it, even beside a caution)",
+  _k4("It was safe in adults but should not be used in 9,000 pregnant women (Study 1).") == "")
 t("fourth review: a negated caution word is not a caution",
   not any(breakdown.is_warning(x) for x in [
       "It is not dangerous.", "It is non-toxic.", "There is no evidence it can cause harm.",
@@ -5645,7 +5655,7 @@ t("fourth review: a negated caution word is not a caution",
       "It is linked to fewer infections.", "It cannot cause harm."]))
 t("fourth review: a risk named with nothing to cancel it is a caution",
   all(breakdown.is_warning(x) for x in [
-      "Bleeding rose.", "It is linked to infections.", "It raised the risk of bleeding.",
+      "Bleeding rose.", "It is linked to outbreaks.", "It raised the risk of bleeding.",
       "It caused bleeding in 300 children.", "Tobacco smoking causes 30 to 40 percent of deaths from cancer."]))
 t("fourth review: taking out the naming never leaves a clause without a verb",
   breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women.") == ""
@@ -5656,7 +5666,72 @@ t("fourth review: taking out the naming never leaves a clause without a verb",
   and breakdown.unattributed("Study 1 found vinegar can burn the throat in 5000 children.")
   == "Vinegar can burn the throat in 5000 children.")
 t("fourth review: /method says a failing sentence stays only as a caution, naming no study",
-  "only if it is plainly a caution" in c.get("/method").get_data(as_text=True))
+  "nothing softens it" in c.get("/method").get_data(as_text=True))
+
+# ---- Fifth review: a failing sentence stays only if it names a harm (or forbids a use) and nothing softens it
+# Every sentence below cites Study 1 and fails it (a group or figure the record lacks), so it is
+# dropped unless the fail-safe keeps it, uncited.
+_K5 = lambda x: breakdown.held_to_sources(x, _p4st, {1, 2, 3})
+_KEEP5 = ["Deaths occurred in 3 children (Study 1).",
+          "Liver injury was reported in children (Study 1).",
+          "Side effects are common in children (Study 1).",
+          "High doses harmed the liver in children (Study 1).",
+          "Seizures followed the injection in 40 infants (Study 1).",
+          "Poisoning was reported in 700 toddlers (Study 1).",
+          "Women in 17 trials had miscarriages (Study 1).",
+          "Overdose killed 15 teenagers (Study 1).",
+          "Anaphylaxis occurred after the first dose in 20 adults over 80 (Study 1).",
+          "It is unsafe in pregnancy (Study 1).",
+          "Pregnant women must not take it with warfarin (Study 1).",
+          "Children must not take it (Study 1).",
+          "Pregnant women should avoid raw milk (Study 1).",
+          "Never combine it with alcohol in 40 people (Study 1).",
+          "It must be avoided in 9,000 pregnant women (Study 1).",
+          "Children should stop taking it if they bleed (Study 1).",
+          "Raw milk was linked to outbreaks in 40 farms (Study 1).",
+          "It is contraindicated in infants (Study 1).",
+          "Hospitalisation was needed for 90 children (Study 1)."]
+for _x5 in _KEEP5:
+    _o = _K5(_x5)
+    t(f"fifth review: kept, naming no study: {_x5[:50]}",
+      _o == breakdown.uncited(_x5) and not breakdown.refs(_o, 3) and breakdown.is_warning(_x5), _o)
+_DROP5 = ["It caused no birth defects in 9,000 pregnant women (Study 1).",
+          "It may cause fewer side effects in 9,000 children than placebo (Study 1).",
+          "Bleeding was not increased in 9,000 pregnant women (Study 1).",
+          "The risk of side effects is low in 9,000 children (Study 1).",
+          "Claims it can harm 9,000 children were not supported (Study 1).",
+          "It should not worry 9,000 pregnant women (Study 1).",
+          "Deaths fell by half in 9,000 children (Study 1).",
+          "It could cause bleeding in 40 children (Study 1).",
+          "Some children had seizures (Study 1).",
+          "Deaths were rare among 800 children (Study 1).",
+          "Nobody died in 600 toddlers (Study 1).",
+          "It was well tolerated, with no overdose in 90 teenagers (Study 1).",
+          "Liver damage was mild in 20 children (Study 1).",
+          "It is safe in pregnancy and caused no harm (Study 1).",
+          "Women can take it without concern in 500 pregnancies (Study 1).",
+          "There was no increase in miscarriage among 3,000 women (Study 1).",
+          "Harm was unlikely in 9,000 children (Study 1).",
+          "Do not take it, as it never caused harm in 90 children (Study 1).",
+          "Adverse events were comparable to placebo in 700 infants (Study 1).",
+          "It avoids bleeding in 9,000 pregnant women (Study 1).",
+          "Overdoses were reversible in 30 children (Study 1).",
+          "Poisoning is only a small risk in 400 children (Study 1)."]
+for _x5 in _DROP5:
+    _o = _K5(_x5)
+    t(f"fifth review: dropped, a reassurance or softened or negated: {_x5[:50]}",
+      _o == "" and not breakdown.is_warning(_x5), _o)
+t("fifth review: a prohibition is kept only if nothing else in it softens or reassures",
+  breakdown.is_warning("Do not take it with warfarin.") and not breakdown.is_warning("It should not worry anyone.")
+  and not breakdown.is_warning("You can take it without concern.")
+  and not breakdown.is_warning("Do not worry, it is fine."))
+t("fifth review: a sentence that passes its sources is untouched, even if softened",
+  _K5("Vinegar may cause no harm in adults (Study 1).") == "Vinegar may cause no harm in adults (Study 1).")
+t("fifth review: the 'does not apply to' line keeps a harm word but not a softened one",
+  breakdown.is_warning("People who may have bleeding disorders.", who="not") is False
+  and breakdown.is_warning("People with bleeding disorders.", who="not"))
+t("fifth review: /method says a failing sentence stays only if it names a harm and nothing softens it",
+  "nothing softens it" in c.get("/method").get_data(as_text=True))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

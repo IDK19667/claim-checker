@@ -1794,20 +1794,20 @@ _SETS_ASIDE = re.compile(
     r"(?:animal|lab|laboratory|preclinical|in vitro|cell|rat|mouse|mice) (?:studies|study|work|"
     r"research|models?|experiments?))\b", re.IGNORECASE)
 
-# A caution about harm. Every sentence is held to its sources first, like any
-# other; the "never dropped" protection is only for one that fails them and is
-# positively a caution: it has an explicit caution frame, and no reassurance
-# marker cancels it. Anything else that fails goes. A caution kept that way
-# names no study, bracketed or inline, so none is credited with what its
-# record does not give. (Fourth review: a word list of harm words let
-# reassurances through, "harmless in 9,000 pregnant women", and a list of
-# negations and reducers then threw out real cautions, "it did not reduce the
-# risk of bleeding, which rose", "stopping or reducing insulin can be fatal".)
+# A sentence that fails its sources is dropped, except a caution about harm
+# and a statement that the claim went untested. The caution rule is a
+# fail-safe: keeping a false reassurance is never acceptable, and losing a
+# few awkwardly worded warnings is. A failing sentence stays only if it names
+# a harm (or is an instruction not to use something) AND has no softening
+# word, no reassuring word and no negation in it. A kept caution names no
+# study, bracketed or inline, so none is credited with what its record does
+# not give.
 #
 # The "does not apply to" line is a list of people, not a claim: a harm or
 # hazard word there ("bacterial infections", "contraindications to alcohol")
-# says who must not rely on the answer, and is enough. HARM and _HAZARD are
-# that line's words.
+# says who must not rely on the answer. It meets the same softening test but
+# not the negation test ("people without desk jobs, and people with severe
+# spinal injuries").
 HARM = re.compile(
     r"\b(?:injur\w*|burn(?:s|ed|t|ing)?|toxic\w*|poison\w*|teratogen\w*|unsafe|not safe|"
     r"should not|shouldn[’']t|must not|do not stop|don[’']t stop|contraindicat\w*|"
@@ -1815,137 +1815,62 @@ HARM = re.compile(
     r"dangerous\w*|warn\w*|caution\w*)\b", re.IGNORECASE)
 _HAZARD = re.compile(r"\b(?:infections?|infectious|outbreaks?|interact\w*|abnormalit\w*)\b",
                      re.IGNORECASE)
-# "Avoid" warns only as advice: "pregnant women should avoid raw milk",
-# "Avoid undiluted vinegar". "It avoids weight gain" is a benefit claim.
-_AVOID_ADVICE = re.compile(
-    r"\b(?:should|must|need to|needs to|advised to|best to|told to|ought to)\s+(?:\w+\s+){0,2}?avoid\w*\b|"
-    r"^\W*avoid\b|\b(?:best|should be|must be|is|are) avoided\b", re.IGNORECASE)
 
-# What a caution is about. Whole words: "cytotoxic" is not "toxic".
-_HAZ = (r"(?:injur\w*|burns?|bleed\w*|ha?emorrhag\w*|deaths?|mortality|died|fatal\w*|overdos\w*|"
-        r"side[- ]effects?|adverse(?:\s+(?:events?|effects?|reactions?|outcomes?))?|harms?|harmful|"
-        r"infections?|outbreaks?|toxicity|damage|abnormalit\w*|poisoning|complications?|hypoglyc\w*|"
-        r"birth defects?|miscarriages?|strokes?|heart attacks?|dangers?)")
-_W = r"[\w'’%-]+"
-# A negation just before a word: "not", "never", "no", "isn't", "non-".
-_NEG_BEFORE = re.compile(r"(?:\b(?:not|never|no|nor|without|hardly|neither)|n[’']t|\bnon-?)\s*(?:" + _W + r"\s+){0,1}$",
-                         re.IGNORECASE)
-_NO_EVIDENCE = re.compile(r"\bno\s+(?:\w+\s+){0,2}?(?:evidence|proof|sign|data)\b", re.IGNORECASE)
+# Words naming a harm, whole words with their inflections.
+_HARM_WORDS = re.compile(
+    r"\b(?:death\w*|die|dies|died|dying|dead|deadly|fatal\w*|kill\w*|lethal|mortality|"
+    r"injur\w*|damag\w*|failures?|bleed\w*|ha?emorrhag\w*|birth defects?|malformation\w*|"
+    r"miscarriages?|stillbirths?|overdos\w*|poison\w*|toxic\w*|seizures?|anaphyla\w*|"
+    r"allergic reactions?|interact\w*|hospitali[sz]\w*|side[- ]effects?|adverse|"
+    r"harm\w*|danger\w*|hazardous|unsafe|teratogen\w*|outbreaks?|burn(?:s|ed|t|ing)?|strokes?|heart attacks?|"
+    r"complications?|abnormalit\w*|contraindicat\w*)\b", re.IGNORECASE)
 
-# Strong frames: each is a caution on its own, even next to a reassurance
-# ("safe in adults but should not be used in pregnancy").
-_STRONG = [
-    # A modal with a verb of harm: "can cause", "may still injure", "could be fatal".
-    (re.compile(r"\b(?:can|may|could|might|will|would)\s+(?:(?!not\b|never\b|no\b)\w+\s+){0,2}?"
-                r"(?:cause|injure|burn|damage|harm|worsen|be fatal|be deadly|be dangerous|be harmful|be toxic|"
-                r"kill|poison|interact|trigger|raise the risk|increase the risk|lead to|result in)\b", re.IGNORECASE), True),
-    # A verb of harm that happened: "caused 40 outbreaks", "burned the throat".
-    (re.compile(r"\b(?:caus(?:es|ed|ing)\s+(?:" + _W + r"\s+){0,5}?" + _HAZ + r"|"
-                r"(?:the )?causes? of\s+(?:" + _W + r"\s+){0,5}?" + _HAZ + r"|"
-                r"(?:potential|able|likely|known) to cause|"
-                r"injured|damaged|worsened|killed|poisoned|burned|burnt)\b", re.IGNORECASE), True),
-    (re.compile(r"\b(?:should not|shouldn[’']t|must not|mustn[’']t|ought not|"
-                r"no one should|nobody should|do not stop|don[’']t stop|not be used|"
-                r"not safe|unsafe|never safe|not free of|not harmless|not without (?:risk|harm)|"
-                r"no safe (?:dose|level|amount|limit|quantity))\b", re.IGNORECASE), False),
-    # Advice: "Do not take it", "Never take it with warfarin", "..., and do not".
-    (re.compile(r"(?:^|[,;:]\s*|\b(?:and|but|so|or)\s+)\W*(?:do not|don[’']t|never)\s+(?:take|use|give|drink|eat|"
-                r"mix|combine|stop|exceed|rely|replace|swallow|inject|apply|start|skip)\b", re.IGNORECASE), False),
-    (re.compile(r"\b(?:dangerous|toxic|teratogen\w*|contraindicat\w*|harmful|hazardous|deadly|lethal)\b",
-                re.IGNORECASE), True),
-    (_AVOID_ADVICE, False),
-    # "No evidence it is safe": the absence of a reassurance.
-    (re.compile(r"\bno\s+(?:\w+\s+){0,2}?(?:evidence|proof|data)\b[^.;:]{0,40}?\bsafe\b", re.IGNORECASE), False),
-]
-# Weak frames: a hazard named as a risk. A reassurance in the same clause
-# cancels one ("the risk of bleeding was no higher").
-_WEAK = [
-    re.compile(r"\b(?:linked|tied|associated|connected|related)\s+(?:to|with)\s+(?:" + _W + r"\s+){0,3}?" + _HAZ + r"\b",
-               re.IGNORECASE),
-    re.compile(r"\b" + _HAZ + r"\b(?:\W+" + _W + r"){0,4}?\W+(?:rose|rises|rising|increased|increases|doubled|tripled|"
-               r"(?:was|were|is|are)\s+(?:higher|more common|more frequent|increased|raised)|higher|more common)\b",
-               re.IGNORECASE),
-    re.compile(r"\b(?:increas\w*|rais\w*|higher|greater|doubl\w*|tripl\w*|worsen\w*)\s+(?:" + _W + r"\s+){0,2}?"
-               r"(?:(?:risk|rate|rates|odds|chance)\s+(?:of|for)\s+)?" + _HAZ + r"\b", re.IGNORECASE),
-    re.compile(r"\b(?:risks?|risky|odds|chance)\s+(?:of|for)\s+(?:" + _W + r"\s+){0,3}?" + _HAZ + r"\b|"
-               r"\b" + _HAZ + r"\s+risks?\b", re.IGNORECASE),
-    re.compile(r"\b" + _HAZ + r"\b(?:\W+" + _W + r"){0,5}?\W+(?:is|are|was|were)\s+caused\s+by\b", re.IGNORECASE),
-    re.compile(r"\b" + _HAZ + r"\b[^.;:]*\b(?:exposure|exposed)\b|\b(?:exposure|exposed)\b[^.;:]*\b" + _HAZ + r"\b",
-               re.IGNORECASE),
-]
-# Reassurances. Each counts only un-negated: "not harmless", "never safe",
-# "no safe dose", "no evidence it is safe" reassure no one.
-_REASSURE = re.compile(r"\b(?:harmless|safe|safely|well[- ]tolerated|rare|rarely|uncommon|infrequent)\b",
-                       re.IGNORECASE)
-_REASSURE_FIXED = re.compile(r"\b(?:no higher|not higher|no more|not more|no greater|no increase|no difference|"
-                             r"no rise|similar to placebo|similar to (?:the )?control|as safe as|no worse)\b",
-                             re.IGNORECASE)
-_NONE_OF = re.compile(r"\b(?:no|without|zero|free of|none|never|nor)\s+(?:" + _W + r"\s+){0,2}?" + _HAZ + r"\b",
-                      re.IGNORECASE)
-# A reducer applied to the hazard: "cut outbreaks", "fewer side effects",
-# "the risk of infections fell". One applied to the treatment, with a modal
-# or a copula between it and the harm ("reducing insulin can be fatal"), is
-# not, and nor is one negated ("did not reduce", "does not prevent").
-_UNLINKED = r"(?!(?:can|may|could|might|will|would|should|must|is|are|was|were|be|been|did|does|do|not|never|no)\b)"
-_REDUCER = re.compile(r"\b(?:reduc\w*|lower\w*|cut|cuts|cutting|decreas\w*|fewer|less|prevent\w*|halv\w*|lessen\w*|"
-                      r"curb\w*|avoid\w*|protect\w*\s+against)\s+(?:" + _UNLINKED + _W + r"\s+){0,3}?"
-                      r"(?:(?:risk|rate|rates|odds|chance)\s+(?:of|for)\s+)?" + _HAZ + r"\b", re.IGNORECASE)
-_REDUCED = re.compile(r"\b" + _HAZ + r"\b(?:\W+" + _UNLINKED + _W + r"){0,3}?\W+(?:fell|falls|dropped|drops|declined|declines|"
-                      r"decreased|decreases|halved|(?:was|were|is|are)\s+(?:reduced|lower|lowered|cut|prevented|fewer|"
-                      r"less|rarer))\b", re.IGNORECASE)
-_NEG_AUX = re.compile(r"(?:\b(?:not|never|no)|n[’']t|\bcannot|\bfailed to|\bunable to)\s+(?:\w+\s+){0,1}$",
-                      re.IGNORECASE)
-_CLAUSES = re.compile(r";\s*|:\s*|,\s*(?:and|but|while|whereas|although|though)\s+|\s+but\s+|\s+whereas\s+")
+# Words that soften or reassure. Any one anywhere in the sentence drops it.
+_SOFTENERS = re.compile(
+    r"\b(?:may|might|could|can|possibl\w+|perhaps|sometimes|occasional\w*|rare|rarely|rarer|seldom|"
+    r"uncommon|infrequent\w*|usually|generally|typically|mostly|mild\w*|minor|minimal|negligible|tiny|"
+    r"slight\w*|some|few|fewer|less|lower\w*|low|little|small\w*|only|hardly|barely|unlikely|"
+    r"safe|safely|safer|safety|harmless|gentle|gently|tolerat\w+|fine|ok|okay|relax\w*|worr\w+|concern\w*|"
+    r"unfounded|unsupported|unchanged|similar|comparable|resolv\w+|reversible|transient|"
+    r"benign|reassur\w+|placebo-like|"
+    # a cut in the harm is good news, whatever the harm is
+    r"reduc\w+|fell|fall\w*|fallen|drop\w*|declin\w+|decreas\w+|cut|cuts|cutting|prevent\w*|"
+    r"halv\w+|lessen\w*|curb\w*|avoid\w*|protect\w*|improv\w*)\b", re.IGNORECASE)
 
+# Negation turns a harm into a reassurance ("caused no birth defects").
+_NEGATION = re.compile(
+    r"\b(?:no|not|never|none|nothing|nobody|without|zero|neither|nor|cannot|non-?|"
+    r"free of|absence of|lack of|lacks?|lacking)\b|n[’']t\b", re.IGNORECASE)
 
-def _negated(text: str, at: int) -> bool:
-    before = text[:at]
-    return bool(_NEG_BEFORE.search(before) or _NO_EVIDENCE.search(before[-40:]))
-
-
-def _reassures(clause: str) -> bool:
-    """Whether a clause reassures: an un-negated "harmless", "safe", "rare",
-    "no higher", "similar to placebo"; no harm at all; or a cut in the harm."""
-    for m in _REASSURE.finditer(clause):
-        if not _negated(clause, m.start()):
-            return True
-    if _REASSURE_FIXED.search(clause):
-        return True
-    for m in _NONE_OF.finditer(clause):
-        if not re.search(r"\bnot\s*$", clause[:m.start()], re.IGNORECASE):
-            return True
-    for pattern in (_REDUCER, _REDUCED):
-        for m in pattern.finditer(clause):
-            if not _NEG_AUX.search(clause[:m.start()]) and not re.search(
-                    r"\b(?:not|never)\b|n[’']t", m.group(0), re.IGNORECASE):
-                return True
-    return False
-
-
-def _strong(clause: str) -> bool:
-    for pattern, may_negate in _STRONG:
-        for m in pattern.finditer(clause):
-            if may_negate and _negated(clause, m.start()):
-                continue
-            return True
-    return False
+# An instruction not to use something. It is a caution without a harm word,
+# and its own "not" and "avoid" are not counted as negation or softening.
+_PROHIBITION = re.compile(
+    r"\b(?:(?:do not|don[’']t|must not|mustn[’']t|should not|shouldn[’']t|should never|never|"
+    r"no one should|nobody should)\s+(?:(?:ever|simply|just)\s+)?"
+    r"(?:take|give|use|combine|exceed|start|stop|mix|drink|eat|inject|apply|swallow|skip|delay|rely|replace)\b|"
+    r"not be (?:used|given|taken)|"
+    r"must be avoided|(?:is|are) (?:best )?avoided|(?:should|must|need to|needs to|advised to|best to|"
+    r"told to|ought to)\s+(?:\w+\s+){0,2}?avoid\w*|^\W*avoid\b|"
+    r"stop(?:s|ped)? taking|(?:is|are) contraindicated)", re.IGNORECASE)
 
 
 def is_warning(sentence: str, who: str = "") -> bool:
-    """A caution about harm: a clause with a strong caution frame ("can
-    cause", "should not", "unsafe", "no safe dose"), or one naming a hazard as
-    a risk ("linked to outbreaks", "bleeding rose", "the risk of bleeding")
-    that nothing in the same clause reassures about. On the "does not apply
-    to" line a harm or hazard word is enough."""
+    """A caution about harm that nothing in the sentence softens: it names a
+    harm ("deaths occurred in 3 children") or tells people not to use
+    something ("do not take it with warfarin"), and has no softening or
+    reassuring word ("may", "rare", "safe", "fewer", "reduced") and no
+    negation ("no", "not", "without"). A prohibition's own "not" does not
+    count against it. On the "does not apply to" line a harm or hazard word
+    is enough, if nothing softens it."""
     body = _REF.sub(" ", sentence or "")
+    rest = _PROHIBITION.sub(" ", body)
+    if _SOFTENERS.search(rest):
+        return False
     if who == "not":
-        return bool(HARM.search(body) or _HAZARD.search(body) or _AVOID_ADVICE.search(body))
-    for clause in _CLAUSES.split(body):
-        if _strong(clause):
-            return True
-        if any(p.search(clause) for p in _WEAK) and not _reassures(clause):
-            return True
-    return False
+        return bool(HARM.search(body) or _HAZARD.search(body))
+    if _NEGATION.search(rest):
+        return False
+    return bool(_HARM_WORDS.search(rest) or _PROHIBITION.search(body))
 
 
 # A sentence saying the studies did not test the claim is the honest answer to
@@ -2322,7 +2247,7 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: st
       to" line (`who="not"`), the group and clause rules do not run.
 
     A sentence that fails these checks goes, unless it is a caution about
-    harm (is_warning: a caution frame no reassurance cancels) or says the
+    harm (is_warning: names a harm or forbids a use, with nothing softening it) or says the
     claim was not tested. That one stays, naming no study, bracketed or
     inline (unattributed), so none is credited with it. The one exception
     is a study not relied on that the sentence names inline, when what it
