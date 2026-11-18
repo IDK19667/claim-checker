@@ -57,6 +57,7 @@
 
     <h2 class="section-label">Contact</h2>
     {% if about.contact %}<p>{{ about.contact }}</p>{% endif %}
+    {% if contact_email %}<p>To ask for a correction or for a claim to be removed, email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. Emailing shares your address with us; the report button does not.</p>{% endif %}
     <p>To report a wrong answer, use the button under any result. <a href="/corrections">How corrections work</a></p>
 
     <p class="fine">Not medical advice. This tool summarizes published research and can be wrong. For your own health, talk to a clinician.</p>

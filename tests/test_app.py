@@ -5101,6 +5101,16 @@ t("F7: an owner set in config is named, and none is named until then",
   and "Evident is run by Dhruva." in _abt and "Dhruva" in _abt.split("Who checks a result")[0]
   and "It is based in" not in _abt)
 
+t("contact: /about and /corrections give hello@checkevident.com as a plain mailto link, with no form",
+  'href="mailto:hello@checkevident.com"' in _abt and 'href="mailto:hello@checkevident.com"' in c.get("/corrections").get_data(as_text=True)
+  and "<form" not in c.get("/corrections").get_data(as_text=True) and "<form" not in _abt
+  and "\u2014" not in c.get("/corrections").get_data(as_text=True))
+_old_ce = appmod.CONTACT_EMAIL
+appmod.CONTACT_EMAIL = None
+_noce = c.get("/corrections").get_data(as_text=True)
+appmod.CONTACT_EMAIL = _old_ce
+t("contact: with no address set, no mailto is shown", "mailto:" not in _noce)
+
 # ---- B6 F9: a linkable method page -----------------------------------------------
 _me = c.get("/method")
 _met = _me.get_data(as_text=True)

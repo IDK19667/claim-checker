@@ -468,10 +468,15 @@ ABOUT = {
 }
 
 
+# Where removal and correction requests go. A plain mailto link, no form: the
+# owner sets this address up, and EVIDENT_EMAIL changes it without a deploy.
+CONTACT_EMAIL = os.environ.get("EVIDENT_EMAIL", "hello@checkevident.com").strip() or None
+
+
 @app.route("/about")
 def about():
     return render_template("about.html", base_url=_base_url(), provider=verdict.provider_label(),
-                           about=ABOUT, labels=VERDICT_LABELS)
+                           about=ABOUT, labels=VERDICT_LABELS, contact_email=CONTACT_EMAIL)
 
 
 # The method page's own version. Bump both when a rule it describes changes.
@@ -488,7 +493,7 @@ def method():
 
 @app.route("/corrections")
 def corrections():
-    return render_template("corrections.html", base_url=_base_url())
+    return render_template("corrections.html", base_url=_base_url(), contact_email=CONTACT_EMAIL)
 
 
 @app.route("/privacy")

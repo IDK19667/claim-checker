@@ -45,6 +45,11 @@
     <p>Reports are stored with the claim, so a wrong answer can be found and checked again. A report is anonymous, so there is no way to reply to it.</p>
     <p>A saved answer is not kept forever: when someone checks the same claim more than a day later, it is checked against PubMed again, so a newer study can change it.</p>
 
+    {% if contact_email %}
+    <h2 class="section-label">Ask for a correction or a removal</h2>
+    <p>To ask for a correction, or for a claim and its answer to be removed, email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. Say which claim, and what is wrong or why it should go. There is no form on this page and nothing is sent from it. An email shares your address with us; the report button above does not.</p>
+    {% endif %}
+
     <p class="fine">Not medical advice. This tool summarizes published research and can be wrong. For your own health, talk to a clinician.</p>
     <p><a href="/">Back to Evident</a></p>
   </main>

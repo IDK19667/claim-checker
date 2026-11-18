@@ -4,6 +4,15 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: Corrections and removals go to one email address, as a link
+
+Owner's decision: hello@checkevident.com (a placeholder the owner will set
+up) on `/corrections` and `/about`, as a plain mailto link. There is no
+form and nothing is sent from the site, so non-negotiable 7 (no accounts,
+nothing that ties a check to a person) still holds. Both pages say that
+emailing shares the sender's address and the report button does not.
+`EVIDENT_EMAIL` overrides the address; empty hides the line.
+
 ## 2026-11-17: /about names the owner, Dhruva, by default
 
 Owner's decision: the page says "Evident is run by Dhruva." with no
