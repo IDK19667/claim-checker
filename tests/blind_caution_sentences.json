@@ -1,0 +1,246 @@
+{
+ "keep": [
+  {
+   "text": "It caused liver failure in children. (Study 1)",
+   "note": "liver failure in children"
+  },
+  {
+   "text": "Pregnant women must not take it.",
+   "note": "instruction not to use in pregnancy"
+  },
+  {
+   "text": "Nine deaths were recorded among the 4,000 people who received the drug. (Study 2)",
+   "note": "deaths"
+  },
+  {
+   "text": "The drug triggered severe bleeding in older adults. (Study 2)",
+   "note": "bleeding"
+  },
+  {
+   "text": "Use during the first trimester led to birth defects in infants. (Study 3)",
+   "note": "birth defects"
+  },
+  {
+   "text": "Do not give this supplement to infants. (Study 3)",
+   "note": "do not use in infants"
+  },
+  {
+   "text": "Kidney damage occurred in people with kidney disease who took it. (Study 4)",
+   "note": "organ injury"
+  },
+  {
+   "text": "Miscarriage followed exposure in pregnant women.",
+   "note": "miscarriage"
+  },
+  {
+   "text": "Stop taking it if you are pregnant. (Study 1)",
+   "note": "instruction to stop"
+  },
+  {
+   "text": "An overdose in toddlers produced seizures and one death. (Study 1)",
+   "note": "overdose, death"
+  },
+  {
+   "text": "Combining it with warfarin caused dangerous bleeding in 12 patients. (Study 2)",
+   "note": "dangerous interaction"
+  },
+  {
+   "text": "The injection provoked anaphylaxis in children.",
+   "note": "allergic reaction"
+  },
+  {
+   "text": "Poisoning was reported in infants given the herbal remedy. (Study 3)",
+   "note": "poisoning"
+  },
+  {
+   "text": "Side effects were common in the 9,000 participants, including vomiting and dizziness.",
+   "note": "common side effects"
+  },
+  {
+   "text": "It damaged the kidneys of older adults. (Study 4)",
+   "note": "kidney injury"
+  },
+  {
+   "text": "Trial investigators halted enrolment after liver injury appeared in children.",
+   "note": "harm reported in trial"
+  },
+  {
+   "text": "Children should never take adult doses of this medicine. (Study 4)",
+   "note": "do not use"
+  },
+  {
+   "text": "Heart attacks occurred more often in the treatment group of 4,000 people.",
+   "note": "cardiac harm in trial"
+  },
+  {
+   "text": "Hemorrhage killed three pregnant women in the cohort. (Study 2)",
+   "note": "deaths, hemorrhage"
+  },
+  {
+   "text": "Avoid it entirely if you have kidney disease.",
+   "note": "instruction to avoid"
+  },
+  {
+   "text": "Stillbirth was recorded in several pregnancies exposed to the drug.",
+   "note": "stillbirth"
+  },
+  {
+   "text": "Across 12 trials, the drug harmed the liver.",
+   "note": "liver harm"
+  },
+  {
+   "text": "Fatal respiratory depression struck infants given the syrup.",
+   "note": "fatal respiratory harm"
+  },
+  {
+   "text": "Taking it alongside antidepressants produced serotonin syndrome in older adults. (Study 3)",
+   "note": "dangerous interaction"
+  },
+  {
+   "text": "Hospitalization for acute kidney failure followed use in people with kidney disease.",
+   "note": "kidney failure"
+  },
+  {
+   "text": "The product is toxic to infants.",
+   "note": "toxicity"
+  },
+  {
+   "text": "Fetal malformations arose in the babies of mothers who used it. (Study 1)",
+   "note": "birth defects"
+  },
+  {
+   "text": "Severe allergic reactions affected children in the trial.",
+   "note": "allergic reaction"
+  },
+  {
+   "text": "Do not combine it with alcohol, as patients in the 4,000-person study were hospitalised.",
+   "note": "do not combine; hospitalisation"
+  },
+  {
+   "text": "Nausea and vomiting were frequent in children given the medicine.",
+   "note": "common side effects"
+  }
+ ],
+ "drop": [
+  {
+   "text": "It did not increase bleeding in older adults. (Study 1)",
+   "note": "negates bleeding"
+  },
+  {
+   "text": "No birth defects were seen in the babies of pregnant women.",
+   "note": "negates birth defects"
+  },
+  {
+   "text": "It rarely caused side effects in children. (Study 2)",
+   "note": "minimises side effects"
+  },
+  {
+   "text": "Fears of liver damage in infants are unfounded.",
+   "note": "dismisses liver harm"
+  },
+  {
+   "text": "The risk of miscarriage is low for pregnant women. (Study 2)",
+   "note": "minimises miscarriage"
+  },
+  {
+   "text": "It may cause fewer deaths than placebo in the 9,000 participants.",
+   "note": "implies safety, hedged"
+  },
+  {
+   "text": "This should not worry parents of young children. (Study 3)",
+   "note": "reassures parents"
+  },
+  {
+   "text": "Side effects were mild in people with kidney disease.",
+   "note": "minimises side effects"
+  },
+  {
+   "text": "It is generally safe for children. (Study 4)",
+   "note": "says safe"
+  },
+  {
+   "text": "The drug was well tolerated by older adults. (Study 3)",
+   "note": "says well tolerated"
+  },
+  {
+   "text": "It was as safe as placebo across 12 trials. (Study 1)",
+   "note": "safe as placebo"
+  },
+  {
+   "text": "It is no more harmful than water for infants.",
+   "note": "no harm"
+  },
+  {
+   "text": "It is fine for infants. (Study 2)",
+   "note": "plain reassurance, no harm word"
+  },
+  {
+   "text": "Kidney function was unchanged in people with kidney disease.",
+   "note": "no harm seen"
+  },
+  {
+   "text": "Pregnant women can take it without concern. (Study 1)",
+   "note": "safe in pregnancy"
+  },
+  {
+   "text": "Overdose is very unlikely in toddlers.",
+   "note": "minimises overdose"
+  },
+  {
+   "text": "Serious adverse events were no more frequent than with sugar pills among 4,000 people. (Study 3)",
+   "note": "no excess harm"
+  },
+  {
+   "text": "There is no evidence of allergic reactions in children.",
+   "note": "negates allergy"
+  },
+  {
+   "text": "Doctors consider it low risk for elderly patients. (Study 4)",
+   "note": "low risk"
+  },
+  {
+   "text": "It posed no danger to the fetus.",
+   "note": "no harm"
+  },
+  {
+   "text": "No deaths were attributed to the treatment in the 9,000-person trial. (Study 4)",
+   "note": "negates deaths"
+  },
+  {
+   "text": "Children tolerate it easily.",
+   "note": "tolerated"
+  },
+  {
+   "text": "It is gentle on the kidneys of older adults. (Study 1)",
+   "note": "reassures"
+  },
+  {
+   "text": "Parents can relax about poisoning, as it is harmless to toddlers.",
+   "note": "harmless"
+  },
+  {
+   "text": "Interactions with warfarin were not a problem in the 12 patients. (Study 2)",
+   "note": "negates interaction"
+  },
+  {
+   "text": "It is safe to continue during pregnancy.",
+   "note": "safe in pregnancy"
+  },
+  {
+   "text": "Liver injury was uncommon and resolved quickly in children. (Study 2)",
+   "note": "minimises liver injury"
+  },
+  {
+   "text": "Infants showed no ill effects.",
+   "note": "no harm"
+  },
+  {
+   "text": "The treatment suits people with kidney disease just fine.",
+   "note": "reassures"
+  },
+  {
+   "text": "Heart risks were not elevated among the 4,000 people studied.",
+   "note": "no heart risk"
+  }
+ ]
+}

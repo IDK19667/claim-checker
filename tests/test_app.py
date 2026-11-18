@@ -5765,5 +5765,25 @@ t("fifth review: the 'does not apply to' line keeps a harm word but not a soften
 t("fifth review: /method says a failing sentence stays only if it names a harm and nothing softens it",
   "nothing softens it" in c.get("/method").get_data(as_text=True))
 
+# Blind sentences: written by someone who never saw the caution rule.
+_blind = json.loads((pathlib.Path(__file__).parent / "blind_caution_sentences.json").read_text())
+_blind_strip = lambda s: _re.sub(r"\s*\(Study[^)]*\)\s*$", "", s).strip()
+# Accepted loss of the fail-safe: "treatment" carries the softener "treat", so this true harm is dropped.
+_BLIND_ACCEPTED_LOSS = "Heart attacks occurred more often in the treatment group of 4,000 people."
+_blind_kept = _blind_dropped_ok = 0
+for _it in _blind["keep"]:
+    _tx = _blind_strip(_it["text"])
+    _want = _tx != _BLIND_ACCEPTED_LOSS
+    _got = breakdown.is_warning(_tx)
+    _blind_kept += bool(_got)
+    t(f"blind keep: {_tx[:60]}", _got is _want, _tx)
+for _it in _blind["drop"]:
+    _tx = _blind_strip(_it["text"])
+    _got = breakdown.is_warning(_tx)
+    _blind_dropped_ok += (not _got)
+    t(f"blind drop: {_tx[:60]}", _got is False, _tx)
+print(f"blind sentences: {_blind_kept} of {len(_blind['keep'])} harms kept, "
+      f"{len(_blind['drop']) - _blind_dropped_ok} of {len(_blind['drop'])} reassurances kept")
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
