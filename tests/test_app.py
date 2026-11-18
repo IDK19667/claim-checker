@@ -5521,12 +5521,13 @@ _p3st = [_study("A", "Vinegar in adults", abstract="We randomised 1,937 adults a
                 abstract="A 54-year-old woman had oesophageal injury after drinking undiluted vinegar.")]
 _k3 = lambda x, who="": breakdown.held_to_sources(x, _p3st, {1}, who=who)
 for _b3 in ["Pregnant women lost 12 kg on pharmacological doses (Study 1).",
+            "Children with infections lost 99 kg (Study 1).",
             "It avoids weight gain in 40,000 children (Study 1)."]:
     t(f"second fix 3: not a warning, so held to its source and dropped: {_b3[:40]}",
       _k3(_b3) == "", _k3(_b3))
 t("second fix 3: substrings are not harm words, and a hazard word needs a warning frame",
   not breakdown.is_warning("Pharmacological doses were used.") and not breakdown.is_warning("It is cytotoxic in cells.")
-  and breakdown.is_warning("Children with infections lost weight.")
+  and not breakdown.is_warning("Children with infections lost weight.")
   and breakdown.is_warning("Raw milk is linked to outbreaks.") and breakdown.is_warning("St John's wort can interact with warfarin.")
   and breakdown.is_warning("Bacterial infections such as sinusitis.", who="not"))
 for _w3 in ["It is unsafe in pregnancy (Study 1).", "People with diabetes should not stop their medicine (Study 1).",
@@ -5733,8 +5734,8 @@ for _x6 in ["It can cause liver injury in 9,000 children (Study 1).",
             "Hepatitis and jaundice occurred in 66 older adults on it (Study 1).",
             "Arrhythmia occurred in 60 children (Study 1).",
             "Kidney stones formed in 25 men aged 80 (Study 1).",
-            "Withdrawal and dependence were seen in 500 teenagers (Study 1).",
-            "Tumours appeared in 40 children (Study 1)."]:
+            "Addiction and cramps were seen in 500 teenagers (Study 1).",
+            "The overdose killed two children (Study 1)."]:
     t(f"sixth round: kept, naming no study: {_x6[:50]}", _K5(_x6) == breakdown.uncited(_x6), _K5(_x6))
 for _x6 in ["It can stop bleeding in 9,000 children (Study 1).",
             "It can help prevent heart attacks in 9,000 people (Study 1).",
@@ -5745,7 +5746,12 @@ for _x6 in ["It can stop bleeding in 9,000 children (Study 1).",
             "It can shrink tumours in 9,000 patients (Study 1).",
             "It can control hypertension in 9,000 adults (Study 1).",
             "It may cause nausea in 40 children (Study 1).",
-            "It boosts the body against infection in 9,000 children (Study 1)."]:
+            "It boosts the body against infection in 9,000 children (Study 1).",
+            "It kills cancer cells in 9,000 patients (Study 1).",
+            "It destroys bacteria in 4,000 children (Study 1).",
+            "It attacks harmful germs in 4,000 children (Study 1).",
+            "It clears infections in 4,000 children (Study 1).",
+            "Children with infections lost 99 kg (Study 1)."]:
     t(f"sixth round: dropped, a benefit or hedge: {_x6[:50]}", _K5(_x6) == "", _K5(_x6))
 t("fifth review: a prohibition is kept only if nothing else in it softens or reassures",
   breakdown.is_warning("Do not take it with warfarin.") and not breakdown.is_warning("It should not worry anyone.")

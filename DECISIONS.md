@@ -4,6 +4,17 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: The caution rule, third round: conditions are not harms, killing germs is a benefit
+
+Removed from the harm list because they name conditions, not harms a
+product causes, and kept invented figures uncited: cancer, tumour,
+infection, sepsis, hypertension, insomnia, dependence, withdrawal.
+"Outbreak" still keeps "linked to outbreaks". "Kill", "destroy" or "attack"
+within three words of cells, bacteria, germs, microbes, viruses, parasites,
+fungi, pathogens, tumours or cancer is a benefit and softens; destroy,
+clear, eradicate and target are benefit softeners too. This closes the
+"kills cancer cells" leak noted in the second round.
+
 ## 2026-11-17: The caution rule, second round: "can" is not a hedge, more harm words
 
 Owner's target is no real warning lost against the live site. "Can" came

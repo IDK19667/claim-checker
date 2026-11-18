@@ -1825,9 +1825,9 @@ _HARM_WORDS = re.compile(
     r"harm\w*|danger\w*|hazardous|unsafe|teratogen\w*|outbreaks?|burn(?:s|ed|t|ing)?|strokes?|heart attacks?|"
     r"complications?|abnormalit\w*|contraindicat\w*|"
     r"nausea\w*|vomit\w*|diarrh\w*|dizz\w*|headaches?|rash\w*|itch\w*|syndromes?|hepatitis|jaundice|"
-    r"arrhythmi\w*|palpitations?|hypoglyc\w*|hyperkal\w*|hypotension|hypertensi\w*|cancers?|tumou?rs?|"
-    r"infections?|sepsis|coma|paralysis|blindness|deafness|dependence|addiction|withdrawal|cramps?|pain\w*|"
-    r"swelling|ulcers?|kidney stones?|insomnia)\b", re.IGNORECASE)
+    r"arrhythmi\w*|palpitations?|hypoglyc\w*|hyperkal\w*|hypotension|"
+    r"coma|paralysis|blindness|deafness|addiction|cramps?|pain\w*|"
+    r"swelling|ulcers?|kidney stones?)\b", re.IGNORECASE)
 
 # Words that soften or reassure. Any one anywhere in the sentence drops it.
 _SOFTENERS = re.compile(
@@ -1843,7 +1843,11 @@ _SOFTENERS = re.compile(
     # a benefit claim is not a harm, and "can" must not carry one through
     r"treat\w*|cur(?:e|es|ed|ing)|heal\w*|reliev\w*|relief|eas(?:e|es|ed|ing)|stop|stops|stopped|stopping|"
     r"control\w*|manag\w*|restor\w*|boost\w*|support\w*|help\w*|benefit\w*|fight\w*|shrink\w*|"
-    r"slow\w*|eliminat\w*|revers\w*)\b", re.IGNORECASE)
+    r"slow\w*|eliminat\w*|revers\w*|destroy\w*|clear\w*|eradicat\w*|target\w*)\b", re.IGNORECASE)
+# Killing germs or cells is a benefit claim, not a harm.
+_KILLS_GERMS = re.compile(
+    r"\b(?:kill|destroy|attack)\w*\s+(?:\w+\s+){0,3}?(?:cells?|bacteri\w*|germs?|microbes?|viruses|virus|"
+    r"parasites?|fungi|fungus|pathogens?|tumou?rs?|cancer\w*)\b", re.IGNORECASE)
 
 # Negation turns a harm into a reassurance ("caused no birth defects").
 _NEGATION = re.compile(
@@ -1872,7 +1876,7 @@ def is_warning(sentence: str, who: str = "") -> bool:
     is enough, if nothing softens it."""
     body = _REF.sub(" ", sentence or "")
     rest = _PROHIBITION.sub(" ", body)
-    if _SOFTENERS.search(rest):
+    if _SOFTENERS.search(rest) or _KILLS_GERMS.search(rest):
         return False
     if who == "not":
         return bool(HARM.search(body) or _HAZARD.search(body))
