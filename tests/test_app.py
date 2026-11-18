@@ -5098,7 +5098,8 @@ _abo = c.get("/about").get_data(as_text=True)
 appmod.ABOUT.clear(); appmod.ABOUT.update(_old_about)
 t("F7: an owner set in config is named, and none is named until then",
   "Evident is run by Test Owner." in _abo and "It is based in Testland." in _abo
-  and "Evident is run by" not in _abt)
+  and "Evident is run by Dhruva." in _abt and "Dhruva" in _abt.split("Who checks a result")[0]
+  and "It is based in" not in _abt)
 
 # ---- B6 F9: a linkable method page -----------------------------------------------
 _me = c.get("/method")

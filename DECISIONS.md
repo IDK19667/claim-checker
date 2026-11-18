@@ -4,6 +4,13 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: /about names the owner, Dhruva, by default
+
+Owner's decision: the page says "Evident is run by Dhruva." with no
+surname, school or location, and without any environment variable.
+`EVIDENT_OWNER` still overrides it (an empty value hides the name). The
+country, funding and who-checks lines stay hidden until set.
+
 ## 2026-11-17: A failing sentence is kept only as an unsoftened caution (fail-safe)
 
 Owner's decision, after an independent review found the old caution rule

@@ -460,7 +460,7 @@ def favicon():
 # Who runs Evident. Each is shown on /about only when set, so the page never
 # carries a placeholder and never says anything the owner has not decided.
 ABOUT = {
-    "owner": os.environ.get("EVIDENT_OWNER", "").strip() or None,
+    "owner": os.environ.get("EVIDENT_OWNER", "Dhruva").strip() or None,
     "who": os.environ.get("EVIDENT_WHO", "").strip() or None,
     "country": os.environ.get("EVIDENT_COUNTRY", "").strip() or None,
     "funding": os.environ.get("EVIDENT_FUNDING", "").strip() or None,
