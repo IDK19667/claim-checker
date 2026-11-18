@@ -4,6 +4,19 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: Review fixes: reassurances by absence, and /method and /about made exact
+
+Negation list gained absence and denial words (absent, absence, ruled out,
+excluded, myth, misconception, exaggerated, overblown, overstated,
+unproven, disproven, debunked, refuted, false alarm, nonexistent,
+unaffected, normal, undetected, unobserved, clear of); 22 new must-drop
+tests. Blind set unchanged: 29 of 30 harms kept, 0 of 30 reassurances kept.
+/method (version 2) now says: an inline study naming stays when its clause
+passes; only cited sentences are checked, and with no relied-on study the
+text is left as is; what `follow_guidelines` really does by claim type;
+and that the low-certainty cap changes the stamp itself. /about no longer
+promises "will not claim more certainty" and says what the code does.
+
 ## 2026-11-17: The caution rule, third round: conditions are not harms, killing germs is a benefit
 
 Removed from the harm list because they name conditions, not harms a

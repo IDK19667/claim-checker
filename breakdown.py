@@ -1852,7 +1852,9 @@ _KILLS_GERMS = re.compile(
 # Negation turns a harm into a reassurance ("caused no birth defects").
 _NEGATION = re.compile(
     r"\b(?:no|not|never|none|nothing|nobody|without|zero|neither|nor|cannot|non-?|"
-    r"free of|absence of|lack of|lacks?|lacking)\b|n[’']t\b", re.IGNORECASE)
+    r"free of|clear of|lack of|lacks?|lacking|absen(?:t|ce)|rul(?:e|es|ed|ing) out|exclud\w*|myths?|"
+    r"misconception\w*|exaggerat\w*|overblown|overstat\w*|unproven|disprov\w*|debunk\w*|refut\w*|"
+    r"false alarms?|nonexistent|unaffected|normal\w*|undetect\w*|unobserved)\b|n[’']t\b", re.IGNORECASE)
 
 # An instruction not to use something. It is a caution without a harm word,
 # and its own "not" and "avoid" are not counted as negation or softening.

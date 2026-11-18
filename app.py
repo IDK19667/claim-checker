@@ -480,8 +480,8 @@ def about():
 
 
 # The method page's own version. Bump both when a rule it describes changes.
-METHOD_VERSION = "1"
-METHOD_CHANGED = "15 November 2026"
+METHOD_VERSION = "2"
+METHOD_CHANGED = "17 November 2026"
 
 
 @app.route("/method")

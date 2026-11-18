@@ -5765,6 +5765,19 @@ t("fifth review: the 'does not apply to' line keeps a harm word but not a soften
 t("fifth review: /method says a failing sentence stays only if it names a harm and nothing softens it",
   "nothing softens it" in c.get("/method").get_data(as_text=True))
 
+# Reassurances by absence, denial or dismissal: all dropped.
+for _x7 in ["Kidney harm was absent in all 200 participants.", "Birth defects were ruled out.",
+            "Seizures were absent.", "Deaths were absent from the trial.", "Poisoning is a myth.",
+            "Fears of liver damage are exaggerated.", "Harm was excluded in the trial of 800 adults.",
+            "There were no signs of toxicity.", "The danger of overdose is overblown.",
+            "Reports of miscarriage were debunked.", "Claims of heart attacks were refuted.",
+            "Bleeding is a misconception.", "Stroke risk was overstated.", "The harm is unproven.",
+            "Side effects were undetected in 900 children.", "Allergic reactions were unobserved.",
+            "Liver injury was nonexistent.", "Kidney function was unaffected, with no injury.",
+            "Blood counts were normal and there was no bleeding.", "It is a false alarm that it causes seizures.",
+            "The drug is clear of poison.", "Hospitalisation can be ruled out."]:
+    t(f"reassurance by absence or denial is dropped: {_x7[:50]}", not breakdown.is_warning(_x7), _x7)
+
 # Blind sentences: written by someone who never saw the caution rule.
 _blind = json.loads((pathlib.Path(__file__).parent / "blind_caution_sentences.json").read_text())
 _blind_strip = lambda s: _re.sub(r"\s*\(Study[^)]*\)\s*$", "", s).strip()
