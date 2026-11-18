@@ -4,6 +4,26 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-17: The caution rule, second round: "can" is not a hedge, more harm words
+
+Owner's target is no real warning lost against the live site. "Can" came
+off the softening list ("can cause liver injury" states a harm; "may",
+"might", "could" stay, "cannot" stays a negation). To stop benefit claims
+riding through on "can", benefit verbs now soften: treat, cure, heal,
+relieve, ease, stop (the prohibition "stop taking" is removed first),
+control, manage, restore, boost, support, help, benefit, plus fight,
+shrink, slow, eliminate, reverse. The harm list gained common adverse
+effects: nausea, vomiting, diarrhoea, dizziness, headache, rash, itching,
+syndrome, hepatitis, jaundice, arrhythmia, palpitations, hypoglycaemia,
+hyperkalaemia, hypotension, hypertension, cancer, tumour, infection,
+sepsis, coma, paralysis, blindness, deafness, dependence, addiction,
+withdrawal, cramps, pain, swelling, ulcer, kidney stones, insomnia
+(depression left out on purpose). Known leak: "kills" is a harm word, so
+"It kills cancer cells in 9,000 patients" would stay as an uncited
+caution. Against the 97 saved answers the only warning-like sentence lost
+versus the old rule is "most infections are caused by viruses, not
+bacteria", accepted by the owner.
+
 ## 2026-11-17: Corrections and removals go to one email address, as a link
 
 Owner's decision: hello@checkevident.com (a placeholder the owner will set

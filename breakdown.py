@@ -1823,11 +1823,15 @@ _HARM_WORDS = re.compile(
     r"miscarriages?|stillbirths?|overdos\w*|poison\w*|toxic\w*|seizures?|anaphyla\w*|"
     r"allergic reactions?|interact\w*|hospitali[sz]\w*|side[- ]effects?|adverse|"
     r"harm\w*|danger\w*|hazardous|unsafe|teratogen\w*|outbreaks?|burn(?:s|ed|t|ing)?|strokes?|heart attacks?|"
-    r"complications?|abnormalit\w*|contraindicat\w*)\b", re.IGNORECASE)
+    r"complications?|abnormalit\w*|contraindicat\w*|"
+    r"nausea\w*|vomit\w*|diarrh\w*|dizz\w*|headaches?|rash\w*|itch\w*|syndromes?|hepatitis|jaundice|"
+    r"arrhythmi\w*|palpitations?|hypoglyc\w*|hyperkal\w*|hypotension|hypertensi\w*|cancers?|tumou?rs?|"
+    r"infections?|sepsis|coma|paralysis|blindness|deafness|dependence|addiction|withdrawal|cramps?|pain\w*|"
+    r"swelling|ulcers?|kidney stones?|insomnia)\b", re.IGNORECASE)
 
 # Words that soften or reassure. Any one anywhere in the sentence drops it.
 _SOFTENERS = re.compile(
-    r"\b(?:may|might|could|can|possibl\w+|perhaps|sometimes|occasional\w*|rare|rarely|rarer|seldom|"
+    r"\b(?:may|might|could|possibl\w+|perhaps|sometimes|occasional\w*|rare|rarely|rarer|seldom|"
     r"uncommon|infrequent\w*|usually|generally|typically|mostly|mild\w*|minor|minimal|negligible|tiny|"
     r"slight\w*|some|few|fewer|less|lower\w*|low|little|small\w*|only|hardly|barely|unlikely|"
     r"safe|safely|safer|safety|harmless|gentle|gently|tolerat\w+|fine|ok|okay|relax\w*|worr\w+|concern\w*|"
@@ -1835,7 +1839,11 @@ _SOFTENERS = re.compile(
     r"benign|reassur\w+|placebo-like|"
     # a cut in the harm is good news, whatever the harm is
     r"reduc\w+|fell|fall\w*|fallen|drop\w*|declin\w+|decreas\w+|cut|cuts|cutting|prevent\w*|"
-    r"halv\w+|lessen\w*|curb\w*|avoid\w*|protect\w*|improv\w*)\b", re.IGNORECASE)
+    r"halv\w+|lessen\w*|curb\w*|avoid\w*|protect\w*|improv\w*|"
+    # a benefit claim is not a harm, and "can" must not carry one through
+    r"treat\w*|cur(?:e|es|ed|ing)|heal\w*|reliev\w*|relief|eas(?:e|es|ed|ing)|stop|stops|stopped|stopping|"
+    r"control\w*|manag\w*|restor\w*|boost\w*|support\w*|help\w*|benefit\w*|fight\w*|shrink\w*|"
+    r"slow\w*|eliminat\w*|revers\w*)\b", re.IGNORECASE)
 
 # Negation turns a harm into a reassurance ("caused no birth defects").
 _NEGATION = re.compile(
