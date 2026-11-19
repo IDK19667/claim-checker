@@ -750,7 +750,11 @@ function renderResult(data) {
     list.querySelectorAll(".study.cited").forEach((li, i) => li.style.setProperty("--i", i));
     requestAnimationFrame(() => list.classList.add("sweep"));
   }
-  $("query").textContent = data.search_query_used || "";
+  // A saved record with no search on file says nothing about one, rather
+  // than "Searched PubMed for" and a blank. The link to PubMed stays.
+  const usedQuery = (data.search_query_used || "").trim();
+  $("query").textContent = usedQuery;
+  $("query-what").hidden = !usedQuery;
   $("broadened").textContent = data.search_broadened ? " (the first search found nothing, so it was widened)" : "";
   $("more-link").href = data.pubmed_url || "#";
   $("toast").textContent = "";

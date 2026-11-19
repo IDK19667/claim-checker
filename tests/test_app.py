@@ -4543,5 +4543,21 @@ t("renderBreakdown counts the used studies itself, not the stored number",
   "const restsOn = studies.filter((s) => s.cited_in_verdict).length" in _rb
   and "bd.rests_on" not in _js_now and _rb.index("const restsOn") < _rb.index("head.textContent = restsOn"))
 
+# A saved record with no search query on file hides the "Searched PubMed for"
+# line in the server render and in renderResult, and invents no query.
+db.put_cached_verdict("empty query saved", "  ", "true", "Because (Study 1).",
+                      ["R1"], _RS, tldr="Short.")
+_eq = c.get("/?q=empty+query+saved").data.decode()
+t("a saved result with an empty search query hides the 'Searched PubMed for' line",
+  '<span id="query-what" hidden>' in _eq and "More on PubMed" in _eq, re.findall(r'id="query-what".{0,40}', _eq))
+t("  and a result opened from a link carries the search that was stored, not an empty one",
+  db.get_cached_by_key("count mismatch saved")["search_query"] == "q AND r"
+  and '"search_query_used": "q AND r"' in _rsh.replace('"search_query_used":"', '"search_query_used": "'),
+  re.findall(r"search_query_used.{0,40}", _rsh))
+t("  and a saved result with a query still shows it",
+  "Searched PubMed for <code id=\"query\">q AND r</code>" in _rsh and "id=\"query-what\" hidden" not in _rsh, re.findall(r"query-what.{0,160}", _rsh))
+t("  and renderResult hides it the same way",
+  '$("query-what").hidden = !usedQuery' in (ROOT / "static" / "app.js").read_text())
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

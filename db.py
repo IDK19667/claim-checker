@@ -541,6 +541,9 @@ def get_cached_by_key(claim_key: str) -> dict | None:
         return None
     return {
         "claim_text": row["claim_text"],
+        # The search that was actually run, as stored. A result opened from
+        # a link used to drop it and show an empty "Searched PubMed for".
+        "search_query": row["search_query"] or "",
         "verdict": row["verdict"],
         "tldr": row["tldr"] or "",
         "explanation": row["explanation"],
