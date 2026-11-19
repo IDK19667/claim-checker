@@ -67,6 +67,25 @@ function typeInfo(types) {
   return { label: t[0] || DEFAULT_TYPE[0], cls: "", what: DEFAULT_TYPE[2] };
 }
 
+// Why a study is listed, in one line: what the verdict did with it and, for a
+// study it leaned on, what that kind of study does and where it stops.
+// Mirrors display.study_why; a test runs both on the same records.
+function studyWhy(s) {
+  if (s.cited_in_verdict) {
+    const ti = typeInfo(s.publication_types);
+    const out = ["Relied on for the verdict."];
+    if (ti.label !== DEFAULT_TYPE[0]) out.push(ti.what);
+    if (s.population) out.push(`Studied in: ${s.population}.`);
+    return out.join(" ");
+  }
+  if (s.off_topic) return `Read and set aside: ${String(s.off_topic).replace(/\.+$/, "")}.`;
+  if (s.background) {
+    const why = String(s.background_why || "").replace(/\.+$/, "");
+    return why ? `Background only, not counted: ${why}.` : "Background only, not counted.";
+  }
+  return "Read, not relied on.";
+}
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
@@ -743,6 +762,7 @@ function renderResult(data) {
         </p>
         <p class="title"><span>${escapeHtml(s.title)}</span></p>
         <p class="src">${escapeHtml(src)}${src ? " · " : ""}<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" data-stop>PMID ${escapeHtml(s.pmid)}</a></p>
+        <p class="why">${escapeHtml(studyWhy(s))}</p>
         <button type="button" class="study-go" aria-label="Deep dive on study ${i + 1}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
       </li>`;
   };

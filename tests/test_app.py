@@ -1743,6 +1743,38 @@ t("  the script fills the same block from the same view",
   'function renderWho(data)' in (ROOT / "static" / "app.js").read_text()
   and "renderWho(data);" in (ROOT / "static" / "app.js").read_text())
 
+# ---- sources say why they are listed ---------------------------------------------
+_SW = [{"cited_in_verdict": True, "publication_types": ["Journal Article", "Meta-Analysis"]},
+       {"cited_in_verdict": True, "publication_types": ["Randomized Controlled Trial"], "population": "children aged 2 to 5"},
+       {"cited_in_verdict": True, "publication_types": ["Journal Article"]},
+       {"cited_in_verdict": False, "off_topic": "tests something other than what this claim is about.", "publication_types": ["Review"]},
+       {"cited_in_verdict": False, "background": True, "background_why": "animal or lab", "publication_types": []},
+       {"cited_in_verdict": False, "background": True, "publication_types": ["Editorial"]},
+       {"cited_in_verdict": False, "publication_types": ["Observational Study"]}]
+_sw = [_display.study_why(x) for x in _SW]
+t("a source says why it is listed: relied on with what its design does and where it stops, or why it was set aside",
+  _sw[0].startswith("Relied on for the verdict. Combines the results of several studies")
+  and "only as sound as the studies it pools" in _sw[0]
+  and _sw[1].endswith("Studied in: children aged 2 to 5.")
+  and _sw[2] == "Relied on for the verdict."
+  and _sw[3] == "Read and set aside: tests something other than what this claim is about."
+  and _sw[4] == "Background only, not counted: animal or lab."
+  and _sw[5] == "Background only, not counted."
+  and _sw[6] == "Read, not relied on.", _sw)
+t("  the table of designs is the same in the script and on the server",
+  _re.findall(r'\["([^"]+)", "([a-z]*)", "((?:[^"\\]|\\.)*)"\]',
+              (ROOT / "static" / "app.js").read_text().split("const TYPES = [")[1].split("\n];")[0])
+  == [tuple(x) for x in _display.DESIGN_NOTES])
+t("  every source on the result page carries its line",
+  _ord.split('id="server-result"')[0].count('<li class="study ') == _ord.split('id="server-result"')[0].count('<p class="why">')
+  and _ord.count('<p class="why">') >= 1)
+if _shutil.which("node"):
+    _tsrc = (ROOT / "static" / "app.js").read_text()
+    _tsrc = ("const TYPES = [" + _tsrc.split("const TYPES = [")[1].split("function escapeHtml")[0])
+    _jsw = json.loads(_subprocess.run(["node", "-e", _tsrc + "console.log(JSON.stringify(" + json.dumps(_SW) + ".map(studyWhy)));"],
+                                      capture_output=True, text=True, check=True).stdout)
+    t("  and the script writes the same line for every kind of source", _jsw == _sw, _jsw)
+
 # (d) What the research says: never folded, every sentence already gated.
 _says = _vd["breakdown"]["says"]
 t("what the research says is three to five sentences, every one of them cited",

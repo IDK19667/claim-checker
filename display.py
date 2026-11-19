@@ -103,3 +103,61 @@ def confidence_line(result) -> str:
     tiers = {s.get("tier") or "moderate" for s in cited}
     word = "Strong" if "strong" in tiers else "Moderate" if tiers - {"weak", "retracted"} else "Weak"
     return f"{word} study designs."
+
+
+# ---- Sources: why each study is on the page --------------------------------
+# What each study design does and where it stops. static/app.js carries the
+# same table (TYPES) for the study sheet; a test compares the two. The first
+# matching label wins, as in the script.
+DESIGN_NOTES = (
+    ('Meta-Analysis', 'strong', 'Combines the results of several studies into one estimate. It is only as sound as the studies it pools, and it can mix very different ones.'),
+    ('Network Meta-Analysis', 'strong', 'Combines many studies to compare several treatments at once. Comparisons made only indirectly are less certain than head-to-head trials.'),
+    ('Systematic Review', 'strong', 'Searches for every study on a question, using set rules for what counts. It is only as sound as the studies it found.'),
+    ('Randomized Controlled Trial', 'strong', 'Randomly assigns people to a treatment or a comparison group. A small size, a short run or a narrow group limits what it shows.'),
+    ('Practice Guideline', 'strong', "Recommendations a medical body wrote after reviewing the evidence. They reflect that body's judgment and can lag behind newer studies."),
+    ('Retracted Publication', 'retracted', 'Withdrawn by the journal after publication. Its findings should not be relied on.'),
+    ('Case Reports', 'weak', 'Describes one patient or a few. It can raise a question, but it cannot show cause or how common something is.'),
+    ('Editorial', 'weak', "An opinion piece by the journal's editors. It gives a view, not data."),
+    ('Comment', 'weak', 'A published reply to another paper. It is not a study.'),
+    ('Letter', 'weak', 'A short letter to the journal. It is not a study.'),
+    ('News', 'weak', 'A news item. It is not a study.'),
+    ('Controlled Clinical Trial', '', 'Tests people against a comparison group without random assignment. The groups may have differed from the start.'),
+    ('Clinical Trial', '', 'Tests a treatment on people, not always with a comparison group. Without one it cannot show cause.'),
+    ('Observational Study', '', 'Watches what happens to people who did or did not do something. It can show links but not prove cause, since other factors may differ.'),
+    ('Multicenter Study', '', 'Run at several sites, which can make results more general. The label says nothing about how well it was designed.'),
+    ('Comparative Study', '', 'Compares two or more approaches. What it shows depends on how the comparison was run.'),
+    ('Review', '', "An expert's summary of the research. It depends on which studies the author chose."),
+)
+_IGNORE_TYPES = re.compile(r"^(Journal Article|Research Support|English Abstract|Introductory)")
+DEFAULT_DESIGN = ("Journal article", "", "A research paper. The abstract says what kind of study it was.")
+
+
+def design_note(publication_types) -> tuple:
+    """(label, class, note) for the most informative design in `publication_types`."""
+    types = [t for t in (publication_types or []) if not _IGNORE_TYPES.match(t)]
+    for label, cls, note in DESIGN_NOTES:
+        if any(t.startswith(label) for t in types):
+            return label, cls, note
+    return (types[0] if types else DEFAULT_DESIGN[0]), "", DEFAULT_DESIGN[2]
+
+
+def study_why(study) -> str:
+    """
+    One line on why a study is listed: what the verdict did with it and, for a
+    study it leaned on, what that kind of study does and where it stops. All of
+    it is read off fields the record already carries.
+    """
+    if study.get("cited_in_verdict"):
+        label, _cls, note = design_note(study.get("publication_types"))
+        out = ["Relied on for the verdict."]
+        if label != DEFAULT_DESIGN[0]:
+            out.append(note)
+        if study.get("population"):
+            out.append(f"Studied in: {study['population']}.")
+        return " ".join(out)
+    if study.get("off_topic"):
+        return f"Read and set aside: {str(study['off_topic']).rstrip('.')}."
+    if study.get("background"):
+        why = str(study.get("background_why") or "").rstrip(".")
+        return f"Background only, not counted: {why}." if why else "Background only, not counted."
+    return "Read, not relied on."

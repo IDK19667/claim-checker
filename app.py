@@ -87,6 +87,8 @@ CSP_TEMPLATE = (
 # What the result page prints from the breakdown, each sentence once.
 app.jinja_env.globals["breakdown_view"] = display.breakdown_view
 app.jinja_env.globals["confidence_line"] = display.confidence_line
+app.jinja_env.globals["design_note"] = display.design_note
+app.jinja_env.globals["study_why"] = display.study_why
 
 
 @app.before_request

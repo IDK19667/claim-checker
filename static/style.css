@@ -856,7 +856,8 @@ mark, .key-mark, .hl {
   animation-delay: calc(460ms + var(--i, 0) * 120ms);
 }
 @keyframes mark-in { to { background-size: 100% 100%; } }
-.study .src { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); }
+.study .src { margin: 6px 0 0; font-size: 14px; color: var(--ink-3); }
+.study .why { margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
 .study .src a { position: relative; z-index: 1; color: var(--ink-3); }
 
 /* "Deep dive" is the button, and its hit area is stretched over the whole

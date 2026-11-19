@@ -530,10 +530,11 @@
         </div>
         <p class="fine" style="margin:0 0 8px">Open any study for its abstract, how often it has been cited, free full text where there is any, and the studies next to it.</p>
 
-        {% macro study_row(s, i) %}<li class="study k-{{ s.kind }}{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}">
-          <p class="meta"><span class="ord">{{ "%02d"|format(i + 1) }}</span>{% if s.year %}<span>{{ s.year }}</span>{% endif %}</p>
+        {% macro study_row(s, i) %}{% set d = design_note(s.publication_types) %}<li class="study k-{{ s.kind }}{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}">
+          <p class="meta"><span class="ord">{{ "%02d"|format(i + 1) }}</span>{% if d[0] != "Journal article" %}<span class="type {{ d[1] }}">{{ d[0] }}</span>{% endif %}{% if s.year %}<span>{{ s.year }}</span>{% endif %}</p>
           <p class="title"><span>{{ s.title }}</span></p>
           <p class="src">{{ s.journal }}{% if s.journal %} · {% endif %}<a href="{{ s.url }}" target="_blank" rel="noopener" data-stop>PMID {{ s.pmid }}</a></p>
+          <p class="why">{{ study_why(s) }}</p>
           <!-- The button opens the study, and its hit area covers the whole
                row. The row is not itself a button: it holds the PMID link,
                and a link inside a button is lost to a screen reader. -->
