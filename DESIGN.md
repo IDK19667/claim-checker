@@ -671,5 +671,5 @@ Never reintroduce: a glowing or neon accent, cyan light cues, a navy or
 pure black night, a cream ground, a colour coded verdict, a second accent,
 gradient washes, glass or backdrop blur, pill buttons, shadows used for
 depth on ordinary content (the study sheet is the one that floats), emoji icons, stat-card rows, gauges, generated
-hero imagery or video, animated backgrounds, cursor effects, or analytics
-of any kind.
+hero imagery or video, animated backgrounds, cursor effects, per-person analytics, cookies
+or any third-party tracking.
