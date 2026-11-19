@@ -446,6 +446,34 @@ def privacy():
     return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label())
 
 
+_INFO_PAGES = {
+    "about": ("About", "Who makes Evident, what it does and what it does not do."),
+    "method": ("Methodology", "How a check works and the rules every verdict must pass."),
+    "corrections": ("Corrections and contact", "Report a wrong answer or get in touch."),
+}
+
+
+def _info(slug):
+    title, desc = _INFO_PAGES[slug]
+    return render_template("info.html", slug=slug, title=title, desc=desc,
+                           base_url=_base_url(), provider=verdict.provider_label())
+
+
+@app.route("/about")
+def about():
+    return _info("about")
+
+
+@app.route("/method")
+def method():
+    return _info("method")
+
+
+@app.route("/corrections")
+def corrections():
+    return _info("corrections")
+
+
 @app.route("/og/<path:key>.png")
 def og_image(key):
     cached = db.get_cached_by_key(key)

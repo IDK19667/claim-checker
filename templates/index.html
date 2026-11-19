@@ -86,7 +86,7 @@
       <div class="nameplate"><a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span></div>
       <nav class="top-actions" aria-label="Site">
         <button class="ghost" id="how-btn" type="button">How it works</button>
-        <a class="navlink" id="about-link" href="/#trust">About</a>
+        <a class="navlink" id="about-link" href="/about">About</a>
         <a class="navlink" href="/privacy">Privacy</a>
         <button class="install" id="install-btn" type="button" hidden>Install</button>
       </nav>
@@ -681,8 +681,9 @@
     <p class="fine">
       Studies from PubMed, U.S. National Library of Medicine. Verdicts written
       by an AI model that reads the abstracts. Nothing you type is tied to you.
-      <a href="/privacy">Privacy</a>
     </p>
+    <p class="fine">Evident summarises published research. It is not medical advice and does not replace a clinician.</p>
+    <p class="fine foot-links"><a href="/about">About</a> · <a href="/method">Methodology</a> · <a href="/corrections">Corrections and contact</a> · <a href="/privacy">Privacy</a></p>
   </footer>
 
   {% if result %}<script id="server-result" type="application/json" nonce="{{ csp_nonce }}">{{ result | tojson }}</script>{% endif %}

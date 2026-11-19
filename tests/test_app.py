@@ -4869,5 +4869,20 @@ t("errors: the claim is shown on the error screen and no copy points at a hidden
   'id="error-claim"' in c.get("/").get_data(as_text=True)
   and '$("error-claim").textContent' in _js and "still in the box" not in _js)
 
+_home2 = c.get("/").get_data(as_text=True)
+_foot = _home2.split('<footer class="foot')[1]
+t("footer: About, Methodology, Corrections and contact, Privacy, and the medical-scope line",
+  all(x in _foot for x in ('href="/about"', 'href="/method"', 'href="/corrections"', 'href="/privacy"',
+                           "does not replace a clinician"))
+  and 'id="about-link" href="/about"' in _home2)
+for _slug in ("about", "method", "corrections", "privacy"):
+  _r = c.get("/" + _slug); _h = _r.get_data(as_text=True)
+  t(f"/{_slug} page: 200, footer links, Not medical advice, no dashes",
+    _r.status_code == 200 and 'href="/corrections"' in _h and "Not medical advice" in _h
+    and "\u2014" not in _h and "\u2013" not in _h)
+_a = c.get("/about").get_data(as_text=True)
+t("about: names Dhruva with the contact address and nothing else about the owner",
+  "Dhruva" in _a and "hello@checkevident.com" in _a)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ title }} · Evident</title>
+  <meta name="description" content="{{ desc }}" />
+  <meta name="theme-color" content="#0f1211" />
+  <meta name="color-scheme" content="light" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon.svg') }}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}" />
+  <link rel="canonical" href="{{ base_url }}/{{ slug }}" />
+  <meta property="og:title" content="{{ title }} · Evident" />
+  <meta property="og:description" content="{{ desc }}" />
+  <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="page-doc">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-quote" viewBox="100 120 320 260"><g fill="currentColor"><circle cx="176" cy="300" r="62"/><path d="M114 300 C114 222 150 168 232 140 L246 172 C198 192 176 224 176 264 Z"/><circle cx="346" cy="300" r="62"/><path d="M284 300 C284 222 320 168 402 140 L416 172 C368 192 346 224 346 264 Z"/></g></symbol>
+    </defs>
+  </svg>
+  <div class="band">
+    <header class="top">
+      <div class="nameplate"><a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span></div>
+    </header>
+  </div>
+    <main class="wrap doc">
+    {% if slug == "about" %}
+    <h1 class="hero">About Evident</h1>
+    <p class="lede">Evident checks a health claim against the published research and shows its working.</p>
+    <h2 class="section-label">Who makes it</h2>
+    <p>Evident is an independent project made and run by Dhruva. It shows no ads, sells nothing and has no accounts, so no verdict makes it money.</p>
+    <h2 class="section-label">What it does</h2>
+    <p>You paste a claim. Evident searches PubMed, reads the abstracts of the closest studies, and writes a verdict that cites only studies it was shown. Every verdict says what is still open. "It's complicated" and "Not enough evidence" are ordinary answers.</p>
+    <h2 class="section-label">What it does not do</h2>
+    <p>It does not diagnose, treat or advise. It can misread an abstract, and PubMed does not index everything. Read the studies it lists, and take your own health questions to a clinician.</p>
+    <h2 class="section-label">Contact</h2>
+    <p>Questions, corrections or ideas: <a href="mailto:hello@checkevident.com">hello@checkevident.com</a>.</p>
+    {% elif slug == "method" %}
+    <h1 class="hero">Methodology</h1>
+    <p class="lede">How a check works, step by step, and the rules the code enforces on every verdict.</p>
+    <h2 class="section-label">The steps</h2>
+    <p><strong>Your claim becomes a search.</strong> An AI model ({{ provider }}) turns the claim into the terms researchers use.</p>
+    <p><strong>PubMed answers.</strong> Evident takes up to 8 of the closest matches, with their abstracts.</p>
+    <p><strong>The studies get weighed, not counted.</strong> A meta-analysis of many trials outranks one small pilot. A case report about one patient barely counts.</p>
+    <p><strong>The verdict is checked by code.</strong> A verdict can cite only studies it was shown. One with no citations, or resting only on case reports or animal and lab studies, becomes "Not enough evidence".</p>
+    <p><strong>Every verdict says what is still open.</strong> The last line names the gap: who the studies left out, how short they ran, or what finding would change the answer.</p>
+    <h2 class="section-label">Limits</h2>
+    <p>The model can misread an abstract, and PubMed does not index everything. Strong evidence of a small effect is not strong evidence for a cure.</p>
+    {% else %}
+    <h1 class="hero">Corrections and contact</h1>
+    <p class="lede">If a verdict looks wrong, say so. Corrections are how this gets better.</p>
+    <h2 class="section-label">Report a wrong answer</h2>
+    <p>Use the report option under any verdict, or email <a href="mailto:hello@checkevident.com">hello@checkevident.com</a> with the claim and what looks wrong. Leave anything personal out.</p>
+    <h2 class="section-label">Contact</h2>
+    <p><a href="mailto:hello@checkevident.com">hello@checkevident.com</a></p>
+    {% endif %}
+    <p><a href="/">Back to Evident</a></p>
+  </main>
+  <footer class="foot wrap">
+    <p><strong>Not medical advice.</strong> Evident summarises published research. It is not medical advice and does not replace a clinician.</p>
+    <p class="fine"><a href="/about">About</a> · <a href="/method">Methodology</a> · <a href="/corrections">Corrections and contact</a> · <a href="/privacy">Privacy</a></p>
+  </footer>
+</body>
+</html>

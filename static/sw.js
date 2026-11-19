@@ -5,13 +5,16 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v82";
+const CACHE = "evident-v83";
 const SHELL = [
   "/",
   "/checks",
   "/static/style.css",
   "/static/app.js",
   "/privacy",
+  "/about",
+  "/method",
+  "/corrections",
   "/manifest.webmanifest",
   "/static/fonts/woff2/bricolagegrotesque-opsz96-300-500.woff2",
   "/static/fonts/woff2/instrumentsans-normal-400-600.woff2",

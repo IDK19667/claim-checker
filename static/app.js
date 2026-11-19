@@ -1714,13 +1714,6 @@ for (const d of document.querySelectorAll("dialog.sheet")) {
     y0 = null;
   });
 }
-// "About" is the section under the checker, "Before you trust a verdict". From
-// a result or an error it first goes back to the checker, then scrolls to it.
-$("about-link").addEventListener("click", (e) => {
-  e.preventDefault();
-  if (askSection.hidden) goHome();
-  if (trustSection) trustSection.scrollIntoView({ block: "start" });
-});
 $("how-btn").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
 $("assess").addEventListener("click", (e) => { if (e.target.closest("#meter")) openSheet($("how-sheet"), $("how-title")); });
 
