@@ -1,0 +1,7 @@
+PASS error: empty submit shows it, linked and invalid; typing clears all three
+PASS suggestions: near-duplicate wordings are one row, the other is named, nothing else is lost
+PASS suggestions: the list is labelled 'Previously checked claims', visibly and by name
+PASS suggestions: the list says a pick opens the saved answer, and a pick does exactly that
+PASS field border: 3:1 or better against the night ground and the field fill, at both widths
+
+5/5 passed

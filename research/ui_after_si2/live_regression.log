@@ -1,0 +1,55 @@
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+a research line did not match its abstract (direction), so it was dropped: 'That is about 17% lower odds, a small effect (Study 2).'
+ 1. NO  complicated   want true          :: Exercise lowers the risk of depression
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+a research line did not match its abstract (group), so it was dropped: 'That is about 28% lower risk, a moderate effect (Study 5).'
+ 2. ok  true          want true          :: Smoking causes lung cancer
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+ 3. NO  HTTP 502      want true          :: Vaccines reduce the risk of severe measles
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+ 4. NO  HTTP 502      want true          :: Regular physical activity reduces the risk of type 2 diabetes
+model prose used banned words: robust
+ 5. ok  true          want true          :: Sleep deprivation impairs memory
+ 6. ok  false         want false         :: Vaccines cause autism
+ 7. ok  false         want false         :: Cracking your knuckles causes arthritis
+ 8. ok  false         want false         :: Sugar makes children hyperactive
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+ 9. NO  HTTP 502      want false         :: You need to drink 8 glasses of water a day
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+10. ok  insufficient  want insufficient  :: Detox teas remove toxins from the body
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+a research line did not match its abstract (group), so it was dropped: 'The adjusted odds ratio for sudden chest and throat infections risk was 0.88 with a likely range from 0.81 to 0.96 (Study 2).'
+11. ok  complicated   want complicated   :: Vitamin D supplements prevent winter infections
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+12. ok  complicated   want complicated   :: Eggs raise heart disease risk
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+13. ok  false         want false         :: Intermittent fasting is better for weight loss than regular dieting
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+14. NO  HTTP 502      want false         :: Red wine is good for the heart
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+15. ok  complicated   want complicated   :: Creatine improves cognitive performance
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+16. ~   complicated   want true          :: Melatonin helps people fall asleep faster
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+17. NO  HTTP 502      want insufficient  :: Cold showers boost immunity
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+18. ok  complicated   want complicated   :: Magnesium supplements improve sleep quality
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+19. NO  HTTP 502      want complicated   :: Standing desks reduce back pain
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+a rewrite of the short answer was refused, because it argued with the stamp, lost a hedge or changed the answer: 'Ashwagandha reduces stress, though the certainty of the evidence is low, but the certainty of that evidence is low.' -> 'Ashwagandha reduces stress.'
+20. ok  complicated   want complicated   :: Ashwagandha reduces stress
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+21. NO  HTTP 502      want false         :: Apple cider vinegar cure diabetes
+
+12/21 match, 0 stamp/text conflicts, 0 with off-topic studies used

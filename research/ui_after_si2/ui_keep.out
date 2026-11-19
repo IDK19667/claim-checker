@@ -1,0 +1,10 @@
+PASS type-ahead: arrow keys walk the suggestions and Enter picks one
+PASS type-ahead: Escape closes the suggestions and keeps what was typed
+PASS how-it-works dialog: Escape closes it and focus returns to its button
+PASS study dialog: Escape and Close both close it, focus returns to the study's button
+PASS "Link copied" appears after Copy link, and the link is on the clipboard
+PASS report a wrong answer: it opens on a focused note and Cancel closes it without sending
+PASS loading stages follow the stream events in order, and wait when the server waits
+PASS Cancel during a check stops it and keeps the draft
+
+8/8 passed

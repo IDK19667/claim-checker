@@ -1,0 +1,78 @@
+{
+ "home@1440": [
+  {
+   "id": "aria-allowed-role",
+   "impact": "minor",
+   "n": 1,
+   "help": "ARIA role should be appropriate for the element",
+   "targets": [
+    "#claim-input :: Fix any of the following: |   ARIA role combobox is not allowed for given element"
+   ]
+  }
+ ],
+ "result@1440": [
+  {
+   "id": "page-has-heading-one",
+   "impact": "moderate",
+   "n": 1,
+   "help": "Page should contain a level-one heading",
+   "targets": [
+    "html :: Fix all of the following: |   Page must have a level-one heading"
+   ]
+  }
+ ],
+ "source-dialog@1440": [],
+ "error@1440": [
+  {
+   "id": "page-has-heading-one",
+   "impact": "moderate",
+   "n": 1,
+   "help": "Page should contain a level-one heading",
+   "targets": [
+    "html :: Fix all of the following: |   Page must have a level-one heading"
+   ]
+  }
+ ],
+ "about@1440": [],
+ "method@1440": [],
+ "corrections@1440": [],
+ "privacy@1440": [],
+ "home@390": [
+  {
+   "id": "aria-allowed-role",
+   "impact": "minor",
+   "n": 1,
+   "help": "ARIA role should be appropriate for the element",
+   "targets": [
+    "#claim-input :: Fix any of the following: |   ARIA role combobox is not allowed for given element"
+   ]
+  }
+ ],
+ "result@390": [
+  {
+   "id": "page-has-heading-one",
+   "impact": "moderate",
+   "n": 1,
+   "help": "Page should contain a level-one heading",
+   "targets": [
+    "html :: Fix all of the following: |   Page must have a level-one heading"
+   ]
+  }
+ ],
+ "source-dialog@390": [],
+ "error@390": [
+  {
+   "id": "page-has-heading-one",
+   "impact": "moderate",
+   "n": 1,
+   "help": "Page should contain a level-one heading",
+   "targets": [
+    "html :: Fix all of the following: |   Page must have a level-one heading"
+   ]
+  }
+ ],
+ "about@390": [],
+ "method@390": [],
+ "corrections@390": [],
+ "privacy@390": []
+}

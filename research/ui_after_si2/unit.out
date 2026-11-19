@@ -1,0 +1,1298 @@
+[2026-11-19 08:41:40,012] ERROR in app: Check could not run: No AI provider key is set. Copy .env.example to .env and add either GEMINI_API_KEY (free at aistudio.google.com) or ANTHROPIC_API_KEY (console.anthropic.com).
+Gemini returned 429; trying again in 1.0s (try 2 of 3)
+Gemini returned 429; trying again in 3.0s (try 3 of 3)
+[2026-11-19 08:41:41,370] ERROR in app: The AI provider rejected its key: The GEMINI_API_KEY in .env was rejected. Check it at aistudio.google.com.
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+Gemini returned 503; trying again in 1.0s (try 2 of 3)
+Gemini returned 503; trying again in 3.0s (try 3 of 3)
+Gemini returned 429; trying again in 1.0s (try 2 of 3)
+Gemini returned 429; trying again in 1.0s (try 2 of 3)
+Gemini returned 429; trying again in 3.0s (try 3 of 3)
+Gemini returned 500; trying again in 1.0s (try 2 of 3)
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+stamp 'complicated' still disagreed with the takeaway (no) after the retry, so it follows the takeaway: 'Controlled tests show sugar does not make children hyperactive.'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+stamp 'true' still disagreed with the takeaway (no) after the retry, so it follows the takeaway: 'Controlled tests show sugar does not make children hyperactive.'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+stamp 'complicated' still disagreed with the takeaway (yes) after the retry, so it follows the takeaway: 'Ashwagandha reduces stress.'
+stamp 'complicated' still disagreed with the takeaway (yes) after the retry, so it follows the takeaway: 'Vitamin D reduces colds.'
+a sentence reported an outcome its studies never measured, so it was dropped: 'Vitamin D cut colds (Study 1).'
+stamp 'complicated' still disagreed with the takeaway (no) after the retry, so it follows the takeaway: 'Daily water needs vary by person and food intake, so 8 glasses is just a rough guide.'
+could not read which way the takeaway answers the claim, so the stamp 'complicated' stands: 'Daily water needs vary by person and food intake, so 8 glasses is just a rough guide.'
+dropped an explanation sentence that ruled against the stamp 'false'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the takeaway left out that the main review puts the link down to other factors, so it was replaced: 'Moderate wine may lower heart risks, but lifestyle factors and heavy drinking complicate the picture.'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+a sentence reported an outcome its studies never measured, so it was dropped: 'Immune markers dipped after vaccination (Study 1).'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the short answer did not match its abstracts (direction), so it was rewritten: 'Tai chi lowers blood pressure a lot.' -> 'Tai chi lowers blood pressure a little.'
+a research line did not match its abstract (group), so it was rewritten: 'Tai chi lowered blood pressure by 8 mmHg (Study 1).'
+a research line did not match its abstract (unsupported), so it was dropped: 'It also improved sleep (Study 2).'
+a rewrite of the short answer was refused, because it argued with the stamp, lost a hedge or changed the answer: 'Tai chi lowers blood pressure a lot.' -> 'Tai chi does not lower blood pressure.'
+a research line did not match its abstract (group), so it was dropped: 'Tai chi lowered blood pressure by 8 mmHg (Study 1).'
+a research line did not match its abstract (unsupported), so it was dropped: 'It also improved sleep (Study 2).'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+a rewrite of the short answer was refused, because it argued with the stamp, lost a hedge or changed the answer: 'Tai chi does not lower blood pressure.' -> 'Tai chi studies show mixed results because some trials find no change while others find a drop.'
+a research line did not match its abstract (direction), so it was dropped: 'Some trials found tai chi lowered blood pressure (Study 2).'
+a research line did not match its abstract (group), so it was dropped: 'Tai chi lowered blood pressure by 8 mmHg (Study 1).'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+a sentence reported an outcome its studies never measured, so it was dropped: 'A second trial found caffeine levels rose, but nobody developed kidney stones (Study 2).'
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the faithfulness check did not run, so the answer stands: Couldn't reach the AI service.
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': ['CDC', 'WHO'], 'says': 'fewer than 2 in 10 colds respond to antibiotics.'}
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': [], 'says': 'antibiotics do not work on colds.'}
+the guideline check did not run, so the answer stands: Couldn't reach the AI service.
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': ['CDC', 'WHO'], 'says': 'the WHO report on raw milk says it is unsafe.'}
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': ['CDC', 'WHO'], 'says': 'the Dietary Guidelines for Americans advise against it.'}
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': ['CDC', 'WHO'], 'says': 'the “Global Strategy on Diet” says it is unsafe.'}
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': ['CDC', 'WHO'], 'says': 'a CDC fact sheet says antibiotics do not work on colds.'}
+the guideline answer could not be used as it was: {'position': 'rejects', 'bodies': ['CDC', 'WHO'], 'says': 'the NHS guidance titled Healthy Eating says no.'}
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'complicated' becomes false: 'Major health guidelines say: antibiotics do not work on colds, which are caused by viruses.'
+a guideline answer argued with itself, so it was not used: 'Major health guidelines say: antibiotics do not cure colds.' (true)
+health guidance (CDC, WHO) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: colloidal silver is not safe or effective for treating any disease.'
+health guidance (CDC, WHO) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: colloidal silver is not safe or effective for treating any disease.'
+a sentence reported an outcome its studies never measured, so it was dropped: 'One trial found fewer skin cancers (Study 1).'
+the verdict 'complicated' conflicted with health guidance (CDC, WHO), so it follows the guidance as 'true': 'Major health guidelines say: daily sunscreen use lowers the risk of skin cancer.' (was 'The evidence on sunscreen and skin cancer is mixed.')
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'complicated' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: this is advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: this is not safe, and the medicine is still advised.'
+health guidance (CDC, WHO) is plain on a pregnancy claim, so the 'complicated' becomes false: 'Major health guidelines say: no amount of alcohol is safe during pregnancy.'
+health guidance (CDC, WHO) is plain on a pregnancy claim, so the 'insufficient' becomes false: 'Major health guidelines say: no amount of alcohol is safe during pregnancy.'
+health guidance (CDC, WHO) is plain on a pregnancy claim, so the 'insufficient' becomes false: 'Major health guidelines say: smoking during pregnancy harms the baby and is never safe.'
+health guidance (CDC, WHO) is plain on a pregnancy claim, so the 'insufficient' becomes true: 'Major health guidelines say: getting the whooping cough shot while pregnant helps protect newborn babies from getting sick.'
+health guidance (CDC, WHO) is plain on a child claim, so the 'insufficient' becomes false: 'Major health guidelines say: babies under one year old should not be given honey.'
+health guidance (CDC, WHO) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: eating sushi during pregnancy is fine.'
+a guideline answer argued with itself, so it was not used: 'Major health guidelines say: pregnant women can safely drink a little, but should avoid binge drinking.' (false)
+health guidance (CDC, WHO) is plain on a pregnancy claim, so the 'complicated' becomes false: 'Major health guidelines say: no level of alcohol is known to be safe during pregnancy.'
+a guideline answer argued with itself, so it was not used: 'Major health guidelines say: the vaccine does not cause harm to the baby.' (false)
+health guidance (CDC, WHO) added to a 'insufficient' it cannot overrule: 'Major health guidelines say: this is fine.'
+health guidance (CDC, WHO) is plain on a pregnancy claim, so the 'complicated' becomes false: 'Major health guidelines say: no amount of alcohol is safe during pregnancy.'
+/Users/dhruv/Downloads/health-claim-checker 2/.claude/worktrees/site-improve/tests/test_app.py:4216: DeprecationWarning: Image.Image.getdata is deprecated and will be removed in Pillow 14 (2027-10-15). Use get_flattened_data instead.
+  max(_strip.getdata()) > 130 and _card_im.getpixel((8, 350)) < 30 and _card_im.size == (1200, 630))
+health guidance (WHO) rejects a forgo-treatment claim, so the 'insufficient' becomes false: 'Major health guidelines say: people who have had a heart attack should keep taking statins to prevent another one.'
+PASS index 200 
+PASS teacher page gone 
+PASS manifest served w/ type 
+PASS manifest carries the current product name, not a stale one 
+PASS the front page's own wordmark carries the current name 
+PASS llms.txt was renamed along with everything else 
+PASS manifest share_target + shortcuts 
+PASS sw.js at root w/ js type 
+PASS healthz 
+PASS healthz reports a short commit string 
+PASS commit is the 7-character prefix of RENDER_GIT_COMMIT 
+PASS commit is unknown with no env var and git failing 
+PASS icon icon-192.png 
+PASS icon icon-512.png 
+PASS icon icon-512-maskable.png 
+PASS icon apple-touch-icon.png 
+PASS icon icon.svg 
+PASS empty claim 400 
+PASS 500+ char claim 400 
+PASS no keys -> 500, with the operator's instructions kept out of the page 
+PASS anthropic only -> anthropic 
+PASS both -> gemini wins 
+PASS LLM_PROVIDER override 
+PASS placeholder key treated as unset 
+PASS pubmed: a call NCBI turns away (429) is asked once more 
+PASS   and a second refusal still fails, into the check's defined PubMed error 
+PASS happy path 200 
+PASS   cited mapping 
+PASS   tldr, share_url, pubmed_url, study detail fields 
+PASS   not cached, 2 calls 
+PASS cache hit from other ip 
+PASS both checks logged, cached flag set 
+PASS log keeps full study metadata 
+PASS uncited false -> not enough evidence + honest tldr 
+PASS per-ip limit 429 + Retry-After 
+PASS limited ip still gets cache 
+PASS other ip ok 
+PASS XFF ignored by default 
+PASS XFF honored w/ TRUST_PROXY -> limited ip 
+PASS broadened search used & flagged 
+PASS sse content-type 
+PASS sse stages in order 
+PASS   found carries count/query; done carries result 
+PASS sse cache hit -> single done, cached 
+PASS sse empty claim -> error 400 event 
+PASS sse rate limit -> error 429 w/ retry_after 
+PASS gemini 429 -> 429 w/ retry_after 
+PASS gemini bad key -> 500, and the page says only that the checker is unavailable 
+PASS gemini 503 -> 502 
+PASS non-JSON -> complicated 
+PASS truncated -> complicated 
+PASS PubMed down -> 502 
+PASS failed checks not cached 
+PASS gemini retry: 503, 503, then success returns the answer after 3 tries, pausing 1s then 3s 
+PASS   503 three times: the same 'unavailable' error and message as before, after 3 tries 
+PASS   429 then success returns the answer, pausing 1s once 
+PASS   429 three times: 'rate_limit' after 3 tries 
+PASS   a rejected key is never retried: 'auth' after 1 try, no pause 
+PASS   any other 4xx is never retried: 'other' after 1 try, no pause 
+PASS   any 5xx is retried, not just 503 
+PASS   a dropped connection is not retried 
+PASS trending lists multi-checked cached claims 
+PASS feedback validation 400 
+PASS feedback ok 
+PASS   feedback stored keyed 
+PASS og:title carries verdict for cached claim 
+PASS   og:image points at card 
+PASS share-target ?text= also previews 
+PASS uncached claim -> generic og 
+PASS og image png for cached claim 
+PASS generic og image 
+PASS tidy: filler opener and dashes removed, sentence closed 
+PASS tidy: capped at a sentence boundary 
+PASS tidy: empty stays empty 
+PASS tidy: an em dash before a new thought becomes a full stop 
+PASS tidy: a spaced hyphen used as a dash becomes a comma 
+PASS tidy: a dash between numbers is a range, not a list 
+PASS tidy: a hyphenated word and a subtraction are left alone 
+PASS tidy: no em or en dash survives 'A — b' 
+PASS tidy: no em or en dash survives 'end –' 
+PASS tidy: no em or en dash survives '— start' 
+PASS tidy: no em or en dash survives 'x—y–z' 
+PASS tidy: no em or en dash survives 'One -- two' 
+PASS copy gate: every banned word in model prose is flagged 
+PASS   and the flag is a log line naming the words, not the text 
+PASS   and the words are flagged, not rewritten 
+PASS copy gate: elevated (a finding) and a single solution are not flagged 
+PASS copy gate: every word on the list is caught 
+PASS gate applied to tldr and still_open in the API 
+PASS   still_open survives the cache 
+PASS forced complicated names the open question 
+PASS no dashes in shipped copy 
+PASS verdict is server-rendered, not JS-only 
+PASS   the ask view is hidden when a result is rendered 
+PASS   studies are in the HTML with their PMIDs 
+PASS   sources split into relied on and set aside 
+PASS   the relied-on group is open and the rest is folded 
+PASS   every study is still in the folded HTML 
+PASS   study numbers stay global so the prose can point at them 
+PASS ClaimReview markup 
+PASS   every study is a citation, relied-on ones flagged 
+PASS   no null values in the markup 
+PASS canonical points at the shared url 
+PASS uncached claim renders the ask view 
+PASS robots.txt allows crawlers and names the sitemap 
+PASS sitemap lists the static pages only, never a claim somebody typed 
+PASS llms.txt describes the rules and links recent claims 
+PASS privacy page 
+PASS   it says what the AI provider is sent, that it gets nothing that identifies you, and that the verdict can be wrong 
+PASS every response carries a content security policy 
+PASS   the policy is same-origin by default 
+PASS   no third party can be framed, based or posted to 
+PASS   scripts are allowed by nonce, never by 'unsafe-inline' 
+PASS   the nonce in the header is the one in the page 
+PASS   a fresh nonce per response 
+PASS a claim never leaks to PubMed as a referrer 
+PASS content types are not sniffed 
+PASS the page cannot be framed 
+PASS no camera, mic or location is ever asked for 
+PASS plain http is not told to be https-only 
+PASS the privacy page is protected too 
+PASS the debugger is off unless it is asked for 
+PASS meta-analysis outranks the journal-article tag 
+PASS a retracted paper is its own tier, not merely weak 
+PASS an untyped paper counts as moderate, never as strong 
+PASS snapshot counts what was read, used, pooled and registered 
+PASS snapshot reports the real year range 
+PASS the mix adds up to the studies read 
+PASS empty input gives an empty mix, not a crash 
+PASS tier labels are singular for one and plural for many 
+PASS a mouse study tagged only Journal Article is an animal or lab study 
+PASS   and so is a paper that never says it was run on people 
+PASS   while a human randomized trial stays strong and an untagged human cohort stays human 
+PASS   and a record with no abstract is not judged off its silence 
+PASS the design mix counts animal and lab papers as such, not as human studies 
+PASS   and the chart's sentence says so 
+PASS   and the mix still adds up to the studies read 
+PASS the evidence table in app.js matches evidence.py 
+PASS a non-numeric PubMed ID is refused 
+PASS the deep dive returns citations, full text and related work 
+PASS a failing deep dive degrades to an honest shape, never a 500 
+PASS the front page shows the ledger 
+PASS the front page lists recent checks with their evidence 
+PASS the front page never says '1 studies' 
+PASS a rendered result carries the evidence chart 
+PASS a literal fragment finds the claim 
+PASS a misspelled claim still finds the right one 
+PASS a corrected spelling is labelled a near match, not a literal one 
+PASS a literal hit is labelled as one 
+PASS nonsense suggests nothing 
+PASS a fragment shorter than the floor suggests nothing 
+PASS suggestions carry the verdict so the row can preview it 
+PASS the suggest endpoint answers with cached claims 
+PASS the suggest endpoint stays quiet below the floor 
+PASS a missing page returns 404 with a real page 
+PASS the 404 offers the claim field and stays honest 
+PASS the 404 is not indexable 
+PASS the page preloads the fonts it actually uses 
+PASS theme colour matches the shipped ground, and no dark scheme is claimed 
+PASS every element the browser renders into exists on the cold front page 
+PASS a verdict that rests on evidence gets no next-steps panel 
+PASS no papers at all is reported as nothing_found 
+PASS papers that test nothing are a different fact from no papers 
+PASS the exact search is offered back to the reader 
+PASS a wider search joins the terms with OR, not AND 
+PASS stopwords are dropped from the search terms 
+PASS a dead end offers related claims that do have answers 
+PASS the claim itself is never offered as its own related claim 
+PASS a single-word claim gets no wider search rather than a useless one 
+PASS grounding: an uncited sentence never reaches the page 
+PASS grounding: a study number out of range is not a citation 
+PASS grounding: a figure that is in no abstract takes its sentence with it 
+PASS grounding: a figure that is in an abstract survives, comma or no comma 
+PASS grounding: a sentence too long to read is dropped 
+PASS grounding: the wording is pulled back to what the evidence carries 
+PASS grounding: the reader's own claim is quoted, not softened 
+PASS grounding: a part with no study gets a stated fact, not the model's prose 
+PASS grounding: every surviving sentence carries a study number 
+PASS grounding: the layer never reaches past the records the verdict was shown 
+PASS grounding: a medical term is explained once, on its first appearance 
+PASS grounding: a design with a plain name is renamed, and named once in brackets 
+PASS grounding: the prose lands at about an 8th-grade reading level 
+PASS grounding: a sentence is capped after its explanations go in, not before 
+PASS   so a term skipped for length is still explained further down 
+PASS grounding: no dashes in the deeper layer either 
+PASS grounding: an effect size that is described, not quoted, does not survive 
+PASS   and it points at the figures that did survive, rather than denying them 
+PASS   with no figure anywhere on the page, the abstracts are said to carry none 
+PASS   and a figure that is in them is quoted as it stands 
+PASS grounding: softening only ever weakens a claim 
+PASS   and under a 'not' it leaves the verb alone, since weakening it there would strengthen the sentence 
+PASS   and inside 'none show that', 'did not find that' or 'little evidence that', however far back 
+PASS grounding: a breakdown with nothing left in it is no breakdown at all 
+PASS grounding: a check with no studies has nothing to ground against 
+PASS grounding: reading grade is measured, not asserted 
+PASS search: a bracketed OR group is one term, not four 
+PASS   broadening drops a whole group, never half of one 
+PASS   a query with one group cannot be broadened further 
+PASS   the second search asks PubMed for the designs that settle claims 
+PASS   strong designs take the front of the merged list, with no duplicates 
+PASS   and every search really ran, the review search first, then the filtered one 
+PASS search: the review search uses the first, as-typed term of each group 
+PASS   a query with one group still gets one, and an empty one does not 
+PASS   its top reviews lead the list, however many synonym searches find 
+PASS   and it is one extra search, asked for only the review slots 
+PASS   a third AND group is dropped, whatever the prompt asked for 
+PASS   two groups are left exactly as they are 
+PASS   a record with no abstract cannot ground a sentence, so it is dropped 
+PASS population: a trial names its group in the title 
+PASS   or in the opening of its abstract 
+PASS   a pooled review is not narrowed by a subgroup line in its abstract 
+PASS   nor is a narrative review or a guideline, which enrolled nobody; its title still counts 
+PASS   a general trial is not labelled at all 
+PASS   narrow groups are listed in the order they were read 
+PASS   evidence drawn only from narrow groups is flagged as such 
+PASS   one general study among them clears the flag 
+PASS narrow evidence cannot carry a true verdict 
+PASS   and the result says whose evidence it was 
+PASS a review that names children in passing does not make the evidence narrow 
+PASS conditions: a claim's condition is read off its own words 
+PASS   a claim with no condition asks for no subgroup search 
+PASS   a subgroup sentence on that condition is pulled out of the abstract 
+PASS   and a counting sentence is not mistaken for a finding 
+PASS   two abstracts disagreeing is itself what gets reported 
+PASS   the conditions these abstracts do report on are named for the prompt 
+PASS   and the model is handed those sentences, with their study numbers 
+PASS   no condition in the claim means no block at all 
+PASS effect size: thresholds are fixed in code, not left to the prose 
+PASS   a ratio becomes a percentage a reader can picture 
+PASS   a ratio with its outcome named in between is still read 
+PASS   but a figure the sentence does not pin to that ratio is left alone 
+PASS   a ratio above 1 reads as an increase 
+PASS   a standardised mean difference uses Cohen's own thresholds 
+PASS   a percentage drop is a drop, not a rise 
+PASS   a confidence interval is not read as an effect 
+PASS   prose with no figure in it has no size 
+PASS   the takeaway is pulled back to the size behind it 
+PASS   a large effect is left to speak for itself 
+PASS   a sentence that hedges itself is not hedged twice 
+PASS   and a negative sentence is left alone 
+PASS   the breakdown's effect line carries the translation and its citation 
+PASS   and the size label travels with it for the takeaway 
+PASS indirect: a study that measured the outcome is not called indirect 
+PASS   one that measured a stand-in is labelled with the term it used 
+PASS   with no surrogate named, nothing is called indirect 
+PASS   the subject filter reads the title and the abstract's opening only 
+PASS   a British spelling or a plural is the same term 
+PASS   but a longer word is still another word 
+PASS   and the prompt tells the model which study measured a stand-in 
+PASS   a paper that never mentions the claim's subject sinks under the ones that do 
+PASS   the surrogate search asks for the subject plus the stand-in, never the outcome 
+PASS consistency: calling a reported condition untested is caught 
+PASS   two lines saying opposite things about the same effect are caught 
+PASS   an answer that agrees with itself raises nothing 
+PASS   'the studies found' is not read as a finding, so nothing fires 
+PASS off claim: a product the claim never named is flagged 
+PASS   a claim about the product itself keeps it 
+PASS a judgement the gate took away does not become 'no study tests this' 
+PASS   while a part the model never judged still says so 
+PASS   and the bookkeeping flag never reaches the payload 
+PASS a sentence the brackets alone made too long keeps the sentence, not the brackets 
+PASS   the percentage is added to a quoted ratio, with its citation 
+PASS   and a size word the model already chose is not repeated 
+PASS   a figure from one line is never translated under another 
+PASS soften: 'blocks' the thing is not rewritten as 'reduces' 
+PASS a bracket on its own is not a sentence, so it never becomes a section 
+PASS a count the abstract spells out is a count the verdict may write 
+PASS   and only the whole run counts, so 'forty-five' never permits 40 or 5 
+PASS   a scale word and its 'and' are part of the number 
+PASS   so a sentence quoting a spelled count is not deleted as invented 
+PASS plain: 'duration' is replaced by a word that fits every slot it sits in 
+PASS surrogate: the second line is read only when it is labelled 
+PASS   an unlabelled second line is not a surrogate 
+PASS   and 'none' means none 
+PASS plain: a compound noun is rewritten as the thing you do 
+PASS   and 'supplementation with X' becomes 'taking X' 
+PASS   a term that reads differently after 'the ... of' gets the noun, not the clause 
+PASS   but standing alone it gets the plain clause 
+PASS   a deficiency is low levels of the thing, in that order 
+PASS   a superlative is not left as 'most low' 
+PASS   the term parked in brackets is not then rewritten by a later rule 
+PASS   the medical term is kept once, not on every appearance 
+PASS   an article follows the word that replaced the one after it 
+PASS   an adjective before a noun is rebuilt, not just swapped 
+PASS   softening 'stops' leaves 'stops working' alone, which claims nothing 
+PASS   the two design labels together are one pooled review, named once 
+PASS   a long word with a short twin loses nothing, so it is swapped silently 
+PASS natural: the takeaway is a sentence someone would say out loud 
+PASS   and research grammar is turned back into speech 
+PASS   and 'link' used as a thing is left alone, never 'a small are linked to' 
+PASS   nor after a describing word with the verb before it: never 'shows mixed is linked to' 
+PASS grade: the claim's own words are not counted against the prose 
+PASS   excluding them lowers the measured grade of the same sentence 
+PASS   the breakdown reports its own measured grade, never an asserted one 
+PASS   and short prose about these trials comes in at the target or below 
+PASS the breakdown rides on the verdict call: one search, one verdict, one faithfulness read 
+PASS   the takeaway is held to the same rule as the breakdown 
+PASS   the breakdown is in the API payload, gated 
+PASS   it survives the cache round trip 
+PASS a self contradicting answer costs one more call, and only then 
+PASS   and the answer the reader gets is the consistent one 
+PASS the breakdown is server rendered, so a shared link carries it 
+PASS   it is collapsed by default, on the server and in the markup 
+PASS   the summary says how many studies it rests on 
+PASS   each study opens from a real button, not a list item playing one 
+PASS   what was gated out is not in the page either 
+PASS   the effect size is printed once: in 'What the research says', not again as its own line 
+PASS   and every section of the layer is there 
+PASS a forced 'not enough evidence' verdict carries no breakdown 
+PASS a result cached before the breakdown existed renders cleanly 
+PASS   and reports no breakdown rather than an empty one 
+PASS the server and the browser render the same breakdown headings 
+PASS the browser's renderer runs every sentence through the same ref linking 
+PASS nothing in the breakdown is a card, and nothing in it is colour coded 
+PASS a structured abstract's conclusion section is quoted 
+PASS   an inline numbered heading counts too 
+PASS   so does the BMJ's heading with no colon 
+PASS   an unstructured abstract is quoted from its concluding sentence 
+PASS   and with no concluding sentence nothing is guessed 
+PASS   a headed abstract with no conclusion heading quotes nothing 
+PASS   the registration trailer is dropped and dashes become words 
+PASS   only studies the verdict used, numbered as on the shelf 
+PASS the breakdown's head says what is inside it 
+PASS   and says nothing when there is nothing to say 
+PASS the payload carries each used study's conclusion, and the head's contents line 
+PASS   the conclusions are server rendered as quotes, labelled by study 
+PASS   and the head says what is inside before it is opened 
+PASS   the browser draws the same quotes, never linking inside them 
+PASS after a check the page moves to the answer, once 
+PASS   any touch, wheel or key from the reader cancels it 
+PASS   it honours reduced motion and waits for a hidden tab 
+PASS the answer is flat on the page: no panel, no shadow, no lift onto the head 
+PASS on a wide screen the sources are a narrow rail beside one reading column 
+PASS after a check the address carries the claim as checked, so a fixed spelling stays fixed on reload 
+PASS the result reads claim, answer, assessment, research, still open, breakdown, evidence, then sources 
+PASS   the claim carries its label and is never cut short 
+PASS   its quotation marks come from the stylesheet, so the text stays the text 
+PASS   and the answer sentence is set larger than the claim and the assessment at every width 
+PASS   the assessment is plain text: no oval, no ring, no pen drawn round it on the result 
+PASS   the assessment and its confidence are two labelled rows under the answer 
+PASS   the confidence is the sentence the check worded, once 
+PASS the breakdown view drops what 'What the research says' already printed 
+PASS   the who-line is not said twice: the who block keeps the sentence, the research block does not 
+PASS   the effect-size pair, shown once in the research block, is not printed again as 'How big the effect is' 
+PASS   a record with no breakdown has no view 
+PASS the result page prints no sentence twice (12 sentences) 
+PASS   the effect-size sentence is on the page once, in the research block, and there is no second 'How big the effect is' 
+PASS the script and the server pick the same sentences to print, on three records 
+PASS a result page carries no footage, and the checking screen has no banner: no band element, no clips, no film code 
+PASS   checking reserves no tall block: the head is as tall as its content, so the claim stays where the verdict will put it 
+PASS the source dialog has one Close, in a bar that sticks to its top; the foot has none 
+PASS   that Close is at least 44px tall and wide, and has a word, not just an icon 
+PASS   focus moves into the dialog on open, Escape closes it natively, and the opener gets focus back 
+PASS the phone's share bar is shown only once the short answer has scrolled above the top edge, never on first view 
+PASS   and it is put away with the result: leaving the result or starting a check disarms it 
+PASS the service worker no longer precaches the still 
+PASS the confidence line: nothing found, nothing used, the checked wording, or the designs of an old record 
+PASS   and the script words every one of them the same way 
+PASS the result offers 'Edit claim' right under the claim, before anything else on the sheet 
+PASS   it goes back to the claim box with the claim filled, cursor at the end, suggestions shut 
+PASS   it is a 44px target and is not offered while a check runs 
+PASS who and what the answer applies to is its own block, between the research and what is still open 
+PASS   it leaves the breakdown, so the breakdown does not say it a second time 
+PASS   the main limitation is still the still_open field, and still printed 
+PASS   the script fills the same block from the same view 
+PASS a source says why it is listed: relied on with what its design does and where it stops, or why it was set aside 
+PASS   the table of designs is the same in the script and on the server 
+PASS   every source on the result page carries its line 
+PASS   and the script writes the same line for every kind of source 
+PASS what the research says is three to five sentences, every one of them cited 
+PASS   and carries no figure the abstracts do not have 
+PASS   it is in the payload, server rendered, and outside the fold 
+PASS   the figure and its plain words are picked as a pair 
+PASS   a sentence the gate rejects never reaches it 
+PASS   and it costs no extra call: every sentence is already in the answer 
+PASS   the population line carries its label, and drops a common word's capital 
+PASS   a name keeps its capital, and the label is never doubled 
+PASS   a lead-in that repeats the label is dropped 
+PASS   so is an ending that repeats it, and a common first word loses its capital 
+PASS the chart says what it is based on, in words, from the counts 
+PASS   the rest of the record goes on one line under it 
+PASS   a screen reader gets the real counts, not the drawing 
+PASS   one study is 'study', and nothing used says so 
+PASS   an empty set draws no chart and claims nothing 
+PASS a study's cloth is what it was run on, read off the record 
+PASS   an animal study is lab cloth even when it is pooled, and the height still says pooled 
+PASS every study in the payload carries its cloth 
+PASS a mini shelf stands its books in kind order and marks the ones relied on 
+PASS a spine is lettered with the design in a reader's words, and no year 
+PASS   a lab study says what it was run on, unless it is a pooled design 
+PASS the shelf's key lists only the cloths on the shelf, in legend order 
+PASS every study in the payload carries the word for its spine 
+PASS every study carries the type name the chart shows on hover 
+PASS the bars are drawn in the order of the list, numbered the same way 
+PASS height is the kind of study and fill is whether the verdict used it 
+PASS each bar names itself for a screen reader and says where it goes 
+PASS the server and the browser draw the same bar 
+PASS   and read the chart's words off the same server counts 
+PASS the chart draws only in named tokens: no raw colour reaches the evidence 
+PASS   the cloth says what kind of study it is, and nothing is coloured by verdict 
+PASS   a spine word that cannot stand up on its book is left off, never cut 
+PASS a bar is at least a finger tall, and the gap between books is inside the button, so no strip between them is dead to a finger 
+PASS a book is as wide as a book: columns stop at 46px and the row ends at a bookend, so a short list never stretches into a bar chart 
+PASS a relied-on book is solid cloth and a book read but not used is outlined in its cloth on a pale wash, never faded, on the shelf, the mini shelves and the share card 
+PASS the reveal moves transform and opacity only 
+PASS   under 400ms end to end, and nothing at all under reduced motion 
+PASS a bar is a button, so the keyboard reaches it, and it marks what it opens 
+PASS a result that rests on evidence carries no next_steps in its payload 
+PASS home: the field has a visible label and a helper line, not just a placeholder 
+PASS   the nav is How it works, About, Privacy, and the page loads no footage 
+PASS   the examples sit in the form, after the submit button; the counters come after the form 
+PASS   the first three examples are the ones app.js renders 
+PASS home: the privacy line sits right after the submit button and says what the code does 
+PASS   it is true: the claim text is a stored column and is sent to the provider, with no dashes in the line 
+PASS   /flight still redirects and its frames are gone from static/ 
+PASS   the service worker no longer precaches the intro's files 
+PASS the stamp check flags the audit's five contradictions and none of the rest 
+PASS   a 'but' that turns to a side note leaves the plain answer standing 
+PASS   'no study tests this' is not a 'no', so it can sit under an unsure stamp 
+PASS   an explanation that rules on the claim counts, a single finding does not 
+PASS a stamp that contradicts its takeaway is asked again, once, and the agreeing answer wins 
+PASS   if the retry still contradicts, the stamp follows the takeaway's plain no 
+PASS   and a retry that writes the same sentence costs no second reading 
+PASS   and the words are kept, never swapped for a stock line 
+PASS   a stamp over opposite words follows the words, whichever way they point 
+PASS the prompt says the verdict and the takeaway are one answer 
+PASS the claim's own group is not narrow for that claim 
+PASS   a claim that names its group counts the same 
+PASS   and a general claim answered only in children is still downgraded 
+PASS   a risk claim is never answered by people who already have the disease 
+PASS   'women and men' is everyone, not 'men only' 
+PASS   so measles stays 'Likely true' and its takeaway stands 
+PASS   and the prompt marks those studies as the claim's own group, not narrow 
+PASS an interval that crosses no effect is read as no clear difference 
+PASS   and a p value of 0.05 or more, or 'not significantly different', reads the same 
+PASS   a group's own average is not a comparison and is never judged 
+PASS OR 0.99 with an interval of 0.92 to 1.06 is 'no clear difference', never 'a small effect' 
+PASS   and the deeper paragraphs say it was not statistically significant 
+PASS   the translation is still the line 'What the research says' picks 
+PASS   a size word on a null figure becomes 'no clear difference' 
+PASS a difference the abstract calls not significant is said to be not significant 
+PASS a figure keeps its comparison: 1.7 against 3.2 episodes, not 1.7 episodes 
+PASS   a sentence that already gives both sides is left alone 
+PASS 'not statistically significant' is never glossed as 'unlikely to be chance alone' 
+PASS   the explanation is held to the same rule 
+PASS the prompt asks for both groups' figures and for 'no clear difference' 
+PASS sizes are read in digits and in words 
+PASS   two versions of the treatment and nobody without is no untreated comparison 
+PASS   a review that grades its evidence low is low certainty, one that says moderate is not 
+PASS a low-certainty review caps 'true' 
+PASS   and so does a stack of small, pilot and uncontrolled trials 
+PASS   one trial of 400 people with a control group is enough to lift it 
+PASS   a study that says nothing about its size or design is never the reason to cap 
+PASS   a comparative claim is not capped for comparing two treatments 
+PASS ashwagandha is 'It's complicated', and the takeaway says the certainty is low 
+PASS   so are standing desks 
+PASS the prompt marks a trial with nobody untreated, and never calls it randomised evidence 
+PASS a drug-dose trial in smokers with lung cancer is off topic for 'smoking causes lung cancer' 
+PASS   so are screening and a survey of beliefs, and the cohort and the review are not 
+PASS   ethanol injected in heart surgery is off topic for red wine 
+PASS   a treatment trial is not ruled out in code for a claim that is not about causes 
+PASS the code gate removes off-topic studies from what was used, whatever the model cited 
+PASS   and drops every sentence that leaned on them alone 
+PASS   and writes the reason onto the record it is cached with 
+PASS   an off-topic strong design is not counted as strong evidence 
+PASS the model's own 'wrong outcome' judgement removes the sports review from what was used 
+PASS   a judgement left out rules nothing out 
+PASS the prompt asks for subject and outcome for every study, and marks OFF TOPIC 
+PASS the server-rendered chart says which bars are off topic 
+PASS 'insufficient' is a verdict the schema allows 
+PASS   and it has its own label everywhere a verdict is drawn 
+PASS no studies at all is not enough evidence, not 'complicated' 
+PASS only case reports are not a test of the claim 
+PASS   nor are animal and lab studies 
+PASS a case report of harm never makes 'does not work': the stamp is not enough evidence 
+PASS   the explanation says harm is a reason for caution, not evidence it fails 
+PASS   and the takeaway no longer says it doesn't work 
+PASS the model's own 'insufficient' keeps its takeaway 
+PASS the prompt defines all four, and says a harm report is not 'does not work' 
+PASS the server-rendered page stamps 'Not enough evidence' 
+PASS   and the link-preview card draws it 
+PASS a MedlineDate range is read as its year: '1995 Nov 22-29' is 1995 
+PASS   including on rows cached before the fix 
+PASS 'memory and cognitive function' is not 'memory and thinking and memory' 
+PASS   a whole phrase said twice across 'and' is said once 
+PASS   and ordinary prose is left alone 
+PASS a spelling fix is taken, a rewrite or a flipped 'not' is refused 
+PASS   the Claim: line is never read as the search query 
+PASS   the check runs on the corrected claim and says what was typed 
+PASS   a misspelling of a claim already checked is answered from the cache 
+PASS   a claim spelled right carries no typed note 
+PASS   the page has the note, hidden until a check fills it 
+PASS a treatment trial in people who already have the disease cannot show prevention 
+PASS   a prevention study of the same disease stays on topic 
+PASS   'about as well for weight loss as' is a plain no, whatever a later clause hedges 
+PASS   a claim that says 'not' is answered no by a plain yes, so its 'false' stays false 
+PASS   a 'not' inside 'people who don't' is not the claim saying no 
+PASS   'should not stop' is a plain no to 'can safely stop' 
+PASS   'not more dangerous than' is a plain no to 'more dangerous than' 
+PASS   softening's own negation check leaves the verdict reader's alone 
+PASS   a risk claim's own disease is its outcome, not a narrow group 
+PASS   a fixed claim gets its apostrophe and a capital 
+PASS the claim's own subject is also searched alone, as a phrase 
+PASS   and what the phrase search finds is always among the studies read 
+PASS   a subject PubMed does not know as a phrase is not searched as one 
+PASS   an unknown outcome phrase is dropped and the search asked again 
+PASS trust: the home page answers the five questions a stranger asks, and shows a real one 
+PASS   the answers carry no repeated links back to the claim box 
+PASS   in plain words: no dashes, none of the banned words 
+PASS   the study count it states is the one PubMed is asked for 
+PASS   and it names the labels the code actually forces 
+PASS   the real check is the exported one, linked as a result page 
+PASS   /checks carries it too, and neither page points at footage that is gone 
+PASS   and a result page renders it hidden, so the verdict owns that screen 
+PASS   with no real check built, the section renders without inventing one 
+PASS   its links put the cursor in the claim box without changing the address 
+PASS   and a check in progress hides it, so the work is what the reader sees 
+PASS the search call asks for temperature 0 
+PASS   and so does the call that writes the verdict, both with a fixed seed 
+PASS   and the search is saved for the claim 
+PASS   a re-check reuses it: one call, the verdict, and the same search 
+PASS each plain answer pins one stamp, and a hedged one pins none 
+PASS   'it's complicated' over 'nothing has tested this' is now a contradiction 
+PASS   the answer after 'so' is the conclusion, and 'eight' is the claim's '8' 
+PASS   calling the claim itself unsettled is 'not shown', a hedge on a finding is not 
+PASS   'not clearly' and 'for most people' hedge a no 
+PASS   the direction is read by one small call at temperature 0 
+PASS   and the retry is shown both halves and told they must agree 
+PASS   still apart, 'nothing tested this' makes it 'Not enough evidence', and says so in the log 
+PASS   a plain yes followed to 'true' still meets every gate: low certainty brings it back 
+PASS   and so does the one-group downgrade 
+PASS   the code screen misreads 'just a rough guide' as a plain yes 
+PASS   so the small call decides, and the stamp becomes 'Likely false', never 'Likely true' 
+PASS   the small call is told a fixed rule that 'varies' or is 'a rough guide' is answered no 
+PASS   a reading that agrees with the stamp means a false alarm: no retry, nothing changes 
+PASS   and a reading that fails changes nothing either 
+PASS   the screen reads a reason after ', as' as the reason, not the answer 
+PASS   an explanation sentence that rules against an agreed answer is the one that goes 
+PASS a narrative review of compounds and mechanisms is background, like the lab work it reviews 
+PASS   a review that sums up human trials is not, and a systematic review never is 
+PASS a review that says lifestyle likely explains its link is confounded; the routine caveat is not 
+PASS   a takeaway that puts the link down to other factors says so, one that only names them does not 
+PASS   and saying so is a qualified answer, never a plain yes 
+PASS   a 'true' resting on that review is capped, and its line says why 
+PASS   only a set with such a review gets the extra paragraph 
+PASS red wine: the resveratrol reviews are background, the takeaway that skipped confounding is asked again 
+PASS   still left out, the takeaway is replaced, not added to 
+PASS   and a 'true' over it is 'It's complicated', with the reason in the explanation 
+PASS a claim that says cure, reverses or completely prevents is absolute 
+PASS   and plain 'prevents', cured meats, a subject and a claim that says no are not 
+PASS   'it lowers blood sugar a bit, but it does not cure it' is a plain no to it 
+PASS   the noun is not softened: 'rather than a full cure' stays a full cure 
+PASS   curing diabetes is about people with diabetes, so their trials are not 'one narrow group' 
+PASS   only an absolute claim's prompt carries the note, and the old example goes 
+PASS   'complicated' over 'it does not cure it' becomes 'Likely false', and says why 
+PASS   words that never say no leave the stamp alone 
+PASS   and a rat study alone never makes it false 
+PASS   a claim that promises less is never raised 
+PASS a claim is about people unless it names animals or the lab 
+PASS   a rat study the model cited is not counted as used 
+PASS   it is marked background on its record, and nothing else is 
+PASS   the chart counts it as background, not used 
+PASS   and says one of them in the singular 
+PASS   the breakdown's 'Rests on' count leaves it out too 
+PASS   resting on nothing but a rat study is 'not enough evidence', and says why 
+PASS   a claim about dogs still counts a study in dogs 
+PASS   'what the research says' never picks a line resting only on a rat study 
+PASS   the API marks it, and the page and the script both group it as background 
+PASS the evidence line says what the evidence is evidence of 
+PASS   it names the one group, says low certainty, and is empty with nothing used 
+PASS   the confidence line prints it, and no longer calls the designs 'the evidence' 
+PASS   a real check carries it in the payload, under the 'Likely false' it explains 
+PASS a figure with three decimals is rounded, and an HbA1c change with no unit is left out 
+PASS   the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its interval 
+PASS   a sentence that is only the bare figure goes, and 'Study 1' is not a figure to keep 
+PASS   a unit the model wrote for a figure the abstract printed bare is no unit at all 
+PASS   a unit the model dropped is put back from the abstract 
+PASS   an HbA1c change in % is said in percentage points; a level in % is left alone 
+PASS   p-values, ratios, counts, years and study numbers are never touched 
+PASS   an interval is rounded without 'about', and a range carries its unit once 
+PASS   one range, one precision: both ends round alike, but two separate figures do not 
+PASS   and reading it twice changes nothing 
+PASS   a real verdict prints the rounded figure everywhere, after the gate kept it 
+PASS   no unitless figure reaches the page; a field that was only that says it is left out 
+PASS   an explanation that was only a unitless figure is not replaced by a note about units 
+PASS   and the footnote says figures are rounded 
+PASS relevance gate: farm animals, commentaries, essays and buying guides are background 
+PASS   dairy cows and heifers are animals, whatever the abstract says 
+PASS   an abstract that reports people studied is no essay, and a stub record is not one either 
+PASS   a study in dogs is never an opinion piece, so a claim about dogs can still use it 
+PASS   a safety review is off topic for a claim that something works 
+PASS   a record that never names the claim's subject cannot be about it 
+PASS   through a real verdict, only the trial in people that names garlic is used 
+PASS   the onion trial is off topic, the rest are background with their reasons 
+PASS   a paper the model reads as measuring nothing in people is background; a human trial never is 
+PASS   the chart names the group for what is in it, not only animal and lab studies 
+PASS   and the payload says why each one is background 
+PASS   the page and the script both print the server's group name 
+PASS certainty: a review's own rating is read in its own words 
+PASS   'high-quality trials are needed' rates nothing, and a trial is never a lead review 
+PASS   a review that rates each outcome is read on the claim's own outcome, lowest when none match 
+PASS   the evidence line never says Strong when the lead review says low or very low 
+PASS   and never Strong when the only strong designs pool observational studies 
+PASS   the lead review is the first one used that rates itself 
+PASS   a true verdict is capped on the claim's outcome, not on another one 
+PASS certainty: a rating inside brackets stays with the finding it rates 
+PASS   an outcome no finding names whole is read on the word its terms share 
+PASS   only a review that rates the outcome low and nowhere higher can cap a true 
+PASS   and the certainty line gives the review's own range, never Strong 
+PASS   through a real verdict, a narrower question's low rating neither caps it nor flags the review 
+PASS   through a real verdict, a very low certainty review cannot carry a true 
+PASS   and a review sure of this outcome, unsure of another, keeps it 
+PASS   only on-topic studies in people count as strong designs 
+PASS   the page builds the line from the query's outcome group 
+PASS hierarchy: designs are ranked from the record 
+PASS   the weaker ones are named in a reader's words 
+PASS   trials say yes, a cohort and a survey say no: the verdict follows the trials, never a tie 
+PASS   and the answer says the weaker studies disagree, by number 
+PASS   the model was asked once more before code turned the stamp 
+PASS   a retry that follows the trials in its own words is the answer 
+PASS   a large trial that found nothing outranks a cohort that found a link 
+PASS   trials marked 'for' never turn the model's no into a yes 
+PASS   one small pilot trial does not outrank everything else 
+PASS   trials that disagree with each other are a real 'complicated' 
+PASS   an answer that follows the trials but never mentions the dissent gets one sentence saying so 
+PASS harm guard: which way a claim leans on a protective practice 
+PASS   a significant result is read off the abstract, and a negated one is not 
+PASS   an answer steering people from vaccination with no trial or review behind it follows the review 
+PASS   and the model was asked to fix it first 
+PASS   a later downgrade replaces a takeaway code wrote, so the two never argue 
+PASS   a 'complicated' that lends weight to an anti-vaccine claim follows the review that says no 
+PASS   a documented harm a trial backs stands as it is 
+PASS   'it is safe' with nothing but a survey behind it is not rated likely true 
+PASS   'no clear effect' is never shown when a cited trial found a significant benefit 
+PASS faithfulness: a figure from another arm is rewritten to the group the line names 
+PASS   a line its abstract cannot support is dropped, here and in the explanation 
+PASS   a study's own headline finding that no line gave is added 
+PASS   the short answer is held to the abstracts too 
+PASS   and all of it costs one call after the verdict, at temperature 0 
+PASS   the check is shown each line, numbered, with only the studies used 
+PASS   a rewrite goes through the same gates: a figure no abstract printed, or a study not used, is dropped 
+PASS   and a rewritten short answer that argues with the stamp is refused 
+PASS   when the check cannot run, the answer stands as it was 
+PASS   an answer with no research lines costs no check 
+PASS   a rewritten short answer that only takes the hedge out is refused, and the refusal is logged 
+PASS   but one that turns a hedged answer round, or adds a hedge, is kept 
+PASS   'small', 'some' and 'low certainty' are hedges too, and a figure fixed is not a hedge lost 
+PASS   a rewritten short answer that turns a plain no into a tie is refused 
+PASS   but hedging a plain answer keeps it, and a 'not' inside a hedge stays a no 
+PASS   a research line rewritten without its hedge is dropped, never printed surer 
+PASS   a takeaway code wrote is not sent to be checked 
+PASS faithfulness: a dropped line leaves the effect row and the part-by-part answers too 
+PASS writing: a number spelled out is written in digits 
+PASS   a decimal and a sign said in words become the figure 
+PASS   but 'one' and 'zero' as words, and fractions, stay words 
+PASS writing: a long number gets its commas 
+PASS   a year, a PMID, a decimal and a trial registration number do not 
+PASS writing: an area under the glucose curve is the total rise in blood sugar 
+PASS   a weighted mean difference is the average difference, and a 95% CI the likely range 
+PASS   and so is a confidence interval written out 
+PASS   in percent, and with the gloss it was given, which the plain name makes redundant 
+PASS   Hedges' g, Cohen's d and a bare g are effect sizes, capitalised only where a sentence opens 
+PASS   efficacy reads as a clause alone, a noun after a verb, and stays inside a compound 
+PASS   before 'of' it is the noun 'effect', never 'how well it works of' 
+PASS   a meta analysis without its hyphen and sleep onset latency are said in words 
+PASS   a fall is not given a minus sign as well, nor is its range or what it is compared to 
+PASS   but a range that crosses zero keeps every sign, the fall's too 
+PASS   a fall written without its sign loses the signs on its range too, unless it crosses zero 
+PASS   and a word the plain name doubled is said once 
+PASS   a standardized mean difference is an effect size, and after meals is said in words 
+PASS writing: a plural subject takes a plural verb 
+PASS   and a singular one a singular verb 
+PASS   a sentence that was already right is left alone 
+PASS writing: a number spelled in words meets the gate like any other 
+PASS effect line: counts of people or trials are not figures to point at 
+PASS   and with no figure given at all, the abstracts are still said to carry none 
+PASS   while a size above is still pointed at 
+PASS   a pointer left with nothing above it, after a later step, is taken out 
+PASS   and the page prints no effect row when there is no line 
+PASS writing: a real check prints digits, commas and plain names for its statistics 
+PASS   and its verbs agree with their subjects 
+PASS unmeasured outcome: the outcome group is read as its naming words, not 'risk' or 'levels' 
+PASS   and a study that names it in other words ('cardiovascular' for heart) did mention it 
+PASS   a sentence reporting that outcome for a study that never mentions it is caught 
+PASS   but not one that says the study didn't measure it 
+PASS   nor one citing a study that did measure it, nor one citing a study with no abstract to read 
+PASS   and through a real check it goes from every place it was written, while the honest line stays 
+PASS   and the model's own check is told the same rule 
+PASS off-outcome effect: a figure for another outcome, from a study that never names this one, is caught 
+PASS   but not a figure that names the outcome, or one from a study about it 
+PASS   nor a figure for the stand-in the search named for this outcome 
+PASS   through a real check, that row is left out of 'How big is the effect', not pointed at 
+PASS   and the size the takeaway is held to comes from the claim's own outcome 
+PASS 'healthy' that no cited study says is taken out, and a sentence that started with it still starts upper case 
+PASS   but stays when the study says it, or says it another way, or has no abstract to read 
+PASS   and an uncited sentence keeps it when any study shown says it 
+PASS an adjective before 'efficacy' takes the noun: 'lack clear effect', 'the long-term effect and safety' 
+PASS a number in a name is not a result: no 'not significant' note after 'type 1 diabetes' 
+PASS 'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun 
+PASS   and 'safety and efficacy' is 'safety and effect' 
+PASS   through a real check, both reach the page fixed 
+PASS guideline check: runs for medicine, vaccines, infections, cancer, pregnancy, stopping treatment and protective practices 
+PASS   and not for everyday claims, where it would only cost a call 
+PASS   a plain guideline is read as a verdict and one printable sentence 
+PASS   and mixed, unknown, a figure nothing can check, no named body, or a failed call all mean no guidance 
+PASS   a guideline line that names a document (a report, a title, a fact sheet, quotes) is not used 
+PASS   but naming who advises is fine, and so is 'reports' as a verb or 'Guidelines' opening the line 
+PASS   and the prompt itself bans named reports and guideline titles, not only numbers 
+PASS guideline check: a verdict that conflicts with plain guidance follows it, and the takeaway says so 
+PASS   and a research line or explanation sentence that rules against the new stamp goes 
+PASS   and it is a code-written takeaway, so the faithfulness check leaves it alone 
+PASS   a verdict that already agrees is left exactly as it was 
+PASS   and a claim outside those topics never makes the call 
+PASS   a guideline sentence that argues with its own position is not used 
+PASS guideline check: never overrules 'Not enough evidence' on papers that test nothing in people; it adds the guidance to the takeaway 
+PASS   and never rates a verdict that used no study at all 
+PASS   and when PubMed finds nothing, the stamp stays 'Not enough evidence' with the guidance added 
+PASS guideline check: through a real check, the page and the cache both carry the guidance 
+PASS   with no dash anywhere in what the reader sees 
+PASS forgo guard: 'People who have had a heart attack can safely stop taking statins' with no study cited ends false, with the guidance and the doctor sentence 
+PASS forgo guard: 'People who have had a heart attack can safely stop taking statins' with an insufficient result citing lab papers ends false, with the guidance and the doctor sentence 
+PASS forgo guard: 'People with type 1 diabetes can replace insulin with a strict diet' with no study cited ends false, with the guidance and the doctor sentence 
+PASS forgo guard: 'People with type 1 diabetes can replace insulin with a strict diet' with an insufficient result citing lab papers ends false, with the guidance and the doctor sentence 
+PASS forgo guard: 'Antibiotics cure the common cold' with no study cited ends false, with the guidance and the doctor sentence 
+PASS forgo guard: 'Antibiotics cure the common cold' with an insufficient result citing lab papers ends false, with the guidance and the doctor sentence 
+PASS   and an empty still_open is filled, never left empty 
+PASS   a 'complicated' stamp on a cure claim the guidance rejects also becomes false 
+PASS   control: an ordinary claim with insufficient and a rejecting view keeps insufficient, guidance appended 
+PASS   control: another ordinary claim, same 
+PASS   control: a mixed view changes nothing for a statins claim 
+PASS   control: a supports view leaves an insufficient forgo claim alone 
+PASS   the predicate catches the plain wordings and not unrelated claims 
+PASS   with PubMed finding nothing, the stamp is false, not forced back to insufficient 
+PASS   through /api/check the stamp is false, with the guidance and doctor sentence, and it is cached so 
+PASS   with no dash anywhere in what the reader sees 
+PASS pregnancy: the doctor lines are the ones asked for 
+PASS   vulnerable_group and says_safe read the wording 
+PASS   a child claim with safety wording is a guideline topic; one without is not, so it costs no call 
+PASS   alcohol, complicated with a study cited: false, the lead once, the doctor line, still_open set 
+PASS   alcohol, insufficient with nothing cited: false, the lead once, the doctor line, still_open set 
+PASS   smoking: false with the pregnancy doctor line 
+PASS   whooping cough: insufficient with nothing cited becomes true, with the pregnancy doctor line 
+PASS   honey for babies: false with the child doctor line 
+PASS   guard: guidance alone never makes 'safe in pregnancy' true; the line is only appended 
+PASS   guard: a line that argues with itself is not used, the verdict stays complicated 
+PASS   guard: no guidance leaves a pregnancy claim unchanged 
+PASS   guard: a claim outside both groups keeps its stamp 
+PASS   _plain_not_safe: plain no, argues with itself, or no cue, by table 
+PASS   says_safe: asserts safety or not, by table 
+PASS   alcohol with 'no level of alcohol is known to be safe' becomes false, with the doctor line 
+PASS   a 'rejects' line that says no harm is not used 
+PASS   guidance alone never stamps 'won't harm' wording true 
+PASS   guideline_view strips a repeated lead: 'Major health guidelines say ' 
+PASS   guideline_view strips a repeated lead: 'major health guidelines say:' 
+PASS   guideline_view strips a repeated lead: 'Guidelines say that no amoun' 
+PASS   guideline_view strips a repeated lead: 'Major health guidelines say:' 
+PASS   guideline_view strips a repeated lead: 'that no amount of alcohol is' 
+PASS   guideline_view strips a repeated lead: 'That no amount of alcohol is' 
+PASS   guideline_view keeps a pronoun 'that' before a verb: 'that is not safe during ' 
+PASS   guideline_view keeps a pronoun 'that' before a verb: "that isn't safe during p" 
+PASS   guideline_view keeps a pronoun 'that' before a verb: "that doesn't harm the ba" 
+PASS   guideline_view keeps a pronoun 'that' before a verb: "that won't hurt the baby" 
+PASS   guideline_view keeps a pronoun 'that' before a verb: 'that, the CDC says, is u' 
+PASS   through a real check the alcohol claim is false, with the doctor line and a still_open 
+PASS every masthead carries a Beta label right after the wordmark: home, privacy, 404 
+PASS   it is plain text, not a link, a button or a tab stop 
+PASS   set in the mono, on the night's quiet ink, with no fill and no motion 
+PASS a server-rendered result carries the doctor line, after the assessment and before what the research says 
+PASS   exactly once, and visible: no hidden attribute on a page that has a verdict 
+PASS   an unchecked page keeps the line hidden until a verdict shows 
+PASS   a live check shows it with the verdict and hides it while a check runs 
+PASS   the page and the script say the same sentence, and it has no dash 
+PASS the shared text is built with the doctor line in the script 
+PASS   with a still open line, the text ends on it, each sentence closed 
+PASS   and without one, it still ends on it 
+PASS the card module carries the same sentence 
+PASS   and it is drawn under the ringed verdict, on the night, at the card's left margin 
+PASS safety set: 15 claims, numbered in order, every verdict a real one 
+PASS   and no verdict is both safe and harmful for the same claim 
+PASS keep-the-treatment guidance: 'should keep taking statins' is a no to a claim to stop them, not a conflict 
+PASS   and 'need insulin ... cannot replace it with diet' is a no to replacing insulin 
+PASS   and 'should not stop', 'do not stop' and 'never stop' all read as no 
+PASS   but guidance that really says 'safe to stop' is still a yes, so the conflict guard still drops it 
+PASS   and a claim that is not about stopping a treatment is read as before 
+PASS   and end to end: the statins guidance turns an insufficient stamp into false 
+PASS an unexpected failure is a plain 500 with a way out, not the exception text 
+PASS   the streamed check says the same 
+PASS   and no visitor-facing error string has a dash 
+PASS a GET to the feedback address is a JSON 405, not the framework's page 
+PASS a POST to a page is the friendly 404 page with a 405 status, home link and the notice 
+PASS the 500 page is plain, says it was our side, links home and keeps the notice, with no dash 
+PASS   and an API route's 500 is JSON the page can read 
+PASS /favicon.ico answers with an image, not a 404 
+PASS the page has a polite live region for 'still working', errors and the verdict 
+PASS   a silent check shows static 'still working' text after a delay and gives up later with Retry 
+PASS   Retry runs the same claim again, and a claim the server refused to read gets no Retry 
+PASS an error says which of four things failed, each with its own title: invalid claim, no connection, a limit, the checker 
+PASS   the kind comes from the status the server sent: 400 invalid, 429 a limit, any other failure the checker; no status is guessed 
+PASS   no response at all (offline, a dropped stream, a silent server) is the network kind, never a status 
+PASS   an invalid claim offers Edit claim and no Retry; every other kind offers Retry 
+PASS   every failure keeps the draft in the field 
+PASS   the error screen has a title and a line under it, and none of that copy has a dash 
+PASS a result that rests on no studies says what to try next (server-rendered, hidden when studies exist, and shown by the script on a live check) 
+PASS   none of that copy has a dash 
+PASS a server-rendered result has the Report a wrong answer button and its form 
+PASS   and the script posts it to /api/feedback and resets it for every result 
+PASS a report is stored as a thumbs down whose note starts 'wrong answer: ', whitespace tidied 
+PASS   and nothing that identifies the sender is stored: no address in any column or value 
+PASS   an oversized claim and note are cut, and a verdict that is not one of ours is dropped 
+PASS   a report with no claim is a plain 400 
+PASS   a thumb still works as before 
+PASS   and a body that is not JSON is a 400, not a 500 
+PASS the privacy page says a report's note is kept, anonymously 
+PASS the sitemap has the three static pages, absolute, and no claim 
+PASS the sitemap and llms.txt list /about, /method and /corrections as absolute URLs 
+PASS robots.txt points at the sitemap with an absolute URL 
+PASS /checks has its own title and canonical, and the same card tags as home 
+PASS a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twitter:card too 
+PASS the ask screen carries Not medical advice and the doctor sentence right under its introduction 
+PASS   so do the 404 page and the error screen 
+PASS   and every result's head has the notice in the same row as the case line 
+PASS stats.py prints checks per day for 30 days and the top claims, from the checks table 
+PASS   it counts today and yesterday separately, and leaves out what is older than 30 days from the daily list 
+PASS   it is read-only: the file is unchanged and no table is added 
+PASS   with no database it says so plainly and creates nothing 
+PASS   and it has no way to write: no INSERT, UPDATE, DELETE, CREATE or db.init_db 
+PASS a script is gzipped for a browser that accepts it, and decompresses to the same bytes 
+PASS   and is left alone for one that does not 
+PASS   the home page is gzipped too, and still HTML once decoded 
+PASS   the event stream is never compressed, and images are not either 
+PASS   a conditional request still answers 304 with no body 
+PASS turso: with no env vars nothing calls the HTTP function 
+PASS   nor with only the URL set 
+PASS   nor with only the token set 
+PASS turso: libsql:// is turned into https:// 
+PASS   an https URL is kept, without a trailing slash 
+PASS   init_db creates the tables in Turso too 
+PASS   feedback is written to Turso, not the local file 
+PASS   one request to /v2/pipeline with the bearer token, a close and typed args 
+PASS   None is sent as a null arg 
+PASS   a saved answer round-trips through Turso, integers and JSON decoded 
+PASS   the check log goes to Turso with its integer and AUTOINCREMENT id 
+PASS   the saved search round-trips 
+PASS   ledger sends its three reads in one request and decodes the counts 
+PASS   recent_verdicts, all_claims, recent_cached, get_cached_by_key and trending read from Turso 
+PASS turso down: a check still returns 200 
+PASS   and was saved to the local file instead 
+PASS   feedback lands in the local file when Turso fails 
+PASS   a bad HTTP status or a bad reply also falls back, never raises 
+PASS   a reply with the wrong shape is a miss and a logged warning 
+PASS   a statement the server rejects is a miss too 
+PASS   the token appears in no log line, and a warning was logged 
+PASS turso cool-down: it is tried until the failure limit 
+PASS   then skipped: further calls do not reach it 
+PASS   after the cool-down it is tried once, and one more failure skips it again 
+PASS   and a success clears the count 
+PASS turso: init_db with Turso down does not raise 
+PASS   once it is up the first call creates the tables and the write lands there 
+PASS healthz store: configured but never called is turso-unused, and healthz made no call 
+PASS healthz store: after a successful call it is turso 
+PASS healthz store: after a failed call it is turso-failing, and leaks no token, URL or error 
+PASS healthz store: it recovers to turso after a good call 
+PASS healthz store: in cool-down it is turso-failing 
+PASS healthz store: with Turso not configured it is local 
+PASS turso: with the variables removed, storage is local again 
+PASS relied_only takes an uncited study out of a list of citations 
+PASS   drops a sentence that cites only studies not relied on 
+PASS   says Study, not Studies, when one is left 
+PASS   and leaves text that cites nothing alone 
+PASS the verdict's 'why' paragraph never credits a study it did not rely on 
+PASS   but a verdict that relied on nothing keeps its paragraph as written 
+PASS the evidence line never takes its strength word from a study the verdict did not use 
+PASS a saved result's 'Rests on' count equals the studies marked used (server render) 
+PASS   and in the JSON the browser draws from 
+PASS   while the stored record is not rewritten 
+PASS renderBreakdown counts the used studies itself, not the stored number 
+PASS a saved result with an empty search query hides the 'Searched PubMed for' line 
+PASS   and a result opened from a link carries the search that was stored, not an empty one 
+PASS   and a saved result with a query still shows it 
+PASS   and renderResult hides it the same way 
+PASS a re-checked saved answer carries its first check date beside the refresh date 
+PASS   a cache hit in the log is not an original check, so no first date is invented 
+PASS   a log date that is not earlier than the saved date is ignored 
+PASS renderResult words the two dates separately and omits a date the record lacks 
+PASS the saved-record audit counts the planted mismatches and renders every record 
+PASS   and leaves the database it was given byte for byte unchanged 
+PASS input: the empty-claim error has its own element, hidden until needed 
+PASS   and the script links it with aria-describedby, sets aria-invalid, and clears both on valid text 
+PASS suggest: near-duplicate wordings fold into one row that names the other wordings 
+PASS   a different claim is its own row and has no 'similar' 
+PASS   the same words in another case, order or punctuation are one question 
+PASS   a negation never folds: 'is safe' and 'is not safe' stay apart 
+PASS   a differing number never folds: 500 mg and 5000 mg stay apart 
+PASS   a different verdict never folds, even for near-identical words 
+PASS   two or more words must be shared and at most one may differ on each side 
+PASS   the list is named 'Previously checked claims' (visible heading, accessible name) and says a pick opens the saved answer and says a pick opens the saved answer 
+PASS   and the script has no dash in the strings it writes for the list 
+PASS study designs: all 17 labels have a line 
+PASS   no line overstates a design: none says 'gold standard', 'very strong' or 'as strong as evidence gets' 
+PASS   every study design says what it does and where it stops, in two short sentences 
+PASS   a pooled or randomized design names its limit 
+PASS   and the lines have no em or en dash 
+PASS errors: the claim is shown on the error screen and no copy points at a hidden box 
+PASS footer: About, Methodology, Corrections and contact, Privacy, and the medical-scope line 
+PASS /about page: 200, footer links, Not medical advice, no dashes 
+PASS /method page: 200, footer links, Not medical advice, no dashes 
+PASS /corrections page: 200, footer links, Not medical advice, no dashes 
+PASS /privacy page: 200, footer links, Not medical advice, no dashes 
+PASS about: names Dhruva with the contact address and nothing else about the owner 
+PASS faq: no repeated Check a claim links inside Before you trust a verdict 
+PASS type: the main heading is 34 to 38px on a phone and 48 to 56px wide, tracked no tighter than -0.025em 
+PASS type: no font size under 13px in the stylesheet, except the lettering on a book spine (aria-hidden decoration) 
+PASS type: body text is 16 to 17px on a 1.6 line height 
+PASS touch: qa.mjs fails any tap target under 44px, and the footer links are 44px rows on every page 
+PASS DESIGN.md: palette roles are written down and say green never signals safe or a good verdict 
+PASS who: with only a 'does not apply' sentence, the heading says so and no empty 'applies to' heading is left 
+PASS F1: the evidence line is never surer than the short answer's stated certainty, in its own design word 
+PASS F1: the short answer, the evidence line and the breakdown state one certainty level 
+PASS F1: a capped phrase keeps its sentence and its capital letter 
+PASS F1: a negated certainty phrase is neither counted nor rewritten 
+PASS F1: nothing is ever rewritten upwards 
+PASS F1: a review's own lower rating caps the line even when it is not the first review 
+PASS F1: the server-rendered page carries no surer certainty phrase than the short answer 
+PASS F2: CINeMA's 'confidence ... was low for X and very low for Y' is read as the review's own rating 
+PASS F2: a confidence interval is never read as a rating 
+PASS F2: a main review rated low or very low never yields a Moderate or Strong label 
+PASS F2: the breakdown's 'moderate certainty' is brought down to the main review's rating 
+PASS F2: the existing rule then holds: a main review rated low cannot carry 'Likely true' 
+PASS F3: a postpartum-only study is labelled people after giving birth, never 'pregnant' 
+PASS F3: a sentence whose figures are in the study it cites is kept 
+PASS F3: '15 to 30 mL' credited to studies that give 20 and 30 is dropped 
+PASS F3: 'thousands of people' of a review of 1,937 is dropped 
+PASS F3: prose links only studies the verdict relied on 
+PASS F3: a group the cited study never names ('pregnant women') is dropped 
+PASS F3: a who-line citing a study not relied on is removed, an honest absence is kept 
+PASS F3: 'still open' is never touched 
+PASS F3: a warning no cited study supports is removed, like any other sentence 
+PASS F3: with nothing relied on, the reasons studies were set aside stay 
+PASS F7: /about exists, says who checks a result, how it is paid for, and carries the disclaimer 
+PASS F7: /about ships no visible placeholder and no dashes 
+PASS F7: home, a result and the privacy page all link to /about 
+PASS F7: /about names Dhruva as the owner, and no owner-config block is promised 
+PASS contact: /about and /corrections give hello@checkevident.com as a plain mailto link, with no form 
+PASS contact: with no address set, no mailto is shown 
+PASS F9: /method exists with a version and a last-changed date 
+PASS F9: /method states the number of abstracts the code actually reads 
+PASS F9: /method names the code's own rules: no citation means Not enough evidence; label capped by the review 
+PASS F9: /method has no placeholder and no dashes 
+PASS F9: the How it works sheet and every result link to /method 
+PASS F10: the line gives the check date and the years of the studies relied on, not those read 
+PASS F10: one study, one year, and none are each worded plainly 
+PASS F10: a result carries the line, and the server-rendered page shows it before any script 
+PASS F10: renderResult fills the same line 
+PASS F8: /corrections exists, points to the existing report button, and carries the disclaimer 
+PASS F8: it promises no response time and no placeholder shows 
+PASS F8: the report form, /about and /method link to it 
+PASS F8: reports still go through the one anonymous feedback route, and set no cookie 
+PASS F13: the newest entry's number equals the Claims checked count, with no gaps 
+PASS fix 1: a warning no cited study supports is removed: Neither tested whether diabetes went away, and s 
+PASS fix 1: a warning no cited study supports is removed: Antibiotics should not be used for the common co 
+PASS fix 1: a warning no cited study supports is removed: Alcohol is a well-established teratogen that can 
+PASS fix 1: a warning no cited study supports is removed: Raw milk consumption is linked to outbreaks of c 
+PASS fix 1: a warning no cited study supports is removed: Indirect evidence shows various functional and s 
+PASS fix 1: a warning no cited study supports is removed: It is unsafe in pregnancy (Study 1). 
+PASS fix 1: a warning no cited study supports is removed: People with diabetes should not stop their medic 
+PASS fix 1: a warning no cited study supports is removed: Doses of 99 mL a day burned the throat in 12,000 
+PASS fix 1 (fifth review: softened or negated, so now dropped): Most acute nose and throat infections are caused 
+PASS fix 1: the harm rule also holds inside the breakdown 
+PASS fix 2: a 'does not apply to' line naming groups its record never mentions is kept 
+PASS fix 2: a 'does not apply to' line citing only a study not relied on still goes 
+PASS fix 2: an 'applies to' line loses only the clause its record does not support 
+PASS fix 2: an absence stated as 'does not apply to' or 'not in' is never held to naming the group 
+PASS fix 2: a statement that the claim was not tested is never dropped 
+PASS fix 3: prose stating the same level keeps the design word 
+PASS fix 3: prose stating a lower level lowers the line in a design word, never 'certainty' 
+PASS fix 3: prose can never raise the line 
+PASS fix 3: 'certainty' wording comes only from a review's own rating 
+PASS fix 4: 'More high-quality evidence is needed' is left alone, and states no level 
+PASS fix 4: 'would' and 'larger ... needed' sentences are never rewritten 
+PASS fix 4: a phrase credited to a study or review is never rewritten 
+PASS fix 4: the prose's own statement about the evidence is still brought down, in a design word 
+PASS fix 5: an earlier review's 'confidence was high' cannot displace a later low-rated lead review 
+PASS fix 5: self-confidence and someone's confidence are not ratings 
+PASS fix 5: confidence in the evidence, or with CINeMA named, still counts 
+PASS fix 6: /method says the prose check covers the explanation and breakdown, not the short answer 
+PASS fix 6: /method says guidance can decide some claims with no study cited, and never says 'safe' alone 
+PASS fix 6: the removal sentence on /method is backed by the gate 
+PASS fix 6: /about names the guidance exception instead of 'whatever the model wrote' 
+PASS fix 6: guidance really can stamp a forgo-treatment claim with nothing cited (the exception /method states) 
+PASS fix 7: /about no longer promises a free tier it cannot know 
+PASS fix 7: the 'sells' promise is limited to this site, ads, accounts and data 
+PASS fix 8: numbers still run newest = count down to 1 with ties broken by insertion 
+PASS fix 8: recent_verdicts issues two statements whatever the table size 
+PASS fix 8: work grows about linearly with rows (8x rows, well under 20x steps), not quadratically 
+PASS fix 8: all_claims (type-ahead) does no numbering at all: one statement, no issue field 
+PASS fix 9: get_cached_by_key returns the stored search query 
+PASS fix 9: the streamed check reads the review on the claim's outcome (moderate, not the lowest) 
+PASS fix 9: the shared link prints the same evidence line as the streamed check 
+PASS fix 10: a card whose gate raises still renders a PNG with the stored short answer 
+PASS fix 11: space-grouped thousands in a record match the comma form 
+PASS fix 11: a rounded count the record supports is kept (1.3 million, 36,000) 
+PASS fix 11: a trial's total from its group sizes is kept (25 + 29 = 54) 
+PASS fix 11: 'type 2' is a name, not a figure the record must give 
+PASS fix 11: a number the claim itself gives is not held against the record 
+PASS fix 11: a figure in no record still goes, and so does a wrong rounding 
+PASS fix 11: the verbatim dropped sentence from the review now stays 
+PASS extra: a cached 'true' over a low-rated lead review is shown as complicated, with the low line 
+PASS extra: the shared page, its markup and its card never say Likely true over that line 
+PASS extra: type-ahead shows the capped stamp too, not the stored 'true' 
+PASS extra: an explanation the gate empties is empty, not the short answer again 
+PASS extra: the server-rendered page then hides the research block instead of printing the short answer twice 
+PASS extra: /corrections says the time of a report is stored, as the feedback table does 
+PASS second fix 1: vaccine-shaped rows rated over a range stay Likely true with the short answer unchanged 
+PASS second fix 1: their lines still read as ranges that start low, which is not a low rating 
+PASS second fix 1: a lead review rated low (turmeric shape) or CINeMA low (exercise shape) is still capped 
+PASS second fix 2: a guidance 'true' over a low-rated review keeps its stamp and its guidance takeaway 
+PASS second fix 2: the same rows without the guidance lead are still capped 
+PASS second fix 2: /method says the verdict follows the guidance, and the code lets it 
+PASS second fix 3: not a warning, so held to its source and dropped: Pregnant women lost 12 kg on pharmacolog 
+PASS second fix 3: not a warning, so held to its source and dropped: Children with infections lost 99 kg (Stu 
+PASS second fix 3: not a warning, so held to its source and dropped: It avoids weight gain in 40,000 children 
+PASS second fix 3: substrings are not harm words, and a hazard word needs a warning frame 
+PASS second fix 3 (Q8: now removed): an unsupported warning goes: It is unsafe in pregnancy (Study 1). 
+PASS second fix 3 (Q8: now removed): an unsupported warning goes: People with diabetes should not stop their m 
+PASS second fix 3 (Q8): cited to a study not relied on, so removed: Undiluted vinegar can injure the throat in c 
+PASS second fix 3 (Q8): cited to a study not relied on, so removed: Undiluted vinegar can injure the oesophagus  
+PASS second fix 3 (Q8): cited to a study not relied on, so removed: Neither tested whether diabetes went away, a 
+PASS second fix 3 (Q8): a warning its relied-on study supports is untouched 
+PASS second fix 3: a warning with a figure its study lacks is removed (Q8) 
+PASS second fix 3 (Q8): every warning from the review that no study supports is now removed 
+PASS optional: the free tier and Google's terms are mentioned only when checks go to Gemini 
+PASS optional: /about says the claim and the studies' published details are sent 
+PASS third review: a reassurance or benefit with figures its study lacks is dropped: Study 1 found vinegar may avoid infections i 
+PASS third review: a reassurance or benefit with figures its study lacks is dropped: In Study 1, the risk of infections fell by 7 
+PASS third review: a reassurance or benefit with figures its study lacks is dropped: Studies 1 and 2 show it could cut outbreaks  
+PASS third review: a reassurance or benefit with figures its study lacks is dropped: Study 1 shows it reduces side effects by 90% 
+PASS third review: a reassurance or benefit with figures its study lacks is dropped: Study 1 found no harm in 9,000 pregnant wome 
+PASS third review: a reassurance or benefit with figures its study lacks is dropped: There were no adverse events in 12,000 child 
+PASS third review: negated or reduced harm is not a warning; advice to avoid and plain hazards are 
+PASS third review (Q8): an inline warning its study does not carry is removed: Study 1 found vinegar can burn the throa 
+PASS third review (Q8): an inline warning its study does not carry is removed: In Study 2, undiluted vinegar injured th 
+PASS third review (Q8): an inline warning its study does not carry is removed: Studies 1 and 2 warn that vinegar can in 
+PASS third review (Q8): an inline warning its study does not carry is removed: Raw milk can carry harmful bacteria and  
+PASS third review: a supported inline warning is left exactly as written 
+PASS third review: with no key the home page does not read 'An AI model (an AI model API)' 
+PASS fourth review (fifth review: accepted trade, now dropped): It does not prevent bleeding and can cause it  
+PASS fourth review (fifth review: accepted trade, now dropped): It did not reduce the risk of bleeding in olde 
+PASS fourth review (fifth review: accepted trade, now dropped): It is not free of side effects in children (St 
+PASS fourth review (fifth review: accepted trade, now dropped): Stopping or reducing insulin can be fatal in c 
+PASS fourth review (fifth review: accepted trade, now dropped): Cutting insulin can cause dangerous high blood 
+PASS fourth review (fifth review: accepted trade, now dropped): There is no safe dose for 700 pregnant women ( 
+PASS fourth review (fifth review: accepted trade, now dropped): Stopping insulin is never safe for 700 childre 
+PASS fourth review (fifth review: accepted trade, now dropped): Not harmless: it can cause liver injury in old 
+PASS fourth review (fifth review: accepted trade, now dropped): It should not be used to prevent infections in 
+PASS fourth review (fifth review: accepted trade, now dropped): No evidence it is safe in pregnancy (Study 1). 
+PASS fourth review: a reassurance its study does not carry is dropped: It was harmless in 9,000 pregnant women. 
+PASS fourth review: a reassurance its study does not carry is dropped: Side effects were rare in 6,000 children. 
+PASS fourth review: a reassurance its study does not carry is dropped: Serious harm was uncommon among 9,000 pregnant 
+PASS fourth review: a reassurance its study does not carry is dropped: Deaths were no higher among 9,000 pregnant wom 
+PASS fourth review: a reassurance its study does not carry is dropped: Adverse events were similar to placebo in 9,00 
+PASS fourth review: a reassurance its study does not carry is dropped: The risk of bleeding was no higher in 4,000 pr 
+PASS fourth review: an inline reassurance its study does not carry is dropped, never 'It harmless in' 
+PASS fourth review: the six probes of the third review are still dropped 
+PASS fourth review (fifth review: a reassurance anywhere in the sentence drops it, even beside a caution) 
+PASS fourth review: a negated caution word is not a caution 
+PASS fourth review: a risk named with nothing to cancel it is a caution 
+PASS fourth review: taking out the naming never leaves a clause without a verb 
+PASS fourth review (Q8): /method says an unsupported sentence is removed, even a warning 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Deaths occurred in 3 children (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Liver injury was reported in children (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Side effects are common in children (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: High doses harmed the liver in children (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Seizures followed the injection in 40 infants (Stu 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Poisoning was reported in 700 toddlers (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Women in 17 trials had miscarriages (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Overdose killed 15 teenagers (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Anaphylaxis occurred after the first dose in 20 ad 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: It is unsafe in pregnancy (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Pregnant women must not take it with warfarin (Stu 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Children must not take it (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Pregnant women should avoid raw milk (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Never combine it with alcohol in 40 people (Study  
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: It must be avoided in 9,000 pregnant women (Study  
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Children should stop taking it if they bleed (Stud 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Raw milk was linked to outbreaks in 40 farms (Stud 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: It is contraindicated in infants (Study 1). 
+PASS fifth review (Q8: no longer kept): an unsupported warning is removed: Hospitalisation was needed for 90 children (Study  
+PASS fifth review: dropped, a reassurance or softened or negated: It caused no birth defects in 9,000 pregnant women 
+PASS fifth review: dropped, a reassurance or softened or negated: It may cause fewer side effects in 9,000 children  
+PASS fifth review: dropped, a reassurance or softened or negated: Bleeding was not increased in 9,000 pregnant women 
+PASS fifth review: dropped, a reassurance or softened or negated: The risk of side effects is low in 9,000 children  
+PASS fifth review: dropped, a reassurance or softened or negated: Claims it can harm 9,000 children were not support 
+PASS fifth review: dropped, a reassurance or softened or negated: It should not worry 9,000 pregnant women (Study 1) 
+PASS fifth review: dropped, a reassurance or softened or negated: Deaths fell by half in 9,000 children (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: It could cause bleeding in 40 children (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: Some children had seizures (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: Deaths were rare among 800 children (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: Nobody died in 600 toddlers (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: It was well tolerated, with no overdose in 90 teen 
+PASS fifth review: dropped, a reassurance or softened or negated: Liver damage was mild in 20 children (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: It is safe in pregnancy and caused no harm (Study  
+PASS fifth review: dropped, a reassurance or softened or negated: Women can take it without concern in 500 pregnanci 
+PASS fifth review: dropped, a reassurance or softened or negated: There was no increase in miscarriage among 3,000 w 
+PASS fifth review: dropped, a reassurance or softened or negated: Harm was unlikely in 9,000 children (Study 1). 
+PASS fifth review: dropped, a reassurance or softened or negated: Do not take it, as it never caused harm in 90 chil 
+PASS fifth review: dropped, a reassurance or softened or negated: Adverse events were comparable to placebo in 700 i 
+PASS fifth review: dropped, a reassurance or softened or negated: It avoids bleeding in 9,000 pregnant women (Study  
+PASS fifth review: dropped, a reassurance or softened or negated: Overdoses were reversible in 30 children (Study 1) 
+PASS fifth review: dropped, a reassurance or softened or negated: Poisoning is only a small risk in 400 children (St 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: It can cause liver injury in 9,000 children (Study 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Undiluted vinegar can injure the throat in childre 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: It can burn the throat of 9,000 children (Study 1) 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Nausea and vomiting occurred in 40 children (Study 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Diarrhoea was common in 90 infants (Study 1). 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Dizziness and headaches affected 77 adults (Study  
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: A rash and itching appeared in 88 toddlers (Study  
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Hepatitis and jaundice occurred in 66 older adults 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Arrhythmia occurred in 60 children (Study 1). 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Kidney stones formed in 25 men aged 80 (Study 1). 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: Addiction and cramps were seen in 500 teenagers (S 
+PASS sixth round (Q8: no longer kept): an unsupported warning is removed: The overdose killed two children (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It can stop bleeding in 9,000 children (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It can help prevent heart attacks in 9,000 people  
+PASS sixth round: dropped, a benefit or hedge: It can be taken without harm by 9,000 children (St 
+PASS sixth round: dropped, a benefit or hedge: It can cure cancer in 9,000 people (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It can treat infections in 9,000 children (Study 1 
+PASS sixth round: dropped, a benefit or hedge: It can relieve pain in 400 adults (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It can shrink tumours in 9,000 patients (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It can control hypertension in 9,000 adults (Study 
+PASS sixth round: dropped, a benefit or hedge: It may cause nausea in 40 children (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It boosts the body against infection in 9,000 chil 
+PASS sixth round: dropped, a benefit or hedge: It kills cancer cells in 9,000 patients (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It destroys bacteria in 4,000 children (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: It attacks harmful germs in 4,000 children (Study  
+PASS sixth round: dropped, a benefit or hedge: It clears infections in 4,000 children (Study 1). 
+PASS sixth round: dropped, a benefit or hedge: Children with infections lost 99 kg (Study 1). 
+PASS fifth review: a prohibition is kept only if nothing else in it softens or reassures 
+PASS fifth review: a sentence that passes its sources is untouched, even if softened 
+PASS fifth review: the 'does not apply to' line keeps a harm word but not a softened one 
+PASS fifth review (Q8): /method says a failing sentence is removed, even a warning, bar an untested statement 
+PASS reassurance by absence or denial is dropped: Kidney harm was absent in all 200 participants. 
+PASS reassurance by absence or denial is dropped: Birth defects were ruled out. 
+PASS reassurance by absence or denial is dropped: Seizures were absent. 
+PASS reassurance by absence or denial is dropped: Deaths were absent from the trial. 
+PASS reassurance by absence or denial is dropped: Poisoning is a myth. 
+PASS reassurance by absence or denial is dropped: Fears of liver damage are exaggerated. 
+PASS reassurance by absence or denial is dropped: Harm was excluded in the trial of 800 adults. 
+PASS reassurance by absence or denial is dropped: There were no signs of toxicity. 
+PASS reassurance by absence or denial is dropped: The danger of overdose is overblown. 
+PASS reassurance by absence or denial is dropped: Reports of miscarriage were debunked. 
+PASS reassurance by absence or denial is dropped: Claims of heart attacks were refuted. 
+PASS reassurance by absence or denial is dropped: Bleeding is a misconception. 
+PASS reassurance by absence or denial is dropped: Stroke risk was overstated. 
+PASS reassurance by absence or denial is dropped: The harm is unproven. 
+PASS reassurance by absence or denial is dropped: Side effects were undetected in 900 children. 
+PASS reassurance by absence or denial is dropped: Allergic reactions were unobserved. 
+PASS reassurance by absence or denial is dropped: Liver injury was nonexistent. 
+PASS reassurance by absence or denial is dropped: Kidney function was unaffected, with no injury. 
+PASS reassurance by absence or denial is dropped: Blood counts were normal and there was no bleeding 
+PASS reassurance by absence or denial is dropped: It is a false alarm that it causes seizures. 
+PASS reassurance by absence or denial is dropped: The drug is clear of poison. 
+PASS reassurance by absence or denial is dropped: Hospitalisation can be ruled out. 
+PASS minimiser or rarity figure is dropped: Miscarriages were scarcely reported. 
+PASS minimiser or rarity figure is dropped: Deaths were practically nonexistent in the trial. 
+PASS minimiser or rarity figure is dropped: Seizures occurred in under 2% of children. 
+PASS minimiser or rarity figure is dropped: Strokes were virtually nil. 
+PASS minimiser or rarity figure is dropped: Liver damage was trivial. 
+PASS minimiser or rarity figure is dropped: Bleeding episodes were isolated. 
+PASS minimiser or rarity figure is dropped: Overdoses were sporadic. 
+PASS minimiser or rarity figure is dropped: Allergic reactions were essentially unknown in 500 
+PASS minimiser or rarity figure is dropped: Heart attacks were insignificant. 
+PASS minimiser or rarity figure is dropped: Only a handful of seizures occurred. 
+PASS minimiser or rarity figure is dropped: Poisoning was merely theoretical. 
+PASS minimiser or rarity figure is dropped: Kidney injury occurred in 3 in 10,000 users. 
+PASS minimiser or rarity figure is dropped: Fewer than 5 deaths occurred in 9,000 people. 
+PASS minimiser or rarity figure is dropped: Birth defects were seen in at most 1 in 1,000 preg 
+PASS minimiser or rarity figure is dropped: Adverse events were limited. 
+PASS minimiser or rarity figure is dropped: Serious harm was modest. 
+PASS minimiser or rarity figure is dropped: Fatalities were unheard of. 
+PASS minimiser or rarity figure is dropped: Side effects were just nausea in a few people. 
+PASS minimiser or rarity figure is dropped: Hospitalisation occurred in below 1% of patients. 
+PASS minimiser or rarity figure is dropped: Toxic effects were minimal in 700 adults. 
+PASS minimiser or rarity figure is dropped: Burns happened in up to 4 children. 
+PASS blind q8: 0 of 30 reassurances kept 
+PASS blind q8: 0 of 60 unsupported sentences kept, warnings included 
+PASS blind q8: never_dropped keeps none of the 60 
+blind sentences (q8): 0 of 60 kept, 0 reassurances kept
+
+1186/1186 passed
