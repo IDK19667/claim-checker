@@ -37,6 +37,7 @@ const errorScreen = (page) => page.evaluate(() => ({
   title: document.getElementById("error-title").textContent, msg: document.getElementById("error-msg").textContent,
   retry: !document.getElementById("error-retry").hidden, back: document.getElementById("error-back").textContent,
   draft: document.getElementById("claim-input").value,
+  shown: (() => { const el = document.getElementById("error-claim"); const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? el.textContent : ""; })(),
 }));
 const top = (page, sel) => page.evaluate((s) => Math.round(document.querySelector(s).getBoundingClientRect().top + scrollY), sel);
 
@@ -62,32 +63,32 @@ await test("invalid input: its own title, the server's words, Edit claim and no 
   await page.waitForSelector("#error:not([hidden])");
   const e = await errorScreen(page);
   must(e.title === "That claim can't be checked" && /Trim the claim/.test(e.msg), JSON.stringify(e));
-  must(!e.retry && e.back === "Edit claim" && e.draft.length === 520, JSON.stringify(e));
+  must(!e.retry && e.back === "Edit claim" && e.draft.length === 520 && e.shown.length > 0 && e.shown.startsWith("xxx"), JSON.stringify(e));
 });
 await test("network failure: its own title, Retry offered, draft kept", async (page) => {
   await page.route("**/api/check**", (r) => r.abort());
   await send(page, "Network failure claim");
   await page.waitForSelector("#error:not([hidden])");
   const e = await errorScreen(page);
-  must(e.title === "Couldn't reach the server" && /connection/.test(e.msg) && e.retry && e.draft === "Network failure claim", JSON.stringify(e));
+  must(e.title === "Couldn't reach the server" && /connection/.test(e.msg) && e.retry && e.draft === "Network failure claim" && e.shown === "Network failure claim", JSON.stringify(e));
 });
 await test("rate limit: its own title, the server's words, a countdown, draft kept", async (page) => {
   await send(page, "Provider busy claim");
   await page.waitForSelector("#error:not([hidden])");
   const e = await errorScreen(page);
-  must(e.title === "Too many checks right now" && /busy/.test(e.msg) && e.retry && e.draft === "Provider busy claim", JSON.stringify(e));
+  must(e.title === "Too many checks right now" && /busy/.test(e.msg) && e.retry && e.draft === "Provider busy claim" && e.shown === "Provider busy claim", JSON.stringify(e));
   must(await page.locator("#countdown").isVisible(), "no countdown");
 });
 await test("provider failure and PubMed failure: the checker's own title, the server's words, draft kept", async (page) => {
   await send(page, "Provider down claim");
   await page.waitForSelector("#error:not([hidden])");
   let e = await errorScreen(page);
-  must(e.title === "The checker couldn't finish this check" && /AI service/.test(e.msg) && e.retry, JSON.stringify(e));
+  must(e.title === "The checker couldn't finish this check" && /AI service/.test(e.msg) && e.retry && e.shown === "Provider down claim", JSON.stringify(e));
   await page.click("#error-back");
   await send(page, "PubMed down claim");
   await page.waitForFunction(() => /PubMed/.test(document.getElementById("error-msg").textContent));
   e = await errorScreen(page);
-  must(e.title === "The checker couldn't finish this check" && e.draft === "PubMed down claim", JSON.stringify(e));
+  must(e.title === "The checker couldn't finish this check" && e.draft === "PubMed down claim" && e.shown === "PubMed down claim", JSON.stringify(e));
 });
 await test("no relevant evidence: an answer, not an error, that says what to try", async (page) => {
   await send(page, "No evidence claim");

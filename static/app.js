@@ -743,6 +743,10 @@ function renderError(kind, message, retryAfter) {
   $("error-msg").textContent = message;
   announce(`${k.title}. ${message}`);
   if (lastClaim && !input.value.trim()) input.value = lastClaim;
+  // The field itself is on the hidden checker screen, so the draft is shown
+  // here too: the reader sees what Retry will send.
+  $("error-claim").textContent = lastClaim || input.value.trim();
+  $("error-claim").hidden = !$("error-claim").textContent;
   $("error-back").textContent = k.back;
   const cd = $("countdown");
   const back = $("error-retry");
@@ -913,7 +917,7 @@ async function check(claim) {
     const saved = loadRecent().find((r) => r.claim.toLowerCase() === claim.toLowerCase() && r.result);
     if (saved) { renderResult({ ...saved.result, restored: true }); return; }
     lastClaim = claim;
-    renderError("network", "You're offline. Reconnect, then retry. Your claim is still in the box.", 0);
+    renderError("network", "You're offline. Reconnect, then retry. Your claim is kept below.", 0);
     return;
   }
 
@@ -963,7 +967,7 @@ async function check(claim) {
     endPending();
     if (err && err.name === "AbortError" && gaveUp) renderError("network", "This check is taking longer than it should. Nothing is wrong on your side. Retry in a moment.", 0);
     else if (err && err.name === "AbortError") { screenState.leave(); show(askSection); focusClaim(); }
-    else renderError("network", "Check your connection, then retry. Your claim is still in the box.", 0);
+    else renderError("network", "Check your connection, then retry. Your claim is kept below.", 0);
   } finally {
     clearSlow();
     inFlight = false;

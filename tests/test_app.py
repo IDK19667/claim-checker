@@ -4864,5 +4864,10 @@ t("  a pooled or randomized design names its limit", all(
   for l, w in _design_rows if l in ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review", "Randomized Controlled Trial")))
 t("  and the lines have no em or en dash", not any(d in w for _, w in _design_rows for d in ("\u2014", "\u2013")))
 
+_js = (ROOT / "static" / "app.js").read_text()
+t("errors: the claim is shown on the error screen and no copy points at a hidden box",
+  'id="error-claim"' in c.get("/").get_data(as_text=True)
+  and '$("error-claim").textContent' in _js and "still in the box" not in _js)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

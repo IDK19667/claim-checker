@@ -996,6 +996,8 @@ dialog.sheet[open]::backdrop { opacity: 1; }
    light shape on it. */
 #error { padding: 8px 0 64px; }
 #error .error-title { margin: 28px 0 0; font: 350 26px/1.2 var(--display); letter-spacing: -0.025em; max-width: 24em; }
+#error .error-claim { margin: 16px 0 0; padding-left: 14px; border-left: 2px solid var(--deep-line); max-width: 30em; font-size: 16px; line-height: 1.5; color: var(--on-deep); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+#error .error-claim[hidden] { display: none; }
 #error .error-msg { margin: 12px 0 0; font-size: 17px; line-height: 1.5; color: var(--on-deep-2); max-width: 30em; }
 #error .countdown { color: var(--on-deep-2); }
 #error .secondary { margin-top: 24px; background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
