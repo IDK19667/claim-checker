@@ -4583,5 +4583,19 @@ t("renderResult words the two dates separately and omits a date the record lacks
   "First checked on ${fmtDate(data.first_checked_at)}. Last re-checked on ${fmtDate(data.cached_at)}" in _js_d
   and "Result from an earlier check." in _js_d and "function hasDate(" in _js_d)
 
+# The saved-record audit script counts the kinds of inconsistency and renders
+# every record, on copies, never touching the file it is given.
+import subprocess as _sp
+_ad = os.path.join(tempfile.mkdtemp(), "audit.db")
+import shutil as _sh
+_sh.copyfile(os.environ["DB_PATH"], _ad)
+_before = open(_ad, "rb").read()
+_out = _sp.run([sys.executable, str(ROOT / "scripts" / "saved_record_audit.py"), _ad],
+               capture_output=True, text=True, env={**os.environ})
+t("the saved-record audit counts the planted mismatches and renders every record",
+  "count_mismatch:" in _out.stdout and "render check:" in _out.stdout and _out.returncode == 0
+  and "empty_query" in _out.stdout, _out.stdout[-400:] + _out.stderr[-300:])
+t("  and leaves the database it was given byte for byte unchanged", open(_ad, "rb").read() == _before)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
