@@ -74,7 +74,6 @@
   --film-top: rgba(15, 18, 17, 0.35);
   --scrim: rgba(8, 10, 9, 0.55);
   --shadow: rgba(8, 10, 9, 0.22);
-  --shadow-near: rgba(8, 10, 9, 0.08);
   --focus: #2c5848;
 
   --display: "Bricolage Grotesque", system-ui, sans-serif;
@@ -509,11 +508,9 @@ body {
    the study sheet, the only shadows in the design. */
 .verdict-block {
   position: relative; z-index: 1;
-  margin: -24px -8px 0;
-  padding: 28px 20px 24px;
-  background: var(--panel);
-  border: 1px solid var(--rule); border-radius: var(--r-panel);
-  box-shadow: 0 1px 2px var(--shadow-near), 0 24px 48px -20px var(--shadow);
+  margin: 0;
+  padding: 28px 0 8px;
+  background: transparent;
 }
 .answer { padding: 0; }
 .tldr {
@@ -697,7 +694,8 @@ body {
 #result.checking .actions,
 #result.checking .toast,
 #result.checking .feedback,
-#result.checking .report { display: none; }
+#result.checking .report,
+#result.checking .after { display: none; }
 #result.checking .report-head { min-height: 46vh; }
 
 .ref {
@@ -804,7 +802,8 @@ mark, .key-mark, .hl {
 
 /* ---- The sources --------------------------------------------------------- */
 
-.evidence { margin: 56px 0 0; }
+.after { margin: 32px 0 0; }
+.evidence { margin: 48px 0 0; }
 .evidence .section-row { padding-top: 0; flex-wrap: wrap; row-gap: 6px; margin-bottom: 8px; }
 #evidence-label { margin: 0; font: 350 28px/1.1 var(--display); letter-spacing: -0.03em; color: var(--ink); }
 .key { margin: 0; white-space: nowrap; }
@@ -1145,12 +1144,14 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
      and the sources the right. While the check is still running there is
      nothing to put in the second column, so checking stays one column. */
   body:not(.view-ask) #result:not(.checking) {
-    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
     column-gap: 64px; align-items: start;
   }
   body:not(.view-ask) #result:not(.checking) > .report-head { grid-column: 1 / -1; }
   body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 44px; }
-  .verdict-block { margin: -32px 0 0; padding: 36px 36px 30px; }
+  body:not(.view-ask) #result:not(.checking) > .verdict-block { grid-column: 1; grid-row: 2; }
+  body:not(.view-ask) #result:not(.checking) > .after { grid-column: 1; grid-row: 3; }
+  .verdict-block { margin: 0; padding: 40px 0 8px; }
   .report-head { padding-bottom: 64px; }
   .study { margin-inline: 0; padding-left: 16px; padding-right: 0; background-position: 0 16px; }
 }

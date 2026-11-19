@@ -1577,10 +1577,11 @@ t("  it honours reduced motion and waits for a hidden tab",
 
 _css = (ROOT / "static" / "style.css").read_text()
 _sheet = _css[_css.find(".verdict-block {"):].split("}")[0]
-t("the answer is a sheet that floats: a lighter panel, a fine rule edge, lifted onto the night head, a soft shadow",
-  "background: var(--panel)" in _sheet and "border: 1px solid var(--rule)" in _sheet
-  and "margin: -24px -8px 0" in _sheet and "box-shadow:" in _sheet and "var(--shadow-near)" in _sheet
-  and "--shadow-near: rgba(8, 10, 9, 0.08);" in _css)
+t("the answer is flat on the page: no panel, no shadow, no lift onto the head",
+  "box-shadow" not in _sheet and "background: transparent" in _sheet and "border" not in _sheet
+  and "--shadow-near" not in _css)
+t("on a wide screen the sources are a narrow rail beside one reading column",
+  "grid-template-columns: minmax(0, 1fr) 340px" in _css)
 _done = _js[_js.find("renderResult(final.result);"):][:900]
 t("after a check the address carries the claim as checked, so a fixed spelling stays fixed on reload",
   'encodeURIComponent(final.result.claim || claim)' in _done
@@ -1595,7 +1596,7 @@ def _at(needle):
 t("the result reads claim, answer, assessment, research, still open, breakdown, evidence, then sources",
   _at("The claim you checked") < _at("The short answer") < _at('id="tldr"') < _at('id="stamp"')
   < _at("What the research says") < _at(">Still open<") < _at("Read the full breakdown")
-  < _at('id="chart-sec"') < _at("Studies checked"))
+  < _at('id="chart-sec"') < _at("Studies checked") < _at('id="share-btn"') < _at('id="report-open"'))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
   and "Vitamin D supplements in winter cut colds</h2>" in _ord)

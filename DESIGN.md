@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: Evident
-description: The reading room after hours. Night, a charcoal with the green of the stacks in it, is where a claim arrives and where its verdict is ringed in pen. Day, cool stone, is the desk the evidence is laid out on, and the studies stand on it as a shelf of books whose cloth says what kind of study each one is. Three faces, one accent, and nothing ever coloured by what the verdict was.
+description: The reading room after hours. Night, a charcoal with the green of the stacks in it, is where a claim arrives and where its answer is read. Day, cool stone, is the desk the evidence is laid out on, and the studies stand on it as a shelf of books whose cloth says what kind of study each one is. Three faces, one accent, and nothing ever coloured by what the verdict was.
 colors:
   primary: "#121514"
   secondary: "#f1f2ee"
@@ -35,7 +35,6 @@ colors:
   film-top: "rgba(15, 18, 17, 0.35)"
   scrim: "rgba(8, 10, 9, 0.55)"
   shadow: "rgba(8, 10, 9, 0.22)"
-  shadow-near: "rgba(8, 10, 9, 0.08)"
   focus: "#2c5848"
 typography:
   label:
@@ -333,8 +332,6 @@ components:
     backgroundColor: "{colors.scrim}"
   sheet-shadow:
     backgroundColor: "{colors.shadow}"
-  answer-sheet-shadow:
-    backgroundColor: "{colors.shadow-near}"
   focus-ring:
     backgroundColor: "{colors.focus}"
 ---
@@ -348,7 +345,7 @@ redesign replaces this file on purpose, never by drift.
 ## The idea
 
 **The reading room after hours.** A claim arrives at night: it is typed
-into a dark room, and the verdict is given there, ringed in pen. Then the
+into a dark room, and the answer is given there. Then the
 lights come up on the desk and the evidence is laid out by day: what the
 research says, what is still open, and the studies themselves, standing
 on a shelf as books.
@@ -427,19 +424,13 @@ credibility does not get to colour its own answers, and green for true
 would imply a certainty the studies do not support. No stylesheet may
 select on `data-verdict`; a test enforces it.
 
-## The thread and the ring
+## The answer, not a ring
 
-On the report's night head a single 1px line in `--deep-line` runs down
-the left of the claim, with a 7px sage knot at each label: "The claim you
-checked", then "Verdict". It is the line from the question to its answer,
-and it ends at the verdict's knot.
-
-**The ring** is a pen stroke in sage, 1.25px, drawn round the verdict
-words rather than the column: `fitRing()` measures the text's own line
-boxes, pads each end by 7% of the text's width plus 12px so the ring's
-curved shoulders never cross a letter, and keeps it inside the screen.
-The stroke's start and end overlap a little at the top, where a pen
-would lift. It is static: drawn, not animated.
+The verdict is no longer an oversized oval. The answer sentence leads in
+display type (26 to 34px) and the assessment sits under it as two plain
+rows: the label in 24px display, and one line on how much to lean on it,
+counted from the studies the check used. The thread, its knots and the
+pen ring are gone.
 
 ## The highlighter
 
@@ -521,18 +512,21 @@ the shape of the evidence before opening a check.
 - **Before you trust a verdict:** the same grammar, one question per row,
   every answer ending on a link back to the claim box, and a real check
   as an aside.
-- **The report:** a band of footage, then the night head (back, the case
-  line, the thread, the claim in curly quotes, the reading log while it
-  runs, the ringed verdict), then by day: "The short answer" at 21px,
-  "What the research says", "Still open" under an ink rule, the full
-  breakdown, "The evidence" with the shelf, then the sources.
-- **The answer sheet:** everything from "The short answer" to the shelf
-  sits on one sheet of `--panel`, a shade lighter than the desk, edged in
-  a 1px `--rule` at `--r-panel`, lifted onto the night head (24px on a
-  phone, 32px wide) with a soft shadow (`--shadow-near` close in,
-  `--shadow` far out). On a phone it stands 12px in from the screen
-  edges. The sources, the share bar and the feedback row stay on the desk
-  beside and below it.
+- **The report:** a band of footage while the check runs (the result
+  itself carries no picture), then the night head (back, the case line,
+  the claim as checked with an "Edit claim" button under it, the reading
+  log while it runs). Then by day, one reading column: the answer
+  sentence in display type, the assessment (verdict label and how much to
+  lean on it, as plain rows), the doctor line, "What the research says",
+  "Who and what this applies to", "Still open" under an ink rule, the
+  closed breakdown, the evidence chart. The sources, each saying why it
+  is listed, and the search details follow, then share, feedback and
+  report. From 1024px the sources are a 340px rail beside the column; on
+  a phone it is one column. Each saved sentence is printed once: the
+  later blocks drop what an earlier one already said (`display.py`,
+  mirrored by `breakdownView` in `app.js`).
+- **The answer** is flat on the page: no panel, no shadow, no lift. The
+  one thing that floats is the study sheet.
 - **The full breakdown** sits straight under "Still open", closed, so a
   reader meets it before the shelf rather than after the sources. Its
   head is a heading, not a link: a 2px ink rule over it, "Rests on N
@@ -558,13 +552,12 @@ the shape of the evidence before opening a check.
   of paper. While a countdown runs, "Try again" is drawn as an outline
   and plainly not yet open.
 - **The study sheet:** a panel that rises from the foot of the screen
-  over a scrim, `--r-panel` at its top corners. With the answer sheet,
+  over a scrim, `--r-panel` at its top corners. Alone in that,
   the only shadows in the design.
 - **Documents** (privacy, the 404): the masthead, a 44px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
   again and the latest checks.
-- **The doctor line:** directly under the ringed verdict on the report's
-  night head, "Check important health decisions with a doctor.", 13.5px
+- **The doctor line:** directly under the assessment on the report, "Check important health decisions with a doctor.", 13.5px
   Instrument Sans in `--on-deep-2`, balanced so it never strands a word.
   It is the same words and the same setting whatever the verdict says. It
   is in the server-rendered HTML, so a shared link has it before any
@@ -572,7 +565,7 @@ the shape of the evidence before opening a check.
   check). The same line ends the shared text.
 - **Cards:** the share image (1080 square, drawn in the browser) and the
   link preview (1200x630, drawn by `og.py`) are one composition: night on
-  top with the wordmark, the thread, the claim, the ringed verdict and the
+  top with the wordmark, the claim, the verdict and the
   doctor line under it;
   day below with the short answer, what is still open, the mini shelf;
   a mono colophon with "Not medical advice".
@@ -606,17 +599,16 @@ Two moments in the reading, and the live check:
    20ms, on a check the reader just ran. Transform and opacity only.
 2. **The highlighter** sweeps across relied-on titles, once, on a check
    the reader just ran.
-3. **A live check:** the band and the sheet arrive once when the check
-   starts, each line of the reading log prints as its stage happens, and
+3. **A live check:** the band arrives once when the check starts, each line of the reading log prints as its stage happens, and
    the live line's dot pulses.
 4. **The nudge:** 900ms after a check the reader just ran comes back,
-   the page moves down once so the thread sits near the top and the short
-   answer and the start of the reading show under the verdict. It is the
+   the page moves down once so the claim sits near the top and the short
+   answer and the start of the reading show under the claim. It is the
    one time the page scrolls itself. It never runs on a shared link, any
    touch, wheel or key from the reader cancels it, it waits for a hidden
    tab to come back, and under reduced motion it jumps rather than glides.
 
-The ring does not draw itself. Nothing else animates: no entrances on
+Nothing else animates: no entrances on
 sections, no parallax, no cursor effects, no scroll hijacking (the nudge
 is one move the reader can cancel, not a hijack), no animated
 backgrounds. All of it collapses under `prefers-reduced-motion`.
@@ -636,7 +628,6 @@ copy or model output. A test enforces it on the rendered page;
 Never reintroduce: a glowing or neon accent, cyan light cues, a navy or
 pure black night, a cream ground, a colour coded verdict, a second accent,
 gradient washes, glass or backdrop blur, pill buttons, shadows used for
-depth on ordinary content (the answer sheet and the study sheet are the
-two that float, and no third joins them), emoji icons, stat-card rows, gauges, generated
+depth on ordinary content (the study sheet is the one that floats), emoji icons, stat-card rows, gauges, generated
 hero imagery or video, animated backgrounds, cursor effects, or analytics
 of any kind.
