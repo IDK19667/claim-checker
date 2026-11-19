@@ -55,6 +55,35 @@ await test("error: empty submit shows it, linked and invalid; typing clears all 
   must(await err.isVisible(), "spaces alone cleared the error");
 });
 
+// ---- 2. grouped near-duplicates, labelled list ----------------------------------
+
+const typeAhead = async (page, text) => {
+  await page.click("#claim-input");
+  await page.keyboard.type(text, { delay: 30 });
+  await page.waitForSelector("#suggest:not([hidden]) .suggest-row", { timeout: 5000 });
+};
+
+await test("suggestions: near-duplicate wordings are one row, the other is named, nothing else is lost", async (page) => {
+  await typeAhead(page, "creatine");
+  const rows = await page.locator(".suggest-row .suggest-claim").evaluateAll((els) => els.map((e) => e.textContent));
+  const builds = rows.filter((r) => /Creatine builds strength|Creatine improves strength/.test(r));
+  must(builds.length === 1, `expected one row for the two strength claims, got ${JSON.stringify(rows)}`);
+  must(/Also checked as: Creatine (builds|improves) strength/.test(builds[0]) && !/^(.*)Also checked as: \1$/.test(builds[0]), "the folded wording is not named: " + builds[0]);
+  must(rows.some((r) => /not safe for the kidneys/.test(r)), "a negated claim was folded away: " + JSON.stringify(rows));
+  // Keyboard still walks the rows of the grouped list.
+  await page.keyboard.press("ArrowDown");
+  must((await page.getAttribute("#suggest-0", "aria-selected")) === "true", "ArrowDown did not select the first grouped row");
+});
+
+await test("suggestions: the list is labelled 'Previously checked claims', visibly and by name", async (page) => {
+  await typeAhead(page, "creatine");
+  const head = (await page.locator("#suggest-head").textContent()).trim();
+  must(head === "Previously checked claims", `visible heading is "${head}"`);
+  must(await page.locator("#suggest-head").isVisible(), "heading is not visible");
+  must((await page.getAttribute("#suggest-list", "aria-labelledby")) === "suggest-head", "listbox is not named by the heading");
+  must((await page.locator("#suggest-list").evaluate((e) => e.getAttribute("aria-label"))) === null, "a second, conflicting aria-label is set");
+});
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -59,6 +59,10 @@ SEED = [
     "Antibiotics cure the common cold",
     "Vaccines reduce the risk of severe measles",
     "Sleeping with a fan on gives you a stiff neck",
+    "Turmeric reduces joint inflammation",
+    "Creatine builds strength",
+    "Creatine improves strength",
+    "Creatine is not safe for the kidneys",
 ]
 REPLAY_FROM = "Taking vitamin D supplements in winter cuts your risk of catching a cold or flu, but only if you're deficient to begin with"
 

@@ -4605,5 +4605,34 @@ t("  and the script links it with aria-describedby, sets aria-invalid, and clear
   'setAttribute("aria-invalid", "true")' in _appjs and 'removeAttribute("aria-invalid")' in _appjs
   and "clearClaimError()" in _appjs and 'showClaimError("Type or paste the claim first.")' in _appjs)
 
+_cr = [{"claim_text": "Creatine builds strength", "verdict": "true", "issue": 5},
+       {"claim_text": "Creatine improves strength.", "verdict": "true", "issue": 4},
+       {"claim_text": "Creatine increases strength", "verdict": "true", "issue": 3},
+       {"claim_text": "Creatine is not safe for the kidneys", "verdict": "complicated", "issue": 2}]
+_g = suggest_mod.suggest("creatine", _cr)
+t("suggest: near-duplicate wordings fold into one row that names the other wordings",
+  [r["claim_text"] for r in _g][0] == "Creatine builds strength" and len(_g) == 2
+  and _g[0]["similar"] == ["Creatine improves strength.", "Creatine increases strength"], _g)
+t("  a different claim is its own row and has no 'similar'", "similar" not in _g[1])
+_sq = suggest_mod.same_question
+_c = lambda text, v="true": {"claim_text": text, "verdict": v}
+t("  the same words in another case, order or punctuation are one question",
+  _sq(_c("Vitamin D prevents colds"), _c("colds: vitamin d, PREVENTS!"))
+  and _sq(_c("Vitamin D prevents colds"), _c("vitamin d PREVENTS colds!")))
+t("  a negation never folds: 'is safe' and 'is not safe' stay apart",
+  not _sq(_c("Creatine is safe for kidneys"), _c("Creatine is not safe for kidneys")))
+t("  a differing number never folds: 500 mg and 5000 mg stay apart",
+  not _sq(_c("Vitamin C 500 mg cures colds"), _c("Vitamin C 5000 mg cures colds")))
+t("  a different verdict never folds, even for near-identical words",
+  not _sq(_c("Creatine builds strength", "true"), _c("Creatine improves strength", "false")))
+t("  two or more words must be shared and at most one may differ on each side",
+  not _sq(_c("Creatine builds strength"), _c("Creatine builds muscle mass"))
+  and not _sq(_c("Zinc helps"), _c("Iron helps")))
+t("  the list is named 'Previously checked claims' (visible heading, accessible name)",
+  'id="suggest-head">Previously checked claims</p>' in _home
+  and 'role="listbox" aria-labelledby="suggest-head"' in _home)
+t("  and the script has no dash in the strings it writes for the list",
+  not any(d in _appjs[_appjs.index("function suggestAlso"):_appjs.index("function moveSuggest")] for d in ("\u2014", "\u2013")))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

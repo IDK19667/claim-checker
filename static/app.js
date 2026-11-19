@@ -1155,23 +1155,35 @@ function askSuggest() {
   }, 160);
 }
 
+// A claim worded twice is one row. The other wording is named under it, so
+// nothing is hidden, and the row opens the one saved answer.
+function suggestAlso(r) {
+  const more = r.similar || [];
+  if (!more.length) return "";
+  const rest = more.length > 1 ? ` and ${more.length - 1} more` : "";
+  return `<span class="suggest-also">Also checked as: ${escapeHtml(more[0])}${rest}</span>`;
+}
+
 function renderSuggest(rows) {
   suggestRows = rows;
   suggestAt = -1;
   if (!rows.length) { closeSuggest(); return; }
 
+  // The list is always the claims already checked. When none contains what
+  // was typed, say these are the closest ones: a corrected spelling is never
+  // passed off as the reader's own words.
   const anyLiteral = rows.some((r) => r.kind === "match");
-  suggestHead.textContent = anyLiteral ? "Already checked" : "Did you mean";
+  suggestHead.textContent = anyLiteral ? "Previously checked claims" : "Previously checked claims, closest to what you typed";
 
   suggestList.innerHTML = rows.map((r, i) => `
     <li class="suggest-row" id="suggest-${i}" role="option" aria-selected="false" data-i="${i}">
-      <span class="suggest-claim">${escapeHtml(r.claim_text)}</span>
+      <span class="suggest-claim">${escapeHtml(r.claim_text)}${suggestAlso(r)}</span>
       <span class="suggest-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
     </li>`).join("");
 
   suggestBox.hidden = false;
   input.setAttribute("aria-expanded", "true");
-  suggestLive.textContent = `${rows.length} ${rows.length === 1 ? "claim" : "claims"} already checked. Use the arrow keys to choose one.`;
+  suggestLive.textContent = `${rows.length} previously checked ${rows.length === 1 ? "claim" : "claims"}. Use the arrow keys to choose one.`;
 }
 
 function moveSuggest(step) {
