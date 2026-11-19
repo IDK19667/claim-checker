@@ -1716,6 +1716,18 @@ if _shutil.which("node"):
                                       capture_output=True, text=True, check=True).stdout)
     t("  and the script words every one of them the same way", _jcl == _cl, _jcl)
 
+# ---- edit the claim --------------------------------------------------------------
+_edit_js = (ROOT / "static" / "app.js").read_text().split('$("edit-claim").addEventListener("click", () => {')[1].split("\n});")[0]
+t("the result offers 'Edit claim' right under the claim, before anything else on the sheet",
+  _at("The claim you checked") < _at('id="edit-claim"') < _at("The short answer")
+  and '>Edit claim</button>' in _ord and 'id="claim-echo"' in _ord)
+t("  it goes back to the claim box with the claim filled, cursor at the end, suggestions shut",
+  "goHome()" in _edit_js and "input.value = claim" in _edit_js and "currentResult.claim" in _edit_js
+  and "setSelectionRange(claim.length, claim.length)" in _edit_js and "closeSuggest()" in _edit_js
+  and "check(" not in _edit_js)
+t("  it is a 44px target and is not offered while a check runs",
+  "min-height: 44px" in _css.split(".edit-claim {")[1].split("}")[0] and "#result.checking .edit-claim { display: none; }" in _css)
+
 # (d) What the research says: never folded, every sentence already gated.
 _says = _vd["breakdown"]["says"]
 t("what the research says is three to five sentences, every one of them cited",

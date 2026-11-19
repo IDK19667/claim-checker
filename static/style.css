@@ -445,6 +445,17 @@ body {
   color: var(--on-deep-2); max-width: 34em; overflow-wrap: break-word;
 }
 
+/* Edit sits under the claim, in the night's own ink, and is as tall as a
+   thumb. It is not offered while a check runs: Cancel is the way out then. */
+.edit-claim {
+  display: inline-flex; align-items: center; min-height: 44px; margin: 6px 0 0; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  font: 500 15px/1.4 var(--body); color: var(--on-deep);
+  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
+}
+.edit-claim:hover { color: var(--sage); }
+#result.checking .edit-claim { display: none; }
+
 /* While a check runs, the work prints along the thread. */
 .reading { list-style: none; margin: 24px 0 0; padding: 0; font: 500 12.5px/1.5 var(--mono); color: var(--on-deep-2); }
 .reading li { display: flex; gap: 10px; padding: 4px 0; animation: line-in 240ms ease-out both; }

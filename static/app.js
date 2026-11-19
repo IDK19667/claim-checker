@@ -1247,6 +1247,19 @@ $("back-btn").addEventListener("click", () => {
   if (controller) { controller.abort(); return; }
   if (history.state && history.state.view === "result") history.back(); else { history.replaceState({ view: "ask" }, "", "/"); goHome(); }
 });
+// Edit returns to the claim box with the claim already in it, cursor at the
+// end, to reword and check again. The suggestions stay shut: the reader has
+// not typed anything yet.
+$("edit-claim").addEventListener("click", () => {
+  const claim = (currentResult && currentResult.claim) || $("claim-echo").textContent.trim();
+  history.replaceState({ view: "ask" }, "", "/");
+  goHome();
+  input.value = claim;
+  clearBtn.hidden = !claim;
+  closeSuggest();
+  input.focus({ preventScroll: true });
+  input.setSelectionRange(claim.length, claim.length);
+});
 window.addEventListener("popstate", () => {
   if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult); return; }
   goHome();
