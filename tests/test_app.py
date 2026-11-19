@@ -1602,7 +1602,10 @@ t("the result reads claim, answer, assessment, research, still open, breakdown, 
   < _at('id="chart-sec"') < _at("Studies checked") < _at('id="share-btn"') < _at('id="report-open"'))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
-  and "Vitamin D supplements in winter cut colds</h2>" in _ord)
+  and "Vitamin D supplements in winter cut colds</h1>" in _ord)
+t("  the claim is the result view's h1 and the error title the error view's; the home h1 sits in the hidden ask section",
+  '<h1 class="claim-echo" id="claim-echo">' in _ord and '<h1 class="error-title" id="error-title">' in _ord
+  and '<section id="ask" aria-labelledby="ask-heading" hidden>' in _ord and "<h2 class=\"claim-echo\"" not in _ord)
 t("  its quotation marks come from the stylesheet, so the text stays the text",
   ".claim-echo::before" in _css and "\\201C" in _css)
 # Sizes are compared rather than eyeballed.

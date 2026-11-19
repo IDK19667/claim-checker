@@ -297,7 +297,7 @@
         </div>
         <div class="thread">
           <p class="field-label">The claim you checked</p>
-          <h2 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
+          <h1 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h1>
           {# Only a live check fills this: a shared or saved link already
              carries the corrected claim, so there is nothing to explain. #}
           <p class="typed-note" id="typed-note" hidden></p>
@@ -583,7 +583,7 @@
 
     <!-- ===== Error ===== -->
     <section id="error" hidden>
-      <h2 class="error-title" id="error-title"></h2>
+      <h1 class="error-title" id="error-title"></h1>
       <p class="error-msg" id="error-msg"></p>
       <p class="error-claim" id="error-claim"></p>
       <p class="countdown" id="countdown" hidden></p>
