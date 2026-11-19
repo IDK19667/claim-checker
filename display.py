@@ -217,17 +217,86 @@ def result_meta(claim: str, label: str, short_answer: str) -> dict:
 
 SAVED_VERDICTS = ("true", "false", "complicated", "insufficient")
 
-# A claim is something a person typed. One that carries an email address, a
-# phone number or first-person wording ("my", "I", "me") is more likely to hold
-# something about that person, so it is never offered to a search engine.
+# A claim is something a person typed. Anything in it that could point at, or
+# say something about, one person keeps it away from search engines. The screen
+# errs towards flagging: a false positive only costs an index entry, a false
+# negative puts a stranger's detail in a search result.
 _PERSONAL = re.compile(
-    r"[\w.+-]+@[\w-]+\.[\w.]+"             # an email address
-    r"|\+?\d[\d\s().-]{7,}\d"              # a phone-like run of digits
-    r"|\b(?:i|i'm|i've|i'd|my|me|mine|myself)\b", re.I)
+    # contact details
+    r"[\w.+-]+@[\w-]+\.[\w.]+"                       # an email address
+    r"|(?<![\w.])@\w{2,}"                             # an @handle
+    r"|\+?\d[\d\s().-]{7,}\d"                        # a phone-like run of digits
+    r"|https?://|\bwww\.|\b[\w-]+\.(?:com|org|net|io|co|me|uk|app|tv|ly)\b"   # a URL or domain
+    r"|\b\d{1,5}\s+(?:[a-z0-9.'-]+\s+){1,3}(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|boulevard|blvd"
+    r"|court|ct|way|place|close|crescent|terrace)\b"    # street-address-like text
+    r"|\bp\.?o\.? box\b|\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b"   # a PO box, a UK postcode
+    # first person and people close to the writer, and gendered pronouns
+    r"|\b(?:i|i'm|i've|i'd|i'll|my|me|mine|myself|we|we're|we've|our|ours|ourselves"
+    r"|he|she|his|her|hers|him|himself|herself|he's|she's)\b"
+    # ages
+    r"|\b\d{1,3}[\s-]*(?:years?|yrs?|y)[\s-]*olds?\b|\b\d{1,3}\s*y\.?/?o\b|\b\d{1,3}\s*yrs?\b"
+    r"|\b(?:aged?|age of)\s+\d{1,3}\b"
+    # personal medical details without a first-person word
+    r"|\b(?:diagnosed|tested positive|test results?|blood results?|lab results?|scan results?|biopsy"
+    r"|prescribed|prescription|(?:am|is|are|was|were|became|got|getting)\s+pregnant|expecting a baby)\b",
+    re.I)
+
+# Capitalised wording that gives a name: titles, a relation then a name.
+_NAMEISH = re.compile(
+    r"\b(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor|Nurse|Sir|Lady)\.?\s+[A-Z][a-z]+"
+    r"|\b(?:[Mm]y|[Oo]ur|[Hh]is|[Hh]er)\s+(?:\w+\s+)?(?:son|daughter|wife|husband|partner|mom|mum|mother|dad|father"
+    r"|friend|doctor|neighbou?r|colleague|boss|uncle|aunt|cousin|brother|sister|grandma|grandpa|boyfriend"
+    r"|girlfriend|child|baby|patient)\s+[A-Z][a-z]+")
+
+_CAPWORD = re.compile(r"\b[A-Z][a-z]+(?:['\u2019]s)?\b")
+_CAPRUN = re.compile(r"\b[A-Z][a-z]+(?:['\u2019]s)?(?:\s+[A-Z][a-z]+(?:['\u2019]s)?)+\b")
+
+# Capitalised health, food and brand terms that are not names. Anything else
+# capitalised in the middle of a claim is treated as a possible name.
+_TERMS = frozenset("""
+vitamin vitamins type omega covid coronavirus alzheimer alzheimers parkinson parkinsons crohn crohns lyme
+hashimoto hashimotos graves huntington huntingtons asperger aspergers down tourette tourettes raynaud
+lou gehrig bell bells palsy epstein barr west nile zika ebola
+tylenol advil motrin aleve benadryl zyrtec claritin lipitor xanax valium prozac zoloft adderall ritalin
+ozempic wegovy mounjaro zepbound metformin viagra botox gatorade pepsi coke coca cola red bull monster
+starbucks apple google bluetooth wifi wi fi gmo
+keto ketogenic paleo mediterranean atkins dash whole vegan vegetarian
+american british european asian african chinese japanese indian korean western eastern northern southern
+himalayan celtic epsom manuka greek french italian mexican swiss dutch
+north south east west america europe asia africa australia
+""".split())
+
+
+_OPENERS = frozenset("""does do did is are was were can could will would should may might must has have
+why how what when where which who whether""".split())
+
+
+def _only_terms(words) -> bool:
+    return all(w.lower().replace("\u2019s", "").replace("'s", "") in _TERMS for w in words)
+
+
+def _name_risk(text: str) -> bool:
+    """A name, or a capitalised word that is not a known term, not at a sentence start."""
+    if _NAMEISH.search(text):
+        return True
+    for run in _CAPRUN.finditer(text):               # two capitalised words in a row, even at the start
+        words = run.group().split()
+        if words[0].lower() in _OPENERS:              # "Does Tylenol ...": a question word, not a name
+            words = words[1:]
+        if words and not _only_terms(words):
+            return True
+    for sent in re.split(r"(?<=[.!?])\s+|\n+", text):
+        for m in _CAPWORD.finditer(sent):
+            if not sent[:m.start()].strip(" \"\u201c\u2018'([-"):
+                continue                              # the first word of a sentence
+            if not _only_terms([m.group()]):
+                return True
+    return False
 
 
 def looks_personal(claim_text) -> bool:
-    return bool(_PERSONAL.search(str(claim_text or "")))
+    text = str(claim_text or "").replace("\u2019", "'").replace("\u2018", "'")
+    return bool(_PERSONAL.search(text)) or _name_risk(text)
 
 
 def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search_query, saved_at,

@@ -5954,6 +5954,43 @@ t("sitemap: a claim with an email, a phone number or first-person wording is nev
                                                  "Omega 3 helps memory in adults over 65"))
   and "looks_personal" in _disp_p.saved_record_problems("my back pain is cured by yoga", "false", [], [], {}, "q", "2026-01-01"))
 
+_PERSONAL_CLAIMS = {
+    "contact": ["email jo@example.com about zinc", "call 020 7946 0958 for the cure", "text +1 (415) 555-0132 if zinc works",
+                "I live at 12 Baker Street and garlic helps", "does it work, ask at www.cureblog.com", "follow @drjane for the cure",
+                "instagram.com/jane_doe says honey cures acne", "garlic cures colds, PO Box 55", "turmeric cures pain, SW1A 1AA"],
+    "age": ["I'm 34 and zinc shortens colds", "34 years old and low iron", "a 34yo with gout and cherries", "my 6-year-old and fish oil",
+            "does a statin help someone aged 70", "age 45 and creatine", "a 6-year-old with eczema and oats"],
+    "name": ["Dr. Smith says garlic cures colds", "Mrs Jones cured a cough with honey", "Ms Patel and turmeric",
+             "my son Tom needs iron", "my friend Priya says keto cured her", "John Smith cured cancer with turmeric",
+             "Does Sarah's diet work", "Is it true that Mark lost weight on fasting"],
+    "medical": ["I have diabetes, is cinnamon good", "my blood pressure is high, does garlic help", "I take metformin with vitamin B12",
+                "my diagnosis was lupus, does fish oil help", "I was diagnosed with lupus", "my test results show low iron",
+                "my pregnancy and caffeine", "my child has eczema, does oatmeal help", "my doctor said to quit gluten",
+                "I am pregnant and eat sushi", "She was diagnosed with cancer", "he tested positive, does zinc help"],
+}
+_ORDINARY_CLAIMS = ["Vitamin D prevents colds", "Intermittent fasting helps weight loss", "Creatine improves strength in older adults",
+                    "Type 2 diabetes can be reversed with diet", "Omega 3 helps memory in adults over 65",
+                    "Does Tylenol cause autism in children", "Can Vitamin C shorten a cold", "Cracking your knuckles causes arthritis",
+                    "5G weakens your immune system", "Is the Mediterranean diet good for the heart",
+                    "Caffeine during pregnancy raises miscarriage risk", "Statins cause memory loss",
+                    "Coffee lowers the risk of Parkinson's disease", "Does HIV spread through kissing?",
+                    "Walking 10,000 steps a day extends life", "Ozempic cures alcoholism"]
+for _cat, _xs in _PERSONAL_CLAIMS.items():
+    _miss = [x for x in _xs if not _disp_p.looks_personal(x)]
+    t(f"personal screen: every {_cat} example is flagged ({len(_xs)})", not _miss, _miss)
+_fp = [x for x in _ORDINARY_CLAIMS if _disp_p.looks_personal(x)]
+t(f"personal screen: {len(_ORDINARY_CLAIMS)} ordinary health claims all pass", not _fp, _fp)
+for _x in [x for xs in _PERSONAL_CLAIMS.values() for x in xs]:
+    t(f"personal screen flags: {_x}", _disp_p.looks_personal(_x))
+for _x in _ORDINARY_CLAIMS:
+    t(f"personal screen passes: {_x}", not _disp_p.looks_personal(_x))
+_ex_js = re.search(r"const EXAMPLES = \[(.*?)\n\];", (ROOT / "static" / "app.js").read_text(), re.S).group(1)
+_examples = re.findall(r'"([^"]+)"', _ex_js)
+t("personal screen: every EXAMPLES claim in app.js passes", len(_examples) >= 7 and not any(_disp_p.looks_personal(x) for x in _examples),
+  [x for x in _examples if _disp_p.looks_personal(x)])
+t("personal screen: curly apostrophes and case do not hide a first-person word",
+  _disp_p.looks_personal("I\u2019M 34") and _disp_p.looks_personal("MY BLOOD PRESSURE") and not _disp_p.looks_personal(""))
+
 
 # ---- Day counts: per-day totals, no identifiers ------------------------------------------
 def _tot():
