@@ -422,19 +422,10 @@ body {
 .case-row { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; margin: 0 0 26px; }
 .case-row .case-nma { color: var(--on-deep-2); }
 
-/* The thread: a fine line from the claim down to its verdict, in the gutter,
-   with a knot at each end. It is the one line that says these two belong to
-   each other, and the work prints along it while a check runs. */
-.thread { position: relative; padding-left: 24px; }
-.thread::before {
-  content: ""; position: absolute; left: 3px; top: 8px; bottom: 0; width: 1px;
-  background: var(--deep-line);
-}
-.thread > .field-label, .stamp-wrap > .field-label { position: relative; }
-.thread > .field-label::before, .stamp-wrap > .field-label::before {
-  content: ""; position: absolute; left: -24px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px;
-  border-radius: 50%; background: var(--sage);
-}
+/* The head holds the claim and, while a check runs, the work printing under
+   it. Nothing links it to the answer by a drawn line: the answer is the next
+   thing down the page. */
+.thread { position: relative; }
 .field-label { margin: 0; color: var(--on-deep-3); }
 
 /* The claim is labelled as the claim and set as a quotation, plainly, well
@@ -464,41 +455,30 @@ body {
 .reading .link-btn { color: var(--on-deep); font-family: var(--body); }
 @keyframes line-in { from { opacity: 0; transform: translateY(3px); } }
 
-/* ---- The verdict: the signature ------------------------------------------ *
-   The largest thing on the screen, in the same ink whatever it says, with a
-   pen ring drawn round it the way you would circle the answer on a page. The
-   ring is the same shape on every verdict: it marks where the answer is,
-   never what it is. */
+/* ---- The answer ---------------------------------------------------------- *
+   The sentence that answers the claim leads, in the display face and the
+   largest type on the page. Under it the assessment and how far to lean on
+   it, each on its own labelled row, in the same ink and the same size
+   whatever the assessment says: a verdict is never coloured and never
+   ringed. */
 
 .ticket { margin: 0; }
-.stamp-wrap { position: relative; margin-top: 34px; }
-/* Ends the thread at the verdict's knot: the line runs no further down. */
-.stamp-wrap::before {
-  content: ""; position: absolute; left: -26px; top: 12px; bottom: 0; width: 6px;
-  background: var(--deep);
-}
-.vwrap { position: relative; margin: 8px 0 0; padding: 20px 0 22px; }
-/* app.js sets --rl and --w from the words' own boxes, wide enough at the
-   shoulders that the pen never crosses a letter. */
-.ring {
-  position: absolute; left: var(--rl, -16px); top: 0; width: var(--w, calc(100% + 16px)); height: 100%;
-  overflow: visible; pointer-events: none;
-}
-.ring path { fill: none; stroke: var(--sage); stroke-width: 1.25px; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.assess { margin: 22px 0 0; display: grid; row-gap: 10px; }
+.assess-row { margin: 0; display: grid; grid-template-columns: 7.5em minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
+.assess-label { font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 .stamp {
-  position: relative; display: block;
-  font-size: clamp(38px, 11.4vw, 60px); line-height: 1.04;
-  font-family: var(--display); font-weight: 350; letter-spacing: -0.04em;
-  color: var(--on-deep);
+  font-family: var(--display); font-weight: 350; font-size: 24px; line-height: 1.2;
+  letter-spacing: -0.02em; color: var(--ink);
 }
-.stamp:empty + .ring, .vwrap:has(.stamp:empty) .ring { display: none; }
+.confidence { font-size: 16px; line-height: 1.55; color: var(--ink); }
+.confidence .what { font-size: 14px; }
 /* The one line under every verdict, the same whatever the verdict says: in
    the night's quiet ink at the size of the note under the claim, so it reads
    as part of the answer and not as a banner. Balanced, so on a narrow phone
    it breaks into two even lines and never strands its last word. */
 .doctor-line {
-  margin: 0; max-width: 28em;
-  font-size: 13.5px; line-height: 1.45; color: var(--on-deep-2);
+  margin: 14px 0 0; max-width: 34em;
+  font-size: 14px; line-height: 1.5; color: var(--ink-3);
   text-wrap: balance;
 }
 /* The same quiet line on the screens that have no verdict yet: under the
@@ -525,7 +505,10 @@ body {
   box-shadow: 0 1px 2px var(--shadow-near), 0 24px 48px -20px var(--shadow);
 }
 .answer { padding: 0; }
-.tldr { margin: 10px 0 0; font-size: 21px; line-height: 1.45; font-weight: 400; letter-spacing: -0.005em; }
+.tldr {
+  margin: 10px 0 0; max-width: 24em;
+  font: 350 clamp(26px, 7.2vw, 34px)/1.22 var(--display); letter-spacing: -0.02em; text-wrap: balance;
+}
 .says-sec { margin-top: 40px; }
 .says { margin-top: 10px; }
 .says-p { margin: 0 0 12px; font-size: 17px; line-height: 1.65; color: var(--ink-2); }
@@ -695,7 +678,6 @@ body {
 
 /* While a check runs nothing has been counted yet, so nothing by day is drawn:
    the claim and the work printing along the thread are the whole screen. */
-#result.checking .stamp-wrap,
 #result.checking .verdict-block,
 #result.checking .deeper,
 #result.checking .actions,
@@ -1155,6 +1137,5 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 44px; }
   .verdict-block { margin: -32px 0 0; padding: 36px 36px 30px; }
   .report-head { padding-bottom: 64px; }
-  .stamp { font-size: 64px; }
   .study { margin-inline: 0; padding-left: 16px; padding-right: 0; background-position: 0 16px; }
 }

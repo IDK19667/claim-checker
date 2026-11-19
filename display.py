@@ -81,3 +81,25 @@ def breakdown_view(result):
         "not_applies_to": unseen(bd.get("not_applies_to"), seen),
         "unknowns": unseen(bd.get("unknowns"), seen),
     }
+
+
+def confidence_line(result) -> str:
+    """
+    How much to lean on the answer, in one sentence, from fields already saved.
+
+    The wording of a real check is evidence.evidence_line, worked out on the
+    server when it ran. A saved record without it says what its studies were,
+    which is all the old level word ever measured.
+    """
+    studies = result.get("studies") or []
+    cited = [s for s in studies if s.get("cited_in_verdict")]
+    if not studies:
+        return "No direct evidence either way: nothing on PubMed matched well enough to weigh."
+    if not cited:
+        return "No direct evidence either way: none of the studies tests this claim."
+    line = str(result.get("evidence_line") or "").strip().rstrip(".")
+    if line:
+        return line + "."
+    tiers = {s.get("tier") or "moderate" for s in cited}
+    word = "Strong" if "strong" in tiers else "Moderate" if tiers - {"weak", "retracted"} else "Weak"
+    return f"{word} study designs."

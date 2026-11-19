@@ -1591,8 +1591,8 @@ def _at(needle):
     return _ord.index(needle)
 
 
-t("the result reads claim, verdict, answer, research, still open, breakdown, evidence, then sources",
-  _at("The claim you checked") < _at('id="stamp"') < _at("The short answer")
+t("the result reads claim, answer, assessment, research, still open, breakdown, evidence, then sources",
+  _at("The claim you checked") < _at("The short answer") < _at('id="tldr"') < _at('id="stamp"')
   < _at("What the research says") < _at(">Still open<") < _at("Read the full breakdown")
   < _at('id="chart-sec"') < _at("Studies checked"))
 t("  the claim carries its label and is never cut short",
@@ -1600,17 +1600,27 @@ t("  the claim carries its label and is never cut short",
   and "Vitamin D supplements in winter cut colds</h2>" in _ord)
 t("  its quotation marks come from the stylesheet, so the text stays the text",
   ".claim-echo::before" in _css and "\\201C" in _css)
-# The verdict has to be the most prominent text on the screen. Sizes are
-# compared rather than eyeballed: the claim's largest is below the verdict's
-# smallest, at every width.
+# Sizes are compared rather than eyeballed.
 _claim_px = [float(n) for n in re.findall(
     r"\.claim-echo \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)",
     _css, re.S)[0]]
-_stamp_px = [float(n) for n in re.findall(
-    r"\.stamp \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)",
-    _css, re.S)[0]]
-t("  and the verdict is set larger than the claim at every width",
-  _claim_px[1] < _stamp_px[0], f"claim {_claim_px} stamp {_stamp_px}")
+# The answer sentence is the biggest text on the result, at every width: its
+# smallest is above the claim's largest and the assessment's largest.
+_tldr_px = [float(n) for n in re.findall(
+    r"\.tldr \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)", _css, re.S)[0]]
+_stamp_px = float(re.search(r"\.stamp \{[^}]*?font-size: (\d+(?:\.\d+)?)px", _css, re.S).group(1))
+t("  and the answer sentence is set larger than the claim and the assessment at every width",
+  _claim_px[1] < _tldr_px[0] and _stamp_px < _tldr_px[0], f"claim {_claim_px} tldr {_tldr_px} stamp {_stamp_px}")
+t("  the assessment is plain text: no oval, no ring, no pen drawn round it on the result",
+  'class="ring"' not in _ord and 'class="vwrap"' not in _ord and ".ring" not in _css
+  and ".vwrap" not in _css and "fitRing" not in (ROOT / "static" / "app.js").read_text())
+t("  the assessment and its confidence are two labelled rows under the answer",
+  '<span class="assess-label">Assessment</span><span class="stamp" id="stamp">' in _ord
+  and '<span class="assess-label">Confidence</span>' in _ord
+  and _at('id="tldr"') < _at('id="assess"') < _at('id="doctor-line"') < _at("What the research says"))
+t("  the confidence is the sentence the check worded, once",
+  "<mark>Low certainty evidence, but no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
+  or "<mark>" in _ord.split('id="assess"')[1].split("</p>")[1], _ord.split('id="assess"')[1][:500])
 
 # ---- no sentence is printed twice -----------------------------------------------
 # "What the research says" is picked from the paragraphs the breakdown prints,
@@ -1686,6 +1696,25 @@ t("  and the screen that lands on the verdict stops the band instead of showing 
   "film.stop()" in _settle and 'film.show("verdict")' not in _settle)
 t("  the service worker no longer precaches the still",
   "verdict.webp" not in (ROOT / "static" / "sw.js").read_text() and not hasattr(appmod, "BAND_STILL"))
+
+# ---- the confidence line: the same sentence from the server and the script -------
+_CL = [{"studies": [], "evidence_line": "x"},
+       {"studies": [{"cited_in_verdict": False, "tier": "strong"}], "evidence_line": "x"},
+       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a partial effect, not a cure"},
+       {"studies": [{"cited_in_verdict": True, "tier": "strong"}, {"cited_in_verdict": True, "tier": "weak"}]},
+       {"studies": [{"cited_in_verdict": True, "tier": "moderate"}]},
+       {"studies": [{"cited_in_verdict": True, "tier": "weak"}]}]
+_cl = [_display.confidence_line(r) for r in _CL]
+t("the confidence line: nothing found, nothing used, the checked wording, or the designs of an old record",
+  _cl == ["No direct evidence either way: nothing on PubMed matched well enough to weigh.",
+          "No direct evidence either way: none of the studies tests this claim.",
+          "Moderate evidence of a partial effect, not a cure.",
+          "Strong study designs.", "Moderate study designs.", "Weak study designs."], _cl)
+if _shutil.which("node"):
+    _csrc = "function confidenceLine" + (ROOT / "static" / "app.js").read_text().split("function confidenceLine")[1].split("\n}\n")[0] + "\n}"
+    _jcl = json.loads(_subprocess.run(["node", "-e", _csrc + "console.log(JSON.stringify(" + json.dumps(_CL) + ".map(confidenceLine)));"],
+                                      capture_output=True, text=True, check=True).stdout)
+    t("  and the script words every one of them the same way", _jcl == _cl, _jcl)
 
 # (d) What the research says: never folded, every sentence already gated.
 _says = _vd["breakdown"]["says"]
@@ -2820,10 +2849,10 @@ t("  it names the one group, says low certainty, and is empty with nothing used"
   and _el("complicated", [_study("L1", "Pilot trial of vinegar", abstract="A pilot trial in 12 adults.")],
           ["L1"], "Vinegar lowers blood sugar").startswith("Low certainty evidence")
   and _el("insufficient", _ACV, [], _ACV_CLAIM) == "" and _el("false", _ACV, [], _ACV_CLAIM) == "")
-_rec = (ROOT / "static" / "app.js").read_text().split("function recordSentence")[1].split("\nfunction ")[0]
-t("  the record line prints it, and no longer calls the designs 'the evidence'",
+_rec = (ROOT / "static" / "app.js").read_text().split("function confidenceLine")[1].split("\nfunction ")[0]
+t("  the confidence line prints it, and no longer calls the designs 'the evidence'",
   "data.evidence_line" in (ROOT / "static" / "app.js").read_text()
-  and "the evidence is <mark>" not in _rec and "escapeHtml(line)" in _rec)
+  and "the evidence is <mark>" not in _rec and "data.evidence_line" in _rec)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _ACV]
 fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                     Resp(VJ("complicated", [1, 2], tldr=_ACV_TLDR,
@@ -4061,8 +4090,8 @@ _dl = P("Sleeping eight hours improves memory", ip="7.7.7.41").get_json()
 _dl_page = c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
 _i_stamp = _dl_page.find('id="stamp"')
 _i_doc = _dl_page.find('<p class="doctor-line" id="doctor-line">' + _DOC + "</p>")
-t("a server-rendered result carries the doctor line, after the verdict stamp and before the answer",
-  0 < _i_stamp < _i_doc < _dl_page.find('<section class="answer">'), (_i_stamp, _i_doc))
+t("a server-rendered result carries the doctor line, after the assessment and before what the research says",
+  0 < _i_stamp < _i_doc < _dl_page.find('id="says-sec"'), (_i_stamp, _i_doc))
 t("  exactly once, and visible: no hidden attribute on a page that has a verdict",
   _dl_page.count(_DOC) == 1 and 'id="doctor-line" hidden' not in _dl_page)
 _cold = c.get("/?q=never%20checked%20for%20the%20line").get_data(as_text=True)

@@ -295,10 +295,10 @@
 
     <!-- ===== Result ===== -->
     <section id="result"{% if not result %} hidden{% endif %}>
-      <!-- The head is a field, not a headline. What was typed is labelled as
-           what was typed and set quietly; the verdict is the biggest thing on
-           the screen. The ground is identical on every verdict, so nothing
-           here is colour coded. -->
+      <!-- The head holds the claim as it was checked, set quietly, and the way
+           back to it. The answer is the first thing on the sheet below, in the
+           largest type on the page. The ground is identical on every verdict,
+           so nothing here is colour coded. -->
       <div class="report-head">
         <button class="back" id="back-btn" type="button">
           <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
@@ -307,10 +307,6 @@
           <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
           <p class="case case-nma">Not medical advice</p>
         </div>
-        {# The thread: one fine line in the gutter from the claim down to its
-           verdict, so the two read as one thing. The pen ring round the
-           verdict is the same shape whatever it says: it marks where the
-           answer is, never what it is. app.js fits it to the words. #}
         <div class="thread">
           <p class="field-label">The claim you checked</p>
           <h2 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h2>
@@ -318,17 +314,6 @@
              carries the corrected claim, so there is nothing to explain. #}
           <p class="typed-note" id="typed-note" hidden></p>
           <ol class="reading" id="reading" hidden aria-live="polite"></ol>
-          <div class="stamp-wrap">
-            <p class="field-label">Verdict</p>
-            <div class="vwrap">
-              <span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span>
-              <svg class="ring" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M58 9 C 150 0, 292 8, 296 40 S 210 80, 140 79 S 2 70, 4 41 S 70 4, 168 6"/></svg>
-            </div>
-            {# One plain line under every verdict, set the same whatever the
-               verdict says. Shown whenever a verdict shows (app.js keeps it
-               in step), and already in the HTML for a shared link. #}
-            <p class="doctor-line" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
-          </div>
         </div>
       </div>
 
@@ -347,6 +332,16 @@
           <section class="answer">
             <p class="section-label">The short answer</p>
             <p class="tldr" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
+            {# The assessment is the same four words whatever it says, set
+               in the same ink and the same size: it marks where the answer
+               stands, never what it is. The confidence is worded on the
+               server (evidence.evidence_line) and says how much to lean on
+               it. #}
+            <div class="assess" id="assess">
+              <p class="assess-row"><span class="assess-label">Assessment</span><span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span></p>
+              <p class="assess-row"><span class="assess-label">Confidence</span><span class="confidence" id="confidence"><mark>{% if result %}{{ confidence_line(result) }}{% endif %}</mark> <button type="button" class="what link-btn" id="meter">What does this mean?</button></span></p>
+            </div>
+            <p class="doctor-line" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
           </section>
 
           {# Always visible, never folded. Every sentence here has already
@@ -484,7 +479,6 @@
             </figure>
             <p class="sr-only" id="chart-desc">{% if ev %}{{ ev.described }}{% endif %}</p>
             <p class="chart-facts" id="chart-facts">{% if ev %}{{ ev.facts }}{% endif %}</p>
-            <p class="record" id="record"></p>
           </section>
           <p class="cached-note" id="cached-note" hidden></p>
         </article>

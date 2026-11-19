@@ -67,17 +67,6 @@ function typeInfo(types) {
   return { label: t[0] || DEFAULT_TYPE[0], cls: "", what: DEFAULT_TYPE[2] };
 }
 
-// Deterministic. Based only on the kinds of studies the verdict cited,
-// not on what the model thinks of them.
-function evidenceLevel(studies) {
-  const cited = studies.filter((s) => s.cited_in_verdict);
-  if (!cited.length) return { level: 0, label: "No direct evidence", note: "None of the studies found actually test this claim, so it can't be rated true or false." };
-  const kinds = cited.map((s) => typeInfo(s.publication_types).cls);
-  if (kinds.includes("strong")) return { level: 3, label: "Strong", note: "Rests on a meta-analysis, systematic review, randomized trial, or official guideline." };
-  if (kinds.some((k) => k === "")) return { level: 2, label: "Moderate", note: "Human studies or expert reviews, but no randomized trial or meta-analysis behind it." };
-  return { level: 1, label: "Weak", note: "Only case reports, letters, opinion pieces, or a retracted paper." };
-}
-
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
@@ -400,21 +389,19 @@ function linkStudyRefs(text, count) {
   });
 }
 
-// What was read and relied on, as one sentence, then what that evidence
-// shows about the claim, highlighted the way you'd mark the line that
-// matters on a printout. The line is worded on the server
-// (evidence.evidence_line): "Strong evidence of a partial effect, not a
-// cure". A result saved on this device before it existed names the designs
-// instead, which is all the level word ever measured.
-function recordSentence(n, cited, ev, best, line) {
-  const what = `<button type="button" class="what link-btn" id="meter">What does this mean?</button>`;
-  if (!n) return `Found nothing on PubMed that matched well enough to weigh. <mark>No direct evidence</mark> either way. ${what}`;
-  const read = `Read ${n} ${n === 1 ? "study" : "studies"} from PubMed`;
-  if (!cited || ev.level === 0) return `${read}, but none of them actually tests this claim, so there's <mark>no direct evidence</mark> either way. ${what}`;
-  const ti = best ? typeInfo(best.publication_types) : null;
-  const strongest = ti && ti.label !== DEFAULT_TYPE[0] ? `, the strongest a ${ti.label.toLowerCase()}` : "";
-  const said = line ? escapeHtml(line) : `${ev.label} study designs`;
-  return `${read} and relied on ${cited}${strongest}. <mark>${said}.</mark> ${what}`;
+// How much to lean on the answer, in one sentence. The wording of a real check
+// is made on the server (evidence.evidence_line); mirrors display.confidence_line.
+function confidenceLine(data) {
+  const studies = data.studies || [];
+  const cited = studies.filter((s) => s.cited_in_verdict);
+  if (!studies.length) return "No direct evidence either way: nothing on PubMed matched well enough to weigh.";
+  if (!cited.length) return "No direct evidence either way: none of the studies tests this claim.";
+  const line = String(data.evidence_line || "").trim().replace(/\.+$/, "");
+  if (line) return line + ".";
+  const tiers = new Set(cited.map((s) => s.tier || "moderate"));
+  const word = tiers.has("strong") ? "Strong"
+    : [...tiers].some((t) => t !== "weak" && t !== "retracted") ? "Moderate" : "Weak";
+  return `${word} study designs.`;
 }
 
 // A date only when the record really has a readable one. fmtDate falls back
@@ -685,32 +672,6 @@ function renderBreakdown(data, count, studies = []) {
   $("deeper-what").textContent = bd.contents || "";
 }
 
-// The pen ring is drawn round the words, not the column, so a short verdict
-// gets a short ring. Measured off the text's own line boxes: a verdict that
-// wraps is ringed to its longest line. The ring stands a little wider than
-// the words at each end, because its shoulders curve in, and never past the
-// edge of the screen. A hidden verdict has no boxes and is measured again
-// when it shows.
-function fitRing() {
-  for (const w of document.querySelectorAll(".vwrap")) {
-    const t = w.querySelector(".stamp");
-    if (!t || !t.textContent) continue;
-    const r = document.createRange();
-    r.selectNodeContents(t);
-    const rects = [...r.getClientRects()].filter((x) => x.width);
-    if (!rects.length) continue;
-    const box = w.getBoundingClientRect();
-    const left = Math.min(...rects.map((x) => x.left)) - box.left;
-    const right = Math.max(...rects.map((x) => x.right)) - box.left;
-    const room = (right - left) * 0.07 + 12;
-    const l = Math.max(6 - box.left, left - room);
-    const rr = Math.min(document.documentElement.clientWidth - 6 - box.left, right + room);
-    w.style.setProperty("--rl", `${Math.round(l)}px`);
-    w.style.setProperty("--w", `${Math.round(rr - l)}px`);
-  }
-}
-addEventListener("resize", fitRing);
-
 // A spine is lettered only when its word fits standing up. A short book with
 // a long word shows its cloth and leaves the word to the key and the tip,
 // never a word cut off part way.
@@ -720,7 +681,7 @@ function fitSpines() {
     s.hidden = s.scrollHeight > s.clientHeight + 1;
   }
 }
-if (document.fonts) document.fonts.ready.then(() => { fitRing(); fitSpines(); });
+if (document.fonts) document.fonts.ready.then(() => fitSpines());
 
 function renderResult(data) {
   currentResult = data;
@@ -733,7 +694,6 @@ function renderResult(data) {
 
   $("stamp").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
   $("doctor-line").hidden = false;
-  fitRing();
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
   $("tldr").textContent = data.tldr || "";
@@ -743,9 +703,7 @@ function renderResult(data) {
   renderBreakdown(data, data.studies.length, data.studies);
 
   const n = data.studies.length;
-  const cited = data.studies.filter((s) => s.cited_in_verdict).length;
-  const ev = evidenceLevel(data.studies);
-  $("record").innerHTML = recordSentence(n, cited, ev, strongestCited(data.studies), data.evidence_line);
+  $("confidence").querySelector("mark").textContent = confidenceLine(data);
 
   const note = $("cached-note");
   note.hidden = !(data.cached || data.restored);
@@ -892,7 +850,6 @@ function logLine(text, live) {
 function endPending() {
   document.querySelector(".ticket").classList.remove("pending");
   resultSection.classList.remove("checking");
-  fitRing();
   const log = $("reading"); log.hidden = true; log.innerHTML = "";
   $("feedback").hidden = false;
   document.querySelector(".evidence").hidden = false;
@@ -1543,12 +1500,6 @@ async function renderShareCard(r) {
   return new Promise((resolve) => c.toBlob((b) => resolve(b), "image/png"));
 }
 
-function strongestCited(studies) {
-  const rank = { strong: 3, "": 2, weak: 1, retracted: 0 };
-  return studies.filter((s) => s.cited_in_verdict)
-    .sort((a, b) => rank[typeInfo(b.publication_types).cls] - rank[typeInfo(a.publication_types).cls])[0] || null;
-}
-
 function shareText(r) {
   // Each sentence ends on its own full stop, so the doctor line never runs on
   // from the last word of what is still open.
@@ -1880,7 +1831,7 @@ $("about-link").addEventListener("click", (e) => {
   if (trustSection) trustSection.scrollIntoView({ block: "start" });
 });
 $("how-btn").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
-$("record").addEventListener("click", (e) => { if (e.target.closest("#meter")) openSheet($("how-sheet"), $("how-title")); });
+$("assess").addEventListener("click", (e) => { if (e.target.closest("#meter")) openSheet($("how-sheet"), $("how-title")); });
 
 // ---- Voice input (where the browser has it) --------------------------------
 
