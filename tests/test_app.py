@@ -4384,6 +4384,9 @@ _sm = c.get("/sitemap.xml").get_data(as_text=True)
 t("the sitemap has the three static pages, absolute, and no claim",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")) and "?q=" not in _sm)
 _rb = c.get("/robots.txt").get_data(as_text=True)
+t("the sitemap and llms.txt list /about, /method and /corrections as absolute URLs",
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/about", "/method", "/corrections"))
+  and all(f"](http://localhost{x})" in c.get("/llms.txt").get_data(as_text=True) for x in ("/about", "/method", "/corrections", "/privacy")))
 t("robots.txt points at the sitemap with an absolute URL", "Sitemap: http://localhost/sitemap.xml" in _rb)
 
 # 6. Page identity: /checks has its own title and canonical; every result has a card.

@@ -338,7 +338,9 @@ def sitemap():
     # Static pages only. A typed claim is something a person wrote; listing
     # it here would publish it to every crawler, which the privacy page
     # does not say and the product does not want.
-    urls = [(f"{base}/", "1.0"), (f"{base}/checks", "0.8"), (f"{base}/privacy", "0.3")]
+    urls = [(f"{base}/", "1.0"), (f"{base}/checks", "0.8"), (f"{base}/about", "0.5"),
+            (f"{base}/method", "0.5"), (f"{base}/corrections", "0.4"),
+            (f"{base}/privacy", "0.3")]
     body = "".join(
         f"<url><loc>{escape(u)}</loc><priority>{p}</priority></url>" for u, p in urls
     )
@@ -378,6 +380,9 @@ def llms_txt():
         "",
         f"- [Check a claim]({base}/): the checker, with how a check works below it",
         f"- [Check a claim, tool only]({base}/checks): the checker on its own",
+        f"- [About]({base}/about): who makes Evident, what it does and what it does not do",
+        f"- [Method]({base}/method): how a check works and the rules every verdict must pass",
+        f"- [Corrections]({base}/corrections): report a wrong answer or get in touch",
         f"- [Privacy]({base}/privacy): what is kept, what is sent where, what is never collected",
     ]
     if recent:
