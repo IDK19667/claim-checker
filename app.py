@@ -572,6 +572,24 @@ def _next_steps_safe(claim, query_used, studies, cited):
         return None
 
 
+def _original_check_date(claim, cached_at):
+    """
+    The date this claim was first checked, when that is a different day from
+    the saved answer's own (a re-check replaces the saved date). From the
+    check log only; None when the log has nothing, either date is unreadable,
+    or the log's date is not earlier. Nothing is guessed.
+    """
+    try:
+        first = db.first_fresh_check(db.normalize_claim(claim))
+        a = datetime.fromisoformat(first) if first else None
+        b = datetime.fromisoformat(cached_at) if cached_at else None
+    except (sqlite3.Error, ValueError, TypeError):
+        return None
+    if a is None or b is None or a.date() >= b.date():
+        return None
+    return first
+
+
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None):
@@ -604,6 +622,9 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         "breakdown": breakdown,
         "cached": cached_at is not None,
         "cached_at": cached_at,
+        # The first real check of this claim, only when it was on an earlier
+        # day than cached_at (the last re-check). Otherwise null.
+        "first_checked_at": _original_check_date(claim, cached_at) if cached_at else None,
         "share_url": f"{base_url}/?q={quote(claim)}",
         "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(search_query or claim)}",
         # Counts the reader can check us on, computed from PubMed's own

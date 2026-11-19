@@ -555,6 +555,21 @@ def get_cached_by_key(claim_key: str) -> dict | None:
     }
 
 
+@_routed
+def first_fresh_check(claim_key: str) -> str | None:
+    """
+    When this claim was first checked for real (not answered from the cache),
+    from the anonymous check log, or None if the log has no such row. The
+    cache row itself only keeps its latest date: a re-check replaces it.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT MIN(checked_at) FROM checks WHERE claim_key = ? AND cached = 0",
+            (claim_key,)
+        ).fetchone()
+    return row[0] if row and row[0] else None
+
+
 # ---- Feedback ----------------------------------------------------------------
 
 @_routed

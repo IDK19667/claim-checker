@@ -4559,5 +4559,29 @@ t("  and a saved result with a query still shows it",
 t("  and renderResult hides it the same way",
   '$("query-what").hidden = !usedQuery' in (ROOT / "static" / "app.js").read_text())
 
+# The saved answer keeps only its latest date (a re-check replaces it). The
+# first real check comes from the check log, shown only when it is on an
+# earlier day, and never invented.
+for _cl in ("two dates saved", "one date saved", "log after saved"):
+    db.put_cached_verdict(_cl, "q", "true", "Because (Study 1).", ["R1"], _RS, tldr="Short.")
+with db.get_conn() as _cn:
+    _cn.execute("INSERT INTO checks (claim_key, claim_text, cached, checked_at) VALUES (?,?,0,?)",
+                ("two dates saved", "two dates saved", "2026-09-01T10:00:00+00:00"))
+    _cn.execute("INSERT INTO checks (claim_key, claim_text, cached, checked_at) VALUES (?,?,1,?)",
+                ("one date saved", "one date saved", "2026-01-01T10:00:00+00:00"))
+    _cn.execute("INSERT INTO checks (claim_key, claim_text, cached, checked_at) VALUES (?,?,0,?)",
+                ("log after saved", "log after saved", "2999-01-01T10:00:00+00:00"))
+_two = P("two dates saved", ip="4.4.4.6").get_json()
+t("a re-checked saved answer carries its first check date beside the refresh date",
+  _two["first_checked_at"] == "2026-09-01T10:00:00+00:00" and _two["cached_at"] > _two["first_checked_at"])
+t("  a cache hit in the log is not an original check, so no first date is invented",
+  P("one date saved", ip="4.4.4.7").get_json()["first_checked_at"] is None)
+t("  a log date that is not earlier than the saved date is ignored",
+  P("log after saved", ip="4.4.4.8").get_json()["first_checked_at"] is None)
+_js_d = (ROOT / "static" / "app.js").read_text()
+t("renderResult words the two dates separately and omits a date the record lacks",
+  "First checked on ${fmtDate(data.first_checked_at)}. Last re-checked on ${fmtDate(data.cached_at)}" in _js_d
+  and "Result from an earlier check." in _js_d and "function hasDate(" in _js_d)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

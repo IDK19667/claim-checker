@@ -416,6 +416,11 @@ function recordSentence(n, cited, ev, best, line) {
   return `${read} and relied on ${cited}${strongest}. <mark>${said}.</mark> ${what}`;
 }
 
+// A date only when the record really has a readable one. fmtDate falls back
+// to today, which is right for a check that just ran and wrong for a saved
+// record with no date.
+function hasDate(iso) { return !!iso && !Number.isNaN(new Date(iso).getTime()); }
+
 function fmtDate(iso) {
   try { return new Date(iso || Date.now()).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); }
   catch { return ""; }
@@ -674,7 +679,7 @@ function renderResult(data) {
   currentResult = data;
   $("claim-echo").textContent = data.claim;
   showTyped(data.typed);
-  $("case-line").textContent = `PubMed · ${fmtDate(data.cached_at)}`;
+  $("case-line").textContent = (data.cached || data.restored) && !hasDate(data.cached_at) ? "PubMed" : `PubMed · ${fmtDate(data.cached_at)}`;
 
   const block = document.querySelector(".verdict-block");
   block.dataset.verdict = data.verdict;
@@ -699,7 +704,10 @@ function renderResult(data) {
   note.hidden = !(data.cached || data.restored);
   note.textContent = data.restored
     ? "From your history on this device."
-    : `Result from a check on ${fmtDate(data.cached_at)}. Claims are re-checked after a day.`;
+    : !hasDate(data.cached_at) ? "Result from an earlier check. Claims are re-checked after a day."
+    : hasDate(data.first_checked_at)
+      ? `First checked on ${fmtDate(data.first_checked_at)}. Last re-checked on ${fmtDate(data.cached_at)}. Claims are re-checked after a day.`
+      : `Result from a check on ${fmtDate(data.cached_at)}. Claims are re-checked after a day.`;
 
   renderChart(data);
   renderNextSteps(data.next_steps, data.claim);
