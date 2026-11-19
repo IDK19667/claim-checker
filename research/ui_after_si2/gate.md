@@ -32,7 +32,7 @@ Incomplete. Gemini returned 503 (overloaded) on many calls, so 7 of 21 regressio
 | 20 | Ashwagandha reduces stress | complicated | complicated | complicated | same |
 | 21 | Apple cider vinegar cure diabetes | false | false | HTTP 502 | not run |
 
-Verdicts returned: 14 of 21. Of those, 13 identical to main, 1 differs (claim 1, worse than expected). Exact match to expected among the 14: 12 (main matched 14 of the same 14... claim 1 is the one loss). Answers dropped one research line (a number that did not match its abstract) on claims 2, 11 and 1 (the existing "research line did not match" rule, not the new unsupported-sentence rule); the log shows no "removed" line for any other. The 14 answers read sensibly (checked 1 and 16 in full; others by log and verdict).
+Verdicts returned: 14 of 21. Of those, 13 identical to main, 1 differs (claim 1, worse than expected). Exact match to expected among the 14 returned: 11 (claim 16 is an accepted alternative, claim 1 is the one loss against main). Answers dropped one research line (a number that did not match its abstract) on claims 2, 11 and 1 (the existing "research line did not match" rule, not the new unsupported-sentence rule); the log shows no "removed" line for any other. The 14 answers read sensibly (checked 1 and 16 in full; others by log and verdict).
 
 ### Claim 1 differs because of this branch's rule, not model noise
 
