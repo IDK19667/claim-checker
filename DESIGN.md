@@ -501,13 +501,19 @@ the shape of the evidence before opening a check.
   `--on-deep-2`, on the wordmark's baseline, outside the link, on every
   screen that has a masthead (the front page, a result, the privacy page
   and the 404). It is not tracked, not coloured and not clickable.
-- **The front page:** the fly-through first (see **The footage**), then
-  the ask on night: the question as a 44px headline ("Heard a health
-  claim?" with "Check it against the research." a step quieter), the lede,
-  the ledger of real counts in light 30px figures under a `--deep-line`
-  rule, the claim box as a well in the night, and the one light shape on
-  the screen, the button. Then by day the latest checks and "Before you
-  trust a verdict".
+- **The front page:** the checker first, all on night: the masthead with
+  its short nav (How it works, About, Privacy), the question as a headline
+  (36px on a phone, 54px, 64px on a wide screen: "Heard a health claim?"
+  with "Check it against the research." a step quieter), the lede and the
+  doctor line, then the field with its label ("Health claim to check") and
+  one helper line above it, the claim box as a well in the night (its edge
+  in `--on-deep-3` so it never blends in), the one light shape on the
+  screen, the button, and three examples as quiet outlines. The first
+  screen is exactly that, at 375px and at 1440px, and a measured test
+  (`scripts/ui_measure.mjs --assert`) fails if the field and button are
+  not both on it. Then by day the ledger of real counts in light 30px
+  figures under a `--rule`, the latest checks and "Before you trust a
+  verdict".
 - **Latest checks:** a 32px title, then rows on 1px rules: the issue
   number in mono, the claim, the verdict at the right in plain ink, and
   under it the mini shelf and its counts. On a wide screen the title sits
@@ -573,31 +579,12 @@ the shape of the evidence before opening a check.
 
 ## The footage
 
-The home page opens on a fly-through: real footage of one real check,
-replayed, and it says so on the clip in every state. It is not a mood film
-and not a generated hero; it is a recording of the thing the page does.
+The home page has no intro footage. The scroll-driven fly-through was
+removed from it on 2026-11-18 because it put the claim box 3,000 to 8,000px
+down the page and pinned the scroll; its files are in `_old/`. What
+remains of the footage is the band at the head of a check.
 
-**The footage plays in its own colour.** No grade, no filter, no scrim:
-a toned monochrome was tried and read as black and white, so the clips,
-the poster, the fallback stills and the result band all show the frames
-as they were shot.
-
-**Two panels over the footage, no more, and none on the first screen.**
-Captions sit on a plate of the night stock (`--plate`, 80%) top left, so
-they hold their contrast over any frame. The first screen is the footage
-and its caption and nothing else: no claim, no field, no instruction. The
-one exception is a small mono line on the same plate, bottom left,
-"Illustrative footage. Not medical advice.", because that line is on
-every screen. The work panel arrives bottom left, opaque, when the work
-starts, and its bottom row, across one hairline, carries the standing
-line ("Illustrative footage. A real check, replayed") and, as the row's
-last cell, "Skip to the checker", at every stage after the first. The
-only box to type in is "Now check yours", at the footage's end. Under
-reduced motion and the other still versions no panel is shown: the
-stills carry their own standing line. No glass, no backdrop blur, no
-glow.
-
-A check does not replay the fly-through. It stands down, and a band of
+A band of
 footage across the top of the report (30vh on a phone) shows the stage of
 the work: searching, weighing, the verdict. Every clip change is an event
 from the server, never a timer. Nothing readable sits on the band. A

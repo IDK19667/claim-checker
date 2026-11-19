@@ -12,12 +12,20 @@
  * coordinates), whether the input and the submit button are fully inside the
  * first viewport with no scrolling, the page height, and horizontal overflow.
  * Screenshots are PNG; any over ~400 KB is saved as JPEG quality 70 instead.
+ *
+ * Acceptance mode:  node scripts/ui_measure.mjs --assert [baseUrl] [outDir]
+ * Measures only the home screen (all four sizes, motion on and reduced), and
+ * exits non-zero unless on the first screen, with no scrolling, the field,
+ * its visible label, the submit button and three example buttons are fully
+ * in view. Screenshots go to outDir (default: a temp folder, not the repo).
  */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-const base = process.argv[2]?.startsWith("http") ? process.argv[2] : "http://localhost:5050";
-const out = process.argv[3] && !process.argv[3].startsWith("http") ? process.argv[3] : "research/ui_before";
+const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const ASSERT = process.argv.includes("--assert");
+const base = args[0]?.startsWith("http") ? args[0] : "http://localhost:5050";
+const out = args.find((a) => !a.startsWith("http")) || (ASSERT ? "/tmp/ui_assert" : "research/ui_before");
 mkdirSync(out, { recursive: true });
 
 const WIDTHS = [
@@ -66,6 +74,14 @@ async function measureHome(browser, v, reduced) {
     };
     const i = box("claim-input"), s = box("submit-btn");
     const inside = (b) => b.top >= 0 && b.bottom <= vh && b.left >= 0 && b.right <= innerWidth;
+    // A label a reader can see: its own box has size (not the 1px sr-only clip)
+    // and it is on the first screen, with text.
+    const lab = document.querySelector("label[for=claim-input]");
+    const lb = lab ? box_of(lab) : null;
+    function box_of(el) { const r = el.getBoundingClientRect(); return { top: r.top + scrollY, bottom: r.bottom + scrollY, left: r.left, right: r.right, height: r.height, width: r.width }; }
+    const labelVisible = !!lb && lb.width > 20 && lb.height > 8 && inside(lb) && getComputedStyle(lab).position !== "absolute" && lab.textContent.trim() === "Health claim to check";
+    const chips = [...document.querySelectorAll("#chips .chip")].map(box_of);
+    const chipsVisible = chips.length === 3 && chips.every(inside);
     const de = document.documentElement;
     return {
       scrollY: scrollY,
@@ -76,6 +92,9 @@ async function measureHome(browser, v, reduced) {
       inputInFirstViewport: inside(i),
       submitInFirstViewport: inside(s),
       bothInFirstViewport: inside(i) && inside(s),
+      labelVisible,
+      chipsVisible,
+      chipCount: chips.length,
       pageHeight: Math.max(de.scrollHeight, document.body.scrollHeight),
       scrollWidth: de.scrollWidth,
       clientWidth: de.clientWidth,
@@ -84,7 +103,7 @@ async function measureHome(browser, v, reduced) {
   });
   const rec = { width: v.w, height: v.h, motion: reduced ? "reduce" : "on", ...m };
   const tag = `${v.w}${reduced ? "-reduced" : ""}`;
-  if (!reduced || v.w === 390) await shot(page, `home-first-${tag}`);
+  if (!reduced || v.w === 390 || ASSERT) await shot(page, `home-first-${tag}`);
   if (!reduced && SHOT_WIDTHS.has(v.w)) await shot(page, `home-full-${tag}`, { fullPage: true });
   await ctx.close();
   return rec;
@@ -156,7 +175,7 @@ async function flows(browser, v) {
 const browser = await chromium.launch();
 const rows = [];
 for (const v of WIDTHS) for (const reduced of [false, true]) rows.push(await measureHome(browser, v, reduced));
-for (const v of WIDTHS.filter((v) => SHOT_WIDTHS.has(v.w))) await flows(browser, v);
+if (!ASSERT) for (const v of WIDTHS.filter((v) => SHOT_WIDTHS.has(v.w))) await flows(browser, v);
 await browser.close();
 
 writeFileSync(`${out}/measure.json`, JSON.stringify({ base, measuredAt: new Date().toISOString(), rows, screenshots: files }, null, 2));
@@ -170,3 +189,10 @@ const table = [
 console.log(table);
 writeFileSync(`${out}/table.md`, table + "\n");
 console.log("\n" + files.join("\n"));
+
+if (ASSERT) {
+  const bad = rows.filter((r) => !(r.bothInFirstViewport && r.labelVisible && r.chipsVisible && !r.horizontalOverflow));
+  for (const r of rows) console.log(`${r.width}x${r.height} ${r.motion}: input top ${r.inputTop}, submit bottom ${r.submitBottom}, field+submit ${yn(r.bothInFirstViewport)}, label ${yn(r.labelVisible)}, 3 examples ${yn(r.chipsVisible)}`);
+  if (bad.length) { console.log(`FAIL: ${bad.length} of ${rows.length} cases do not show the checker on the first screen`); process.exit(1); }
+  console.log(`PASS: field, label, submit and 3 examples are on the first screen in all ${rows.length} cases`);
+}

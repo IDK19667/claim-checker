@@ -3557,6 +3557,19 @@ What was deliberately rejected:
 - **Analytics (PostHog) and session replay.** Non-negotiable #6: nothing
   ties a check to a person. The thumbs up/down stays as the only signal.
 
+- 2026-11-18 The checker comes first; the home-page intro is removed. The
+  scroll-driven fly-through pinned the scroll and put the claim box 3,000px
+  (reduced motion) to 8,000px (motion on) down the page, and a lighter
+  version below the form would still have been a scroll-scrubbed 23MB frame
+  sequence. Taking the safer option: no intro on the home page. Its files
+  (template, flight.css/js/decoder, the frames, test_flight.py) are in
+  `_old/`, kept rather than deleted; `static/flight/check.json` stays
+  because the trust section's real example reads it. The label ("Health
+  claim to check") is visible, the counters moved below the form, and
+  `scripts/ui_measure.mjs --assert` fails if field, label, submit and three
+  examples are not on the first screen at 1440x900, 768x1024, 390x844 and
+  375x812, with and without reduced motion.
+
 ## Earlier
 
 - 2026-09-19 Third design pass ("do better"): yellow brand band, the

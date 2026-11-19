@@ -219,69 +219,10 @@ def _citation(s: dict, relied_on: bool) -> dict:
     return c
 
 
-# The footage is 552 frames per size, and Flask serves static files with
-# "no-cache", so every visit asked the server about every frame again: on a
-# free instance at about 0.2s each, the fly-through sat on "Loading footage"
-# for most of a minute. The frames are served instead from a path that
-# carries a fingerprint of the footage's own manifests, with a year-long,
-# immutable cache. The browser keeps them, and so can the CDN in front of
-# Render. Rebuilding the footage rewrites its manifests (frame sizes, byte
-# totals), which changes the fingerprint, so a returning reader never sees
-# old frames under a new check.
-FOOTAGE_MAX_AGE = 365 * 24 * 3600
-_footage_version_memo: list[str] = []
-
-
-def _footage_version() -> str:
-    if not _footage_version_memo:
-        base = os.path.join(app.static_folder, "flight")
-        h = hashlib.sha256()
-        for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
-            if name.endswith(".json"):
-                with open(os.path.join(base, name), "rb") as f:
-                    h.update(name.encode() + b"\0" + f.read())
-        _footage_version_memo.append(h.hexdigest()[:10])
-    return _footage_version_memo[0]
-
-
-@app.route("/footage/<ver>/<path:filename>")
-def footage(ver: str, filename: str):
-    resp = send_from_directory(os.path.join(app.static_folder, "flight"), filename,
-                               max_age=FOOTAGE_MAX_AGE)
-    resp.headers["Cache-Control"] = f"public, max-age={FOOTAGE_MAX_AGE}, immutable"
-    return resp
-
-
-def _flight_context():
-    """
-    The fly-through's own data, or None if it is not built.
-
-    The home page must render without it: a fresh checkout has no frame
-    sequence, and a missing or unreadable check.json is not a reason to
-    serve a 500 or, worse, an invented check. The checker below it is the
-    page's actual job and works either way.
-    """
-    base = os.path.join(app.static_folder, "flight")
-    try:
-        with open(os.path.join(base, "check.json")) as f:
-            check = json.load(f)
-        with open(os.path.join(base, "beats.json")) as f:
-            beats = json.load(f)
-        with open(os.path.join(base, "manifest.json")) as f:
-            poster = json.load(f)["poster"]
-    except (OSError, ValueError):
-        return None
-    d = datetime.fromisoformat(check["checkedAt"])
-    check["checkedAt_long"] = f"{d.day} {d.strftime('%B %Y')}"
-    return {"check": check, "chapters": beats["chapters"], "stills": _FLIGHT_STILLS,
-            "credits": _FLIGHT_CREDITS, "poster": poster,
-            "base": f"/footage/{_footage_version()}"}
-
-
 def _trust_example():
     """
-    The real check the trust section offers as proof: the one the fly-through
-    replays, read from the same file, so the two can never disagree. None if
+    The real check the trust section offers as proof, read from the exported
+    check.json so it is never invented. None if
     it is not built, and the section renders without it rather than with an
     invented example.
     """
@@ -297,7 +238,7 @@ def _trust_example():
         return None
 
 
-def _render_home(with_flight: bool, checks_page: bool = False):
+def _render_home(checks_page: bool = False):
     claim = _claim_from_query_args()
     preview = None
     cached = None
@@ -330,10 +271,6 @@ def _render_home(with_flight: bool, checks_page: bool = False):
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
-    # The fly-through is the home page's first screen, but never on a result
-    # page: a shared link loaded cold gets a still header rather than a 23MB
-    # frame sequence it did not ask for.
-    flight = _flight_context() if (with_flight and not cached) else None
     # The band's picture on a result page: one still of the verdict shot,
     # 28KB, where a live check plays the clip itself. A cold link gets the
     # same layout and none of the video. Only if it has actually been built,
@@ -345,7 +282,7 @@ def _render_home(with_flight: bool, checks_page: bool = False):
         band_still = BAND_STILL
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
-                           ledger=ledger, latest=latest, flight=flight,
+                           ledger=ledger, latest=latest,
                            band_still=band_still,
                            example=None if cached else _trust_example(),
                            provider=verdict.provider_label(), checks_page=checks_page,
@@ -354,8 +291,8 @@ def _render_home(with_flight: bool, checks_page: bool = False):
 
 @app.route("/")
 def index():
-    """The fly-through, then the checker, then the ledger and recent checks."""
-    return _render_home(with_flight=True)
+    """The checker first, then the ledger and recent checks."""
+    return _render_home()
 
 
 @app.route("/checks")
@@ -365,7 +302,7 @@ def checks():
     page used to be. Same ledger, same recent checks, same everything, for
     anyone who wants the tool and not the film.
     """
-    return _render_home(with_flight=False, checks_page=True)
+    return _render_home(checks_page=True)
 
 
 @app.route("/flight")
@@ -441,9 +378,8 @@ def llms_txt():
         "",
         "## Pages",
         "",
-        f"- [How a check works]({base}/): one real check replayed as footage, "
-        f"with the checker on the same page",
-        f"- [Check a claim]({base}/checks): the tool on its own, no footage",
+        f"- [Check a claim]({base}/): the checker, with how a check works below it",
+        f"- [Check a claim, tool only]({base}/checks): the checker on its own",
         f"- [Privacy]({base}/privacy): what is kept, what is sent where, what is never collected",
     ]
     if recent:
@@ -566,38 +502,6 @@ DEPLOYED_COMMIT = _deployed_commit()
 def healthz():
     return jsonify({"ok": True, "commit": DEPLOYED_COMMIT, "store": db.store_status()})
 
-
-# "How a check works": a scroll fly-through of one real, cached check,
-# reachable from a quiet link on the front page rather than replacing its
-# hero. Everything it shows is read from files on disk: the timeline from
-# beats.json and the check from check.json, which
-# scripts/export_flight_check.py exports out of the verdict cache. If either
-# file is missing the route 404s rather than inventing a placeholder check,
-# because a fabricated verdict is the one thing this product must never show.
-_FLIGHT_STILLS = [
-    {"file": "still-1-claim.webp",
-     "alt": "A finger scrolling a phone lying on a desk, its screen lit.",
-     "caption": "A claim can reach anyone, anywhere, in a moment."},
-    {"file": "still-2-archive.webp",
-     "alt": "Rows of bound volumes on library shelves, viewed down the aisle.",
-     "caption": "We step back and search the published research, not the internet."},
-    {"file": "still-3-weighing.webp",
-     "alt": "A researcher at a laboratory bench, working at a computer.",
-     "caption": "Each study is weighed, graded by what kind of evidence it is."},
-    {"file": "still-4-write.webp",
-     "alt": "A hand annotating handwritten research notes on a desk.",
-     "caption": "The findings get written up, ready to stand behind."},
-    {"file": "still-5-publish.webp",
-     "alt": "A laptop screen showing an open-access research guide webpage.",
-     "caption": "Then the record goes public, so anyone can check it."},
-]
-
-# Clips with a licence that requires attribution would list a short credit
-# line here ({"clip": "...", "credit": "..."}); the round-5 set is Pexels
-# License / Pixabay License throughout (free, no attribution required), so
-# this is empty in practice, but flight.html still renders it when present
-# rather than assuming it will always stay empty.
-_FLIGHT_CREDITS = []
 
 # The band's still on a result page. It is the first frame of the same loop
 # a live check ends on (scripts/build_footage.py), so a shared link and a

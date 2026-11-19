@@ -18,14 +18,15 @@ const VERDICT_LABELS = {
   insufficient: "Not enough evidence",
 };
 
-// Claims people actually paste in. Tapping one runs it.
+// Claims people actually paste in. Tapping one runs it. The first screen shows
+// the first three, so the order is the order they are offered in.
 const EXAMPLES = [
   "Apple cider vinegar cures diabetes",
-  "5G weakens your immune system",
-  "Vaccines cause autism",
-  "Detox teas flush toxins out of your body",
   "Cracking your knuckles causes arthritis",
   "Intermittent fasting improves brain function",
+  "Detox teas flush toxins out of your body",
+  "5G weakens your immune system",
+  "Vaccines cause autism",
   "Ozempic cures alcoholism",
 ];
 
@@ -96,7 +97,6 @@ function setTitle(result) {
     ? `${VERDICT_LABELS[result.verdict] || result.verdict}: \u201c${result.claim}\u201d \u00b7 Evident`
     : DEFAULT_TITLE;
 }
-const flightSection = $("flight");
 const root = document.documentElement;
 
 /* ---- the band: three looping shots, moved only by the stream ---------------
@@ -325,7 +325,6 @@ const screenState = {
     // same layout but must not animate into it: nothing moved, the reader
     // navigated there, and a fade-in would read as something still loading.
     document.body.classList.add("live-check");
-    parkFlight();
     film.upgrade();
     film.show("searching");
     window.scrollTo(0, 0);
@@ -333,7 +332,6 @@ const screenState = {
   settle(phase) {
     this.phase = phase;
     root.dataset.screen = phase;
-    parkFlight();
     film.show("verdict");
   },
   leave() {
@@ -342,30 +340,13 @@ const screenState = {
     delete root.dataset.screen;
     document.body.classList.remove("live-check");
     film.stop();
-    resumeFlight();
     window.scrollTo(0, 0);
   },
 };
 
-// While the band is on screen the fly-through is not: it is five screens of
-// scroll belonging to a page the reader has left. Standing it down stops it
-// decoding frames for a canvas nobody can see, and the resize is what makes it
-// remeasure the page it comes back to.
-function parkFlight() {
-  const f = window.EvidentFlight;
-  if (f) f.park();
-}
-function resumeFlight() {
-  const f = window.EvidentFlight;
-  if (f) f.resume();
-  window.dispatchEvent(new Event("resize"));
-}
-
-// Back to the claim box. The fly-through's first screen has no field of its
-// own, so a reader coming back from a check to try another is taken past the
-// footage to the checker, the same place "Skip to the checker" goes.
+// Back to the claim box. The checker is the first thing on the page, so
+// there is nothing to scroll past: just put the cursor in it.
 function focusClaim() {
-  if (flightSection && !flightSection.hidden) askSection.scrollIntoView({ block: "start" });
   input.focus({ preventScroll: true });
 }
 
@@ -384,14 +365,6 @@ function show(section) {
   for (const s of [askSection, resultSection, errorSection]) s.hidden = s !== section;
   askMore.hidden = section !== askSection;
   if (trustSection) trustSection.hidden = section !== askSection;
-  // The fly-through belongs to the home page's resting state and nowhere else.
-  // The resize tells flight.js to recompute its scroll map for the page's new
-  // height rather than keeping offsets from a layout that no longer exists.
-  const keepFlight = section === askSection;
-  if (flightSection && flightSection.hidden === keepFlight) {
-    flightSection.hidden = !keepFlight;
-    window.dispatchEvent(new Event("resize"));
-  }
   document.body.classList.toggle("view-ask", section === askSection);
   if (section !== resultSection) { $("bar-sticky").hidden = true; document.body.classList.remove("has-bar"); }
   window.scrollTo(0, 0);
@@ -1090,19 +1063,6 @@ $("cancel-btn")?.addEventListener("click", () => { if (controller) controller.ab
 
 form.addEventListener("submit", (e) => { e.preventDefault(); check(input.value); });
 
-// The fly-through carries its own claim fields, on the first screen and at the
-// end of the footage. They are real GET forms so they work with no JavaScript
-// at all; with JavaScript they run the same streamed check this page runs,
-// rather than reloading into a server-rendered result.
-for (const f of document.querySelectorAll(".flight-ask")) {
-  f.addEventListener("submit", (e) => {
-    const field = f.querySelector("input[name=q]");
-    if (!field || !field.value.trim()) return;   // let the browser's own validation speak
-    e.preventDefault();
-    input.value = field.value;
-    check(field.value);
-  });
-}
 
 // When an on-screen keyboard opens it shrinks the visual viewport. If that
 // leaves the claim field under it, bring the field back to the middle.
@@ -1247,7 +1207,7 @@ $("error-back").addEventListener("click", () => {
 
 // ---- Examples & trending --------------------------------------------------
 
-$("chips").innerHTML = EXAMPLES.map((c) => `<button type="button" class="chip">${escapeHtml(c)}</button>`).join("");
+$("chips").innerHTML = EXAMPLES.slice(0, 3).map((c) => `<button type="button" class="chip">${escapeHtml(c)}</button>`).join("");
 $("chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
@@ -1271,8 +1231,7 @@ async function loadTrending() {
     if (!Array.isArray(items) || items.length < 3) return;
     $("trending-list").innerHTML = claimListHtml(items.slice(0, 6));
     $("trending").hidden = false;
-    $("examples").hidden = true;
-  } catch { /* offline or not deployed: examples stay */ }
+  } catch { /* offline or not deployed: nothing to add */ }
 }
 
 $("trending-list").addEventListener("click", (e) => {
@@ -1819,6 +1778,13 @@ for (const d of document.querySelectorAll("dialog.sheet")) {
     y0 = null;
   });
 }
+// "About" is the section under the checker, "Before you trust a verdict". From
+// a result or an error it first goes back to the checker, then scrolls to it.
+$("about-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  if (askSection.hidden) goHome();
+  if (trustSection) trustSection.scrollIntoView({ block: "start" });
+});
 $("how-btn").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
 $("record").addEventListener("click", (e) => { if (e.target.closest("#meter")) openSheet($("how-sheet"), $("how-title")); });
 

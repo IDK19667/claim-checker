@@ -1765,8 +1765,7 @@ t("the chart draws only in named tokens: no raw colour reaches the evidence",
   not re.search(r"#[0-9a-f]{3}|rgb\(|hsl\(", _chart_css, re.I), _chart_css[:200])
 t("  the cloth says what kind of study it is, and nothing is coloured by verdict",
   all(f".k-{k}" in _css for k in ("strong", "human", "lab", "weak"))
-  and "data-verdict" not in _css
-  and "data-verdict" not in (ROOT / "static" / "flight.css").read_text())
+  and "data-verdict" not in _css)
 t("  a spine word that cannot stand up on its book is left off, never cut",
   "function fitSpines" in _js and "fitSpines();" in _bar_js
   and ".h-retracted .barcol-spine { display: none; }" in _css)
@@ -1808,14 +1807,30 @@ t("a result that rests on evidence carries no next_steps in its payload",
   '"next_steps": null' in _r.data.decode() or '"next_steps":null' in _r.data.decode()
   or "next_steps" in _r.data.decode())
 
-# The fly-through's beats.json, manifest.json, check.json and /flight route
-# are covered in tests/test_flight.py, on the video-flythrough branch. That
-# file's schema (four real stages, masterSeconds, a stage per beat) replaced
-# an earlier one this block used to check (plannedMasterSeconds, a fixed
-# five-scene chapter set); keeping both would mean two tests asserting two
-# different shapes for the same file, so this one moved rather than stayed
-# stale beside its replacement.
+# The fly-through is out of the home page (its files are in _old/, with its
+# test). /flight still redirects, and static/flight/check.json still feeds the
+# trust section's real example.
 
+# ---- the checker comes first (queue 7, step 2) -----------------------------
+_home = c.get("/").get_data(as_text=True)
+_hi = _home.index('id="claim-input"')
+t("home: the field has a visible label and a helper line, not just a placeholder",
+  '<label class="field-title" for="claim-input">Health claim to check</label>' in _home
+  and "Enter one claim. Add the group or situation if it matters." in _home
+  and 'aria-describedby="claim-help suggest-hint"' in _home)
+t("  the nav is How it works, About, Privacy, and the page loads no footage",
+  all(x in _home for x in ('id="how-btn"', 'id="about-link"', 'href="/privacy">Privacy</a>'))
+  and "flight" not in _home.replace("inFlight", "") and 'id="flight"' not in _home)
+t("  the examples sit in the form, after the submit button; the counters come after the form",
+  _home.index('id="submit-btn"') < _home.index('id="chips"') < _home.index("</form>")
+  < (_home.index('class="ledger"') if 'class="ledger"' in _home else 10**9))
+t("  the first three examples are the ones app.js renders",
+  "EXAMPLES.slice(0, 3)" in _js)
+t("  /flight still redirects and its frames are gone from static/",
+  c.get("/flight").status_code == 301 and not (ROOT / "static" / "flight.js").exists()
+  and not (ROOT / "static" / "flight.css").exists())
+t("  the service worker no longer precaches the intro's files",
+  "flight" not in (ROOT / "static" / "sw.js").read_text().split("const SHELL")[1].split("];")[0])
 
 # ---- accuracy round 2 (the 20-claim audit) ------------------------------------
 # 1. The stamp and the words are one answer. These are the audit's own
@@ -2346,11 +2361,11 @@ t("  the study count it states is the one PubMed is asked for",
 t("  and it names the labels the code actually forces",
   f"“{appmod.VERDICT_LABELS['insufficient']}”" in _trust_text and f"“{appmod.VERDICT_LABELS['complicated']}”" in _trust_text)
 _ex = appmod._trust_example()
-t("  the real check is the one the fly-through replays, linked as a result page",
+t("  the real check is the exported one, linked as a result page",
   _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=Apple%20cider%20vinegar%20cures%20diabetes"
-  and "The footage at the top of this page is this check" in _trust_text, _ex)
+  and "The footage at the top" not in _trust_text, _ex)
 _checks_page = c.get("/checks").get_data(as_text=True)
-t("  /checks carries it too, without pointing at footage it does not show",
+t("  /checks carries it too, and neither page points at footage that is gone",
   '<section id="trust"' in _checks_page and "The footage at the top" not in _checks_page)
 _ex_res = c.get(_ex["href"] if _ex else "/").get_data(as_text=True)
 t("  and a result page renders it hidden, so the verdict owns that screen",
@@ -4169,10 +4184,9 @@ t("a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twi
 _ask = c.get("/checks").get_data(as_text=True)
 t("the ask screen carries Not medical advice and the doctor sentence right under its introduction",
   'class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
-t("  so do the 404 page and the error screen, and the footage's first screen carries Beta too",
+t("  so do the 404 page and the error screen",
   'class="ask-note">Not medical advice. Ask a doctor' in c.get("/nope-nope").get_data(as_text=True)
-  and 'class="error-note">Not medical advice. Ask a doctor' in _tpl
-  and "Evident Beta. Illustrative footage" in (ROOT / "templates" / "_flythrough.html").read_text())
+  and 'class="error-note">Not medical advice. Ask a doctor' in _tpl)
 t("  and every result's head has the notice in the same row as the case line",
   'class="case case-nma">Not medical advice</p>' in _srv)
 

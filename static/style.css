@@ -118,7 +118,7 @@ body {
 
 /* Labels are set in the mono, small and in sentence case. Never tracked out,
    never in capitals: they are notes in the margin, not signage. */
-.section-label, .field-label, .case, .key, .meta, .dateline {
+.section-label, .field-label, .case, .key, .meta {
   font-family: var(--mono); font-size: 11px; font-weight: 500; line-height: 1.4;
   letter-spacing: 0; text-transform: none; color: var(--ink-3);
 }
@@ -162,17 +162,16 @@ body {
   padding: 1px 6px; border: 1px solid var(--deep-line); border-radius: var(--r-control);
   color: var(--on-deep-2); white-space: nowrap; cursor: default;
 }
-.dateline { color: var(--on-deep-3); white-space: nowrap; }
-@media (max-width: 419px) { .dateline { display: none; } }
 .top-actions { display: flex; gap: 16px; align-items: center; }
 /* In the masthead the controls are words, not buttons: the page below has
    the weight, and a bordered block up here competes with the nameplate. */
-.top .ghost, .top .install {
+.top .ghost, .top .install, .top .navlink {
   border: 0; padding: 0; background: none; color: var(--on-deep-2);
-  font: 500 14px/1.2 var(--body); cursor: pointer; position: relative;
+  font: 500 14px/1.2 var(--body); cursor: pointer; position: relative; text-decoration: none;
 }
-.top .ghost:hover, .top .install:hover { color: var(--on-deep); }
-.top .ghost::after, .top .install::after { content: ""; position: absolute; inset: -14px -8px; }
+.top .ghost:hover, .top .install:hover, .top .navlink:hover { color: var(--on-deep); }
+.top .ghost::after, .top .install::after, .top .navlink::after { content: ""; position: absolute; inset: -14px -8px; }
+@media (max-width: 419px) { .top-actions { gap: 14px; } .top { gap: 12px; } }
 
 .link-btn {
   background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
@@ -206,28 +205,34 @@ body {
 
 /* ---- The ask: night ------------------------------------------------------ */
 
-.hero-block { padding: 34px 0 0; }
+.hero-block { padding: 20px 0 0; }
 .hero {
-  margin: 0; font: 350 44px/1.04 var(--display); letter-spacing: -0.04em;
+  margin: 0; font: 350 36px/1.06 var(--display); letter-spacing: -0.03em;
   color: inherit;
 }
 /* The second sentence is the same voice, a step quieter. */
 .hero em { font-style: normal; color: var(--on-deep-3); }
-.lede { margin: 20px 0 0; font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 34ch; }
+.lede { margin: 14px 0 0; font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 34ch; }
 .band .lede { color: var(--on-deep-2); }
 
 /* The ledger: real counts, set large and light. */
+/* Below the checker, by day: the counts are proof the desk works, not the
+   first thing to read. */
 .ledger {
   display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 30px;
-  margin: 32px 0 0; padding-top: 20px; border-top: 1px solid var(--deep-line);
+  margin: 48px 0 0; padding-top: 20px; border-top: 1px solid var(--rule);
 }
-.ledger dt { font: 500 10.5px/1.3 var(--mono); color: var(--on-deep-3); }
+.ledger dt { font: 500 11px/1.3 var(--mono); color: var(--ink-3); }
 .ledger dd {
   margin: 6px 0 0; font: 300 30px/1 var(--display); letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums; color: var(--on-deep);
+  font-variant-numeric: tabular-nums; color: var(--ink);
 }
 
-.claim-form { margin: 32px 0 0; }
+.claim-form { margin: 22px 0 0; }
+/* The field is named out loud: the placeholder is an example, never the label. */
+.field-title { display: block; font: 500 15px/1.3 var(--body); color: inherit; }
+.field-help { margin: 4px 0 10px; font-size: 14px; line-height: 1.4; color: var(--ink-2); }
+.band .field-help { color: var(--on-deep-2); }
 .claim-box {
   position: relative; padding: 12px 14px 12px;
   background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--r-panel);
@@ -251,7 +256,7 @@ body {
 
 /* On the night ground the box is a well in it, and the button is the light
    shape: the one bright thing on the screen is the thing to press. */
-.band .claim-box { background: var(--deep-2); border-color: var(--deep-line); }
+.band .claim-box { background: var(--deep-2); border-color: var(--on-deep-3); }
 .band .claim-box:focus-within { outline-color: var(--sage); }
 .band #claim-input { color: var(--on-deep); }
 .band #claim-input::placeholder { color: var(--on-deep-3); }
@@ -295,6 +300,9 @@ body {
   padding: 9px 12px; min-height: 44px;
 }
 .chip:hover { border-color: var(--ink); }
+/* On the night ground the examples are quiet outlines: the one bright shape is Check. */
+.band .chip { background: transparent; color: var(--on-deep); border-color: var(--deep-line); }
+.band .chip:hover { border-color: var(--on-deep-2); }
 
 .section-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .section-label { margin: 0; }
@@ -303,7 +311,9 @@ body {
 }
 .latest { margin-top: 64px; }
 .examples, .trending, .recent, .nudge { margin-top: 40px; }
-.examples .section-label, .trending .section-label, .recent .section-label { margin-bottom: 12px; }
+.claim-form .examples { margin-top: 18px; }
+.claim-form .examples .field-help { margin: 0 0 8px; }
+.trending .section-label, .recent .section-label { margin-bottom: 12px; }
 
 .claim-list, .ledger-list { list-style: none; margin: 0; padding: 0; }
 .claim-list { border-top: 1px solid var(--rule); }
@@ -1099,7 +1109,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   .sheet-handle { display: none; }
   .bar-sticky { display: none; }
   body.has-bar { padding-bottom: 0; }
-  .hero { font-size: 58px; }
+  .hero { font-size: 54px; }
   .sec-title, .trust-title { font-size: 40px; }
   .chart { --plot-h: 240px; }
   .film { height: 34vh; min-height: 200px; max-height: 360px; }
@@ -1110,10 +1120,10 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   body:not(.view-ask) .wrap, body:not(.view-ask) .top { max-width: 1040px; }
   body.view-ask .band .wrap, body.view-ask main.wrap, body.view-ask .top { max-width: 1200px; }
   .foot { max-width: 1200px; }
-  .hero { font-size: 72px; }
+  .hero { font-size: 64px; }
   body.view-ask .band .wrap { padding-bottom: 96px; }
   body.view-ask #ask { display: grid; grid-template-columns: 1.15fr 0.85fr; column-gap: 72px; align-items: end; }
-  body.view-ask #ask .hero-block { grid-column: 1; padding-top: 56px; }
+  body.view-ask #ask .hero-block { grid-column: 1; padding-top: 40px; }
   body.view-ask #ask .claim-form { grid-column: 2; margin-top: 0; }
   body.view-ask .nudge { grid-column: 1 / -1; }
   /* By day, each section is a title on the left and its rows on the right. */
@@ -1122,7 +1132,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   .trust { margin-top: 96px; }
   .latest > .sec-title, .trust > .trust-title { grid-column: 1; grid-row: 1 / span 99; }
   .latest > .ledger-list, .trust > .trust-row { grid-column: 2; }
-  .examples, .trending, .recent { max-width: calc(60% - 29px); margin-left: auto; }
+  .trending, .recent { max-width: calc(60% - 29px); margin-left: auto; }
   /* The night head spans the page; by day the reading takes the left column
      and the sources the right. While the check is still running there is
      nothing to put in the second column, so checking stays one column. */
