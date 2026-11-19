@@ -1183,7 +1183,7 @@ function renderSuggest(rows) {
 
   suggestBox.hidden = false;
   input.setAttribute("aria-expanded", "true");
-  suggestLive.textContent = `${rows.length} previously checked ${rows.length === 1 ? "claim" : "claims"}. Use the arrow keys to choose one.`;
+  suggestLive.textContent = `${rows.length} previously checked ${rows.length === 1 ? "claim" : "claims"}. Use the arrow keys to choose one, and Enter to open its saved answer.`;
 }
 
 function moveSuggest(step) {

@@ -84,6 +84,25 @@ await test("suggestions: the list is labelled 'Previously checked claims', visib
   must((await page.locator("#suggest-list").evaluate((e) => e.getAttribute("aria-label"))) === null, "a second, conflicting aria-label is set");
 });
 
+// ---- 3. what a pick does ----------------------------------------------------------
+// Today a pick runs the check for that exact claim, and a claim in the list is
+// by definition in the cache, so it opens the saved answer. The list says so.
+
+await test("suggestions: the list says a pick opens the saved answer, and a pick does exactly that", async (page) => {
+  await typeAhead(page, "antibio");
+  const note = (await page.locator("#suggest-note").textContent()).trim();
+  must(note === "Choose one to open its saved answer.", `hint is "${note}"`);
+  must(await page.locator("#suggest-note").isVisible(), "hint is not visible");
+  must((await page.getAttribute("#suggest-list", "aria-describedby")) === "suggest-note", "the list does not point at the hint");
+  const bodies = [];
+  page.on("response", async (r) => { if (r.url().includes("/api/check/stream")) bodies.push(await r.text().catch(() => "")); });
+  await page.locator(".suggest-row").first().click();
+  await page.waitForSelector("#stamp", { state: "visible", timeout: 10000 });
+  await page.waitForTimeout(300);
+  must(bodies.length === 1, `expected one check request, saw ${bodies.length}`);
+  must(/"cached":\s*true/.test(bodies[0]), "the pick did not come from the saved answer");
+});
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

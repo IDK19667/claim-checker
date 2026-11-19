@@ -139,9 +139,10 @@
              corrected spelling is never passed off as what was typed. -->
         <div class="suggest" id="suggest" hidden>
           <p class="suggest-head" id="suggest-head">Previously checked claims</p>
-          <ul class="suggest-list" id="suggest-list" role="listbox" aria-labelledby="suggest-head"></ul>
+          <p class="suggest-note" id="suggest-note">Choose one to open its saved answer.</p>
+          <ul class="suggest-list" id="suggest-list" role="listbox" aria-labelledby="suggest-head" aria-describedby="suggest-note"></ul>
         </div>
-        <p class="sr-only" id="suggest-hint">Previously checked claims appear as you type. Use the arrow keys to choose one.</p>
+        <p class="sr-only" id="suggest-hint">Previously checked claims appear as you type. Use the arrow keys to choose one, and Enter to open its saved answer.</p>
         <p class="sr-only" id="suggest-live" role="status" aria-live="polite"></p>
 
         <button type="submit" class="primary" id="submit-btn">

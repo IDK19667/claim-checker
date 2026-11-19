@@ -4628,9 +4628,10 @@ t("  a different verdict never folds, even for near-identical words",
 t("  two or more words must be shared and at most one may differ on each side",
   not _sq(_c("Creatine builds strength"), _c("Creatine builds muscle mass"))
   and not _sq(_c("Zinc helps"), _c("Iron helps")))
-t("  the list is named 'Previously checked claims' (visible heading, accessible name)",
+t("  the list is named 'Previously checked claims' (visible heading, accessible name) and says a pick opens the saved answer and says a pick opens the saved answer",
   'id="suggest-head">Previously checked claims</p>' in _home
-  and 'role="listbox" aria-labelledby="suggest-head"' in _home)
+  and 'role="listbox" aria-labelledby="suggest-head"' in _home
+  and "Choose one to open its saved answer." in _home)
 t("  and the script has no dash in the strings it writes for the list",
   not any(d in _appjs[_appjs.index("function suggestAlso"):_appjs.index("function moveSuggest")] for d in ("\u2014", "\u2013")))
 
