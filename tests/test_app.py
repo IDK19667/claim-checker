@@ -1930,7 +1930,7 @@ t("the bars are drawn in the order of the list, numbered the same way",
 t("height is the kind of study and fill is whether the verdict used it",
   'class="barcol is-used" data-i="0"' in _ord and "barcol-bar h-strong" in _ord)
 t("each bar names itself for a screen reader and says where it goes",
-  'aria-label="Study 1, meta-analysis, 2017, used for this verdict. '
+  'aria-label="Meta-analysis 01, 2017, used for this verdict. '
   'Go to it in the list of studies."' in _ord)
 
 # The chart is drawn twice, by Jinja for a shared link and by renderChart for

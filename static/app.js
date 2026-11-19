@@ -342,7 +342,8 @@ function renderChart(data) {
   bars.classList.remove("reveal");
   bars.innerHTML = data.studies.map((s, i) => {
     const tip = [s.type_label, s.year, s.off_topic ? "off topic" : ""].filter(Boolean).join(" \u00b7 ");
-    const said = [`Study ${i + 1}`, (s.type_label || "").toLowerCase(), s.year,
+    const said = [`${s.spine ? s.spine + " " : "Study "}${String(i + 1).padStart(2, "0")}`,
+                  (s.type_label || "").toLowerCase() === (s.spine || "").toLowerCase() ? "" : (s.type_label || "").toLowerCase(), s.year,
                   s.cited_in_verdict ? "used for this verdict"
                     : s.off_topic ? "read, off topic"
                     : s.background ? `${s.background_why || "animal or lab"}, background only` : "read but not used"]
@@ -350,7 +351,7 @@ function renderChart(data) {
     return `<button type="button" class="barcol${s.cited_in_verdict ? " is-used" : ""}" data-i="${i}" style="--i:${i}"` +
       ` aria-label="${escapeHtml(said)}. Go to it in the list of studies.">` +
       `<span class="barcol-track"><span class="barcol-bar h-${escapeHtml(s.tier || "moderate")} k-${escapeHtml(kindOf(s))}">` +
-      `<span class="barcol-spine" aria-hidden="true">${escapeHtml(s.spine || "")}</span></span></span>` +
+      `<span class="barcol-spine" aria-hidden="true">${escapeHtml(s.spine || "")}</span></span></span> ` +
       `<span class="barcol-no">${String(i + 1).padStart(2, "0")}</span>` +
       (tip ? `<span class="barcol-tip" aria-hidden="true">${escapeHtml(tip)}</span>` : "") +
       "</button>";
