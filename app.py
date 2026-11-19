@@ -515,13 +515,14 @@ def og_image(key):
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
                 breakdown=cached.get("breakdown"))
-            short, stamp = page["tldr"], page["verdict"]
+            short, stamp, still = page["tldr"], page["verdict"], page.get("still_open") or ""
         except Exception as e:  # noqa: BLE001
             app.logger.warning("Card for %s fell back to the stored short answer: %s", key, type(e).__name__)
             short = cached.get("tldr") or ""
             # The stored stamp, but never "true" without the cap having run.
             stamp = "complicated" if cached["verdict"] == "true" else cached["verdict"]
-        png = og.render_card(cached["claim_text"], stamp, short, len(cached["studies"]), receipt)
+            still = cached.get("still_open") or ""
+        png = og.render_card(cached["claim_text"], stamp, short, len(cached["studies"]), receipt, still)
     else:
         png = og.render_card("Saw a health claim? Check it against the research.", "complicated", "", 0)
     return Response(png, mimetype="image/png", headers={"Cache-Control": "public, max-age=3600"})

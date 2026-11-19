@@ -87,27 +87,46 @@ def _ring(im: Image.Image, box: tuple, width: float) -> Image.Image:
     return Image.alpha_composite(im.convert("RGBA"), layer)
 
 
+def _pieces(draw, word: str, font, max_width: int) -> list[str]:
+    """A word wider than the line (a URL, a run of letters) in pieces that each fit."""
+    out, cur = [], ""
+    for ch in word:
+        if cur and draw.textlength(cur + ch, font=font) > max_width:
+            out.append(cur)
+            cur = ch
+        else:
+            cur += ch
+    return out + [cur] if cur else out
+
+
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int, max_lines: int) -> list[str]:
-    words = text.split()
+    """
+    `text` in at most `max_lines` lines no wider than `max_width`. A word too
+    wide for a line is broken where it must be; if the text does not fit, the
+    last line ends in an ellipsis that is itself inside the width.
+    """
+    tokens: list[tuple[str, bool]] = []  # (text, starts a new word)
+    for w in text.split():
+        if draw.textlength(w, font=font) > max_width:
+            tokens += [(piece, i == 0) for i, piece in enumerate(_pieces(draw, w, font, max_width))]
+        else:
+            tokens.append((w, True))
     lines, line = [], ""
-    for w in words:
-        trial = (line + " " + w).strip()
+    for tok, new_word in tokens:
+        trial = line + (" " if new_word and line else "") + tok
         if draw.textlength(trial, font=font) <= max_width:
             line = trial
         else:
             if line:
                 lines.append(line)
-            line = w
-            if len(lines) == max_lines:
-                break
-    if len(lines) < max_lines and line:
+            line = tok
+    if line:
         lines.append(line)
-    if lines and len(lines) == max_lines:
-        last = lines[-1]
-        if " ".join(lines) != " ".join(words):
-            while draw.textlength(last + "…", font=font) > max_width and " " in last:
-                last = last[: last.rfind(" ")]
-            lines[-1] = last + "…"
+    if len(lines) > max_lines:
+        last = lines[max_lines - 1]
+        while last and draw.textlength(last + "\u2026", font=font) > max_width:
+            last = last[:-1]
+        lines = lines[:max_lines - 1] + [last.rstrip(" ,;:") + "\u2026"]
     return lines
 
 
@@ -134,7 +153,8 @@ def strongest_cited(studies: list[dict], cited: list[str]) -> tuple[str, str, st
 
 
 @lru_cache(maxsize=256)
-def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tuple | None) -> bytes:
+def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tuple | None,
+            still_open: str = "") -> bytes:
     im = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(im)
     pad = 64
@@ -189,6 +209,17 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
         for line in _wrap(d, tldr, body, W - pad * 2, 2):
             d.text((pad, y), line, font=body, fill=INK)
             y += 37
+    # What the check could not settle, in one line: every share says it.
+    still = " ".join((still_open or "").split())
+    if still:
+        y += 6
+        lab = "Still open"
+        lab_font = _mono(15)
+        lab_w = int(d.textlength(lab, font=lab_font)) + 14
+        d.text((pad, y + 7), lab, font=lab_font, fill=INK_3)
+        for line in _wrap(d, still, _body(21), W - pad * 2 - lab_w, 1):
+            d.text((pad + lab_w, y), line, font=_body(21), fill=INK_2)
+        y += 34
     if receipt and y < H - 120:
         label_r, year, title = receipt
         y += 8
@@ -208,5 +239,6 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
     return buf.getvalue()
 
 
-def render_card(claim: str, verdict: str, tldr: str, study_count: int, receipt: tuple | None = None) -> bytes:
-    return _render(claim, verdict, tldr or "", study_count, tuple(receipt) if receipt else None)
+def render_card(claim: str, verdict: str, tldr: str, study_count: int, receipt: tuple | None = None,
+                still_open: str = "") -> bytes:
+    return _render(claim, verdict, tldr or "", study_count, tuple(receipt) if receipt else None, still_open or "")

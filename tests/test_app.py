@@ -5852,5 +5852,40 @@ t("result meta: a short claim and answer are not padded or cut",
 t("result meta: it never says more than the label: the label leads both lines",
   all(_dsp.result_meta("A claim " * 20, lb, "An answer. " * 30)[k].startswith(lb) for lb in appmod.VERDICT_LABELS.values() for k in ("title", "description")))
 
+# ---- Polish: the share card is 1200x630 whatever it is given, and nothing runs off it ---
+from PIL import Image as _CI, ImageDraw as _CD  # noqa: E402
+import io as _cio  # noqa: E402
+_cd = _CD.Draw(_CI.new("RGB", (10, 10)))
+_cf = og._body(34)
+_cases = {"long": ("word " * 200).strip(), "nospace": "x" * 500, "url": "see https://example.com/" + "a" * 120 + " for proof",
+          "short": "Garlic cures colds"}
+_okw, _okl, _ell = True, True, {}
+for _n, _txt in _cases.items():
+    _ls = og._wrap(_cd, _txt, _cf, 1000, 2)
+    _okl &= 1 <= len(_ls) <= 2
+    _okw &= all(_cd.textlength(x, font=_cf) <= 1000 for x in _ls)
+    _ell[_n] = _ls[-1].endswith("\u2026")
+t("card text: wrapped lines fit the width and the line limit, even for one unbroken word", _okw and _okl, _ell)
+t("card text: text that does not fit ends in an ellipsis inside the width; text that fits is untouched",
+  _ell["long"] and _ell["nospace"] and _ell["url"] and not _ell["short"]
+  and og._wrap(_cd, "Garlic cures colds", _cf, 1000, 2) == ["Garlic cures colds"])
+_shots = []
+for _cl, _vd, _tl, _so in [("A very long claim " * 40, "complicated", "An answer that goes on and on. " * 12, "Something still open. " * 20),
+                           ("x" * 500, "insufficient", "y" * 400, "z" * 300),
+                           ("Short", "true", "Short answer.", ""), ("Medium length claim about sleep", "false", "", "Doses vary.")]:
+    _im = _CI.open(_cio.BytesIO(og.render_card(_cl, _vd, _tl, 5, ("Meta-Analysis", "2020", "T " * 200), _so))).convert("RGB")
+    _shots.append(_im)
+def _runs_off(im):
+    # The strip at the right edge, below the masthead, is only ever the night or the paper.
+    return any(im.getpixel((x, y)) not in {(15, 18, 17), (241, 242, 238)}
+               for y in range(100, 630, 2) for x in range(1150, 1200, 2))
+t("share card: exactly 1200x630 for a very long claim, a run of letters, a long answer and a short one",
+  all(i.size == (1200, 630) for i in _shots), [i.size for i in _shots])
+t("share card: no text reaches the right edge, and the footer line is clear of the answer",
+  not any(_runs_off(i) for i in _shots))
+_sc = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "How long the effect lasts.")
+_sc_none = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "")
+t("share card: a check's still-open line is on the card, and a card without one is a different image", _sc != _sc_none)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
