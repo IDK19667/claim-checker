@@ -924,7 +924,22 @@ dialog.sheet::backdrop {
 dialog.sheet[open]::backdrop { opacity: 1; }
 @starting-style { dialog.sheet[open]::backdrop { opacity: 0; } }
 
-.sheet-handle { width: 40px; height: 4px; border-radius: var(--r-control); background: var(--rule-2); margin: 10px auto 0; }
+.sheet-handle { width: 40px; height: 4px; border-radius: var(--r-control); background: var(--rule-2); position: absolute; top: 8px; left: 50%; transform: translateX(-50%); }
+/* The bar that stays: Close at the right, the handle in the middle on a phone.
+   The sheet itself is the scroller, so sticky holds it at the top. */
+.sheet-bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; justify-content: flex-end; align-items: center;
+  min-height: 52px; padding: 0 var(--gutter);
+  background: var(--paper); border-bottom: 1px solid var(--rule);
+}
+.sheet-close {
+  min-width: 44px; min-height: 44px; margin-right: -8px; padding: 0 8px;
+  background: none; border: 0; cursor: pointer;
+  font: 500 15px/1.4 var(--body); color: var(--ink);
+  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
+}
+.sheet-close:hover { color: var(--green); }
 .sheet-body { padding: 16px var(--gutter) max(24px, env(safe-area-inset-bottom)); }
 .sheet-title { margin: 8px 0 8px; font: 350 26px/1.15 var(--display); letter-spacing: -0.03em; }
 .sheet-title:focus { outline: none; }
@@ -1079,6 +1094,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   dialog.sheet[open] { transform: translate(-50%, -50%); }
   @starting-style { dialog.sheet[open] { transform: translate(-50%, calc(-50% + 16px)); } }
   .sheet-handle { display: none; }
+  .sheet-bar { min-height: 48px; }
   .bar-sticky { display: none; }
   body.has-bar { padding-bottom: 0; }
   .hero { font-size: 54px; }

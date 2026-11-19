@@ -598,7 +598,12 @@
 
   <!-- ===== Study sheet ===== -->
   <dialog class="sheet" id="study-sheet" aria-labelledby="sheet-title">
-    <div class="sheet-handle" aria-hidden="true"></div>
+    {# Close stays at the top while the abstract scrolls, so a long one is never
+       a long way back. It is the only Close: the one at the foot is gone. #}
+    <div class="sheet-bar">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <button class="sheet-close" type="button" data-close>Close</button>
+    </div>
     <div class="sheet-body">
       <p class="meta" id="sheet-meta"></p>
       <h2 class="sheet-title" id="sheet-title"></h2>
@@ -633,7 +638,6 @@
       </div>
       <div class="sheet-actions">
         <a class="primary link-as-btn" id="sheet-link" href="#" target="_blank" rel="noopener">Open on PubMed<svg width="18" height="18" aria-hidden="true"><use href="#i-ext"/></svg></a>
-        <button class="ghost" type="button" data-close>Close</button>
       </div>
     </div>
   </dialog>

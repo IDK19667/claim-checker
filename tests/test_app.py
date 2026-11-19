@@ -1697,7 +1697,19 @@ t("a result page carries no footage, and the checking screen has no banner: no b
   and ".film" not in _css and "/footage/" not in _appjs)
 t("  checking reserves no tall block: the head is as tall as its content, so the claim stays where the verdict will put it",
   "#result.checking .report-head { min-height" not in _css)
-t("  the service worker no longer precaches the still",
+_sheet = _tpl.split('id="study-sheet"')[1].split("</dialog>")[0]
+t("the source dialog has one Close, in a bar that sticks to its top; the foot has none",
+  _sheet.count("data-close") == 1 and 'class="sheet-bar"' in _sheet
+  and _sheet.index("data-close") < _sheet.index('class="sheet-body"')
+  and "position: sticky" in _css.split(".sheet-bar {")[1].split("}")[0])
+t("  that Close is at least 44px tall and wide, and has a word, not just an icon",
+  "min-height: 44px" in _css.split(".sheet-close {")[1].split("}")[0]
+  and "min-width: 44px" in _css.split(".sheet-close {")[1].split("}")[0]
+  and ">Close</button>" in _sheet)
+t("  focus moves into the dialog on open, Escape closes it natively, and the opener gets focus back",
+  "heading.focus(" in _appjs.split("function openSheet")[1].split("\n}")[0]
+  and "showModal()" in _appjs and "cancel" not in _appjs.split("function openSheet")[1].split("\n}")[0])
+t("the service worker no longer precaches the still",
   "verdict.webp" not in (ROOT / "static" / "sw.js").read_text() and not hasattr(appmod, "BAND_STILL"))
 
 # ---- the confidence line: the same sentence from the server and the script -------
