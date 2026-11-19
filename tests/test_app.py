@@ -4635,5 +4635,25 @@ t("  the list is named 'Previously checked claims' (visible heading, accessible 
 t("  and the script has no dash in the strings it writes for the list",
   not any(d in _appjs[_appjs.index("function suggestAlso"):_appjs.index("function moveSuggest")] for d in ("\u2014", "\u2013")))
 
+# ---- study designs: what each does and where it stops ----------------------------
+# A label says what was done, never how sure to be: design alone does not set
+# certainty, so no line calls a design the best or the final word.
+_types_src = _appjs.split("const TYPES = [")[1].split("\n];")[0]
+_design_rows = _re.findall(r'\["([^"]+)", "[a-z]*", "((?:[^"\\]|\\.)*)"\]', _types_src)
+t("study designs: all 17 labels have a line", len(_design_rows) == 17, len(_design_rows))
+_overclaim = _re.compile(r"gold standard|as strong as|very strong|proves nothing|best evidence|settles|proof", _re.I)
+t("  no line overstates a design: none says 'gold standard', 'very strong' or 'as strong as evidence gets'",
+  not [l for l, w in _design_rows if _overclaim.search(w)], _design_rows)
+_real = ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review", "Randomized Controlled Trial",
+         "Practice Guideline", "Case Reports", "Controlled Clinical Trial", "Clinical Trial",
+         "Observational Study", "Multicenter Study", "Comparative Study", "Review")
+t("  every study design says what it does and where it stops, in two short sentences",
+  all(len(_re.findall(r"[.!?](?:\s|$)", w)) == 2 and len(w.split()) <= 30
+      for l, w in _design_rows if l in _real), [(l, w) for l, w in _design_rows if l in _real])
+t("  a pooled or randomized design names its limit", all(
+  _re.search(r"only as sound|less certain|limits what|can mix", w)
+  for l, w in _design_rows if l in ("Meta-Analysis", "Network Meta-Analysis", "Systematic Review", "Randomized Controlled Trial")))
+t("  and the lines have no em or en dash", not any(d in w for _, w in _design_rows for d in ("\u2014", "\u2013")))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -35,25 +35,25 @@ const EXAMPLES = [
 // The first matching label wins, so the badge shows the most informative type.
 const TYPES = [
   // strong
-  ["Meta-Analysis", "strong", "Pools the results of many studies into one bigger answer. About as strong as evidence gets."],
-  ["Network Meta-Analysis", "strong", "Compares several treatments at once by pooling many studies. Very strong."],
-  ["Systematic Review", "strong", "A structured review of every study on a question, with rules for what counts. Very strong."],
-  ["Randomized Controlled Trial", "strong", "People were randomly assigned to get the thing or not, then compared. The gold standard for “does X cause Y.”"],
-  ["Practice Guideline", "strong", "Official recommendations from a medical body, based on the evidence it reviewed."],
+  ["Meta-Analysis", "strong", "Combines the results of several studies into one estimate. It is only as sound as the studies it pools, and it can mix very different ones."],
+  ["Network Meta-Analysis", "strong", "Combines many studies to compare several treatments at once. Comparisons made only indirectly are less certain than head-to-head trials."],
+  ["Systematic Review", "strong", "Searches for every study on a question, using set rules for what counts. It is only as sound as the studies it found."],
+  ["Randomized Controlled Trial", "strong", "Randomly assigns people to a treatment or a comparison group. A small size, a short run or a narrow group limits what it shows."],
+  ["Practice Guideline", "strong", "Recommendations a medical body wrote after reviewing the evidence. They reflect that body's judgment and can lag behind newer studies."],
   // weak
-  ["Retracted Publication", "retracted", "Withdrawn by the journal after publication. Its findings shouldn't be trusted."],
-  ["Case Reports", "weak", "The story of one patient, or a few. Interesting, but proves nothing on its own."],
-  ["Editorial", "weak", "An opinion piece by the journal's editors, not a study."],
-  ["Comment", "weak", "A published comment on another paper, not a study."],
-  ["Letter", "weak", "A letter to the journal, not a study."],
-  ["News", "weak", "A news item, not a study."],
+  ["Retracted Publication", "retracted", "Withdrawn by the journal after publication. Its findings should not be relied on."],
+  ["Case Reports", "weak", "Describes one patient or a few. It can raise a question, but it cannot show cause or how common something is."],
+  ["Editorial", "weak", "An opinion piece by the journal's editors. It gives a view, not data."],
+  ["Comment", "weak", "A published reply to another paper. It is not a study."],
+  ["Letter", "weak", "A short letter to the journal. It is not a study."],
+  ["News", "weak", "A news item. It is not a study."],
   // medium
-  ["Controlled Clinical Trial", "", "Tested on people against a comparison group, but not randomized. Good, with caveats."],
-  ["Clinical Trial", "", "Tested on people, but not necessarily randomized or compared. Good, with caveats."],
-  ["Observational Study", "", "Watched what happened to people who did or didn't do X. Can show links, not cause."],
-  ["Multicenter Study", "", "Run at several hospitals or sites, which makes results more general."],
-  ["Comparative Study", "", "Compared two or more approaches. How well depends on the design."],
-  ["Review", "", "An expert's summary of the research. Useful context, but it depends on which studies they picked."],
+  ["Controlled Clinical Trial", "", "Tests people against a comparison group without random assignment. The groups may have differed from the start."],
+  ["Clinical Trial", "", "Tests a treatment on people, not always with a comparison group. Without one it cannot show cause."],
+  ["Observational Study", "", "Watches what happens to people who did or did not do something. It can show links but not prove cause, since other factors may differ."],
+  ["Multicenter Study", "", "Run at several sites, which can make results more general. The label says nothing about how well it was designed."],
+  ["Comparative Study", "", "Compares two or more approaches. What it shows depends on how the comparison was run."],
+  ["Review", "", "An expert's summary of the research. It depends on which studies the author chose."],
 ];
 const IGNORE = /^(Journal Article|Research Support|English Abstract|Introductory)/;
 const DEFAULT_TYPE = ["Journal article", "", "A research paper. The abstract says what kind of study it was."];
