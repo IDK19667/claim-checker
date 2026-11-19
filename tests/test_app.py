@@ -4515,5 +4515,33 @@ t("the evidence line never takes its strength word from a study the verdict did 
   and evidence.evidence_line("true", _LINE, ["S1", "S2"]).startswith("Strong evidence"),
   evidence.evidence_line("true", _LINE, ["S1"]))
 
+# A saved result whose stored "rests_on" disagrees with its cited studies
+# (the audit saw "Rests on 5" beside "3 used") shows the cited count in both
+# renderers, and the stored record is left as it was.
+_RS = [_study(f"R{i}", f"Trial {i}", abstract="Vitamin D and colds.", types=["Randomized Controlled Trial"])
+       for i in range(1, 6)]
+_rs_bd = {"strength": "x", "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
+          "not_applies_to": "", "unknowns": "", "rests_on": 5}
+db.put_cached_verdict("count mismatch saved", "q AND r", "true", "Because (Study 1).",
+                      ["R1", "R2", "R3"], _RS, tldr="Short.", breakdown=_rs_bd)
+_rsh = c.get("/?q=count+mismatch+saved").data.decode()
+t("a saved result's 'Rests on' count equals the studies marked used (server render)",
+  "Rests on" in _rsh and '<span class="group-count">3 studies</span>' in _rsh
+  and '5 studies</span>' not in _rsh, re.findall(r"Rests on.{0,80}", _rsh))
+_rsj = P("count mismatch saved", ip="4.4.4.5").get_json()
+t("  and in the JSON the browser draws from",
+  _rsj["breakdown"]["rests_on"] == 3
+  and sum(1 for s_ in _rsj["studies"] if s_["cited_in_verdict"]) == 3, _rsj["breakdown"].get("rests_on"))
+with db.get_conn() as _cn:
+    _raw_bd = _cn.execute("SELECT breakdown_json FROM verdict_cache WHERE claim_text=?",
+                          ("count mismatch saved",)).fetchone()[0]
+t("  while the stored record is not rewritten", json.loads(_raw_bd)["rests_on"] == 5)
+_js_now = (ROOT / "static" / "app.js").read_text()
+_rb = _js_now[_js_now.index("function renderBreakdown"):]
+_rb = _rb[:_rb.index("\n}\n")]
+t("renderBreakdown counts the used studies itself, not the stored number",
+  "const restsOn = studies.filter((s) => s.cited_in_verdict).length" in _rb
+  and "bd.rests_on" not in _js_now and _rb.index("const restsOn") < _rb.index("head.textContent = restsOn"))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

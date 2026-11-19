@@ -389,7 +389,7 @@
           <details class="deeper" id="deeper"{% if not (result and result.breakdown) %} hidden{% endif %}>
             <summary class="deeper-head">
               <span class="deeper-title">
-                <span class="deeper-count" id="deeper-count"{% if not (result and result.breakdown and result.breakdown.rests_on) %} hidden{% endif %}>Rests on <span class="group-count">{% if result and result.breakdown and result.breakdown.rests_on %}{{ result.breakdown.rests_on }} stud{{ "y" if result.breakdown.rests_on == 1 else "ies" }}{% endif %}</span></span>
+                {% set rests_n = (result.studies | selectattr("cited_in_verdict") | list | length) if (result and result.breakdown) else 0 %}<span class="deeper-count" id="deeper-count"{% if not rests_n %} hidden{% endif %}>Rests on <span class="group-count">{% if rests_n %}{{ rests_n }} stud{{ "y" if rests_n == 1 else "ies" }}{% endif %}</span></span>
                 <span class="deeper-name">Read the full breakdown</span>
                 <span class="deeper-what" id="deeper-what">{% if result and result.breakdown %}{{ result.breakdown.contents }}{% endif %}</span>
               </span>

@@ -581,6 +581,12 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # these existed gets them too: each relied-on study's conclusion in
         # its authors' words, and the line saying what the fold holds.
         breakdown = {**breakdown, "concluded": evidence.conclusions(studies, cited)}
+        # "Rests on N" is the number of studies the verdict used, read from
+        # the same cited-study mapping that marks each study "used". A count
+        # stored inside an old breakdown can disagree with it, so it is
+        # recomputed here and never trusted. Nothing stored is rewritten.
+        if "rests_on" in breakdown:
+            breakdown["rests_on"] = sum(1 for s in studies if s["pmid"] in cited)
         breakdown["contents"] = breakdown_mod.contents(breakdown)
     return {
         "claim": claim,

@@ -566,6 +566,10 @@ function renderBreakdown(bd, count, studies = []) {
     return;
   }
   wrap.hidden = false;
+  // The studies the verdict used, counted from the same cited_in_verdict
+  // flag the study list and the chart read. A count stored in an old
+  // breakdown is never shown.
+  const restsOn = studies.filter((s) => s.cited_in_verdict).length;
   // Collapsed on every new result, including one reopened from history.
   wrap.open = false;
 
@@ -621,11 +625,11 @@ function renderBreakdown(bd, count, studies = []) {
 
   const head = wrap.querySelector(".deeper-head .group-count");
   if (head) {
-    head.textContent = bd.rests_on
-      ? `${bd.rests_on} ${bd.rests_on === 1 ? "study" : "studies"}`
+    head.textContent = restsOn
+      ? `${restsOn} ${restsOn === 1 ? "study" : "studies"}`
       : "";
   }
-  $("deeper-count").hidden = !bd.rests_on;
+  $("deeper-count").hidden = !restsOn;
   $("deeper-what").textContent = bd.contents || "";
 }
 
