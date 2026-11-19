@@ -265,6 +265,10 @@ body {
 .band .primary { background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
 .band .primary:hover { background: var(--panel); }
 
+.field-error { margin: 8px 0 0; padding-left: 10px; font-size: 14px; line-height: 1.4; color: var(--ink); box-shadow: inset 2px 0 0 currentColor; }
+.band .field-error { color: var(--on-deep); }
+.claim-box:has(#claim-input[aria-invalid="true"]) { border-color: currentColor; }
+
 /* ---- Type-ahead ---------------------------------------------------------- */
 
 .suggest {

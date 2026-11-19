@@ -1007,10 +1007,29 @@ function nudgeToAnswer() {
   }, NUDGE_AFTER_MS);
 }
 
+// The empty-field message belongs to the field: it is announced, tied to the
+// textarea with aria-describedby, and gone the moment the text is valid.
+const claimErrorEl = $("claim-error");
+const CLAIM_DESCRIBED_BY = input.getAttribute("aria-describedby") || "";
+function showClaimError(text) {
+  claimErrorEl.textContent = text;
+  claimErrorEl.hidden = false;
+  input.setAttribute("aria-invalid", "true");
+  input.setAttribute("aria-describedby", ("claim-error " + CLAIM_DESCRIBED_BY).trim());
+}
+function clearClaimError() {
+  if (claimErrorEl.hidden) return;
+  claimErrorEl.hidden = true;
+  claimErrorEl.textContent = "";
+  input.removeAttribute("aria-invalid");
+  input.setAttribute("aria-describedby", CLAIM_DESCRIBED_BY);
+}
+
 async function check(claim) {
   claim = (claim || "").trim();
   if (inFlight) return;
-  if (!claim) { setStatus("Type or paste the claim first.", false); input.focus(); return; }
+  if (!claim) { showClaimError("Type or paste the claim first."); input.focus(); return; }
+  clearClaimError();
   if (!navigator.onLine) {
     const saved = loadRecent().find((r) => r.claim.toLowerCase() === claim.toLowerCase() && r.result);
     if (saved) { renderResult({ ...saved.result, restored: true }); return; }
@@ -1091,7 +1110,7 @@ if (window.visualViewport) {
 }
 
 const clearBtn = $("clear-btn");
-input.addEventListener("input", () => { clearBtn.hidden = !input.value; askSuggest(); });
+input.addEventListener("input", () => { clearBtn.hidden = !input.value; if (input.value.trim()) clearClaimError(); askSuggest(); });
 clearBtn.addEventListener("click", () => { input.value = ""; clearBtn.hidden = true; closeSuggest(); input.focus(); });
 
 // ---- Type-ahead over claims already checked -------------------------------

@@ -4597,5 +4597,13 @@ t("the saved-record audit counts the planted mismatches and renders every record
   and "empty_query" in _out.stdout, _out.stdout[-400:] + _out.stderr[-300:])
 t("  and leaves the database it was given byte for byte unchanged", open(_ad, "rb").read() == _before)
 
+# ---- input fixes (queue 7, step 5) -------------------------------------------
+t("input: the empty-claim error has its own element, hidden until needed",
+  '<p class="field-error" id="claim-error" role="alert" hidden></p>' in _home)
+_appjs = open("static/app.js", encoding="utf-8").read()
+t("  and the script links it with aria-describedby, sets aria-invalid, and clears both on valid text",
+  'setAttribute("aria-invalid", "true")' in _appjs and 'removeAttribute("aria-invalid")' in _appjs
+  and "clearClaimError()" in _appjs and 'showClaimError("Type or paste the claim first.")' in _appjs)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
