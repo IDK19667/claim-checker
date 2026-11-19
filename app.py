@@ -293,6 +293,7 @@ def _render_home(checks_page: bool = False):
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
+    db.count_event("view.result" if cached else "view.home")
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
                            ledger=ledger, latest=latest,
@@ -496,6 +497,7 @@ CONTACT_EMAIL = os.environ.get("EVIDENT_EMAIL", "hello@checkevident.com").strip(
 
 @app.route("/privacy")
 def privacy():
+    db.count_event("view.info")
     return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label(),
                            on_gemini=_on_gemini())
 
@@ -509,6 +511,7 @@ _INFO_PAGES = {
 
 def _info(slug):
     title, desc = _INFO_PAGES[slug]
+    db.count_event("view.info")
     return render_template("info.html", slug=slug, title=title, desc=desc,
                            base_url=_base_url(), provider=verdict.provider_label(),
                            labels=VERDICT_LABELS, max_studies=MAX_STUDIES,
@@ -861,6 +864,20 @@ def _log_check_safe(claim, verdict_value, explanation, studies, cached=False):
 
 def _run_check(claim: str, client_ip: str, base_url: str):
     """
+    The pipeline, with the day counts around it: a claim that reaches it is
+    "submitted", one that ends in a result is "completed". Only the totals are
+    kept; see db.COUNTER_NAMES.
+    """
+    if claim and len(claim) <= MAX_CLAIM_CHARS:
+        db.count_event("check.submitted")
+    for ev in _run_check_stages(claim, client_ip, base_url):
+        if ev.get("stage") == "done":
+            db.count_event("check.completed")
+        yield ev
+
+
+def _run_check_stages(claim: str, client_ip: str, base_url: str):
+    """
     Yields stage dicts. Terminal stages are "done" (with "result") and
     "error" (with "error", "status", optional "retry_after").
 
@@ -1007,6 +1024,32 @@ def api_check_stream():
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
     })
+
+
+COUNT_BODY_MAX = 200  # bytes: a name and nothing else
+
+
+@app.route("/api/count", methods=["POST"])
+def api_count():
+    """
+    One more to a per-day total, for the few things only the page can see:
+    a share click, and the kind of error the page showed. The body is a name
+    from a fixed list (db.CLIENT_COUNTERS) and nothing else; anything else is
+    refused. Nothing about the sender is read or kept, and a browser that
+    sends Global Privacy Control is not counted.
+    """
+    if (request.content_length or 0) > COUNT_BODY_MAX:
+        return jsonify({"error": "Not a count."}), 400
+    payload = request.get_json(force=True, silent=True)
+    name = payload.get("name") if isinstance(payload, dict) and len(payload) == 1 else None
+    if name not in db.CLIENT_COUNTERS:
+        return jsonify({"error": "Not a count."}), 400
+    allowed, _ = ratelimit.COUNT.check(f"ip:{_client_ip()}")
+    if not allowed:
+        return jsonify({"error": "Too many."}), 429
+    if request.headers.get("Sec-GPC") != "1":
+        db.count_event(name)
+    return "", 204
 
 
 @app.route("/api/trending")

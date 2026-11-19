@@ -94,6 +94,9 @@ def check(user_key: str) -> tuple[bool, str | None, int]:
 # Feedback is cheap to store but shouldn't be floodable.
 FEEDBACK = SlidingWindow(limit=_env_int("RATE_LIMIT_FEEDBACK_PER_HOUR", 30), window_seconds=3600)
 
+# A day count is a few bytes in memory, but the endpoint is open to anyone.
+COUNT = SlidingWindow(limit=_env_int("RATE_LIMIT_COUNT_PER_MINUTE", 60), window_seconds=60)
+
 # The deep dive costs NCBI three link calls, not an AI call, so it can be
 # far looser than a check. It is still capped: PubMed is a shared public
 # service and we are a guest on it.

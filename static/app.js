@@ -736,6 +736,16 @@ const ERROR_KINDS = {
 };
 // 400: the server read the claim and refused it. 429: a limit, ours or the
 // provider's. Anything else the server sent (500, 502): the checker failed.
+// A per-day total, not a record of anyone (see /privacy): the request is a
+// name from a short fixed list and carries nothing else. A browser that sends
+// Global Privacy Control is not counted, as a courtesy.
+function countEvent(name) {
+  try {
+    if (navigator.globalPrivacyControl) return;
+    fetch("/api/count", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }), keepalive: true }).catch(() => {});
+  } catch { /* a count is never worth an error */ }
+}
 function errorKindOf(status) {
   if (status === 400) return "invalid";
   if (status === 429) return "limit";
@@ -746,6 +756,7 @@ function errorKindOf(status) {
 function renderError(kind, message, retryAfter) {
   // Same night ground, same way out. Only what the screen says changes.
   const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
+  countEvent("client_error." + (ERROR_KINDS[kind] ? kind : "provider"));
   screenState.settle("error");
   $("error-title").textContent = k.title;
   $("error-msg").textContent = message;
@@ -1407,6 +1418,7 @@ function shareText(r) {
 
 async function shareResult() {
   if (!currentResult) return;
+  countEvent("share.click");
   const r = currentResult;
   const url = r.share_url || (location.origin + "/?q=" + encodeURIComponent(r.claim));
   const text = shareText(r);
@@ -1439,6 +1451,7 @@ async function shareResult() {
 
 async function copyLink() {
   if (!currentResult) return;
+  countEvent("share.copy");
   const url = currentResult.share_url || location.href;
   $("toast").textContent = (await copyText(url)) ? "Link copied" : "Couldn't copy. The link is in your address bar.";
   setTimeout(() => { $("toast").textContent = ""; }, 2500);

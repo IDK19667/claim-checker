@@ -25,6 +25,7 @@ dotenv.load_dotenv = lambda *a, **k: None  # keep the developer's .env out of th
 import app as appmod  # noqa: E402
 import og  # noqa: E402
 import db  # noqa: E402
+db.COUNT_FLUSH_SECONDS = 0  # no background writer in tests; they call db.flush_counts()
 import pubmed  # noqa: E402
 import ratelimit  # noqa: E402
 import verdict  # noqa: E402
@@ -5952,6 +5953,76 @@ t("sitemap: a claim with an email, a phone number or first-person wording is nev
   and not any(_disp_p.looks_personal(x) for x in ("Vitamin D prevents colds", "Iron supplements cure fatigue",
                                                  "Omega 3 helps memory in adults over 65"))
   and "looks_personal" in _disp_p.saved_record_problems("my back pain is cured by yoga", "false", [], [], {}, "q", "2026-01-01"))
+
+
+# ---- Day counts: per-day totals, no identifiers ------------------------------------------
+def _tot():
+    db.flush_counts()
+    out = {}
+    for r in db.counts_since(30):
+        out[r["name"]] = out.get(r["name"], 0) + r["count"]
+    return out
+def _delta(before, after):
+    return {k: after.get(k, 0) - before.get(k, 0) for k in set(before) | set(after) if after.get(k, 0) != before.get(k, 0)}
+
+_b = _tot()
+c.get("/"); c.get("/checks"); c.get("/", query_string={"q": _good_c}); c.get("/about"); c.get("/method"); c.get("/corrections"); c.get("/privacy")
+c.get("/", query_string={"q": "a claim nobody has checked yet"}); c.get("/no-such-page"); c.get("/healthz"); c.get("/sitemap.xml")
+_d = _delta(_b, _tot())
+t("counts: page views by kind: home (and /checks and an unchecked ?q=) 3, a saved result 1, info pages 4; 404s, the sitemap and healthz are not views",
+  _d == {"view.home": 3, "view.result": 1, "view.info": 4}, _d)
+_b = _tot()
+P(_good_c, ip="9.9.9.1"); P("", ip="9.9.9.1"); P("x" * 600, ip="9.9.9.1")
+_d = _delta(_b, _tot())
+t("counts: a claim sent counts once as submitted and once as completed; an empty or too long one counts as neither",
+  _d == {"check.submitted": 1, "check.completed": 1}, _d)
+_b = _tot()
+_r = c.post("/api/count", json={"name": "share.click"}); c.post("/api/count", json={"name": "client_error.network"})
+_d = _delta(_b, _tot())
+t("counts: POST /api/count with an allowed name adds one and answers 204", _r.status_code == 204 and _d == {"share.click": 1, "client_error.network": 1}, _d)
+_b = _tot()
+_bad = [c.post("/api/count", json={"name": "view.home"}), c.post("/api/count", json={"name": "x" * 50}), c.post("/api/count", json={"name": "share.click", "claim": "my back pain"}),
+        c.post("/api/count", json={}), c.post("/api/count", data="share.click"), c.post("/api/count", json=["share.click"]),
+        c.post("/api/count", json={"name": "share.click", "pad": "y" * 400}), c.get("/api/count")]
+t("counts: any other name, extra fields, a big body, a non-JSON body or a GET is refused and counts nothing",
+  [x.status_code for x in _bad] == [400, 400, 400, 400, 400, 400, 400, 405] and not _delta(_b, _tot()), [x.status_code for x in _bad])
+_b = _tot()
+_g = c.post("/api/count", json={"name": "share.click"}, headers={"Sec-GPC": "1"})
+t("counts: a beacon from a browser sending Global Privacy Control is answered and not counted", _g.status_code == 204 and not _delta(_b, _tot()))
+_ips = [c.post("/api/count", json={"name": "share.copy"}, environ_base={"REMOTE_ADDR": "9.9.9.77"}).status_code for _ in range(70)]
+t("counts: /api/count is rate-limited per address like the other endpoints", _ips[:60] == [204] * 60 and 429 in _ips[60:], set(_ips))
+with db.get_conn() as _cn:
+    _cols = [r[1] for r in _cn.execute("PRAGMA table_info(counters)").fetchall()]
+    _rows = _cn.execute("SELECT day, name, count FROM counters").fetchall()
+_dump = json.dumps([list(r) for r in _rows])
+t("counts: the table holds only day, name and count; every name is on the fixed list; no claim text or address is in it",
+  _cols == ["day", "name", "count"] and all(r[1] in db.COUNTER_NAMES for r in _rows)
+  and _good_c not in _dump and "9.9.9" not in _dump and "my back pain" not in _dump, _cols)
+db.count_event("view.nonsense"); db.count_event(_good_c)
+_nb = _tot()
+t("counts: a name not on the list is ignored by the writer too", not _delta(_nb, _tot()) and "view.nonsense" not in _tot())
+_jsapp = (ROOT / "static" / "app.js").read_text()
+t("counts: the page skips its beacon when the browser sends Global Privacy Control, and sends only a name",
+  "navigator.globalPrivacyControl" in _jsapp and "JSON.stringify({ name })" in _jsapp
+  and all(n in _jsapp for n in ('countEvent("share.click")', 'countEvent("share.copy")', '"client_error."')))
+_cfg = {n for n in db.CLIENT_COUNTERS}
+t("counts: every error kind the page classifies has a client counter", {"client_error." + k for k in ("invalid", "network", "limit", "provider")} <= _cfg)
+
+# The same counts go to Turso when it is configured.
+_ftc = FakeTurso()
+os.environ["TURSO_DATABASE_URL"] = _URL; os.environ["TURSO_AUTH_TOKEN"] = _SECRET
+db._http_post = _ftc; db._reset_turso_state()
+db.count_event("share.click"); db.count_event("share.click"); db.count_event("view.home"); db.flush_counts()
+_tc = dict((n, k) for n, k in _ftc.con.execute("select name, count from counters").fetchall())
+db.count_event("share.click"); db.flush_counts()
+_tc2 = dict((n, k) for n, k in _ftc.con.execute("select name, count from counters").fetchall())
+t("counts: with Turso configured the counters table lives there, and a second flush adds to the same row",
+  _tc == {"share.click": 2, "view.home": 1} and _tc2["share.click"] == 3, (_tc, _tc2))
+_ftc.fail = OSError("down")
+db.count_event("share.click"); db.flush_counts()
+t("counts: Turso failing never raises from a count", True)
+os.environ.pop("TURSO_DATABASE_URL", None); os.environ.pop("TURSO_AUTH_TOKEN", None)
+db._http_post = _real_post; db._reset_turso_state()
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

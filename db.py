@@ -15,6 +15,13 @@ SQLite storage, optionally kept in Turso. Tables:
 
   query_cache, feedback  see the schema below.
 
+  counters       per-day totals and nothing else: (day, name, count). What is
+                 counted is the fixed list COUNTER_NAMES below: page views by
+                 kind, claims submitted, results completed, errors by kind,
+                 share clicks. No claim text, no address, no user agent, no
+                 visitor id: a count cannot be traced to a person because
+                 nothing about a person goes in.
+
 Where it lives. By default in a local SQLite file (DB_PATH). On a host whose
 disk is wiped on every restart, set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN
 and the same tables live in Turso (hosted libSQL, SQLite's dialect) instead,
@@ -24,6 +31,7 @@ against Turso when that is configured and healthy, and against the local
 file otherwise. Turso being down never fails a check: see `_routed`.
 """
 
+import atexit
 import base64
 import functools
 import json
@@ -88,6 +96,13 @@ CREATE TABLE IF NOT EXISTS checks (
 
 -- Anonymous thumbs up/down on a verdict. No identity, no free text
 -- beyond a short optional note.
+CREATE TABLE IF NOT EXISTS counters (
+    day TEXT NOT NULL,
+    name TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, name)
+);
+
 CREATE TABLE IF NOT EXISTS feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     claim_key TEXT NOT NULL,
@@ -695,4 +710,95 @@ def saved_records(limit: int = 500) -> list[dict]:
             "SELECT claim_text, verdict, search_query, cited_json, studies_json, breakdown_json, created_at "
             "FROM verdict_cache ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
         ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---- Daily counts -----------------------------------------------------------------
+# Counting must never slow a page or fail a check, and on Turso every write is
+# a network round trip. So a count is added to a small in-memory tally and a
+# background thread writes the tally out every COUNT_FLUSH_SECONDS (and once more
+# at exit). A restart can lose at most that many seconds of counts. Tests set
+# COUNT_FLUSH_SECONDS to 0, which starts no thread, and call flush_counts().
+
+# Counted on the server.
+SERVER_COUNTERS = (
+    "view.home", "view.result", "view.info",
+    "check.submitted", "check.completed",
+    "error.server",                       # a 500 or an unhandled exception
+    "provider.rate_limit",                # the AI provider answered 429
+    "provider.unavailable",               # the AI provider answered 503 or could not be reached
+    "provider.auth",                      # its key rejected or missing
+    "provider.other",                     # any other provider error
+    "pubmed.failure",                     # PubMed could not be reached or answered badly
+)
+# Sent by the page to POST /api/count: the only names that endpoint accepts.
+CLIENT_COUNTERS = (
+    "share.click", "share.copy",
+    "client_error.invalid", "client_error.network", "client_error.limit", "client_error.provider",
+)
+COUNTER_NAMES = frozenset(SERVER_COUNTERS) | frozenset(CLIENT_COUNTERS)
+
+COUNT_FLUSH_SECONDS = 30
+_pending: dict = {}
+_pending_lock = threading.Lock()
+_flusher_started = False
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def count_event(name: str, n: int = 1) -> None:
+    """Add to today's total for `name`. A name not on the list is ignored,
+    so nothing but the fixed counters can ever reach the table."""
+    global _flusher_started
+    if name not in COUNTER_NAMES:
+        return
+    key = (_today(), name)
+    with _pending_lock:
+        _pending[key] = _pending.get(key, 0) + n
+        start = COUNT_FLUSH_SECONDS > 0 and not _flusher_started
+        if start:
+            _flusher_started = True
+    if start:
+        threading.Thread(target=_flush_loop, name="count-flush", daemon=True).start()
+        atexit.register(flush_counts)
+
+
+def _flush_loop():
+    while True:
+        time.sleep(max(1, COUNT_FLUSH_SECONDS))
+        flush_counts()
+
+
+def flush_counts() -> None:
+    """Write the tally out. Never raises: a count that cannot be saved is
+    dropped after a log line, because a count is not worth a failed request."""
+    with _pending_lock:
+        batch = list(_pending.items())
+        _pending.clear()
+    if not batch:
+        return
+    try:
+        _write_counts(batch)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Could not save %d day counts: %s", len(batch), type(e).__name__)
+
+
+@_routed
+def _write_counts(items) -> None:
+    with get_conn() as conn:
+        _run_many(conn, [("INSERT INTO counters (day, name, count) VALUES (?, ?, ?) "
+                          "ON CONFLICT(day, name) DO UPDATE SET count = count + excluded.count",
+                          (day, name, n)) for (day, name), n in items])
+
+
+@_routed
+def counts_since(days: int = 30) -> list[dict]:
+    """Saved totals for the last `days` days (today included), as
+    [{"day", "name", "count"}], oldest first. Counts not yet flushed are not in it."""
+    first = (datetime.now(timezone.utc) - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        rows = conn.execute("SELECT day, name, count FROM counters WHERE day >= ? ORDER BY day, name",
+                            (first,)).fetchall()
     return [dict(r) for r in rows]
