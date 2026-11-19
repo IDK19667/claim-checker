@@ -5934,6 +5934,13 @@ t("record check: names each kind of problem, and a sound record has none",
   and "missing_date" in _pr("c", "true", [], [], None, "q", "")
   and "unknown_verdict" in _pr("c", "maybe", [], [], None, "q", "2020-01-01T00:00:00")
   and _pr("c", "true", "oops", [], None, "q", "2020-01-01T00:00:00") == ["unreadable_json"])
+import display as _disp_p
+t("sitemap: a claim with an email, a phone number or first-person wording is never offered for indexing",
+  all(_disp_p.looks_personal(x) for x in ("my mum's diabetes is cured by cinnamon", "Can I take ibuprofen with warfarin",
+                                         "email jo@example.com about zinc", "call 020 7946 0958 for the cure"))
+  and not any(_disp_p.looks_personal(x) for x in ("Vitamin D prevents colds", "Iron supplements cure fatigue",
+                                                 "Omega 3 helps memory in adults over 65"))
+  and "looks_personal" in _disp_p.saved_record_problems("my back pain is cured by yoga", "false", [], [], {}, "q", "2026-01-01"))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

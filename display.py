@@ -217,6 +217,18 @@ def result_meta(claim: str, label: str, short_answer: str) -> dict:
 
 SAVED_VERDICTS = ("true", "false", "complicated", "insufficient")
 
+# A claim is something a person typed. One that carries an email address, a
+# phone number or first-person wording ("my", "I", "me") is more likely to hold
+# something about that person, so it is never offered to a search engine.
+_PERSONAL = re.compile(
+    r"[\w.+-]+@[\w-]+\.[\w.]+"             # an email address
+    r"|\+?\d[\d\s().-]{7,}\d"              # a phone-like run of digits
+    r"|\b(?:i|i'm|i've|i'd|my|me|mine|myself)\b", re.I)
+
+
+def looks_personal(claim_text) -> bool:
+    return bool(_PERSONAL.search(str(claim_text or "")))
+
 
 def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search_query, saved_at,
                           now=None) -> list:
@@ -233,6 +245,8 @@ def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search
     out = []
     if not str(claim_text or "").strip():
         out.append("no_claim")
+    if looks_personal(claim_text):
+        out.append("looks_personal")
     if verdict not in SAVED_VERDICTS:
         out.append("unknown_verdict")
     if not isinstance(cited, (list, tuple)) or not isinstance(studies, list):

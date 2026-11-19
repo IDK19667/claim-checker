@@ -13,7 +13,10 @@ the sitemap now lists up to 500 of them, newest first, each as its one
 canonical `/?q=<saved claim text>` address. Only a record that passes
 `display.saved_record_problems` is listed: no cited study missing from the
 studies, "rests on" equal to the studies cited, a search query, a readable
-and non-future save date, a known verdict. A record that fails is left out
+and non-future save date, a known verdict, and a claim with no email address,
+phone number or first-person wording ("my", "I", "me"), since a claim is
+something a person typed and those are the ones likeliest to be about them
+(the reason the old rule existed). A record that fails is left out
 and its page carries `noindex` (it still renders for a person, because the
 page repairs those faults). robots.txt repeats its two Disallow lines in
 every group, since a crawler with its own group ignores the `*` group. Result
