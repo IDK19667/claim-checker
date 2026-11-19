@@ -171,12 +171,34 @@ document.addEventListener("click", (e) => {
   input.focus({ preventScroll: true });
 });
 
+// The phone's share bar waits for the short answer to scroll past. On first
+// view the answer is all there is on screen, and a bar across the foot of it
+// would cover the lines the reader came for. Once the summary is above the top
+// edge the bar appears; scroll back up to it and the bar goes again.
+let shareBarWatch = null;
+function disarmShareBar() {
+  if (shareBarWatch) { shareBarWatch.disconnect(); shareBarWatch = null; }
+  $("bar-sticky").hidden = true;
+  document.body.classList.remove("has-bar");
+}
+function armShareBar() {
+  disarmShareBar();
+  const summary = document.querySelector("#result .answer");
+  if (!summary || !("IntersectionObserver" in window)) return;
+  shareBarWatch = new IntersectionObserver(([e]) => {
+    const past = !resultSection.hidden && !e.isIntersecting && e.boundingClientRect.bottom <= 0;
+    $("bar-sticky").hidden = !past;
+    document.body.classList.toggle("has-bar", past);
+  });
+  shareBarWatch.observe(summary);
+}
+
 function show(section) {
   for (const s of [askSection, resultSection, errorSection]) s.hidden = s !== section;
   askMore.hidden = section !== askSection;
   if (trustSection) trustSection.hidden = section !== askSection;
   document.body.classList.toggle("view-ask", section === askSection);
-  if (section !== resultSection) { $("bar-sticky").hidden = true; document.body.classList.remove("has-bar"); }
+  if (section !== resultSection) disarmShareBar();
   window.scrollTo(0, 0);
 }
 if (!$("server-result")) document.body.classList.add("view-ask");
@@ -607,8 +629,7 @@ function renderResult(data) {
   renderFeedbackState(data.claim);
   resetReport();
 
-  $("bar-sticky").hidden = false;
-  document.body.classList.add("has-bar");
+  armShareBar();
   setTitle(data);
   // The band goes to the verdict shot and the report lands on the sheet under
   // it. Set before the reveal, so the sheet is never painted as a bare column
@@ -644,7 +665,7 @@ function renderPending(claim) {
   $("cached-note").hidden = true;
   $("still-open").hidden = true;
   renderBreakdown(null, 0);
-  $("bar-sticky").hidden = true; document.body.classList.remove("has-bar");
+  disarmShareBar();
   for (const sec of [askSection, errorSection]) sec.hidden = true;
   askMore.hidden = true;
   if (trustSection) trustSection.hidden = true;

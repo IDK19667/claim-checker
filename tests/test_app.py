@@ -1709,6 +1709,14 @@ t("  that Close is at least 44px tall and wide, and has a word, not just an icon
 t("  focus moves into the dialog on open, Escape closes it natively, and the opener gets focus back",
   "heading.focus(" in _appjs.split("function openSheet")[1].split("\n}")[0]
   and "showModal()" in _appjs and "cancel" not in _appjs.split("function openSheet")[1].split("\n}")[0])
+_bar = _appjs.split("function armShareBar()")[1].split("\n}\n")[0]
+t("the phone's share bar is shown only once the short answer has scrolled above the top edge, never on first view",
+  'querySelector("#result .answer")' in _bar and "e.boundingClientRect.bottom <= 0" in _bar
+  and "!e.isIntersecting" in _bar and '$("bar-sticky").hidden = false' not in _appjs
+  and 'classList.add("has-bar")' not in _appjs)
+t("  and it is put away with the result: leaving the result or starting a check disarms it",
+  "if (section !== resultSection) disarmShareBar()" in _appjs and _appjs.count("disarmShareBar();") >= 2
+  and "shareBarWatch.disconnect()" in _appjs)
 t("the service worker no longer precaches the still",
   "verdict.webp" not in (ROOT / "static" / "sw.js").read_text() and not hasattr(appmod, "BAND_STILL"))
 
