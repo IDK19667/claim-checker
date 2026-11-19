@@ -462,6 +462,9 @@ body {
 .reading li.live { color: var(--on-deep); }
 .reading li.live::before { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--sage); animation: pulse 1s ease-in-out infinite; }
 .reading li.cancel-row::before { display: none; }
+/* The log opens where Edit claim will be, so the answer arrives close to where
+   the head already ends. */
+#result.checking .reading { margin-top: 8px; }
 .reading .link-btn { color: var(--on-deep); font-family: var(--body); }
 @keyframes line-in { from { opacity: 0; transform: translateY(3px); } }
 
@@ -696,7 +699,6 @@ body {
 #result.checking .feedback,
 #result.checking .report,
 #result.checking .after { display: none; }
-#result.checking .report-head { min-height: 46vh; }
 
 .ref {
   display: inline-block; min-width: 16px; padding: 0 1px; cursor: pointer;
@@ -1008,7 +1010,7 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .doc .ledger-list { margin-top: 12px; }
 /* A layout wrapper around the masthead and the ask view: the night ground
    on every screen. On the result and error views the masthead stands alone
-   over the band of footage. */
+   over the report. */
 .band { margin: 0; padding: 0; }
 body:not(.view-ask) .band .wrap { display: none; }
 body.view-ask .band .wrap { padding-bottom: 56px; }
@@ -1018,48 +1020,11 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
 .foot .fine { color: var(--on-deep-3); }
 .foot a { color: var(--on-deep-2); }
 
-/* ---- The band of footage ------------------------------------------------- *
-   Checking, a verdict, an error and a check that found nothing are one screen:
-   a strip of footage across the head of the page that fades down into the
-   night ground the report is printed on, so the picture and the verdict are
-   one surface with no seam.
+/* ---- Checking, a verdict and an error share one night ground ------------- *
+   The report is printed straight under the masthead: no picture above it. */
 
-   Nothing legible ever sits on the footage. The claim, the step lines and the
-   whole verdict are text below it, on the ground, so no panel has to buy its
-   contrast back with a tint or a blur, and there are none anywhere here. */
-
-.film {
-  position: relative;
-  height: 26vh; min-height: 140px; max-height: 260px;
-  overflow: hidden;
-  background: var(--deep);
-}
-.film::after {
-  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background: linear-gradient(180deg, var(--film-top), transparent 40%, var(--deep));
-}
-
-/* The clips are stacked and cross-faded, so a stage change costs opacity and
-   nothing else: no reflow, no second load, no flash of dark between two. */
-.film-shot {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 420ms linear;
-}
-.film-shot[data-on="1"] { opacity: 1; }
-
-/* Each crop is chosen, not defaulted. The band runs wider than the 3.2:1
-   source on most desktops and much narrower on a phone, where `cover` keeps
-   less than half the width: these say which half. See
-   scripts/build_footage.py. */
-.film-shot[data-shot="searching"] { object-position: 45% 50%; }
-.film-shot[data-shot="weighing"] { object-position: 30% 50%; }
-.film-shot[data-shot="verdict"] { object-position: 70% 50%; }
-
-/* The report starts on the band's own ground, tucked a pixel under it so no
-   hairline of paper can show between the two. */
+/* The report starts on the night ground, tucked a pixel under the masthead so
+   no hairline of paper can show between the two. */
 [data-screen] main.wrap {
   position: relative; z-index: 1;
   margin-top: -1px;
@@ -1074,9 +1039,7 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
 /* The entrance belongs to the live transition, not to a cold load: a shared
    link is a page the reader navigated to, and it has no business fading in.
    app.js carries the class for as long as a check owns the screen. */
-body.live-check .film { animation: band-in 300ms ease-out both; }
 body.live-check main.wrap { animation: sheet-rise 420ms cubic-bezier(0.2, 0.9, 0.3, 1) both; }
-@keyframes band-in { from { opacity: 0; } }
 @keyframes sheet-rise { from { opacity: 0; transform: translateY(18px); } }
 
 /* ---- Motion -------------------------------------------------------------- */
@@ -1090,8 +1053,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 .offscreen, .offscreen *, .offscreen::before, .offscreen *::before, .offscreen *::after { animation-play-state: paused !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  .film-shot { transition: none; }
-  body.live-check .film, body.live-check main.wrap { animation: none; }
+  body.live-check main.wrap { animation: none; }
   .sweep .study.cited .title span { animation: none; background-size: 100% 100%; }
   .reading li { animation: none; }
   .chart-bars.reveal .barcol-bar { animation: none; }
@@ -1119,7 +1081,6 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   .hero { font-size: 54px; }
   .sec-title, .trust-title { font-size: 40px; }
   .chart { --plot-h: 240px; }
-  .film { height: 34vh; min-height: 200px; max-height: 360px; }
   .top { padding-top: 24px; padding-bottom: 24px; }
 }
 

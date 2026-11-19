@@ -512,8 +512,7 @@ the shape of the evidence before opening a check.
 - **Before you trust a verdict:** the same grammar, one question per row,
   every answer ending on a link back to the claim box, and a real check
   as an aside.
-- **The report:** a band of footage while the check runs (the result
-  itself carries no picture), then the night head (back, the case line,
+- **The report:** no picture at any stage: the night head (back, the case line,
   the claim as checked with an "Edit claim" button under it, the reading
   log while it runs). Then by day, one reading column: the answer
   sentence in display type, the assessment (verdict label and how much to
@@ -572,17 +571,10 @@ the shape of the evidence before opening a check.
 
 ## The footage
 
-The home page has no intro footage. The scroll-driven fly-through was
-removed from it on 2026-11-18 because it put the claim box 3,000 to 8,000px
-down the page and pinned the scroll; its files are in `_old/`. What
-remains of the footage is the band at the head of a check.
-
-A band of
-footage across the top of the report (30vh on a phone) shows the stage of
-the work: searching, weighing, the verdict. Every clip change is an event
-from the server, never a timer. Nothing readable sits on the band. A
-shared result opens cold on one still and loads no video. Reduced motion,
-Save-Data and a slow connection get the same screens with stills.
+None. The home page lost its fly-through on 2026-11-18, and the band of
+footage above a running check went the same week: the claim and the
+reading log are the whole checking screen, printed straight under the
+masthead, with the claim at the same place the verdict will put it.
 
 ## The keyboard
 
@@ -599,7 +591,7 @@ Two moments in the reading, and the live check:
    20ms, on a check the reader just ran. Transform and opacity only.
 2. **The highlighter** sweeps across relied-on titles, once, on a check
    the reader just ran.
-3. **A live check:** the band arrives once when the check starts, each line of the reading log prints as its stage happens, and
+3. **A live check:** the sheet arrives once when the check starts, each line of the reading log prints as its stage happens, and
    the live line's dot pulses.
 4. **The nudge:** 900ms after a check the reader just ran comes back,
    the page moves down once so the claim sits near the top and the short

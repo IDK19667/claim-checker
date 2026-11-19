@@ -107,248 +107,49 @@ function setTitle(result) {
 }
 const root = document.documentElement;
 
-/* ---- the band: three looping shots, moved only by the stream ---------------
- * Checking, the verdict and an error are one layout: a strip of footage across
- * the top and the report on a sheet below it. The strip is this. Three clips,
- * about half a megabyte each, cross-faded by opacity: the pages being gone
- * through while the search runs, the marker on the page once studies have come
- * back, the microscope under the verdict.
- *
- * Nothing here is on a clock. `FILM_STAGES` maps the stages the stream already
- * emits onto the three shots, and a shot changes when its event lands. A step
- * that takes twenty seconds simply loops its own clip: a strip that moved on
- * by itself would be a progress bar that lies, which is the one thing this
- * screen must not be.
- *
- * Nothing loads until it is wanted either. The home page's first screen is a
- * claim field and the fly-through's own poster; these clips are fetched when
- * the page has been idle after becoming interactive, or when Check is pressed,
- * whichever comes first.
- */
-const filmBand = $("film");
-const FILM_SHOTS = ["searching", "weighing", "verdict"];
-const FILM_STAGES = {
-  start: "searching",   // the claim is in, the search is being built
-  query: "searching",   // searching PubMed
-  found: "weighing",    // studies came back, and are being read
-  weigh: "weighing",    // weighing them
-  done: "verdict",      // the verdict: the shot it rests on
-};
-
-const film = {
-  shot: null,
-  built: false,
-  // No video for a reader who asked for no motion, or who is paying for
-  // bytes: the same three pictures arrive as stills, in the same band, under
-  // the same sheet. Nothing else about the screen changes.
-  still: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    || !!(navigator.connection || {}).saveData,
-  // Nobody is watching: the tab is in the background, or the band has been
-  // scrolled out of view while the reader goes through the studies. A clip
-  // playing then is decoding video for no one.
-  tabHidden: document.hidden,
-  away: true,
-
-  // The one place that decides whether a clip runs: the shot that is on plays
-  // while someone can see it and motion is wanted, and every clip holds its
-  // frame otherwise. A clip that is fading out is left to finish its fade,
-  // and the transitionend below stops it.
-  sync() {
-    if (!filmBand) return;
-    const run = !this.still && !this.tabHidden && !this.away;
-    for (const el of filmBand.querySelectorAll("video.film-shot")) {
-      if (run && this.shot && el.dataset.on === "1") {
-        // Autoplay can be refused (a data saver, a locked-down profile). The
-        // poster is the clip's own first frame, so a refusal is a still band,
-        // not an empty one.
-        const p = el.play();
-        if (p && p.catch) p.catch(() => {});
-      } else if (!run || el.dataset.on === "1") {
-        el.pause();
-      }
-    }
-  },
-
-  src(name, ext) { return `${filmBand.dataset.footage}/${name}.${ext}`; },
-
-  layer(name) {
-    return filmBand.querySelector(`.film-shot[data-shot="${name}"]`);
-  },
-
-  // Built once, on the first call that needs a picture. The server may have
-  // put the verdict shot here already (a shared link opens on it), and that
-  // still is kept rather than replaced: it is the same frame.
-  build() {
-    if (this.built || !filmBand) return;
-    this.built = true;
-    for (const name of FILM_SHOTS) {
-      if (this.layer(name)) continue;
-      let el;
-      if (this.still) {
-        el = document.createElement("img");
-        el.src = this.src(name, "webp");
-        el.alt = "";
-        el.decoding = "async";
-      } else {
-        el = document.createElement("video");
-        el.muted = true;
-        el.loop = true;
-        el.playsInline = true;
-        el.setAttribute("playsinline", "");
-        el.preload = "none";
-        el.poster = this.src(name, "webp");
-        for (const [ext, type] of [["webm", "video/webm"], ["mp4", "video/mp4"]]) {
-          const s = document.createElement("source");
-          s.src = this.src(name, ext);
-          s.type = type;
-          el.appendChild(s);
-        }
-        // The clip that just faded out stops when the fade is over, not when
-        // the stage changed: pausing it at the change would freeze it halfway
-        // through its own cross-fade, in full view.
-        el.addEventListener("transitionend", () => {
-          if (el.dataset.on === "0") el.pause();
-        });
-      }
-      el.className = "film-shot";
-      el.dataset.shot = name;
-      el.dataset.on = "0";
-      filmBand.appendChild(el);
-    }
-  },
-
-  // A page that opened on a shared result has the verdict shot as a still,
-  // which is all a cold link should ever load. Once a live check starts, the
-  // reader is going to watch the band for the length of a check, so the still
-  // gives way to the clip it is the first frame of. So do stills built while
-  // reduced motion was on, once it has been switched off.
-  upgrade() {
-    if (this.still || !filmBand) return;
-    const stills = filmBand.querySelectorAll("img.film-shot");
-    if (!stills.length) return;
-    stills.forEach((el) => el.remove());
-    this.built = false;
-    this.build();
-    // Mid-check, the shot on screen comes straight back as its clip.
-    const shot = this.shot;
-    if (shot) { this.shot = null; this.show(shot); }
-  },
-
-  // Fetch a clip before it is needed. Idle time on the home page takes the
-  // searching shot, which is the one every check opens on; the rest are asked
-  // for as the check reaches them.
-  warm(name) {
-    this.build();
-    const el = this.layer(name);
-    if (!el || el.tagName !== "VIDEO" || el.preload === "auto") return;
-    el.preload = "auto";
-    el.load();
-  },
-
-  show(name) {
-    if (!filmBand) return;
-    this.build();
-    if (this.shot === name) return;
-    this.shot = name;
-    filmBand.hidden = false;
-    for (const el of filmBand.querySelectorAll(".film-shot")) {
-      const on = el.dataset.shot === name;
-      el.dataset.on = on ? "1" : "0";
-      if (on && el.tagName === "VIDEO") el.preload = "auto";
-    }
-    this.sync();
-    // The next shot is usually the one after this: ask for it now so the
-    // cross-fade has something to fade to.
-    const next = FILM_SHOTS[FILM_SHOTS.indexOf(name) + 1];
-    if (next) this.warm(next);
-  },
-
-  stop() {
-    if (!filmBand) return;
-    this.shot = null;
-    filmBand.hidden = true;
-    for (const el of filmBand.querySelectorAll(".film-shot")) {
-      el.dataset.on = "0";
-      if (el.tagName === "VIDEO") el.pause();
-    }
-  },
-};
-
 /* Pausing what nobody can see. A tab in the background is still asked to run
  * every animation on it, and a part of the page scrolled away is still asked
- * to loop. While the tab is hidden, body.paused freezes every CSS animation
- * and the band's clip holds its frame. Scrolled out of view, the band's clip
- * holds too, and so do the looping dots: the mic while it listens, the live
- * line of the reading list, the working status. Reduced motion switched on
- * mid-visit stops the clip where it is; switched off during a check, the
- * stills become clips again. */
+ * to loop. While the tab is hidden, body.paused freezes every CSS animation.
+ * Scrolled out of view, the looping dots hold too: the mic while it listens,
+ * the live line of the reading list, the working status. */
 function onTabVisibility() {
   document.body.classList.toggle("paused", document.hidden);
-  film.tabHidden = document.hidden;
-  film.sync();
 }
 document.addEventListener("visibilitychange", onTabVisibility);
 onTabVisibility();
 
 if ("IntersectionObserver" in window) {
-  if (filmBand) {
-    new IntersectionObserver((entries) => {
-      film.away = !entries[entries.length - 1].isIntersecting;
-      film.sync();
-    }).observe(filmBand);
-  }
   const loops = new IntersectionObserver((entries) => {
     for (const e of entries) e.target.classList.toggle("offscreen", !e.isIntersecting);
   });
   for (const id of ["mic-btn", "reading", "status"]) if ($(id)) loops.observe($(id));
-} else {
-  film.away = false;
 }
 
-{
-  const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const onMotion = () => {
-    film.still = motion.matches || !!(navigator.connection || {}).saveData;
-    if (document.body.classList.contains("live-check")) film.upgrade();
-    film.sync();
-  };
-  if (motion.addEventListener) motion.addEventListener("change", onMotion);
-  else if (motion.addListener) motion.addListener(onMotion);   // Safari before 14
-}
-
-/* The screen the reader is on. `null` is the home page: the fly-through, or
- * the checker on its own at /checks. Everything else is the band over the
- * sheet, and the attribute on <html> is what styles it. */
+/* The screen the reader is on. `null` is the home page. Everything else is
+ * the report on its night ground, and the attribute on <html> is what styles
+ * it. There is no picture above it: while a check runs the claim and the
+ * reading log are the whole screen, and they stay where the verdict will
+ * be. */
 const screenState = {
   phase: $("server-result") ? "result" : null,
-  at(step) {
-    const shot = FILM_STAGES[step];
-    // A stage the map does not know is ignored rather than guessed at.
-    if (shot && this.phase) film.show(shot);
-  },
   enter() {
     this.phase = "checking";
     root.dataset.screen = "checking";
-    // The band and the sheet arrive once, here. A shared link opens on the
+    // The sheet arrives once, here. A shared link opens on the
     // same layout but must not animate into it: nothing moved, the reader
     // navigated there, and a fade-in would read as something still loading.
     document.body.classList.add("live-check");
-    film.upgrade();
-    film.show("searching");
     window.scrollTo(0, 0);
   },
   settle(phase) {
     this.phase = phase;
     root.dataset.screen = phase;
-    // The verdict screen has no picture: the band goes when the answer lands.
-    film.stop();
   },
   leave() {
     if (!this.phase) return;
     this.phase = null;
     delete root.dataset.screen;
     document.body.classList.remove("live-check");
-    film.stop();
     window.scrollTo(0, 0);
   },
 };
@@ -854,7 +655,6 @@ function renderPending(claim) {
   resultSection.hidden = false;
   document.body.classList.remove("view-ask");
   logLine("Building the search", true);
-  screenState.at("start");
 }
 
 // A misspelled claim is checked as it was meant. Say so, and show what was
@@ -970,7 +770,6 @@ function handleStage(ev) {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
     else { logLine(`Found ${ev.count} ${ev.count === 1 ? "study" : "studies"}${ev.broadened ? " after widening the search" : ""}`); logLine("Reading the studies", true); }
   } else if (ev.stage === "weigh") logLine("Weighing the evidence", true);
-  screenState.at(ev.stage);
 }
 
 async function checkStreamed(claim) {
@@ -1097,7 +896,6 @@ async function check(claim) {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays
       // there, which is the frame the panel is about to appear over.
-      screenState.at("done");
       // The verdict arrived. A fault from here on is ours, not the
       // network's, and must not be reported as "couldn't reach the
       // server": that sends the reader to check their wifi over our bug.
@@ -1962,16 +1760,6 @@ else if (params.get("focus")) input.focus();
 renderRecent();
 loadTrending();
 maybeNudge();
-
-// The band's first clip, fetched once the page has gone quiet. Never ahead of
-// the first screen, which is a claim field and one poster, and never on a
-// result page, where the reader came to read rather than to check.
-if (!screenState.phase && filmBand) {
-  const idle = window.requestIdleCallback
-    ? window.requestIdleCallback.bind(window)
-    : (cb) => setTimeout(cb, 1500);
-  window.addEventListener("load", () => idle(() => film.warm("searching")), { once: true });
-}
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });

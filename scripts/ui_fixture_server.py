@@ -17,6 +17,9 @@ Claims with a special path:
   GATED  "Gated claim for stage test"   each stage waits for /__fixture/release/<gate>
   SLOW   "Slow claim for cancel test"   hangs after the query stage
   DOWN   "Provider down claim"          the provider is unavailable (an error screen)
+  BUSY   "Provider busy claim"          the provider answers rate limited (429, retry_after 20)
+  PUBMED "PubMed down claim"            PubMed cannot be reached (502)
+  NONE   "No evidence claim"            PubMed returns no studies (an insufficient verdict)
   LIVE   "Vitamin D supplements prevent colds"  streams with a short pause per stage
 Gates: query, found, done. /__fixture/reset closes them and forgets the replayed claims.
 """
@@ -47,6 +50,9 @@ import verdict  # noqa: E402
 GATED = "Gated claim for stage test"
 SLOW = "Slow claim for cancel test"
 DOWN = "Provider down claim"
+BUSY = "Provider busy claim"
+PUBMED = "PubMed down claim"
+NONE = "No evidence claim"
 LIVE = "Vitamin D supplements prevent colds"
 PAUSE = float(os.environ.get("UI_FIXTURE_PAUSE", "0.9"))
 
@@ -114,6 +120,10 @@ def _wait(name, claim):
 
 
 def _extract(claim):
+    if claim == BUSY:
+        raise verdict.ProviderError("rate_limit", "The AI service is busy.")
+    if claim == PUBMED:
+        raise appmod.requests.RequestException("fixture: PubMed unreachable")
     if claim == DOWN:
         raise verdict.ProviderError("unavailable", "The AI service is not answering right now. Try again in a minute.")
     _wait("query", claim)
@@ -124,11 +134,18 @@ def _extract(claim):
 
 def _search(query, max_results=8, surrogate=""):
     _wait("found", query)
+    if query == NONE:
+        return [], query, False
     return replay["studies"], replay["search_query"] or query, False
 
 
 def _weigh(claim, studies, query="", surrogate=""):
     _wait("done", claim)
+    if not studies:
+        return {"verdict": "insufficient", "tldr": "No published studies on this yet. Unproven, not disproven.",
+                "explanation": "No relevant studies were found on PubMed for this claim. That doesn't mean the claim is false, it may just not be well studied yet, or the search terms need refining.",
+                "still_open": "Whether anyone has tested this claim directly. PubMed found nothing that does.",
+                "cited_studies": [], "breakdown": None}
     return {"verdict": replay["verdict"], "tldr": replay["tldr"], "explanation": replay["explanation"],
             "still_open": replay["still_open"], "cited_studies": replay["cited"], "breakdown": replay["breakdown"]}
 
@@ -154,7 +171,7 @@ def _reset():
     # The replayed claims are cached once they finish; forget them so the
     # next run streams again. The seeded claims stay.
     with db.get_conn() as conn:
-        for claim in (GATED, SLOW, DOWN, LIVE):
+        for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE):
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
     return "ok"
 

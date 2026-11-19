@@ -160,14 +160,6 @@
     </div>
   </div>
 
-  {# The band: a strip of footage at the head of the checking screen and the
-     error screen, loaded only once Check has been pressed (static/app.js).
-     A result page has none: no picture sits between the claim and its
-     answer, and a shared link loads no footage at all. Decorative: every
-     step line is text on the sheet below it. #}
-  <div class="film" id="film" aria-hidden="true"
-       data-footage="{{ url_for('static', filename='footage') }}" hidden></div>
-
   <main class="wrap">
     <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>
         {% if ledger and ledger.studies_read %}

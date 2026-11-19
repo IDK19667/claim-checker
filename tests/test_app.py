@@ -1689,13 +1689,14 @@ if _shutil.which("node"):
 
 # ---- the result page has no picture ---------------------------------------------
 _res_head = _ord.split('id="server-result"')[0]
-t("a result page carries no footage: no still, no image, a hidden empty band",
+_appjs = (ROOT / "static" / "app.js").read_text()
+_css = (ROOT / "static" / "style.css").read_text()
+t("a result page carries no footage, and the checking screen has no banner: no band element, no clips, no film code",
   'class="film-shot"' not in _res_head and "<img" not in _res_head and "verdict.webp" not in _res_head
-  and '<div class="film" id="film" aria-hidden="true"' in _res_head
-  and 'hidden></div>' in _res_head.split('id="film"', 1)[1][:200])
-_settle = (ROOT / "static" / "app.js").read_text().split("settle(phase) {")[1].split("\n  },")[0]
-t("  and the screen that lands on the verdict stops the band instead of showing the verdict shot",
-  "film.stop()" in _settle and 'film.show("verdict")' not in _settle)
+  and 'id="film"' not in _res_head and "film." not in _appjs and "filmBand" not in _appjs
+  and ".film" not in _css and "/footage/" not in _appjs)
+t("  checking reserves no tall block: the head is as tall as its content, so the claim stays where the verdict will put it",
+  "#result.checking .report-head { min-height" not in _css)
 t("  the service worker no longer precaches the still",
   "verdict.webp" not in (ROOT / "static" / "sw.js").read_text() and not hasattr(appmod, "BAND_STILL"))
 
