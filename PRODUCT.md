@@ -72,7 +72,7 @@ either share it onward or type their own claim.
    confident verdict with nothing cited (enforced in code).
 3. Never fail silently: every failure path returns a real message and a
    way out.
-4. Never tie a check to a person: no accounts, no analytics, no cookies.
+4. Never tie a check to a person: no accounts, no cookies, no third-party analytics, no per-person tracking. Only per-day aggregate counts with no identifiers, as `/privacy` says.
 5. Never drop "Not medical advice" from a screen.
 
 ## Scope

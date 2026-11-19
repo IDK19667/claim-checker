@@ -4,6 +4,35 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-19: Daily usage counts, with no identifiers (queue 8)
+
+Dhruva asked for usage counts and error monitoring. This reverses "no
+analytics" as written in CLAUDE.md non-negotiable 7 (and PRODUCT.md), and
+keeps what that rule was for: nothing ties a check to a person. The design
+that keeps the promise true:
+
+- A `counters` table of (day, name, count) and nothing else, in the same store
+  as the rest (Turso when configured, SQLite otherwise). The names are a
+  fixed list in `db.py` (`COUNTER_NAMES`); anything else is ignored by the
+  writer. No IP, user agent, claim text, cookie or visitor id is read, so
+  there is nothing to leak or subpoena beyond totals.
+- Page views, claims submitted, results completed and server-side errors
+  (500s, provider 429/503/key/other, PubMed) are counted on the server.
+  Share clicks and the kind of error screen shown are sent by the page to
+  `POST /api/count`: a name from an allow-list, no other field, rate-limited,
+  and not sent (nor counted, if `Sec-GPC: 1` arrives) when the browser has
+  Global Privacy Control on. Aggregates without identifiers need no consent;
+  the GPC courtesy is for anyone who would rather not be in even a total.
+- Counts are tallied in memory and written every 30 seconds by a background
+  thread (and at exit), so a page view never waits on Turso. A restart can
+  lose that half minute. That was chosen over a write per request.
+- `/stats?token=...` shows the last 30 days as a plain table. It is a 404
+  when `STATS_TOKEN` is unset or the token is wrong (constant-time compare,
+  rate-limited, token redacted from the web server's request log), noindex,
+  no-store, and out of the sitemap and robots.
+- `/privacy` lists exactly what is counted. Third-party analytics, cookies and
+  anything per-person stay out; adding any of them is a new decision, here.
+
 ## 2026-11-19: Sound saved results are in the sitemap; the rest are noindex
 
 Reverses "the sitemap lists static pages only" (the audit decision that kept

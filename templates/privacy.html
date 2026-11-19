@@ -47,8 +47,14 @@
     <h2 class="section-label">Rate limits</h2>
     <p>To keep the free AI quota fair, the server counts checks, lookups and reports per IP address in memory, for a minute to an hour. Nothing is written to disk, and the count disappears when the server restarts.</p>
 
+    <h2 class="section-label">What we count</h2>
+    <p>To see whether the site is working and being used, we keep daily totals of a short, fixed list of things: page views (the home page, a saved result, and the about, method, corrections and privacy pages), claims submitted, results completed, shares (the share and copy link buttons), and errors. Errors are counted two ways: the ones the server saw (server errors, the AI provider being busy, unavailable or refusing our key, and PubMed not answering), and the kind of error screen your browser showed.</p>
+    <p>A count is a date, a name from that list and a number, for example the number of results completed on one day. It is not tied to an IP address, a user agent, a cookie, a visitor ID or any claim text, and nothing about you goes into it, so it cannot be traced back to you or told apart from anyone else's. Page views include search engines and link previews, because nothing tells them apart from people.</p>
+    <p>The totals are kept in the same database as the saved answers (Turso, or a file on the server when Turso is not set up), and only the person who runs the site can read them.</p>
+    <p>Most counts are made on our server as the page is served. Share clicks and the error kind are sent by the page itself, as one request that carries only the name of the count. If your browser sends the Global Privacy Control signal, the page does not send those, and the server does not count them if it receives one anyway.</p>
+
     <h2 class="section-label">No tracking</h2>
-    <p>No analytics scripts, no advertising, no cookies. Fonts and images are served from this site, not from a third party.</p>
+    <p>No analytics scripts, no third-party services, no advertising, no cookies. The daily totals above are the only thing counted, and they identify no one. Fonts and images are served from this site, not from a third party.</p>
 
     <p class="doc-back"><a class="tap" href="/">Back to Evident</a></p>
   </main>

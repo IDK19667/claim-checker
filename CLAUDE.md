@@ -43,9 +43,11 @@ build step is a feature: anyone can read the shipped file.
 5. Keep full study metadata (abstract, authors, publication types, data
    banks) flowing through the API and into `checks.studies_json`.
 6. "Not medical advice" stays visible on every screen.
-7. No classroom/teacher features; no accounts; no analytics; no cookies;
-   nothing that ties a check to a person. The privacy page says so, so
-   it has to stay true.
+7. No classroom/teacher features; no accounts; no cookies; no
+   third-party analytics and no per-person tracking; nothing that ties a
+   check to a person. The one thing counted is per-day aggregate totals
+   with no identifiers (the `counters` table, `/stats`), exactly as
+   `/privacy` describes. The privacy page says so, so it has to stay true.
 
 ## Working rules (design)
 

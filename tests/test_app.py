@@ -6110,5 +6110,20 @@ _after = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"
 t("stats: guessing is rate-limited per address (even the right token is refused for a while)", set(_fl) == {404} and _after == 404, (set(_fl), _after))
 os.environ.pop("STATS_TOKEN", None)
 
+
+# ---- /privacy says exactly what is counted -------------------------------------------------
+_pv = c.get("/privacy").get_data(as_text=True)
+_pt = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv).split())
+t("privacy: it names every kind of count (page views, claims submitted, results completed, shares, errors by kind)",
+  all(x in _pt for x in ("What we count", "page views", "claims submitted", "results completed", "shares", "errors",
+                         "server errors", "PubMed not answering", "the kind of error screen")), _pt[:200])
+t("privacy: it says a count is per day with no IP address, user agent, cookie, visitor ID or claim text, where it is kept, and the GPC courtesy",
+  all(x in _pt for x in ("daily totals", "IP address, a user agent, a cookie, a visitor ID or any claim text", "same database as the saved answers",
+                         "Global Privacy Control")) and "No tracking" in _pt and "no cookies" in _pt)
+t("privacy: it has no dash", not _DASH.search(_pt))
+_pc = (ROOT / "CLAUDE.md").read_text()
+t("CLAUDE.md non-negotiable 7 allows only per-day aggregate counts with no identifiers", "no\n   third-party analytics and no per-person tracking" in _pc
+  and "no analytics; no cookies" not in _pc and "per-day aggregate totals" in _pc)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
