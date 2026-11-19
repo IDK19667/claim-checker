@@ -1902,9 +1902,15 @@ _UNTESTED = re.compile(
 
 
 def never_dropped(sentence: str, who: str = "") -> bool:
-    """A caution about harm or a statement that the claim went untested: kept
-    if it fails its sources, without naming a study."""
-    return bool(is_warning(sentence, who) or _UNTESTED.search(_REF.sub(" ", sentence or "")))
+    """Whether a sentence that fails its sources is kept anyway. Only a
+    statement that the claim went untested, with no harm named in it, is: it asserts an absence no study
+    could support. A warning of harm is not. Five rounds of word lists could
+    not tell every warning from every reassurance, so a sentence no cited
+    study supports is removed, even a warning. is_warning stays as the old
+    classifier, used by tests and no longer by the page."""
+    body = _REF.sub(" ", sentence or "")
+    return bool(_UNTESTED.search(body)
+                and not (_HARM_WORDS.search(body) or HARM.search(body) or _PROHIBITION.search(body)))
 
 
 def uncited(sentence: str) -> str:
@@ -2267,9 +2273,8 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: st
       no word for is taken out, not the whole line; on the "does not apply
       to" line (`who="not"`), the group and clause rules do not run.
 
-    A sentence that fails these checks goes, unless it is a caution about
-    harm (is_warning: names a harm or forbids a use, with nothing softening it) or says the
-    claim was not tested. That one stays, naming no study, bracketed or
+    A sentence that fails these checks goes, even a warning of harm, unless it
+    says the claim was not tested. That one stays, naming no study, bracketed or
     inline (unattributed), so none is credited with it. The one exception
     is a study not relied on that the sentence names inline, when what it
     is credited with passes: that cannot come off without a rewrite, so the
@@ -2296,8 +2301,8 @@ def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: st
         if held:
             kept.append(held)
             continue
-        # It failed. Only a caution (or a statement that the claim went
-        # untested) stays, and then it names no study.
+        # It failed. Only a statement that the claim went untested stays,
+        # and then it names no study.
         if not never_dropped(sentence, who or ""):
             continue
         def passes(clause: str) -> bool:

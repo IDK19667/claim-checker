@@ -5069,8 +5069,8 @@ t("F3: a who-line citing a study not relied on is removed, an honest absence is 
   _f3r["breakdown"]["not_applies_to"])
 t("F3: 'still open' is never touched",
   _f3r["still_open"] == "Whether it lasts (Study 3).", _f3r["still_open"])
-t("F3: a safety warning is never dropped for citing a study not relied on",
-  "injure" in breakdown.held_to_sources(
+t("F3: a warning no cited study supports is removed, like any other sentence",
+  "injure" not in breakdown.held_to_sources(
       "Undiluted vinegar can injure the throat (Study 3).", _f3s, {1, 2}))
 t("F3: with nothing relied on, the reasons studies were set aside stay",
   breakdown.held_to_sources("Mice gained less fat (Study 3).", _f3s, set())
@@ -5197,8 +5197,10 @@ _HARMS = {
 }
 for _hin, _hout in _HARMS.items():
     _hgot = breakdown.held_to_sources(_hin, _h8, {1, 2})
-    t(f"fix 1: a harm warning stays, at most losing a citation of a study not relied on: {_hin[:48]}",
-      _hgot == _hout, _hgot)
+    # Q8: an unsupported warning is removed too. The old expected text stays in
+    # the table as the record of what the retired caution rule kept.
+    _hok = "injure" not in _hgot and "Antibiotics" not in _hgot and "Alcohol" not in _hgot and "milk" not in _hgot and "abnormal" not in _hgot and "unsafe" not in _hgot and "stop their" not in _hgot and "burned" not in _hgot
+    t(f"fix 1: a warning no cited study supports is removed: {_hin[:48]}", _hok, _hgot)
 for _hin in ["Most acute nose and throat infections are caused by viruses, not bacteria (Study 3)."]:
     t(f"fix 1 (fifth review: softened or negated, so now dropped): {_hin[:48]}",
       breakdown.held_to_sources(_hin, _h8, {1, 2}) == "")
@@ -5206,7 +5208,7 @@ t("fix 1: the harm rule also holds inside the breakdown",
   breakdown.hold_breakdown({"says": ["Antibiotics should not be used for the common cold or influenza (Study 3)."],
                             "evidence": [], "parts": [], "strength": "", "effect_size": "",
                             "applies_to": "", "not_applies_to": "", "unknowns": ""},
-                           _h8, {1, 2})["says"] == ["Antibiotics should not be used for the common cold or influenza."])
+                           _h8, {1, 2})["says"] == [])
 
 # ---- Review fix 2: the two "who" lines, and untested claims ----------------------
 _na = ("Heavy drinkers, people with contraindications to alcohol, and those outside the "
@@ -5283,9 +5285,9 @@ t("fix 6: /method says the prose check covers the explanation and breakdown, not
   "In the explanation and the breakdown, though not in the short answer" in _met6)
 t("fix 6: /method says guidance can decide some claims with no study cited, and never says 'safe' alone",
   "even when no study is cited" in _met6 and "never on its own that something is safe" in _met6)
-t("fix 6: the harm sentence on /method is backed by the gate",
-  "nothing softens it" in _met6 and "without naming any study" in _met6
-  and breakdown.held_to_sources("It is unsafe in pregnancy (Study 3).", _h8, {1, 2}) == "It is unsafe in pregnancy.")
+t("fix 6: the removal sentence on /method is backed by the gate",
+  "even a warning" in _met6
+  and breakdown.held_to_sources("It is unsafe in pregnancy (Study 3).", _h8, {1, 2}) == "")
 t("fix 6: /about names the guidance exception instead of 'whatever the model wrote'",
   "whatever the model wrote" not in _abt6 and "without a study" in _abt6)
 t("fix 6: guidance really can stamp a forgo-treatment claim with nothing cited (the exception /method states)",
@@ -5527,15 +5529,19 @@ t("second fix 3: substrings are not harm words, and a hazard word needs a warnin
   and not breakdown.is_warning("Children with infections lost weight.")
   and breakdown.is_warning("Raw milk is linked to outbreaks.") and breakdown.is_warning("St John's wort can interact with warfarin.")
   and breakdown.is_warning("Bacterial infections such as sinusitis.", who="not"))
-for _w3 in ["It is unsafe in pregnancy (Study 1).", "People with diabetes should not stop their medicine (Study 1).",
-            "Undiluted vinegar can injure the throat in children (Study 2).",
+for _w3 in ["It is unsafe in pregnancy (Study 1).", "People with diabetes should not stop their medicine (Study 1)."]:
+    t(f"second fix 3 (Q8: now removed): an unsupported warning goes: {_w3[:44]}", _k3(_w3) == "", _k3(_w3))
+for _w3 in ["Undiluted vinegar can injure the throat in children (Study 2).",
             "Undiluted vinegar can injure the oesophagus (Study 2).",
             "Neither tested whether diabetes went away, and Study 2 is a reminder that undiluted vinegar can injure the oesophagus."]:
     _o3 = _k3(_w3)
-    t(f"second fix 3: a real warning stays on the page: {_w3[:44]}",
-      _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", _o3).rstrip(".") == _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", _w3).rstrip("."), _o3)
-t("second fix 3: a warning with a figure its study lacks keeps the warning and loses the citation",
-  _k3("Vinegar burned the throat of 300 adults (Study 1).") == "Vinegar burned the throat of 300 adults.")
+    t(f"second fix 3 (Q8): cited to a study not relied on, so removed: {_w3[:44]}", _o3 == "", _o3)
+t("second fix 3 (Q8): a warning its relied-on study supports is untouched",
+  _k3("A woman had oesophageal injury after drinking undiluted vinegar (Study 1).")
+  == "A woman had oesophageal injury after drinking undiluted vinegar (Study 1).",
+  _k3("A woman had oesophageal injury after drinking undiluted vinegar (Study 1)."))
+t("second fix 3: a warning with a figure its study lacks is removed (Q8)",
+  _k3("Vinegar burned the throat of 300 adults (Study 1).") == "")
 _ORIG17 = [
     ("Heavy drinkers, people with contraindications to alcohol, and those outside the studied age ranges (Study 1).", "not"),
     ("Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).", ""),
@@ -5552,7 +5558,10 @@ _ORIG17 = [
 ]
 _bare3 = lambda x: _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", x).replace("Study 6, Study 8", "").rstrip(". ")
 _lost3 = [x for x, w in _ORIG17 if _bare3(breakdown.held_to_sources(x, _h8, {1, 2}, who=w)) != _bare3(x)]
-t("second fix 3: every originally dropped warning from the review still stays on the page", not _lost3, _lost3)
+t("second fix 3 (Q8): every warning from the review that no study supports is now removed",
+  all(_bare3(breakdown.held_to_sources(x, _h8, {1, 2}, who=w)) == "" for x, w in _ORIG17
+      if not x.startswith(("Heavy drinkers", "People with chronic", "Men, people", "Bacterial infections"))
+      and "Patients with other" not in x), _lost3)
 
 # ---- Second review, optional: free-tier wording only on Gemini; /about says what is sent
 _og_prov = verdict.provider
@@ -5595,8 +5604,7 @@ _w4 = {"Study 1 found vinegar can burn the throat in 5000 children.": "Vinegar c
            "Raw milk can carry harmful bacteria and caused 40 outbreaks."}
 for _wi, _wo in _w4.items():
     _go = breakdown.held_to_sources(_wi, _p3st, {1, 2})
-    t(f"third review: a real warning named inline keeps the hazard, credits no study with the figure: {_wi[:40]}",
-      _go == _wo and not breakdown.refs(_go, 2), _go)
+    t(f"third review (Q8): an inline warning its study does not carry is removed: {_wi[:40]}", _go == "", _go)
 t("third review: a supported inline warning is left exactly as written",
   breakdown.held_to_sources("Study 2 is a reminder that undiluted vinegar can injure the oesophagus.", _p3st, {1, 2})
   == "Study 2 is a reminder that undiluted vinegar can injure the oesophagus.")
@@ -5664,8 +5672,8 @@ t("fourth review: taking out the naming never leaves a clause without a verb",
   == "It can cause liver injury."
   and breakdown.unattributed("Study 1 found vinegar can burn the throat in 5000 children.")
   == "Vinegar can burn the throat in 5000 children.")
-t("fourth review: /method says a failing sentence stays only as a caution, naming no study",
-  "nothing softens it" in c.get("/method").get_data(as_text=True))
+t("fourth review (Q8): /method says an unsupported sentence is removed, even a warning",
+  "even a warning" in c.get("/method").get_data(as_text=True))
 
 # ---- Fifth review: a failing sentence stays only if it names a harm (or forbids a use) and nothing softens it
 # Every sentence below cites Study 1 and fails it (a group or figure the record lacks), so it is
@@ -5692,8 +5700,8 @@ _KEEP5 = ["Deaths occurred in 3 children (Study 1).",
           "Hospitalisation was needed for 90 children (Study 1)."]
 for _x5 in _KEEP5:
     _o = _K5(_x5)
-    t(f"fifth review: kept, naming no study: {_x5[:50]}",
-      _o == breakdown.uncited(_x5) and not breakdown.refs(_o, 3) and breakdown.is_warning(_x5), _o)
+    t(f"fifth review (Q8: no longer kept): an unsupported warning is removed: {_x5[:50]}",
+      _o == "" and breakdown.is_warning(_x5), _o)
 _DROP5 = ["It caused no birth defects in 9,000 pregnant women (Study 1).",
           "It may cause fewer side effects in 9,000 children than placebo (Study 1).",
           "Bleeding was not increased in 9,000 pregnant women (Study 1).",
@@ -5733,7 +5741,7 @@ for _x6 in ["It can cause liver injury in 9,000 children (Study 1).",
             "Kidney stones formed in 25 men aged 80 (Study 1).",
             "Addiction and cramps were seen in 500 teenagers (Study 1).",
             "The overdose killed two children (Study 1)."]:
-    t(f"sixth round: kept, naming no study: {_x6[:50]}", _K5(_x6) == breakdown.uncited(_x6), _K5(_x6))
+    t(f"sixth round (Q8: no longer kept): an unsupported warning is removed: {_x6[:50]}", _K5(_x6) == "", _K5(_x6))
 for _x6 in ["It can stop bleeding in 9,000 children (Study 1).",
             "It can help prevent heart attacks in 9,000 people (Study 1).",
             "It can be taken without harm by 9,000 children (Study 1).",
@@ -5759,8 +5767,9 @@ t("fifth review: a sentence that passes its sources is untouched, even if soften
 t("fifth review: the 'does not apply to' line keeps a harm word but not a softened one",
   breakdown.is_warning("People who may have bleeding disorders.", who="not") is False
   and breakdown.is_warning("People with bleeding disorders.", who="not"))
-t("fifth review: /method says a failing sentence stays only if it names a harm and nothing softens it",
-  "nothing softens it" in c.get("/method").get_data(as_text=True))
+t("fifth review (Q8): /method says a failing sentence is removed, even a warning, bar an untested statement",
+  "even a warning of harm" in c.get("/method").get_data(as_text=True)
+  and "nothing softens it" not in c.get("/method").get_data(as_text=True))
 
 # Reassurances by absence, denial or dismissal: all dropped.
 for _x7 in ["Kidney harm was absent in all 200 participants.", "Birth defects were ruled out.",
@@ -5788,25 +5797,19 @@ for _x8 in ["Miscarriages were scarcely reported.", "Deaths were practically non
             "Burns happened in up to 4 children."]:
     t(f"minimiser or rarity figure is dropped: {_x8[:50]}", not breakdown.is_warning(_x8), _x8)
 
-# Blind sentences: written by someone who never saw the caution rule.
-_blind = json.loads((pathlib.Path(__file__).parent / "blind_caution_sentences.json").read_text())
-_blind_strip = lambda s: _re.sub(r"\s*\(Study[^)]*\)\s*$", "", s).strip()
-# Accepted loss of the fail-safe: "treatment" carries the softener "treat", so this true harm is dropped.
-_BLIND_ACCEPTED_LOSS = "Heart attacks occurred more often in the treatment group of 4,000 people."
-_blind_kept = _blind_dropped_ok = 0
-for _it in _blind["keep"]:
-    _tx = _blind_strip(_it["text"])
-    _want = _tx != _BLIND_ACCEPTED_LOSS
-    _got = breakdown.is_warning(_tx)
-    _blind_kept += bool(_got)
-    t(f"blind keep: {_tx[:60]}", _got is _want, _tx)
-for _it in _blind["drop"]:
-    _tx = _blind_strip(_it["text"])
-    _got = breakdown.is_warning(_tx)
-    _blind_dropped_ok += (not _got)
-    t(f"blind drop: {_tx[:60]}", _got is False, _tx)
-print(f"blind sentences: {_blind_kept} of {len(_blind['keep'])} harms kept, "
-      f"{len(_blind['drop']) - _blind_dropped_ok} of {len(_blind['drop'])} reassurances kept")
+# Blind sentences (round 8): 60 written by someone who never saw the rule, 30 warnings and
+# 30 reassurances. The word-list rule kept 1 reassurance, so it no longer decides what stays:
+# an unsupported sentence is removed, a warning included. Held to sources with no support,
+# none of the 60 may stay, and in particular no reassurance.
+_blind8 = json.loads((pathlib.Path(__file__).parent / "warning_blind_q8.json").read_text())
+_b8_st = [{"pmid": "1", "title": "Background", "abstract": "A narrative review.", "journal": "J", "year": "2020",
+           "publication_types": ["Review"], "authors": ["x"], "data_banks": None, "url": "u"}]
+_b8_kept = [x for x in _blind8 if breakdown.held_to_sources(x["text"].rstrip(".") + " (Study 1).", _b8_st, {2}) != ""]
+_b8_kept_r = [x["text"] for x in _b8_kept if x["kind"] == "reassurance"]
+t("blind q8: 0 of 30 reassurances kept", not _b8_kept_r and sum(x["kind"] == "reassurance" for x in _blind8) == 30, _b8_kept_r)
+t("blind q8: 0 of 60 unsupported sentences kept, warnings included", not _b8_kept, [x["text"] for x in _b8_kept])
+t("blind q8: never_dropped keeps none of the 60", not any(breakdown.never_dropped(x["text"]) for x in _blind8))
+print(f"blind sentences (q8): {len(_b8_kept)} of {len(_blind8)} kept, {len(_b8_kept_r)} reassurances kept")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
