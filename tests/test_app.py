@@ -5886,6 +5886,17 @@ _sc = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "How
 _sc_none = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "")
 t("share card: a check's still-open line is on the card, and a card without one is a different image", _sc != _sc_none)
 
+_so3 = "The long-term effect beyond twelve weeks is unknown. " * 5
+_i3 = _CI.open(_cio.BytesIO(og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, _so3))).convert("RGB")
+_i1 = _CI.open(_cio.BytesIO(og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "Short."))).convert("RGB")
+_dark = lambda im, y0, y1: sum(1 for y in range(y0, y1) for x in range(100, 1150, 2) if sum(im.getpixel((x, y))) < 300)
+_o3 = og._wrap(_cd, _so3, og._body(21), 1000, 3)
+t("share card: a long still-open line wraps to up to three lines before it truncates",
+  len(_o3) == 3 and og._wrap(_cd, _so3 * 3, og._body(21), 1000, 3)[-1].endswith("\u2026") and not _o3[-1].endswith("\u2026")
+  and _i3.size == (1200, 630) and _dark(_i3, 330, 560) > _dark(_i1, 330, 560), _o3)
+t("share card: three still-open lines leave the footer row clear",
+  not any(_i3.getpixel((x, y)) != (241, 242, 238) for y in range(560, 590) for x in range(64, 1136, 3)))
+
 # ---- Polish: sitemap, robots, canonical, noindex ---------------------------------------
 _gs = {"pmid": "S1", "title": "Garlic and colds", "abstract": "A randomized trial.", "journal": "J", "year": "2020",
        "publication_types": ["Randomized Controlled Trial"], "authors": ["x"], "data_banks": None, "url": "u"}

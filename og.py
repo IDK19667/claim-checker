@@ -209,7 +209,7 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
         for line in _wrap(d, tldr, body, W - pad * 2, 2):
             d.text((pad, y), line, font=body, fill=INK)
             y += 37
-    # What the check could not settle, in one line: every share says it.
+    # What the check could not settle: every share says it.
     still = " ".join((still_open or "").split())
     if still:
         y += 6
@@ -217,9 +217,12 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
         lab_font = _mono(15)
         lab_w = int(d.textlength(lab, font=lab_font)) + 14
         d.text((pad, y + 7), lab, font=lab_font, fill=INK_3)
-        for line in _wrap(d, still, _body(21), W - pad * 2 - lab_w, 1):
+        # Up to three lines, as many as fit above the footer; only then an ellipsis.
+        room = max(1, min(3, (H - 64 - y) // 29))
+        for line in _wrap(d, still, _body(21), W - pad * 2 - lab_w, room):
             d.text((pad + lab_w, y), line, font=_body(21), fill=INK_2)
-        y += 34
+            y += 29
+        y += 5
     if receipt and y < H - 120:
         label_r, year, title = receipt
         y += 8
