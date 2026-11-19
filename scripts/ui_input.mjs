@@ -103,6 +103,26 @@ await test("suggestions: the list says a pick opens the saved answer, and a pick
   must(/"cached":\s*true/.test(bodies[0]), "the pick did not come from the saved answer");
 });
 
+// ---- 4. the field's border on the dark ground ------------------------------------
+
+await test("field border: 3:1 or better against the night ground and the field fill, at both widths", async (page) => {
+  for (const w of [1440, 390]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    const m = await page.evaluate(() => {
+      const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const ratio = (a, b) => { const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+      const box = document.querySelector(".claim-box");
+      const cs = getComputedStyle(box);
+      let ground = box.parentElement;
+      while (ground && /rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(ground).backgroundColor)) ground = ground.parentElement;
+      return { width: cs.borderTopWidth, style: cs.borderTopStyle, vsGround: ratio(cs.borderTopColor, getComputedStyle(ground).backgroundColor), vsFill: ratio(cs.borderTopColor, cs.backgroundColor) };
+    });
+    must(m.style === "solid" && parseFloat(m.width) >= 1, `no visible border at ${w}: ${JSON.stringify(m)}`);
+    must(m.vsGround >= 3 && m.vsFill >= 3, `border contrast at ${w}: ${JSON.stringify(m)}`);
+  }
+});
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
