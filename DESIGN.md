@@ -552,7 +552,15 @@ the shape of the evidence before opening a check.
   and plainly not yet open.
 - **The study sheet:** a panel that rises from the foot of the screen
   over a scrim, `--r-panel` at its top corners. Alone in that,
-  the only shadows in the design.
+  the only shadows in the design. A bar sticks to its top with the only
+  Close (a word, 44px tall) while the abstract scrolls.
+- **The share bar (phones):** fixed to the foot, but only once the short
+  answer has scrolled above the top edge. It never covers the answer on
+  first view, and goes again when the reader scrolls back up to it.
+- **Failures:** an error is a title naming the problem (invalid claim, no
+  connection, a limit, the checker) and a line saying what to do. The
+  kind follows the status the server sent. No studies is an answer, not
+  an error: the result says nothing on PubMed matched and what to try.
 - **Documents** (privacy, the 404): the masthead, a 44px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
   again and the latest checks.
