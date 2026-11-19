@@ -551,6 +551,8 @@ function renderResult(data) {
 
   $("stamp").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
   $("doctor-line").hidden = false;
+  $("review-line").textContent = data.review_line || "";
+  $("review-line").hidden = !data.review_line;
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
   $("tldr").textContent = data.tldr || "";
@@ -663,6 +665,7 @@ function renderPending(claim) {
   if (who) who.hidden = true;
   document.querySelector(".verdict-block").dataset.verdict = "";
   $("doctor-line").hidden = true;
+  $("review-line").hidden = true;
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
   $("feedback").hidden = true;

@@ -457,43 +457,12 @@ def favicon():
     return resp
 
 
-# Who runs Evident. Each is shown on /about only when set, so the page never
-# carries a placeholder and never says anything the owner has not decided.
-ABOUT = {
-    "owner": os.environ.get("EVIDENT_OWNER", "Dhruva").strip() or None,
-    "who": os.environ.get("EVIDENT_WHO", "").strip() or None,
-    "country": os.environ.get("EVIDENT_COUNTRY", "").strip() or None,
-    "funding": os.environ.get("EVIDENT_FUNDING", "").strip() or None,
-    "contact": os.environ.get("EVIDENT_CONTACT", "").strip() or None,
-}
-
-
-# Where removal and correction requests go. A plain mailto link, no form: the
-# owner sets this address up, and EVIDENT_EMAIL changes it without a deploy.
-CONTACT_EMAIL = os.environ.get("EVIDENT_EMAIL", "hello@checkevident.com").strip() or None
-
-
-@app.route("/about")
-def about():
-    return render_template("about.html", base_url=_base_url(), provider=verdict.provider_label(),
-                           about=ABOUT, labels=VERDICT_LABELS, contact_email=CONTACT_EMAIL)
-
-
 # The method page's own version. Bump both when a rule it describes changes.
 METHOD_VERSION = "2"
 METHOD_CHANGED = "17 November 2026"
 
-
-@app.route("/method")
-def method():
-    return render_template("method.html", base_url=_base_url(), provider=verdict.provider_label(),
-                           labels=VERDICT_LABELS, version=METHOD_VERSION, changed=METHOD_CHANGED,
-                           max_studies=MAX_STUDIES)
-
-
-@app.route("/corrections")
-def corrections():
-    return render_template("corrections.html", base_url=_base_url(), contact_email=CONTACT_EMAIL)
+# Where removal and correction requests go. A plain mailto link, no form.
+CONTACT_EMAIL = os.environ.get("EVIDENT_EMAIL", "hello@checkevident.com").strip() or None
 
 
 @app.route("/privacy")
@@ -512,7 +481,10 @@ _INFO_PAGES = {
 def _info(slug):
     title, desc = _INFO_PAGES[slug]
     return render_template("info.html", slug=slug, title=title, desc=desc,
-                           base_url=_base_url(), provider=verdict.provider_label())
+                           base_url=_base_url(), provider=verdict.provider_label(),
+                           labels=VERDICT_LABELS, max_studies=MAX_STUDIES,
+                           version=METHOD_VERSION, changed=METHOD_CHANGED,
+                           contact_email=CONTACT_EMAIL)
 
 
 @app.route("/about")
@@ -681,6 +653,50 @@ def _original_check_date(claim, cached_at):
     return first
 
 
+def _from_guidance(tldr) -> bool:
+    """A stamp set by verdict.follow_guidelines: its takeaway begins with the
+    guidance lead. /method says the verdict follows that guidance, so no
+    output-time cap may overrule it."""
+    return str(tldr or "").startswith(verdict.GUIDELINE_LEAD)
+
+
+def _on_gemini() -> bool:
+    """Whether checks go to Gemini, whose free tier terms the home page and
+    the privacy page warn about. With no key set the warning stays: it is
+    the cautious reading, and the site cannot run checks then anyway."""
+    try:
+        return verdict.provider() == "gemini"
+    except RuntimeError:
+        return True
+
+
+def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool:
+    """Whether a "true" has to be shown as "complicated": exactly the cap a
+    fresh check gets in verdict.py (the lead review, read strictly, rates
+    itself low or very low, or only small and pilot trials), and nothing
+    looser. A line whose range starts low ("Low to moderate", "Low to high")
+    is not a low rating: a review that rates several outcomes differently
+    gives that range, and capping on it turned well-supported vaccine
+    answers into "It's complicated, but the certainty is low"."""
+    if verdict_value != "true" or not cited or _from_guidance(tldr):
+        return False
+    comparative = bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or ""))
+    return bool(evidence.certainty_cap(studies, cited, comparative, outcome))
+
+
+def _listed(v: dict) -> dict:
+    """A recent-checks entry with the stamp the page itself would show."""
+    cited = set(v.get("cited") or [])
+    outcome = _outcome_group(v.get("search_query"))
+    try:
+        if _capped_true(v["verdict"], v["claim_text"], v["studies"], cited, outcome, v.get("tldr")):
+            return dict(v, verdict="complicated")
+    except Exception:  # noqa: BLE001
+        if v.get("verdict") == "true" and not _from_guidance(v.get("tldr")):
+            return dict(v, verdict="complicated")
+    return v
+
+
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None):
@@ -761,6 +777,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # The first real check of this claim, only when it was on an earlier
         # day than cached_at (the last re-check). Otherwise null.
         "first_checked_at": _original_check_date(claim, cached_at) if cached_at else None,
+        "review_line": _review_line(cached_at, studies, cited),
         "share_url": f"{base_url}/?q={quote(claim)}",
         "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(search_query or claim)}",
         # Counts the reader can check us on, computed from PubMed's own

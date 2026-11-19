@@ -1037,7 +1037,7 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .doc a.tap::after { content: none; }
 .doc p { font-size: 16px; line-height: 1.65; margin: 0 0 12px; }
 .doc .lede { margin: 14px 0 12px; }
-.doc p.meta { font-size: 11px; line-height: 1.4; margin: 0 0 10px; }
+.doc p.meta { font-size: 13px; line-height: 1.4; margin: 0 0 10px; }
 .doc .ledger-list { margin-top: 12px; }
 /* A layout wrapper around the masthead and the ask view: the night ground
    on every screen. On the result and error views the masthead stands alone

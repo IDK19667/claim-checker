@@ -4826,6 +4826,7 @@ t("suggest: near-duplicate wordings fold into one row that names the other wordi
   [r["claim_text"] for r in _g][0] == "Creatine builds strength" and len(_g) == 2
   and _g[0]["similar"] == ["Creatine improves strength.", "Creatine increases strength"], _g)
 t("  a different claim is its own row and has no 'similar'", "similar" not in _g[1])
+import sqlite3 as _sqlite_b  # noqa: E402
 _sq = suggest_mod.same_question
 _c = lambda text, v="true": {"claim_text": text, "verdict": v}
 t("  the same words in another case, order or punctuation are one question",
@@ -5091,14 +5092,10 @@ t("F7: home, a result and the privacy page all link to /about",
   'href="/about"' in c.get("/").get_data(as_text=True)
   and 'href="/about"' in c.get("/privacy").get_data(as_text=True)
   and 'href="/about"' in c.get("/?q=conclusions+render").get_data(as_text=True))
-_old_about = dict(appmod.ABOUT)
-appmod.ABOUT.update(owner="Test Owner", country="Testland")
-_abo = c.get("/about").get_data(as_text=True)
-appmod.ABOUT.clear(); appmod.ABOUT.update(_old_about)
-t("F7: an owner set in config is named, and none is named until then",
-  "Evident is run by Test Owner." in _abo and "It is based in Testland." in _abo
-  and "Evident is run by Dhruva." in _abt and "Dhruva" in _abt.split("Who checks a result")[0]
-  and "It is based in" not in _abt)
+# main's rebuilt /about is a fixed page (no env-configured owner block): it
+# names Dhruva as the person who runs Evident, and says so before the contact line.
+t("F7: /about names Dhruva as the owner, and no owner-config block is promised",
+  "made and run by Dhruva" in _abt and "It is based in" not in _abt)
 
 t("contact: /about and /corrections give hello@checkevident.com as a plain mailto link, with no form",
   'href="mailto:hello@checkevident.com"' in _abt and 'href="mailto:hello@checkevident.com"' in c.get("/corrections").get_data(as_text=True)
@@ -5307,7 +5304,7 @@ def _work8(n):
     """VM steps and statements for recent_verdicts(n) and all_claims() on a fresh n-row table."""
     _old_path, _old_conn = db.DB_PATH, db.get_conn
     db.DB_PATH = os.path.join(tempfile.mkdtemp(), "f8.db")
-    _con = _sq.connect(db.DB_PATH); _con.executescript(db.SCHEMA)
+    _con = _sqlite_b.connect(db.DB_PATH); _con.executescript(db.SCHEMA)
     _con.executemany("INSERT INTO verdict_cache (claim_key, claim_text, verdict, explanation, created_at) "
                      "VALUES (?, ?, 'complicated', 'x', ?)",
                      [(f"k{i}", f"Claim {i}", f"2026-01-01T00:00:{i % 7:02d}") for i in range(n)])
@@ -5315,7 +5312,7 @@ def _work8(n):
     tally = {"steps": 0, "sql": []}
     @_cl8.contextmanager
     def _counting():
-        conn = _sq.connect(db.DB_PATH); conn.row_factory = _sq.Row
+        conn = _sqlite_b.connect(db.DB_PATH); conn.row_factory = _sqlite_b.Row
         conn.set_trace_callback(tally["sql"].append)
         def _tick():
             tally["steps"] += 1
@@ -5455,7 +5452,7 @@ t("extra: the server-rendered page then hides the research block instead of prin
 
 # ---- Review extra: /corrections lists everything a report stores ----------------
 _cor = c.get("/corrections").get_data(as_text=True)
-_fbcols = {r[1] for r in _sq.connect(os.environ["DB_PATH"]).execute("pragma table_info(feedback)")}
+_fbcols = {r[1] for r in _sqlite_b.connect(os.environ["DB_PATH"]).execute("pragma table_info(feedback)")}
 t("extra: /corrections says the time of a report is stored, as the feedback table does",
   "created_at" in _fbcols and "the date and time of the report" in _cor
   and _fbcols <= {"id", "claim_key", "verdict", "helpful", "note", "created_at"}, _fbcols)

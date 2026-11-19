@@ -240,19 +240,23 @@
       <div class="trust-row">
         <h3 class="trust-q">Is an AI making this up?</h3>
         <div class="trust-a">
-          <p>An AI model ({{ provider }}) reads those abstracts and writes the verdict. It can only cite studies it was shown: the code checks every citation against that list. A verdict with no citations, or one resting only on case reports or animal and lab studies, is turned into “{{ labels.insufficient }}” before you see it. It can still misread an abstract, which is why every study it used is one tap away.</p>
+          <p>An AI model{% if provider != "an AI model API" %} ({{ provider }}){% endif %} reads those abstracts and writes the verdict. It can only cite studies it was shown: the code checks every citation against that list. A verdict with no citations, or one resting only on case reports or animal and lab studies, is turned into “{{ labels.insufficient }}” before you see it. It can still misread an abstract, which is why every study it used is one tap away.</p>
         </div>
       </div>
       <div class="trust-row">
         <h3 class="trust-q">Is it biased? Who made it?</h3>
         <div class="trust-a">
-          <p>Evident is an independent project. It shows no ads, sells nothing and has no accounts, so no verdict makes it money. Its rules lean towards caution: “{{ labels.complicated }}” and “{{ labels.insufficient }}” are ordinary answers here, and a confident one needs studies behind it. Research has blind spots of its own, so every verdict also says what is still open.</p>
+          <p>Evident is an independent project. It shows no ads, has no accounts and sells no data, so no verdict makes it money. Its rules lean towards caution: “{{ labels.complicated }}” and “{{ labels.insufficient }}” are ordinary answers here, and a confident one needs studies behind it. Research has blind spots of its own, so every verdict also says what is still open. <a href="/about">Who runs Evident</a></p>
         </div>
       </div>
       <div class="trust-row">
         <h3 class="trust-q">Is it free?</h3>
         <div class="trust-a">
+          {%- if on_gemini %}
           <p>Yes. No account, no paywall and no ads. It runs on the free tier of an AI service, so on a busy day it can reach its limit, and the page then says so and when to try again. A claim someone has already checked opens straight away. On that free tier, Google's terms let it use the text you paste to improve its products, so leave out anything personal.</p>
+          {%- else %}
+          <p>Yes. No account, no paywall and no ads. On a busy day it can reach the usage limit of the AI service it uses, and the page then says so and when to try again. A claim someone has already checked opens straight away.</p>
+          {%- endif %}
         </div>
       </div>
       <div class="trust-row">
@@ -331,6 +335,9 @@
               <p class="assess-row"><span class="assess-label">Confidence</span><span class="confidence" id="confidence"><mark>{% if result %}{{ confidence_line(result) }}{% endif %}</mark> <button type="button" class="what link-btn" id="meter">What does this mean?</button></span></p>
             </div>
             <p class="doctor-line" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
+            {# When the check ran and the years of the studies it relied on,
+               worded once in app.py (_review_line). #}
+            <p class="case review-line" id="review-line"{% if not result or not result.review_line %} hidden{% endif %}>{% if result %}{{ result.review_line }}{% endif %}</p>
           </section>
 
           {# Always visible, never folded. Every sentence here has already
@@ -338,14 +345,13 @@
              carries no figure the abstracts do not have, and is short enough
              to read. Picked in breakdown.says from prose that already
              exists, so the block costs no extra model call. #}
-          <section class="says-sec" id="says-sec"{% if not result %} hidden{% endif %}>
+          {%- set says_lines = ((bv.says if bv else [result.explanation]) | select | list) if result else [] %}
+          <section class="says-sec" id="says-sec"{% if not says_lines %} hidden{% endif %}>
             <p class="section-label">What the research says</p>
             <div class="says" id="says">
-              {%- if result %}
-              {%- for line in (bv.says if bv else [result.explanation]) %}
+              {%- for line in says_lines %}
               <p class="says-p">{{ line }}</p>
               {%- endfor %}
-              {%- endif %}
             </div>
           </section>
 
@@ -557,7 +563,7 @@
         <form class="report-form" id="report-form" hidden novalidate>
           <label for="report-note">What is wrong with this answer? (optional)</label>
           <textarea id="report-note" rows="3" maxlength="280" autocomplete="off"></textarea>
-          <p class="fine">Leave out anything personal. Reports are anonymous and tied only to the claim.</p>
+          <p class="fine">Leave out anything personal. Reports are anonymous and tied only to the claim. <a href="/corrections">How corrections work</a></p>
           <div class="report-actions">
             <button class="secondary" id="report-send" type="submit">Send report</button>
             <button class="ghost" id="report-cancel" type="button">Cancel</button>
@@ -659,6 +665,7 @@
         <li><b>Low certainty:</b> the review behind it rates its own evidence low, or every trial is small or a pilot.</li>
       </ul>
       <p class="fine">The highlighted line says what that evidence shows about the claim itself. Strong evidence of a small effect is not strong evidence for a cure.</p>
+      <p class="fine"><a href="/method">The full method, and what Evident cannot do</a></p>
       <p class="fine">Not medical advice. The model can misread an abstract, and PubMed doesn't index everything. Read the studies. Talk to a clinician about your own health.</p>
       <div class="sheet-actions">
         <button class="primary" type="button" data-close>Got it</button>

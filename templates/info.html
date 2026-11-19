@@ -36,28 +36,64 @@
     <p>Evident is an independent project made and run by Dhruva. It shows no ads and has no accounts.</p>
     <h2 class="section-label">What it does</h2>
     <p>You paste a claim. Evident searches PubMed, reads the abstracts of the closest studies, and writes a verdict that cites only studies it was shown. Every verdict says what is still open. "It's complicated" and "Not enough evidence" are ordinary answers.</p>
-    <h2 class="section-label">What it does not do</h2>
-    <p>It does not diagnose, treat or advise. It can misread an abstract, and PubMed does not index everything. Read the studies it lists, and take your own health questions to a clinician.</p>
+    <h2 class="section-label">Who checks a result</h2>
+    <p>No doctor or scientist reviews each result before you see it. Each verdict is written by an AI model from the studies it was shown, and checked by rules in the code before it reaches the page. <a href="/method">How a verdict is reached</a></p>
+    <h2 class="section-label">Money</h2>
+    <p>This site shows no ads, has no accounts and sells no data. It keeps no record of who you are, so there is no data about you to sell. Each verdict is written by an outside AI service, which is sent the text of the claim and the published details of the studies, such as their titles and abstracts, and nothing about you.</p>
+    <h2 class="section-label">What it will not do</h2>
+    <p>It does not diagnose, treat or advise. The code works to keep the answer no surer than the evidence: it lowers a “{{ labels.true }}” to “{{ labels.complicated }}, but the certainty is low” when the evidence's own certainty is low, and it removes sentences that its cited studies do not support, except plain warnings of harm, which it keeps without naming a study. It cannot promise that every sentence is right: it can misread an abstract, and PubMed does not index everything. A verdict may cite only studies the model was shown, and a verdict that cites none becomes “{{ labels.insufficient }}” in the code, with one exception: on a few claims where a wrong answer can hurt someone, plain advice from major health bodies can decide the verdict without a study. <a href="/method">Which claims, and how</a></p>
+    <p>Read the studies it lists, and take your own health questions to a clinician.</p>
     <h2 class="section-label">Contact</h2>
-    <p>Questions, corrections or ideas: <a href="mailto:hello@checkevident.com">hello@checkevident.com</a>.</p>
+    <p>Questions, corrections or ideas: <a href="mailto:hello@checkevident.com">hello@checkevident.com</a>. To report a wrong answer, use the button under any result. <a href="/corrections">How corrections work</a></p>
     {% elif slug == "method" %}
+    {# Every statement here must match the code. When a rule in pubmed.py,
+       verdict.py, evidence.py or breakdown.py changes what this page says,
+       change the page, bump METHOD_VERSION and METHOD_CHANGED in app.py, and
+       add the change to DECISIONS.md. #}
+    <p class="meta">Method version {{ version }}, last changed {{ changed }}</p>
     <h1 class="hero">Methodology</h1>
     <p class="lede">How a check works, step by step, and the rules the code enforces on every verdict.</p>
+
     <h2 class="section-label">The steps</h2>
-    <p><strong>Your claim becomes a search.</strong> An AI model ({{ provider }}) turns the claim into the terms researchers use.</p>
-    <p><strong>PubMed answers.</strong> Evident takes up to 8 of the closest matches, with their abstracts.</p>
-    <p><strong>The studies get weighed, not counted.</strong> A meta-analysis of many trials outranks one small pilot. A case report about one patient barely counts.</p>
-    <p><strong>The verdict is checked by code.</strong> A verdict can cite only studies it was shown. One with no citations, or resting only on case reports or animal and lab studies, becomes "Not enough evidence".</p>
-    <p><strong>Every verdict says what is still open.</strong> The last line names the gap: who the studies left out, how short they ran, or what finding would change the answer.</p>
-    <h2 class="section-label">Limits</h2>
-    <p>The model can misread an abstract, and PubMed does not index everything. Strong evidence of a small effect is not strong evidence for a cure.</p>
+    <ol class="steps">
+      <li><strong>Your claim becomes a search.</strong> An AI model{% if provider != "an AI model API" %} ({{ provider }}){% endif %} turns the claim into the terms researchers use, and Evident searches PubMed, the U.S. National Library of Medicine's index of medical research, for the most relevant records. If nothing matches, it tries once more with a broader search.</li>
+      <li><strong>It reads up to {{ max_studies }} abstracts.</strong> An abstract is the summary at the top of a paper. Evident reads the summary, not the full paper.</li>
+      <li><strong>Each study is sorted by its design,</strong> from PubMed's own labels, and by whether it was run in people or in animals or cells. Reviews that pool many studies and randomized trials count most; single case reports and opinion pieces count least.</li>
+      <li><strong>The AI model writes the verdict</strong> from those abstracts only, and must name the studies it relied on.</li>
+      <li><strong>The code checks the result.</strong> A citation must be one of the studies the model was shown. A verdict that cites none, or rests only on case reports or animal and lab studies, becomes “{{ labels.insufficient }}”, except in the cases of health guidance below. In the explanation and the breakdown, though not in the short answer, a sentence that leans on a study the verdict did not rely on, or gives a figure or a group of people its cited study does not mention, is removed before you see it. A sentence that fails these checks stays only if it names a harm, such as a death, an injury, a rash or a seizure, or tells people not to use something, and nothing softens it, or if it says the claim was not tested. Any softening or reassuring word, such as “may”, “rare”, “safe”, “fewer”, “reduced”, “help” or “treat”, and any “no”, “not” or “without” (except in an instruction such as “do not take”), sends it away with the rest. That means a careful warning worded that way can be lost, which we accept, because showing a false reassurance is worse. A sentence that stays does so without naming any study, so no study is credited with what its record does not say. The one exception is a sentence that names a study inside itself, such as “Study 4 is a reminder that …”: when that part is supported by the study it names, the naming stays. These checks run only on sentences that cite a study. A sentence that cites nothing is not checked against the sources, and if the verdict relied on no study at all, the text is left as it is.</li>
+      <li><strong>Every result says what is still open:</strong> who the studies left out, how short they ran, or what finding would change the answer.</li>
+    </ol>
+    <p>On claims where a wrong answer can hurt someone, such as medicines, vaccines, infections, cancer, pregnancy, children or stopping a treatment, the AI model is also asked what major health bodies such as the WHO, the CDC and the NHS advise. When that advice is plain and differs from the verdict, what happens depends on the claim. On a claim about stopping a treatment or a medicine curing something, advice that rejects the claim makes the verdict “{{ labels.false }}” even when no study is cited. On a pregnancy or child safety claim, plain advice decides a verdict that was “{{ labels.insufficient }}” or “{{ labels.complicated }}”: it can say something is not safe, or that a vaccine protects, but never on its own that something is safe. On other claims where studies were cited, the verdict follows it, and the short answer begins “Major health guidelines say:”. When the studies shown test nothing in people, the advice is added beside the verdict and the verdict stays. That is the model's account of the advice, not a quote from those bodies.</p>
+
+    <h2 class="section-label">How sure it is</h2>
+    <p>The Confidence line under the verdict says how strong the evidence is, from the designs of the studies the verdict relied on:</p>
+    <ul class="legend">
+      <li><b>Strong:</b> it rests on a meta-analysis, a systematic review, a randomized trial or a practice guideline. A review that pools only observational studies counts as moderate.</li>
+      <li><b>Moderate:</b> other clinical trials, observational studies or narrative reviews, or a study PubMed gives no design for.</li>
+      <li><b>Weak:</b> only case reports, letters, editorials or comments.</li>
+    </ul>
+    <p>When a review rates its own evidence, for example with GRADE or CINeMA, its words replace that one: high, moderate, low or very low certainty. The label is never higher than the lowest rating any review it relied on gives, and never higher than any certainty the result's own text states. It drops to low certainty when the main review rates its evidence low or puts the link down to other factors, or, with no review behind it, when every study is small, a pilot, paid for by the maker or has no group that went without. That cap changes the verdict itself, not only the label: a “{{ labels.true }}” whose evidence has low certainty is shown as “{{ labels.complicated }}, but the certainty is low”. A verdict that follows health guidance is not capped this way.</p>
+    <p>“{{ labels.false }}” needs studies that contradict the claim. A claim nothing tests in people is “{{ labels.insufficient }}”, never false. “{{ labels.complicated }}” is for real evidence that is mixed, partial or uncertain.</p>
+
+    <h2 class="section-label">What Evident cannot do</h2>
+    <ul class="legend">
+      <li>It reads summaries, and a summary can leave out or overstate a result.</li>
+      <li>It reads at most {{ max_studies }} studies, so it can miss one, including a newer one.</li>
+      <li>No doctor or scientist checks each result. Mistakes happen: report one with the button under the result. <a href="/corrections">How corrections work</a></li>
+      <li>It does not know your health. It is not medical advice.</li>
+    </ul>
     {% else %}
     <h1 class="hero">Corrections and contact</h1>
     <p class="lede">If a verdict looks wrong, say so. Corrections are how this gets better.</p>
     <h2 class="section-label">Report a wrong answer</h2>
-    <p>Use the report option under any verdict, or email <a href="mailto:hello@checkevident.com">hello@checkevident.com</a> with the claim and what looks wrong. Leave anything personal out.</p>
+    <p>Under every result there is a button, Report a wrong answer. You can add a short note saying what is wrong. You do not need to give a name or an email, and there is no account to sign in to. A report holds the claim, the verdict it got, your note if you wrote one, and the date and time of the report. Leave anything personal out of the note. A report is anonymous, so there is no way to reply to it.</p>
+    <p>A saved answer is not kept forever: when someone checks the same claim more than a day later, it is checked against PubMed again, so a newer study can change it.</p>
+    {% if contact_email %}
+    <h2 class="section-label">Ask for a correction or a removal</h2>
+    <p>To ask for a correction, or for a claim and its answer to be removed, email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. Say which claim, and what is wrong or why it should go. An email shares your address with us; the report button does not.</p>
     <h2 class="section-label">Contact</h2>
-    <p><a class="tap" href="mailto:hello@checkevident.com">hello@checkevident.com</a></p>
+    <p><a class="tap" href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+    {% endif %}
     {% endif %}
     <p class="doc-back"><a class="tap" href="/">Back to Evident</a></p>
   </main>
