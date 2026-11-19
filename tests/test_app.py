@@ -6024,5 +6024,53 @@ t("counts: Turso failing never raises from a count", True)
 os.environ.pop("TURSO_DATABASE_URL", None); os.environ.pop("TURSO_AUTH_TOKEN", None)
 db._http_post = _real_post; db._reset_turso_state()
 
+
+# ---- Error counts: server errors and provider failures, as per-day totals ----------------------
+_b = _tot()
+fg.models.script = [errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})] * 3
+P("count err 429", ip="9.9.8.1")
+fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})] * 3
+P("count err 503", ip="9.9.8.2")
+fg.models.script = [errors.ClientError(418, {"error": {"message": "teapot", "status": "TEAPOT"}})] * 3
+P("count err other", ip="9.9.8.3")
+fg.models.script = [errors.ClientError(400, {"error": {"message": "API key not valid.", "status": "INVALID_ARGUMENT"}})]
+P("count err auth", ip="9.9.8.4")
+_d = _delta(_b, _tot())
+t("error counts: a provider 429, a 503, another provider error and a rejected key each add one to their own counter, and each is a submitted claim that did not complete",
+  _d == {"provider.rate_limit": 1, "provider.unavailable": 1, "provider.other": 1, "provider.auth": 1, "check.submitted": 4}, _d)
+_b = _tot()
+_real_swf2 = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError("down"))
+fg.models.script = [Resp("q")]
+P("count err pubmed", ip="9.9.8.5")
+pubmed.search_with_fallback = lambda *a, **k: (_ for _ in ()).throw(ValueError("0xFEED"))
+fg.models.script = [Resp("q")]
+appmod.app.logger.setLevel(logging.CRITICAL)
+P("count err crash", ip="9.9.8.6")
+fg.models.script = [Resp("q")]
+stream("count err crash two", ip="9.9.8.7")
+pubmed.search_with_fallback = _real_swf2
+_d = _delta(_b, _tot())
+t("error counts: PubMed unreachable adds one pubmed.failure, an unhandled crash in a check adds one error.server (JSON and streamed alike)",
+  _d == {"pubmed.failure": 1, "error.server": 2, "check.submitted": 3}, _d)
+_b = _tot()
+ratelimit.PER_USER = ratelimit.SlidingWindow(1, 600)
+fg.models.script = [Resp("q"), Resp(VJ("true", [1]))]; P("count limit one", ip="9.9.8.8"); P("count limit two", ip="9.9.8.8")
+ratelimit.PER_USER = ratelimit.SlidingWindow(100, 600)
+_d = _delta(_b, _tot())
+t("error counts: a limit we set ourselves is not a provider failure or a server error",
+  _d == {"check.submitted": 2, "check.completed": 1}, _d)
+_b = _tot()
+_real_ss = db.store_status
+db.store_status = lambda: (_ for _ in ()).throw(RuntimeError("0xBEEF"))
+_r5 = c.get("/healthz"); _r6 = c.get("/api/trending") if False else None
+db.store_status = _real_ss
+appmod.app.logger.setLevel(logging.ERROR)
+_d = _delta(_b, _tot())
+t("error counts: an unhandled exception on a route is a 500 and adds one error.server", _r5.status_code == 500 and _d == {"error.server": 1}, _d)
+_rawcounts = json.dumps([[r["day"], r["name"]] for r in db.counts_since(30)])
+t("error counts: no claim text, exception text or address reaches the table",
+  all(x not in _rawcounts for x in ("count err", "0xFEED", "0xBEEF", "9.9.8", "quota", "teapot")))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

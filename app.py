@@ -463,8 +463,9 @@ def server_error(_e):
     The last line of defence for any page route: a plain page with a way
     out, never the framework's error page. The cause goes to the log (Flask
     has already logged it); nothing about it is shown. The API routes answer
-    in JSON the front end can read.
+    in JSON the front end can read. It is counted for the day, as a total.
     """
+    db.count_event("error.server")
     if request.path.startswith("/api/"):
         return jsonify({"error": "Something went wrong on our side. Try again in a moment."}), 500
     body = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -951,10 +952,12 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         # Missing/misconfigured API key: the operator's problem, not the
         # reader's. The detail goes to the log; the page says what to do.
         app.logger.error("Check could not run: %s", e)
+        db.count_event("provider.auth")
         yield {"stage": "error", "status": 500, "error": UNAVAILABLE_MESSAGE}
         return
     except verdict.ProviderError as e:
         status = {"auth": 500, "rate_limit": 429, "unavailable": 502}.get(e.kind, 502)
+        db.count_event("provider." + (e.kind if e.kind in ("auth", "rate_limit", "unavailable") else "other"))
         suffix = " Wait a few seconds and try again." if e.kind == "rate_limit" else ""
         # A rejected key names .env and the provider's console: for the
         # operator's log, never for the page.
@@ -967,12 +970,14 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         yield ev
         return
     except requests.RequestException:
+        db.count_event("pubmed.failure")
         yield {"stage": "error", "status": 502,
                "error": "Couldn't reach PubMed right now. Try again in a minute."}
         return
     except Exception:  # noqa: BLE001 — last line of defence; never crash a check
         # The exception text is for the log. A reader gets the problem and a way out.
         app.logger.exception("Check failed")
+        db.count_event("error.server")
         yield {"stage": "error", "status": 500,
                "error": "Something went wrong while checking this claim. Try again in a moment."}
         return
@@ -1077,6 +1082,7 @@ def api_study(pmid):
         dive = pubmed.deep_dive(pmid)
     except Exception as e:  # noqa: BLE001 - a deep dive must never 500 the sheet
         app.logger.warning("Deep dive failed for %s: %s", pmid, e)
+        db.count_event("pubmed.failure")
         return jsonify({"pmid": pmid, "cited_by": None, "full_text_url": None,
                         "related": [], "partial": True,
                         "note": "Could not reach PubMed for the extra detail."})
