@@ -78,18 +78,27 @@ const AUDIT = () => {
         if (r < need && !seen.has(key)) { seen.add(key); contrast.push(`${el.tagName}.${el.className} "${own.slice(0, 22)}" ${r.toFixed(2)}:1 (needs ${need})`); }
       }
     }
-    // Every control a thumb has to hit. Measured by hit-testing outward from
-    // the centre, not from the box: a small mark with a grown hit area (an
-    // inline reference, say) is genuinely tappable and should pass.
-    if (/^(BUTTON|A|SUMMARY)$/.test(el.tagName) && innerWidth < 720) {
+    // Every control a thumb has to hit: 44px or more, at every width.
+    // Measured by hit-testing outward from the centre, not from the box: a
+    // small mark with a grown hit area (an inline reference, say) is
+    // genuinely tappable and should pass. A plain link that sits inside a
+    // sentence of running text is exempt (WCAG 2.5.8 inline exception); a
+    // link or button standing on its own line or in its own row is not.
+    if (/^(BUTTON|A|SUMMARY)$/.test(el.tagName)) {
+      el.scrollIntoView({ block: "center", inline: "nearest" });
       const r = el.getBoundingClientRect();
-      const owns = (x, y) => { const hit = document.elementFromPoint(x, y); return hit && (hit === el || el.contains(hit) || hit.contains(el)); };
-      if (r.width > 0 && r.height > 0 && !el.closest(".src, .query, .foot, .fine")) {
+      const owns = (x, y) => { const hit = document.elementFromPoint(x, y); return hit && (hit === el || el.contains(hit)); };
+      const around = (el.parentElement ? el.parentElement.textContent : "").replace(el.textContent, "").trim().length;
+      // Shelf columns: eight books cannot each be 44px wide on a phone, so a column
+      // shrinks to fit (never under 38px) and takes the full height of the shelf.
+      const shelf = el.classList.contains("barcol") && r.width >= 38 && r.height >= 44;
+      const inProse = shelf || cs.display === "inline" && around >= 40 && !el.classList.contains("ref") && !el.closest(".foot, .src, .query, .fine");
+      if (r.width > 0 && r.height > 0 && !inProse && !el.closest(".sr-only")) {
         const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        const reach = (dx, dy) => { let n = 0; for (; n <= 24; n += 2) { const x = cx + dx * (n + 2), y = cy + dy * (n + 2); if (x < 0 || y < 0 || x > innerWidth || y > innerHeight || !owns(x, y)) break; } return n; };
+        const reach = (dx, dy) => { let n = 0; for (; n <= 30; n += 1) { const x = cx + dx * (n + 0.5 + (dx ? r.width / 2 : 0)), y = cy + dy * (n + 0.5 + (dy ? r.height / 2 : 0)); if (x < 0 || y < 0 || x > innerWidth || y > innerHeight || !owns(x, y)) break; } return n; };
         const h = reach(0, -1) + reach(0, 1) + r.height, w = reach(-1, 0) + reach(1, 0) + r.width;
-        if (owns(cx, cy) && (h < 31 || w < 31)) {
-          targets.push(`${el.tagName}.${el.className} effective ${Math.round(w)}x${Math.round(h)}`);
+        if (owns(cx, cy) && (h < 43.5 || w < 43.5)) {
+          targets.push(`${el.tagName}.${String(el.className).slice(0, 24)} "${el.textContent.trim().slice(0, 16)}" effective ${Math.round(w)}x${Math.round(h)}`);
         }
       }
     }
@@ -128,13 +137,13 @@ for (const v of VIEWS) {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("pageerror", (e) => errors.push(String(e)));
 
-  for (const [label, url] of [["home", `${base}/${q()}`], ["result", `${base}/${q("q=" + encodeURIComponent(claim))}`]]) {
+  for (const [label, url] of [["home", `${base}/${q()}`], ["result", `${base}/${q("q=" + encodeURIComponent(claim))}`], ["about", `${base}/about`], ["privacy", `${base}/privacy`]]) {
     await page.goto(url, { waitUntil: "networkidle" });
     await page.waitForTimeout(700);
     const a = await page.evaluate(AUDIT);
     const where = `${v.name} ${label}`;
     a.contrast.forEach((d) => note(where, "contrast", d));
-    a.targets.forEach((d) => note(where, "tap target < 32px", d));
+    a.targets.forEach((d) => note(where, "tap target < 44px", d));
     a.smallText.forEach((d) => note(where, "text under 13px", d));
     a.overflow.forEach((d) => note(where, "overflows viewport", d));
     if (a.scrollW > a.innerW + 1) note(where, "horizontal scroll", `${a.scrollW} > ${a.innerW}`);
@@ -166,7 +175,7 @@ for (const v of VIEWS) {
       } else {
         const sa = await page.evaluate(AUDIT);
         sa.contrast.forEach((d) => note(`${where} type-ahead`, "contrast", d));
-        sa.targets.forEach((d) => note(`${where} type-ahead`, "tap target < 32px", d));
+        sa.targets.forEach((d) => note(`${where} type-ahead`, "tap target < 44px", d));
         if (sa.scrollW > sa.innerW + 1) note(`${where} type-ahead`, "horizontal scroll", `${sa.scrollW} > ${sa.innerW}`);
         const aria = await page.getAttribute("#claim-input", "aria-expanded");
         if (aria !== "true") note(`${where} type-ahead`, "aria", `aria-expanded is ${aria}`);

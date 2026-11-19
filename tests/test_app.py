@@ -4899,6 +4899,11 @@ t("type: no font size under 13px in the stylesheet, except the lettering on a bo
 _body_css = re.search(r"body \{[^}]*font-size: (\d+)px; line-height: ([\d.]+)", _css9)
 t("type: body text is 16 to 17px on a 1.6 line height",
   bool(_body_css) and 16 <= int(_body_css.group(1)) <= 17 and 1.55 <= float(_body_css.group(2)) <= 1.65)
+_qa_src = (ROOT / "scripts" / "qa.mjs").read_text()
+t("touch: qa.mjs fails any tap target under 44px, and the footer links are 44px rows on every page",
+  "h < 43.5 || w < 43.5" in _qa_src and "tap target < 44px" in _qa_src
+  and re.search(r"\.foot-links a \{[^}]*min-height: 44px", _css9) is not None
+  and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/", "/about", "/privacy")))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

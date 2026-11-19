@@ -152,7 +152,7 @@ body {
   white-space: nowrap; color: var(--on-deep); text-decoration: none; position: relative;
 }
 /* The name stays 20px tall; the thumb target around it does not. */
-.wordmark::after { content: ""; position: absolute; inset: -12px -6px; }
+.wordmark::after { content: ""; position: absolute; inset: -14px -6px; }
 /* "Beta" is a label beside the name, in the mono every label is set in: a
    hairline tag, no fill, no colour, and nothing to press. It is plain text,
    never a link or a button, so it takes no tap area. */
@@ -249,7 +249,9 @@ body {
 }
 .clear { right: 42px; } .mic { right: 6px; }
 /* Small marks, 44px to touch: the target grows, the mark and the layout do not. */
-.clear::after, .mic::after { content: ""; position: absolute; inset: -3px -5px; }
+.clear::after, .mic::after { content: ""; position: absolute; inset: -4px -5px; }
+/* The mic sits against the clear button, so the clear button grows to its left only. */
+.clear::after { inset: -4px 0 -4px -10px; }
 .mic.listening { color: var(--green); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.25; } }
 
@@ -708,7 +710,7 @@ body {
   text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px;
   position: relative;
 }
-.ref::after { content: ""; position: absolute; inset: -12px -4px; }
+.ref::after { content: ""; position: absolute; inset: -15px -15px; }
 .record { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
 /* The highlighter: a pass of tint along the lower half of the line, never a
    block. The UA's yellow <mark> is replaced by it. */
@@ -862,6 +864,9 @@ mark, .key-mark, .hl {
 .study .src { margin: 6px 0 0; font-size: 14px; color: var(--ink-3); }
 .study .why { margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
 .study .src a { position: relative; z-index: 1; color: var(--ink-3); }
+.study .src a::after { content: ""; position: absolute; inset: -14px -6px; }
+#more-link { position: relative; }
+#more-link::after { content: ""; position: absolute; inset: -13px -6px; }
 
 /* "Deep dive" is the button, and its hit area is stretched over the whole
    row, so the row still opens its study wherever it is tapped. The PMID
@@ -1025,6 +1030,9 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .doc .hero { color: var(--ink); }
 .doc h2 { margin: 36px 0 8px; }
 .doc h2.section-label { font: 350 24px/1.2 var(--display); letter-spacing: -0.025em; color: var(--ink); }
+.doc a { position: relative; }
+.doc a::after { content: ""; position: absolute; inset: -12px -4px; z-index: 1; }
+.doc a.tap::after { content: none; }
 .doc p { font-size: 16px; line-height: 1.65; margin: 0 0 12px; }
 .doc .lede { margin: 14px 0 12px; }
 .doc .ledger-list { margin-top: 12px; }
@@ -1039,6 +1047,11 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
 .foot b, .foot strong { color: var(--on-deep); font-weight: 500; }
 .foot .fine { color: var(--on-deep-3); }
 .foot a { color: var(--on-deep-2); }
+/* The footer links are controls, not a sentence: each one is a 44px row. */
+.doc-back { margin-top: 28px; }
+.tap { display: inline-flex; align-items: center; min-height: 44px; }
+.foot-links { display: flex; flex-wrap: wrap; align-items: center; margin-left: -6px; }
+.foot-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
 
 /* ---- Checking, a verdict and an error share one night ground ------------- *
    The report is printed straight under the masthead: no picture above it. */
