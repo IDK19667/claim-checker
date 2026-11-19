@@ -211,3 +211,48 @@ def result_meta(claim: str, label: str, short_answer: str) -> dict:
             whole = nxt
         body = whole if len(whole) >= budget * 0.5 else clip(answer, budget)
     return {"title": title, "description": (lead + body).strip()}
+
+
+# ---- Is a saved answer sound enough to be indexed? ---------------------------
+
+SAVED_VERDICTS = ("true", "false", "complicated", "insufficient")
+
+
+def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search_query, saved_at,
+                          now=None) -> list:
+    """
+    What is wrong with a saved answer, by name; an empty list means sound. The
+    same kinds scripts/saved_record_audit.py counts (all but the one that needs
+    the check log): a cited study that is not among the studies, a breakdown
+    whose "rests on" differs from the studies cited, no search query, a missing,
+    unreadable or future save date. The page repairs most of these when it
+    renders, so a person never sees them; a crawler is told to leave such a
+    record out of the index and the sitemap all the same.
+    """
+    from datetime import datetime, timezone
+    out = []
+    if not str(claim_text or "").strip():
+        out.append("no_claim")
+    if verdict not in SAVED_VERDICTS:
+        out.append("unknown_verdict")
+    if not isinstance(cited, (list, tuple)) or not isinstance(studies, list):
+        return out + ["unreadable_json"]
+    pmids = {s.get("pmid") for s in studies if isinstance(s, dict)}
+    if set(cited) - pmids:
+        out.append("cited_not_in_studies")
+    if isinstance(breakdown, dict) and breakdown.get("rests_on") is not None \
+            and breakdown["rests_on"] != len(set(cited) & pmids):
+        out.append("count_mismatch")
+    if not str(search_query or "").strip():
+        out.append("empty_query")
+    if not saved_at:
+        out.append("missing_date")
+    else:
+        try:
+            d = datetime.fromisoformat(str(saved_at))
+            d = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+            if d > (now or datetime.now(timezone.utc)):
+                out.append("future_date")
+        except ValueError:
+            out.append("unparseable_date")
+    return out

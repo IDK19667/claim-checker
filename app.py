@@ -254,6 +254,7 @@ def _render_home(checks_page: bool = False):
     preview = None
     cached = None
     jsonld = None
+    noindex = False
     if claim:
         cached = db.get_cached_by_key(db.normalize_claim(claim))
         if cached:
@@ -266,6 +267,9 @@ def _render_home(checks_page: bool = False):
                 "url": share_url,
             }
             jsonld = _claim_review_jsonld(cached, share_url)
+            noindex = bool(display.saved_record_problems(
+                cached["claim_text"], cached["verdict"], cached["cited_studies"], cached["studies"],
+                cached.get("breakdown"), cached.get("search_query"), cached.get("cached_at")))
             cached = _check_response(
                 cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
@@ -290,7 +294,7 @@ def _render_home(checks_page: bool = False):
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
     return render_template("index.html", preview=preview, base_url=_base_url(),
-                           result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
+                           result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
                            ledger=ledger, latest=latest,
                            example=None if cached else _trust_example(),
                            provider=verdict.provider_label(), on_gemini=_on_gemini(), checks_page=checks_page,
@@ -319,40 +323,66 @@ def flight_redirect():
     return redirect("/", code=301)
 
 
+# Paths no crawler needs. Repeated in every group below: a crawler that has a
+# group of its own reads only that group and ignores the one for "*".
+_ROBOTS_DISALLOW = ["Disallow: /api/", "Disallow: /stats"]
+
+
 @app.route("/robots.txt")
 def robots():
-    lines = [
-        "User-agent: *",
-        "Allow: /",
-        "Disallow: /api/",
-        "",
-        # The verdicts are meant to be quotable. Say so rather than leaving
-        # the AI crawlers to guess from silence.
-        "User-agent: GPTBot",
-        "Allow: /",
-        "User-agent: ClaudeBot",
-        "Allow: /",
-        "User-agent: PerplexityBot",
-        "Allow: /",
-        "User-agent: Google-Extended",
-        "Allow: /",
-        "",
-        f"Sitemap: {_base_url()}/sitemap.xml",
-    ]
+    lines = ["User-agent: *", "Allow: /", *_ROBOTS_DISALLOW, ""]
+    # The verdicts are meant to be quotable. Say so rather than leaving
+    # the AI crawlers to guess from silence.
+    for bot in ("GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended"):
+        lines += [f"User-agent: {bot}", "Allow: /", *_ROBOTS_DISALLOW]
+    lines += ["", f"Sitemap: {_base_url()}/sitemap.xml"]
     return Response("\n".join(lines) + "\n", mimetype="text/plain")
+
+
+SITEMAP_RESULTS_MAX = 500
+_sitemap_memo = {"stamp": None, "paths": []}
+
+
+def _sitemap_result_paths() -> list:
+    """
+    /?q= paths of the saved answers that pass the saved-record check, newest
+    first. Built from every row, so it is remembered until the table changes
+    (its row count or newest save date), not rebuilt on each crawl.
+    """
+    try:
+        stamp = db.saved_stamp()
+        if stamp == _sitemap_memo["stamp"]:
+            return _sitemap_memo["paths"]
+        paths = []
+        for r in db.saved_records(SITEMAP_RESULTS_MAX):
+            try:
+                cited, studies = json.loads(r["cited_json"] or "[]"), json.loads(r["studies_json"] or "[]")
+                bd = json.loads(r["breakdown_json"]) if r["breakdown_json"] else None
+            except (ValueError, TypeError):
+                continue
+            if display.saved_record_problems(r["claim_text"], r["verdict"], cited, studies, bd,
+                                             r["search_query"], r["created_at"]):
+                continue
+            paths.append((f"/?q={quote(r['claim_text'])}", (r["created_at"] or "")[:10]))
+        _sitemap_memo.update(stamp=stamp, paths=paths)
+        return paths
+    except Exception as e:  # noqa: BLE001 - the sitemap must never be a 500
+        app.logger.warning("Sitemap results left out: %s", type(e).__name__)
+        return []
 
 
 @app.route("/sitemap.xml")
 def sitemap():
     base = _base_url()
-    # Static pages only. A typed claim is something a person wrote; listing
-    # it here would publish it to every crawler, which the privacy page
-    # does not say and the product does not want.
-    urls = [(f"{base}/", "1.0"), (f"{base}/checks", "0.8"), (f"{base}/about", "0.5"),
-            (f"{base}/method", "0.5"), (f"{base}/corrections", "0.4"),
-            (f"{base}/privacy", "0.3")]
+    # The pages, then the saved answers that pass the saved-record check. An
+    # answer that fails it is left out and is marked noindex on its own page.
+    urls = [(f"{base}/", "1.0", ""), (f"{base}/checks", "0.8", ""), (f"{base}/about", "0.5", ""),
+            (f"{base}/method", "0.5", ""), (f"{base}/corrections", "0.4", ""),
+            (f"{base}/privacy", "0.3", "")]
+    urls += [(base + path, "0.6", day) for path, day in _sitemap_result_paths()]
     body = "".join(
-        f"<url><loc>{escape(u)}</loc><priority>{p}</priority></url>" for u, p in urls
+        f"<url><loc>{escape(u)}</loc>{f'<lastmod>{d}</lastmod>' if d else ''}<priority>{p}</priority></url>"
+        for u, p, d in urls
     )
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</urlset>")

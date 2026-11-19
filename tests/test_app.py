@@ -480,9 +480,8 @@ t("robots.txt allows crawlers and names the sitemap",
   r.status_code == 200 and "Disallow: /api/" in r.data.decode() and "Sitemap:" in r.data.decode()
   and "ClaudeBot" in r.data.decode())
 r = c.get("/sitemap.xml")
-t("sitemap lists the static pages only, never a claim somebody typed", r.status_code == 200
-  and r.mimetype == "application/xml" and "streamed%20claim" not in r.data.decode()
-  and "?q=" not in r.data.decode() and "/privacy" in r.data.decode())
+t("sitemap is XML and lists the static pages", r.status_code == 200
+  and r.mimetype == "application/xml" and "/privacy" in r.data.decode() and "/method" in r.data.decode())
 r = c.get("/llms.txt")
 t("llms.txt describes the rules and links recent claims",
   r.status_code == 200 and "ClaimReview" in r.data.decode() and "not medical advice" in r.data.decode().lower()
@@ -4387,8 +4386,8 @@ t("the privacy page says a report's note is kept, anonymously", "report a wrong 
 
 # 5. The sitemap lists static pages only; a claim somebody typed never appears.
 _sm = c.get("/sitemap.xml").get_data(as_text=True)
-t("the sitemap has the three static pages, absolute, and no claim",
-  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")) and "?q=" not in _sm)
+t("the sitemap has the static pages, absolute",
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")))
 _rb = c.get("/robots.txt").get_data(as_text=True)
 t("the sitemap and llms.txt list /about, /method and /corrections as absolute URLs",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/about", "/method", "/corrections"))
@@ -5886,6 +5885,55 @@ t("share card: no text reaches the right edge, and the footer line is clear of t
 _sc = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "How long the effect lasts.")
 _sc_none = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "")
 t("share card: a check's still-open line is on the card, and a card without one is a different image", _sc != _sc_none)
+
+# ---- Polish: sitemap, robots, canonical, noindex ---------------------------------------
+_gs = {"pmid": "S1", "title": "Garlic and colds", "abstract": "A randomized trial.", "journal": "J", "year": "2020",
+       "publication_types": ["Randomized Controlled Trial"], "authors": ["x"], "data_banks": None, "url": "u"}
+_good_c, _bad_c = "Garlic shortens a cold in adults", "Onion juice cures a sore throat in adults"
+db.put_cached_verdict(_good_c, "garlic AND cold", "complicated", "Garlic may shorten colds (Study 1).",
+                      ["S1"], [_gs], tldr="Studies are mixed.", still_open="Doses vary.")
+db.put_cached_verdict(_bad_c, "onion AND throat", "complicated", "Onion juice may help (Study 1).",
+                      ["GONE"], [_gs], tldr="Studies are mixed.", still_open="Doses vary.")
+_sm = c.get("/sitemap.xml").get_data(as_text=True)
+_loc_good = "<loc>http://localhost/?q=" + urllib.parse.quote(_good_c) + "</loc>"
+_loc_bad = urllib.parse.quote(_bad_c)
+t("sitemap: a saved result that passes the record check is listed, absolute and with its save date",
+  _loc_good in _sm and "<lastmod>" in _sm, _sm[:300])
+t("sitemap: a saved result that fails the check (a cited study that is not among the studies) is left out", _loc_bad not in _sm)
+t("sitemap: the five pages the brief names are all there, absolute",
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/method", "/about", "/privacy", "/corrections")))
+_gh = c.get("/", query_string={"q": _good_c}).get_data(as_text=True)
+_bh = c.get("/", query_string={"q": _bad_c}).get_data(as_text=True)
+t("noindex: a result that fails the check says noindex and still renders its answer; a sound one is indexable",
+  '<meta name="robots" content="noindex" />' in _bh and 'id="server-result"' in _bh
+  and 'content="noindex"' not in _gh and 'content="index, follow' in _gh)
+t("noindex: the home page and the info pages stay indexable", 'content="noindex"' not in c.get("/").get_data(as_text=True)
+  and 'content="noindex"' not in c.get("/method").get_data(as_text=True))
+_canon = lambda h: _re.search(r'<link rel="canonical" href="([^"]*)"', h).group(1)
+_variants = [_good_c, _good_c.upper(), _good_c + "?", "  " + _good_c + "  "]
+_cs = {_canon(c.get("/", query_string={"q": v}).get_data(as_text=True)) for v in _variants}
+t("canonical: every phrasing of one claim has one stable canonical, the saved claim's own address",
+  _cs == {"http://localhost/?q=" + urllib.parse.quote(_good_c)}, _cs)
+t("canonical: every page that can be indexed has one, absolute",
+  all(_re.search(r'<link rel="canonical" href="http://localhost[^"]*"', c.get(u).get_data(as_text=True))
+      for u in ("/", "/checks", "/about", "/method", "/corrections", "/privacy"))
+  and _canon(c.get("/", query_string={"q": "never checked at all"}).get_data(as_text=True)) == "http://localhost/")
+_rb = c.get("/robots.txt").get_data(as_text=True)
+_groups = [g for g in _rb.split("\n\n") if g.startswith("User-agent")]
+t("robots.txt: allows all, keeps /api/ and /stats out for every crawler group, and names the sitemap",
+  _rb.count("User-agent:") == 5 and all("Disallow: /api/" in g and "Disallow: /stats" in g and "Allow: /" in g for g in _groups)
+  and _rb.rstrip().endswith("Sitemap: http://localhost/sitemap.xml"), _rb)
+_pr = _dsp.saved_record_problems
+t("record check: names each kind of problem, and a sound record has none",
+  _pr(_good_c, "true", ["S1"], [_gs], {"rests_on": 1}, "q", "2020-01-01T00:00:00+00:00") == []
+  and "cited_not_in_studies" in _pr("c", "true", ["X"], [_gs], None, "q", "2020-01-01T00:00:00")
+  and "count_mismatch" in _pr("c", "true", ["S1"], [_gs], {"rests_on": 3}, "q", "2020-01-01T00:00:00")
+  and "empty_query" in _pr("c", "true", [], [], None, "  ", "2020-01-01T00:00:00")
+  and "future_date" in _pr("c", "true", [], [], None, "q", "2999-01-01T00:00:00")
+  and "unparseable_date" in _pr("c", "true", [], [], None, "q", "soon")
+  and "missing_date" in _pr("c", "true", [], [], None, "q", "")
+  and "unknown_verdict" in _pr("c", "maybe", [], [], None, "q", "2020-01-01T00:00:00")
+  and _pr("c", "true", "oops", [], None, "q", "2020-01-01T00:00:00") == ["unreadable_json"])
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

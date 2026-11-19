@@ -42,7 +42,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   {% endif %}
   {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% elif checks_page %}<link rel="canonical" href="{{ base_url }}/checks" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
-  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+  {% if noindex %}<meta name="robots" content="noindex" />{% else %}<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />{% endif %}
   {% if jsonld %}<script type="application/ld+json" nonce="{{ csp_nonce }}">{{ jsonld | tojson }}</script>{% endif %}
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Evident" />

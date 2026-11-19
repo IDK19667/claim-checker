@@ -4,6 +4,22 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-19: Sound saved results are in the sitemap; the rest are noindex
+
+Reverses "the sitemap lists static pages only" (the audit decision that kept
+typed claims out). A saved result is already a public page with ClaimReview
+markup, the front page lists the latest ten and llms.txt lists recent ones, so
+the sitemap now lists up to 500 of them, newest first, each as its one
+canonical `/?q=<saved claim text>` address. Only a record that passes
+`display.saved_record_problems` is listed: no cited study missing from the
+studies, "rests on" equal to the studies cited, a search query, a readable
+and non-future save date, a known verdict. A record that fails is left out
+and its page carries `noindex` (it still renders for a person, because the
+page repairs those faults). robots.txt repeats its two Disallow lines in
+every group, since a crawler with its own group ignores the `*` group. Result
+titles are `<label>: "<claim>"` clipped to about 50 characters (60 with the
+site name), so a clipped claim still sits under its verdict.
+
 ## 2026-11-17: The caution rule, last round: minimisers and rarity figures
 
 Closes the class "the harm is tiny": scarcely, practically, virtually,

@@ -673,3 +673,26 @@ def all_claims(limit: int = 500) -> list[dict]:
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@_routed
+def saved_stamp() -> tuple:
+    """(row count, newest save date): changes whenever a saved answer is added or replaced."""
+    with get_conn() as conn:
+        r = conn.execute("SELECT COUNT(*) n, MAX(created_at) m FROM verdict_cache").fetchone()
+    return (r["n"], r["m"])
+
+
+@_routed
+def saved_records(limit: int = 500) -> list[dict]:
+    """
+    Saved answers as stored, newest first, with the JSON columns still text so
+    a record that cannot be read is reported rather than raised. For the
+    sitemap, which checks each one before listing it.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT claim_text, verdict, search_query, cited_json, studies_json, breakdown_json, created_at "
+            "FROM verdict_cache ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
