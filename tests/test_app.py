@@ -2546,8 +2546,8 @@ t("trust: the home page answers the five questions a stranger asks, and shows a 
   _qs[:5] == ["Where do the studies come from?", "Is an AI making this up?",
               "Is it biased? Who made it?", "Is it free?", "Is this medical advice?"]
   and "Can I see a real one?" in _qs, _qs)
-t("  every answer ends pointing back to the claim box",
-  len(_rows) >= 6 and all(_re.findall(r'<a [^>]*href="([^"]+)"', r)[-1:] == ["#claim-input"] for r in _rows))
+t("  the answers carry no repeated links back to the claim box",
+  len(_rows) >= 6 and not any("#claim-input" in r for r in _rows))
 _trust_text = _html.unescape(_re.sub(r"<[^>]+>", " ", _trust))
 t("  in plain words: no dashes, none of the banned words",
   "\u2014" not in _trust_text and "\u2013" not in _trust_text and not verdict.banned_words(_trust_text),
