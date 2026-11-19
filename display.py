@@ -299,6 +299,37 @@ def looks_personal(claim_text) -> bool:
     return bool(_PERSONAL.search(text)) or _name_risk(text)
 
 
+# The only claims whose result pages a search engine may index or the sitemap
+# may list: the site's own examples. Same list, same order as EXAMPLES in
+# static/app.js (a test compares them). A claim a person typed is never here.
+CURATED_CLAIMS = (
+    "Apple cider vinegar cures diabetes",
+    "Cracking your knuckles causes arthritis",
+    "Intermittent fasting improves brain function",
+    "Detox teas flush toxins out of your body",
+    "5G weakens your immune system",
+    "Vaccines cause autism",
+    "Ozempic cures alcoholism",
+)
+
+
+def _claim_form(claim_text) -> str:
+    return re.sub(r"[\s.!?,;:]+$", "", re.sub(r"\s+", " ", str(claim_text or "")).strip()).casefold()
+
+
+_CURATED_FORMS = frozenset(_claim_form(c) for c in CURATED_CLAIMS)
+
+
+def is_curated_claim(claim_text) -> bool:
+    return _claim_form(claim_text) in _CURATED_FORMS
+
+
+def indexable_claim(claim_text) -> bool:
+    """Curated and not personal. A search engine may see a result page only when this holds
+    and saved_record_problems is empty."""
+    return is_curated_claim(claim_text) and not looks_personal(claim_text)
+
+
 def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search_query, saved_at,
                           now=None) -> list:
     """

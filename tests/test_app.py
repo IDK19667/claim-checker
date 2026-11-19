@@ -5909,16 +5909,44 @@ db.put_cached_verdict(_bad_c, "onion AND throat", "complicated", "Onion juice ma
 _sm = c.get("/sitemap.xml").get_data(as_text=True)
 _loc_good = "<loc>http://localhost/?q=" + urllib.parse.quote(_good_c) + "</loc>"
 _loc_bad = urllib.parse.quote(_bad_c)
-t("sitemap: a saved result that passes the record check is listed, absolute and with its save date",
-  _loc_good in _sm and "<lastmod>" in _sm, _sm[:300])
+_cur_c, _cur_bad = "Vaccines cause autism", "Cracking your knuckles causes arthritis"
+db.put_cached_verdict(_cur_c, "vaccines AND autism", "false", "Large studies find no link (Study 1).",
+                      ["S1"], [_gs], tldr="No link found.", still_open="Rare events are hard to study.")
+db.put_cached_verdict(_cur_bad, "knuckles AND arthritis", "false", "No link (Study 1).",
+                      ["GONE"], [_gs], tldr="No link found.", still_open="Few trials.")
+_sm = c.get("/sitemap.xml").get_data(as_text=True)
+_loc_cur = "<loc>http://localhost/?q=" + urllib.parse.quote(_cur_c) + "</loc>"
+t("sitemap: a curated example claim whose saved result is sound is listed, absolute and with its save date",
+  _loc_cur in _sm and "<lastmod>" in _sm, _sm[:300])
+t("sitemap: a sound, non-personal saved result that is not a curated example is absent", _loc_good not in _sm)
+t("sitemap: a curated example whose saved record is unsound (cited study missing) is absent",
+  urllib.parse.quote(_cur_bad) not in _sm)
 t("sitemap: a saved result that fails the check (a cited study that is not among the studies) is left out", _loc_bad not in _sm)
+_sm_locs = _re.findall(r"<loc>([^<]*)</loc>", _sm)
+t("sitemap: only the six static pages and curated results, nothing else",
+  all(u.startswith("http://localhost/?q=") is False or urllib.parse.unquote(u.split("?q=", 1)[1]) in _dsp.CURATED_CLAIMS
+      for u in _sm_locs) and len(_sm_locs) == 7, _sm_locs)
 t("sitemap: the five pages the brief names are all there, absolute",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/method", "/about", "/privacy", "/corrections")))
 _gh = c.get("/", query_string={"q": _good_c}).get_data(as_text=True)
 _bh = c.get("/", query_string={"q": _bad_c}).get_data(as_text=True)
-t("noindex: a result that fails the check says noindex and still renders its answer; a sound one is indexable",
+_ch = c.get("/", query_string={"q": _cur_c}).get_data(as_text=True)
+_cbh = c.get("/", query_string={"q": _cur_bad}).get_data(as_text=True)
+t("noindex: a result that fails the record check says noindex and still renders its answer",
   '<meta name="robots" content="noindex" />' in _bh and 'id="server-result"' in _bh
-  and 'content="noindex"' not in _gh and 'content="index, follow' in _gh)
+  and '<meta name="robots" content="noindex" />' in _cbh and 'id="server-result"' in _cbh)
+t("noindex: a sound, non-personal saved result that is not a curated example is noindex and still renders",
+  '<meta name="robots" content="noindex" />' in _gh and 'id="server-result"' in _gh and 'content="index, follow' not in _gh)
+t("noindex: a curated example with a sound record is indexable", 'content="noindex"' not in _ch and 'content="index, follow' in _ch)
+t("noindex: a curated claim typed with other case, spacing and a trailing mark is still the same indexable page",
+  'content="noindex"' not in c.get("/", query_string={"q": "  vaccines  CAUSE autism?? "}).get_data(as_text=True))
+_js_cur = re.findall(r'"([^"]+)"', re.search(r"const EXAMPLES = \[(.*?)\n\];", (ROOT / "static" / "app.js").read_text(), re.S).group(1))
+t("CURATED_CLAIMS in display.py is the EXAMPLES array in app.js, same claims in the same order",
+  list(_dsp.CURATED_CLAIMS) == _js_cur, (_dsp.CURATED_CLAIMS, _js_cur))
+t("curated match ignores case, whitespace and trailing punctuation, and nothing else",
+  _dsp.is_curated_claim("  5g weakens   your IMMUNE system. ") and not _dsp.is_curated_claim("5G weakens your immune system in kids")
+  and not _dsp.is_curated_claim("") and not _dsp.is_curated_claim(None))
+t("the claim the trust section offers is a curated example", _dsp.is_curated_claim(appmod._trust_example()["claim"]))
 t("noindex: the home page and the info pages stay indexable", 'content="noindex"' not in c.get("/").get_data(as_text=True)
   and 'content="noindex"' not in c.get("/method").get_data(as_text=True))
 _canon = lambda h: _re.search(r'<link rel="canonical" href="([^"]*)"', h).group(1)

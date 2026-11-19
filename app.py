@@ -269,7 +269,9 @@ def _render_home(checks_page: bool = False):
                 "url": share_url,
             }
             jsonld = _claim_review_jsonld(cached, share_url)
-            noindex = bool(display.saved_record_problems(
+            # Indexable only when the claim is one of the site's own examples, has no
+            # personal details and the saved record is sound. Anything else is noindex.
+            noindex = not display.indexable_claim(cached["claim_text"]) or bool(display.saved_record_problems(
                 cached["claim_text"], cached["verdict"], cached["cited_studies"], cached["studies"],
                 cached.get("breakdown"), cached.get("search_query"), cached.get("cached_at")))
             cached = _check_response(
@@ -343,21 +345,29 @@ def robots():
 
 
 SITEMAP_RESULTS_MAX = 500
+SITEMAP_SCAN_MAX = 50000
 _sitemap_memo = {"stamp": None, "paths": []}
 
 
 def _sitemap_result_paths() -> list:
     """
-    /?q= paths of the saved answers that pass the saved-record check, newest
-    first. Built from every row, so it is remembered until the table changes
-    (its row count or newest save date), not rebuilt on each crawl.
+    /?q= paths of the saved answers whose claim is one of the curated examples,
+    has no personal details and passes the saved-record check, newest first.
+    Built from every row, so it is remembered until the table changes (its row
+    count or newest save date), not rebuilt on each crawl.
     """
     try:
         stamp = db.saved_stamp()
         if stamp == _sitemap_memo["stamp"]:
             return _sitemap_memo["paths"]
         paths = []
-        for r in db.saved_records(SITEMAP_RESULTS_MAX):
+        # Scan far more rows than the sitemap can hold: only the few curated claims
+        # qualify, and they must be found however many typed claims were saved after them.
+        for r in db.saved_records(SITEMAP_SCAN_MAX):
+            if not display.indexable_claim(r["claim_text"]):
+                continue
+            if len(paths) >= SITEMAP_RESULTS_MAX:
+                break
             try:
                 cited, studies = json.loads(r["cited_json"] or "[]"), json.loads(r["studies_json"] or "[]")
                 bd = json.loads(r["breakdown_json"]) if r["breakdown_json"] else None
@@ -377,8 +387,8 @@ def _sitemap_result_paths() -> list:
 @app.route("/sitemap.xml")
 def sitemap():
     base = _base_url()
-    # The pages, then the saved answers that pass the saved-record check. An
-    # answer that fails it is left out and is marked noindex on its own page.
+    # The pages, then the curated example claims whose saved answer is sound. Any
+    # other result page is left out and is marked noindex on its own page.
     urls = [(f"{base}/", "1.0", ""), (f"{base}/checks", "0.8", ""), (f"{base}/about", "0.5", ""),
             (f"{base}/method", "0.5", ""), (f"{base}/corrections", "0.4", ""),
             (f"{base}/privacy", "0.3", "")]
