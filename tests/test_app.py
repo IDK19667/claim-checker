@@ -4893,6 +4893,12 @@ _hero_wide = [int(n) for n in re.findall(r"\n  \.hero \{ font-size: (\d+)px; \}"
 t("type: the main heading is 34 to 38px on a phone and 48 to 56px wide, tracked no tighter than -0.025em",
   bool(_hero_base) and 34 <= int(_hero_base.group(1)) <= 38 and float(_hero_base.group(2)) >= -0.025
   and len(_hero_wide) == 2 and all(48 <= n <= 56 for n in _hero_wide), (_hero_base and _hero_base.groups(), _hero_wide))
+_small_px = [(m.group(0)) for m in re.finditer(r"(?:font-size: ?|font: \d+ )(\d+(?:\.\d+)?)px", _css9) if float(m.group(1)) < 13]
+t("type: no font size under 13px in the stylesheet, except the lettering on a book spine (aria-hidden decoration)",
+  len(_small_px) == 1 and "10px" in _small_px[0] and "barcol-spine" in _css9.split(_small_px[0])[0].rsplit("}", 1)[1], _small_px)
+_body_css = re.search(r"body \{[^}]*font-size: (\d+)px; line-height: ([\d.]+)", _css9)
+t("type: body text is 16 to 17px on a 1.6 line height",
+  bool(_body_css) and 16 <= int(_body_css.group(1)) <= 17 and 1.55 <= float(_body_css.group(2)) <= 1.65)
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -62,7 +62,7 @@ const AUDIT = () => {
   const bgOf = (el) => { let e = el; while (e) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0.9) return c.rgb; e = e.parentElement; } return parse(getComputedStyle(document.body).backgroundColor).rgb; };
   const ratio = (f, b) => { const l1 = lum(f), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
 
-  const contrast = [], targets = [], overflow = [];
+  const contrast = [], targets = [], overflow = [], smallText = [];
   const seen = new Set();
   for (const el of document.querySelectorAll("body *")) {
     const cs = getComputedStyle(el);
@@ -93,13 +93,15 @@ const AUDIT = () => {
         }
       }
     }
+    // Nothing a reader needs is under 13px. The spine lettering is aria-hidden decoration.
+    if (own && parseFloat(cs.fontSize) < 13 && !el.closest(".barcol-spine, .sr-only")) smallText.push(`${el.tagName}.${String(el.className).slice(0, 24)} ${cs.fontSize}`);
     const r = el.getBoundingClientRect();
     if (r.right > innerWidth + 1 && cs.overflowX !== "auto" && cs.position !== "fixed" && !el.closest(".still-row")) {
       overflow.push(`${el.tagName}.${String(el.className).slice(0, 24)} extends to ${Math.round(r.right)}px`);
     }
   }
   return {
-    contrast, targets: [...new Set(targets)], overflow: [...new Set(overflow)].slice(0, 5),
+    contrast, smallText: [...new Set(smallText)], targets: [...new Set(targets)], overflow: [...new Set(overflow)].slice(0, 5),
     scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
     title: document.title, h1: document.querySelectorAll("h1").length,
     h1px: parseFloat(getComputedStyle(document.querySelector("h1") || document.body).fontSize),
@@ -133,6 +135,7 @@ for (const v of VIEWS) {
     const where = `${v.name} ${label}`;
     a.contrast.forEach((d) => note(where, "contrast", d));
     a.targets.forEach((d) => note(where, "tap target < 32px", d));
+    a.smallText.forEach((d) => note(where, "text under 13px", d));
     a.overflow.forEach((d) => note(where, "overflows viewport", d));
     if (a.scrollW > a.innerW + 1) note(where, "horizontal scroll", `${a.scrollW} > ${a.innerW}`);
     if (a.h1 !== 1) note(where, "headings", `${a.h1} <h1> elements`);

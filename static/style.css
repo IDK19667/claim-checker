@@ -118,7 +118,7 @@ body {
 /* Labels are set in the mono, small and in sentence case. Never tracked out,
    never in capitals: they are notes in the margin, not signage. */
 .section-label, .field-label, .case, .key, .meta {
-  font-family: var(--mono); font-size: 11px; font-weight: 500; line-height: 1.4;
+  font-family: var(--mono); font-size: 13px; font-weight: 500; line-height: 1.4;
   letter-spacing: 0; text-transform: none; color: var(--ink-3);
 }
 
@@ -157,7 +157,7 @@ body {
    hairline tag, no fill, no colour, and nothing to press. It is plain text,
    never a link or a button, so it takes no tap area. */
 .beta {
-  font: 500 11px/1.4 var(--mono); letter-spacing: 0;
+  font: 500 13px/1.4 var(--mono); letter-spacing: 0;
   padding: 1px 6px; border: 1px solid var(--deep-line); border-radius: var(--r-control);
   color: var(--on-deep-2); white-space: nowrap; cursor: default;
 }
@@ -221,7 +221,7 @@ body {
   display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 30px;
   margin: 48px 0 0; padding-top: 20px; border-top: 1px solid var(--rule);
 }
-.ledger dt { font: 500 11px/1.3 var(--mono); color: var(--ink-3); }
+.ledger dt { font: 500 13px/1.3 var(--mono); color: var(--ink-3); }
 .ledger dd {
   margin: 6px 0 0; font: 300 30px/1 var(--display); letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums; color: var(--ink);
@@ -276,7 +276,7 @@ body {
 }
 .suggest-head {
   margin: 0; padding: 10px 14px 2px;
-  font: 500 12px/1.3 var(--mono); color: var(--on-deep-2);
+  font: 500 13px/1.3 var(--mono); color: var(--on-deep-2);
 }
 .suggest-note { margin: 0; padding: 0 14px 9px; font-size: 13px; line-height: 1.4; color: var(--on-deep-2); border-bottom: 1px solid var(--deep-line); }
 .suggest-list { list-style: none; margin: 0; padding: 0; }
@@ -293,7 +293,7 @@ body {
 .suggest-row[aria-selected="true"] { box-shadow: inset 2px 0 0 var(--sage); }
 .suggest-claim { font-size: 15px; line-height: 1.4; color: var(--on-deep); }
 .suggest-also { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--on-deep-2); }
-.suggest-verdict { flex: none; font: 500 10.5px/1.3 var(--mono); color: var(--on-deep-2); white-space: nowrap; }
+.suggest-verdict { flex: none; font: 500 13px/1.3 var(--mono); color: var(--on-deep-2); white-space: nowrap; }
 
 /* ---- The front page, by day ---------------------------------------------- */
 
@@ -340,7 +340,7 @@ body {
   align-items: baseline; text-decoration: none; color: var(--ink);
 }
 .entry-link:hover .entry-claim { text-decoration: underline; text-decoration-color: var(--rule-2); }
-.entry-no { grid-column: 1 / -1; font: 500 11px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.entry-no { grid-column: 1 / -1; font: 500 13px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .entry-claim { font-size: 18px; line-height: 1.35; overflow-wrap: break-word; }
 .entry-verdict { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
 .entry-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
@@ -383,13 +383,13 @@ body {
 }
 .recent-btn > span:first-child { font-size: 16px; line-height: 1.35; }
 .recent-btn:hover > span:first-child { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rule-2); }
-.recent-btn .tag { font: 500 11px/1.3 var(--mono); color: var(--ink-3); white-space: nowrap; }
+.recent-btn .tag { font: 500 13px/1.3 var(--mono); color: var(--ink-3); white-space: nowrap; }
 .recent-btn:active { transform: translateY(1px); }
 .nudge { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-panel); padding: 16px; }
 .nudge-body { margin: 8px 0 14px; font-size: 15px; }
 .nudge-actions { display: flex; gap: 8px; }
 
-.fine { font-size: 12.5px; line-height: 1.5; color: var(--ink-3); margin: 10px 0 0; }
+.fine { font-size: 13px; line-height: 1.5; color: var(--ink-3); margin: 10px 0 0; }
 .band .fine { color: var(--on-deep-3); }
 .small { font-size: 13px; }
 
@@ -403,7 +403,7 @@ body {
   color: var(--green); text-decoration: underline; text-underline-offset: 3px;
   display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;
 }
-.nosteps-acts code { font: 500 12.5px var(--mono); }
+.nosteps-acts code { font: 500 13px var(--mono); }
 .nosteps-sub { margin-top: 20px; }
 
 /* ---- The report: night --------------------------------------------------- */
@@ -456,7 +456,7 @@ body {
 #result.checking .edit-claim { display: none; }
 
 /* While a check runs, the work prints along the thread. */
-.reading { list-style: none; margin: 24px 0 0; padding: 0; font: 500 12.5px/1.5 var(--mono); color: var(--on-deep-2); }
+.reading { list-style: none; margin: 24px 0 0; padding: 0; font: 500 13px/1.5 var(--mono); color: var(--on-deep-2); }
 .reading li { display: flex; gap: 10px; padding: 4px 0; animation: line-in 240ms ease-out both; }
 .reading li::before { content: ""; width: 9px; height: 1px; margin-top: 9px; background: var(--on-deep-3); flex: none; }
 .reading li.live { color: var(--on-deep); }
@@ -529,9 +529,9 @@ body {
 .says-p:last-child { margin-bottom: 0; }
 
 .no-evidence { margin: 36px 0 0; padding: 18px 0 0; border-top: 1px solid var(--rule-2); font-size: 17px; line-height: 1.55; max-width: 34em; }
-.no-evidence b { display: block; margin-bottom: 8px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.no-evidence b { display: block; margin-bottom: 8px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 .still-open { margin: 36px 0 0; padding: 18px 0 0; border-top: 1px solid var(--ink); font-size: 17px; line-height: 1.55; }
-.still-open b { display: block; margin-bottom: 8px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.still-open b { display: block; margin-bottom: 8px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 
 /* ---- The evidence chart -------------------------------------------------- *
    The shelf. One book per study, in the order of the list of studies. Height
@@ -639,7 +639,7 @@ body {
 .barcol-no {
   height: var(--num-h); margin: var(--ledge) 3px 0; display: flex;
   align-items: center; justify-content: center;
-  font: 500 10.5px/1 var(--mono); color: var(--ink-3);
+  font: 500 13px/1 var(--mono); color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
 .is-used .barcol-no { color: var(--ink); }
@@ -655,7 +655,7 @@ body {
   position: absolute; bottom: calc(var(--num-h) + var(--ledge) + var(--plot-h) + 8px);
   left: 50%; transform: translateX(-50%); z-index: 2;
   padding: 4px 8px; background: var(--ink); color: var(--panel); border-radius: var(--r-control);
-  font: 500 10.5px/1.3 var(--mono); white-space: nowrap;
+  font: 500 13px/1.3 var(--mono); white-space: nowrap;
   opacity: 0; pointer-events: none;
 }
 /* The end columns anchor to their own edge: centred, the first and last tips
@@ -690,7 +690,7 @@ body {
    result is on screen. */
 .study.target { box-shadow: inset 0 0 0 1px var(--ink); }
 
-.cached-note { margin: 28px 0 0; padding: 10px 0 0; border-top: 1px solid var(--rule); font-size: 12.5px; color: var(--ink-3); }
+.cached-note { margin: 28px 0 0; padding: 10px 0 0; border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-3); }
 
 /* While a check runs nothing has been counted yet, so nothing by day is drawn:
    the claim and the work printing along the thread are the whole screen. */
@@ -735,7 +735,7 @@ mark, .key-mark, .hl {
 .deeper-head::-webkit-details-marker { display: none; }
 .deeper-head:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
 .deeper-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.deeper-count { font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.deeper-count { font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 .deeper-name { font: 350 26px/1.1 var(--display); letter-spacing: -0.03em; color: var(--ink); }
 .deeper-what { font-size: 15px; line-height: 1.5; color: var(--ink-2); max-width: 46ch; }
 .deeper-what:empty { display: none; }
@@ -778,7 +778,7 @@ mark, .key-mark, .hl {
 .concluded { list-style: none; margin: 10px 0 0; padding: 0; }
 .said { padding: 14px 0; border-bottom: 1px solid var(--rule); }
 .said:last-child { border-bottom: 0; }
-.said-who { margin: 0; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.said-who { margin: 0; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 .said-q { margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: var(--ink); }
 .said-q::before { content: "\201C"; }
 .said-q::after { content: "\201D"; }
@@ -787,7 +787,7 @@ mark, .key-mark, .hl {
 /* The one figure a reader came for, given its own line and its own rule. The
    text in it is copied out of an abstract or it says there is no figure. */
 .effect { margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--ink); font-size: 16px; line-height: 1.6; }
-.effect b { display: block; margin-bottom: 6px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.effect b { display: block; margin-bottom: 6px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 
 .actions { display: flex; gap: 8px; margin: 36px 0 0; }
 .actions .secondary { flex: 1; }
@@ -830,7 +830,7 @@ mark, .key-mark, .hl {
   transform: rotate(-45deg); transition: transform 150ms ease;
 }
 .source-group[open] .group-name::before { transform: rotate(45deg); margin-top: -5px; }
-.group-count { font: 500 11px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.group-count { font: 500 13px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
 /* A study row carries its book's cloth as a stripe down its edge. */
 .study {
@@ -880,8 +880,8 @@ mark, .key-mark, .hl {
 .studies.related .study:hover { background-color: transparent; }
 .studies .empty { padding: 16px 0; font-size: 15px; color: var(--ink-2); }
 
-.query { margin: 18px 0 0; font-size: 12.5px; color: var(--ink-3); }
-.query code { font: 500 12px var(--mono); color: var(--ink-2); }
+.query { margin: 18px 0 0; font-size: 13px; color: var(--ink-3); }
+.query code { font: 500 13px var(--mono); color: var(--ink-2); }
 .query a { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-weight: 500; }
 
 /* ---- Sticky share bar (phones) ------------------------------------------- */
@@ -949,10 +949,10 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .sheet-section p { margin: 0; font-size: 15.5px; }
 .sheet-section .section-label { margin-bottom: 6px; }
 .type-card { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 12px 0; font-size: 15.5px; }
-.type-card b { display: block; margin-bottom: 4px; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.type-card b { display: block; margin-bottom: 4px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 .type-card.retracted b { color: var(--ink); }
 .abstract p { margin: 0 0 12px; font-size: 15.5px; line-height: 1.65; }
-.abstract p b { display: block; font: 500 11px/1.4 var(--mono); color: var(--ink-3); }
+.abstract p b { display: block; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
 .sheet-actions { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
 .link-as-btn { text-decoration: none; flex: 1; }
 .steps { padding-left: 20px; margin: 12px 0 20px; }
@@ -961,7 +961,7 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .legend li { margin-bottom: 6px; }
 .dive-figs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--ink); }
 .dive-figs > div { padding: 6px 0; }
-.dive-figs dt { font: 500 10.5px/1.3 var(--mono); color: var(--ink-3); }
+.dive-figs dt { font: 500 13px/1.3 var(--mono); color: var(--ink-3); }
 .dive-figs dd { margin: 4px 0 0; font: 300 26px/1 var(--display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .dive-status { font-size: 14px; color: var(--ink-3); margin: 10px 0 0; }
 .dive-links { margin: 14px 0 0; font-size: 14.5px; font-weight: 500; }
