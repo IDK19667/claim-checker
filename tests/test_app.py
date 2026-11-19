@@ -4914,6 +4914,11 @@ t("touch: qa.mjs fails any tap target under 44px, and the footer links are 44px 
   "h < 43.5 || w < 43.5" in _qa_src and "tap target < 44px" in _qa_src
   and re.search(r"\.foot-links a \{[^}]*min-height: 44px", _css9) is not None
   and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/", "/about", "/privacy")))
+_fl = [re.search(r'<p class="fine foot-links">(.*?)</p>', c.get(u).get_data(as_text=True), re.S).group(1) for u in ("/", "/about", "/privacy")]
+t("footer: the separators are CSS on the links, not dots in the text, so none can end or start a wrapped line",
+  all("\u00b7" not in x and x.count("<a ") == 4 and x.startswith('<span class="foot-row">') for x in _fl)
+  and re.search(r"\.foot-links a::before \{[^}]*content: \"\\00b7\"", _css9) is not None
+  and re.search(r"\.foot-links \{[^}]*overflow: hidden", _css9) is not None, _fl[0])
 _design9 = (ROOT / "DESIGN.md").read_text()
 t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
   "Palette roles" in _design9 and "Green never signals" in _design9

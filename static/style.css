@@ -1053,8 +1053,15 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
 /* The footer links are controls, not a sentence: each one is a 44px row. */
 .doc-back { margin-top: 28px; }
 .tap { display: inline-flex; align-items: center; min-height: 44px; }
-.foot-links { display: flex; flex-wrap: wrap; align-items: center; margin-left: -6px; }
-.foot-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
+/* The separators are not text: a dot written between the links would end one
+   line or start the next when they wrap. Each link carries its own dot in the
+   gap before it, and the paragraph clips what lies outside it, so the dot of
+   a link that starts a row falls outside and is never seen. The padding
+   leaves room for the focus ring. */
+.foot-links { overflow: hidden; margin: -4px -4px -4px -10px; padding: 4px; }
+.foot-row { display: flex; flex-wrap: wrap; align-items: center; margin-left: -16px; }
+.foot-links a { position: relative; display: inline-flex; align-items: center; min-height: 44px; margin-left: 16px; padding: 0 6px; }
+.foot-links a::before { content: "\00b7"; content: "\00b7" / ""; position: absolute; left: -16px; width: 16px; text-align: center; }
 
 /* ---- Checking, a verdict and an error share one night ground ------------- *
    The report is printed straight under the masthead: no picture above it. */
