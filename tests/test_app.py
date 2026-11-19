@@ -6019,6 +6019,12 @@ t("personal screen: every EXAMPLES claim in app.js passes", len(_examples) >= 7 
 t("personal screen: curly apostrophes and case do not hide a first-person word",
   _disp_p.looks_personal("I\u2019M 34") and _disp_p.looks_personal("MY BLOOD PRESSURE") and not _disp_p.looks_personal(""))
 
+_pv = c.get("/privacy").get_data(as_text=True)
+_pv_txt = _re.sub(r"\s+", " ", _re.sub(r"<[^>]+>", " ", _pv))
+t("privacy: it says typed-claim pages are not indexed, are kept out of the sitemap, and only example claims can be indexed",
+  "not indexed by search engines" in _pv_txt and "out of the sitemap" in _pv_txt and "Only the site's own example claims can be indexed" in _pv_txt)
+t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt and "\u2013" not in _pv_txt)
+
 
 # ---- Day counts: per-day totals, no identifiers ------------------------------------------
 def _tot():

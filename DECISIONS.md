@@ -4,6 +4,28 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-19: Only curated example claims are indexed
+
+Replaces the earlier rule "sound saved results are in the sitemap; the rest are
+noindex" (entry below). A claim is text a person typed and can hold a name, an
+age or a medical detail; the old screen (email, phone, first-person words) let
+through anything phrased in the third person ("Sarah's diabetes", "a 34 year
+old with gout"). A saved record being sound says nothing about whether the claim
+is safe to publish to a search engine. So a result page is indexable, and in the
+sitemap, only when all three hold: the claim is one of the curated examples
+(`display.CURATED_CLAIMS`, the same list as `EXAMPLES` in `static/app.js`,
+compared by a test, matched after case, whitespace and trailing punctuation);
+the saved record passes `display.saved_record_problems`; and the claim passes
+the personal-details screen (`display.looks_personal`: contact details, ages,
+names, personal medical wording, gendered pronouns). Every other result page is
+`noindex` and absent from the sitemap; it still renders for anyone with the
+link. When unsure, do not index: the screen is built to over-flag, since a false
+positive costs one index entry and a false negative exposes a person. The
+sitemap scans up to 50,000 saved rows so a curated claim is found however many
+typed claims came after it. `/privacy` says all of this. Not changed here:
+`/llms.txt` and the front page still list recent saved claims; they are not
+search indexes, but the same screen could be applied to them.
+
 ## 2026-11-19: Daily usage counts, with no identifiers (queue 8)
 
 Dhruva asked for usage counts and error monitoring. This reverses "no
