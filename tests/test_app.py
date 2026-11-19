@@ -484,9 +484,9 @@ r = c.get("/sitemap.xml")
 t("sitemap is XML and lists the static pages", r.status_code == 200
   and r.mimetype == "application/xml" and "/privacy" in r.data.decode() and "/method" in r.data.decode())
 r = c.get("/llms.txt")
-t("llms.txt describes the rules and links recent claims",
+t("llms.txt describes the rules and no longer lists a typed, non-curated claim",
   r.status_code == 200 and "ClaimReview" in r.data.decode() and "not medical advice" in r.data.decode().lower()
-  and "streamed claim" in r.data.decode())
+  and "streamed claim" not in r.data.decode())
 
 # ---- privacy page ----------------------------------------------------------------
 r = c.get("/privacy")
@@ -6024,6 +6024,29 @@ _pv_txt = _re.sub(r"\s+", " ", _re.sub(r"<[^>]+>", " ", _pv))
 t("privacy: it says typed-claim pages are not indexed, are kept out of the sitemap, and only example claims can be indexed",
   "not indexed by search engines" in _pv_txt and "out of the sitemap" in _pv_txt and "Only the site's own example claims can be indexed" in _pv_txt)
 t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt and "\u2013" not in _pv_txt)
+
+_pers, _ordc = "My son Tom has asthma, does honey help", "Honey soothes a cough in adults"
+for _cl, _q in ((_pers, "honey AND asthma"), (_ordc, "honey AND cough")):
+    db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], [_gs], tldr="Mixed.", still_open="Doses vary.")
+_pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/checks", "/no-such-page-xyz")}
+_pages["/llms.txt"] = c.get("/llms.txt").get_data(as_text=True)
+t("lists: a personal saved claim is on no public list (/, /checks, 404, /llms.txt)",
+  all("Tom" not in v and "asthma" not in v for v in _pages.values()), [u for u, v in _pages.items() if "Tom" in v])
+t("lists: an ordinary saved claim still shows on /, /checks and the 404 page",
+  all(_ordc in _pages[u] for u in ("/", "/checks", "/no-such-page-xyz")))
+t("lists: /llms.txt lists only curated claims, so an ordinary typed one is left out", _ordc not in _pages["/llms.txt"]
+  and "Vaccines cause autism" in _pages["/llms.txt"])
+for _ in range(2):
+    for _cl in (_pers, _ordc):
+        db.log_check(_cl, "complicated", "x", [])
+_tr = c.get("/api/trending").get_json()
+_tp = appmod._public_claims([{"claim": _pers}, {"claim": _ordc}], 8, key="claim")
+t("lists: the trending filter drops a personal claim and keeps an ordinary one", _tp == [{"claim": _ordc}])
+t("lists: /api/trending carries the ordinary claim checked twice and not the personal one",
+  any(x["claim"] == _ordc for x in _tr) and not any("Tom" in x["claim"] for x in _tr), _tr)
+t("privacy: it says lists of recent checks leave out a claim that looks personal",
+  "Lists of recent checks on the site leave out any claim that looks like it holds a name, an age, contact details or a personal medical detail"
+  in _re.sub(r"\s+", " ", c.get("/privacy").get_data(as_text=True)))
 
 
 # ---- Day counts: per-day totals, no identifiers ------------------------------------------

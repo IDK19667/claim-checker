@@ -232,6 +232,20 @@ def _citation(s: dict, relied_on: bool) -> dict:
     return c
 
 
+def _public_claims(rows, n, key="claim_text", indexable=False):
+    """
+    The first n rows whose claim may be shown in a public list. A claim that looks
+    like it holds a name, an age, contact details or a medical detail is left out
+    (indexable=True also needs it to be a curated example, for the machine index).
+    Callers fetch about three times n so a filtered list stays near its old size.
+    """
+    keep = display.indexable_claim if indexable else (lambda c: not display.looks_personal(c))
+    return [r for r in rows if keep(r[key])][:n]
+
+
+LIST_OVERFETCH = 3
+
+
 def _trust_example():
     """
     The real check the trust section offers as proof, read from the exported
@@ -293,7 +307,7 @@ def _render_home(checks_page: bool = False):
         ledger = db.ledger()
         latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
                        shelf=evidence.shelf(v["studies"], v["cited"]))
-                  for v in map(_listed, db.recent_verdicts(10))]
+                  for v in map(_listed, _public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))]
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
@@ -406,7 +420,7 @@ def sitemap():
 def llms_txt():
     """A plain description of this site for language models that read one."""
     base = _base_url()
-    recent = db.recent_cached(25)
+    recent = _public_claims(db.recent_cached(25 * LIST_OVERFETCH), 25, indexable=True)
     lines = [
         "# Evident",
         "",
@@ -455,7 +469,7 @@ def not_found(_e):
     render the page rather than turning a 404 into a 500.
     """
     try:
-        latest = [_listed(v) for v in db.recent_verdicts(5)]
+        latest = [_listed(v) for v in _public_claims(db.recent_verdicts(5 * LIST_OVERFETCH), 5)]
     except sqlite3.Error:
         latest = []
     return render_template("404.html", latest=latest, labels=VERDICT_LABELS), 404
@@ -1142,7 +1156,7 @@ def api_count():
 
 @app.route("/api/trending")
 def api_trending():
-    return jsonify(db.trending())
+    return jsonify(_public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8, key="claim"))
 
 
 @app.route("/api/study/<pmid>")

@@ -22,9 +22,12 @@ names, personal medical wording, gendered pronouns). Every other result page is
 link. When unsure, do not index: the screen is built to over-flag, since a false
 positive costs one index entry and a false negative exposes a person. The
 sitemap scans up to 50,000 saved rows so a curated claim is found however many
-typed claims came after it. `/privacy` says all of this. Not changed here:
-`/llms.txt` and the front page still list recent saved claims; they are not
-search indexes, but the same screen could be applied to them.
+typed claims came after it. `/privacy` says all of this. Every public list of
+claims (front page ledger, /checks, the 404 page, /api/trending) also drops a
+claim that `looks_personal` flags, through one helper (`_public_claims`), after
+fetching three times as many rows so the list stays near its size; /llms.txt,
+a machine index, lists only curated claims. Otherwise a personal claim's text
+would be indexed on the home page even though its own page is noindex.
 
 ## 2026-11-19: Daily usage counts, with no identifiers (queue 8)
 
