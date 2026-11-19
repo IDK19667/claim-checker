@@ -377,6 +377,10 @@
             </div>
           </section>
 
+          {# A check that found no studies says what to try, beside the verdict
+             that says why: nothing on PubMed matched. #}
+          <p class="no-evidence" id="no-evidence"{% if not result or result.studies %} hidden{% endif %}><b>Nothing on PubMed matched</b>Name the condition and the treatment, then check again. Edit claim puts your wording back in the box.</p>
+
           <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><b>Still open</b><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
 
           {# ===== The deeper layer =====
@@ -580,6 +584,7 @@
 
     <!-- ===== Error ===== -->
     <section id="error" hidden>
+      <h2 class="error-title" id="error-title"></h2>
       <p class="error-msg" id="error-msg"></p>
       <p class="countdown" id="countdown" hidden></p>
       <div class="error-actions">

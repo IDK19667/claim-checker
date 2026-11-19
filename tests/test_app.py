@@ -4296,13 +4296,36 @@ t("/favicon.ico answers with an image, not a 404", _r.status_code == 200 and _r.
 # 3. The front end: a slow check says so, a failed one offers Retry, both are announced.
 t("the page has a polite live region for 'still working', errors and the verdict",
   'id="announce" role="status" aria-live="polite"' in _tpl and 'function announce(' in _jsrc
-  and "announce(SLOW_TEXT)" in _jsrc and "announce(message)" in _jsrc and "announce(`Verdict:" in _jsrc)
+  and "announce(SLOW_TEXT)" in _jsrc and "announce(`${k.title}. ${message}`)" in _jsrc and "announce(`Verdict:" in _jsrc)
 t("  a silent check shows static 'still working' text after a delay and gives up later with Retry",
   "const SLOW_MS = 12000" in _jsrc and "const GIVE_UP_MS = 90000" in _jsrc
   and "taking longer than it should" in _jsrc and 'id="error-retry"' in _tpl and "Retry this claim" in _tpl
   and "li.slow" in _jsrc)
 t("  Retry runs the same claim again, and a claim the server refused to read gets no Retry",
-  'check(lastClaim)' in _jsrc and "final.status !== 400" in _jsrc)
+  'check(lastClaim)' in _jsrc and "retry: false" in _jsrc.split("const ERROR_KINDS")[1].split("};")[0])
+# The five failures a reader can meet, told apart by what the server really sent.
+_kinds = _jsrc.split("const ERROR_KINDS = {")[1].split("};")[0]
+t("an error says which of four things failed, each with its own title: invalid claim, no connection, a limit, the checker",
+  all(x in _kinds for x in ("That claim can't be checked", "Couldn't reach the server",
+                            "Too many checks right now", "The checker couldn't finish this check")))
+t("  the kind comes from the status the server sent: 400 invalid, 429 a limit, any other failure the checker; no status is guessed",
+  'if (status === 400) return "invalid"' in _jsrc and 'if (status === 429) return "limit"' in _jsrc
+  and 'return "provider"' in _jsrc and "errorKindOf(final.status)" in _jsrc)
+t("  no response at all (offline, a dropped stream, a silent server) is the network kind, never a status",
+  _jsrc.count('renderError("network"') == 3)
+t("  an invalid claim offers Edit claim and no Retry; every other kind offers Retry",
+  'back: "Edit claim"' in _kinds and _kinds.count("retry: true") == 3)
+t("  every failure keeps the draft in the field",
+  "if (lastClaim && !input.value.trim()) input.value = lastClaim" in _jsrc)
+t("  the error screen has a title and a line under it, and none of that copy has a dash",
+  'id="error-title"' in _tpl and 'id="error-msg"' in _tpl
+  and not _DASH.search(_kinds) and not any(_DASH.search(x) for x in _re2.findall(r'renderError\("[a-z]+", "([^"]+)"', _jsrc)))
+# A check that found no studies is an answer, not an error: the result says what to try.
+t("a result that rests on no studies says what to try next (server-rendered, hidden when studies exist, and shown by the script on a live check)",
+  'id="no-evidence"{% if not result or result.studies %} hidden{% endif %}' in _tpl
+  and 'id="no-evidence" hidden' in c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
+  and "Name the condition and the treatment" in _tpl and not _DASH.search(_tpl.split('id="no-evidence"')[1].split("</p>")[0])
+  and '$("no-evidence").hidden = data.studies.length > 0' in _jsrc)
 _strings = _re2.findall(r'"([^"\n]{12,})"', _jsrc.split("const SLOW_MS")[1].split("async function checkStreamed")[0])
 t("  none of that copy has a dash", not any(_DASH.search(x) for x in _strings) and not _DASH.search(_tpl.split('id="error"')[1].split("</section>")[0]))
 

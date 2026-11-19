@@ -529,6 +529,7 @@ function renderResult(data) {
   $("tldr").textContent = data.tldr || "";
   renderSays(data);
   renderWho(data);
+  $("no-evidence").hidden = data.studies.length > 0;
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
   renderBreakdown(data, data.studies.length, data.studies);
@@ -692,18 +693,39 @@ function endPending() {
 function announce(text) { const el = $("announce"); if (el) el.textContent = text || ""; }
 
 let countdownTimer = null;
-// `retry` puts a button on the screen that runs the same claim again. It is
-// off for a claim the server refused to read (empty, too long), where running
-// the same words again cannot change the answer.
-function renderError(message, retryAfter, retry = false) {
-  // Nothing found, rate limited, provider down: same band, same sheet, same
-  // way out. Only what the sheet says changes.
+
+// Four ways a check can fail, told apart only by what actually happened: the
+// status the server sent, or no answer at all. Each has a title that names the
+// problem; the line under it says what to do, and is the server's own words
+// when it sent some. A check that found no studies is not here: it is an
+// answer, and the result screen says so.
+const ERROR_KINDS = {
+  invalid: { title: "That claim can't be checked", retry: false, back: "Edit claim" },
+  network: { title: "Couldn't reach the server", retry: true, back: "Check another claim" },
+  limit: { title: "Too many checks right now", retry: true, back: "Check another claim" },
+  provider: { title: "The checker couldn't finish this check", retry: true, back: "Check another claim" },
+};
+// 400: the server read the claim and refused it. 429: a limit, ours or the
+// provider's. Anything else the server sent (500, 502): the checker failed.
+function errorKindOf(status) {
+  if (status === 400) return "invalid";
+  if (status === 429) return "limit";
+  return "provider";
+}
+// The draft stays in the field on every failure. Retry and Edit both start
+// from it, so nothing has to be typed again.
+function renderError(kind, message, retryAfter) {
+  // Same night ground, same way out. Only what the screen says changes.
+  const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
   screenState.settle("error");
+  $("error-title").textContent = k.title;
   $("error-msg").textContent = message;
-  announce(message);
+  announce(`${k.title}. ${message}`);
+  if (lastClaim && !input.value.trim()) input.value = lastClaim;
+  $("error-back").textContent = k.back;
   const cd = $("countdown");
   const back = $("error-retry");
-  back.hidden = !(retry && lastClaim);
+  back.hidden = !(k.retry && lastClaim);
   clearInterval(countdownTimer);
   if (retryAfter && retryAfter > 0) {
     let left = retryAfter;
@@ -870,7 +892,7 @@ async function check(claim) {
     const saved = loadRecent().find((r) => r.claim.toLowerCase() === claim.toLowerCase() && r.result);
     if (saved) { renderResult({ ...saved.result, restored: true }); return; }
     lastClaim = claim;
-    renderError("You're offline. Checking a claim needs a connection.", 0, true);
+    renderError("network", "You're offline. Reconnect, then retry. Your claim is still in the box.", 0);
     return;
   }
 
@@ -891,7 +913,7 @@ async function check(claim) {
 
     if (final.stage === "error") {
       endPending();
-      renderError(final.error, final.retry_after, final.status !== 400);
+      renderError(errorKindOf(final.status), final.error, final.retry_after);
     } else {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays
@@ -905,7 +927,7 @@ async function check(claim) {
         announce(`Verdict: ${VERDICT_LABELS[final.result.verdict] || final.result.verdict}. ${final.result.tldr || ""}`);
       } catch (err) {
         console.error("Rendering the verdict failed:", err);
-        renderError("The verdict came back, but this page could not draw it. Retry to see it again.", 0, true);
+        renderError("provider", "The verdict came back, but this page could not draw it. Retry to see it again.", 0);
         return;
       }
       // The address carries the claim as checked: a misspelled one comes
@@ -918,9 +940,9 @@ async function check(claim) {
     }
   } catch (err) {
     endPending();
-    if (err && err.name === "AbortError" && gaveUp) renderError("This check is taking longer than it should. Nothing is wrong on your side. Retry in a moment.", 0, true);
+    if (err && err.name === "AbortError" && gaveUp) renderError("network", "This check is taking longer than it should. Nothing is wrong on your side. Retry in a moment.", 0);
     else if (err && err.name === "AbortError") { screenState.leave(); show(askSection); focusClaim(); }
-    else renderError("Couldn't reach the server. Check your connection, then retry.", 0, true);
+    else renderError("network", "Check your connection, then retry. Your claim is still in the box.", 0);
   } finally {
     clearSlow();
     inFlight = false;
