@@ -368,7 +368,8 @@
             <p class="section-label">What the research says</p>
             <div class="says" id="says">
               {%- if result %}
-              {%- for line in (result.breakdown.says if result.breakdown and result.breakdown.says else [result.explanation]) %}
+              {%- set bv = breakdown_view(result) %}
+              {%- for line in (bv.says if bv else [result.explanation]) %}
               <p class="says-p">{{ line }}</p>
               {%- endfor %}
               {%- endif %}
@@ -399,12 +400,12 @@
               <span class="deeper-open" aria-hidden="true"><span class="when-shut">Open</span><span class="when-open">Close</span></span>
             </summary>
             <div class="deeper-body" id="deeper-body">
-              {%- if result and result.breakdown %}{% set bd = result.breakdown %}
-              {%- if bd.parts %}
+              {%- if result and result.breakdown %}{% set bv = breakdown_view(result) %}
+              {%- if bv.parts %}
               <section class="deeper-sec">
                 <p class="section-label">The claim, part by part</p>
                 <ol class="parts">
-                  {%- for p in bd.parts %}
+                  {%- for p in bv.parts %}
                   <li class="part">
                     <p class="part-claim">{{ p.part }}</p>
                     <p class="part-take">{{ p.assessment }}</p>
@@ -413,22 +414,22 @@
                 </ol>
               </section>
               {%- endif %}
-              {%- if bd.evidence %}
+              {%- if bv.evidence or bv.effect_size %}
               <section class="deeper-sec">
                 <p class="section-label">What the evidence shows</p>
-                {%- for para in bd.evidence %}
+                {%- for para in bv.evidence %}
                 <p class="deeper-p">{{ para }}</p>
                 {%- endfor %}
-                {%- if bd.effect_size %}
-                <p class="effect"><b>How big the effect is</b><span>{{ bd.effect_size }}</span></p>
+                {%- if bv.effect_size %}
+                <p class="effect"><b>How big the effect is</b><span>{{ bv.effect_size }}</span></p>
                 {%- endif %}
               </section>
               {%- endif %}
-              {%- if bd.concluded %}
+              {%- if bv.concluded %}
               <section class="deeper-sec">
                 <p class="section-label">What each study concluded</p>
                 <ol class="concluded">
-                  {%- for c in bd.concluded %}{% set st = result.studies[c.n - 1] %}
+                  {%- for c in bv.concluded %}{% set st = result.studies[c.n - 1] %}
                   <li class="said">
                     <p class="said-who">Study {{ c.n }}{% if st.type_label %} · {{ st.type_label }}{% endif %}{% if st.year %} · {{ st.year }}{% endif %}</p>
                     <blockquote class="said-q">{{ c.said }}</blockquote>
@@ -438,33 +439,33 @@
                 <p class="said-note">In the authors' own words, from the summary each study was published with.</p>
               </section>
               {%- endif %}
-              {%- if bd.strength %}
+              {%- if bv.strength %}
               <section class="deeper-sec">
                 <p class="section-label">Why the verdict is what it is</p>
-                <p class="deeper-p">{{ bd.strength }}</p>
+                <p class="deeper-p">{{ bv.strength }}</p>
               </section>
               {%- endif %}
-              {%- if bd.applies_to or bd.not_applies_to or bd.populations %}
+              {%- if bv.applies_to or bv.not_applies_to or bv.populations %}
               <section class="deeper-sec">
                 <p class="section-label">Who this applies to</p>
-                {%- if bd.applies_to %}<p class="deeper-p">{{ bd.applies_to }}</p>{% endif %}
+                {%- if bv.applies_to %}<p class="deeper-p">{{ bv.applies_to }}</p>{% endif %}
                 {#- Read off the records, not written by the model: these are the
                     narrow groups the cited studies were actually run in. #}
-                {%- if bd.populations %}
+                {%- if bv.populations %}
                 <p class="deeper-p narrow">Some of this evidence comes from studies
-                  of one group only: {{ bd.populations|join(", ") }}. A result found
+                  of one group only: {{ bv.populations|join(", ") }}. A result found
                   in one group may not hold for everyone.</p>
                 {%- endif %}
-                {%- if bd.not_applies_to %}
+                {%- if bv.not_applies_to %}
                 <p class="section-label label-2">And who it does not</p>
-                <p class="deeper-p">{{ bd.not_applies_to }}</p>
+                <p class="deeper-p">{{ bv.not_applies_to }}</p>
                 {%- endif %}
               </section>
               {%- endif %}
-              {%- if bd.unknowns %}
+              {%- if bv.unknowns %}
               <section class="deeper-sec">
                 <p class="section-label">What is still unknown</p>
-                <p class="deeper-p">{{ bd.unknowns }}</p>
+                <p class="deeper-p">{{ bv.unknowns }}</p>
               </section>
               {%- endif %}
               <p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them. Tap a study number to read it.</p>

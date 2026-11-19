@@ -1431,8 +1431,9 @@ t("  each study opens from a real button, not a list item playing one",
       in (ROOT / "static" / "style.css").read_text())
 t("  what was gated out is not in the page either",
   "47%" not in _html and "cites nothing" not in _html and "wards off" not in _html)
-t("  the effect size gets its own line",
-  "How big the effect is" in _html and "was 0.88, and 0.30" in _html)
+t("  the effect size is printed once: in 'What the research says', not again as its own line",
+  "How big the effect is" not in _html.split('id="server-result"')[0]
+  and _html.split('id="server-result"')[0].count("was 0.88, and 0.30") == 1)
 t("  and every section of the layer is there",
   all(s in _html for s in ("What the evidence shows", "Why the verdict is what it is",
                            "Who this applies to", "And who it does not",
@@ -1470,7 +1471,7 @@ _js_labels = set(re.findall(r'sec\("([^"]+)"', _js)) | set(
 t("the server and the browser render the same breakdown headings",
   _tpl_labels == _js_labels, sorted(_tpl_labels ^ _js_labels))
 t("the browser's renderer runs every sentence through the same ref linking",
-  "renderBreakdown(data.breakdown" in _js and "linkStudyRefs(p.assessment" in _js)
+  "renderBreakdown(data, " in _js and "linkStudyRefs(p.assessment" in _js)
 # The one rounded thing in the layer is its Open control, at the controls'
 # radius. Nothing that holds reading is boxed.
 _deeper_css = ((ROOT / "static" / "style.css").read_text()
@@ -1610,6 +1611,69 @@ _stamp_px = [float(n) for n in re.findall(
     _css, re.S)[0]]
 t("  and the verdict is set larger than the claim at every width",
   _claim_px[1] < _stamp_px[0], f"claim {_claim_px} stamp {_stamp_px}")
+
+# ---- no sentence is printed twice -----------------------------------------------
+# "What the research says" is picked from the paragraphs the breakdown prints,
+# so the same effect-size and who-it-applies-to sentences used to appear in both.
+import display as _display  # noqa: E402
+_DUP = {"claim": "Vitamin D prevents colds", "explanation": "Colds fell a little (Study 1).",
+        "still_open": "Whether it holds for older adults.",
+        "breakdown": {
+            "says": ["Colds fell a little (Study 1).",
+                     "The odds ratio for everyone was 0.88 (Study 1).",
+                     "That is about 12% lower odds, a small effect (Study 1).",
+                     "Who was studied: adults aged 18 to 67 (Study 2)."],
+            "parts": [{"part": "Vitamin D prevents colds", "assessment": "Colds fell a little (Study 1)."}],
+            "evidence": ["Colds fell a little (Study 1). Fewer people caught a cold (Study 2)."],
+            "effect_size": "The odds ratio for everyone was 0.88 (Study 1). "
+                           "That is about 12% lower odds, a small effect (Study 1).",
+            "strength": "Pooled trials agree (Study 1).",
+            "applies_to": "Adults aged 18 to 67 (Study 2).",
+            "not_applies_to": "Children (Study 2).", "unknowns": "Whether it holds for older adults.",
+            "concluded": [], "populations": []}}
+_bv = _display.breakdown_view(_DUP)
+t("the breakdown view drops what 'What the research says' already printed",
+  _bv["effect_size"] == "" and _bv["parts"] == [] and _bv["evidence"] == ["Fewer people caught a cold (Study 2)."]
+  and _bv["unknowns"] == "" and _bv["strength"] == "Pooled trials agree (Study 1).", _bv)
+t("  the who-line is not said twice: the who block keeps the sentence, the research block does not",
+  not any(ln.startswith("Who was studied") for ln in _bv["says"]) and _bv["applies_to"] == "Adults aged 18 to 67 (Study 2).")
+t("  the effect-size pair, shown once in the research block, is not printed again as 'How big the effect is'",
+  _bv["effect_size"] == "" and any("0.88" in ln for ln in _bv["says"]))
+t("  a record with no breakdown has no view", _display.breakdown_view({"claim": "x"}) is None)
+
+import html as _htmllib  # noqa: E402
+
+
+def _printed(page):
+    """Each sentence the reading column and the breakdown print, quotes of the authors left out."""
+    body = page.split('id="says"', 1)[1].split('class="evidence"', 1)[0]
+    body = body.split('<p class="fine">')[0] + (body.split('</details>', 1)[1] if "</details>" in body else "")
+    paras = _re.findall(r'<p class="(?:says-p|deeper-p|part-take|effect)[^"]*"[^>]*>(.*?)</p>|<span>(.*?)</span></p>', body, _re.S)
+    text = " ".join(a or b for a, b in paras)
+    text = _htmllib.unescape(_re.sub(r"<[^>]+>", "", text))
+    return [s.strip() for s in _display.split_sentences(text)]
+
+
+_sents = _printed(_ord)
+_keys = [_display._key(x) for x in _sents]
+t(f"the result page prints no sentence twice ({len(_sents)} sentences)",
+  len(_sents) >= 4 and len(_keys) == len(set(_keys)),
+  [x for x in _sents if _keys.count(_display._key(x)) > 1])
+t("  the effect-size sentence is on the page once, in the research block, and there is no second 'How big the effect is'",
+  _ord.split('id="server-result"')[0].count("The odds ratio was 0.88, and 0.30 in the lowest") == 1
+  and "How big the effect is" not in _ord.split('id="server-result"')[0])
+
+import shutil as _shutil, subprocess as _subprocess  # noqa: E402
+if _shutil.which("node"):
+    _hsrc = (ROOT / "static" / "app.js").read_text().split("// ---- What the page prints from the breakdown, each sentence once")[1].split("// (d) on the result screen.")[0]
+    _hsrc = _hsrc.split("\n", 1)[1]
+    _recs = [_DUP, dict(_DUP, breakdown=dict(_DUP["breakdown"], says=[], evidence=[])),
+             {"claim": "x", "explanation": "e", "breakdown": None}]
+    _prog = _hsrc + "console.log(JSON.stringify(" + json.dumps(_recs) + ".map(breakdownView)));"
+    _js_views = json.loads(_subprocess.run(["node", "-e", _prog], capture_output=True, text=True, check=True).stdout)
+    _py_views = [_display.breakdown_view(r) for r in _recs]
+    t("the script and the server pick the same sentences to print, on three records",
+      _js_views == _py_views, (_js_views, _py_views))
 
 # (d) What the research says: never folded, every sentence already gated.
 _says = _vd["breakdown"]["says"]
@@ -3493,8 +3557,8 @@ t("  a pointer left with nothing above it, after a later step, is taken out",
                                "evidence": ["LDL fell by 0.19 mmol/L (Study 1)."]})["effect_size"]
   == breakdown.EFFECT_SIZE_ABOVE)
 t("  and the page prints no effect row when there is no line",
-  "{%- if bd.effect_size %}" in (ROOT / "templates" / "index.html").read_text()
-  and "(bd.effect_size\n        ? `<p class=\"effect\">" in (ROOT / "static" / "app.js").read_text())
+  "{%- if bv.effect_size %}" in (ROOT / "templates" / "index.html").read_text()
+  and "(bv.effect_size\n        ? `<p class=\"effect\">" in (ROOT / "static" / "app.js").read_text())
 
 # All of it, through a real check.
 _LENT_CLAIM = "Lentils lower LDL cholesterol"

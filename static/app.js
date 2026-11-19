@@ -430,6 +430,51 @@ function fmtDate(iso) {
 // word of its three lines is computed server-side in evidence.py, so a
 // streamed check and the page a shared link renders can never word the same
 // set of studies differently.
+// ---- What the page prints from the breakdown, each sentence once -----------
+// Mirrors display.py (the page a shared link gets); a test runs both on the
+// same records. "What the research says" is picked from the same paragraphs
+// the breakdown prints, so the breakdown loses every sentence already shown.
+const WHO_LABEL = "Who was studied: ";
+const splitSentences = (text) =>
+  String(text || "").trim().split(/(?<=[.!?])\s+(?=[A-Z0-9\u201c"(])/).map((x) => x.trim()).filter(Boolean);
+const sentenceKey = (x) => x.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 80);
+function unseen(text, seen) {
+  const out = [];
+  for (const sentence of splitSentences(text)) {
+    const k = sentenceKey(sentence);
+    if (k && !seen.has(k)) { seen.add(k); out.push(sentence); }
+  }
+  return out.join(" ");
+}
+function breakdownView(data) {
+  const bd = data && data.breakdown;
+  if (!bd) return null;
+  const explanation = String(data.explanation || "").trim() ? [data.explanation] : [];
+  let says = (bd.says || []).filter((ln) => String(ln || "").trim());
+  if (!says.length) says = explanation;
+  says = says.filter((ln) => !ln.toLowerCase().startsWith(WHO_LABEL.trim().toLowerCase()));
+  if (!says.length) says = explanation;
+  const seen = new Set();
+  for (const ln of says) for (const x of splitSentences(ln)) seen.add(sentenceKey(x));
+  for (const x of splitSentences(data.still_open)) seen.add(sentenceKey(x));
+  const parts = [];
+  for (const p of bd.parts || []) {
+    const take = unseen(p.assessment, seen);
+    if (take) parts.push({ part: p.part || "", assessment: take });
+  }
+  const evidence = (bd.evidence || []).map((para) => unseen(para, seen)).filter(Boolean);
+  return {
+    says, parts, evidence,
+    effect_size: unseen(bd.effect_size, seen),
+    concluded: bd.concluded || [],
+    strength: unseen(bd.strength, seen),
+    applies_to: unseen(bd.applies_to, seen),
+    populations: bd.populations || [],
+    not_applies_to: unseen(bd.not_applies_to, seen),
+    unknowns: unseen(bd.unknowns, seen),
+  };
+}
+
 // (d) on the result screen. The sentences are picked server-side in
 // breakdown.says from prose that has already passed the gate; a result
 // cached before the block existed falls back to the explanation, which is
@@ -437,8 +482,8 @@ function fmtDate(iso) {
 function renderSays(data) {
   const sec = $("says-sec"), wrap = $("says");
   if (!sec || !wrap) return;
-  const bd = data.breakdown || {};
-  const lines = (bd.says && bd.says.length ? bd.says : [data.explanation])
+  const bv = breakdownView(data);
+  const lines = (bv ? bv.says : [data.explanation])
     .filter((t) => String(t || "").trim());
   sec.hidden = !lines.length;
   wrap.innerHTML = lines
@@ -558,7 +603,8 @@ function renderNextSteps(ns, claim) {
 // this point has already been through the gate in breakdown.py, which dropped
 // anything without a study number and anything carrying a figure the abstracts
 // do not have. This only lays it out.
-function renderBreakdown(bd, count, studies = []) {
+function renderBreakdown(data, count, studies = []) {
+  const bd = data && data.breakdown, bv = breakdownView(data);
   const wrap = $("deeper");
   if (!wrap) return;
   const body = $("deeper-body");
@@ -583,18 +629,18 @@ function renderBreakdown(bd, count, studies = []) {
     `<section class="deeper-sec"><p class="section-label">${escapeHtml(label)}</p>${inner}</section>`;
 
   const out = [];
-  if ((bd.parts || []).length) {
-    out.push(sec("The claim, part by part", `<ol class="parts">${bd.parts.map((p) => `
+  if (bv.parts.length) {
+    out.push(sec("The claim, part by part", `<ol class="parts">${bv.parts.map((p) => `
       <li class="part">
         <p class="part-claim">${escapeHtml(p.part)}</p>
         <p class="part-take">${linkStudyRefs(p.assessment, count)}</p>
       </li>`).join("")}</ol>`));
   }
-  if ((bd.evidence || []).length) {
+  if (bv.evidence.length || bv.effect_size) {
     out.push(sec("What the evidence shows",
-      bd.evidence.map(prose).join("") +
-      (bd.effect_size
-        ? `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bd.effect_size, count)}</span></p>`
+      bv.evidence.map(prose).join("") +
+      (bv.effect_size
+        ? `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bv.effect_size, count)}</span></p>`
         : "")));
   }
   // Quoted from the abstracts on the server, so the quote is escaped and never
@@ -610,21 +656,21 @@ function renderBreakdown(bd, count, studies = []) {
       </li>`;
     }).join("")}</ol><p class="said-note">In the authors' own words, from the summary each study was published with.</p>`));
   }
-  if (bd.strength) out.push(sec("Why the verdict is what it is", prose(bd.strength)));
+  if (bv.strength) out.push(sec("Why the verdict is what it is", prose(bv.strength)));
   // The narrow groups come off the PubMed records on the server, so this
   // prints a list rather than prose: no refs to link, nothing to gate.
-  const groups = bd.populations || [];
-  if (bd.applies_to || bd.not_applies_to || groups.length) {
+  const groups = bv.populations || [];
+  if (bv.applies_to || bv.not_applies_to || groups.length) {
     out.push(sec("Who this applies to",
-      (bd.applies_to ? prose(bd.applies_to) : "") +
+      (bv.applies_to ? prose(bv.applies_to) : "") +
       (groups.length
         ? `<p class="deeper-p narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(groups.join(", "))}. A result found in one group may not hold for everyone.</p>`
         : "") +
-      (bd.not_applies_to
-        ? `<p class="section-label label-2">And who it does not</p>${prose(bd.not_applies_to)}`
+      (bv.not_applies_to
+        ? `<p class="section-label label-2">And who it does not</p>${prose(bv.not_applies_to)}`
         : "")));
   }
-  if (bd.unknowns) out.push(sec("What is still unknown", prose(bd.unknowns)));
+  if (bv.unknowns) out.push(sec("What is still unknown", prose(bv.unknowns)));
   out.push(`<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them. Tap a study number to read it.</p>`);
   body.innerHTML = out.join("");
 
@@ -693,7 +739,7 @@ function renderResult(data) {
   renderSays(data);
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
-  renderBreakdown(data.breakdown, data.studies.length, data.studies);
+  renderBreakdown(data, data.studies.length, data.studies);
 
   const n = data.studies.length;
   const cited = data.studies.filter((s) => s.cited_in_verdict).length;

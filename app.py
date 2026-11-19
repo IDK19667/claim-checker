@@ -18,6 +18,7 @@ from flask import (Flask, Response, g, jsonify, redirect, render_template, reque
                    send_from_directory)
 
 import breakdown as breakdown_mod
+import display
 import db
 import evidence
 import og
@@ -81,6 +82,10 @@ CSP_TEMPLATE = (
     "object-src 'none'; "
     "frame-ancestors 'none'"
 )
+
+
+# What the result page prints from the breakdown, each sentence once.
+app.jinja_env.globals["breakdown_view"] = display.breakdown_view
 
 
 @app.before_request
