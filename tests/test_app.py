@@ -4911,6 +4911,10 @@ _design9 = (ROOT / "DESIGN.md").read_text()
 t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
   "Palette roles" in _design9 and "Green never signals" in _design9
   and all(h in _design9 for h in ("#f1f2ee", "#fafaf8", "#121514", "#434a46", "#5d6560", "#2c5848", "#d4e4da", "#0f1211")))
+_tpl_who = (ROOT / "templates" / "index.html").read_text()
+t("who: with only a 'does not apply' sentence, the heading says so and no empty 'applies to' heading is left",
+  "Who this does not apply to" in _tpl_who and "{%- if who_yes %}<p class=\"section-label label-2\">" in _tpl_who
+  and "Who this does not apply to" in _js and "(yes ? `<p class=\"section-label label-2\">" in (ROOT / "static" / "app.js").read_text())
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

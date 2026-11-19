@@ -352,7 +352,8 @@
           {# Who the evidence covers, and who it does not. From the breakdown's
              own fields, with the sentences already printed above taken out. #}
           <section class="who-sec" id="who-sec"{% if not (bv and (bv.applies_to or bv.not_applies_to or bv.populations)) %} hidden{% endif %}>
-            <p class="section-label">Who and what this applies to</p>
+            {%- set who_yes = bv and (bv.applies_to or bv.populations) %}
+            <p class="section-label" id="who-label">{% if bv and not who_yes and bv.not_applies_to %}Who this does not apply to{% else %}Who and what this applies to{% endif %}</p>
             <div class="who" id="who">
               {%- if bv %}
               {%- if bv.applies_to %}<p class="says-p">{{ bv.applies_to }}</p>{% endif %}
@@ -364,7 +365,7 @@
                 in one group may not hold for everyone.</p>
               {%- endif %}
               {%- if bv.not_applies_to %}
-              <p class="section-label label-2">And who it does not</p>
+              {%- if who_yes %}<p class="section-label label-2">And who it does not</p>{% endif %}
               <p class="says-p">{{ bv.not_applies_to }}</p>
               {%- endif %}
               {%- endif %}

@@ -444,13 +444,17 @@ function renderWho(data) {
   const count = data.studies.length;
   const groups = bv ? bv.populations : [];
   const prose = (text) => `<p class="says-p">${linkStudyRefs(text, count)}</p>`;
+  const yes = !!(bv && (bv.applies_to || groups.length));
+  const label = $("who-label");
+  if (label) label.textContent = bv && !yes && bv.not_applies_to
+    ? "Who this does not apply to" : "Who and what this applies to";
   const html = bv
     ? (bv.applies_to ? prose(bv.applies_to) : "") +
       (groups.length
         ? `<p class="deeper-p narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(groups.join(", "))}. A result found in one group may not hold for everyone.</p>`
         : "") +
       (bv.not_applies_to
-        ? `<p class="section-label label-2">And who it does not</p>${prose(bv.not_applies_to)}`
+        ? (yes ? `<p class="section-label label-2">And who it does not</p>` : "") + prose(bv.not_applies_to)
         : "")
     : "";
   sec.hidden = !html;
