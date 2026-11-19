@@ -325,6 +325,7 @@
          sentence of the prose use. #}
       {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="Study {{ i + 1 }}{% if s.type_label %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else ((s.background_why or 'animal or lab') ~ ', background only' if s.background else 'read but not used')) }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }} k-{{ s.kind }}"><span class="barcol-spine" aria-hidden="true">{{ s.spine }}</span></span></span><span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
 
+      {% set bv = breakdown_view(result) if result else None %}
       <div class="verdict-block"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
         <article class="ticket" aria-labelledby="claim-echo">
           {# The panel reads top to bottom: the short answer, the research
@@ -355,10 +356,31 @@
             <p class="section-label">What the research says</p>
             <div class="says" id="says">
               {%- if result %}
-              {%- set bv = breakdown_view(result) %}
               {%- for line in (bv.says if bv else [result.explanation]) %}
               <p class="says-p">{{ line }}</p>
               {%- endfor %}
+              {%- endif %}
+            </div>
+          </section>
+
+          {# Who the evidence covers, and who it does not. From the breakdown's
+             own fields, with the sentences already printed above taken out. #}
+          <section class="who-sec" id="who-sec"{% if not (bv and (bv.applies_to or bv.not_applies_to or bv.populations)) %} hidden{% endif %}>
+            <p class="section-label">Who and what this applies to</p>
+            <div class="who" id="who">
+              {%- if bv %}
+              {%- if bv.applies_to %}<p class="says-p">{{ bv.applies_to }}</p>{% endif %}
+              {#- Read off the records, not written by the model: these are the
+                  narrow groups the cited studies were actually run in. #}
+              {%- if bv.populations %}
+              <p class="deeper-p narrow">Some of this evidence comes from studies
+                of one group only: {{ bv.populations|join(", ") }}. A result found
+                in one group may not hold for everyone.</p>
+              {%- endif %}
+              {%- if bv.not_applies_to %}
+              <p class="section-label label-2">And who it does not</p>
+              <p class="says-p">{{ bv.not_applies_to }}</p>
+              {%- endif %}
               {%- endif %}
             </div>
           </section>
@@ -387,7 +409,7 @@
               <span class="deeper-open" aria-hidden="true"><span class="when-shut">Open</span><span class="when-open">Close</span></span>
             </summary>
             <div class="deeper-body" id="deeper-body">
-              {%- if result and result.breakdown %}{% set bv = breakdown_view(result) %}
+              {%- if bv %}
               {%- if bv.parts %}
               <section class="deeper-sec">
                 <p class="section-label">The claim, part by part</p>
@@ -430,23 +452,6 @@
               <section class="deeper-sec">
                 <p class="section-label">Why the verdict is what it is</p>
                 <p class="deeper-p">{{ bv.strength }}</p>
-              </section>
-              {%- endif %}
-              {%- if bv.applies_to or bv.not_applies_to or bv.populations %}
-              <section class="deeper-sec">
-                <p class="section-label">Who this applies to</p>
-                {%- if bv.applies_to %}<p class="deeper-p">{{ bv.applies_to }}</p>{% endif %}
-                {#- Read off the records, not written by the model: these are the
-                    narrow groups the cited studies were actually run in. #}
-                {%- if bv.populations %}
-                <p class="deeper-p narrow">Some of this evidence comes from studies
-                  of one group only: {{ bv.populations|join(", ") }}. A result found
-                  in one group may not hold for everyone.</p>
-                {%- endif %}
-                {%- if bv.not_applies_to %}
-                <p class="section-label label-2">And who it does not</p>
-                <p class="deeper-p">{{ bv.not_applies_to }}</p>
-                {%- endif %}
               </section>
               {%- endif %}
               {%- if bv.unknowns %}

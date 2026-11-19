@@ -1436,7 +1436,7 @@ t("  the effect size is printed once: in 'What the research says', not again as 
   and _html.split('id="server-result"')[0].count("was 0.88, and 0.30") == 1)
 t("  and every section of the layer is there",
   all(s in _html for s in ("What the evidence shows", "Why the verdict is what it is",
-                           "Who this applies to", "And who it does not",
+                           "Who and what this applies to", "And who it does not",
                            "What is still unknown")))
 
 # A verdict with nothing cited cannot have a breakdown of what the evidence
@@ -1466,8 +1466,9 @@ _js = (ROOT / "static" / "app.js").read_text()
 _deeper_tpl = _tpl[_tpl.find('<details class="deeper"'):]
 _deeper_tpl = _deeper_tpl[:_deeper_tpl.find("</details>")]
 _tpl_labels = set(re.findall(r'class="section-label[^"]*">([^<]+)<', _deeper_tpl))
-_js_labels = set(re.findall(r'sec\("([^"]+)"', _js)) | set(
-    re.findall(r'class="section-label label-2">([^<]+)<', _js))
+_js_deeper = _js.split("function renderBreakdown(")[1].split("\nfunction ")[0]
+_js_labels = set(re.findall(r'sec\("([^"]+)"', _js_deeper)) | set(
+    re.findall(r'class="section-label label-2">([^<]+)<', _js_deeper))
 t("the server and the browser render the same breakdown headings",
   _tpl_labels == _js_labels, sorted(_tpl_labels ^ _js_labels))
 t("the browser's renderer runs every sentence through the same ref linking",
@@ -1727,6 +1728,20 @@ t("  it goes back to the claim box with the claim filled, cursor at the end, sug
   and "check(" not in _edit_js)
 t("  it is a 44px target and is not offered while a check runs",
   "min-height: 44px" in _css.split(".edit-claim {")[1].split("}")[0] and "#result.checking .edit-claim { display: none; }" in _css)
+
+# ---- who and what it applies to, then the limitation -----------------------------
+_deeper_html = _ord.split('<details class="deeper"')[1].split("</details>")[0]
+t("who and what the answer applies to is its own block, between the research and what is still open",
+  _at("What the research says") < _at("Who and what this applies to") < _at(">Still open<")
+  and "Adults aged 18 to 67" in _ord.split(">Still open<")[0].split("Who and what this applies to")[1])
+t("  it leaves the breakdown, so the breakdown does not say it a second time",
+  "Who and what this applies to" not in _deeper_html and "And who it does not" not in _deeper_html
+  and "Adults aged 18 to 67" not in _deeper_html)
+t("  the main limitation is still the still_open field, and still printed",
+  _re.search(r'<p class="still-open" id="still-open">.*?<span id="still-open-text">[^<]+</span>', _ord, _re.S) is not None)
+t("  the script fills the same block from the same view",
+  'function renderWho(data)' in (ROOT / "static" / "app.js").read_text()
+  and "renderWho(data);" in (ROOT / "static" / "app.js").read_text())
 
 # (d) What the research says: never folded, every sentence already gated.
 _says = _vd["breakdown"]["says"]

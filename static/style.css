@@ -520,7 +520,10 @@ body {
   margin: 10px 0 0; max-width: 24em;
   font: 350 clamp(26px, 7.2vw, 34px)/1.22 var(--display); letter-spacing: -0.02em; text-wrap: balance;
 }
-.says-sec { margin-top: 40px; }
+.says-sec { margin-top: 36px; }
+.who-sec { margin-top: 32px; }
+.who { margin-top: 10px; }
+.who .label-2 { margin-top: 18px; }
 .says { margin-top: 10px; }
 .says-p { margin: 0 0 12px; font-size: 17px; line-height: 1.65; color: var(--ink-2); }
 .says-p:last-child { margin-bottom: 0; }

@@ -591,6 +591,29 @@ function renderNextSteps(ns, claim) {
 // this point has already been through the gate in breakdown.py, which dropped
 // anything without a study number and anything carrying a figure the abstracts
 // do not have. This only lays it out.
+// Who the evidence covers and who it does not: the breakdown's own fields,
+// with what was already printed above taken out. The narrow groups come off
+// the PubMed records on the server, so that note is a list, not prose.
+function renderWho(data) {
+  const sec = $("who-sec"), wrap = $("who");
+  if (!sec || !wrap) return;
+  const bv = breakdownView(data);
+  const count = data.studies.length;
+  const groups = bv ? bv.populations : [];
+  const prose = (text) => `<p class="says-p">${linkStudyRefs(text, count)}</p>`;
+  const html = bv
+    ? (bv.applies_to ? prose(bv.applies_to) : "") +
+      (groups.length
+        ? `<p class="deeper-p narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(groups.join(", "))}. A result found in one group may not hold for everyone.</p>`
+        : "") +
+      (bv.not_applies_to
+        ? `<p class="section-label label-2">And who it does not</p>${prose(bv.not_applies_to)}`
+        : "")
+    : "";
+  sec.hidden = !html;
+  wrap.innerHTML = html;
+}
+
 function renderBreakdown(data, count, studies = []) {
   const bd = data && data.breakdown, bv = breakdownView(data);
   const wrap = $("deeper");
@@ -645,19 +668,6 @@ function renderBreakdown(data, count, studies = []) {
     }).join("")}</ol><p class="said-note">In the authors' own words, from the summary each study was published with.</p>`));
   }
   if (bv.strength) out.push(sec("Why the verdict is what it is", prose(bv.strength)));
-  // The narrow groups come off the PubMed records on the server, so this
-  // prints a list rather than prose: no refs to link, nothing to gate.
-  const groups = bv.populations || [];
-  if (bv.applies_to || bv.not_applies_to || groups.length) {
-    out.push(sec("Who this applies to",
-      (bv.applies_to ? prose(bv.applies_to) : "") +
-      (groups.length
-        ? `<p class="deeper-p narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(groups.join(", "))}. A result found in one group may not hold for everyone.</p>`
-        : "") +
-      (bv.not_applies_to
-        ? `<p class="section-label label-2">And who it does not</p>${prose(bv.not_applies_to)}`
-        : "")));
-  }
   if (bv.unknowns) out.push(sec("What is still unknown", prose(bv.unknowns)));
   out.push(`<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them. Tap a study number to read it.</p>`);
   body.innerHTML = out.join("");
@@ -698,6 +708,7 @@ function renderResult(data) {
 
   $("tldr").textContent = data.tldr || "";
   renderSays(data);
+  renderWho(data);
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
   renderBreakdown(data, data.studies.length, data.studies);
@@ -800,6 +811,8 @@ function renderPending(claim) {
   if (bars) { bars.classList.remove("reveal"); bars.innerHTML = ""; }
   const says = $("says-sec");
   if (says) says.hidden = true;
+  const who = $("who-sec");
+  if (who) who.hidden = true;
   document.querySelector(".verdict-block").dataset.verdict = "";
   $("doctor-line").hidden = true;
   const log = $("reading");
