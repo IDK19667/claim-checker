@@ -94,6 +94,9 @@ def check(user_key: str) -> tuple[bool, str | None, int]:
 # Feedback is cheap to store but shouldn't be floodable.
 FEEDBACK = SlidingWindow(limit=_env_int("RATE_LIMIT_FEEDBACK_PER_HOUR", 30), window_seconds=3600)
 
+# The stats page answers a wrong token with a 404; this keeps it from being guessed at.
+STATS = SlidingWindow(limit=_env_int("RATE_LIMIT_STATS_PER_MINUTE", 20), window_seconds=60)
+
 # A day count is a few bytes in memory, but the endpoint is open to anyone.
 COUNT = SlidingWindow(limit=_env_int("RATE_LIMIT_COUNT_PER_MINUTE", 60), window_seconds=60)
 

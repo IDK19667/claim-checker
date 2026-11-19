@@ -6072,5 +6072,43 @@ _rawcounts = json.dumps([[r["day"], r["name"]] for r in db.counts_since(30)])
 t("error counts: no claim text, exception text or address reaches the table",
   all(x not in _rawcounts for x in ("count err", "0xFEED", "0xBEEF", "9.9.8", "quota", "teapot")))
 
+
+# ---- /stats: the day counts behind a token ------------------------------------------------
+os.environ.pop("STATS_TOKEN", None)
+_s0 = [c.get("/stats"), c.get("/stats", query_string={"token": "anything"})]
+t("stats: with STATS_TOKEN unset the page does not exist (404, even with a token)", [x.status_code for x in _s0] == [404, 404])
+os.environ["STATS_TOKEN"] = "s3cret-tok-7"
+_s1 = [c.get("/stats"), c.get("/stats", query_string={"token": ""}), c.get("/stats", query_string={"token": "wrong"}),
+       c.get("/stats", query_string={"token": "s3cret-tok-"}), c.get("/stats", query_string={"token": "caf\u00e9"})]
+t("stats: no token, an empty one, a wrong one, a prefix of the right one and a non-ASCII one are all a 404",
+  [x.status_code for x in _s1] == [404] * 5 and all(b"s3cret" not in x.data for x in _s1), [x.status_code for x in _s1])
+_b = _tot()
+db.count_event("share.click"); db.count_event("provider.rate_limit"); db.count_event("view.home")
+_s2 = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.1"})
+_sb = _s2.get_data(as_text=True)
+t("stats: the right token is a 200 that is not cached, not indexed, and says so", _s2.status_code == 200
+  and _s2.headers["Cache-Control"] == "no-store" and "noindex" in _s2.headers["X-Robots-Tag"]
+  and '<meta name="robots" content="noindex, nofollow" />' in _sb, _s2.status_code)
+t("stats: it is a plain table in the doc-page style: 30 day rows, the counters grouped, totals and today",
+  'class="wrap doc"' in _sb and _sb.count('<th scope="row">20') == 30 and "Page views" in _sb and "Errors the server saw" in _sb
+  and "AI provider: rate limited (429)" in _sb and "PubMed failures" in _sb and "Not medical advice" in _sb)
+_totals = {r["name"]: r["count"] for r in map(lambda n: {"name": n[0], "count": n[1]}, [(k, v) for k, v in _tot().items()])}
+import re as _re_s
+_m = _re_s.search(r"Share button</th><td class=\"num\">(\d+)</td><td class=\"num\">(\d+)</td>", _sb)
+t("stats: the numbers on the page are the saved totals", _m and int(_m.group(1)) == _totals["share.click"] == int(_m.group(2)), (_m and _m.groups(), _totals.get("share.click")))
+t("stats: no claim text, address or token on the page; no dash in what it says",
+  all(x not in _sb for x in (_good_c, "9.9.7.1", "s3cret-tok-7", "count err")) and not _DASH.search(_re_s.sub(r"<[^>]+>", " ", _sb)))
+t("stats: it is not in the sitemap and robots disallows it, in every group",
+  "/stats" not in c.get("/sitemap.xml").get_data(as_text=True) and c.get("/robots.txt").get_data(as_text=True).count("Disallow: /stats") >= 5)
+import logging as _lg_s
+_rec = _lg_s.LogRecord("werkzeug", 20, __file__, 1, '127.0.0.1 - - "GET /stats?token=s3cret-tok-7&x=1 HTTP/1.1" 200 -', (), None)
+_flt = [f for f in _lg_s.getLogger("werkzeug").filters if type(f).__name__ == "_RedactToken"]
+_ok = bool(_flt) and _flt[0].filter(_rec)
+t("stats: the web server's request log does not carry the token", _ok and "s3cret" not in _rec.getMessage() and "token=REDACTED&x=1" in _rec.getMessage(), _rec.getMessage())
+_fl = [c.get("/stats", query_string={"token": "nope"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code for _ in range(25)]
+_after = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code
+t("stats: guessing is rate-limited per address (even the right token is refused for a while)", set(_fl) == {404} and _after == 404, (set(_fl), _after))
+os.environ.pop("STATS_TOKEN", None)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

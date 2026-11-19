@@ -1,11 +1,13 @@
 import gzip
 import hashlib
+import hmac
+import logging
 import json
 import os
 import re
 import secrets
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
 from urllib.parse import quote
@@ -15,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()  # must run before verdict.py reads the provider keys
 
 import requests
-from flask import (Flask, Response, g, jsonify, redirect, render_template, request,
+from flask import (Flask, abort, Response, g, make_response, jsonify, redirect, render_template, request,
                    send_from_directory)
 
 import breakdown as breakdown_mod
@@ -501,6 +503,77 @@ def privacy():
     db.count_event("view.info")
     return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label(),
                            on_gemini=_on_gemini())
+
+
+# ---- /stats: the day counts, behind a token --------------------------------------------
+
+class _RedactToken(logging.Filter):
+    """The token rides in the address, and some servers log the address. Whatever
+    is logged by the web server says REDACTED where it was."""
+    _pat = re.compile(r"([?&]token=)[^&\s\"']*")
+
+    def filter(self, record):
+        try:
+            record.msg = self._pat.sub(r"\1REDACTED", str(record.getMessage()))
+            record.args = ()
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+
+
+for _name in ("werkzeug", "gunicorn.access"):
+    logging.getLogger(_name).addFilter(_RedactToken())
+
+STATS_DAYS = 30
+STATS_LABELS = [
+    ("Page views", [("view.home", "Home"), ("view.result", "A saved result"), ("view.info", "About, method, corrections, privacy")]),
+    ("Checks", [("check.submitted", "Claims submitted"), ("check.completed", "Results completed")]),
+    ("Shares", [("share.click", "Share button"), ("share.copy", "Copy link button")]),
+    ("Errors the server saw", [("error.server", "Server errors"), ("provider.rate_limit", "AI provider: rate limited (429)"),
+                               ("provider.unavailable", "AI provider: unavailable (503 or unreachable)"),
+                               ("provider.auth", "AI provider: key rejected or missing"), ("provider.other", "AI provider: other error"),
+                               ("pubmed.failure", "PubMed failures")]),
+    ("Errors the page showed", [("client_error.invalid", "Claim could not be checked"), ("client_error.network", "Could not reach the server"),
+                                ("client_error.limit", "Too many checks"), ("client_error.provider", "The checker could not finish")]),
+]
+_STATS_COLUMNS = [("Views", ("view.home", "view.result", "view.info")), ("Claims", ("check.submitted",)),
+                  ("Results", ("check.completed",)), ("Shares", ("share.click", "share.copy")),
+                  ("Errors", ("error.server", "provider.rate_limit", "provider.unavailable", "provider.auth",
+                              "provider.other", "pubmed.failure"))]
+
+
+@app.route("/stats")
+def stats():
+    """
+    Per-day totals for the last 30 days, for the person who runs the site. It
+    exists only when STATS_TOKEN is set; without it the page is a 404 like any
+    other path. The token is compared in constant time, never logged, and a
+    wrong one gets the same 404.
+    """
+    token = (os.environ.get("STATS_TOKEN") or "").strip()
+    if not token:
+        abort(404)
+    allowed, _ = ratelimit.STATS.check(f"ip:{_client_ip()}")
+    given = request.args.get("token", "")
+    if not allowed or not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
+        abort(404)
+    db.flush_counts()
+    rows = db.counts_since(STATS_DAYS)
+    by_day: dict = {}
+    totals: dict = {}
+    for r in rows:
+        by_day.setdefault(r["day"], {})[r["name"]] = r["count"]
+        totals[r["name"]] = totals.get(r["name"], 0) + r["count"]
+    today = datetime.now(timezone.utc).date()
+    days = [(today - timedelta(days=i)).isoformat() for i in range(STATS_DAYS)]
+    table = [{"day": d, "cells": [sum(by_day.get(d, {}).get(n, 0) for n in names) for _, names in _STATS_COLUMNS]} for d in days]
+    groups = [{"title": title, "rows": [{"label": label, "total": totals.get(name, 0), "today": by_day.get(days[0], {}).get(name, 0)}
+                                        for name, label in items]} for title, items in STATS_LABELS]
+    resp = make_response(render_template("stats.html", base_url=_base_url(), columns=[c for c, _ in _STATS_COLUMNS],
+                                         table=table, groups=groups, days=STATS_DAYS))
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return resp
 
 
 _INFO_PAGES = {
