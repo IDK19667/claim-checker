@@ -4884,5 +4884,8 @@ _a = c.get("/about").get_data(as_text=True)
 t("about: names Dhruva with the contact address and nothing else about the owner",
   "Dhruva" in _a and "hello@checkevident.com" in _a)
 
+_trust = c.get("/").get_data(as_text=True).split('<section id="trust"')[1].split("</section>")[0]
+t("faq: no repeated Check a claim links inside Before you trust a verdict", "to-claim" not in _trust)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
