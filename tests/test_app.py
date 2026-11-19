@@ -4887,5 +4887,12 @@ t("about: names Dhruva with the contact address and nothing else about the owner
 _trust = c.get("/").get_data(as_text=True).split('<section id="trust"')[1].split("</section>")[0]
 t("faq: no repeated Check a claim links inside Before you trust a verdict", "to-claim" not in _trust)
 
+_css9 = (ROOT / "static" / "style.css").read_text()
+_hero_base = re.search(r"\.hero \{\s*margin: 0; font: \d+ (\d+)px/[\d.]+ var\(--display\); letter-spacing: (-?[\d.]+)em", _css9)
+_hero_wide = [int(n) for n in re.findall(r"\n  \.hero \{ font-size: (\d+)px; \}", _css9)]
+t("type: the main heading is 34 to 38px on a phone and 48 to 56px wide, tracked no tighter than -0.025em",
+  bool(_hero_base) and 34 <= int(_hero_base.group(1)) <= 38 and float(_hero_base.group(2)) >= -0.025
+  and len(_hero_wide) == 2 and all(48 <= n <= 56 for n in _hero_wide), (_hero_base and _hero_base.groups(), _hero_wide))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

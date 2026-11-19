@@ -194,10 +194,10 @@ typography:
     letterSpacing: -0.035em
   hero:
     fontFamily: Bricolage Grotesque
-    fontSize: 44px
+    fontSize: 36px
     fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
+    lineHeight: 1.08
+    letterSpacing: -0.02em
   flight-verdict-max:
     fontFamily: Bricolage Grotesque
     fontSize: 54px
@@ -206,10 +206,10 @@ typography:
     letterSpacing: -0.04em
   hero-mid:
     fontFamily: Bricolage Grotesque
-    fontSize: 58px
+    fontSize: 52px
     fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
+    lineHeight: 1.08
+    letterSpacing: -0.02em
   verdict:
     fontFamily: Bricolage Grotesque
     fontSize: 60px
@@ -224,10 +224,10 @@ typography:
     letterSpacing: -0.04em
   hero-wide:
     fontFamily: Bricolage Grotesque
-    fontSize: 72px
+    fontSize: 56px
     fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
+    lineHeight: 1.08
+    letterSpacing: -0.02em
 spacing:
   gutter: 20px
   row: 8px

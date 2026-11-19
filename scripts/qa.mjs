@@ -102,6 +102,7 @@ const AUDIT = () => {
     contrast, targets: [...new Set(targets)], overflow: [...new Set(overflow)].slice(0, 5),
     scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
     title: document.title, h1: document.querySelectorAll("h1").length,
+    h1px: parseFloat(getComputedStyle(document.querySelector("h1") || document.body).fontSize),
     // A missing alt is the fault. alt="" is the correct markup for a
     // decorative image (the result page's film still), and a screen reader
     // should skip it rather than be read a description of scenery.
@@ -135,6 +136,9 @@ for (const v of VIEWS) {
     a.overflow.forEach((d) => note(where, "overflows viewport", d));
     if (a.scrollW > a.innerW + 1) note(where, "horizontal scroll", `${a.scrollW} > ${a.innerW}`);
     if (a.h1 !== 1) note(where, "headings", `${a.h1} <h1> elements`);
+    // Main heading: 34 to 38px on a phone, 48 to 56px at desktop widths.
+    const [lo, hi] = v.width <= 430 ? [34, 38] : [48, 56];
+    if (a.h1px < lo || a.h1px > hi) note(where, "main heading size", `${a.h1px}px, wanted ${lo} to ${hi}`);
     if (a.imgsNoAlt) note(where, "images", `${a.imgsNoAlt} without alt`);
     if (!a.title) note(where, "title", "empty <title>");
     // There is no dark stock: a dark system preference must not darken the

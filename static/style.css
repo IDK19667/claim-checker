@@ -206,7 +206,7 @@ body {
 
 .hero-block { padding: 14px 0 0; }
 .hero {
-  margin: 0; font: 350 36px/1.06 var(--display); letter-spacing: -0.03em;
+  margin: 0; font: 350 36px/1.08 var(--display); letter-spacing: -0.02em;
   color: inherit;
 }
 /* The second sentence is the same voice, a step quieter. */
@@ -1099,7 +1099,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   .sheet-bar { min-height: 48px; }
   .bar-sticky { display: none; }
   body.has-bar { padding-bottom: 0; }
-  .hero { font-size: 54px; }
+  .hero { font-size: 52px; }
   .sec-title, .trust-title { font-size: 40px; }
   .chart { --plot-h: 240px; }
   .top { padding-top: 24px; padding-bottom: 24px; }
@@ -1109,7 +1109,7 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
   body:not(.view-ask) .wrap, body:not(.view-ask) .top { max-width: 1040px; }
   body.view-ask .band .wrap, body.view-ask main.wrap, body.view-ask .top { max-width: 1200px; }
   .foot { max-width: 1200px; }
-  .hero { font-size: 64px; }
+  .hero { font-size: 56px; }
   body.view-ask .band .wrap { padding-bottom: 96px; }
   body.view-ask #ask { display: grid; grid-template-columns: 1.15fr 0.85fr; column-gap: 72px; align-items: end; }
   body.view-ask #ask .hero-block { grid-column: 1; padding-top: 40px; }
