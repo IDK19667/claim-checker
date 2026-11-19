@@ -274,8 +274,7 @@ def _render_home(checks_page: bool = False):
             # The link preview and the markup say what the page says, with
             # the page's one certainty and stamp (both can be capped above).
             label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
-            preview["title"] = f"{label}: “{cached['claim']}”"
-            preview["description"] = cached["tldr"] or cached["explanation"]
+            preview.update(display.result_meta(cached["claim"], label, cached["tldr"] or cached["explanation"]))
             jsonld["reviewRating"]["ratingValue"] = RATING.get(cached["verdict"], 3)
             jsonld["reviewRating"]["alternateName"] = label
             jsonld["reviewRating"]["ratingExplanation"] = cached["tldr"] or cached["explanation"]

@@ -5443,7 +5443,7 @@ t("extra: the shared page, its markup and its card never say Likely true over th
   and _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">", _xh)
   and f"<title>{appmod.VERDICT_LABELS['true']}" not in _xh
   and f"{appmod.VERDICT_LABELS['true']}: \u201c{_xc}" not in _xh
-  and f"<title>{__import__('markupsafe').escape(appmod.VERDICT_LABELS['complicated'])}: \u201c{_xc}" in _xh
+  and "<title>" + str(__import__('markupsafe').escape(appmod.display.result_meta(_xc, appmod.VERDICT_LABELS['complicated'], "")["title"])) in _xh
   and f'"alternateName": "{appmod.VERDICT_LABELS["true"]}"' not in _xh and _xseen.get("stamp") == "complicated",
   [_xh[max(0, m.start() - 120):m.end() + 40] for m in _re7.finditer(appmod.VERDICT_LABELS["true"], _xh)][:4])
 
@@ -5821,6 +5821,36 @@ t("blind q8: 0 of 30 reassurances kept", not _b8_kept_r and sum(x["kind"] == "re
 t("blind q8: 0 of 60 unsupported sentences kept, warnings included", not _b8_kept, [x["text"] for x in _b8_kept])
 t("blind q8: never_dropped keeps none of the 60", not any(breakdown.never_dropped(x["text"]) for x in _blind8))
 print(f"blind sentences (q8): {len(_b8_kept)} of {len(_blind8)} kept, {len(_b8_kept_r)} reassurances kept")
+
+# ---- Polish: each result page has its own title, description and card tags ---------
+import display as _dsp  # noqa: E402
+_mq = 'Taking 5\u201310 mg of "melatonin" & magnesium nightly for years cures chronic insomnia in every adult over fifty'
+db.put_cached_verdict(_mq, _GIN_Q, "complicated", "Ginger reduces vomiting (Study 1).",
+                      ["L1"], [_LOWREV], tldr="Studies point both ways on melatonin. Small trials found a short gain in sleep, and none ran longer than a few weeks, so what happens over years is unknown.", still_open="Doses vary.")
+_mh = c.get("/", query_string={"q": _mq}).get_data(as_text=True)
+_mt = _re.search(r"<title>(.*?)</title>", _mh, _re.S).group(1)
+_md = _re.search(r'<meta name="description" content="(.*?)" />', _mh, _re.S).group(1)
+import html as _html  # noqa: E402
+_mt_raw, _md_raw = _html.unescape(_mt), _html.unescape(_md)
+t("result meta: title is about 60 characters, starts with the verdict's label, and ends with the site name",
+  len(_mt_raw) <= 62 and _mt_raw.startswith("It's complicated: \u201c") and _mt_raw.endswith("\u201d \u00b7 Evident") and "\u2026" in _mt_raw, _mt_raw)
+t("result meta: description is the label and the short answer, 155 characters or fewer",
+  len(_md_raw) <= 155 and _md_raw.startswith("It's complicated. Studies point both ways") and "years is unknown" not in _md_raw, _md_raw)
+t("result meta: no em or en dash, and the page escapes what the claim carried",
+  not _DASH.search(_mt_raw + _md_raw) and "&amp;" in _mh and "<title>" in _mh and '"melatonin"' not in _mt, _mt)
+t("result meta: og and twitter tags carry the same title, description and card",
+  f'property="og:title" content="{_mt.rsplit(" \u00b7 Evident", 1)[0]}"' in _mh
+  and f'name="twitter:title" content="{_mt.rsplit(" \u00b7 Evident", 1)[0]}"' in _mh
+  and f'property="og:description" content="{_md}"' in _mh and f'name="twitter:description" content="{_md}"' in _mh
+  and 'name="twitter:image" content="http://localhost/og/' in _mh and 'property="og:image" content="http://localhost/og/' in _mh)
+t("result meta: the home page keeps its own title, and no two saved results share one",
+  "Evident: check a health claim" in c.get("/").get_data(as_text=True)
+  and _mt != _re.search(r"<title>(.*?)</title>", c.get("/", query_string={"q": _xc}).get_data(as_text=True), _re.S).group(1))
+_short = _dsp.result_meta("Garlic cures colds", "Likely false", "No.")
+t("result meta: a short claim and answer are not padded or cut",
+  _short == {"title": "Likely false: \u201cGarlic cures colds\u201d", "description": "Likely false. No."}, _short)
+t("result meta: it never says more than the label: the label leads both lines",
+  all(_dsp.result_meta("A claim " * 20, lb, "An answer. " * 30)[k].startswith(lb) for lb in appmod.VERDICT_LABELS.values() for k in ("title", "description")))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

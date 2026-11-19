@@ -161,3 +161,53 @@ def study_why(study) -> str:
         why = str(study.get("background_why") or "").rstrip(".")
         return f"Background only, not counted: {why}." if why else "Background only, not counted."
     return "Read, not relied on."
+
+
+# ---- The page's own words for a link preview and a search result -------------
+
+TITLE_MAX = 50       # plus " · Evident" in the tab: about 60 in all
+DESCRIPTION_MAX = 155
+
+
+def _plain(text) -> str:
+    """One line, no dashes used as punctuation (the site never prints them)."""
+    t = " ".join(str(text or "").split())
+    t = re.sub(r"(?<=\d)\s*[—–]\s*(?=\d)", " to ", t)
+    t = re.sub(r"\s*[—–]\s*", ", ", t)
+    return t
+
+
+def clip(text: str, limit: int) -> str:
+    """At most `limit` characters, cut at a word and closed with an ellipsis."""
+    t = _plain(text)
+    if len(t) <= limit:
+        return t
+    cut = t[: limit - 1]
+    if " " in cut and len(cut.rsplit(" ", 1)[0]) >= limit * 0.5:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:.-") + "…"
+
+
+def result_meta(claim: str, label: str, short_answer: str) -> dict:
+    """
+    <title> and description for a saved result: the verdict's own label first,
+    so a clipped claim still sits under the right answer, then the claim in
+    quotes; the description is the label and the short answer, whole sentences
+    where they fit. Nothing here is stronger than the label it is given.
+    """
+    room = TITLE_MAX - len(label) - 4  # ": " and the two quotation marks
+    title = f"{label}: “{clip(claim.rstrip(' .?!'), max(room, 12))}”"
+    lead = f"{label}. "
+    answer = _plain(short_answer)
+    budget = DESCRIPTION_MAX - len(lead)
+    if len(answer) <= budget:
+        body = answer
+    else:
+        whole = ""
+        for sentence in _SENTENCE_END.split(answer):
+            nxt = (whole + " " + sentence).strip()
+            if len(nxt) > budget:
+                break
+            whole = nxt
+        body = whole if len(whole) >= budget * 0.5 else clip(answer, budget)
+    return {"title": title, "description": (lead + body).strip()}
