@@ -178,8 +178,8 @@ for (const v of VIEWS) {
         sa.contrast.forEach((d) => note(`${where} type-ahead`, "contrast", d));
         sa.targets.forEach((d) => note(`${where} type-ahead`, "tap target < 44px", d));
         if (sa.scrollW > sa.innerW + 1) note(`${where} type-ahead`, "horizontal scroll", `${sa.scrollW} > ${sa.innerW}`);
-        const aria = await page.getAttribute("#claim-input", "aria-expanded");
-        if (aria !== "true") note(`${where} type-ahead`, "aria", `aria-expanded is ${aria}`);
+        const aria = await page.getAttribute("#claim-input", "aria-controls");
+        if (aria !== "suggest-list") note(`${where} type-ahead`, "aria", `aria-controls is ${aria}`);
         await page.screenshot({ path: `/tmp/qa-${v.name.replace(/\s/g, "-")}-suggest.png` });
       }
       await page.locator("#claim-input").fill("");

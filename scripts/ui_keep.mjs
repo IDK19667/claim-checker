@@ -75,7 +75,7 @@ await test("type-ahead: arrow keys walk the suggestions and Enter picks one", as
   await page.waitForSelector("#suggest:not([hidden]) .suggest-row", { timeout: 5000 });
   const n = await page.locator(".suggest-row").count();
   must(n >= 2, `expected 2+ suggestions, got ${n}`);
-  must((await page.getAttribute("#claim-input", "aria-expanded")) === "true", "aria-expanded not true when open");
+  must((await page.getAttribute("#claim-input", "aria-controls")) === "suggest-list" && !(await page.getAttribute("#claim-input", "role")), "input must stay a plain textbox that controls the list (no role=combobox on a textarea)");
   await page.keyboard.press("ArrowDown");
   must((await page.getAttribute("#suggest-0", "aria-selected")) === "true", "first ArrowDown did not select row 0");
   must((await page.getAttribute("#claim-input", "aria-activedescendant")) === "suggest-0", "aria-activedescendant not set");
@@ -100,7 +100,7 @@ await test("type-ahead: Escape closes the suggestions and keeps what was typed",
   await page.keyboard.press("Escape");
   must(!(await visible(page, "#suggest")), "Escape left the suggestions open");
   must((await page.inputValue("#claim-input")) === "antibio", "Escape cleared the draft");
-  must((await page.getAttribute("#claim-input", "aria-expanded")) === "false", "aria-expanded still true");
+  must(!(await page.getAttribute("#claim-input", "aria-activedescendant")), "aria-activedescendant left set after Escape");
 });
 
 // ---- dialogs -----------------------------------------------------------------

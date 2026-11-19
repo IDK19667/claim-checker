@@ -470,6 +470,9 @@ t("  every study is a citation, relied-on ones flagged",
   and _flagged == ["PMID:P2"], (_flagged, ld.get("citation")))
 t("  no null values in the markup", "null" not in json.dumps(ld))
 t("canonical points at the shared url", 'rel="canonical" href="http://localhost/?q=streamed%20claim"' in html)
+_ci = _re.search(r'<textarea\s[^>]*id="claim-input"[^>]*>', c.get("/").get_data(as_text=True), _re.S).group(0)
+t("the claim field is a plain textbox: no role the textarea may not have, no aria-expanded",
+  _ci and "role=" not in _ci and "aria-expanded" not in _ci and 'aria-controls="suggest-list"' in _ci and 'aria-autocomplete="list"' in _ci, _ci)
 t("uncached claim renders the ask view", '<section id="result" hidden>' in c.get("/?q=never%20checked").data.decode())
 
 r = c.get("/robots.txt")
