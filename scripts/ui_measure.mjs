@@ -16,7 +16,8 @@
  * Acceptance mode:  node scripts/ui_measure.mjs --assert [baseUrl] [outDir]
  * Measures only the home screen (all four sizes, motion on and reduced), and
  * exits non-zero unless on the first screen, with no scrolling, the field,
- * its visible label, the submit button and three example buttons are fully
+ * its visible label, the submit button, the privacy line and three example
+ * buttons are fully
  * in view. Screenshots go to outDir (default: a temp folder, not the repo).
  */
 import { chromium } from "playwright";
@@ -82,6 +83,8 @@ async function measureHome(browser, v, reduced) {
     const labelVisible = !!lb && lb.width > 20 && lb.height > 8 && inside(lb) && getComputedStyle(lab).position !== "absolute" && lab.textContent.trim() === "Health claim to check";
     const chips = [...document.querySelectorAll("#chips .chip")].map(box_of);
     const chipsVisible = chips.length === 3 && chips.every(inside);
+    const pl = document.getElementById("privacy-line");
+    const privacyVisible = !!pl && inside(box_of(pl));
     const de = document.documentElement;
     return {
       scrollY: scrollY,
@@ -94,6 +97,7 @@ async function measureHome(browser, v, reduced) {
       bothInFirstViewport: inside(i) && inside(s),
       labelVisible,
       chipsVisible,
+      privacyVisible,
       chipCount: chips.length,
       pageHeight: Math.max(de.scrollHeight, document.body.scrollHeight),
       scrollWidth: de.scrollWidth,
@@ -191,8 +195,8 @@ writeFileSync(`${out}/table.md`, table + "\n");
 console.log("\n" + files.join("\n"));
 
 if (ASSERT) {
-  const bad = rows.filter((r) => !(r.bothInFirstViewport && r.labelVisible && r.chipsVisible && !r.horizontalOverflow));
-  for (const r of rows) console.log(`${r.width}x${r.height} ${r.motion}: input top ${r.inputTop}, submit bottom ${r.submitBottom}, field+submit ${yn(r.bothInFirstViewport)}, label ${yn(r.labelVisible)}, 3 examples ${yn(r.chipsVisible)}`);
+  const bad = rows.filter((r) => !(r.bothInFirstViewport && r.labelVisible && r.chipsVisible && r.privacyVisible && !r.horizontalOverflow));
+  for (const r of rows) console.log(`${r.width}x${r.height} ${r.motion}: input top ${r.inputTop}, submit bottom ${r.submitBottom}, field+submit ${yn(r.bothInFirstViewport)}, label ${yn(r.labelVisible)}, 3 examples ${yn(r.chipsVisible)}, privacy line ${yn(r.privacyVisible)}`);
   if (bad.length) { console.log(`FAIL: ${bad.length} of ${rows.length} cases do not show the checker on the first screen`); process.exit(1); }
-  console.log(`PASS: field, label, submit and 3 examples are on the first screen in all ${rows.length} cases`);
+  console.log(`PASS: field, label, submit, privacy line and 3 examples are on the first screen in all ${rows.length} cases`);
 }

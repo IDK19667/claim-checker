@@ -1826,6 +1826,17 @@ t("  the examples sit in the form, after the submit button; the counters come af
   < (_home.index('class="ledger"') if 'class="ledger"' in _home else 10**9))
 t("  the first three examples are the ones app.js renders",
   "EXAMPLES.slice(0, 3)" in _js)
+_pl = _re.search(r'<p class="privacy-line"[^>]*>(.*?)</p>', _home, _re.S)
+_pl_text = __import__("html").unescape(_re.sub(r"<[^>]+>", "", _pl.group(1))) if _pl else ""
+_dbsrc = (ROOT / "db.py").read_text()
+t("home: the privacy line sits right after the submit button and says what the code does",
+  _pl and _home.index('id="submit-btn"') < _home.index('id="privacy-line"') < _home.index('id="status"')
+  and "Don't include names or personal medical details." in _pl_text
+  and "Claim text is stored and sent to our AI provider." in _pl_text
+  and 'href="/privacy"' in _pl.group(1), _pl_text)
+t("  it is true: the claim text is a stored column and is sent to the provider, with no dashes in the line",
+  "claim_text TEXT NOT NULL" in _dbsrc and "def log_check(claim_text" in _dbsrc
+  and "\u2014" not in _pl_text and "\u2013" not in _pl_text)
 t("  /flight still redirects and its frames are gone from static/",
   c.get("/flight").status_code == 301 and not (ROOT / "static" / "flight.js").exists()
   and not (ROOT / "static" / "flight.css").exists())
