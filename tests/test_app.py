@@ -4904,6 +4904,10 @@ t("touch: qa.mjs fails any tap target under 44px, and the footer links are 44px 
   "h < 43.5 || w < 43.5" in _qa_src and "tap target < 44px" in _qa_src
   and re.search(r"\.foot-links a \{[^}]*min-height: 44px", _css9) is not None
   and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/", "/about", "/privacy")))
+_design9 = (ROOT / "DESIGN.md").read_text()
+t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
+  "Palette roles" in _design9 and "Green never signals" in _design9
+  and all(h in _design9 for h in ("#f1f2ee", "#fafaf8", "#121514", "#434a46", "#5d6560", "#2c5848", "#d4e4da", "#0f1211")))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

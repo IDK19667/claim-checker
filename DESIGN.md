@@ -424,6 +424,48 @@ credibility does not get to colour its own answers, and green for true
 would imply a certainty the studies do not support. No stylesheet may
 select on `data-verdict`; a test enforces it.
 
+### Palette roles: which colour is for what
+
+| Role | Token | Hex | Used for |
+|---|---|---|---|
+| Background | `--paper` | `#f1f2ee` | The day ground every long read sits on |
+| Surface | `--panel` | `#fafaf8` | Raised day surfaces: panels, the study rows, the sheet |
+| Text | `--ink` | `#121514` | Headings and body copy, and the primary button fill |
+| Secondary text | `--ink-2` | `#434a46` | Explanations, helper text, link text in a footer on day |
+| Muted text | `--ink-3` | `#5d6560` | Metadata and labels: dates, counts, mono labels |
+| Action | `--green` | `#2c5848` | Links, focus rings, the one thing you can press by day |
+| Highlight | `--tint` | `#d4e4da` | The highlighter stroke under relied-on study titles |
+| Dark surface | `--deep` | `#0f1211` | Night: masthead, the ask, the report head, errors, the footer |
+
+Night adds its own inks (`--on-deep`, `--on-deep-2`, `--on-deep-3`), its
+hairline (`--deep-line`) and the sage pen (`--sage`); every pairing was
+checked for contrast and `scripts/qa.mjs` keeps checking it. The role of a
+colour is its whole job: a colour that is not in this table, or the cloth
+table above, has no business on the page.
+
+**Green never signals "safe", "good" or "true".** Green here means
+"you can act on this" (a link, a focus ring) and nothing about the
+evidence. A verdict is never coloured, not green, not red, not amber, and
+no verdict, confidence or study count may borrow the action green to look
+reassuring. The one green book cloth means a strong study design, not a
+good result.
+
+### Type and spacing floors
+
+- Main heading (`.hero`): 36px on a phone (34 to 38), 52px from 720px and
+  56px from 1024px (48 to 56), tracked at `-0.02em`.
+- Body 16px on a 1.6 line height. Helper text 14 to 15px. Metadata (dates,
+  study counts, labels, the privacy line, footer links) 13 to 14px.
+- **Nothing a reader needs is under 13px.** The single exception is the
+  lettering on a book spine (10px, uppercase), which is `aria-hidden`
+  decoration: the same words are in the book's accessible name, its tip and
+  the key. `scripts/qa.mjs` fails any other text under 13px.
+- Every link and button a reader taps is 44px or more in both directions,
+  by its box or by a grown hit area (`::after`); `scripts/qa.mjs` hit-tests
+  it at every width. The exemptions are a plain link inside a sentence of
+  running text, and the shelf columns, which are at least 38px wide (eight
+  books across a phone) and the full height of the shelf.
+
 ## The answer, not a ring
 
 The verdict is no longer an oversized oval. The answer sentence leads in
@@ -561,7 +603,7 @@ the shape of the evidence before opening a check.
   connection, a limit, the checker) and a line saying what to do. The
   kind follows the status the server sent. No studies is an answer, not
   an error: the result says nothing on PubMed matched and what to try.
-- **Documents** (privacy, the 404): the masthead, a 44px title, the lede,
+- **Documents** (privacy, the 404): the masthead, a 52 to 56px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
   again and the latest checks.
 - **The doctor line:** directly under the assessment on the report, "Check important health decisions with a doctor.", 13.5px
