@@ -276,19 +276,9 @@ def _render_home(checks_page: bool = False):
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
-    # The band's picture on a result page: one still of the verdict shot,
-    # 28KB, where a live check plays the clip itself. A cold link gets the
-    # same layout and none of the video. Only if it has actually been built,
-    # so a fresh checkout renders a result page with no band rather than a
-    # broken one.
-    band_still = None
-    if cached and os.path.exists(
-            os.path.join(app.static_folder, "footage", BAND_STILL)):
-        band_still = BAND_STILL
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
                            ledger=ledger, latest=latest,
-                           band_still=band_still,
                            example=None if cached else _trust_example(),
                            provider=verdict.provider_label(), checks_page=checks_page,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
@@ -506,12 +496,6 @@ DEPLOYED_COMMIT = _deployed_commit()
 @app.route("/healthz")
 def healthz():
     return jsonify({"ok": True, "commit": DEPLOYED_COMMIT, "store": db.store_status()})
-
-
-# The band's still on a result page. It is the first frame of the same loop
-# a live check ends on (scripts/build_footage.py), so a shared link and a
-# check that just finished show the same picture.
-BAND_STILL = "verdict.webp"
 
 
 # ---------------------------------------------------------------------

@@ -160,23 +160,13 @@
     </div>
   </div>
 
-  {# The band. A strip of footage at the head of every screen that is not the
-     home page's first one: checking, the verdict, an error, a check that
-     found nothing. A live check swaps the clip on real stream events, and
-     loads them only once Check has been pressed (static/app.js). A link
-     opened cold gets one still of the verdict shot, 28KB, server rendered,
-     and loads no video at all. Decorative throughout: the claim, every step
-     line and the whole verdict are text on the sheet below it, never on the
-     picture. #}
+  {# The band: a strip of footage at the head of the checking screen and the
+     error screen, loaded only once Check has been pressed (static/app.js).
+     A result page has none: no picture sits between the claim and its
+     answer, and a shared link loads no footage at all. Decorative: every
+     step line is text on the sheet below it. #}
   <div class="film" id="film" aria-hidden="true"
-       data-footage="{{ url_for('static', filename='footage') }}"
-       {%- if not (result and band_still) %} hidden{% endif %}>
-    {%- if result and band_still %}
-    <img class="film-shot" data-shot="verdict" data-on="1"
-         src="{{ url_for('static', filename='footage/' + band_still) }}"
-         width="1920" height="600" alt="" decoding="async" fetchpriority="high">
-    {%- endif %}
-  </div>
+       data-footage="{{ url_for('static', filename='footage') }}" hidden></div>
 
   <main class="wrap">
     <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>

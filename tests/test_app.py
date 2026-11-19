@@ -1675,6 +1675,18 @@ if _shutil.which("node"):
     t("the script and the server pick the same sentences to print, on three records",
       _js_views == _py_views, (_js_views, _py_views))
 
+# ---- the result page has no picture ---------------------------------------------
+_res_head = _ord.split('id="server-result"')[0]
+t("a result page carries no footage: no still, no image, a hidden empty band",
+  'class="film-shot"' not in _res_head and "<img" not in _res_head and "verdict.webp" not in _res_head
+  and '<div class="film" id="film" aria-hidden="true"' in _res_head
+  and 'hidden></div>' in _res_head.split('id="film"', 1)[1][:200])
+_settle = (ROOT / "static" / "app.js").read_text().split("settle(phase) {")[1].split("\n  },")[0]
+t("  and the screen that lands on the verdict stops the band instead of showing the verdict shot",
+  "film.stop()" in _settle and 'film.show("verdict")' not in _settle)
+t("  the service worker no longer precaches the still",
+  "verdict.webp" not in (ROOT / "static" / "sw.js").read_text() and not hasattr(appmod, "BAND_STILL"))
+
 # (d) What the research says: never folded, every sentence already gated.
 _says = _vd["breakdown"]["says"]
 t("what the research says is three to five sentences, every one of them cited",

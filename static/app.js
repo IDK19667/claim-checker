@@ -332,7 +332,8 @@ const screenState = {
   settle(phase) {
     this.phase = phase;
     root.dataset.screen = phase;
-    film.show("verdict");
+    // The verdict screen has no picture: the band goes when the answer lands.
+    film.stop();
   },
   leave() {
     if (!this.phase) return;

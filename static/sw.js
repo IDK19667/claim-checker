@@ -11,9 +11,6 @@ const SHELL = [
   "/checks",
   "/static/style.css",
   "/static/app.js",
-  /* The one frame a shared link needs before any script runs: the still that
-     heads the result. 28KB. The looping clips are not shell (see below). */
-  "/static/footage/verdict.webp",
   "/privacy",
   "/manifest.webmanifest",
   "/static/fonts/woff2/bricolagegrotesque-opsz96-300-500.woff2",
