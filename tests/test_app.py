@@ -2035,6 +2035,11 @@ t("  /flight still redirects and its frames are gone from static/",
 t("  the service worker no longer precaches the intro's files",
   "flight" not in (ROOT / "static" / "sw.js").read_text().split("const SHELL")[1].split("];")[0])
 
+_sw_src = (ROOT / "static" / "sw.js").read_text()
+t("  the service worker never caches or serves /stats or /api/ (a tokened address must not become the offline shell)",
+  '"/stats"' in _sw_src and _sw_src.index('"/stats"') < _sw_src.index('req.mode === "navigate"')
+  and '"/api/"' in _sw_src.split('req.mode === "navigate"')[0])
+
 # ---- accuracy round 2 (the 20-claim audit) ------------------------------------
 # 1. The stamp and the words are one answer. These are the audit's own
 # takeaways: the five it stamped over with a contradicting verdict, and the
