@@ -577,9 +577,11 @@ def stats():
     token = (os.environ.get("STATS_TOKEN") or "").strip()
     if not token:
         abort(404)
-    allowed, _ = ratelimit.STATS.check(f"ip:{_client_ip()}")
     given = request.args.get("token", "")
-    if not allowed or not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
+    if not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
+        # Only a failed attempt spends the limit, so behind a shared proxy
+        # address bad guesses can never lock the owner out. Either way: 404.
+        ratelimit.STATS.check(f"ip:{_client_ip()}")
         abort(404)
     db.flush_counts()
     rows = db.counts_since(STATS_DAYS)

@@ -6206,7 +6206,10 @@ _ok = bool(_flt) and _flt[0].filter(_rec)
 t("stats: the web server's request log does not carry the token", _ok and "s3cret" not in _rec.getMessage() and "token=REDACTED&x=1" in _rec.getMessage(), _rec.getMessage())
 _fl = [c.get("/stats", query_string={"token": "nope"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code for _ in range(25)]
 _after = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code
-t("stats: guessing is rate-limited per address (even the right token is refused for a while)", set(_fl) == {404} and _after == 404, (set(_fl), _after))
+t("stats: wrong guesses are all a 404 and never lock out the right token (only failures count toward the limit)",
+  set(_fl) == {404} and _after == 200, (set(_fl), _after))
+_ok_many = [c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.10"}).status_code for _ in range(30)]
+t("stats: the right token is never limited, however often it is used", set(_ok_many) == {200}, set(_ok_many))
 os.environ.pop("STATS_TOKEN", None)
 
 
