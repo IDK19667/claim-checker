@@ -534,7 +534,7 @@ def privacy():
 class _RedactToken(logging.Filter):
     """The token rides in the address, and some servers log the address. Whatever
     is logged by the web server says REDACTED where it was."""
-    _pat = re.compile(r"([?&]token=)[^&\s\"']*")
+    _pat = re.compile(r"([?&]token(?:=|%3[dD]))[^&\s\"']*", re.IGNORECASE)
 
     def filter(self, record):
         try:
@@ -572,12 +572,16 @@ def stats():
     Per-day totals for the last 30 days, for the person who runs the site. It
     exists only when STATS_TOKEN is set; without it the page is a 404 like any
     other path. The token is compared in constant time, never logged, and a
-    wrong one gets the same 404.
+    wrong one gets the same 404. Send it as `?token=...` or, to keep it out of
+    proxy logs, as an `Authorization: Bearer <token>` header.
     """
     token = (os.environ.get("STATS_TOKEN") or "").strip()
     if not token:
         abort(404)
     given = request.args.get("token", "")
+    _auth = request.headers.get("Authorization", "")
+    if not given and _auth[:7].lower() == "bearer ":
+        given = _auth[7:].strip()
     if not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
         # Only a failed attempt spends the limit, so behind a shared proxy
         # address bad guesses can never lock the owner out. Either way: 404.

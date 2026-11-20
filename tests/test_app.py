@@ -6204,6 +6204,16 @@ _rec = _lg_s.LogRecord("werkzeug", 20, __file__, 1, '127.0.0.1 - - "GET /stats?t
 _flt = [f for f in _lg_s.getLogger("werkzeug").filters if type(f).__name__ == "_RedactToken"]
 _ok = bool(_flt) and _flt[0].filter(_rec)
 t("stats: the web server's request log does not carry the token", _ok and "s3cret" not in _rec.getMessage() and "token=REDACTED&x=1" in _rec.getMessage(), _rec.getMessage())
+for _u in ('GET /stats?token%3Ds3cret-tok-7&x=1 HTTP', 'GET /stats?a=1&TOKEN=s3cret-tok-7 HTTP', 'GET /stats?x=1&token%3Ds3cret-tok-7 HTTP'):
+    _r2 = _lg_s.LogRecord("werkzeug", 20, __file__, 1, _u, (), None)
+    _flt[0].filter(_r2)
+    t("stats: the log redaction also catches an encoded or upper-case token: " + _u, "s3cret" not in _r2.getMessage() and "REDACTED" in _r2.getMessage(), _r2.getMessage())
+_bh = [c.get("/stats", headers={"Authorization": "Bearer s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.20"}),
+       c.get("/stats", headers={"Authorization": "bearer s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.20"}),
+       c.get("/stats", headers={"Authorization": "Bearer wrong"}, environ_base={"REMOTE_ADDR": "9.9.7.20"}),
+       c.get("/stats", headers={"Authorization": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.20"})]
+t("stats: the token may come in an Authorization: Bearer header (right is 200, wrong or malformed is 404)",
+  [x.status_code for x in _bh] == [200, 200, 404, 404] and _bh[0].headers["Cache-Control"] == "no-store", [x.status_code for x in _bh])
 _fl = [c.get("/stats", query_string={"token": "nope"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code for _ in range(25)]
 _after = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code
 t("stats: wrong guesses are all a 404 and never lock out the right token (only failures count toward the limit)",
