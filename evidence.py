@@ -673,6 +673,24 @@ def _ratio_name(name: str) -> str:
     return name.lower()
 
 
+_RATIO_NAMED = re.compile(r"\b(?:odds ratios?|hazard ratios?|risk ratios?|relative risks?"
+                          r"|incidence rate ratios?|rate ratios?|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))\b",
+                          re.IGNORECASE)
+
+
+def ratio_kinds(text: str) -> set[str]:
+    """The kinds of ratio a text names ("odds ratio", "hazard ratio"...),
+    abbreviations read only in capitals."""
+    return {_ratio_name(m.group(0)).rstrip("s") for m in _RATIO_NAMED.finditer(str(text or ""))}
+
+
+def ratio_kind(figure: str) -> str:
+    """The kind of ratio an effect's figure is ("odds ratio 0.88" gives
+    "odds ratio"), or "" when it is not a ratio."""
+    m = _RATIO_NAMED.match(str(figure or ""))
+    return _ratio_name(m.group(0)).rstrip("s") if m else ""
+
+
 def _ratio_word(name: str) -> str:
     for pattern, word in _RATIO_WORDS:
         if re.fullmatch(pattern, name, re.IGNORECASE):

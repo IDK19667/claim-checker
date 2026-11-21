@@ -3227,11 +3227,22 @@ def settle_effect(bd: dict | None) -> dict | None:
     """
     Take the effect line out when it points at figures that are no longer
     above it: rounding, the faithfulness check or the unit rule can remove
-    the last one after the line was written.
+    the last one after the line was written. The effect's size goes too
+    when the ratio it was read from is printed nowhere.
     """
-    if not bd or bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+    if not bd:
         return bd
     said = list(bd.get("evidence") or []) + [p.get("assessment") or "" for p in bd.get("parts") or []]
+    # The size the evidence line words ("a large effect") stands on a ratio
+    # only when the page prints a ratio of that kind. One saved from a misread
+    # ("35 people or 80 adults" read as an odds ratio of 80) is no finding.
+    # An effect line that says no clear difference still means none.
+    kind = evidence.ratio_kind((bd.get("effect") or {}).get("figure") or "")
+    if kind and not any(kind in evidence.ratio_kinds(t) for t in [bd.get("effect_size") or ""] + said):
+        bd = {**bd, "effect": (dict(evidence.NULL_EFFECT, figure="")
+                               if _SAID_NULL.search(bd.get("effect_size") or "") else None)}
+    if bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+        return bd
     return bd if any(shows_effect(t) for t in said) else {**bd, "effect_size": ""}
 
 

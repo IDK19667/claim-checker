@@ -883,6 +883,21 @@ t("grounding: an effect line that says no clear difference is sized as none, wit
   and evidence.evidence_line("false", _NULL_ST, ["NL1"], "Gargling mouthwash cures the infection",
                              _null_bd["effect"]["label"], breakdown.absolute_claim("Gargling mouthwash cures the infection"))
   .endswith("evidence of no clear effect"), (_null_bd["effect"], _null_bd["effect_size"]))
+# A saved answer whose size was read from a misread ratio keeps no size on the
+# way out; one whose ratio the page prints keeps it.
+_mis = breakdown.settle_effect({"evidence": ["Trials enrolled 35 people or 80 adults (Studies 4, 6)."],
+                                "parts": [], "effect_size": "Scores dropped by 3.9 points (Study 7).",
+                                "effect": {"label": "large", "plain": "about 7900% higher odds", "figure": "odds ratio 80"}})
+_mis_null = breakdown.settle_effect({"evidence": [], "parts": [],
+                                     "effect_size": "No drop at 30, or 60 minutes (Study 5). That difference was not "
+                                                    "statistically significant (Study 5).",
+                                     "effect": {"label": "none", "plain": "x", "null": True, "figure": "odds ratio 60"}})
+_real = {"evidence": [], "parts": [], "effect_size": "The matched odds ratio (how much more likely an outcome was) "
+                                                    "was 41.3 (Study 1).",
+         "effect": {"label": "large", "plain": "about 4030% higher odds", "figure": "odds ratio 41.3"}}
+t("grounding: a saved size read from a ratio the page never prints is dropped on the way out",
+  _mis["effect"] is None and (_mis_null["effect"] or {}).get("label") == "none"
+  and breakdown.settle_effect(_real)["effect"] == _real["effect"], (_mis["effect"], _mis_null["effect"]))
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
