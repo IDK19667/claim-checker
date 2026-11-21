@@ -651,6 +651,9 @@ t("  its CSS is gone and the home page stops computing it, while db.ledger() sta
   and "db.ledger()" not in _insp_led.getsource(appmod._render_home) and callable(db.ledger))
 t("the front page lists recent checks with their evidence",
   "Latest checks" in _html and 'class="entry-claim"' in _html and 'class="mini"' in _html)
+_entry_css = re.search(r"^\.entry-link \{(.*?)\}", _css_led, re.M | re.S).group(1)
+t("  without the number line, a list row's link still has a 44px tap height, with the layout unmoved",
+  "padding: 10px 0" in _entry_css and "margin: -10px 0" in _entry_css, _entry_css)
 _404_led = c.get("/no-such-page-led").get_data(as_text=True)
 t("  with no issue numbers, on the home page or the 404 page",
   "entry-no" not in _html and "entry-no" not in _404_led and not re.search(r">No\. \d+<", _html + _404_led)

@@ -317,7 +317,7 @@ body {
 .claim-list, .ledger-list { list-style: none; margin: 0; padding: 0; }
 .claim-list { border-top: 1px solid var(--rule); }
 
-/* A check in a list: its number, the claim, the verdict in words (never
+/* A check in a list: the claim, the verdict in words (never
    coloured), then a mini shelf of the books it was read from. */
 .entry {
   display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: 0 14px;
@@ -327,6 +327,9 @@ body {
   grid-column: 1 / -1;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px;
   align-items: baseline; text-decoration: none; color: var(--ink);
+  /* A 44px tap height for a one-line row, grown into the row's own padding
+     so nothing on the page moves. */
+  padding: 10px 0; margin: -10px 0;
 }
 .entry-link:hover .entry-claim { text-decoration: underline; text-decoration-color: var(--rule-2); }
 .entry-claim { font-size: 18px; line-height: 1.35; overflow-wrap: break-word; }
