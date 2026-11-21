@@ -4,6 +4,27 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-20: An off-topic study is never relied on, on any record
+
+An outside audit saw "Does creatine cause hair loss?" under "Relied on for
+the verdict" beside "3 off topic". A fresh check cannot do this: the
+relevance gate in `verdict.py` drops off-topic studies from the cited list
+in the same pass that marks them (a test proves it with a model that cites
+a study it also judges off subject). A saved record can still carry a PMID
+in both, and the page trusted the cited list. Now `display.relied_pmids`
+takes off-topic studies out of the cited set before anything reads it
+(`_check_response`, the ClaimReview markup, the card's receipt, the
+latest-checks list), so the "used" marks, "Rests on N", the chart caption
+and the relied-on group all count the same studies. If that leaves a rated
+verdict resting on nothing, it becomes "Not enough evidence", the rule a
+fresh check already obeys. A sentence resting only on an off-topic study is
+dropped. Off-topic studies get their own folded group, "Excluded
+(off-topic)", last, in both renderers (`display.source_groups`,
+`sourceGroups` in app.js; a test compares them). `renderResult` also clears
+the stale flag on a result saved on the device. The stored record is not
+rewritten; `saved_record_problems` names it `cited_off_topic` so it stays
+out of the index. Verdict logic for fresh checks is unchanged.
+
 ## 2026-11-19: Only curated example claims are indexed
 
 Replaces the earlier rule "sound saved results are in the sitemap; the rest are

@@ -511,19 +511,23 @@
         </li>{% endmacro %}
         <!-- The sources fold into groups: what the verdict leaned on, open;
              background only (animal and lab studies for a claim about
-             people, opinion pieces, buying guides), closed; and what was
-             read and set aside, closed. Every study stays in the
+             people, opinion pieces, buying guides), closed; what was
+             read and not relied on, closed; and what was excluded as off
+             topic, closed, never under relied on. Every study stays in the
              HTML either way, so crawlers and a reader with no JavaScript get
              the whole file. -->
-        <div class="sources" id="sources">{% if result %}{% set cited = result.studies | selectattr("cited_in_verdict") | list %}{% set back = result.studies | rejectattr("cited_in_verdict") | selectattr("background") | list %}{% set others = result.studies | rejectattr("cited_in_verdict") | rejectattr("background") | list %}{% if cited %}<details class="source-group" open>
-          <summary class="group-head"><span class="group-name">Relied on for the verdict</span><span class="group-count">{{ cited | length }}</span></summary>
-          <ol class="studies">{% for s in result.studies %}{% if s.cited_in_verdict %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
-        </details>{% endif %}{% if back %}<details class="source-group"{% if not cited and not others %} open{% endif %}>
-          <summary class="group-head"><span class="group-name">{{ result.evidence.background_label or 'Background only: animal and lab studies' }}</span><span class="group-count">{{ back | length }}</span></summary>
-          <ol class="studies">{% for s in result.studies %}{% if not s.cited_in_verdict and s.background %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
-        </details>{% endif %}{% if others %}<details class="source-group"{% if not cited %} open{% endif %}>
-          <summary class="group-head"><span class="group-name">{% if cited %}Read, not relied on{% else %}Read{% endif %}</span><span class="group-count">{{ others | length }}</span></summary>
-          <ol class="studies">{% for s in result.studies %}{% if not s.cited_in_verdict and not s.background %}{{ study_row(s, loop.index0) }}{% endif %}{% endfor %}</ol>
+        <div class="sources" id="sources">{% if result %}{% set g = source_groups(result.studies) %}{% if g.cited %}<details class="source-group" open>
+          <summary class="group-head"><span class="group-name">Relied on for the verdict</span><span class="group-count">{{ g.cited | length }}</span></summary>
+          <ol class="studies">{% for i in g.cited %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
+        </details>{% endif %}{% if g.back %}<details class="source-group"{% if not g.cited and not g.others %} open{% endif %}>
+          <summary class="group-head"><span class="group-name">{{ result.evidence.background_label or 'Background only: animal and lab studies' }}</span><span class="group-count">{{ g.back | length }}</span></summary>
+          <ol class="studies">{% for i in g.back %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
+        </details>{% endif %}{% if g.others %}<details class="source-group"{% if not g.cited %} open{% endif %}>
+          <summary class="group-head"><span class="group-name">{% if g.cited %}Read, not relied on{% else %}Read{% endif %}</span><span class="group-count">{{ g.others | length }}</span></summary>
+          <ol class="studies">{% for i in g.others %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
+        </details>{% endif %}{% if g.excluded %}<details class="source-group">
+          <summary class="group-head"><span class="group-name">Excluded (off-topic)</span><span class="group-count">{{ g.excluded | length }}</span></summary>
+          <ol class="studies">{% for i in g.excluded %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
         </details>{% endif %}{% if not result.studies %}<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>{% endif %}{% endif %}</div>
         <!-- Shown only when the check found nothing to stand on. Every line
              here is checkable: the search that ran, a wider one, and claims

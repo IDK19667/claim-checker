@@ -16,6 +16,8 @@ Kinds counted (a record can have more than one):
   count_mismatch    stored breakdown "rests_on" differs from the number of
                     cited studies that are really in the record
   cited_not_in_studies  a cited PMID that is not among the stored studies
+  cited_off_topic   a cited PMID whose stored study is classified off topic
+                    (the page never shows it as relied on)
   empty_query       no search query stored
   missing_date      no created_at
   unparseable_date  created_at is not an ISO date
@@ -66,6 +68,8 @@ def audit(path):
         pmids = {s.get("pmid") for s in studies}
         if cited - pmids:
             flag(r, "cited_not_in_studies")
+        if any(s.get("pmid") in cited and s.get("off_topic") for s in studies):
+            flag(r, "cited_off_topic")
         if isinstance(bd, dict) and bd.get("rests_on") is not None \
                 and bd["rests_on"] != len(cited & pmids):
             flag(r, "count_mismatch")

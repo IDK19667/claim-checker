@@ -141,12 +141,43 @@ def design_note(publication_types) -> tuple:
     return (types[0] if types else DEFAULT_DESIGN[0]), "", DEFAULT_DESIGN[2]
 
 
+def relied_on(study) -> bool:
+    """True for a study the verdict relied on. A study classified off topic
+    never is, whatever an old saved record put in its cited list."""
+    return bool(study.get("cited_in_verdict")) and not study.get("off_topic")
+
+
+def relied_pmids(cited, studies) -> set:
+    """The cited PMIDs less any study classified off topic: the set every
+    count, mark and line on the page is read from."""
+    off = {s.get("pmid") for s in studies or [] if isinstance(s, dict) and s.get("off_topic")}
+    return set(cited or []) - off
+
+
+def source_groups(studies) -> dict:
+    """
+    The study list's groups, as indexes into `studies`, in page order: what the
+    verdict relied on; background only; read and not relied on; and excluded
+    as off topic. Every study is in exactly one. static/app.js sourceGroups
+    does the same; a test runs both on the same records.
+    """
+    out = {"cited": [], "back": [], "others": [], "excluded": []}
+    for i, s in enumerate(studies or []):
+        key = ("excluded" if s.get("off_topic") else "cited" if relied_on(s)
+               else "back" if s.get("background") else "others")
+        out[key].append(i)
+    return out
+
+
 def study_why(study) -> str:
     """
     One line on why a study is listed: what the verdict did with it and, for a
     study it leaned on, what that kind of study does and where it stops. All of
-    it is read off fields the record already carries.
+    it is read off fields the record already carries. Off topic is checked
+    first: a study set aside is never described as relied on.
     """
+    if study.get("off_topic"):
+        return f"Read and set aside: {str(study['off_topic']).rstrip('.')}."
     if study.get("cited_in_verdict"):
         label, _cls, note = design_note(study.get("publication_types"))
         out = ["Relied on for the verdict."]
@@ -155,8 +186,6 @@ def study_why(study) -> str:
         if study.get("population"):
             out.append(f"Studied in: {study['population']}.")
         return " ".join(out)
-    if study.get("off_topic"):
-        return f"Read and set aside: {str(study['off_topic']).rstrip('.')}."
     if study.get("background"):
         why = str(study.get("background_why") or "").rstrip(".")
         return f"Background only, not counted: {why}." if why else "Background only, not counted."
@@ -336,7 +365,8 @@ def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search
     What is wrong with a saved answer, by name; an empty list means sound. The
     same kinds scripts/saved_record_audit.py counts (all but the one that needs
     the check log): a cited study that is not among the studies, a breakdown
-    whose "rests on" differs from the studies cited, no search query, a missing,
+    whose "rests on" differs from the studies cited, a cited study classified
+    off topic, no search query, a missing,
     unreadable or future save date. The page repairs most of these when it
     renders, so a person never sees them; a crawler is told to leave such a
     record out of the index and the sitemap all the same.
@@ -354,6 +384,8 @@ def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search
     pmids = {s.get("pmid") for s in studies if isinstance(s, dict)}
     if set(cited) - pmids:
         out.append("cited_not_in_studies")
+    if set(cited) - relied_pmids(cited, studies):
+        out.append("cited_off_topic")
     if isinstance(breakdown, dict) and breakdown.get("rests_on") is not None \
             and breakdown["rests_on"] != len(set(cited) & pmids):
         out.append("count_mismatch")

@@ -6260,6 +6260,119 @@ t("stats: the right token is never limited, however often it is used", set(_ok_m
 os.environ.pop("STATS_TOKEN", None)
 
 
+# ---- A study classified off topic is never relied on ---------------------------------------
+# The audit saw "Does creatine cause hair loss?" under "Relied on for the
+# verdict" beside "3 off topic". A fresh check drops off-topic studies from
+# its cited list; a saved record may still carry one in both, and the page
+# must not trust it.
+_OT = [_study("OT1", "Creatine and strength: a meta-analysis", types=["Meta-Analysis"]),
+       _study("OT2", "Creatine loading and bench press", types=["Randomized Controlled Trial"]),
+       _study("OT3", "Does creatine cause hair loss? A review", types=["Review"]),
+       _study("OT4", "Creatine and kidney function", types=["Journal Article"])]
+_OT[2]["off_topic"] = verdict.OFF_OUTCOME
+_OT[3]["off_topic"] = verdict.OFF_OUTCOME
+_ot_bd = {"strength": "x", "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
+          "not_applies_to": "", "unknowns": "", "rests_on": 3}
+db.put_cached_verdict("creatine strength off topic saved", "creatine AND strength", "true",
+                      "Studies 1 and 2 show a gain. Study 3 shows hair loss.", ["OT1", "OT2", "OT3"], _OT,
+                      tldr="Creatine increases strength.", breakdown=_ot_bd)
+_oth = c.get("/?q=creatine+strength+off+topic+saved").data.decode()
+_ot_src = _oth[_oth.index('id="sources"'):_oth.index('class="nosteps"')]
+_ot_groups = [(m.group(2), m.group(1) is not None, int(m.group(3)), _re_s.findall(r">PMID (\w+)</a>", m.group(4)))
+              for m in _re_s.finditer(r'<details class="source-group"( open)?>\s*<summary class="group-head">'
+                                      r'<span class="group-name">([^<]*)</span><span class="group-count">(\d+)</span>'
+                                      r'</summary>(.*?)</details>', _ot_src, _re_s.S)]
+_otg = {name: (opened, n, pm) for name, opened, n, pm in _ot_groups}
+t("off topic: a study both cited and off topic is never under 'Relied on' on the server-rendered page",
+  "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
+  and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
+t("  it sits in an 'Excluded (off-topic)' group, folded, with the other off-topic study",
+  _otg.get("Excluded (off-topic)") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
+t("  and its line says it was set aside, not relied on",
+  "Read and set aside: measures a different outcome" in _ot_src.split("PMID OT3")[1].split("</li>")[0])
+_otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
+_ot_used = [s_["pmid"] for s_ in _otj["studies"] if s_["cited_in_verdict"]]
+t("  the counts agree: Rests on 2, '2 used', a relied-on group of 2, and 2 marked used in the JSON",
+  '<span class="group-count">2 studies</span>' in _oth and '3 studies</span>' not in _oth
+  and "2 used for this verdict" in _oth and "3 used for this verdict" not in _oth
+  and _otg["Relied on for the verdict"][1] == 2 and _ot_used == ["OT1", "OT2"]
+  and _otj["breakdown"]["rests_on"] == 2 and _otj["evidence"]["relied_on"] == 2, (_ot_used, re.findall(r"Rests on.{0,60}", _oth)))
+t("  the sentence resting only on the off-topic study is not printed, and the stamp stands on the two left",
+  "hair loss" not in _otj["explanation"] and _otj["verdict"] in ("true", "complicated"), _otj["explanation"])
+t("  the ClaimReview markup does not mark it as a source the verdict was based on",
+  '"identifier": "PMID:OT3", "isBasedOn": false' in _oth or
+  all(not x["isBasedOn"] for x in json.loads(_oth.split('type="application/ld+json"')[1].split(">", 1)[1].split("</script>")[0])["citation"]
+      if x["identifier"] == "PMID:OT3"))
+t("  the saved-record check names it, so a crawler is told to skip the record",
+  "cited_off_topic" in _dsp.saved_record_problems("c", "true", ["OT1", "OT3"], _OT, None, "q", "2020-01-01T00:00:00")
+  and "cited_off_topic" not in _dsp.saved_record_problems("c", "true", ["OT1"], _OT, None, "q", "2020-01-01T00:00:00"))
+# A saved verdict whose only cited study is off topic rests on nothing, so the
+# rule a fresh check obeys applies: "Not enough evidence".
+db.put_cached_verdict("creatine only off topic saved", "creatine AND strength", "true",
+                      "Study 3 shows it.", ["OT3"], _OT, tldr="Creatine increases strength.")
+_oto = P("creatine only off topic saved", ip="4.4.4.7").get_json()
+t("off topic: a saved verdict whose only cited study is off topic is 'Not enough evidence', with none marked used",
+  _oto["verdict"] == "insufficient" and _oto["tldr"] == verdict.UNTESTED_TLDR
+  and not any(s_["cited_in_verdict"] for s_ in _oto["studies"]), (_oto["verdict"], _oto["tldr"]))
+_otoh = c.get("/?q=creatine+only+off+topic+saved").data.decode()
+t("  on the page too, with no relied-on group",
+  "Not enough evidence" in _otoh.split('id="server-result"')[0] and "Relied on for the verdict</span>" not in _otoh)
+# The front page's list shows the stamp the page would.
+t("  and the latest-checks list does not stamp it 'Likely true'",
+  appmod._listed({"claim_text": "creatine only off topic saved", "verdict": "true", "search_query": "q",
+                  "tldr": "x", "studies": _OT, "cited": ["OT3"]})["verdict"] == "insufficient"
+  and appmod._listed({"claim_text": "c", "verdict": "complicated", "search_query": "q",
+                      "tldr": "x", "studies": _OT, "cited": ["OT1", "OT3"]})["cited"] == ["OT1"])
+# A fresh check never cites an off-topic study in the first place.
+# The model cites study 3 and, in the same answer, judges it off its subject.
+fg.models.script = [Resp("creatine AND strength"), Resp(VJ("true", [1, 3], relevance=[
+    {"study": 1, "subject": True, "outcome": True}, {"study": 2, "subject": True, "outcome": True},
+    {"study": 3, "subject": False, "outcome": False}]))]
+_FAKE_OT = [_study("FO1", "Creatine and strength trial", abstract="Creatine increased strength.",
+                   types=["Randomized Controlled Trial"]),
+            _study("FO2", "Creatine trial two", abstract="Creatine increased strength.", types=["Randomized Controlled Trial"]),
+            _study("FO3", "Paracetamol and headache", abstract="Paracetamol eased headache.",
+                   types=["Randomized Controlled Trial"])]
+_ot_saved_search = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": (_FAKE_OT, q, False)
+try:
+    _otf = P("creatine fresh off topic check", ip="4.4.4.8").get_json()
+finally:
+    pubmed.search_with_fallback = _ot_saved_search
+t("off topic: in a fresh check the model's citation of an off-topic study is dropped, so none is both marked used and off topic",
+  _otf.get("studies") and any(s_["pmid"] == "FO3" and s_["off_topic"] and not s_["cited_in_verdict"] for s_ in _otf["studies"])
+  and not any(s_["cited_in_verdict"] and s_["off_topic"] for s_ in _otf["studies"]),
+  [(s_["pmid"], s_["cited_in_verdict"], s_["off_topic"]) for s_ in _otf.get("studies") or []])
+# Both renderers group and describe the same way, on raw records that still
+# carry both flags (a result saved on the device) and on the server payload.
+_ot_raw = [dict(_study("J1", "a"), cited_in_verdict=True), dict(_study("J2", "b"), cited_in_verdict=True, off_topic="x."),
+           dict(_study("J3", "c"), background="lab", background_why="animal or lab"), _study("J4", "d"),
+           dict(_study("J5", "e"), off_topic="y")]
+_ot_recs = [_ot_raw, _otj["studies"], _oto["studies"], []]
+_py_groups = [_dsp.source_groups(r_) for r_ in _ot_recs]
+t("off topic: the server groups a both-flag study as excluded, and every study lands in exactly one group",
+  _py_groups[0] == {"cited": [0], "back": [2], "others": [3], "excluded": [1, 4]}
+  and all(sorted(sum(g_.values(), [])) == list(range(len(r_))) for g_, r_ in zip(_py_groups, _ot_recs)), _py_groups)
+t("  and never describes it as relied on", _dsp.study_why(_ot_raw[1]) == "Read and set aside: x.")
+if _shutil.which("node"):
+    _ot_js = (ROOT / "static" / "app.js").read_text()
+    _ot_fn = "const TYPES = [" + _ot_js.split("const TYPES = [")[1].split("function escapeHtml")[0]
+    _ot_out = json.loads(_subprocess.run(
+        ["node", "-e", _ot_fn + "const R = " + json.dumps(_ot_recs) + ";"
+         "console.log(JSON.stringify({g: R.map(sourceGroups), w: R.map((r) => r.map(studyWhy)),"
+         " d: R.map((r) => dropOffTopicCites({studies: JSON.parse(JSON.stringify(r))}).studies.map((s) => !!s.cited_in_verdict))}));"],
+        capture_output=True, text=True, check=True).stdout)
+    t("  the script and the server put every study in the same group, on four records",
+      _ot_out["g"] == _py_groups, (_ot_out["g"], _py_groups))
+    t("  and write the same line for each", _ot_out["w"] == [[_dsp.study_why(s_) for s_ in r_] for r_ in _ot_recs])
+    t("  and a result saved on the device stops marking an off-topic study used before anything reads it",
+      _ot_out["d"][0] == [True, False, False, False, False]
+      and _ot_out["d"][1] == [s_["cited_in_verdict"] for s_ in _otj["studies"]])
+_ot_rr = _ot_js[_ot_js.index("function renderResult"):] if _shutil.which("node") else (ROOT / "static" / "app.js").read_text()
+t("  renderResult clears the stale flags first and builds the list from sourceGroups, with the excluded group folded",
+  _ot_rr.index("dropOffTopicCites(data)") < _ot_rr.index("currentResult = data")
+  and "sourceGroups(data.studies)" in _ot_rr and 'group("Excluded (off-topic)", rows(g.excluded), false)' in _ot_rr)
+
 # ---- /privacy says exactly what is counted -------------------------------------------------
 _pv = c.get("/privacy").get_data(as_text=True)
 _pt = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv).split())

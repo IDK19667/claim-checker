@@ -70,7 +70,9 @@ function typeInfo(types) {
 // Why a study is listed, in one line: what the verdict did with it and, for a
 // study it leaned on, what that kind of study does and where it stops.
 // Mirrors display.study_why; a test runs both on the same records.
+// Off topic is checked first: a study set aside is never described as relied on.
 function studyWhy(s) {
+  if (s.off_topic) return `Read and set aside: ${String(s.off_topic).replace(/\.+$/, "")}.`;
   if (s.cited_in_verdict) {
     const ti = typeInfo(s.publication_types);
     const out = ["Relied on for the verdict."];
@@ -78,12 +80,30 @@ function studyWhy(s) {
     if (s.population) out.push(`Studied in: ${s.population}.`);
     return out.join(" ");
   }
-  if (s.off_topic) return `Read and set aside: ${String(s.off_topic).replace(/\.+$/, "")}.`;
   if (s.background) {
     const why = String(s.background_why || "").replace(/\.+$/, "");
     return why ? `Background only, not counted: ${why}.` : "Background only, not counted.";
   }
   return "Read, not relied on.";
+}
+
+// The study list's groups, as indexes into `studies`, in page order: relied
+// on, background only, read and not relied on, excluded as off topic. Every
+// study is in exactly one. Mirrors display.source_groups; a test runs both.
+function sourceGroups(studies) {
+  const out = { cited: [], back: [], others: [], excluded: [] };
+  (studies || []).forEach((s, i) => {
+    out[s.off_topic ? "excluded" : s.cited_in_verdict ? "cited" : s.background ? "back" : "others"].push(i);
+  });
+  return out;
+}
+
+// A study classified off topic is never relied on, even in a result saved on
+// this device before the server dropped such studies from the cited list.
+// Every count, mark and chart below reads cited_in_verdict, so it is set once.
+function dropOffTopicCites(data) {
+  (data.studies || []).forEach((s) => { if (s.off_topic) s.cited_in_verdict = false; });
+  return data;
 }
 
 function escapeHtml(str) {
@@ -541,6 +561,7 @@ function fitSpines() {
 if (document.fonts) document.fonts.ready.then(() => fitSpines());
 
 function renderResult(data) {
+  dropOffTopicCites(data);
   currentResult = data;
   $("claim-echo").textContent = data.claim;
   showTyped(data.typed);
@@ -607,16 +628,18 @@ function renderResult(data) {
     : "";
   // Animal and lab studies read for a claim about people are background
   // only: never counted as used, and grouped on their own so it shows. So
-  // are opinion pieces and buying guides; the server names the group.
-  const citedRows = [], backRows = [], otherRows = [];
-  data.studies.forEach((s, i) =>
-    (s.cited_in_verdict ? citedRows : s.background ? backRows : otherRows).push(studyRow(s, i)));
+  // are opinion pieces and buying guides; the server names the group. A
+  // study classified off topic goes in its own group, folded, last.
+  const g = sourceGroups(data.studies);
+  const rows = (idx) => idx.map((i) => studyRow(data.studies[i], i));
+  const citedRows = rows(g.cited), backRows = rows(g.back), otherRows = rows(g.others);
   $("sources").innerHTML = n
     ? group("Relied on for the verdict", citedRows, true) +
       group(escapeHtml((data.evidence && data.evidence.background_label)
                        || "Background only: animal and lab studies"),
             backRows, !citedRows.length && !otherRows.length) +
-      group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0)
+      group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0) +
+      group("Excluded (off-topic)", rows(g.excluded), false)
     : `<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>`;
 
   const list = $("sources");

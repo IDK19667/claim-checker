@@ -94,6 +94,7 @@ app.jinja_env.globals["breakdown_view"] = display.breakdown_view
 app.jinja_env.globals["confidence_line"] = display.confidence_line
 app.jinja_env.globals["design_note"] = display.design_note
 app.jinja_env.globals["study_why"] = display.study_why
+app.jinja_env.globals["source_groups"] = display.source_groups
 
 
 @app.before_request
@@ -190,7 +191,7 @@ def _claim_review_jsonld(cached: dict, url: str) -> dict:
     written by a model, and the markup says so.
     """
     studies = cached.get("studies") or []
-    cited = set(cached.get("cited_studies") or [])
+    cited = display.relied_pmids(cached.get("cited_studies"), studies)
     return {
         "@context": "https://schema.org",
         "@type": "ClaimReview",
@@ -642,7 +643,8 @@ def corrections():
 def og_image(key):
     cached = db.get_cached_by_key(key)
     if cached:
-        receipt = og.strongest_cited(cached["studies"], cached["cited_studies"])
+        receipt = og.strongest_cited(cached["studies"],
+                                     display.relied_pmids(cached["cited_studies"], cached["studies"]))
         # The card's short answer is the page's, with the page's certainty.
         # If the gate cannot run on an old or odd row, the card still renders,
         # with the stored short answer: a link preview must never be a 500.
@@ -825,7 +827,13 @@ def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool
 
 def _listed(v: dict) -> dict:
     """A recent-checks entry with the stamp the page itself would show."""
-    cited = set(v.get("cited") or [])
+    # Off-topic studies are not relied on here either (see _check_response),
+    # so the shelf marks and the stamp match the result page.
+    cited = display.relied_pmids(v.get("cited"), v.get("studies"))
+    if set(v.get("cited") or []) - cited:
+        v = dict(v, cited=[p for p in v.get("cited") or [] if p in cited])
+        if not cited and v.get("verdict") != "insufficient":
+            return dict(v, verdict="insufficient", **({"tldr": verdict.UNTESTED_TLDR} if "tldr" in v else {}))
     outcome = _outcome_group(v.get("search_query"))
     try:
         if _capped_true(v["verdict"], v["claim_text"], v["studies"], cited, outcome, v.get("tldr")):
@@ -839,7 +847,22 @@ def _listed(v: dict) -> dict:
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None):
-    cited = set(cited_studies or [])
+    # A study classified off topic is never relied on. A fresh check already
+    # leaves such studies out of its cited list (verdict.py, the relevance
+    # gate); an old or odd saved record may not, so the page drops them here
+    # and every count, mark and line below reads the same set. If that leaves
+    # a rated verdict resting on nothing, the rule a fresh check obeys
+    # applies: it becomes "Not enough evidence".
+    cited = display.relied_pmids(cited_studies, studies)
+    if set(cited_studies or []) - cited:
+        off_numbers = {i + 1 for i, s in enumerate(studies or []) if s.get("off_topic")}
+        explanation = breakdown_mod.drop_citing(explanation, off_numbers, len(studies or []))
+        if not cited and verdict_value != "insufficient":
+            verdict_value = "insufficient"
+            tldr = verdict.UNTESTED_TLDR
+            explanation = (explanation.rstrip() + " None of the studies found directly "
+                           "test this claim, so there isn't enough evidence to rate it.").strip()
+            breakdown = None
     outcome = _outcome_group(search_query)
     # Every sentence that cites a study is held to the studies it cites, on
     # the way out, so a cached check is held to it too: none may lean on a
