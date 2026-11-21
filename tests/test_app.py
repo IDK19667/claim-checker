@@ -6403,5 +6403,63 @@ _pc = (ROOT / "CLAUDE.md").read_text()
 t("CLAUDE.md non-negotiable 7 allows only per-day aggregate counts with no identifiers", "no\n   third-party analytics and no per-person tracking" in _pc
   and "no analytics; no cookies" not in _pc and "per-day aggregate totals" in _pc)
 
+# ---- Old saved answers with missing text ------------------------------------------
+# A row saved before `tldr` and `still_open` existed (the migration adds them
+# as NULL), or one damaged since, can have either one empty, blank or null.
+# No reader-facing path may show it as a finished verdict: the check runs
+# again, or the page has no verdict on it and runs the check itself.
+ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
+ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+_OR_STUDIES = [_study("OR1", "Honey and cough in children: a randomised trial")]
+# (label, tldr as stored, still_open as stored); None is SQL NULL, the value a
+# row from before the columns existed has after the migration.
+_OR_CASES = [
+    ("an empty short answer", "", "Doses vary."),
+    ("an empty still-open line", "Mixed.", ""),
+    ("both empty", "", ""),
+    ("a null short answer", None, "Doses vary."),
+    ("a null still-open line", "Mixed.", None),
+    ("both null, as a row from before the columns", None, None),
+    ("a blank short answer", "   ", "Doses vary."),
+    ("a blank still-open line", "Mixed.", "  \n "),
+]
+
+
+def _or_put(claim, tldr, still):
+    db.put_cached_verdict(claim, "honey AND cough", "complicated", "Honey may help (Study 1).",
+                          ["OR1"], _OR_STUDIES, tldr="x", still_open="x")
+    con = _sqlite_b.connect(os.environ["DB_PATH"])
+    con.execute("UPDATE verdict_cache SET tldr = ?, still_open = ? WHERE claim_key = ?",
+                (tldr, still, db.normalize_claim(claim)))
+    con.commit(); con.close()
+
+
+def _or_row(claim):
+    con = _sqlite_b.connect(os.environ["DB_PATH"])
+    r = con.execute("SELECT tldr, still_open FROM verdict_cache WHERE claim_key = ?",
+                    (db.normalize_claim(claim),)).fetchone()
+    con.close()
+    return r
+
+
+def _or_fresh():
+    fg.models.script = [Resp("honey AND cough"),
+                        Resp(VJ("complicated", [1], tldr="Fresh short answer.", still_open="Fresh open line."))]
+    fg.models.calls = 0
+
+
+# A whole row is still served from the cache, at no cost: the fix must not
+# turn every saved answer into a re-check.
+_cl = "old row honey cough whole"
+_or_put(_cl, "Mixed.", "Doses vary.")
+fg.models.calls = 0; fg.models.script = []
+_d = P(_cl, ip="9.9.9.1").get_json()
+t("old rows: a row with both lines is still a cache hit, with no model call",
+  _d.get("cached") is True and fg.models.calls == 0 and _d["tldr"] == "Mixed." and _d["still_open"] == "Doses vary.", _d)
+_pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
+t("  and its shared link still renders the verdict with both lines",
+  'id="server-result"' in _pg and "Mixed." in _pg and "Doses vary." in _pg)
+
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
