@@ -95,6 +95,11 @@ app.jinja_env.globals["confidence_line"] = display.confidence_line
 app.jinja_env.globals["design_note"] = display.design_note
 app.jinja_env.globals["study_why"] = display.study_why
 app.jinja_env.globals["source_groups"] = display.source_groups
+# The one sentence on privacy that the footer and the top of /privacy both
+# print, from here, so the two cannot drift. It says what /privacy says in
+# full: the claim text is kept, and nothing that identifies the person is.
+PRIVACY_LINE = "Claims you check are saved without your name, an account or your IP address."
+app.jinja_env.globals["privacy_line"] = PRIVACY_LINE
 
 
 @app.before_request

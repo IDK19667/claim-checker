@@ -6383,6 +6383,22 @@ t("privacy: it says a count is per day with no IP address, user agent, cookie, v
   all(x in _pt for x in ("daily totals", "IP address, a user agent, a cookie, a visitor ID or any claim text", "same database as the saved answers",
                          "Global Privacy Control")) and "No tracking" in _pt and "no cookies" in _pt)
 t("privacy: it has no dash", not _DASH.search(_pt))
+# The footer's privacy sentence is the one at the top of /privacy, from one
+# source, and it says the claim text is kept: no stronger than the page.
+_ft_home = c.get("/").get_data(as_text=True)
+_ft_foot = " ".join(_re_s.sub(r"<[^>]+>", " ", _ft_home.split('<footer class="foot')[1].split("</footer>")[0]).split())
+_ft_lede = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv.split('<p class="lede">')[1].split("</p>")[0]).split())
+_ft_line = appmod.PRIVACY_LINE
+t("footer privacy: the footer and the /privacy short version print the same sentence",
+  _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line, (_ft_foot, _ft_lede))
+t("  and it says the claims are saved, with nothing that identifies you, as the page's 'What we keep' does",
+  "saved" in _ft_line and all(x in _ft_line for x in ("name", "account", "IP address"))
+  and all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check")))
+t("  the stronger line is gone from both, and neither template hard-codes the sentence",
+  "tied to you" not in _ft_foot and "tied to you" not in _ft_lede
+  and all(_ft_line not in (ROOT / "templates" / f_).read_text() and "{{ privacy_line }}" in (ROOT / "templates" / f_).read_text()
+          for f_ in ("index.html", "privacy.html"))
+  and not _DASH.search(_ft_line))
 _pc = (ROOT / "CLAUDE.md").read_text()
 t("CLAUDE.md non-negotiable 7 allows only per-day aggregate counts with no identifiers", "no\n   third-party analytics and no per-person tracking" in _pc
   and "no analytics; no cookies" not in _pc and "per-day aggregate totals" in _pc)
