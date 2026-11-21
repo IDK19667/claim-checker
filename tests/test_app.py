@@ -4406,7 +4406,7 @@ _home_t = _re2.search("<title>(.*?)</title>", c.get("/").get_data(as_text=True))
 _ck_t = _re2.search("<title>(.*?)</title>", _ck).group(1)
 t("/checks has its own title and canonical, and the same card tags as home",
   _home_t != _ck_t and 'rel="canonical" href="http://localhost/checks"' in _ck
-  and 'name="twitter:card" content="summary_large_image"' in _ck and 'property="og:image" content="http://localhost/og/_.png"' in _ck)
+  and 'name="twitter:card" content="summary_large_image"' in _ck and 'property="og:image" content="http://localhost/og/_.png?v=2"' in _ck)
 _png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_dl["claim"]), safe="") + ".png")
 from PIL import Image as _Im2  # noqa: E402
 import io as _io2  # noqa: E402
@@ -5939,6 +5939,14 @@ _cw = " ".join(_claim_words)
 t("og per-claim card: still draws its claim, its claim label and its verdict",
   "Garlic shortens colds" in _cw and "The claim you checked" in _cw and "Verdict" in _cw
   and "It's complicated" in _claim_words and "4 PubMed studies read" in _claim_words, _claim_words)
+# The brand card's address carries a version, so a link service that cached
+# the old card (the tagline drawn as a claim) fetches the new one.
+_ogv = {p: _re2.findall(r'property="og:image" content="([^"]*)"', c.get(p).get_data(as_text=True))
+        for p in ("/", "/privacy", "/about", "/method")}
+t("og brand card: every page that is not a result points og:image at /og/_.png?v=2",
+  all(v == ["http://localhost/og/_.png?v=2"] for v in _ogv.values()), _ogv)
+t("  and no template still names the unversioned address",
+  not any('/og/_.png"' in (ROOT / "templates" / f).read_text() for f in ("index.html", "info.html", "privacy.html")))
 
 # ---- Polish: sitemap, robots, canonical, noindex ---------------------------------------
 _gs = {"pmid": "S1", "title": "Garlic and colds", "abstract": "A randomized trial.", "journal": "J", "year": "2020",
