@@ -661,7 +661,9 @@ def og_image(key):
             still = cached.get("still_open") or ""
         png = og.render_card(cached["claim_text"], stamp, short, len(cached["studies"]), receipt, still)
     else:
-        png = og.render_card("Saw a health claim? Check it against the research.", "complicated", "", 0)
+        # No claim (the home page, an info page, or a key with nothing saved):
+        # the brand card, never a made-up claim with a verdict on it.
+        png = og.render_brand()
     return Response(png, mimetype="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
 

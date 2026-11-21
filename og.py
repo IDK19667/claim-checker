@@ -242,6 +242,36 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
     return buf.getvalue()
 
 
+# The card a link to the site itself unfurls with: no claim, so no verdict,
+# no claim label and no study count. The name, what it does, where it is.
+BRAND_LINE = "See what the research says about a health claim"
+HOST = "checkevident.com"
+
+
+@lru_cache(maxsize=1)
+def render_brand() -> bytes:
+    im = Image.new("RGB", (W, H), PAPER)
+    d = ImageDraw.Draw(im)
+    pad = 64
+    field_h = 360
+    # The night ground and the wordmark, as on every card, only larger.
+    d.rectangle([0, 0, W, field_h], fill=DEEP)
+    mark = _font(DISPLAY, 150, 500)
+    d.text((pad, 96), "Evident", font=mark, fill=ON_DEEP)
+    # By day: what it is for, in the reading face.
+    body = _body(46)
+    y = field_h + 52
+    for line in _wrap(d, BRAND_LINE, body, W - pad * 2, 2):
+        d.text((pad, y), line, font=body, fill=INK)
+        y += 58
+    foot = _mono(15)
+    d.text((pad, H - 40), "Not medical advice", font=foot, fill=INK_3)
+    d.text((W - pad - d.textlength(HOST, font=foot), H - 40), HOST, font=foot, fill=INK_3)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
 def render_card(claim: str, verdict: str, tldr: str, study_count: int, receipt: tuple | None = None,
                 still_open: str = "") -> bytes:
     return _render(claim, verdict, tldr or "", study_count, tuple(receipt) if receipt else None, still_open or "")

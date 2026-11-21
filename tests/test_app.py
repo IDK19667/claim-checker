@@ -5903,6 +5903,43 @@ t("share card: a long still-open line wraps to up to three lines before it trunc
 t("share card: three still-open lines leave the footer row clear",
   not any(_i3.getpixel((x, y)) != (241, 242, 238) for y in range(560, 590) for x in range(64, 1136, 3)))
 
+# The card a link to the site itself unfurls with is a brand card: the
+# tagline is never drawn as if it were a claim someone checked.
+from PIL import ImageDraw as _OGDraw  # noqa: E402
+_og_text = _OGDraw.ImageDraw.text
+_og_drawn = []
+
+
+def _og_spy(self, xy, text, *a, **k):
+    _og_drawn.append(str(text))
+    return _og_text(self, xy, text, *a, **k)
+
+
+_OGDraw.ImageDraw.text = _og_spy
+try:
+    og.render_brand.cache_clear()
+    _brand_png = c.get("/og/_.png")
+    _brand_words = list(_og_drawn)
+    _og_drawn.clear()
+    og._render.cache_clear()
+    og.render_card("Garlic shortens colds", "complicated", "It is mixed.", 4)
+    _claim_words = list(_og_drawn)
+finally:
+    _OGDraw.ImageDraw.text = _og_text
+_bw = " ".join(_brand_words)
+t("og brand card: /og/_.png draws the wordmark, the line and the host, as a 1200x630 png",
+  _brand_png.status_code == 200 and _brand_png.mimetype == "image/png"
+  and _CI.open(_cio.BytesIO(_brand_png.data)).size == (1200, 630)
+  and "Evident" in _brand_words and "checkevident.com" in _brand_words
+  and "See what the research says about a health claim" in _bw, _brand_words)
+t("  and draws no claim label, no verdict and no study count",
+  not any(x in _bw for x in ("claim you checked", "Verdict", "No matching studies", "complicated")), _brand_words)
+t("  a key with nothing saved gets the same brand card", c.get("/og/no-such-claim-saved.png").data == _brand_png.data)
+_cw = " ".join(_claim_words)
+t("og per-claim card: still draws its claim, its claim label and its verdict",
+  "Garlic shortens colds" in _cw and "The claim you checked" in _cw and "Verdict" in _cw
+  and "It's complicated" in _claim_words and "4 PubMed studies read" in _claim_words, _claim_words)
+
 # ---- Polish: sitemap, robots, canonical, noindex ---------------------------------------
 _gs = {"pmid": "S1", "title": "Garlic and colds", "abstract": "A randomized trial.", "journal": "J", "year": "2020",
        "publication_types": ["Randomized Controlled Trial"], "authors": ["x"], "data_banks": None, "url": "u"}
