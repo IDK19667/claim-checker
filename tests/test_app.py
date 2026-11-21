@@ -656,6 +656,19 @@ t("  with no issue numbers, on the home page or the 404 page",
   "entry-no" not in _html and "entry-no" not in _404_led and not re.search(r">No\. \d+<", _html + _404_led)
   and 'class="entry-claim"' in _404_led)
 t("the front page never says '1 studies'", "1 studies read" not in _html)
+# Sentence case is the template's: the stored text and the link keep the
+# wording as typed, only the first letter shown is raised.
+db.put_cached_verdict("green tea speeds up METABOLISM", "green tea AND metabolism", "complicated", "x",
+                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "a", "journal": "J", "year": "2020",
+                        "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Randomized Controlled Trial"]}],
+                      tldr="Maybe a little.", still_open="How much is unclear.")
+_sc_html = c.get("/").data.decode()
+_sc_row = db.get_cached_by_key(db.normalize_claim("green tea speeds up METABOLISM"))
+t("the Latest list shows a claim in sentence case, and only the first letter changes",
+  '<span class="entry-claim">Green tea speeds up METABOLISM</span>' in _sc_html
+  and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_html
+  and _sc_row["claim_text"] == "green tea speeds up METABOLISM",
+  [x for x in _sc_html.split('class="entry-claim">')[1:3]])
 
 _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
