@@ -339,19 +339,18 @@ def _render_home(checks_page: bool = False):
             jsonld["reviewRating"]["ratingValue"] = RATING.get(cached["verdict"], 3)
             jsonld["reviewRating"]["alternateName"] = label
             jsonld["reviewRating"]["ratingExplanation"] = cached["tldr"] or cached["explanation"]
-    # The front page carries the work instead of describing it: real counts
-    # and the most recent verdicts with the evidence behind each. Both are
-    # best-effort; an empty database must still render a usable page.
+    # The front page carries the work instead of describing it: the most
+    # recent verdicts with the evidence behind each. Best-effort; an empty
+    # database must still render a usable page.
     try:
-        ledger = db.ledger()
         latest = _list_entries(_public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))
     except sqlite3.Error as e:
-        app.logger.warning("Could not build the front page ledger: %s", e)
-        ledger, latest = None, []
+        app.logger.warning("Could not build the front page's latest checks: %s", e)
+        latest = []
     db.count_event("view.result" if cached else "view.home")
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
-                           ledger=ledger, latest=latest,
+                           latest=latest,
                            example=None if cached else _trust_example(),
                            provider=verdict.provider_label(), on_gemini=_on_gemini(), checks_page=checks_page,
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
@@ -359,7 +358,7 @@ def _render_home(checks_page: bool = False):
 
 @app.route("/")
 def index():
-    """The checker first, then the ledger and recent checks."""
+    """The checker first, then the recent checks."""
     return _render_home()
 
 

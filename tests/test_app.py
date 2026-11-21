@@ -641,9 +641,20 @@ pubmed.deep_dive = _real_dive
 
 # ---- the front page carries the work ---------------------------------------------
 _html = c.get("/").data.decode()
-t("the front page shows the ledger", "Studies read" in _html and "Pooled analyses" in _html)
+t("the front page shows no counts strip: the latest checks carry the work",
+  'class="ledger"' not in _html and "Studies read" not in _html and "Pooled analyses" not in _html
+  and "Claims checked" not in _html)
+import inspect as _insp_led  # noqa: E402
+_css_led = (ROOT / "static" / "style.css").read_text()
+t("  its CSS is gone and the home page stops computing it, while db.ledger() stays",
+  not re.search(r"^\.ledger[ ,{]", _css_led, re.M) and ".entry-no" not in _css_led
+  and "db.ledger()" not in _insp_led.getsource(appmod._render_home) and callable(db.ledger))
 t("the front page lists recent checks with their evidence",
-  "Latest checks" in _html and "entry-no" in _html and 'class="mini"' in _html)
+  "Latest checks" in _html and 'class="entry-claim"' in _html and 'class="mini"' in _html)
+_404_led = c.get("/no-such-page-led").get_data(as_text=True)
+t("  with no issue numbers, on the home page or the 404 page",
+  "entry-no" not in _html and "entry-no" not in _404_led and not re.search(r">No\. \d+<", _html + _404_led)
+  and 'class="entry-claim"' in _404_led)
 t("the front page never says '1 studies'", "1 studies read" not in _html)
 
 _res = c.get("/?q=streamed%20claim").data.decode()
@@ -2013,9 +2024,9 @@ t("home: the field has a visible label and a helper line, not just a placeholder
 t("  the nav is How it works, About, Privacy, and the page loads no footage",
   all(x in _home for x in ('id="how-btn"', 'id="about-link"', 'href="/privacy">Privacy</a>'))
   and "flight" not in _home.replace("inFlight", "") and 'id="flight"' not in _home)
-t("  the examples sit in the form, after the submit button; the counters come after the form",
+t("  the examples sit in the form, after the submit button; the latest checks come after the form",
   _home.index('id="submit-btn"') < _home.index('id="chips"') < _home.index("</form>")
-  < (_home.index('class="ledger"') if 'class="ledger"' in _home else 10**9))
+  < _home.index('class="latest"'))
 t("  the first three examples are the ones app.js renders",
   "EXAMPLES.slice(0, 3)" in _js)
 _pl = _re.search(r'<p class="privacy-line"[^>]*>(.*?)</p>', _home, _re.S)

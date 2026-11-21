@@ -164,13 +164,6 @@
 
   <main class="wrap">
     <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>
-        {% if ledger and ledger.studies_read %}
-        <dl class="ledger">
-          <div><dt>Studies read</dt><dd>{{ "{:,}".format(ledger.studies_read) }}</dd></div>
-          <div><dt>Claims checked</dt><dd>{{ "{:,}".format(ledger.claims) }}</dd></div>
-          <div><dt>Pooled analyses</dt><dd>{{ "{:,}".format(ledger.pooled) }}</dd></div>
-        </dl>
-        {% endif %}
       {% if latest %}
       <div class="latest">
         <h2 class="sec-title">Latest checks</h2>
@@ -178,7 +171,6 @@
           {% for v in latest %}
           <li class="entry">
             <a class="entry-link" href="/?q={{ v.claim_text | urlencode }}">
-              <span class="entry-no">No. {{ v.issue }}</span>
               <span class="entry-claim">{{ v.claim_text }}</span>
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
