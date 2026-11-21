@@ -1472,11 +1472,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,
         # and is one.
-        answered = again.get("breakdown") or (again.get("verdict") == "insufficient"
-                                              and again.get("tldr"))
+        # A retry missing its short answer or its still-open line is not an
+        # answer either; one that has both beats a first answer that does not.
+        answered = (again.get("breakdown") or (again.get("verdict") == "insufficient"
+                                               and again.get("tldr"))) and has_lines(again)
         if answered:
             said_again = _stamp_disagrees(again, claim, read)
-            if len(_faults(again, claim, reported, studies, said_again)) < len(faults):
+            if (not has_lines(result)
+                    or len(_faults(again, claim, reported, studies, said_again)) < len(faults)):
                 result, said = again, said_again
                 kept = raw, stop_note
     # The stamp and the takeaway are one answer. Asked once to agree and
@@ -1493,6 +1496,9 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
+    # Only an answer read from the model's reply carries this key; the
+    # fallbacks for a reply that could not be read at all do not.
+    replied = "off_topic" in result
     off = result.pop("off_topic", None) or {}
     back = result.pop("background", None) or {}
     result.pop("ranked", None)
@@ -1505,7 +1511,24 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    return follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    result = follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    # Every finished answer has a short answer and a line on what is still
+    # open. A reply that leaves either empty, after every gate and the retry
+    # above, is a failed reply: it ends in the app's error response, with a
+    # way out, and is never saved or shown as an answer.
+    if replied and not has_lines(result):
+        _stamp_log.warning("the reply left its short answer or its still-open line empty: %r",
+                           {k: result.get(k) for k in ("verdict", "tldr", "still_open")})
+        raise ProviderError("other", INCOMPLETE_REPLY)
+    return result
+
+
+INCOMPLETE_REPLY = "The AI model sent back an answer with a line missing. Try again in a moment."
+
+
+def has_lines(result: dict) -> bool:
+    """Both lines every finished answer carries: the short answer and what is still open."""
+    return all(str((result or {}).get(k) or "").strip() for k in ("tldr", "still_open"))
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:

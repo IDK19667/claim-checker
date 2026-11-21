@@ -4,6 +4,21 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21: A reply with an empty line is a failed reply
+
+A fresh reply whose short answer or still-open line came back empty was
+saved and shown without it, and because the cache refuses such a row
+(`db._whole`) it cost a model call on every later visit. Now
+`verdict.weigh_evidence` treats it as failed: the one retry it already has
+does not take an answer missing a line, and prefers one that has both; if
+the final answer still lacks one, it raises `ProviderError("other")`, which
+the app already turns into a 502 with "Try again in a moment" and the
+page's Retry, before anything is saved or logged. The prompt and schema are
+unchanged. Left as they were, for the owner to decide: the fallbacks for a
+reply that could not be read at all (not JSON, cut off, declined) still
+show "Couldn't reach a verdict" over the studies and still save a row
+without a still-open line.
+
 ## 2026-11-21: The same claim in other words gets the same saved answer
 
 "Does creatine cause hair loss?" and "Creatine causes hair loss" were two

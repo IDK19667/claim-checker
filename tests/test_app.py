@@ -298,6 +298,46 @@ r = P("err f"); t("PubMed down -> 502", r.status_code == 502 and "PubMed" in r.g
 t("failed checks not cached", all(db.get_cached_verdict(x, 24) is None for x in ("err a", "err b", "err c", "err f")))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
+# A reply that leaves its still-open line empty is a failed reply: the app's
+# error response, with a way out, and nothing saved or logged as an answer.
+def _no_row(claim):
+    with db.get_conn() as _conn:
+        return _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
+                             (db.normalize_claim(claim),)).fetchone()["n"] == 0
+
+
+for _lbl, _so in (("empty", ""), ("blank", "   ")):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=_so))]
+    _n_logs = len(db.recent_checks(1000))
+    r = P(f"empty line claim {_lbl}", ip="7.7.9.1")
+    t(f"a reply whose still-open line is {_lbl} is a failed reply: 502 with the reason and a way out",
+      r.status_code == 502 and r.get_json()["error"] == verdict.INCOMPLETE_REPLY
+      and "Try again" in r.get_json()["error"], r.get_json())
+    t(f"  and it is never saved, and not logged as a check ({_lbl})",
+      _no_row(f"empty line claim {_lbl}") and len(db.recent_checks(1000)) == _n_logs)
+fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=""))]
+_r, _evs = stream("empty line claim streamed", ip="7.7.9.2")
+t("  the streamed check ends on the same error, never on a done stage",
+  _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502 and _evs[-1]["error"] == verdict.INCOMPLETE_REPLY
+  and not any(e["stage"] == "done" for e in _evs) and _no_row("empty line claim streamed"), _evs[-1])
+t("  and the message has no dash", not any(ch in verdict.INCOMPLETE_REPLY for ch in "\u2013\u2014"))
+fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("false", [], still_open=""))]
+d = P("empty line claim resting on nothing", ip="7.7.9.3").get_json()
+t("  a reply the code turns to 'Not enough evidence' gets its still-open line from code, and is an answer",
+  d.get("verdict") == "insufficient" and d.get("still_open") == "Whether any study has tested this claim directly."
+  and not _no_row("empty line claim resting on nothing"), d)
+fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open="Doses vary."))]
+d = P("empty line claim whole", ip="7.7.9.4").get_json()
+t("  a whole reply is unaffected: shown, with its line, and saved",
+  d.get("still_open") == "Doses vary." and db.get_cached_verdict("empty line claim whole", 24), d)
+fg.models.script = [Resp(VJ("complicated", [1], still_open=""))]
+try:
+    verdict.weigh_evidence("empty line unit", [dict(x) for x in STUDIES], "(x) AND (y)"); _raised = None
+except verdict.ProviderError as e:
+    _raised = e
+t("  weigh_evidence raises the provider's 'other' failure for it",
+  _raised is not None and _raised.kind == "other" and _raised.detail == verdict.INCOMPLETE_REPLY)
+
 # ---- gemini retries -----------------------------------------------------------
 def _scripted(*items):
     seq, calls = list(items), []
@@ -2101,6 +2141,21 @@ t("  if the retry still contradicts, the stamp follows the takeaway's plain no",
   _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 4, _v)
 t("  and a retry that writes the same sentence costs no second reading",
   fg.models.script == [] and fg.models.calls == 4)
+# The retry the code already has: one with an empty line is not an answer,
+# and one with both lines beats a first answer that left one empty.
+fg.models.calls = 0
+fg.models.script = [_SUGAR_NO, DIR("no"),
+                    Resp(VJ("false", [1, 2], tldr=_NO_TLDR, still_open="",
+                            evidence=["Sugar did not change behaviour (Study 1)."]))]
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("a retry that leaves its still-open line empty is not taken; the first answer, with its line, stands",
+  _v["still_open"] == "Longer trials are needed." and _v["verdict"] == "false", _v)
+fg.models.calls = 0
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR, still_open="",
+                            evidence=["Sugar did not change behaviour (Study 1)."])), DIR("no"), _SUGAR_NO]
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("  and a retry with both lines replaces a first answer that left one empty, even with as many faults",
+  _v["still_open"] == "Longer trials are needed.", _v)
 t("  and the words are kept, never swapped for a stock line",
   not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], _v["explanation"],
                                "Sugar makes children hyperactive")
