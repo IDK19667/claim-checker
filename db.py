@@ -430,6 +430,7 @@ def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
     if datetime.now(timezone.utc) - created > timedelta(hours=max_age_hours):
         return None
     return {
+        "claim_text": row["claim_text"],
         "search_query": row["search_query"],
         "verdict": row["verdict"],
         "tldr": row["tldr"] or "",
@@ -578,6 +579,145 @@ def get_cached_by_key(claim_key: str) -> dict | None:
         "studies": json.loads(row["studies_json"] or "[]"),
         "cached_at": row["created_at"],
     }
+
+
+# ---- The same claim, typed another way ------------------------------------
+# Two claims are the same claim only when, after the steps in `claim_fold`,
+# they leave exactly the same words in exactly the same order. No synonyms,
+# no "close enough", no word missing or extra. Ignored: case, quotes,
+# apostrophes, punctuation, hyphens between words, extra spaces, "&" for
+# "and", a short list of small words, the question form, a plural or verb
+# "-s", and where a single hedge word stands. Never folded: negations, digits
+# and what is joined to them, word order, prepositions (over and under, to
+# and from), and/or, more/less, before/after, tense, and which hedge it is.
+# suggest._STOP is not reused: dropped whole it would merge "men over 50"
+# with "men under 50" and "can cause" with "causes".
+
+# Dropped, these and only these: articles, possessives, "it", the linking
+# verbs and the do-support of a question. Every other word is kept.
+_FOLD_DROP = frozenset("a an the my your our their its it is are be has have do does".split())
+# A hedge counts wherever it stands, and only one of them can move.
+_FOLD_HEDGES = frozenset("can could may might will would should must shall".split())
+# A final s that is not a plural, or whose removal makes another word.
+_FOLD_KEEP_S = frozenset("""
+diabetes herpes mumps measles rabies scabies rickets shingles hives tetanus aids
+virus lupus gas bias pancreas atlas christmas canvas lens news series species
+always perhaps sometimes whereas yes thus plus its his hers ours yours theirs
+physics genetics economics ethics aerobics athletics gymnastics politics statistics
+glasses braces gums greens sweets spirits fries dates means odds pots tens
+pcos sids sars mers ards feces faeces arthritis psoriasis
+""".split())
+_FOLD_QUOTES = {"‘": "'", "’": "'", "‛": "'", "′": "'", "`": "'",
+                "“": '"', "”": '"', "„": '"', "″": '"'}
+_FOLD_DASHES = "‐‑‒–—―−"
+_FOLD_LEAD = [("is", "it", "true", "that"), ("is", "it", "true"), ("true", "or", "false")]
+_FOLD_TRAIL = [("true", "or", "false"), ("or", "not")]
+# A number stays one token with its inner separators: 2.5, 2-5, 4,000, 1/2, 3:1.
+_FOLD_TOKEN = re.compile(r"\w*\d(?:[.,/:\-]\d+)+\w*|\w+|\S")
+
+
+def _fold_contractions(t: str) -> str:
+    """Spelled out, never dropped: the "not" always stays."""
+    t = re.sub(r"\bcan'?t\b", "can not", t)
+    t = re.sub(r"\bcannot\b", "can not", t)
+    t = re.sub(r"\bwon'?t\b", "will not", t)
+    t = re.sub(r"\bshan'?t\b", "shall not", t)
+    t = re.sub(r"n't\b", " not", t)
+    return re.sub(r"\b(do|does|did|is|are|was|were|has|have|had|should|would|could|must)nt\b",
+                  r"\1 not", t)
+
+
+def _fold_plural(w: str) -> str:
+    if len(w) <= 3 or not w.isalpha() or w in _FOLD_KEEP_S:
+        return w
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 4 and w.endswith("ie"):
+        return w[:-2] + "y"
+    if w.endswith(("sses", "shes", "xes")):
+        return w[:-2]
+    if w.endswith(("ss", "us", "is")):
+        return w
+    return w[:-1] if w.endswith("s") else w
+
+
+def _fold_tokens(claim: str) -> list:
+    import unicodedata
+    t = unicodedata.normalize("NFKC", str(claim or ""))
+    for k, v in _FOLD_QUOTES.items():
+        t = t.replace(k, v)
+    for d in _FOLD_DASHES:
+        t = t.replace(d, "-")
+    t = _fold_contractions(t.casefold().replace("&", " and ")).replace("'", "")
+    out = []
+    for tok in _FOLD_TOKEN.findall(t):
+        if len(tok) == 1 and not tok.isalnum():
+            # Symbols (% + < > $ # and emoji) stay; punctuation goes.
+            if unicodedata.category(tok).startswith("S") or tok in "%‰#":
+                out.append(tok)
+            continue
+        out.append(tok)
+    return out
+
+
+def claim_fold(claim: str) -> tuple:
+    """The ordered key two wordings of one claim share. See the notes above."""
+    toks = _fold_tokens(claim)
+    changed = True
+    while changed:
+        changed = False
+        for w in _FOLD_LEAD:
+            if len(toks) > len(w) and tuple(toks[:len(w)]) == w:
+                toks, changed = toks[len(w):], True
+                break
+        for w in _FOLD_TRAIL:
+            if len(toks) > len(w) and tuple(toks[-len(w):]) == w:
+                toks, changed = toks[:-len(w)], True
+                break
+    # Read before plurals fold, so "soda cans" never becomes a hedge.
+    hedges = [w for w in toks if w in _FOLD_HEDGES]
+    if len(hedges) == 1:
+        i = toks.index(hedges[0])
+        toks = ["~" + hedges[0]] + toks[:i] + toks[i + 1:]
+    return tuple(_fold_plural(w) for w in toks if w not in _FOLD_DROP)
+
+
+# Problems the page repairs when it renders (display.saved_record_problems):
+# they do not stop a saved answer being served for another wording.
+_REPAIRED_AT_RENDER = frozenset({"count_mismatch", "cited_off_topic"})
+
+
+@_routed
+def find_equivalent(claim: str) -> str | None:
+    """
+    The stored wording of a saved answer to this same claim, or None. Only a
+    whole row (`_whole`) whose record has no problem the page cannot repair
+    is returned. A row stored under this claim's own key comes first, then
+    the newest. Any age: the caller decides whether it is fresh enough.
+    Every saved claim is read, with no cap, so an old one is never missed.
+    """
+    key = claim_fold(claim)
+    if not key:
+        return None
+    own = normalize_claim(claim)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT claim_key, claim_text, tldr, still_open FROM verdict_cache "
+            "ORDER BY created_at DESC, rowid DESC").fetchall()
+    found = [r for r in rows if r["claim_text"] and _whole(r) and claim_fold(r["claim_text"]) == key]
+    found.sort(key=lambda r: r["claim_key"] != own)
+    import display
+    for r in found:
+        # The unrouted reader: this call already runs on one backend.
+        saved = get_cached_by_key.__wrapped__(r["claim_key"])
+        if not saved:
+            continue
+        problems = set(display.saved_record_problems(
+            saved["claim_text"], saved["verdict"], saved["cited_studies"], saved["studies"],
+            saved["breakdown"], saved["search_query"], saved["cached_at"]))
+        if not problems - _REPAIRED_AT_RENDER:
+            return saved["claim_text"]
+    return None
 
 
 @_routed

@@ -192,6 +192,21 @@ def study_why(study) -> str:
     return "Read, not relied on."
 
 
+def typed_note(typed, reason=None) -> str:
+    """
+    The line under the claim when the answer is to other words than the
+    reader's: their own words, and why they differ. A fixed spelling says so;
+    a saved check of the same claim in other words says that instead. Empty
+    when there is nothing to explain. static/app.js typedNote is the same; a
+    test runs both on the same inputs.
+    """
+    if not typed:
+        return ""
+    if reason == "wording":
+        return f"Showing the saved check for this claim. You typed \u201c{typed}\u201d."
+    return f"Spelling fixed. You typed \u201c{typed}\u201d."
+
+
 # ---- The page's own words for a link preview and a search result -------------
 
 TITLE_MAX = 50       # plus " · Evident" in the tab: about 60 in all

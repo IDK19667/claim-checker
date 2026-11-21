@@ -4,6 +4,24 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21: The same claim in other words gets the same saved answer
+
+"Does creatine cause hair loss?" and "Creatine causes hair loss" were two
+rows with two model calls, and could get two verdicts. `db.find_equivalent`
+folds a claim to an ordered key (`db.claim_fold`): case, punctuation, 16
+small words, the question form, a plural or verb "-s" and where one hedge
+stands are ignored; negations, digits, word order, prepositions, more/less,
+and/or, tense and which hedge it is are kept. No synonyms. The 140 approved
+pairs are a table in the suite. It is called after the cache miss and again
+after the spelling switch. A match is shown, shared and logged under its
+saved wording, with `typed_reason: "wording"` so the note reads "Showing
+the saved check for this claim" rather than "Spelling fixed". A match older
+than the cache window is checked again under its saved wording, so its one
+row is refreshed. A row under the claim's own key is preferred; a row that
+is not whole, or has a problem the page cannot repair, is never matched.
+Every saved claim is scanned (no stored key, so no new column); on the
+owner's 97 saved claims it merges exactly three pairs.
+
 ## 2026-11-20: An off-topic study is never relied on, on any record
 
 An outside audit saw "Does creatine cause hair loss?" under "Relied on for

@@ -2453,6 +2453,139 @@ _page = c.get("/").data.decode()
 t("  the page has the note, hidden until a check fills it",
   'id="typed-note" hidden' in _page)
 
+# ---- the same claim typed another way gets the same saved answer -------------
+# db.claim_fold is an ordered key: exact equality, no synonyms. The 140 pairs
+# in tests/equivalent_pairs.json are the approved rule, one test each.
+_EQ_PAIRS = json.loads((ROOT / "tests" / "equivalent_pairs.json").read_text())
+for _p in _EQ_PAIRS:
+    _same = db.claim_fold(_p["a"]) == db.claim_fold(_p["b"])
+    t(f"equivalent [{_p['cat']}] {_p['a']!r} vs {_p['b']!r}: {_p['expect']}",
+      _same == (_p["expect"] == "match"), (db.claim_fold(_p["a"]), db.claim_fold(_p["b"])))
+_eqf = lambda a, b: db.claim_fold(a) == db.claim_fold(b)
+t("equivalent: question form, plural, punctuation and articles fold together",
+  _eqf("Coffee causes cancer", "Does coffee cause cancer?")
+  and _eqf("Eggs raise cholesterol", "Egg raises cholesterol")
+  and _eqf("Omega-3 improves memory!", "omega 3 improves memory")
+  and _eqf("The HPV vaccine is safe", "Is HPV vaccine safe"))
+t("  negation, swapped order, dose, over and under, before and after, more and less never fold",
+  not any(_eqf(a, b) for a, b in [
+      ("Vaccines cause autism", "Vaccines don't cause autism"),
+      ("Vaccines cause autism", "Vaccines do not cause autism"),
+      ("Coffee causes cancer", "Cancer causes coffee"),
+      ("Taking 4000 IU of vitamin D is safe", "Taking 400 IU of vitamin D is safe"),
+      ("Taking 4000 IU of vitamin D is safe", "Taking 4,000 IU of vitamin D is safe"),
+      ("Testosterone is safe for men over 50", "Testosterone is safe for men under 50"),
+      ("Coffee before exercise helps", "Coffee after exercise helps"),
+      ("More sleep improves memory", "Less sleep improves memory")]))
+t("  a hedge is part of the claim: can, may, might, should and will never fold into each other or into none",
+  not any(_eqf(a, b) for a, b in [
+      ("Smoking causes lung cancer", "Smoking can cause lung cancer"),
+      ("Coffee may cause cancer", "Coffee might cause cancer"),
+      ("Coffee should be avoided", "Coffee will be avoided")])
+  and _eqf("Can vitamin D prevent colds?", "Vitamin D can prevent colds"))
+t("  cures, helps and causes are three claims",
+  not any(_eqf(a, b) for a, b in [
+      ("Apple cider vinegar cures diabetes", "Apple cider vinegar helps diabetes"),
+      ("Apple cider vinegar helps diabetes", "Apple cider vinegar causes diabetes"),
+      ("Apple cider vinegar cures diabetes", "Apple cider vinegar causes diabetes")]))
+t("  the small words dropped never include a negation, a preposition that sets direction or a hedge",
+  not (db._FOLD_DROP & {"not", "no", "never", "without", "over", "under", "before", "after", "more",
+                        "less", "to", "from", "and", "or", "can", "may", "might", "should", "will"}))
+
+_EQ_SAVED = "Creatine causes hair loss in men"
+db.put_cached_verdict(_EQ_SAVED, "(creatine) AND (hair loss)", "false", "No trial found it (Study 1).",
+                      ["P1"], STUDIES, tldr="No, the trials found no hair loss.", still_open="Longer trials.")
+fg.models.script = []; fg.models.calls = 0
+r = P("Does creatine cause hair loss in men?", ip="7.7.8.1"); d = r.get_json()
+t("equivalent: a reworded claim is answered from the saved check, with no model call",
+  r.status_code == 200 and d["cached"] and fg.models.calls == 0 and d["verdict"] == "false", d)
+t("  under the saved wording: the claim, the share link and the log",
+  d["claim"] == _EQ_SAVED and d["share_url"].endswith("/?q=" + urllib.parse.quote(_EQ_SAVED))
+  and db.recent_checks(1)[0]["claim_text"] == _EQ_SAVED, (d["claim"], d["share_url"]))
+t("  and it says what was typed, as a reworded match, not a spelling fix",
+  d["typed"] == "Does creatine cause hair loss in men?" and d["typed_reason"] == "wording", d)
+_r, _evs = stream("Is it true that creatine causes hair loss in men?", ip="7.7.8.2")
+t("  the streamed check gives the same saved answer and the same note",
+  _evs[-1]["stage"] == "done" and _evs[-1]["result"]["claim"] == _EQ_SAVED
+  and _evs[-1]["result"]["typed_reason"] == "wording" and fg.models.calls == 0, _evs[-1])
+_r, _evs = stream("Creatine cause hair loss in men", ip="7.7.8.3")
+t("  a dropped s is the same claim on the stream too",
+  _evs[-1]["result"]["claim"] == _EQ_SAVED and _evs[-1]["result"]["typed"] == "Creatine cause hair loss in men"
+  and _evs[-1]["result"]["typed_reason"] == "wording" and fg.models.calls == 0, _evs[-1])
+fg.models.script = [Resp("(creatine) AND (hair loss)"), Resp(VJ("complicated", [1]))]
+d = P("Creatine can cause hair loss in men", ip="7.7.8.4").get_json()
+t("  a hedged wording is another claim: it is checked fresh under its own words",
+  not d["cached"] and d["claim"] == "Creatine can cause hair loss in men" and d["typed"] is None, d)
+t("  a claim checked under its own words carries no note reason", d["typed_reason"] is None, d)
+
+# A saved check older than the window is checked again under its saved
+# wording: its one row is refreshed, and no second row for it is made.
+_EQ_OLD = "Green tea lowers blood pressure in adults"
+db.put_cached_verdict(_EQ_OLD, "(green tea) AND (blood pressure)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Old short answer.", still_open="Old open line.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                  ("2020-01-01T00:00:00+00:00", db.normalize_claim(_EQ_OLD)))
+db.put_cached_query(_EQ_OLD, verdict.QUERY_PROMPT_VERSION, "(green tea) AND (blood pressure)", "", _EQ_OLD)
+fg.models.script = [Resp(VJ("complicated", [1], tldr="Fresh short answer.", still_open="Fresh open line."))]
+fg.models.calls = 0
+d = P("Does green tea lower blood pressure in adults?", ip="7.7.8.5").get_json()
+with db.get_conn() as _conn:
+    _eq_rows = [r["claim_text"] for r in _conn.execute("SELECT claim_text FROM verdict_cache").fetchall()
+                if db.claim_fold(r["claim_text"]) == db.claim_fold(_EQ_OLD)]
+t("equivalent: a stale match is checked fresh under the saved wording, reusing its saved search",
+  not d["cached"] and d["claim"] == _EQ_OLD and d["tldr"] == "Fresh short answer."
+  and d["typed"] == "Does green tea lower blood pressure in adults?" and d["typed_reason"] == "wording"
+  and d["search_query_used"] == "(green tea) AND (blood pressure)", d)
+t("  and refreshes that one row: no second row for the same claim", _eq_rows == [_EQ_OLD], _eq_rows)
+
+# An incomplete saved row (no still-open line) is never served through a match.
+_EQ_BAD = "Garlic lowers cholesterol in adults"
+db.put_cached_verdict(_EQ_BAD, "(garlic) AND (cholesterol)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Half a row.", still_open="")
+t("equivalent: an incomplete saved row is never returned", db.find_equivalent("Does garlic lower cholesterol in adults?") is None)
+fg.models.script = [Resp("(garlic) AND (cholesterol)"), Resp(VJ("complicated", [1], tldr="A whole answer."))]
+d = P("Does garlic lower cholesterol in adults?", ip="7.7.8.6").get_json()
+t("  and the check runs fresh under the reader's own words",
+  not d["cached"] and d["tldr"] == "A whole answer." and d["claim"] == "Does garlic lower cholesterol in adults?"
+  and d["typed"] is None, d)
+# A saved record the page cannot repair (here: a claim that looks personal) is not served either.
+_EQ_PERS = "My son Jake 7 gets sick from milk"
+db.put_cached_verdict(_EQ_PERS, "(milk) AND (illness)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+t("  nor is a record with a problem the page cannot repair",
+  bool(appmod.display.saved_record_problems(_EQ_PERS, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
+  and db.find_equivalent("My son Jake 7 get sick from milk") is None)
+
+# Both renderers say the same line, from the same two fields.
+_TN = [("x", None), ("Does coffee cause cancer?", "wording"), ("smokng causs cancr", "spelling"), (None, "wording"), ("", None)]
+_tn_py = [appmod.display.typed_note(a, b) for a, b in _TN]
+t("typed note: a spelling fix and a reworded match each say what happened",
+  _tn_py[1] == "Showing the saved check for this claim. You typed “Does coffee cause cancer?”."
+  and _tn_py[2] == "Spelling fixed. You typed “smokng causs cancr”." and _tn_py[3] == "" and _tn_py[4] == "", _tn_py)
+_tn_js_src = (ROOT / "static" / "app.js").read_text()
+t("  renderResult and the live stage both pass the reason to the note",
+  "showTyped(data.typed, data.typed_reason)" in _tn_js_src and "showTyped(typed, ev.typed_reason)" in _tn_js_src)
+_tn_tpl = (ROOT / "templates" / "index.html").read_text()
+t("  the page renders the same line through display.typed_note",
+  "typed_note(result.typed, result.typed_reason)" in _tn_tpl)
+_tn_mark = _tn_tpl[_tn_tpl.index('<p class="typed-note"'):]
+_tn_mark = _tn_mark[:_tn_mark.index("</p>") + 4]
+with appmod.app.test_request_context("/"):
+    _tn_env = appmod.app.jinja_env
+    _tn_on = _tn_env.from_string(_tn_mark).render(result={"typed": "Does coffee cause cancer?", "typed_reason": "wording"})
+    _tn_off = _tn_env.from_string(_tn_mark).render(result=None)
+t("  the template's own markup shows the line with a result that carries it, and stays hidden without",
+  _tn_on == '<p class="typed-note" id="typed-note">' + _tn_py[1] + "</p>"
+  and _tn_off == '<p class="typed-note" id="typed-note" hidden></p>', (_tn_on, _tn_off))
+if _shutil.which("node"):
+    _tn_fn = _tn_js_src[_tn_js_src.index("function typedNote"):_tn_js_src.index("function showTyped")]
+    _tn_js = json.loads(_subprocess.run(
+        ["node", "-e", _tn_fn + "console.log(JSON.stringify(" + json.dumps(_TN) + ".map(([a, b]) => typedNote(a, b))));"],
+        capture_output=True, text=True, check=True).stdout)
+    t("  the script and the server write the same note, on five inputs", _tn_js == _tn_py, (_tn_js, _tn_py))
+t("  no note string carries a dash", not any(ch in s for s in _tn_py for ch in "–—"))
+
 # ---- prevention claims and comparisons said in other words -------------------
 _T2D = "Regular physical activity reduces the risk of type 2 diabetes"
 _offt = lambda title: evidence.off_topic({"title": title, "abstract": ""}, _T2D)

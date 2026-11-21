@@ -95,6 +95,7 @@ app.jinja_env.globals["confidence_line"] = display.confidence_line
 app.jinja_env.globals["design_note"] = display.design_note
 app.jinja_env.globals["study_why"] = display.study_why
 app.jinja_env.globals["source_groups"] = display.source_groups
+app.jinja_env.globals["typed_note"] = display.typed_note
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
 # full: the claim text is kept, and nothing that identifies the person is.
@@ -851,7 +852,7 @@ def _listed(v: dict) -> dict:
 
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
-                    typed=None):
+                    typed=None, typed_reason=None):
     # A study classified off topic is never relied on. A fresh check already
     # leaves such studies out of its cited list (verdict.py, the relevance
     # gate); an old or odd saved record may not, so the page drops them here
@@ -927,9 +928,12 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         breakdown["contents"] = breakdown_mod.contents(breakdown)
     return {
         "claim": claim,
-        # What the reader typed, present only when its spelling was fixed
-        # and the check ran on the corrected claim, so the page can say so.
+        # What the reader typed, present only when the answer is to other
+        # words than theirs, so the page can say so: "spelling" when the
+        # spelling was fixed, "wording" when a saved check of the same claim
+        # in other words was used. Both null otherwise.
         "typed": typed,
+        "typed_reason": (typed_reason or "spelling") if typed else None,
         "search_query_used": search_query,
         "search_broadened": broadened,
         "verdict": verdict_value,
@@ -1026,12 +1030,16 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
                "error": f"That's a long one. Trim the claim to under {MAX_CLAIM_CHARS} characters."}
         return
 
-    def from_cache(cached, typed=None):
-        _log_check_safe(claim, cached["verdict"], cached["explanation"], cached["studies"], cached=True)
+    def from_cache(cached, typed=None, reason=None, saved_as=None):
+        # A saved answer found under another wording is shown, shared and
+        # logged under the wording it was saved with, never the typed one.
+        shown = saved_as or claim
+        _log_check_safe(shown, cached["verdict"], cached["explanation"], cached["studies"], cached=True)
         return {"stage": "done", "result": _check_response(
-            claim, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
+            shown, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
             cached["cited_studies"], cached["studies"], base_url, cached_at=cached["cached_at"],
-            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"), typed=typed)}
+            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"), typed=typed,
+            typed_reason=reason)}
 
     # 1. Cache first: a repeat of a recent claim costs nothing and is
     #    never rate-limited. Viral claims get checked by many people.
@@ -1039,6 +1047,18 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     if cached:
         yield from_cache(cached)
         return
+    # The same claim in other words ("Does coffee cause cancer?" for "Coffee
+    # causes cancer") gets the same saved answer, as free as a repeat. One
+    # older than the cache window is checked again under its saved wording,
+    # so its one row is refreshed and no second row for it is made.
+    typed, reason = None, None
+    same = _equivalent(claim)
+    if same:
+        cached = db.get_cached_verdict(same, VERDICT_CACHE_HOURS)
+        if cached:
+            yield from_cache(cached, claim, "wording", same)
+            return
+        typed, reason, claim = claim, "wording", same
 
     # 2. Rate limit only the checks that will actually hit the AI provider.
     allowed, message, retry_after = ratelimit.check(f"ip:{client_ip}")
@@ -1064,17 +1084,28 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
                 if understood != claim:
                     db.put_cached_query(understood, verdict.QUERY_PROMPT_VERSION,
                                         search_query, surrogate, understood)
-        typed = None
         if understood != claim:
             # Misspelled. Everything from here runs on the claim as meant:
             # the verdict, the code's own checks, the cache and the share
             # link. A correctly spelled check of it may already be cached.
-            typed, claim = claim, understood
+            # The note says what the reader typed, and that it was spelling.
+            typed, reason, claim = typed or claim, "spelling", understood
             cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
             if cached:
-                yield from_cache(cached, typed)
+                yield from_cache(cached, typed, reason)
                 return
-        yield {"stage": "query", "query": search_query, "claim": claim if typed else None}
+            same = _equivalent(claim)
+            if same:
+                cached = db.get_cached_verdict(same, VERDICT_CACHE_HOURS)
+                if cached:
+                    yield from_cache(cached, typed, reason, same)
+                    return
+                claim = same
+                again = db.get_cached_query(claim, verdict.QUERY_PROMPT_VERSION)
+                if again:
+                    search_query, surrogate, _ = again
+        yield {"stage": "query", "query": search_query, "claim": claim if typed else None,
+               "typed_reason": reason}
         studies, query_used, broadened = pubmed.search_with_fallback(
             search_query, max_results=MAX_STUDIES, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
@@ -1123,7 +1154,22 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     yield {"stage": "done", "result": _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
-        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed)}
+        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed,
+        typed_reason=reason)}
+
+
+def _equivalent(claim: str) -> str | None:
+    """
+    The saved wording of this same claim when it differs from the claim's
+    own key (a lookup by that key has already been made), or None. Looking
+    is a convenience: a storage error never sinks the check.
+    """
+    try:
+        same = db.find_equivalent(claim)
+    except sqlite3.Error as e:
+        app.logger.warning("Could not look for an equivalent claim: %s", e)
+        return None
+    return same if same and db.normalize_claim(same) != db.normalize_claim(claim) else None
 
 
 def _claim_from_body() -> str:

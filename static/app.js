@@ -564,7 +564,7 @@ function renderResult(data) {
   dropOffTopicCites(data);
   currentResult = data;
   $("claim-echo").textContent = data.claim;
-  showTyped(data.typed);
+  showTyped(data.typed, data.typed_reason);
   $("case-line").textContent = (data.cached || data.restored) && !hasDate(data.cached_at) ? "PubMed" : `PubMed · ${fmtDate(data.cached_at)}`;
 
   const block = document.querySelector(".verdict-block");
@@ -710,12 +710,20 @@ function renderPending(claim) {
   logLine("Building the search", true);
 }
 
-// A misspelled claim is checked as it was meant. Say so, and show what was
-// typed, so the reader can tell the answer is to their question.
-function showTyped(typed) {
+// A misspelled claim is checked as it was meant, and the same claim in other
+// words gets its saved check. Say which, and show what was typed, so the
+// reader can tell the answer is to their question. Mirrors display.typed_note;
+// a test runs both on the same inputs.
+function typedNote(typed, reason) {
+  if (!typed) return "";
+  if (reason === "wording") return `Showing the saved check for this claim. You typed \u201c${typed}\u201d.`;
+  return `Spelling fixed. You typed \u201c${typed}\u201d.`;
+}
+
+function showTyped(typed, reason) {
   const note = $("typed-note");
   note.hidden = !typed;
-  note.textContent = typed ? `Spelling fixed. You typed \u201c${typed}\u201d.` : "";
+  note.textContent = typedNote(typed, reason);
 }
 
 function logLine(text, live) {
@@ -852,7 +860,7 @@ function handleStage(ev) {
   if (ev.stage === "query" && ev.claim) {
     const typed = $("claim-echo").textContent;
     $("claim-echo").textContent = ev.claim;
-    showTyped(typed);
+    showTyped(typed, ev.typed_reason);
   }
   if (ev.stage === "query") logLine(ev.query ? `Searching PubMed for “${ev.query}”` : "Searching PubMed", true);
   else if (ev.stage === "found") {
