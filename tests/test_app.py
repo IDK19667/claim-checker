@@ -2382,6 +2382,15 @@ t("  a background sentence that states the study's aim counts as what it set out
                                    "RESULTS: Fewer lesions; more injection-site pain.\nCONCLUSIONS: It prevents lesions."),
                             "(safety OR adverse events OR side effects)") is True
   and evidence.measured_outcome(_hair, _hair_out) is False)
+t("off outcome: hyperactivity rated as behaviour, and stress rated as tension, were measured",
+  evidence.measured_outcome(_study("MO9", "Diets high in sucrose and the behavior of children",
+                                   abstract="BACKGROUND: Sugar is said to cause hyperactivity.\nMETHODS: 48 children, three "
+                                            "diets.\nRESULTS: No differences in 39 behavioral measures.\nCONCLUSIONS: None."),
+                            "(hyperactivity OR hyperactive OR ADHD)") is True
+  and evidence.measured_outcome(_study("MO10", "Ashwagandha, cognition and mood",
+                                       abstract="BACKGROUND: It is said to reduce stress.\nMETHODS: 59 adults, POMS.\n"
+                                                "RESULTS: Less tension and fatigue.\nCONCLUSION: Some benefit."),
+                                "(stress OR psychological stress OR cortisol)") is True)
 _MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
 fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
                             explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",

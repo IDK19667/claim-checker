@@ -820,6 +820,10 @@ _OUTCOME_KIN = [
     ("weight", "obes", "adipos", "bmi", "body mass", "fat"),
     ("sleep", "insomnia"),
     ("depress", "mood"),
+    # Stress is reported as anxiety, or as tension on a mood scale.
+    ("stress", "anxi", "tension"),
+    # Hyperactivity is measured as behaviour, on a rating scale.
+    ("hyperactiv", "adhd", "behavio"),
     ("memory", "cognit", "dementia"),
     ("skin", "derma", "cutaneous"),
     ("hair", "alopecia", "bald"),
