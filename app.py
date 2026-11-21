@@ -97,9 +97,19 @@ app.jinja_env.globals["study_why"] = display.study_why
 app.jinja_env.globals["source_groups"] = display.source_groups
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
-# full: the claim text is kept, and nothing that identifies the person is.
-PRIVACY_LINE = "Claims you check are saved without your name, an account or your IP address."
-app.jinja_env.globals["privacy_line"] = PRIVACY_LINE
+# full: the claim text is kept, nothing that identifies the person is, and
+# the text goes to the AI provider the page names.
+PRIVACY_LINE = "Claim text is stored without anything that identifies you and is sent to {provider} to check it."
+
+
+def privacy_line(provider: str, after_colon: bool = False) -> str:
+    """The privacy sentence for this provider. after_colon lowers its first
+    letter, for the /privacy lede, where it runs on after "The short version:"."""
+    line = PRIVACY_LINE.format(provider=provider)
+    return line[0].lower() + line[1:] if after_colon else line
+
+
+app.jinja_env.globals["privacy_line"] = privacy_line
 
 
 @app.before_request

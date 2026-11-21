@@ -6400,15 +6400,29 @@ t("privacy: it has no dash", not _DASH.search(_pt))
 _ft_home = c.get("/").get_data(as_text=True)
 _ft_foot = " ".join(_re_s.sub(r"<[^>]+>", " ", _ft_home.split('<footer class="foot')[1].split("</footer>")[0]).split())
 _ft_lede = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv.split('<p class="lede">')[1].split("</p>")[0]).split())
-_ft_line = appmod.PRIVACY_LINE
-t("footer privacy: the footer and the /privacy short version print the same sentence",
-  _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line, (_ft_foot, _ft_lede))
-t("  and it says the claims are saved, with nothing that identifies you, as the page's 'What we keep' does",
-  "saved" in _ft_line and all(x in _ft_line for x in ("name", "account", "IP address"))
-  and all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check")))
+import html as _ft_html  # noqa: E402
+_ft_foot = _ft_html.unescape(_ft_foot)
+_ft_lede = _ft_html.unescape(_ft_lede)
+_ft_prov = verdict.provider_label()
+_ft_line = appmod.privacy_line(_ft_prov)
+t("footer privacy: the sentence is the owner's, naming the provider the claim is sent to",
+  _ft_line == f"Claim text is stored without anything that identifies you and is sent to {_ft_prov} to check it.", _ft_line)
+t("  the footer and the /privacy short version print the same sentence",
+  _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line[0].lower() + _ft_line[1:], (_ft_foot, _ft_lede))
+t("  the lede runs on after its colon in lower case, with no stray capital",
+  _ft_lede.startswith("The short version: claim text is stored"), _ft_lede)
+_ft_p = _ft_home.split('<footer class="foot')[1].split("</footer>")[0]
+_ft_p = [x for x in _ft_p.split("<p") if "identifies you" in x][0].split("</p>")[0]
+t("  in the footer the sentence is followed by a link to /privacy",
+  _re_s.search(r'identifies you and is sent to [^<]* to check it\.\s*<a href="/privacy">[^<]+</a>\s*$', _ft_p), _ft_p)
+t("  and it stays true: /privacy keeps the claim text with nothing that identifies the person, and sends it to the same provider",
+  all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check",
+                         "it does not get your IP address or anything else that identifies you"))
+  and f"and {_ft_prov} to turn the claim into a search" in _ft_html.unescape(_pt))
 t("  the stronger line is gone from both, and neither template hard-codes the sentence",
   "tied to you" not in _ft_foot and "tied to you" not in _ft_lede
-  and all(_ft_line not in (ROOT / "templates" / f_).read_text() and "{{ privacy_line }}" in (ROOT / "templates" / f_).read_text()
+  and all("identifies you and is sent" not in (ROOT / "templates" / f_).read_text()
+          and "privacy_line(provider" in (ROOT / "templates" / f_).read_text()
           for f_ in ("index.html", "privacy.html"))
   and not _DASH.search(_ft_line))
 _pc = (ROOT / "CLAUDE.md").read_text()
