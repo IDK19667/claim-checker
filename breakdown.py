@@ -2475,10 +2475,13 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
     sized = evidence.effect_size(effect)
     # A figure its own abstract reports as no clear difference is sized as
     # none, whatever its distance from 1. The sentence say_nulls added under
-    # it becomes the translation, so it is picked as one by says().
+    # it becomes the translation, so it is picked as one by says(). So is an
+    # effect line that itself says there was no clear difference, whether or
+    # not a ratio could be read from it: "no drop in viral titer at 30 or 60
+    # minutes" is no effect, not a missing size for the line to guess at.
     null_ref = next((r for r in (null_figure(t, studies) for t in sentences(effect))
                      if r is not None), None)
-    if null_ref is not None or (sized and _SAID_NULL.search(effect)):
+    if null_ref is not None or _SAID_NULL.search(effect):
         sized = dict(evidence.NULL_EFFECT, figure=(sized or {}).get("figure", ""))
         if null_ref:
             effect = effect.replace(NOT_SIGNIFICANT_SAID.format(ref=null_ref),

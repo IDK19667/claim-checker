@@ -863,6 +863,26 @@ t("  and a figure that is in them is quoted as it stands",
   "was 0.88, and 0.30 in the lowest (Study 1)." in _bd["effect_size"],
   _bd["effect_size"])
 
+# An effect line that says there was no clear difference is no effect, even
+# when no ratio can be read from it. Read as a missing size, a "cure" claim's
+# evidence line fell back to "a partial effect, not a cure".
+_NULL_ST = [{"pmid": "NL1", "title": "A mouthwash trial in mild infection", "journal": "J", "year": "2020",
+             "authors": ["A B"], "data_banks": None, "url": "https://pubmed.ncbi.nlm.nih.gov/NL1/",
+             "publication_types": ["Randomized Controlled Trial"],
+             "abstract": "METHODS: 49 patients used the mouthwash or placebo. RESULTS: The mouthwash did not "
+                         "reduce salivary viral titer at 10, 30, or 60 minutes compared to placebo, and the "
+                         "difference was not statistically significant."}]
+_null_bd = breakdown.ground(
+    {"parts": [], "evidence": ["The mouthwash did not reduce viral titer compared to placebo (Study 1)."],
+     "effect_size": "The trial found no drop in viral titer at 10, 30, or 60 minutes compared to placebo (Study 1). "
+                    "That difference was not statistically significant (Study 1).",
+     "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _NULL_ST, verdict.tidy_prose)
+t("grounding: an effect line that says no clear difference is sized as none, with no ratio read from it",
+  (_null_bd["effect"] or {}).get("label") == "none"
+  and evidence.evidence_line("false", _NULL_ST, ["NL1"], "Gargling mouthwash cures the infection",
+                             _null_bd["effect"]["label"], breakdown.absolute_claim("Gargling mouthwash cures the infection"))
+  .endswith("evidence of no clear effect"), (_null_bd["effect"], _null_bd["effect_size"]))
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
