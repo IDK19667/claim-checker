@@ -83,6 +83,37 @@ def model_name() -> str:
     return GEMINI_MODEL if provider() == "gemini" else ANTHROPIC_MODEL
 
 
+# The source files that decide an answer: the search (pubmed.py), the screens
+# and certainty rules (evidence.py), the weighing, gates and wording
+# (verdict.py, breakdown.py) and what counts as a sound saved record
+# (display.py). Not app.py: what it does to an answer it does again on every
+# render, so a saved answer gets its changes without being made again.
+ANSWER_FILES = ("verdict.py", "evidence.py", "pubmed.py", "breakdown.py", "display.py")
+
+
+def _method_stamp() -> str:
+    """
+    A short hash of the code that decides an answer, and of the model that
+    reads it, worked out once at start-up. Any deploy that changes one of
+    those files, or the provider or model in force, changes the stamp, so a
+    saved answer made by other code is never kept as if this code had made it.
+    """
+    h = hashlib.sha256()
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name in ANSWER_FILES:
+        with open(os.path.join(here, name), "rb") as f:
+            h.update(name.encode() + b"\0" + f.read() + b"\0")
+    try:
+        mode = f"{provider()}/{model_name()}"
+    except RuntimeError:
+        mode = "none"
+    h.update(mode.encode())
+    return h.hexdigest()[:12]
+
+
+METHOD_STAMP = _method_stamp()
+
+
 def provider_label() -> str:
     """Plain-English name of the AI service, for the privacy page. Never raises."""
     try:

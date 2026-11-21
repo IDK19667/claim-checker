@@ -1109,6 +1109,10 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         studies, query_used, broadened = pubmed.search_with_fallback(
             search_query, max_results=MAX_STUDIES, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
+        kept = _steady(claim, studies)
+        if kept:
+            yield from_cache(kept, typed, reason, claim if typed else None)
+            return
         if studies:
             yield {"stage": "weigh"}
         result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
@@ -1149,13 +1153,38 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
                           result["cited_studies"], studies, tldr=result["tldr"],
                           still_open=result.get("still_open", ""),
-                          breakdown=result.get("breakdown"))
+                          breakdown=result.get("breakdown"), method_stamp=verdict.METHOD_STAMP)
     _log_check_safe(claim, result["verdict"], result["explanation"], studies)
     yield {"stage": "done", "result": _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
         still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed,
         typed_reason=reason)}
+
+
+def _steady(claim: str, studies: list) -> dict | None:
+    """
+    A saved answer past the cache window, kept rather than made again: when
+    it is whole, has no problem the page cannot repair, was made by the code
+    and model in force now (its method stamp), and the search just run found
+    exactly the studies it read (PubMed ids, as a set). Its date is refreshed
+    and it is returned as get_cached_verdict reads it. Otherwise None, and the
+    check runs as before: a row with no stamp or an old one is always made
+    again once, so every fix reaches every saved claim.
+    """
+    if VERDICT_CACHE_HOURS <= 0:      # the cache is switched off: always check again
+        return None
+    try:
+        saved = db.get_cached_by_key(db.normalize_claim(claim))
+        if not (db.servable(saved) and saved.get("method_stamp") == verdict.METHOD_STAMP):
+            return None
+        if {s.get("pmid") for s in saved["studies"]} != {s.get("pmid") for s in studies or []}:
+            return None
+        db.refresh_saved(saved["claim_text"])
+        return db.get_cached_verdict(saved["claim_text"], VERDICT_CACHE_HOURS)
+    except sqlite3.Error as e:
+        app.logger.warning("Could not read a saved answer to keep: %s", e)
+        return None
 
 
 def _equivalent(claim: str) -> str | None:

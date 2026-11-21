@@ -63,7 +63,10 @@ CREATE TABLE IF NOT EXISTS verdict_cache (
     breakdown_json TEXT,
     cited_json TEXT,
     studies_json TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    -- verdict.METHOD_STAMP when the answer was made: a hash of the code that
+    -- decides an answer. Null on rows saved before it existed.
+    method_stamp TEXT
 );
 
 -- The PubMed search a claim was given, kept so the same claim always runs
@@ -348,6 +351,8 @@ def _init_schema(conn):
         conn.execute("ALTER TABLE verdict_cache ADD COLUMN still_open TEXT")
     if "breakdown_json" not in vcols:
         conn.execute("ALTER TABLE verdict_cache ADD COLUMN breakdown_json TEXT")
+    if "method_stamp" not in vcols:
+        conn.execute("ALTER TABLE verdict_cache ADD COLUMN method_stamp TEXT")
     conn.execute(
         "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
     )
@@ -440,6 +445,7 @@ def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
         "cited_studies": json.loads(row["cited_json"] or "[]"),
         "studies": json.loads(row["studies_json"] or "[]"),
         "cached_at": row["created_at"],
+        "method_stamp": _stamp(row),
     }
 
 
@@ -451,6 +457,14 @@ def _whole(row) -> bool:
     row is replaced; to a shared link or a card it is no saved answer at all.
     """
     return all(str(row[k] or "").strip() for k in ("tldr", "still_open"))
+
+
+def _stamp(row) -> str | None:
+    """The row's method stamp, or None (a row, or a database, from before it)."""
+    try:
+        return row["method_stamp"] or None
+    except (IndexError, KeyError):
+        return None
 
 
 def _breakdown(row) -> dict | None:
@@ -483,13 +497,14 @@ def put_cached_verdict(
     tldr: str = "",
     still_open: str = "",
     breakdown: dict | None = None,
+    method_stamp: str | None = None,
 ):
     with get_conn() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO verdict_cache
                (claim_key, claim_text, search_query, verdict, tldr, explanation, still_open,
-                breakdown_json, cited_json, studies_json, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                breakdown_json, cited_json, studies_json, created_at, method_stamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 normalize_claim(claim),
                 claim,
@@ -502,8 +517,18 @@ def put_cached_verdict(
                 json.dumps(cited_studies),
                 json.dumps(studies),
                 _now(),
+                method_stamp,
             ),
         )
+
+
+@_routed
+def refresh_saved(claim: str):
+    """Today's date on a saved answer kept as it is (the method and the
+    studies are the same as when it was made). Nothing else changes."""
+    with get_conn() as conn:
+        conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                     (_now(), normalize_claim(claim)))
 
 
 # ---- Anonymous check log -------------------------------------------------
@@ -578,6 +603,7 @@ def get_cached_by_key(claim_key: str) -> dict | None:
         "cited_studies": json.loads(row["cited_json"] or "[]"),
         "studies": json.loads(row["studies_json"] or "[]"),
         "cached_at": row["created_at"],
+        "method_stamp": _stamp(row),
     }
 
 
@@ -706,18 +732,24 @@ def find_equivalent(claim: str) -> str | None:
             "ORDER BY created_at DESC, rowid DESC").fetchall()
     found = [r for r in rows if r["claim_text"] and _whole(r) and claim_fold(r["claim_text"]) == key]
     found.sort(key=lambda r: r["claim_key"] != own)
-    import display
     for r in found:
         # The unrouted reader: this call already runs on one backend.
         saved = get_cached_by_key.__wrapped__(r["claim_key"])
-        if not saved:
-            continue
-        problems = set(display.saved_record_problems(
-            saved["claim_text"], saved["verdict"], saved["cited_studies"], saved["studies"],
-            saved["breakdown"], saved["search_query"], saved["cached_at"]))
-        if not problems - _REPAIRED_AT_RENDER:
+        if servable(saved):
             return saved["claim_text"]
     return None
+
+
+def servable(saved: dict | None) -> bool:
+    """A saved answer (as get_cached_by_key reads it) that is whole and has no
+    problem the page cannot repair when it renders."""
+    if not saved:
+        return False
+    import display
+    problems = set(display.saved_record_problems(
+        saved["claim_text"], saved["verdict"], saved["cited_studies"], saved["studies"],
+        saved["breakdown"], saved["search_query"], saved["cached_at"]))
+    return not problems - _REPAIRED_AT_RENDER
 
 
 @_routed

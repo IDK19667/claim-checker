@@ -2639,7 +2639,102 @@ if _shutil.which("node"):
         ["node", "-e", _tn_fn + "console.log(JSON.stringify(" + json.dumps(_TN) + ".map(([a, b]) => typedNote(a, b))));"],
         capture_output=True, text=True, check=True).stdout)
     t("  the script and the server write the same note, on five inputs", _tn_js == _tn_py, (_tn_js, _tn_py))
-t("  no note string carries a dash", not any(ch in s for s in _tn_py for ch in "–—"))
+t("  no note string carries a dash", not any(ch in s for s in _tn_py for ch in "\u2013\u2014"))
+
+# ---- steady answers: a stale saved answer is kept when nothing has changed ------
+# Past the cache window the search runs again. Same method stamp, same set of
+# PubMed ids, a whole and sound row: the saved answer is kept, re-dated, and no
+# model is asked. Anything else and the check runs as before.
+_OLD_DATE = "2020-01-01T00:00:00+00:00"
+
+
+def _steady_row(claim, studies=None, stamp="now", still="Longer trials."):
+    q = "(steady) AND (claim)"
+    db.put_cached_verdict(claim, q, "complicated", "Mixed (Study 1).", ["P1"], studies or STUDIES,
+                          tldr="Saved short answer.", still_open=still,
+                          method_stamp=verdict.METHOD_STAMP if stamp == "now" else stamp)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                      (_OLD_DATE, db.normalize_claim(claim)))
+    db.put_cached_query(claim, verdict.QUERY_PROMPT_VERSION, q, "", claim)
+
+
+def _saved_row(claim):
+    with db.get_conn() as _conn:
+        return _conn.execute("SELECT created_at, method_stamp, tldr FROM verdict_cache WHERE claim_key = ?",
+                             (db.normalize_claim(claim),)).fetchone()
+
+
+t("steady: the method stamp is a short hash worked out at start-up from the files that decide an answer",
+  len(verdict.METHOD_STAMP) == 12 and all(ch in "0123456789abcdef" for ch in verdict.METHOD_STAMP)
+  and set(verdict.ANSWER_FILES) >= {"verdict.py", "evidence.py", "pubmed.py", "display.py"})
+_real_files = verdict.ANSWER_FILES
+verdict.ANSWER_FILES = _real_files[:-1]
+_fewer = verdict._method_stamp()
+verdict.ANSWER_FILES = _real_files
+t("  and it changes when the files it is made from change", _fewer != verdict._method_stamp())
+_SK = "Steady claim kept as saved"
+_steady_row(_SK)
+fg.models.script = []; fg.models.calls = 0
+d = P(_SK, ip="7.7.10.1").get_json()
+t("steady: same stamp, same study ids and a whole row: the saved answer is kept, with no model call",
+  d["cached"] and d["tldr"] == "Saved short answer." and fg.models.calls == 0, (d.get("tldr"), fg.models.calls))
+t("  and its date is moved to now", _saved_row(_SK)["created_at"] > _OLD_DATE
+  and d["cached_at"] == _saved_row(_SK)["created_at"], _saved_row(_SK)["created_at"])
+_steady_row(_SK)
+fg.models.calls = 0
+_r, _evs = stream(_SK, ip="7.7.10.2")
+t("  the streamed check keeps it the same way, after running the search",
+  _evs[-1]["stage"] == "done" and _evs[-1]["result"]["cached"] and fg.models.calls == 0
+  and any(e["stage"] == "found" for e in _evs), _evs[-1].get("stage"))
+
+for _lbl, _kw in (("the study ids differ by one", {"studies": STUDIES[:2] + [dict(STUDIES[2], pmid="P9")]}),
+                  ("the stamp differs", {"stamp": "0123456789ab"}),
+                  ("the stamp is missing", {"stamp": None}),
+                  ("the row is not whole", {"still": ""})):
+    _c = "Steady claim rerun when " + _lbl
+    _steady_row(_c, **_kw)
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made again.", still_open="New open line."))]
+    fg.models.calls = 0
+    d = P(_c, ip="7.7.10.3").get_json()
+    t(f"steady: checked again when {_lbl}",
+      not d["cached"] and d["tldr"] == "Made again." and fg.models.calls >= 1, (d.get("tldr"), fg.models.calls))
+    t(f"  and the row is replaced by one with the current stamp ({_lbl})",
+      _saved_row(_c)["method_stamp"] == verdict.METHOD_STAMP and _saved_row(_c)["tldr"] == "Made again.")
+
+_SR = "Steady claim saved in its own words"
+_steady_row(_SR)
+fg.models.script = []; fg.models.calls = 0
+d = P("Is it true that steady claim saved in its own words?", ip="7.7.10.4").get_json()
+t("steady: a reworded match on a stale row follows the same rule: kept under the saved wording, no model call",
+  d["cached"] and d["claim"] == _SR and d["typed_reason"] == "wording" and fg.models.calls == 0
+  and _saved_row(_SR)["created_at"] > _OLD_DATE, d)
+
+# A database from before the column opens, gains it, and still serves.
+import sqlite3 as _sq3  # noqa: E402
+_old_db = os.path.join(tempfile.mkdtemp(), "old.db")
+_oc = _sq3.connect(_old_db)
+_oc.executescript("""CREATE TABLE verdict_cache (claim_key TEXT PRIMARY KEY, claim_text TEXT NOT NULL,
+  search_query TEXT, verdict TEXT NOT NULL, tldr TEXT, explanation TEXT, still_open TEXT,
+  breakdown_json TEXT, cited_json TEXT, studies_json TEXT, created_at TEXT NOT NULL);""")
+_oc.execute("INSERT INTO verdict_cache VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("old database claim", "Old database claim", "(old) AND (db)", "complicated", "Old short.",
+             "Mixed (Study 1).", "Old open.", None, json.dumps(["P1"]), json.dumps(STUDIES),
+             appmod.datetime.now(appmod.timezone.utc).isoformat()))
+_oc.commit(); _oc.close()
+_real_db_path = db.DB_PATH
+db.DB_PATH = _old_db
+try:
+    db.init_db()
+    fg.models.calls = 0
+    d = P("Old database claim", ip="7.7.10.5").get_json()
+    _cols = {r[1] for r in _sq3.connect(_old_db).execute("PRAGMA table_info(verdict_cache)")}
+finally:
+    db.DB_PATH = _real_db_path
+t("steady: an old database without the column opens, gains it, and serves its saved answer",
+  "method_stamp" in _cols and d.get("cached") and d.get("tldr") == "Old short." and fg.models.calls == 0, d)
+t("  and a row read from it has no stamp, so past the window it would be made again",
+  db.get_cached_by_key("x") is None and appmod._steady("never saved claim", STUDIES) is None)
 
 # ---- prevention claims and comparisons said in other words -------------------
 _T2D = "Regular physical activity reduces the risk of type 2 diabetes"

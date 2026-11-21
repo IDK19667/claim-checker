@@ -4,6 +4,28 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21: Steady answers: a stale saved answer is kept when nothing changed
+
+The same claim got different verdicts on different days from the same
+studies, because a saved answer past the cache window was thrown away and
+the model asked again. Now `verdict_cache` has a nullable `method_stamp`
+column (added to old databases by `_init_schema`, like the columns before
+it). The stamp is `verdict.METHOD_STAMP`, worked out once at start-up with
+no hand-kept number: a 12-character hash of verdict.py (the weighing, the
+gates, the wording), evidence.py (screens and certainty rules), pubmed.py
+(the search), breakdown.py (the deeper layer's gates and wording) and
+display.py (what counts as a sound saved record), plus the provider and
+model in force. app.py is left out on purpose: what it does to an answer
+(`_check_response`) it does again on every render, so a saved answer gets
+those changes without being made again, and app.py changes with every UI
+deploy. Past the window the search runs as before (rate limit and every
+other gate unchanged); if the row is whole, has no problem the page cannot
+repair, carries the current stamp and the search found exactly the PubMed
+ids it read, the saved answer is kept, re-dated and served with no model
+call. Otherwise the check runs and saves a stamped row. A row with no stamp
+or an old one is always made again once, so every accuracy fix reaches
+every saved claim.
+
 ## 2026-11-21: A reply with an empty line is a failed reply
 
 A fresh reply whose short answer or still-open line came back empty was
