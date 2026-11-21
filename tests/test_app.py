@@ -2000,8 +2000,8 @@ t("a result that rests on evidence carries no next_steps in its payload",
   or "next_steps" in _r.data.decode())
 
 # The fly-through is out of the home page (its files are in _old/, with its
-# test). /flight still redirects, and static/flight/check.json still feeds the
-# trust section's real example.
+# test). /flight still redirects; the trust section's real example is read
+# from the saved answers (see the trust tests below).
 
 # ---- the checker comes first (queue 7, step 2) -----------------------------
 _home = c.get("/").get_data(as_text=True)
@@ -2549,6 +2549,15 @@ t("  an unknown outcome phrase is dropped and the search asked again",
 import html as _html
 import inspect as _inspect
 import re as _re
+# The proof is the saved answer itself, read from the database by its key,
+# so it is seeded here the way a real check would have saved it.
+_EXS = [_study("EX1", "Vinegar and fasting glucose: a meta-analysis", types=["Meta-Analysis"]),
+        _study("EX2", "Vinegar with meals in type 2 diabetes", types=["Randomized Controlled Trial"]),
+        _study("EX3", "Vinegar and insulin in rats", types=["Journal Article"])]
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
 _home = c.get("/").get_data(as_text=True)
 _trust = _home.split('<section id="trust"')[1].split("</section>")[0] if '<section id="trust"' in _home else ""
 _rows = _trust.split('<div class="trust-row">')[1:]
@@ -2569,9 +2578,47 @@ t("  the study count it states is the one PubMed is asked for",
 t("  and it names the labels the code actually forces",
   f"“{appmod.VERDICT_LABELS['insufficient']}”" in _trust_text and f"“{appmod.VERDICT_LABELS['complicated']}”" in _trust_text)
 _ex = appmod._trust_example()
-t("  the real check is the exported one, linked as a result page",
-  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=Apple%20cider%20vinegar%20cures%20diabetes"
+t("  the real check is the saved one, linked as a result page",
+  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=" + urllib.parse.quote(appmod.EXAMPLE_CLAIM)
   and "The footage at the top" not in _trust_text, _ex)
+_ex_row = db.get_cached_by_key(db.normalize_claim(appmod.EXAMPLE_CLAIM))
+t("  its claim, verdict, short answer, date and count are the saved row's, not a frozen file's",
+  _ex and _ex["claim"] == _ex_row["claim_text"] and _ex["verdict"] == "complicated"
+  and _ex["tldr"] == _ex_row["tldr"] and _ex["read"] == 3
+  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(appmod.datetime.fromisoformat(_ex_row["cached_at"]))
+  and "check.json" not in _inspect.getsource(appmod._trust_example), _ex)
+t("  the frozen file and the script that wrote it are gone from the repo",
+  not (ROOT / "static" / "flight" / "check.json").exists() and not (ROOT / "scripts" / "export_flight_check.py").exists())
+# It goes through the Latest list's own path: a stored "true" whose only cited
+# study is off topic shows the same capped verdict in both places.
+_EXO = [dict(_EXS[0], off_topic=verdict.OFF_OUTCOME), _EXS[1]]
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "true",
+                      "Study 1 shows a cure.", ["EX1"], _EXO, tldr="It cures diabetes.", still_open="Doses vary.")
+_ex2 = appmod._trust_example()
+_ex2_home = c.get("/").get_data(as_text=True)
+_ex2_latest = [x for x in _ex2_home.split('<ol class="ledger-list">')[1].split("</ol>")[0].split('<li class="entry">')
+               if appmod.EXAMPLE_CLAIM.lower() in _html.unescape(x).lower()]
+_ex2_proof = _re.search(r'<p class="proof-verdict">([^<]*)</p>', _ex2_home)
+t("  the proof and the Latest list show the same verdict, through the same listing path",
+  _ex2 and _ex2["verdict"] == "insufficient" and _ex2_proof and _ex2_latest
+  and _ex2_proof.group(1) == appmod.VERDICT_LABELS["insufficient"]
+  and f'<span class="entry-verdict">{appmod.VERDICT_LABELS["insufficient"]}</span>' in _ex2_latest[0]
+  and _ex2["tldr"] == verdict.UNTESTED_TLDR, (_ex2, _ex2_proof and _ex2_proof.group(1), _ex2_latest))
+# Missing or incomplete, the section renders without it.
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "x", [], [], tldr="A short answer.", still_open="Open.")
+t("  a saved row with no studies is not offered as proof", appmod._trust_example() is None)
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "x", ["EX1"], _EXS, tldr="A short answer.", still_open="")
+t("  nor one with no still-open line", appmod._trust_example() is None
+  and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+with db.get_conn() as _exc:
+    _exc.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(appmod.EXAMPLE_CLAIM),))
+t("  nor a missing one", appmod._trust_example() is None and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
 _checks_page = c.get("/checks").get_data(as_text=True)
 t("  /checks carries it too, and neither page points at footage that is gone",
   '<section id="trust"' in _checks_page and "The footage at the top" not in _checks_page)
@@ -5996,7 +6043,7 @@ t("CURATED_CLAIMS in display.py is the EXAMPLES array in app.js, same claims in 
 t("curated match ignores case, whitespace and trailing punctuation, and nothing else",
   _dsp.is_curated_claim("  5g weakens   your IMMUNE system. ") and not _dsp.is_curated_claim("5G weakens your immune system in kids")
   and not _dsp.is_curated_claim("") and not _dsp.is_curated_claim(None))
-t("the claim the trust section offers is a curated example", _dsp.is_curated_claim(appmod._trust_example()["claim"]))
+t("the claim the trust section offers is a curated example", _dsp.is_curated_claim(appmod.EXAMPLE_CLAIM))
 t("noindex: the home page and the info pages stay indexable", 'content="noindex"' not in c.get("/").get_data(as_text=True)
   and 'content="noindex"' not in c.get("/method").get_data(as_text=True))
 _canon = lambda h: _re.search(r'<link rel="canonical" href="([^"]*)"', h).group(1)

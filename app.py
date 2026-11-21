@@ -262,23 +262,46 @@ def _public_claims(rows, n, key="claim_text", indexable=False):
 LIST_OVERFETCH = 3
 
 
+# The real check the trust section offers as proof. It is read from the
+# saved answers by its key, so the proof is always the answer the site serves.
+EXAMPLE_CLAIM = "Apple cider vinegar cures diabetes"
+
+
+def _list_entries(rows) -> list[dict]:
+    """
+    Saved answers as a public list shows them: the stamp the result page
+    would show (_listed) and the evidence behind it. The Latest list and the
+    trust section's example both go through here, so the two cannot disagree.
+    """
+    return [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
+                 shelf=evidence.shelf(v["studies"], v["cited"]))
+            for v in map(_listed, rows)]
+
+
 def _trust_example():
     """
-    The real check the trust section offers as proof, read from the exported
-    check.json so it is never invented. None if
-    it is not built, and the section renders without it rather than with an
-    invented example.
+    The trust section's real example, {claim, verdict, tldr, checked, read,
+    href}, from the saved answer for EXAMPLE_CLAIM. None when that answer is
+    missing or incomplete (no studies, no short answer, no still-open line, an
+    unknown verdict or an unreadable date): the section then renders without
+    it rather than with an invented example.
     """
     try:
-        with open(os.path.join(app.static_folder, "flight", "check.json")) as f:
-            check = json.load(f)
-        d = datetime.fromisoformat(check["checkedAt"])
-        return {"claim": check["claim"], "verdict": check["verdict"], "tldr": check["tldr"],
-                "checked": f"{d.day} {d.strftime('%B %Y')}",
-                "read": len(check.get("studies") or []),
-                "href": "/?q=" + quote(check["claim"])}
-    except (OSError, ValueError, KeyError, TypeError):
+        row = db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM))
+        if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
+                or not row["tldr"].strip() or not row["still_open"].strip():
+            return None
+        d = datetime.fromisoformat(str(row["cached_at"]))
+        v = _list_entries([{"claim_text": row["claim_text"], "search_query": row["search_query"],
+                            "verdict": row["verdict"], "tldr": row["tldr"], "still_open": row["still_open"],
+                            "created_at": row["cached_at"], "studies": row["studies"],
+                            "cited": row["cited_studies"]}])[0]
+    except (sqlite3.Error, ValueError, KeyError, TypeError, AttributeError) as e:
+        app.logger.warning("Could not build the trust example: %s", e)
         return None
+    return {"claim": v["claim_text"], "verdict": v["verdict"], "tldr": v["tldr"],
+            "checked": f"{d.day} {d.strftime('%B %Y')}", "read": v["evidence"]["read"],
+            "href": "/?q=" + quote(v["claim_text"])}
 
 
 def _render_home(checks_page: bool = False):
@@ -321,9 +344,7 @@ def _render_home(checks_page: bool = False):
     # best-effort; an empty database must still render a usable page.
     try:
         ledger = db.ledger()
-        latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
-                       shelf=evidence.shelf(v["studies"], v["cited"]))
-                  for v in map(_listed, _public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))]
+        latest = _list_entries(_public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page ledger: %s", e)
         ledger, latest = None, []
