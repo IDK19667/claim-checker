@@ -191,7 +191,7 @@ def DIR(answer):
     return Resp(json.dumps({"answer": answer}))
 
 
-def VJ(v, nums, tldr="Short take.", still_open="", **extra):
+def VJ(v, nums, tldr="Short take.", still_open="Longer trials are needed.", **extra):
     body = {"verdict": v, "tldr": tldr, "explanation": "Because.", "cited_study_numbers": nums}
     if still_open:
         body["still_open"] = still_open
@@ -435,7 +435,7 @@ t("gate applied to tldr and still_open in the API",
   d["tldr"] == "It works, mostly." and d["still_open"] == "Whether it lasts past 12 weeks, no trial ran longer.", d)
 d2 = P("gate claim", ip="8.8.8.8").get_json()
 t("  still_open survives the cache", d2["cached"] is True and d2["still_open"] == d["still_open"], d2)
-fg.models.script = [Resp("q"), Resp(VJ("false", []))]
+fg.models.script = [Resp("q"), Resp(VJ("false", [], still_open=""))]
 d = P("uncited again", ip="7.7.7.7").get_json()
 t("forced complicated names the open question", d["still_open"].startswith("Whether any study"), d)
 html = c.get("/?q=gate%20claim").data.decode()
@@ -2338,7 +2338,7 @@ t("the prompt asks for subject and outcome for every study, and marks OFF TOPIC"
   '"relevance"' in verdict.weigh_prompt("c", "s") and "relevance" in verdict.VERDICT_SCHEMA["required"]
   and "OFF TOPIC" in verdict._format_study_for_prompt(2, _SMOKE[1], claim="Smoking causes lung cancer"))
 db.put_cached_verdict("off topic render", "q", "true", "Because (Study 1).", ["L1"], _SMOKE,
-                      tldr="Smoking causes lung cancer.")
+                      tldr="Smoking causes lung cancer.", still_open="Doses vary.")
 _html = c.get("/?q=off%20topic%20render").data.decode()
 t("the server-rendered chart says which bars are off topic",
   "read, off topic" in _html and "3 off topic" in _html)
@@ -2385,7 +2385,7 @@ t("the prompt defines all four, and says a harm report is not 'does not work'",
   '"insufficient" means not enough evidence' in verdict.weigh_prompt("c", "s")
   and "never evidence that\nthe thing does not work" in verdict.weigh_prompt("c", "s"))
 db.put_cached_verdict("not enough render", "q", "insufficient", "Nothing tests it.", [], _DETOX,
-                      tldr="No study has tested this.")
+                      tldr="No study has tested this.", still_open="Whether any study has tested it.")
 _html = c.get("/?q=not%20enough%20render").data.decode()
 t("the server-rendered page stamps 'Not enough evidence'",
   "Not enough evidence" in _html and '"alternateName": "Not enough evidence"' in _html
@@ -4746,7 +4746,7 @@ _RS = [_study(f"R{i}", f"Trial {i}", abstract="Vitamin D and colds.", types=["Ra
 _rs_bd = {"strength": "x", "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
           "not_applies_to": "", "unknowns": "", "rests_on": 5}
 db.put_cached_verdict("count mismatch saved", "q AND r", "true", "Because (Study 1).",
-                      ["R1", "R2", "R3"], _RS, tldr="Short.", breakdown=_rs_bd)
+                      ["R1", "R2", "R3"], _RS, tldr="Short.", still_open="Open.", breakdown=_rs_bd)
 _rsh = c.get("/?q=count+mismatch+saved").data.decode()
 t("a saved result's 'Rests on' count equals the studies marked used (server render)",
   "Rests on" in _rsh and '<span class="group-count">3 studies</span>' in _rsh
@@ -4769,7 +4769,7 @@ t("renderBreakdown counts the used studies itself, not the stored number",
 # A saved record with no search query on file hides the "Searched PubMed for"
 # line in the server render and in renderResult, and invents no query.
 db.put_cached_verdict("empty query saved", "  ", "true", "Because (Study 1).",
-                      ["R1"], _RS, tldr="Short.")
+                      ["R1"], _RS, tldr="Short.", still_open="Open.")
 _eq = c.get("/?q=empty+query+saved").data.decode()
 t("a saved result with an empty search query hides the 'Searched PubMed for' line",
   '<span id="query-what" hidden>' in _eq and "More on PubMed" in _eq, re.findall(r'id="query-what".{0,40}', _eq))
@@ -4786,7 +4786,7 @@ t("  and renderResult hides it the same way",
 # first real check comes from the check log, shown only when it is on an
 # earlier day, and never invented.
 for _cl in ("two dates saved", "one date saved", "log after saved"):
-    db.put_cached_verdict(_cl, "q", "true", "Because (Study 1).", ["R1"], _RS, tldr="Short.")
+    db.put_cached_verdict(_cl, "q", "true", "Because (Study 1).", ["R1"], _RS, tldr="Short.", still_open="Open.")
 with db.get_conn() as _cn:
     _cn.execute("INSERT INTO checks (claim_key, claim_text, cached, checked_at) VALUES (?,?,0,?)",
                 ("two dates saved", "two dates saved", "2026-09-01T10:00:00+00:00"))
@@ -4985,7 +4985,7 @@ t("F1: a review's own lower rating caps the line even when it is not the first r
 db.put_cached_verdict("apple cider vinegar helps diabetes", "vinegar AND diabetes", "complicated",
                       "Two reviews found small drops (Studies 1, 2).", ["V1", "V2"], _ACV,
                       tldr="It may lower blood sugar a little, but the studies are mixed and low certainty.",
-                      breakdown=_ACV_BD)
+                      still_open="Doses vary.", breakdown=_ACV_BD)
 _acv_html = c.get("/?q=apple%20cider%20vinegar%20helps%20diabetes").data.decode()
 t("F1: the server-rendered page carries no surer certainty phrase than the short answer",
   "moderate evidence" not in _acv_html.lower() and "Strong evidence shows" not in _acv_html
@@ -6275,7 +6275,7 @@ _ot_bd = {"strength": "x", "evidence": [], "parts": [], "effect_size": "", "appl
           "not_applies_to": "", "unknowns": "", "rests_on": 3}
 db.put_cached_verdict("creatine strength off topic saved", "creatine AND strength", "true",
                       "Studies 1 and 2 show a gain. Study 3 shows hair loss.", ["OT1", "OT2", "OT3"], _OT,
-                      tldr="Creatine increases strength.", breakdown=_ot_bd)
+                      tldr="Creatine increases strength.", still_open="Doses vary.", breakdown=_ot_bd)
 _oth = c.get("/?q=creatine+strength+off+topic+saved").data.decode()
 _ot_src = _oth[_oth.index('id="sources"'):_oth.index('class="nosteps"')]
 _ot_groups = [(m.group(2), m.group(1) is not None, int(m.group(3)), _re_s.findall(r">PMID (\w+)</a>", m.group(4)))
@@ -6309,7 +6309,7 @@ t("  the saved-record check names it, so a crawler is told to skip the record",
 # A saved verdict whose only cited study is off topic rests on nothing, so the
 # rule a fresh check obeys applies: "Not enough evidence".
 db.put_cached_verdict("creatine only off topic saved", "creatine AND strength", "true",
-                      "Study 3 shows it.", ["OT3"], _OT, tldr="Creatine increases strength.")
+                      "Study 3 shows it.", ["OT3"], _OT, tldr="Creatine increases strength.", still_open="Doses vary.")
 _oto = P("creatine only off topic saved", ip="4.4.4.7").get_json()
 t("off topic: a saved verdict whose only cited study is off topic is 'Not enough evidence', with none marked used",
   _oto["verdict"] == "insufficient" and _oto["tldr"] == verdict.UNTESTED_TLDR
@@ -6460,6 +6460,44 @@ _pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
 t("  and its shared link still renders the verdict with both lines",
   'id="server-result"' in _pg and "Mixed." in _pg and "Doses vary." in _pg)
 
+
+_or_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _OR_STUDIES]
+for _i, (_lbl, _tl, _so) in enumerate(_OR_CASES):
+    # The check endpoint: a hit on such a row is a miss, so it runs again and
+    # replaces the row with a whole one.
+    _cl = f"old row honey cough check {_i}"
+    _or_put(_cl, _tl, _so)
+    _or_fresh()
+    _d = P(_cl, ip=f"9.7.{_i}.1").get_json()
+    t(f"old rows: /api/check with {_lbl} runs the check again, never serving the row",
+      _d.get("cached") is False and fg.models.calls >= 2
+      and _d.get("tldr") == "Fresh short answer." and _d.get("still_open") == "Fresh open line.", _d)
+    t("  and the saved row is replaced by the whole answer",
+      _or_row(_cl) == ("Fresh short answer.", "Fresh open line."), _or_row(_cl))
+    # The streaming check, the path the page itself uses.
+    _cl = f"old row honey cough stream {_i}"
+    _or_put(_cl, _tl, _so)
+    _or_fresh()
+    _r, _evs = stream(_cl, ip=f"9.8.{_i}.1")
+    _done = [e for e in _evs if e.get("stage") == "done"]
+    t(f"old rows: the streaming check with {_lbl} runs again (it searches) and ends with both lines",
+      _done and any(e.get("stage") == "search" for e in _evs) and _done[0]["result"]["cached"] is False
+      and _done[0]["result"]["tldr"] == "Fresh short answer."
+      and _done[0]["result"]["still_open"] == "Fresh open line.", _evs[-1:])
+    # The shared link, GET /?q=: no verdict is rendered from the row; the page
+    # arrives without one and the browser runs the check (app.js, deep links).
+    _cl = f"old row honey cough page {_i}"
+    _or_put(_cl, _tl, _so)
+    _pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
+    t(f"old rows: GET /?q= with {_lbl} renders no verdict from the row, so the page runs the check",
+      'id="server-result"' not in _pg and "data-verdict=" not in _pg and "ClaimReview" not in _pg,
+      [x for x in ('id="server-result"', "data-verdict=", "ClaimReview") if x in _pg])
+    # The share card: the brand card, never a stamp over an empty answer.
+    _png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_cl), safe="") + ".png")
+    t(f"old rows: the share card for {_lbl} is the brand card, with no verdict on it",
+      _png.status_code == 200 and _png.data == og.render_brand())
+pubmed.search_and_fetch = _or_search
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

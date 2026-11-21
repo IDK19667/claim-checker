@@ -424,7 +424,7 @@ def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
         row = conn.execute(
             "SELECT * FROM verdict_cache WHERE claim_key = ?", (key,)
         ).fetchone()
-    if row is None:
+    if row is None or not _whole(row):
         return None
     created = datetime.fromisoformat(row["created_at"])
     if datetime.now(timezone.utc) - created > timedelta(hours=max_age_hours):
@@ -440,6 +440,16 @@ def get_cached_verdict(claim: str, max_age_hours: float) -> dict | None:
         "studies": json.loads(row["studies_json"] or "[]"),
         "cached_at": row["created_at"],
     }
+
+
+def _whole(row) -> bool:
+    """
+    A saved answer carries both its short answer and its still-open line.
+    One saved before those columns existed (they are NULL), or damaged since,
+    is not served: to the check it is a miss, so the check runs again and the
+    row is replaced; to a shared link or a card it is no saved answer at all.
+    """
+    return all(str(row[k] or "").strip() for k in ("tldr", "still_open"))
 
 
 def _breakdown(row) -> dict | None:
@@ -552,7 +562,7 @@ def get_cached_by_key(claim_key: str) -> dict | None:
         row = conn.execute(
             "SELECT * FROM verdict_cache WHERE claim_key = ?", (claim_key,)
         ).fetchone()
-    if row is None:
+    if row is None or not _whole(row):
         return None
     return {
         "claim_text": row["claim_text"],
