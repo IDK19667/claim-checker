@@ -41,6 +41,12 @@ appmod.app.logger.setLevel(logging.ERROR)
 c = appmod.app.test_client()
 results = []
 
+# Every study any response carries, from every route, is recorded here so
+# the last test can say none was ever both relied on and off topic.
+_PAYLOADS = []
+_real_study_payload = appmod._study_payload
+appmod._study_payload = lambda s_, cited_: _PAYLOADS.append(_real_study_payload(s_, cited_)) or _PAYLOADS[-1]
+
 
 def t(label, cond, extra=""):
     results.append(bool(cond))
@@ -2334,6 +2340,41 @@ t("the model's own 'wrong outcome' judgement removes the sports review from what
   and not any("sports" in p for p in (_v["breakdown"] or {}).get("evidence", [])), _v)
 t("  a judgement left out rules nothing out",
   verdict._relevance({"relevance": [{"study": 1}]}, _IF, "c") == {})
+# A study that never measured the claim's outcome is not evidence for it, even
+# when its background names that outcome. The case: a hair trial whose
+# background says creatine "enhances muscle strength", read as a test of
+# strength. Only a structured abstract can be told apart this way.
+_HAIR = json.loads((ROOT / "tests" / "off_outcome_hair_trial.json").read_text())
+_hair_out = _HAIR["outcome"]
+_hair = dict(_HAIR["study"])
+t("off outcome: a structured abstract that names the outcome only in its background did not measure it",
+  evidence.measured_outcome(_hair, _hair_out) is False)
+_RES_ONLY = _study("MO1", "Creatine supplementation in older adults: a randomised trial",
+                   abstract="BACKGROUND: Ageing brings frailty.\nMETHODS: Sixty adults took creatine or placebo.\n"
+                            "RESULTS: One repetition maximum rose by 8 kg with creatine.\nCONCLUSION: Creatine helped.")
+t("  one that names the outcome only in its results did measure it",
+  evidence.measured_outcome(_RES_ONLY, _hair_out) is True)
+t("  one that names only the declared stand-in in its results is left for the stand-in label",
+  evidence.measured_outcome(_study("MO2", "Creatine and hormones", abstract="BACKGROUND: Strength matters.\n"
+                                   "METHODS: Men took creatine.\nRESULTS: Lean mass rose.\nCONCLUSION: Fine."),
+                            _hair_out, "(lean mass)") is True)
+_UNSTRUCT = _study("MO3", "Creatine and hair", abstract="Creatine is known to raise muscle strength. "
+                   "We tested its effect on hair density in 40 men and found none.")
+t("  an abstract with no headings, or none at all, is left as it is",
+  evidence.measured_outcome(_UNSTRUCT, _hair_out) is None
+  and evidence.measured_outcome(_study("MO4", "Creatine and hair", abstract=""), _hair_out) is None
+  and evidence.measured_outcome(_study("MO5", "Creatine and hair", abstract="(No abstract available)"), _hair_out) is None
+  and evidence.measured_outcome(_hair, "") is None)
+_MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
+fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
+                            explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",
+                            relevance=[{"study": i, "subject": True, "outcome": True} for i in range(1, 4)]))]
+_v = verdict.weigh_evidence("Creatine increases muscle strength", _MO, f"(creatine) AND ({_hair_out})")
+t("  in an answer the code sets the hair trial aside as off outcome, whatever the model judged",
+  _MO[1].get("off_topic") == verdict.OFF_OUTCOME and "40265319" not in _v["cited_studies"], (_v["cited_studies"], _MO[1].get("off_topic")))
+t("  and keeps the trial that measured it and the unstructured abstract",
+  "MO1" in _v["cited_studies"] and not _MO[0].get("off_topic") and not _MO[2].get("off_topic"),
+  (_v["cited_studies"], [m_.get("off_topic") for m_ in _MO]))
 t("the prompt asks for subject and outcome for every study, and marks OFF TOPIC",
   '"relevance"' in verdict.weigh_prompt("c", "s") and "relevance" in verdict.VERDICT_SCHEMA["required"]
   and "OFF TOPIC" in verdict._format_study_for_prompt(2, _SMOKE[1], claim="Smoking causes lung cancer"))
@@ -6507,6 +6548,10 @@ _rclick = _rjs.split('$("recent-list").addEventListener("click"')[1].split("\n})
 t("old rows: a recent check on this device is replayed only when it has its short answer and still-open line",
   re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
   and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
+
+t("no response in this run ever carried a study both cited in the answer and off topic",
+  _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
+  (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

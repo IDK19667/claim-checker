@@ -1,0 +1,31 @@
+{
+ "note": "PubMed record 40265319 as the site saved it (checks.studies_json, 2026-10-10). A hair trial whose background names muscle strength: the case for evidence.measured_outcome.",
+ "outcome": "(muscle strength) OR (muscle performance) OR (muscular strength) OR (physical performance) OR (strength) OR (one repetition maximum) OR (isokinetic dynamometry) OR (grip strength) OR (peak torque)",
+ "study": {
+  "pmid": "40265319",
+  "title": "Does creatine cause hair loss? A 12-week randomized controlled trial.",
+  "abstract": "BACKGROUND: Creatine is a widely used ergogenic aid that enhances muscle strength and lean mass. However, concerns have been raised about the potential role in promoting hair loss by increasing dihydrotestosterone (DHT). Currently, there is no direct evidence examining the relationship between creatine supplementation and hair follicle health. Therefore, the purpose was to determine the effects of 12 weeks of creatine supplementation on androgen levels and hair follicle health in healthy young males.\nMETHODS: Forty-five resistance-trained males (ages 18-40 years) were recruited and randomly assigned to either a creatine monohydrate (5 g/day) or placebo (5 g maltodextrin/day) group. Participants maintained their habitual diets and training routines. Blood samples were collected at baseline and after 12 weeks to measure total testosterone, free testosterone, and DHT. Hair follicle health was assessed using the Trichogram test and the FotoFinder system (hair density, follicular unit count, and cumulative hair thickness). Statistical analyses were performed using repeated measures ANOVA, and potential outliers were examined through sensitivity analysis.\nRESULTS: Thirty-eight participants completed the study, with no significant differences in baseline characteristics between groups. There were no group-by-time interactions observed for any hormones or hair-related outcomes (p > 0.05). While total testosterone increased (∆ = post value minus pre value: creatine = ∆124   ±   149 ng/dL; placebo = ∆216   ±   203 ng/dL) and free testosterone decreased (creatine = ∆-9.0   ±   8.7 pg/mL; placebo = ∆-9   ±   6.4 pg/mL) over time, these effects were independent of supplementation. There were no significant differences in DHT levels, DHT-to-testosterone ratio, or hair growth parameters between the creatine and placebo groups.\nCONCLUSION: This study was the first to directly assess hair follicle health following creatine supplementation, providing strong evidence against the claim that creatine contributes to hair loss.",
+  "journal": "Journal of the International Society of Sports Nutrition",
+  "year": "2025",
+  "authors": [
+   "Mohammadyasin Lak",
+   "Scott C Forbes",
+   "Damoon Ashtary-Larky",
+   "Sahar Dadkhahfar",
+   "Reza Mahmoud Robati",
+   "Farshid Nezakati",
+   "Makan Khajevandi",
+   "Sara Naseri",
+   "Arvin Gerafiani",
+   "Neda Haghighat",
+   "Jose Antonio",
+   "Grant M Tinsley"
+  ],
+  "publication_types": [
+   "Journal Article",
+   "Randomized Controlled Trial"
+  ],
+  "data_banks": null,
+  "url": "https://pubmed.ncbi.nlm.nih.gov/40265319/"
+ }
+}

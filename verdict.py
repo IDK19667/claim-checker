@@ -1996,7 +1996,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # or that the model itself judged to miss its subject or its outcome, is
     # not used, whatever the model put in its cited list, and no sentence
     # that leans on it alone reaches the reader.
-    off = _relevance(parsed, studies, claim, subject)
+    off = _relevance(parsed, studies, claim, subject, outcome, surrogate)
     off_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in off}
     cited_pmids = [p for p in cited_pmids if p not in off]
 
@@ -2273,7 +2273,8 @@ OFF_SUBJECT = "tests something other than what this claim is about"
 OFF_OUTCOME = "measures a different outcome from the one this claim names"
 
 
-def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "") -> dict:
+def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "",
+               outcome: str = "", surrogate: str = "") -> dict:
     """
     {pmid: why} for every study that is not evidence for this claim: the
     ones code can rule out on sight, then the ones the model judged to miss
@@ -2284,6 +2285,12 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "")
     in any of its words, is not a test of the thing the claim is about,
     whatever the model judged: the model read a trial of one seed extract
     as a test of seed cycling.
+
+    `outcome` is its second OR-group and `surrogate` the stand-in the query
+    step named. A structured abstract whose title and sections past the
+    background never name the outcome, its kin or the stand-in did not
+    measure it, whatever the model judged: the model read a hair trial
+    whose background mentions strength as a test of strength.
     """
     off = {}
     for s in studies:
@@ -2292,6 +2299,8 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "")
             off[s["pmid"]] = why
         elif subject and not evidence.names_subject(s, subject):
             off[s["pmid"]] = OFF_SUBJECT
+        elif evidence.measured_outcome(s, outcome, surrogate) is False:
+            off[s["pmid"]] = OFF_OUTCOME
     for item in parsed.get("relevance") or []:
         if not isinstance(item, dict):
             continue

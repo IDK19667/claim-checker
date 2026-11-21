@@ -892,6 +892,52 @@ def indirect(study, outcome: str, surrogate: str) -> str | None:
     return None
 
 
+# The section of a structured abstract that says why a study was done, not
+# what it did: it can name an outcome the study never went on to measure
+# ("creatine is known to raise strength; we tested its effect on hair").
+_BACKGROUND_HEAD = re.compile(r"(?i)^(?:backgrounds?|introduction|context|rationale|importance)$")
+
+
+def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
+    """
+    Whether a study with a structured abstract measured the claim's outcome:
+    False when its title and every section but the background (methods,
+    results, conclusions, and any other) never name the outcome, its kin,
+    or the declared stand-in for it. A background sentence is the authors'
+    reason for the study, not something it measured. None when this cannot
+    be read: no outcome, no abstract, or an abstract without headings, where
+    there is no telling the background from the findings.
+    """
+    stems = outcome_stems(outcome)
+    abstract = str((study or {}).get("abstract") or "").strip()
+    if not stems or not abstract or abstract.lower().startswith("(no abstract"):
+        return None
+    text = " ".join(ln.strip() for ln in abstract.split("\n") if ln.strip())
+    # A heading run into the sentence before it ("quality.Conclusions") is
+    # given back its space, as conclusion() does.
+    text = re.sub(r"(?<=[a-z0-9)][.])(?=[A-Z][a-z])", " ", text)
+    if not _ANY_HEAD.match(text):
+        return None
+    heads = list(_ANY_HEAD.finditer(text))
+    kept = []
+    for i, m in enumerate(heads):
+        body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        name = re.sub(r"^\(\d\)\s*", "", m.group().strip()).rstrip(":").strip()
+        if not _BACKGROUND_HEAD.match(name):
+            kept.append(body)
+    if not kept:
+        return None
+    read = f"{study.get('title') or ''} {' '.join(kept)}"
+    if names_any(read, outcome_kin(stems)):
+        return True
+    if surrogate:
+        for term in re.split(r"\s+OR\s+", surrogate.strip("() ")):
+            term = term.strip("() ").strip()
+            if len(term) > 2 and re.search(re.escape(term), _us(read), re.IGNORECASE):
+                return True
+    return False
+
+
 # How the chart's description counts each kind of study. The count follows
 # `kind`, the same call that colours the shelf, so "human studies" is never a
 # default bucket for whatever is left over.
