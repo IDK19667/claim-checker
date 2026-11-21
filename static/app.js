@@ -1254,7 +1254,10 @@ $("recent-list").addEventListener("click", (e) => {
   const btn = e.target.closest(".recent-btn");
   if (!btn) return;
   const saved = loadRecent().find((r) => r.claim === btn.dataset.claim);
-  if (saved && saved.result) {
+  // A result saved by an older version can lack its short answer or its
+  // still-open line. It is not replayed as a finished verdict: it runs again.
+  const whole = (x) => typeof x === "string" && x.trim() !== "";
+  if (saved && saved.result && whole(saved.result.tldr) && whole(saved.result.still_open)) {
     renderResult({ ...saved.result, restored: true });
     history.replaceState(null, "", "/?q=" + encodeURIComponent(saved.claim));
   } else {

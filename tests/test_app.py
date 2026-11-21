@@ -6499,5 +6499,14 @@ for _i, (_lbl, _tl, _so) in enumerate(_OR_CASES):
       _png.status_code == 200 and _png.data == og.render_brand())
 pubmed.search_and_fetch = _or_search
 
+# The device's own list of recent checks (localStorage) keeps whole results
+# so it works offline. One saved by an older version, without either line, is
+# not replayed as a finished verdict: tapping it runs the check instead.
+_rjs = (ROOT / "static" / "app.js").read_text()
+_rclick = _rjs.split('$("recent-list").addEventListener("click"')[1].split("\n});")[0]
+t("old rows: a recent check on this device is replayed only when it has its short answer and still-open line",
+  re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
+  and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
