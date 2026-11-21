@@ -896,6 +896,21 @@ def indirect(study, outcome: str, surrogate: str) -> str | None:
 # what it did: it can name an outcome the study never went on to measure
 # ("creatine is known to raise strength; we tested its effect on hair").
 _BACKGROUND_HEAD = re.compile(r"(?i)^(?:backgrounds?|introduction|context|rationale|importance)$")
+# A heading that says what a study did or found. An abstract whose only
+# headings are a label ("UNLABELLED:") and its trial registration is, for
+# reading, an abstract with no headings at all.
+_FINDINGS_HEAD = re.compile(r"(?i)method|result|finding|conclusion|outcome|design|interpretation"
+                            r"|measure|intervention|participant|patients|subjects|setting|data"
+                            r"|search|selection|synthesis|analys")
+# A background sentence that states the study's own aim ("We report on the
+# safety of...", "the purpose was to determine..."). Some journals put the
+# aim there, and an aim names what the study set out to measure.
+_AIM_SENTENCE = re.compile(
+    r"(?i)\b(?:we (?:report|aim|aimed|sought|examine|examined|investigate|investigated|assess|assessed"
+    r"|evaluate|evaluated|test|tested|compare|compared|studied)"
+    r"|th(?:is|e present) (?:study|trial|review|analysis|meta-analysis) (?:aim|examin|investigat|assess"
+    r"|evaluat|test|compar|sought|was designed)"
+    r"|(?:aim|purpose|objective|goal)s? (?:of (?:this|the present)|was|were|is|are)\b)")
 
 
 def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
@@ -904,13 +919,19 @@ def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
     False when its title and every section but the background (methods,
     results, conclusions, and any other) never name the outcome, its kin,
     or the declared stand-in for it. A background sentence is the authors'
-    reason for the study, not something it measured. None when this cannot
-    be read: no outcome, no abstract, or an abstract without headings, where
-    there is no telling the background from the findings.
+    reason for the study, not something it measured, unless it states the
+    study's aim. None when this cannot be read: no outcome, an outcome also
+    named in general words, no abstract, or an abstract without a methods,
+    results or conclusions heading, where there is no telling the
+    background from the findings.
     """
     stems = outcome_stems(outcome)
     abstract = str((study or {}).get("abstract") or "").strip()
     if not stems or not abstract or abstract.lower().startswith("(no abstract"):
+        return None
+    # An outcome named in general words as well ("health", "complications")
+    # is met by any finding, so its absence in words proves nothing.
+    if any(not outcome_stems(term) for term in re.split(r"\s+OR\s+", outcome.strip("() "))):
         return None
     text = " ".join(ln.strip() for ln in abstract.split("\n") if ln.strip())
     # A heading run into the sentence before it ("quality.Conclusions") is
@@ -919,13 +940,16 @@ def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
     if not _ANY_HEAD.match(text):
         return None
     heads = list(_ANY_HEAD.finditer(text))
-    kept = []
+    kept, findings = [], False
     for i, m in enumerate(heads):
         body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
         name = re.sub(r"^\(\d\)\s*", "", m.group().strip()).rstrip(":").strip()
-        if not _BACKGROUND_HEAD.match(name):
+        if _BACKGROUND_HEAD.match(name):
+            kept += [sent for sent in _SENTENCE.split(body) if _AIM_SENTENCE.search(sent)]
+        else:
             kept.append(body)
-    if not kept:
+            findings = findings or bool(_FINDINGS_HEAD.search(name))
+    if not findings:
         return None
     read = f"{study.get('title') or ''} {' '.join(kept)}"
     if names_any(read, outcome_kin(stems)):

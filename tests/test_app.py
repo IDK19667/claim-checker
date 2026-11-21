@@ -2365,6 +2365,23 @@ t("  an abstract with no headings, or none at all, is left as it is",
   and evidence.measured_outcome(_study("MO4", "Creatine and hair", abstract=""), _hair_out) is None
   and evidence.measured_outcome(_study("MO5", "Creatine and hair", abstract="(No abstract available)"), _hair_out) is None
   and evidence.measured_outcome(_hair, "") is None)
+# Three readings found by measuring the rule on saved answers, each a study
+# that did measure the outcome and must stay in.
+t("off outcome: an outcome named in general words too ('health', 'complications') is never ruled on",
+  evidence.measured_outcome(_study("MO6", "Acute effects of coffee", abstract="BACKGROUND: Effects are uncertain.\n"
+                                   "METHODS: 100 adults wore monitors.\nRESULTS: More ectopic beats.\nCONCLUSIONS: Some."),
+                            "(health OR disease risk OR mortality OR health effects)") is None
+  and evidence.measured_outcome(_hair, f"({_hair_out}) OR (complications)") is None)
+t("  headings that are only a label and a registration are no headings",
+  evidence.measured_outcome(_study("MO7", "A sit-stand desk trial", abstract="UNLABELLED: Desks reduced regional "
+                                   "musculoskeletal discomfort.\nTRIAL REGISTRATION: OSF."),
+                            "(back pain OR low back pain)") is None)
+t("  a background sentence that states the study's aim counts as what it set out to measure",
+  evidence.measured_outcome(_study("MO8", "Efficacy of a vaccine in males", abstract="BACKGROUND: Infection is common. "
+                                   "We report on the safety of the vaccine and its efficacy.\nMETHODS: 4000 men.\n"
+                                   "RESULTS: Fewer lesions; more injection-site pain.\nCONCLUSIONS: It prevents lesions."),
+                            "(safety OR adverse events OR side effects)") is True
+  and evidence.measured_outcome(_hair, _hair_out) is False)
 _MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
 fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
                             explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",
