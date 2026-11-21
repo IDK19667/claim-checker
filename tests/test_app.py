@@ -2639,6 +2639,9 @@ t("  nor one with no still-open line", appmod._trust_example() is None
 with db.get_conn() as _exc:
     _exc.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(appmod.EXAMPLE_CLAIM),))
 t("  nor a missing one", appmod._trust_example() is None and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+_fx_src = (ROOT / "scripts" / "ui_fixture_server.py").read_text()
+t("  the local fixture page seeds the example claim, so its screenshots show the proof",
+  f'    "{appmod.EXAMPLE_CLAIM}",' in _fx_src.split("SEED = [")[1].split("]")[0])
 db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
                       "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
                       tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
