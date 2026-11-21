@@ -511,11 +511,13 @@ _RATIO_WORDS = [
     (r"rate ratios?", "rate"),
 ]
 
-# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)".
+# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)". An
+# abbreviation names a ratio only in capitals: "35 people or 80 adults" is
+# not an odds ratio of 80, and reading it as one printed "7900% higher odds".
 _RATIO = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
-    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
-    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
+    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
     r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 
 # The same figure with the outcome named in between: "the hazard ratio for
@@ -525,8 +527,8 @@ _RATIO = re.compile(
 # figure is always read against the nearest ratio it belongs to.
 _RATIO_WAS = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
-    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
-    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
+    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
     r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
     r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 
@@ -567,7 +569,7 @@ NOT_SIGNIFICANT = re.compile(
     r"\bnot (?:statistically )?significant(?:ly)?\b|\bnon-?significant\b|"
     r"\bno (?:statistically )?significant\b|\bdid not (?:significantly )?differ\b|"
     r"\bno (?:clear |significant |real )?difference\b|\bcould be chance\b", re.IGNORECASE)
-_RATIO_BEFORE = re.compile(r"\b(?:a?ORs?|a?HRs?|a?RRs?|IRRs?|odds ratios?|hazard ratios?|"
+_RATIO_BEFORE = re.compile(r"\b(?:(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?)|odds ratios?|hazard ratios?|"
                            r"risk ratios?|relative risks?|rate ratios?)\b", re.IGNORECASE)
 _DIFF_BEFORE = re.compile(r"\b(?:W?MDs?|SMDs?|mean difference|difference|net|"
                           r"standardi[sz]ed mean difference|Hedges'? g|Cohen'?s d)\b",

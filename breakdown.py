@@ -2581,7 +2581,7 @@ _CHANGE_BEFORE = re.compile(
     re.IGNORECASE)
 # Ratios and standardized differences have no unit, and need none.
 _UNITLESS_BEFORE = re.compile(
-    r"\b(?:a?ORs?|a?RRs?|a?HRs?|IRRs?|SMDs?|ratio|relative risk|standardi[sz]ed|"
+    r"\b(?:(?-i:a?ORs?|a?RRs?|a?HRs?|IRRs?|SMDs?)|ratio|relative risk|standardi[sz]ed|"
     r"Hedges|Cohen|effect size|g)\b[^.\d]{0,12}$", re.IGNORECASE)
 _P_BEFORE = re.compile(r"\bp\s*(?:-?value)?\s*(?:=|<|>|\u2264|\u2265|of)\s*$", re.IGNORECASE)
 _CI_BEFORE = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval|\b95%",

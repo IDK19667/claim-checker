@@ -1094,6 +1094,14 @@ t("  a ratio with its outcome named in between is still read",
 t("  but a figure the sentence does not pin to that ratio is left alone",
   evidence.effect_size("The hazard ratio was not given, but mortality was 1.09.")
   is None)
+t("  the word 'or' before a number is not an odds ratio: no '7900% higher odds' from '35 people or 80 adults'",
+  evidence.effect_size("Trials enrolled small groups, such as 35 people or 80 adults (Studies 4, 6).") is None
+  and evidence.effect_size("exposure up to 10.4 UK units or 83 grams per week (Study 8).") is None
+  and evidence.significance("in 20 or 30 (10 to 40) people", "30") is None
+  and evidence.effect_size("OR 0.88 (95% CI 0.80 to 0.95)")["figure"] == "odds ratio 0.88"
+  and evidence.effect_size("aOR = 1.5")["figure"] == "odds ratio 1.5"
+  and evidence.effect_size("RRs of 1.2")["figure"] == "risk ratio 1.2",
+  (evidence.effect_size("such as 35 people or 80 adults"), evidence.effect_size("OR 0.88")))
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))
