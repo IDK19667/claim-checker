@@ -512,7 +512,7 @@
         <!-- The sources fold into groups: what the verdict leaned on, open;
              background only (animal and lab studies for a claim about
              people, opinion pieces, buying guides), closed; what was
-             read and not relied on, closed; and what was excluded as off
+             read and not relied on, closed; and what was set aside as off
              topic, closed, never under relied on. Every study stays in the
              HTML either way, so crawlers and a reader with no JavaScript get
              the whole file. -->
@@ -526,7 +526,7 @@
           <summary class="group-head"><span class="group-name">{% if g.cited %}Read, not relied on{% else %}Read{% endif %}</span><span class="group-count">{{ g.others | length }}</span></summary>
           <ol class="studies">{% for i in g.others %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
         </details>{% endif %}{% if g.excluded %}<details class="source-group">
-          <summary class="group-head"><span class="group-name">Excluded (off-topic)</span><span class="group-count">{{ g.excluded | length }}</span></summary>
+          <summary class="group-head"><span class="group-name">Set aside: off topic</span><span class="group-count">{{ g.excluded | length }}</span></summary>
           <ol class="studies">{% for i in g.excluded %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
         </details>{% endif %}{% if not result.studies %}<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>{% endif %}{% endif %}</div>
         <!-- Shown only when the check found nothing to stand on. Every line

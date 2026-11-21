@@ -6294,8 +6294,8 @@ _otg = {name: (opened, n, pm) for name, opened, n, pm in _ot_groups}
 t("off topic: a study both cited and off topic is never under 'Relied on' on the server-rendered page",
   "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
   and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
-t("  it sits in an 'Excluded (off-topic)' group, folded, with the other off-topic study",
-  _otg.get("Excluded (off-topic)") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
+t("  it sits in a 'Set aside: off topic' group, folded, with the other off-topic study",
+  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
 t("  and its line says it was set aside, not relied on",
   "Read and set aside: measures a different outcome" in _ot_src.split("PMID OT3")[1].split("</li>")[0])
 _otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
@@ -6379,7 +6379,11 @@ if _shutil.which("node"):
 _ot_rr = _ot_js[_ot_js.index("function renderResult"):] if _shutil.which("node") else (ROOT / "static" / "app.js").read_text()
 t("  renderResult clears the stale flags first and builds the list from sourceGroups, with the excluded group folded",
   _ot_rr.index("dropOffTopicCites(data)") < _ot_rr.index("currentResult = data")
-  and "sourceGroups(data.studies)" in _ot_rr and 'group("Excluded (off-topic)", rows(g.excluded), false)' in _ot_rr)
+  and "sourceGroups(data.studies)" in _ot_rr and 'group("Set aside: off topic", rows(g.excluded), false)' in _ot_rr)
+_ot_tpl = (ROOT / "templates" / "index.html").read_text()
+t("  both renderers name the off-topic group in the same words, and the old label is gone from both",
+  '<span class="group-name">Set aside: off topic</span>' in _ot_tpl and 'group("Set aside: off topic",' in _ot_rr
+  and not any("Excluded (off-topic)" in x for x in (_ot_tpl, (ROOT / "static" / "app.js").read_text())))
 
 # ---- /privacy says exactly what is counted -------------------------------------------------
 _pv = c.get("/privacy").get_data(as_text=True)
