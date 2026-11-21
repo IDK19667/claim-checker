@@ -304,7 +304,7 @@ def _trust_example():
             "href": "/?q=" + quote(v["claim_text"])}
 
 
-def _render_home(checks_page: bool = False):
+def _render_home():
     claim = _claim_from_query_args()
     preview = None
     cached = None
@@ -352,7 +352,7 @@ def _render_home(checks_page: bool = False):
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
                            latest=latest,
                            example=None if cached else _trust_example(),
-                           provider=verdict.provider_label(), on_gemini=_on_gemini(), checks_page=checks_page,
+                           provider=verdict.provider_label(), on_gemini=_on_gemini(),
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 
@@ -365,11 +365,11 @@ def index():
 @app.route("/checks")
 def checks():
     """
-    The checker on its own, with no footage above it: the page the home
-    page used to be. Same ledger, same recent checks, same everything, for
-    anyone who wants the tool and not the film.
+    The checker on its own once had this address. The home page is that page
+    now, so old links land there, with any ?q= they carry.
     """
-    return _render_home(checks_page=True)
+    qs = request.query_string.decode("utf-8", "replace")
+    return redirect("/" + ("?" + qs if qs else ""), code=301)
 
 
 @app.route("/flight")
@@ -439,7 +439,7 @@ def sitemap():
     base = _base_url()
     # The pages, then the curated example claims whose saved answer is sound. Any
     # other result page is left out and is marked noindex on its own page.
-    urls = [(f"{base}/", "1.0", ""), (f"{base}/checks", "0.8", ""), (f"{base}/about", "0.5", ""),
+    urls = [(f"{base}/", "1.0", ""), (f"{base}/about", "0.5", ""),
             (f"{base}/method", "0.5", ""), (f"{base}/corrections", "0.4", ""),
             (f"{base}/privacy", "0.3", "")]
     urls += [(base + path, "0.6", day) for path, day in _sitemap_result_paths()]
@@ -482,7 +482,6 @@ def llms_txt():
         "## Pages",
         "",
         f"- [Check a claim]({base}/): the checker, with how a check works below it",
-        f"- [Check a claim, tool only]({base}/checks): the checker on its own",
         f"- [About]({base}/about): who makes Evident, what it does and what it does not do",
         f"- [Method]({base}/method): how a check works and the rules every verdict must pass",
         f"- [Corrections]({base}/corrections): report a wrong answer or get in touch",

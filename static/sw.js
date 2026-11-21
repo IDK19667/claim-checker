@@ -8,7 +8,6 @@
 const CACHE = "evident-v104";
 const SHELL = [
   "/",
-  "/checks",
   "/static/style.css",
   "/static/app.js",
   "/privacy",

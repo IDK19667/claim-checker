@@ -22,15 +22,6 @@
   <meta name="twitter:title" content="{{ preview.title }}" />
   <meta name="twitter:description" content="{{ preview.description }}" />
   <meta name="twitter:image" content="{{ preview.image }}" />
-  {% elif checks_page %}
-  <title>Check a health claim · Evident</title>
-  <meta name="description" content="The Evident checker on its own: paste a health claim and get a verdict from the studies on PubMed, with the studies shown." />
-  <meta property="og:title" content="Check a health claim · Evident" />
-  <meta property="og:description" content="Saw a health claim? Check it against the research." />
-  <meta property="og:image" content="{{ base_url }}/og/_.png?v=2" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta name="twitter:card" content="summary_large_image" />
   {% else %}
   <title>Evident: check a health claim against real research</title>
   <meta name="description" content="Paste a health claim you saw online. Evident searches real medical studies on PubMed, weighs how strong they are, and gives you a straight answer with sources." />
@@ -41,7 +32,7 @@
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   {% endif %}
-  {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% elif checks_page %}<link rel="canonical" href="{{ base_url }}/checks" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
+  {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
   {% if noindex %}<meta name="robots" content="noindex" />{% else %}<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />{% endif %}
   {% if jsonld %}<script type="application/ld+json" nonce="{{ csp_nonce }}">{{ jsonld | tojson }}</script>{% endif %}
   <meta property="og:type" content="website" />

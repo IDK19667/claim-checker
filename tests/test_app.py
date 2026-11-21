@@ -2643,9 +2643,10 @@ db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes me
                       "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
                       tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
                       still_open="Long trials of a cure are missing.")
-_checks_page = c.get("/checks").get_data(as_text=True)
-t("  /checks carries it too, and neither page points at footage that is gone",
-  '<section id="trust"' in _checks_page and "The footage at the top" not in _checks_page)
+_checks_r = c.get("/checks")
+t("  /checks is gone: it sends the reader to the home page, which points at no footage that is gone",
+  _checks_r.status_code == 301 and _checks_r.headers["Location"].endswith("/")
+  and '<section id="trust"' in _home and "The footage at the top" not in _home, _checks_r.headers.get("Location"))
 _ex_res = c.get(_ex["href"] if _ex else "/").get_data(as_text=True)
 t("  and a result page renders it hidden, so the verdict owns that screen",
   ('<section id="trust" class="trust" aria-labelledby="trust-heading" hidden>' in _ex_res)
@@ -4464,20 +4465,33 @@ t("the privacy page says a report's note is kept, anonymously", "report a wrong 
 # 5. The sitemap lists static pages only; a claim somebody typed never appears.
 _sm = c.get("/sitemap.xml").get_data(as_text=True)
 t("the sitemap has the static pages, absolute",
-  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")))
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/privacy")))
+t("  and /checks, now a redirect, is not in it", "/checks" not in _sm)
 _rb = c.get("/robots.txt").get_data(as_text=True)
 t("the sitemap and llms.txt list /about, /method and /corrections as absolute URLs",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/about", "/method", "/corrections"))
   and all(f"](http://localhost{x})" in c.get("/llms.txt").get_data(as_text=True) for x in ("/about", "/method", "/corrections", "/privacy")))
 t("robots.txt points at the sitemap with an absolute URL", "Sitemap: http://localhost/sitemap.xml" in _rb)
 
-# 6. Page identity: /checks has its own title and canonical; every result has a card.
-_ck = c.get("/checks").get_data(as_text=True)
-_home_t = _re2.search("<title>(.*?)</title>", c.get("/").get_data(as_text=True)).group(1)
-_ck_t = _re2.search("<title>(.*?)</title>", _ck).group(1)
-t("/checks has its own title and canonical, and the same card tags as home",
-  _home_t != _ck_t and 'rel="canonical" href="http://localhost/checks"' in _ck
-  and 'name="twitter:card" content="summary_large_image"' in _ck and 'property="og:image" content="http://localhost/og/_.png?v=2"' in _ck)
+# 6. Page identity: /checks is a permanent redirect to /; every result has a card.
+_ck_r = c.get("/checks")
+_ckq_r = c.get("/checks?q=garlic%20shortens%20colds")
+_ck_home = c.get("/").get_data(as_text=True)
+t("/checks answers 301 to /, and keeps a query string an old shared link may carry",
+  _ck_r.status_code == 301 and urllib.parse.urlsplit(_ck_r.headers["Location"]).path == "/"
+  and not urllib.parse.urlsplit(_ck_r.headers["Location"]).query
+  and _ckq_r.status_code == 301 and _ckq_r.headers["Location"].endswith("/?q=garlic%20shortens%20colds"),
+  (_ck_r.headers.get("Location"), _ckq_r.headers.get("Location")))
+t("  the home page is the one canonical tool page, with the card tags",
+  'rel="canonical" href="http://localhost/"' in _ck_home and "/checks" not in _ck_home
+  and 'name="twitter:card" content="summary_large_image"' in _ck_home and 'property="og:image" content="http://localhost/og/_.png?v=2"' in _ck_home)
+_ck_sw = (ROOT / "static" / "sw.js").read_text()
+t("  /checks is out of the service worker's SHELL, llms.txt and the templates",
+  '"/checks"' not in _ck_sw.split("const SHELL")[1].split("];")[0]
+  and "/checks" not in c.get("/llms.txt").get_data(as_text=True)
+  and not any("checks_page" in (ROOT / "templates" / f).read_text() or "/checks" in (ROOT / "templates" / f).read_text()
+              for f in ("index.html", "info.html", "privacy.html", "404.html"))
+  and "checks_page" not in (ROOT / "app.py").read_text())
 _png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_dl["claim"]), safe="") + ".png")
 from PIL import Image as _Im2  # noqa: E402
 import io as _io2  # noqa: E402
@@ -4486,7 +4500,7 @@ t("a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twi
   and _png.status_code == 200 and _Im2.open(_io2.BytesIO(_png.data)).size == (1200, 630))
 
 # 7. Beta and the doctor line are on the first screen of the ask, the 404 and the error screen.
-_ask = c.get("/checks").get_data(as_text=True)
+_ask = c.get("/").get_data(as_text=True)
 t("the ask screen carries Not medical advice and the doctor sentence right under its introduction",
   'class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
 t("  so do the 404 page and the error screen",
@@ -6044,9 +6058,11 @@ t("sitemap: a curated example whose saved record is unsound (cited study missing
   urllib.parse.quote(_cur_bad) not in _sm)
 t("sitemap: a saved result that fails the check (a cited study that is not among the studies) is left out", _loc_bad not in _sm)
 _sm_locs = _re.findall(r"<loc>([^<]*)</loc>", _sm)
-t("sitemap: only the six static pages and curated results, nothing else",
+t("sitemap: only the five static pages (/checks is a redirect now) and curated results, nothing else",
   all(u.startswith("http://localhost/?q=") is False or urllib.parse.unquote(u.split("?q=", 1)[1]) in _dsp.CURATED_CLAIMS
-      for u in _sm_locs) and len(_sm_locs) == 7, _sm_locs)
+      for u in _sm_locs) and len(_sm_locs) == 6
+  and [u for u in _sm_locs if "?q=" not in u] == ["http://localhost" + x for x in ("/", "/about", "/method", "/corrections", "/privacy")],
+  _sm_locs)
 t("sitemap: the five pages the brief names are all there, absolute",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/method", "/about", "/privacy", "/corrections")))
 _gh = c.get("/", query_string={"q": _good_c}).get_data(as_text=True)
@@ -6077,7 +6093,7 @@ t("canonical: every phrasing of one claim has one stable canonical, the saved cl
   _cs == {"http://localhost/?q=" + urllib.parse.quote(_good_c)}, _cs)
 t("canonical: every page that can be indexed has one, absolute",
   all(_re.search(r'<link rel="canonical" href="http://localhost[^"]*"', c.get(u).get_data(as_text=True))
-      for u in ("/", "/checks", "/about", "/method", "/corrections", "/privacy"))
+      for u in ("/", "/about", "/method", "/corrections", "/privacy"))
   and _canon(c.get("/", query_string={"q": "never checked at all"}).get_data(as_text=True)) == "http://localhost/")
 _rb = c.get("/robots.txt").get_data(as_text=True)
 _groups = [g for g in _rb.split("\n\n") if g.startswith("User-agent")]
@@ -6149,12 +6165,12 @@ t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt
 _pers, _ordc = "My son Tom has asthma, does honey help", "Honey soothes a cough in adults"
 for _cl, _q in ((_pers, "honey AND asthma"), (_ordc, "honey AND cough")):
     db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], [_gs], tldr="Mixed.", still_open="Doses vary.")
-_pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/checks", "/no-such-page-xyz")}
+_pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/no-such-page-xyz")}
 _pages["/llms.txt"] = c.get("/llms.txt").get_data(as_text=True)
-t("lists: a personal saved claim is on no public list (/, /checks, 404, /llms.txt)",
+t("lists: a personal saved claim is on no public list (/, 404, /llms.txt)",
   all("Tom" not in v and "asthma" not in v for v in _pages.values()), [u for u, v in _pages.items() if "Tom" in v])
-t("lists: an ordinary saved claim still shows on /, /checks and the 404 page",
-  all(_ordc in _pages[u] for u in ("/", "/checks", "/no-such-page-xyz")))
+t("lists: an ordinary saved claim still shows on / and the 404 page",
+  all(_ordc in _pages[u] for u in ("/", "/no-such-page-xyz")))
 t("lists: /llms.txt lists only curated claims, so an ordinary typed one is left out", _ordc not in _pages["/llms.txt"]
   and "Vaccines cause autism" in _pages["/llms.txt"])
 for _ in range(2):
@@ -6184,8 +6200,8 @@ _b = _tot()
 c.get("/"); c.get("/checks"); c.get("/", query_string={"q": _good_c}); c.get("/about"); c.get("/method"); c.get("/corrections"); c.get("/privacy")
 c.get("/", query_string={"q": "a claim nobody has checked yet"}); c.get("/no-such-page"); c.get("/healthz"); c.get("/sitemap.xml")
 _d = _delta(_b, _tot())
-t("counts: page views by kind: home (and /checks and an unchecked ?q=) 3, a saved result 1, info pages 4; 404s, the sitemap and healthz are not views",
-  _d == {"view.home": 3, "view.result": 1, "view.info": 4}, _d)
+t("counts: page views by kind: home (and an unchecked ?q=) 2, a saved result 1, info pages 4; the /checks redirect, 404s, the sitemap and healthz are not views",
+  _d == {"view.home": 2, "view.result": 1, "view.info": 4}, _d)
 _b = _tot()
 P(_good_c, ip="9.9.9.1"); P("", ip="9.9.9.1"); P("x" * 600, ip="9.9.9.1")
 _d = _delta(_b, _tot())
