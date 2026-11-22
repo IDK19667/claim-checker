@@ -3657,7 +3657,9 @@ for _lbl, _fresh, _saved in (
     _steady_row(_c, studies=_saved)
     _real_saf = pubmed.search_and_fetch
     pubmed.search_and_fetch = lambda q, max_results=8, surrogate="", _f=_fresh: _copy.deepcopy(_f)
-    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made again.", still_open="New open line."))]
+    # Two studies cited: a retracted study 1 is background now, and the
+    # answer still rests on study 2.
+    fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Made again.", still_open="New open line."))]
     fg.models.calls = 0
     try:
         d = P(_c, ip="7.7.10.6").get_json()
@@ -4333,7 +4335,7 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # false" read as strong evidence for the cure.
 _el = evidence.evidence_line
 t("the evidence line says what the evidence is evidence of",
-  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence against this claim"
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence, and none of it shows a cure"
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
@@ -4345,10 +4347,10 @@ t("the evidence line says what the evidence is evidence of",
 _el_ns = [evidence.evidence_line(verdict_v, _ACV, ["A1", "A2"], c, lab, "cure") for verdict_v, c, lab in
           (("false", "Homeopathy cures cancer", None), ("false", "Garlic cures HIV", ""),
            ("false", "Ivermectin cures COVID-19", "unclear"))]
-t("  a false answer to a promise with no size says 'against this claim', never 'partial'",
-  _el_ns == ["Strong evidence against this claim"] * 3
+t("  a false answer to a promise with no size says none of the evidence shows the promise, never 'partial'",
+  _el_ns == ["Strong evidence, and none of it shows a cure"] * 3
   and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "moderate", "cure") == "Strong evidence of a moderate effect, not a cure"
-  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence against this claim"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence, and none of it shows a cure"
   and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "none", "cure") == "Strong evidence of no clear effect", _el_ns)
 t("  it names the one group, says low certainty, and is empty with nothing used",
   _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
@@ -4365,7 +4367,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence against this claim", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence, and none of it shows a cure", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -8980,7 +8982,7 @@ _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
                tldr="No, it does not cure it.")
 t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
-  _el_cure == "Strong evidence against this claim", _el_cure)
+  _el_cure == "Strong evidence, and none of it shows a cure", _el_cure)
 _el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
               _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
                      dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
@@ -9200,6 +9202,134 @@ t("meet: figure_sentence and effect_size agree on the sentence a figure came fro
   and _fs_sent.startswith("The hazard ratio for death was 0.80")
   and (evidence.effect_size(_fs_sent) or {}).get("figure") == (evidence.effect_size(_FS["effect_size"]) or {}).get("figure"),
   (_fs_sent, evidence.effect_size(_FS["effect_size"])))
+
+# ---- L1: a retracted paper, or a journal notice, is never relied on ----------
+_RT_ST = [_study("RT1", "Vinegar and blood sugar in adults with diabetes: a randomized trial",
+                 types=["Journal Article", "Randomized Controlled Trial", "Retracted Publication"],
+                 abstract="Adults with type 2 diabetes were randomized to vinegar or placebo for 12 weeks."),
+          _study("RT2", "Vinegar and fasting glucose: a randomized trial",
+                 abstract="Adults with type 2 diabetes were randomized to vinegar or placebo for 8 weeks."),
+          _study("RT3", "Retraction notice: vinegar and blood sugar", types=["Retraction of Publication"],
+                 abstract="This article has been retracted at the request of the authors.")]
+_rt_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]
+t("L1: a retracted paper and a retraction notice are background for any claim, with the reason in plain words",
+  evidence.background_reasons(_RT_ST, "Vinegar lowers blood sugar")
+  == {"RT1": evidence.BG_RETRACTED, "RT3": evidence.BG_NOTICE}
+  and evidence.background_reasons(_RT_ST, "Vinegar lowers blood sugar in rats")["RT1"] == evidence.BG_RETRACTED)
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2, 3]))]
+_rt = P("Retracted vinegar lowers blood sugar", ip="7.7.31.1").get_json()
+_rt_by = {s["pmid"]: s for s in _rt.get("studies") or []}
+t("  a fresh check never counts the retracted paper or the notice as used, whatever the model cites",
+  [p for p, s in _rt_by.items() if s["cited_in_verdict"]] == ["RT2"]
+  and _rt_by["RT1"]["background"] and _rt_by["RT1"]["background_why"] == "retracted by the journal"
+  and _rt_by["RT3"]["background"], _rt_by)
+t("  and the study list says so in plain words",
+  _display.study_why(_rt_by["RT1"]) == "Background only, not counted: retracted by the journal.")
+t("  and the list of what each study concluded leaves it out",
+  "RT1" not in json.dumps(((_rt.get("breakdown") or {}).get("concluded")) or []), _rt.get("breakdown"))
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2]))]
+_r, _evs = stream("Retracted vinegar lowers blood sugar streamed", ip="7.7.31.2")
+_rts = [s for s in _evs[-1].get("result", {}).get("studies", []) if s["cited_in_verdict"]]
+t("  and a streamed check the same", [s["pmid"] for s in _rts] == ["RT2"], _evs[-1])
+# A saved row from before the rule, citing the retracted paper.
+_rt_old = [dict(x) for x in _RT_ST]
+db.put_cached_verdict("Retracted vinegar saved row", "(vinegar) AND (blood sugar)", "true",
+                      "Both trials found it (Study 1) (Study 2).", ["RT1", "RT2"], _rt_old,
+                      tldr="It lowers blood sugar.", still_open="Longer trials.")
+_rt_row = db.get_cached_verdict("Retracted vinegar saved row", 24)
+t("  a saved answer that cites it is out of date, as one citing any study now set aside",
+  _rt_row and appmod._current(_rt_row, "Retracted vinegar saved row") is None)
+_rt_pg = appmod._check_response("Retracted vinegar saved row", _rt_row["search_query"], _rt_row["verdict"],
+                                _rt_row["tldr"], _rt_row["explanation"], _rt_row["cited_studies"],
+                                _rt_row["studies"], "http://x", still_open="Longer trials.")
+t("  and if it is ever served as saved, the page still sets the paper aside and no sentence leans on it alone",
+  [s["pmid"] for s in _rt_pg["studies"] if s["cited_in_verdict"]] == ["RT2"]
+  and next(s for s in _rt_pg["studies"] if s["pmid"] == "RT1")["background"]
+  and "(Study 1)" not in _rt_pg["explanation"], _rt_pg["explanation"])
+t("  the recent list and the card read the same set",
+  appmod._listed({"claim_text": "x", "verdict": "true", "cited": ["RT1"], "studies": _rt_old,
+                  "search_query": "(vinegar) AND (blood sugar)"})["verdict"] == "insufficient"
+  and (og.strongest_cited(_rt_old, _display.relied_pmids(["RT1", "RT2"], _rt_old)) or ("",))[0] != ""
+  and _display.relied_pmids(["RT1", "RT2"], _rt_old) == {"RT2"})
+_rt_html = c.get("/?q=" + urllib.parse.quote("Retracted vinegar lowers blood sugar")).data.decode()
+t("  the server-rendered page shows it set aside with the reason",
+  "Background only, not counted: retracted by the journal." in _rt_html)
+_rt_v = verdict._format_study_for_prompt(1, dict(_RT_ST[0]), claim="Vinegar lowers blood sugar")
+t("  the model is told the journal retracted it and not to cite it",
+  "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
+pubmed.search_and_fetch = _rt_search
+
+# ---- L2: narrative reviews do not lift small trials ---------------------------
+_NR_TRIAL = _study("NR1", "Creatine and scalp hair in young men: a randomized trial",
+                   abstract="In this 12-week randomized, placebo-controlled trial, 38 healthy men took creatine "
+                            "or placebo. Scalp hair counts did not differ between groups.")
+_NR_REV = [_study("NR2", "Creatine and hair: a narrative review", types=["Journal Article", "Review"],
+                  abstract="We review what is known about creatine and hair."),
+           _study("NR3", "Creatine safety: an overview", types=["Review"],
+                  abstract="This review summarises creatine safety reports.")]
+_NR_GL = _study("NR4", "Clinical practice guideline on creatine", types=["Practice Guideline"],
+                abstract="The panel recommends creatine for strength.")
+_NR_ALL = [_NR_TRIAL] + _NR_REV + [_NR_GL]
+t("L2: a narrative review is neither solid nor limited, so two of them do not lift one small trial",
+  evidence.trial_caveats(_NR_TRIAL) and evidence.narrative_review(_NR_REV[0]) and evidence.narrative_review(_NR_REV[1])
+  and evidence.certainty_cap(_NR_ALL, ["NR1", "NR2", "NR3"])
+  == evidence.certainty_cap(_NR_ALL, ["NR1"]) == "it rests on small, pilot or uncontrolled studies",
+  (evidence.trial_caveats(_NR_TRIAL), evidence.certainty_cap(_NR_ALL, ["NR1", "NR2", "NR3"])))
+t("  a guideline still counts, and a pooled review or a guideline is never a narrative review",
+  evidence.certainty_cap(_NR_ALL, ["NR1", "NR4"]) is None and not evidence.narrative_review(_NR_GL)
+  and not evidence.narrative_review(_study("NR5", "x", types=["Systematic Review", "Review"])))
+t("  so the line over the trial and the reviews is no surer than over the trial alone",
+  evidence.line_certainty(evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"))
+  == evidence.line_certainty(evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")),
+  (evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"),
+   evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")))
+
+# ---- L3: no empty reference ---------------------------------------------------
+_ER = ("A review found no consistent harm (Study 5), but other reviews note that alcohol is linked "
+       "to fetal harm (Study 6). The evidence is mixed (Study 5).")
+t("L3: a citation whose every number is taken out disappears whole, with the space before it",
+  breakdown.relied_only(_ER, {5}, 8) == "A review found no consistent harm (Study 5), but other reviews note "
+  "that alcohol is linked to fetal harm. The evidence is mixed (Study 5).", breakdown.relied_only(_ER, {5}, 8))
+t("  and no separator is left dangling in the same brackets, nor an empty pair of brackets anywhere",
+  breakdown.relied_only("Harm (Study 6; Study 5).", {5}, 8) == "Harm (Study 5)."
+  and breakdown.relied_only("Harm (Studies 6, 7) and help (Study 5).", {5}, 8) == "Harm and help (Study 5)."
+  and breakdown.relied_only("Harm (Studies ). Plain ( ) words (Study 5).", {5}, 8) == "Harm. Plain words (Study 5).")
+t("  a citation that was part of the sentence itself takes the sentence with it, and plain words stay",
+  breakdown.relied_only("Studies 6 and 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5)."
+  and breakdown.relied_only("As in other trials (see earlier studies).", {5}, 8)
+  == "As in other trials (see earlier studies).")
+_er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", "complicated", "Mixed.", _ER,
+                                ["P5"], [_study(f"P{i}", f"Study of alcohol {i}") for i in range(1, 9)],
+                                "http://x", still_open="Whether small amounts harm.")
+t("  and no prose field on a page carries an empty reference",
+  not any(re.search(r"\(\s*(?:Stud(?:y|ies)\s*)?\)", str(v)) for v in
+          (_er_pg.get("tldr"), _er_pg.get("explanation"), json.dumps(_er_pg.get("breakdown")))), _er_pg.get("explanation"))
+
+# ---- L4: a promise's line claims no strength against what nobody tested -------
+_L4_ST = [_study("Q1", "Vinegar and blood sugar: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="We pooled 12 randomized trials in 800 adults.")]
+_l4 = {noun: (evidence.evidence_line("false", _L4_ST, ["Q1"], "x", None, word),
+              evidence.evidence_line("false", _L4_ST, ["Q1"], "x", "small", word))
+       for word, noun in (("cure", "a cure"), ("reverse", "a reversal"), ("prevent", "complete prevention"),
+                          ("stop", "a complete stop"), ("eliminate", "getting rid of it"), ("heal", "a full fix"))}
+t("L4: a false answer to a promise with no size says none of the evidence shows it, for every promise",
+  all(a == f"Strong evidence, and none of it shows {n}" and b == f"Strong evidence of a small effect, not {n}"
+      for n, (a, b) in _l4.items()), _l4)
+t("  and line_certainty still reads the level off the new line, so the prose caps keep working",
+  evidence.line_certainty("Strong evidence, and none of it shows a cure") == evidence.line_certainty("Strong evidence")
+  and evidence.line_certainty("Very low to moderate certainty evidence, and none of it shows complete prevention")
+  == "very low")
+t("  a false answer to a claim with no promise still says 'against this claim'",
+  evidence.evidence_line("false", _L4_ST, ["Q1"], "Vinegar raises blood sugar") == "Strong evidence against this claim")
+
+# ---- L5: "cure" the noun is not softened as a verb ----------------------------
+t("L5: the softening swap leaves 'cure' the noun alone and still softens the verb",
+  breakdown.soften("The abstracts do not report numerical effect sizes for cold cures (Study 5).")
+  == "The abstracts do not report numerical effect sizes for cold cures (Study 5)."
+  and breakdown.soften("There is no cure for the common cold (Study 2).") == "There is no cure for the common cold (Study 2)."
+  and breakdown.soften("Garlic cures colds (Study 1).") == "Garlic helps with colds (Study 1)."
+  and breakdown.soften("Garlic cures and prevents colds.") == "Garlic helps with and lowers the risk of colds.")
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

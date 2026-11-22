@@ -1130,7 +1130,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
                           if s.get("background") and not s.get("off_topic")),
         # Why each background record is one, once each, in a fixed order:
         # the chart and the study list name the kinds that are there.
-        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED)
+        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED,
+                                       BG_RETRACTED, BG_NOTICE)
                              if any(background_why(s) == k for s in studies
                                     if not s.get("off_topic"))],
         "retracted": sum(1 for s in studies
@@ -1162,7 +1163,7 @@ def snapshot(studies, cited_pmids=()) -> dict:
 # strong evidence for the cure. The level word still comes from the designs
 # that were used (the meter's legend explains it), but the line now says
 # what that evidence is evidence of: "Strong evidence of a small effect,
-# not a cure", or with no size, "Strong evidence against this claim". Built here from facts the page already has (the stamp, the
+# not a cure", or with no size, "Strong evidence, and none of it shows a cure". Built here from facts the page already has (the stamp, the
 # size of the effect, the claim's own words), so it costs no model call and
 # a streamed check and a shared link cannot word it differently.
 # ---------------------------------------------------------------------------
@@ -1215,7 +1216,8 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     never surer than it. `withheld` says the breakdown had a size the line
     may not carry (breakdown.line_label): the line then says no size at
     all. A false line names an effect ("a small effect, not a cure") only
-    with a size; with none it says "against this claim".
+    with a size; with none it says "and none of it shows a cure" for a claim
+    that promises one, "against this claim" for any other.
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1275,6 +1277,11 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
         # size it would assert an effect nobody measured.
         if absolute and size:
             return f"{level} evidence of a {size} effect, not {promise}"
+        # A claim that promises something absolute, with no size to carry:
+        # the level is the studies' design, never strength against a cure
+        # none of them tested, so the line says what they do not show.
+        if absolute:
+            return f"{level} evidence, and none of it shows {promise}"
         return f"{level} evidence against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
@@ -1470,6 +1477,17 @@ def _text(study) -> str:
 
 def is_review(study) -> bool:
     return any(t.startswith(REVIEW_TYPES) for t in study.get("publication_types") or [])
+
+
+_GUIDELINE_TYPES = ("Practice Guideline", "Guideline", "Consensus Development")
+
+
+def narrative_review(study) -> bool:
+    """A review PubMed tags only as a review: not pooled (REVIEW_TYPES), not
+    a guideline, not a trial. It summarises others and measured nothing."""
+    types = [str(t) for t in study.get("publication_types") or []]
+    return (any(t.startswith("Review") for t in types) and not is_review(study)
+            and not any(t.startswith(_GUIDELINE_TYPES + TRIAL_TYPES) for t in types))
 
 
 def is_trial(study) -> bool:
@@ -1954,6 +1972,10 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
         return None
     solid, limited = [], []
     for s in cited:
+        # A narrative review pools nothing and measured nothing itself: like
+        # an unlabelled paper, it is neither the strength nor the weakness.
+        if narrative_review(s):
+            continue
         caveats = [c for c in trial_caveats(s)
                    if not (comparative and c == "no untreated comparison group")]
         # A study that says neither its size nor its design is not evidence
@@ -2398,19 +2420,46 @@ BG_LAB = "animal or lab"
 BG_OPINION = "opinion piece"
 BG_GUIDE = "product guide"
 BG_NOT_TESTED = "not a test of this claim"
+BG_RETRACTED = "retracted by the journal"
+BG_NOTICE = "a journal notice, which measured nothing"
+
+# PubMed's marks on a paper the journal withdrew, and on the notices
+# themselves (a retraction, a correction, an expression of concern), which
+# report no study of their own.
+RETRACTED_TYPES = ("Retracted Publication",)
+NOTICE_TYPES = ("Retraction of Publication", "Expression of Concern", "Published Erratum")
+
+
+def withdrawn(study) -> str:
+    """
+    BG_RETRACTED for a paper PubMed marks as retracted, BG_NOTICE for a
+    retraction, correction or concern notice, else "". Read off the record
+    alone, for any claim, and before any other type: a retracted
+    meta-analysis is still retracted.
+    """
+    types = [str(t) for t in (study or {}).get("publication_types") or []]
+    if any(t.startswith(RETRACTED_TYPES) for t in types):
+        return BG_RETRACTED
+    if any(t.startswith(NOTICE_TYPES) for t in types):
+        return BG_NOTICE
+    return ""
 
 
 def background_reasons(studies, claim: str) -> dict:
     """
     {pmid: why} for the records that are background for this claim and are
-    never counted as used. Opinion pieces and buying guides, for any claim:
+    never counted as used. Retracted papers and journal notices, for any
+    claim: the journal withdrew the one, and the other measured nothing.
+    Opinion pieces and buying guides, for any claim:
     nothing in them was measured. Animal and lab studies, for a claim about
     people: they can say why a thing might work, never whether it does.
     """
     people = about_people(claim)
     out = {}
     for s in studies or []:
-        if product_guide(s):
+        if withdrawn(s):
+            out[s["pmid"]] = withdrawn(s)
+        elif product_guide(s):
             out[s["pmid"]] = BG_GUIDE
         elif people and preclinical(s):
             out[s["pmid"]] = BG_LAB

@@ -1396,8 +1396,12 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
         lines.append(f"OFF TOPIC: {why_off}. Do not cite it")
     elif evidence.background_reasons([study], claim):
         why_back = evidence.background_reasons([study], claim)[study["pmid"]]
-        lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
-                     f"this claim in people and never counts as evidence for or against it")
+        if why_back in _WITHDRAWN_SAID:
+            lines.append(f"BACKGROUND ONLY: {_WITHDRAWN_SAID[why_back]}. It never counts as "
+                         f"evidence for or against this claim. Do not cite it")
+        else:
+            lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
+                         f"this claim in people and never counts as evidence for or against it")
     rated = evidence.review_certainty(study, outcome, strict=True)
     if rated in ("low", "very low"):
         where = " on this outcome" if evidence.certainty_on_outcome(study, outcome) else ""
@@ -1412,6 +1416,11 @@ _BACKGROUND_SAID = {
     evidence.BG_LAB: "an animal or lab study",
     evidence.BG_OPINION: "an opinion piece or commentary, which measured nothing",
     evidence.BG_GUIDE: "a product or buying guide, which measured nothing",
+}
+# The same marker for a paper the journal withdrew, or a journal notice.
+_WITHDRAWN_SAID = {
+    evidence.BG_RETRACTED: "the journal retracted this paper, so its findings must not be relied on",
+    evidence.BG_NOTICE: "a journal notice of a retraction, correction or concern, which measured nothing",
 }
 
 

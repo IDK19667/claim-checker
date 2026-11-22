@@ -538,8 +538,11 @@ SOFTEN = [
     (r"\bprevents\b", "lowers the risk of"),
     (r"\bprevent\b", "lower the risk of"),
     (r"\bprevented\b", "lowered the risk of"),
-    (r"\bcures\b", "helps with"),
-    (r"\bcure\b", "help with"),
+    # Not "cure" the noun: "effect sizes for cold cures (Study 5)" became
+    # "effect sizes for cold helps with". A verb has its object after it; a
+    # noun is followed by a bracket, a stop, or "for", "of", "is" and kin.
+    (r"\bcures\b(?!\s*(?:[(.,;:!?]|$|(?:for|of|is|are|was|were|exist|exists)\b))", "helps with"),
+    (r"\bcure\b(?!\s*(?:[(.,;:!?]|$|(?:for|of|is|are|was|were|exist|exists)\b))", "help with"),
     (r"\bcured\b", "helped with"),
     (r"\beliminates\b", "reduces"),
     (r"\beliminate\b", "reduce"),
@@ -1923,11 +1926,38 @@ def relied_only(text: str, relied, count: int) -> str:
         def fix(m: re.Match) -> str:
             nums = [int(n) for n in re.findall(r"\d+", m.group(1))
                     if int(n) not in drop or int(n) > count]
+            if not nums:
+                return _GONE
             return (f"Study {nums[0]}" if len(nums) == 1
                     else "Studies " + ", ".join(str(n) for n in nums))
 
-        kept.append(_REF.sub(fix, sentence) if cited else sentence)
+        sentence = without_empty_refs(_REF.sub(fix, sentence) if cited else sentence)
+        if sentence:
+            kept.append(sentence)
     return " ".join(kept)
+
+
+# Where a citation whose every number was taken out stood.
+_GONE = "\x00"
+
+
+def without_empty_refs(sentence: str) -> str:
+    """
+    `sentence` with every citation left with no number taken out whole:
+    "(Studies )", "(Study )", "( )", the space before it, and a separator
+    left dangling in the same brackets ("(Study 5; )"). A citation that was
+    part of the sentence itself ("Studies and show") cannot be taken out
+    without rewriting it, so the sentence goes: "" is returned.
+    """
+    s = re.sub(r"(?<=[(\[,;])\s*Stud(?:y|ies)\s*(?=[)\]])", _GONE, sentence)
+    # Inside brackets: the gap and a separator on either side of it.
+    s = re.sub(r"(?:\s*(?:[,;&]|\band\b))?\s*" + _GONE + r"(?=[^()\[\]]*[)\]])", "", s)
+    s = re.sub(r"([(\[])\s*(?:[,;&]|\band\b)\s*", r"\1", s)
+    s = re.sub(r"\s*(?:[,;&]|\band\b)\s*([)\]])", r"\1", s)
+    s = re.sub(r"\s*\(\s*\)|\s*\[\s*\]", "", s)
+    if _GONE in s:
+        return ""
+    return re.sub(r"\s+([.,;:!?])", r"\1", s).strip()
 
 
 # ---------------------------------------------------------------------

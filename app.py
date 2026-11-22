@@ -843,8 +843,10 @@ def _study_payload(s: dict, cited: set) -> dict:
         # an animal or lab study read for a claim about people, an opinion
         # piece, a buying guide. Set in verdict.py. `background_why` says
         # which, in the words the study list uses.
-        "background": bool(s.get("background")),
-        "background_why": evidence.background_why(s),
+        # A retracted paper or a journal notice is background for any claim,
+        # a saved record from before that rule included.
+        "background": bool(s.get("background")) or bool(evidence.withdrawn(s)),
+        "background_why": evidence.withdrawn(s) or evidence.background_why(s),
     }
 
 
@@ -948,7 +950,8 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # applies: it becomes "Not enough evidence".
     cited = display.relied_pmids(cited_studies, studies)
     if set(cited_studies or []) - cited:
-        off_numbers = {i + 1 for i, s in enumerate(studies or []) if s.get("off_topic")}
+        off_numbers = {i + 1 for i, s in enumerate(studies or [])
+                       if s.get("off_topic") or evidence.withdrawn(s)}
         explanation = breakdown_mod.drop_citing(explanation, off_numbers, len(studies or []))
         if not cited and verdict_value != "insufficient":
             verdict_value = "insufficient"
@@ -1146,6 +1149,11 @@ def _current(cached, claim):
     """
     if not cached:
         return cached
+    # One that relied on a retracted paper or a journal notice is out of
+    # date the same way: the paper is background now, for any claim.
+    if any(isinstance(s, dict) and s.get("pmid") in set(cached.get("cited_studies") or [])
+           and evidence.withdrawn(s) for s in cached.get("studies") or []):
+        return None
     groups = pubmed.split_and(cached.get("search_query") or "")
     if len(groups) < 2:
         return cached
