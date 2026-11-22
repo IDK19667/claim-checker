@@ -476,6 +476,11 @@ def _failed(row) -> bool:
     return str(row["tldr"] or "").strip() == FAILED_REPLY_TLDR
 
 
+def whole(row) -> bool:
+    """_whole, for callers outside this module: a row that is a finished answer."""
+    return _whole(row)
+
+
 def _stamp(row) -> str | None:
     """The row's method stamp, or None (a row, or a database, from before it)."""
     try:

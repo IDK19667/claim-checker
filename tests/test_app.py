@@ -3079,8 +3079,12 @@ db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes me
 t("  a saved row with no studies is not offered as proof", appmod._trust_example() is None)
 db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
                       "x", ["EX1"], _EXS, tldr="A short answer.", still_open="")
+_ex_open = c.get("/").get_data(as_text=True)
 t("  nor one with no still-open line", appmod._trust_example() is None
-  and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+  and "Can I see a real one?" not in _ex_open)
+t("  and the Latest list, on the same path, does not show that row as a finished answer either",
+  appmod.EXAMPLE_CLAIM[1:] not in _ex_open.split('<ol class="ledger-list">')[1].split("</ol>")[0]
+  if '<ol class="ledger-list">' in _ex_open else True)
 with db.get_conn() as _exc:
     _exc.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(appmod.EXAMPLE_CLAIM),))
 t("  nor a missing one", appmod._trust_example() is None and "Can I see a real one?" not in c.get("/").get_data(as_text=True))

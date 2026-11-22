@@ -279,6 +279,23 @@ def _list_entries(rows) -> list[dict]:
             for v in map(_listed, rows)]
 
 
+def _latest(n: int) -> list[dict]:
+    """
+    The newest n saved answers a public list may show, as recent_verdicts
+    reads them. Only a whole row (db.whole: its short answer and its
+    still-open line, the same test the example and a result page use) is a
+    finished answer; one that is not is never shown as one. Rows are fetched
+    in growing pages until the list is full or the table runs out.
+    """
+    limit = n * LIST_OVERFETCH
+    while True:
+        rows = db.recent_verdicts(limit)
+        out = _public_claims([r for r in rows if db.whole(r)], n)
+        if len(out) >= n or len(rows) < limit:
+            return out
+        limit *= 2
+
+
 def _trust_example():
     """
     The trust section's real example, {claim, verdict, tldr, checked, read,
@@ -344,7 +361,7 @@ def _render_home():
     # recent verdicts with the evidence behind each. Best-effort; an empty
     # database must still render a usable page.
     try:
-        latest = _list_entries(_public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))
+        latest = _list_entries(_latest(10))
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page's latest checks: %s", e)
         latest = []
@@ -505,7 +522,7 @@ def not_found(_e):
     render the page rather than turning a 404 into a 500.
     """
     try:
-        latest = [_listed(v) for v in _public_claims(db.recent_verdicts(5 * LIST_OVERFETCH), 5)]
+        latest = [_listed(v) for v in _latest(5)]
     except sqlite3.Error:
         latest = []
     return render_template("404.html", latest=latest, labels=VERDICT_LABELS), 404
