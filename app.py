@@ -998,6 +998,12 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         explanation = unaside(explanation or "")
         if breakdown and any(unaside(t) != t for t in breakdown_mod.prose_of(breakdown)):
             breakdown = breakdown_mod.map_prose(breakdown, unaside)
+    # Code never calls a figure not significant when its own interval or p
+    # value rules that out (breakdown.say_nulls); a check saved before that
+    # rule loses such a sentence here.
+    explanation = breakdown_mod.unsaid_nulls(explanation or "")
+    if breakdown and any(breakdown_mod.unsaid_nulls(t) != t for t in breakdown_mod.prose_of(breakdown)):
+        breakdown = breakdown_mod.map_prose(breakdown, breakdown_mod.unsaid_nulls)
     # A rated verdict resting on nothing is "Not enough evidence", as on a
     # fresh check, save where guidance alone may rate it (_nothing_relied).
     if not cited or set(cited_studies or []) - cited:

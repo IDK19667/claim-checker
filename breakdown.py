@@ -1859,11 +1859,19 @@ _NAME_NUMBER = re.compile(r"(?:\b(?:type|phase|stage|grade|class|step|wave|tier)
                           re.IGNORECASE)
 
 
+# An interval's confidence level is not a result: "95" in "(95 percent CI
+# 0.71 to 0.89)" was read against the abstract's first "95% confidence
+# interval", a null subgroup, and a significant risk ratio was called not
+# significant.
+_LEVEL_AFTER = re.compile(r"\s?(?:%|per ?cent\b)\s*(?:C\.?I\.?\b|confidence|credible)", re.IGNORECASE)
+
+
 def _figures(sentence: str) -> list[str]:
     bare = _REF.sub(" ", sentence)
     return [m.group(0) for m in _FIGURE.finditer(bare)
             if not re.fullmatch(r"(?:19|20)\d\d", m.group(0).lstrip("-"))
-            and not _NAME_NUMBER.search(bare[:m.start()])]
+            and not _NAME_NUMBER.search(bare[:m.start()])
+            and not _LEVEL_AFTER.match(bare, m.end())]
 
 
 def null_figure(sentence: str, studies: list[dict]) -> str | None:
@@ -1922,12 +1930,15 @@ def say_nulls(text: str, studies: list[dict]) -> str:
     Every sentence whose figure its abstract calls no clear difference says
     so: a size word for it ("a small effect") becomes "no clear difference",
     and a sentence that does not already say it is followed by one that
-    does, carrying the same citation.
+    does, carrying the same citation. A sentence that carries a significant
+    figure (its own p value or interval rules out no effect) is never called
+    a null: "That difference was not statistically significant" after it
+    would be read as about that figure.
     """
     out = []
     for sentence in sentences(text or ""):
         ref = null_figure(sentence, studies)
-        if ref is None or _SAID_NULL.search(sentence):
+        if ref is None or _SAID_NULL.search(sentence) or significant_figure(sentence):
             out.append(sentence)
             continue
         if _SIZE_SAID.search(sentence):
@@ -1985,6 +1996,31 @@ def keep_comparison(text: str, studies: list[dict]) -> str:
                     break
         out.append(sentence)
     return " ".join(out)
+
+
+_NULL_SAID_BY_CODE = re.compile(
+    "^(?:" + re.escape(NOT_SIGNIFICANT_SAID.split("({ref})")[0]) + "|"
+    + re.escape(TRANSLATION_LEAD + NULL_SAID) + r" )\((?P<ref>[^()]*)\)\.$")
+
+
+def unsaid_nulls(text: str) -> str:
+    """
+    `text` without a null sentence code wrote ("That difference was not
+    statistically significant (Study 1).") straight after a sentence of the
+    same study that carries a significant figure: a check saved before
+    say_nulls asked has it, under "0.79 (95 percent CI 0.71 to 0.89)".
+    Text with no such pair comes back byte for byte.
+    """
+    parts = sentences(text or "")
+    kept = []
+    for s in parts:
+        m = _NULL_SAID_BY_CODE.match(s)
+        if (m and kept and significant_figure(kept[-1])
+                and set(re.findall(r"\d+", m.group("ref"))) <= set(re.findall(r"\d+", " ".join(
+                    x.group(1) for x in _REF.finditer(kept[-1]))) or [None])):
+            continue
+        kept.append(s)
+    return (text or "") if len(kept) == len(parts) else " ".join(kept)
 
 
 def tell_straight(text: str, studies: list[dict]) -> str:

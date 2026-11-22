@@ -5313,6 +5313,36 @@ t("a number in a name is not a result: no 'not significant' note after 'type 1 d
   and breakdown.say_nulls("Children and adults with type 1 diabetes (Study 1).",
                           [_study("1", "T1D diet", abstract="HbA1c fell 1 point, which was not significant (p = 0.4).")])
   == "Children and adults with type 1 diabetes (Study 1).")
+# L1: code never writes "not statistically significant" after a figure whose
+# own printed interval rules that out. Live: vitamin D and winter infections.
+_L1_AB = ("RESULTS: The main analysis showed no significant preventive effects (risk ratio [RR]: 0.99, 95% confidence "
+          "interval [CI]: 0.97 to 1.01). Winter-dominant seasons (RR: 0.79, 95% CI: 0.71 to 0.89) and daily dosing "
+          "(RR: 0.97, 95% CI: 0.90 to 1.04, not significant).")
+_L1_ST = [_study("L1", "Vitamin D and respiratory infections: a meta-analysis", types=["Meta-Analysis"], abstract=_L1_AB)]
+_L1_SIG = "The risk ratio for winter-dominant seasons was 0.79 (95 percent CI 0.71 to 0.89) (Study 1)."
+_L1_NUL = "The risk ratio for daily dosing was 0.97 (Study 1)."
+_L1_TWO = ("Winter risk fell with a risk ratio of 0.79 (95 percent CI 0.71 to 0.89), while the risk ratio for daily "
+           "dosing was 0.97 (Study 1).")
+t("L1: a figure whose own printed interval rules out no effect gets no 'not significant' sentence",
+  breakdown.say_nulls(_L1_SIG, _L1_ST) == _L1_SIG and breakdown.significant_figure(_L1_SIG) and "95" not in breakdown._figures(_L1_SIG),
+  (breakdown.say_nulls(_L1_SIG, _L1_ST), breakdown._figures(_L1_SIG)))
+t("  a figure its abstract reports as no clear difference still gets its sentence",
+  breakdown.say_nulls(_L1_NUL, _L1_ST) == _L1_NUL + " That difference was not statistically significant (Study 1).",
+  breakdown.say_nulls(_L1_NUL, _L1_ST))
+t("  a sentence with one significant and one null figure is not called a null: 'that difference' would read as the first",
+  breakdown.say_nulls(_L1_TWO, _L1_ST) == _L1_TWO, breakdown.say_nulls(_L1_TWO, _L1_ST))
+_L1_SAVED = _L1_SIG + " That difference was not statistically significant (Study 1). That is about 21% lower risk (Study 1)."
+with appmod.app.test_request_context("/"):
+    _l1 = appmod._check_response("Vitamin D prevents winter infections L1", "(vitamin d) AND (infection)", "complicated",
+                                 "It may help a little.", _L1_SIG, ["L1"], [dict(s) for s in _L1_ST], "http://x",
+                                 still_open="Which doses.", breakdown={"parts": [], "evidence": [_L1_SIG],
+                                 "effect_size": _L1_SAVED, "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
+t("  and a saved check that has the false sentence loses it on the page; one after a null figure stays",
+  "not statistically significant" not in _l1["breakdown"]["effect_size"]
+  and "21% lower risk" in _l1["breakdown"]["effect_size"]
+  and breakdown.unsaid_nulls(_L1_NUL + " That difference was not statistically significant (Study 1).")
+  == _L1_NUL + " That difference was not statistically significant (Study 1).",
+  _l1["breakdown"]["effect_size"])
 t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
   breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
   == "A pooled review estimated the global rate of alcohol use during pregnancy."

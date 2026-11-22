@@ -592,6 +592,10 @@ def _num(text: str) -> float:
     return float(text.replace("\u2212", "-"))
 
 
+# The level an interval is given at: "95%", "90 percent", "99 per cent".
+CONFIDENCE_LEVEL = re.compile(r"\b9[059]\s?(?:%|per ?cent\b)", re.IGNORECASE)
+
+
 def _interval_after(text: str, start: int):
     """The (low, high) interval printed straight after a figure, or None."""
     window = text[start:start + 90]
@@ -599,8 +603,10 @@ def _interval_after(text: str, start: int):
     if not m:
         return None
     # The interval has to belong to this figure: another number in between
-    # ("OR 0.88 and RR 1.2 (95% CI ...)") means it belongs to that one.
-    between = re.sub(r"\b9[059]\s?%", "", window[:m.start(1)])
+    # ("OR 0.88 and RR 1.2 (95% CI ...)") means it belongs to that one. Its
+    # confidence level is not such a number, written "95%" or, as the plain
+    # words print it, "95 percent".
+    between = CONFIDENCE_LEVEL.sub("", window[:m.start(1)])
     if re.search(r"\d", re.sub(r"(?:C\.?I\.?|confidence interval).*", "", between,
                                 flags=re.IGNORECASE | re.DOTALL)):
         return None
