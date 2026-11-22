@@ -1002,6 +1002,8 @@ function askSuggest() {
     } catch { rows = []; }
     if (seq !== suggestSeq) return;      // a later keystroke already won
     if (document.activeElement !== input) return;
+    // A list answering after Enter never opens over the check it started.
+    if (inFlight) return;
     renderSuggest(rows);
   }, 160);
 }
