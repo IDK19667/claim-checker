@@ -29,7 +29,7 @@ accounts, installable as a PWA. See `PRODUCT.md`.
 | Storage | SQLite via `db.py`, in Turso when `TURSO_*` is set | add another datastore |
 | AI | `verdict.py` behind one interface (Gemini default, Claude optional) | call a provider SDK from anywhere else |
 | Evidence | `pubmed.py` (E-utilities) | scrape, or add a second source without a decision entry |
-| Front end | vanilla JS + CSS, no bundler | add React, Tailwind, or a component library |
+| Front end | vanilla JS + CSS, no bundler; three.js r128 vendored for the desk | add React, Tailwind, a component library, or a second 3D library |
 | Fonts | self-hosted woff2 in `static/fonts/woff2/` | link Google Fonts |
 | Offline | `static/sw.js` | cache `/api/` or `/og/` responses |
 
@@ -42,8 +42,9 @@ pubmed.py         search + fetch + broadening fallback
 db.py             verdict cache, anonymous check log, feedback
 og.py             link-preview cards (Pillow, server-side)
 ratelimit.py      in-memory sliding windows
-templates/        index.html (the app), privacy.html
-static/           style.css, app.js, sw.js, manifest, icons/, tex/, fonts/
+templates/        index.html (the desk front), info.html, privacy.html, stats.html, 404.html
+static/           desk.css + desk.js (the front), app.js, style.css (the other pages),
+                  sw.js, manifest, vendor/ (three.js), desk/ (the wood), icons/, fonts/
 tests/            test_app.py, fake provider, no network
 scripts/          live_batch.py, real claims against a real key
 ```
@@ -53,20 +54,25 @@ app does not need one.
 
 ## Styling rules
 
-- Tokens first: every colour is a CSS custom property in `:root`. No
-  hard-coded hex in a rule that isn't a token definition, so a palette
-  change is one edit. `DESIGN.md` frontmatter carries the same tokens in
-  the design.md standard; keep them in sync (`scripts/qa.mjs` fails on
-  drift).
+- Two stylesheets. `desk.css` styles the front (`index.html`) on the
+  night; `style.css` styles every other page, a night masthead over the
+  text by day. Neither page family loads the other's file.
+- Tokens first: every colour is a CSS custom property in `:root` (the
+  desk's are `--desk-*`). No hard-coded hex in a rule that isn't a token
+  definition, so a palette change is one edit. `DESIGN.md` frontmatter
+  carries the same tokens in the design.md standard; keep them in sync
+  (`scripts/qa.mjs` fails on drift).
 - Three faces only: Bricolage Grotesque for display, Instrument Sans for
   reading, IBM Plex Mono for labels and counts. No fourth family.
-- One accent (green by day, sage by night). The book cloths say what kind
-  of study a study is, never anything else. Verdicts are not
-  colour-coded: the words and the pen ring carry them, identically.
-- Two grounds, night and day. One shape scale: controls 3px, panels 4px.
-  No cards as a default container, no shadows except the study sheet's,
-  no gradient washes, glass, glows or emoji icons. Icons are the authored
-  SVG sprite in `index.html`.
+- One accent (sage on the night, green by day). The book cloths say what
+  kind of study a study is, never anything else. Verdicts are not
+  colour-coded: the words on the card carry them, identically.
+- 3px corners. No cards as a default container, no shadows on content,
+  no gradients beyond the desk's two scrims, no glass, glows or emoji
+  icons. Icons are the authored SVG in `index.html`.
+- The first screen holds the claim box and the button at every laptop
+  and phone size in `DESIGN.md`, and during a check the newest log line
+  and Cancel.
 - Zero em-dashes and en-dashes in anything a user can read.
 
 ## How to prompt yourself on a change
@@ -77,7 +83,7 @@ Four parts, in this order. The middle two are the ones people skip.
 2. **One task.** One feature, one screen, one fix. Not three merged
    because they felt related.
 3. **Constraints that protect what works.** Name them: "don't change the
-   verdict schema", "preserve the ticket layout", "no new dependency",
+   verdict schema", "preserve the desk's stops", "no new dependency",
    "don't touch the rate limiter". Describe behaviour, not code.
 4. **A reference.** A screenshot, the exact copy, or the failing output.
 
@@ -92,16 +98,20 @@ Run these before saying a change is done:
 ```bash
 .venv/bin/python tests/test_app.py                  # 74 integration tests, no network
 node scripts/qa.mjs                                 # design QA in a real browser, exits non-zero on failure
-node ~/.claude/plugins/cache/impeccable/impeccable/*/skills/impeccable/scripts/detect.mjs --json templates/index.html static/app.js static/style.css
+node ~/.claude/plugins/cache/impeccable/impeccable/*/skills/impeccable/scripts/detect.mjs --json templates/index.html static/app.js static/desk.css static/desk.js static/style.css
 npx --yes @google/design.md@latest lint --format=json DESIGN.md
 ```
 
-`scripts/qa.mjs` loads the running site at 390px and 1280px in light and
-dark, then checks contrast, effective tap areas (hit-tested, not measured
-from the box), horizontal overflow, console errors, heading structure and
-whether `style.css` still uses only colours written down in `DESIGN.md`.
-It needs the server running and, once, `npm install playwright && npx
-playwright install chromium`. Screenshots land in `/tmp/qa-*.png`.
+`scripts/qa.mjs` loads the running site at 390px and 1440px in light and
+dark: the front in 3D and in text mode, a saved result, and the other
+pages. It checks contrast, effective tap areas (hit-tested, not measured
+from the box), text under 13px, horizontal overflow, console errors, CSP
+violations, one h1 at its size, the ground each page stands on, the
+first screen at seven laptop and phone sizes, the front with three.js
+refused, and whether `desk.css` and `style.css` still use only colours
+written down in `DESIGN.md`. It never runs a check. It needs the server
+running and, once, `npm install playwright && npx playwright install
+chromium`. Screenshots land in `$QA_OUT/qa-*.png` (default `/tmp`).
 
 For UI work also: screenshot at 375px in light and dark and at 1280px,
 and check computed contrast in the browser rather than by eye. For any

@@ -10459,6 +10459,15 @@ t("qa.mjs audits the desk front: 3D and text mode, a saved result, the first scr
   and "securitypolicyviolation" in _qa2 and "/static\\/(vendor|desk)\\//" in _qa2
   and '"static/desk.css", "static/style.css"' in _qa2 and "QA_OUT" in _qa2 and "/api/check" not in _qa2.split("*/", 1)[1])
 
+_cl = (ROOT / "CLAUDE.md").read_text()
+_cl_design = _cl.split("## Working rules (design)")[1].split("## Working rules (code)")[0]
+_ag = (ROOT / "AGENTS.md").read_text()
+t("CLAUDE.md and AGENTS.md describe the desk: desk.css and desk.js named, the old front's motion and shelf rules gone",
+  "static/desk.css" in _cl_design and "static/desk.js" in _cl_design and "nudgeToAnswer" not in _cl_design
+  and "pen ring" not in _cl_design and "border-image rule" not in _cl_design
+  and "desk.css" in _ag.split("## Styling rules")[1].split("## How to prompt")[0] and "pen ring" not in _ag
+  and "static/desk.css static/desk.js" in _ag and "static/desk.css static/desk.js" in _cl_design)
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template
