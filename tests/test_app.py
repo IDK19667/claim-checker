@@ -2458,6 +2458,32 @@ t("off outcome: hyperactivity rated as behaviour, and stress rated as tension, w
                                        abstract="BACKGROUND: It is said to reduce stress.\nMETHODS: 59 adults, POMS.\n"
                                                 "RESULTS: Less tension and fatigue.\nCONCLUSION: Some benefit."),
                                 "(stress OR psychological stress OR cortisol)") is True)
+# A missing word proves nothing: a study reports its outcome by an instrument
+# (1RM, A1C, PSQI), an abbreviation the background defined, or other words
+# ("died", "flu"). An independent grader wrote 54 such abstracts of studies
+# that did measure the outcome. The rule sets a study aside only on a positive
+# sign it is about another outcome. One case it still cannot read without the
+# claim's subject: "Sleep loss and word learning", for a claim about memory,
+# names sleep in its title and conclusions as the exposure.
+_ATTACKS = json.loads((ROOT / "tests" / "off_outcome_attacks.json").read_text())["cases"]
+_attacked = [a_["name"] for a_ in _ATTACKS if evidence.measured_outcome(a_["study"], a_["outcome"]) is False]
+t("off outcome: of 54 abstracts that did measure the outcome in other words, only one is set aside",
+  len(_ATTACKS) == 54 and _attacked == ["recall"], _attacked)
+_recall = next(a_ for a_ in _ATTACKS if a_["name"] == "recall")
+t("  and that one stays in once the claim's subject (sleep) is known, as it is in an answer",
+  evidence.measured_outcome(_recall["study"], _recall["outcome"], "", "(sleep deprivation OR sleep loss)") is None)
+t("  a background that never names the outcome sets nothing aside, whatever the title names",
+  evidence.measured_outcome(_study("MO11", "Creatine and hair density: a randomized trial",
+                                   abstract="BACKGROUND: Creatine is popular.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Hair density did not change.\nCONCLUSIONS: No hair loss."),
+                            _hair_out) is None)
+t("  a title naming another outcome is not enough when the findings never name it",
+  evidence.measured_outcome(_study("MO12", "Creatine and hair: a randomized trial",
+                                   abstract="BACKGROUND: Creatine raises muscle strength.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."),
+                            _hair_out) is None)
+t("  the hair trial is still set aside: its background names strength, its title and results name hair",
+  evidence.measured_outcome(_hair, _hair_out) is False)
 _MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
 fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
                             explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",

@@ -2299,7 +2299,7 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "",
             off[s["pmid"]] = why
         elif subject and not evidence.names_subject(s, subject):
             off[s["pmid"]] = OFF_SUBJECT
-        elif evidence.measured_outcome(s, outcome, surrogate) is False:
+        elif evidence.measured_outcome(s, outcome, surrogate, subject) is False:
             off[s["pmid"]] = OFF_OUTCOME
     for item in parsed.get("relevance") or []:
         if not isinstance(item, dict):
