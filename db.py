@@ -710,6 +710,13 @@ def _fold_tokens(claim: str) -> list:
     raw = str(claim or "")
     if any(unicodedata.decomposition(ch).startswith(_FOLD_LOSSY_TAGS) for ch in raw):
         return None   # such a claim has no fold key at all
+    # No letter is folded into more than one: ß would become ss (Maße is not
+    # Masse), a ligature such as ﬁ fi, ㎎ mg. A character that folding turns
+    # into several, any of them a letter or digit, leaves the claim no key.
+    for ch in set(raw):
+        folded = unicodedata.normalize("NFKC", ch).casefold()
+        if len(folded) > 1 and any(c.isalnum() for c in folded):
+            return None
     t = unicodedata.normalize("NFKC", raw)
     for k, v in _FOLD_QUOTES.items():
         t = t.replace(k, v)

@@ -2659,6 +2659,13 @@ t("equivalent: a raised or lowered digit or a fraction character never becomes a
   and not _eqf("10\u00b2 mg zinc", "102 mg zinc") and not _eqf("H\u2082O cures colds", "H2O cures colds")
   and not _eqf("Take \u00bd tablet", "Take 12 tablet")
   and _eqf("\u2460 vitamin C works", "1 vitamin C works"))
+t("equivalent: no letter is folded into more than one letter",
+  all(_nokey(x) for x in ("Die Ma\u00dfe des Fetts", "\ufb01sh oil helps", "Take 5 \u338e zinc",
+                          "\u0130la\u00e7 yarar"))
+  and not _eqf("Die Ma\u00dfe des Fetts", "Die Masse des Fetts")
+  and not _eqf("\ufb01sh oil helps", "fish oil helps")
+  and _eqf("Coffee causes cancer\u2026", "Coffee causes cancer...")
+  and _eqf("\uff11\uff10 mg zinc helps", "10 mg zinc helps"))
 t("  scripts written without combining marks still fold as before",
   _eqf("кофе вызывает рак", "Кофе вызывает рак?") and _eqf("咖啡致癌", "咖啡致癌？")
   and _eqf("القهوة تسبب السرطان", "القهوة تسبب السرطان؟") and not _eqf("咖啡致癌", "茶致癌"))
