@@ -1094,6 +1094,8 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # rewrite above, since settling the effect can set it afresh).
     if breakdown and breakdown_mod.answers_effect(verdict_value, claim):
         breakdown = breakdown_mod.effect_alone(breakdown)
+    # A "That is ..." sentence travels with the figure it explains.
+    breakdown = breakdown_mod.translations_follow(breakdown, withheld)
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in

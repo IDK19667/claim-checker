@@ -1755,6 +1755,55 @@ def unsized(bd: dict | None) -> dict | None:
     return out
 
 
+def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
+    """
+    The breakdown with each "That is ..." sentence code wrote shown only
+    beside the figure it explains. In each block ("What the research says",
+    each list item, each field), one whose sentence before it is missing or
+    gives no figure goes: "That is no clear difference ... (Study 2)." under
+    a sentence with no number explains nothing. With the size withheld, one
+    that only repeats what the block already says ("That is an effect size
+    of 1.03 (Study 1)." after "... an effect size of 1.03 (Study 1).") goes
+    too; one that converts the figure ("That is about 54% lower risk")
+    stays. Everything else comes back as it was.
+    """
+    if not bd:
+        return bd
+
+    def figure(t: str) -> bool:
+        return bool(_FIGURE.search(_REF.sub(" ", t)))
+
+    def words(t: str) -> list[str]:
+        return re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", _REF.sub(" ", t).lower())
+
+    def block(units: list[str]) -> list[str]:
+        kept = []
+        for i, t in enumerate(units):
+            if str(t).startswith(TRANSLATION_LEAD):
+                if not kept or not figure(kept[-1]):
+                    continue
+                if withheld and figure(t):
+                    said = {w for u in units[:i] + units[i + 1:] for w in words(u)}
+                    if set(words(t[len(TRANSLATION_LEAD):])) <= said:
+                        continue
+            kept.append(t)
+        return kept
+
+    def field(t: str) -> str:
+        parts = sentences(t or "")
+        kept = block(parts)
+        return t if len(kept) == len(parts) else " ".join(kept)
+
+    out = dict(bd)
+    out["says"] = block(list(bd.get("says") or []))
+    if bd.get("evidence"):
+        out["evidence"] = [x for x in (field(t) for t in bd["evidence"]) if x]
+    for k in PROSE_FIELDS:
+        if bd.get(k):
+            out[k] = field(bd[k])
+    return out if out != bd else bd
+
+
 def answers_effect(verdict: str, claim: str) -> bool:
     """True when the answer says there is an effect: "true" on a claim of
     one, or "false" on a claim of none ("vaccines do not cause autism")."""

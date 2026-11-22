@@ -9182,6 +9182,37 @@ _f8_on = _f8("Cold showers boost immunity", _EL_Q, "complicated",
                     "standard deviations, a large effect (Study 1).", _EL_LARGE))
 t("F8: a size the line carries keeps its label and its sentence",
   _f8_on["breakdown"]["effect"]["label"] == "large" and "a large effect" in _f8_on["breakdown"]["effect_size"])
+# H8: a "That is ..." sentence travels with the figure it explains, and with
+# the size withheld one that only repeats the figure goes.
+_H8_REP = ("Inflammation increased with an effect size of 1.03 (Study 1). Immune function rose with an effect size "
+           "of 1.03 (Study 1). That is an effect size of 1.03, a large effect (Study 1).")
+_h8_rep = _f8("Cold showers boost immunity", _EL_Q, "complicated",
+              dict(_el_bd(_H8_REP, _EL_LARGE), says=["Inflammation increased with an effect size of 1.03 (Study 1).",
+                                                     "That is an effect size of 1.03, a large effect (Study 1)."]))
+t("H8: with the size withheld, a 'That is' sentence that only repeats the figure goes, box and research lines",
+  _h8_rep["breakdown"]["effect"]["label"] == ""
+  and _h8_rep["breakdown"]["effect_size"] == ("Inflammation increased with an effect size of 1.03 (Study 1). "
+                                              "Immune function rose with an effect size of 1.03 (Study 1).")
+  and _h8_rep["breakdown"]["says"] == ["Inflammation increased with an effect size of 1.03 (Study 1)."],
+  (_h8_rep["breakdown"]["effect_size"], _h8_rep["breakdown"]["says"]))
+t("  one that converts the figure stays (the F8 case, and arithmetic in percent)",
+  "That is a difference of 1.03 standard deviations (Study 1)." in _f8_off["breakdown"]["effect_size"]
+  and breakdown.translations_follow({"says": ["Risk fell with a hazard ratio of 0.46 (Study 1).",
+                                              "That is about 54% lower risk over time (Study 1)."],
+                                     "effect_size": "The odds ratio was 0.88 (Study 2). That is, about 12% lower odds (Study 2)."},
+                                    True)["says"][1] == "That is about 54% lower risk over time (Study 1).")
+_H8_NULL = "That is no clear difference between the groups, because the result was not statistically significant (Study 1)."
+_h8_iv = _f8("Cold showers boost immunity", _EL_Q, "complicated",
+             dict(_el_bd("Hospital stays did not fall with a relative risk of 0.81 (Study 1). " + _H8_NULL, None),
+                  says=["Later trials showed no significant improvement (Study 1).", _H8_NULL,
+                        "Who was studied: adults (Study 1)."]))
+t("H8: a 'That is' sentence whose figure sentence is not shown before it in the same block goes",
+  _H8_NULL not in _h8_iv["breakdown"]["says"] and "Who was studied: adults (Study 1)." in _h8_iv["breakdown"]["says"],
+  _h8_iv["breakdown"]["says"])
+_h8_side = breakdown.translations_follow({"says": ["Hospital stays did not fall, relative risk 0.81 (Study 1).", _H8_NULL],
+                                          "effect_size": "The relative risk was 0.81 (Study 1). " + _H8_NULL})
+t("  and beside its figure it stays",
+  _h8_side["says"][1] == _H8_NULL and _h8_side["effect_size"].endswith(_H8_NULL), _h8_side)
 _f8_db = "Cold showers boost immunity F8"
 db.put_cached_verdict(_f8_db, _EL_Q, "complicated", "The review pooled 11 trials (Study 1).", ["EL1"],
                       [dict(s) for s in _EL_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",
