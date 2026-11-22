@@ -7435,10 +7435,14 @@ db.put_cached_verdict(_ec, _GIN_Q, "complicated", "Ginger helped 99% of people (
 _ea = P(_ec, "9.9.9.7").get_json() or {}
 _eh = c.get("/", query_string={"q": _ec}).get_data(as_text=True)
 _esays = _eh.split('id="says-sec"')[1].split("</section>")[0]
-t("extra: an explanation the gate empties is empty, not the short answer again",
-  _ea.get("explanation") == "" and _ea.get("tldr") == "Ginger may reduce vomiting a little.", _ea.get("explanation"))
-t("extra: the server-rendered page then hides the research block instead of printing the short answer twice",
-  _esays.lstrip().startswith("hidden") and "Ginger may reduce vomiting a little." not in _esays, _esays[:120])
+# K1 replaced "stays empty": the page says what a fresh check says with none
+# of the model's words left, the short answer, once in the research block.
+t("extra: an explanation the gate empties is the fresh check's fallback, the short answer",
+  _ea.get("explanation") == verdict.no_reason_left("complicated", _ea.get("tldr"))
+  and _ea.get("tldr") == "Ginger may reduce vomiting a little.", _ea.get("explanation"))
+t("extra: the server-rendered page then shows it once in the research block, with no other sentence there",
+  not _esays.lstrip().startswith("hidden") and _esays.count("Ginger may reduce vomiting a little.") == 1
+  and "99%" not in _esays, _esays[:400])
 
 # ---- Review extra: /corrections lists everything a report stores ----------------
 _cor = c.get("/corrections").get_data(as_text=True)
@@ -9877,6 +9881,31 @@ t("J5: a breakdown prose field that cites a set-aside study loses that sentence,
   not any(1 in breakdown.refs(x, 2) for x in breakdown.prose_of(_j5["breakdown"]))
   and _j5["breakdown"]["evidence"] == ["A second trial is under way."]
   and _j5["breakdown"]["says"] == ["A second trial is under way."], _j5["breakdown"])
+# K1: reasoning this page's rules empty is never left blank: it gets what a
+# fresh check writes with none of the model's words left (verdict.no_reason_left).
+# Live: type 1 diabetes and insulin, "False" with an empty explanation.
+_K1_ST = [dict(_H1_A["off topic"], off_topic=verdict.OFF_SUBJECT + "."), dict(_H1_B)]
+with appmod.app.test_request_context("/"):
+    _k1_rated = appmod._check_response("Turmeric eases knee pain K1", "(turmeric) AND (knee pain)", "complicated",
+                                       "The studies point both ways.", "Both were small (Studies 1, 2).",
+                                       ["HB2"], [dict(x) for x in _K1_ST], "http://x", still_open="Longer trials.")
+    _k1_none = appmod._check_response("Turmeric eases knee pain K1b", "(turmeric) AND (knee pain)", "insufficient",
+                                      "Unproven either way.", _H1_SAID_A, [], [dict(_H1_A["retracted"]), dict(_H1_B)],
+                                      "http://x", still_open="Longer trials.")
+    _k1_empty = appmod._check_response("Turmeric eases knee pain K1c", "(turmeric) AND (knee pain)", "complicated",
+                                       "The studies point both ways.", "", ["HB2"], [dict(x) for x in _K1_ST],
+                                       "http://x", still_open="Longer trials.")
+t("K1: an explanation this page's rules empty says the short answer, or what 'Not enough evidence' means",
+  _k1_rated["explanation"] == _k1_rated["tldr"] == "The studies point both ways."
+  and _k1_none["explanation"] == verdict.NO_REASON_LEFT,
+  (_k1_rated["explanation"], _k1_none["explanation"]))
+t("K1: one that arrived empty is left as it came",
+  _k1_empty["explanation"] == "", _k1_empty["explanation"])
+t("K1: the fallback is one helper, and a guidance takeaway's doctor line is not repeated in it",
+  verdict.no_reason_left("insufficient", "x") == verdict.NO_REASON_LEFT
+  and verdict.no_reason_left("false", "Major health guidelines say: it does not. " + verdict.CURE_DOCTOR)
+  == "Major health guidelines say: it does not."
+  and verdict.no_reason_left("true", "", "left out") == "left out")
 # H7: a withdrawn paper also read as off topic is shown, and counted once,
 # as withdrawn. Live: a "Retracted Publication" shown as "tests something
 # other than what this claim is about".
