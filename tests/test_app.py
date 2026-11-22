@@ -4335,7 +4335,7 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # false" read as strong evidence for the cure.
 _el = evidence.evidence_line
 t("the evidence line says what the evidence is evidence of",
-  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence against this claim"
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence, and none of it shows a cure"
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
@@ -4347,10 +4347,10 @@ t("the evidence line says what the evidence is evidence of",
 _el_ns = [evidence.evidence_line(verdict_v, _ACV, ["A1", "A2"], c, lab, "cure") for verdict_v, c, lab in
           (("false", "Homeopathy cures cancer", None), ("false", "Garlic cures HIV", ""),
            ("false", "Ivermectin cures COVID-19", "unclear"))]
-t("  a false answer to a promise with no size says 'against this claim', never 'partial'",
-  _el_ns == ["Strong evidence against this claim"] * 3
+t("  a false answer to a promise with no size says none of the evidence shows the promise, never 'partial'",
+  _el_ns == ["Strong evidence, and none of it shows a cure"] * 3
   and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "moderate", "cure") == "Strong evidence of a moderate effect, not a cure"
-  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence against this claim"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence, and none of it shows a cure"
   and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "none", "cure") == "Strong evidence of no clear effect", _el_ns)
 t("  it names the one group, says low certainty, and is empty with nothing used",
   _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
@@ -4367,7 +4367,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence against this claim", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence, and none of it shows a cure", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -8760,7 +8760,7 @@ _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
                tldr="No, it does not cure it.")
 t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
-  _el_cure == "Strong evidence against this claim", _el_cure)
+  _el_cure == "Strong evidence, and none of it shows a cure", _el_cure)
 _el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
               _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
                      dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
@@ -9083,6 +9083,23 @@ _er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", 
 t("  and no prose field on a page carries an empty reference",
   not any(re.search(r"\(\s*(?:Stud(?:y|ies)\s*)?\)", str(v)) for v in
           (_er_pg.get("tldr"), _er_pg.get("explanation"), json.dumps(_er_pg.get("breakdown")))), _er_pg.get("explanation"))
+
+# ---- L4: a promise's line claims no strength against what nobody tested -------
+_L4_ST = [_study("Q1", "Vinegar and blood sugar: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="We pooled 12 randomized trials in 800 adults.")]
+_l4 = {noun: (evidence.evidence_line("false", _L4_ST, ["Q1"], "x", None, word),
+              evidence.evidence_line("false", _L4_ST, ["Q1"], "x", "small", word))
+       for word, noun in (("cure", "a cure"), ("reverse", "a reversal"), ("prevent", "complete prevention"),
+                          ("stop", "a complete stop"), ("eliminate", "getting rid of it"), ("heal", "a full fix"))}
+t("L4: a false answer to a promise with no size says none of the evidence shows it, for every promise",
+  all(a == f"Strong evidence, and none of it shows {n}" and b == f"Strong evidence of a small effect, not {n}"
+      for n, (a, b) in _l4.items()), _l4)
+t("  and line_certainty still reads the level off the new line, so the prose caps keep working",
+  evidence.line_certainty("Strong evidence, and none of it shows a cure") == evidence.line_certainty("Strong evidence")
+  and evidence.line_certainty("Very low to moderate certainty evidence, and none of it shows complete prevention")
+  == "very low")
+t("  a false answer to a claim with no promise still says 'against this claim'",
+  evidence.evidence_line("false", _L4_ST, ["Q1"], "Vinegar raises blood sugar") == "Strong evidence against this claim")
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

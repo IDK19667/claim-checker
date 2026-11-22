@@ -1163,7 +1163,7 @@ def snapshot(studies, cited_pmids=()) -> dict:
 # strong evidence for the cure. The level word still comes from the designs
 # that were used (the meter's legend explains it), but the line now says
 # what that evidence is evidence of: "Strong evidence of a small effect,
-# not a cure", or with no size, "Strong evidence against this claim". Built here from facts the page already has (the stamp, the
+# not a cure", or with no size, "Strong evidence, and none of it shows a cure". Built here from facts the page already has (the stamp, the
 # size of the effect, the claim's own words), so it costs no model call and
 # a streamed check and a shared link cannot word it differently.
 # ---------------------------------------------------------------------------
@@ -1216,7 +1216,8 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     never surer than it. `withheld` says the breakdown had a size the line
     may not carry (breakdown.line_label): the line then says no size at
     all. A false line names an effect ("a small effect, not a cure") only
-    with a size; with none it says "against this claim".
+    with a size; with none it says "and none of it shows a cure" for a claim
+    that promises one, "against this claim" for any other.
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1276,6 +1277,11 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
         # size it would assert an effect nobody measured.
         if absolute and size:
             return f"{level} evidence of a {size} effect, not {promise}"
+        # A claim that promises something absolute, with no size to carry:
+        # the level is the studies' design, never strength against a cure
+        # none of them tested, so the line says what they do not show.
+        if absolute:
+            return f"{level} evidence, and none of it shows {promise}"
         return f"{level} evidence against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
