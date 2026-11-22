@@ -2574,7 +2574,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
             still_open = "Whether any study has tested this claim directly."
     if not tldr:
         # First sentence of the explanation is a serviceable one-liner.
-        tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
+        tldr = _cap(breakdown.first_sentence(explanation).strip(), TLDR_MAX)
 
     # Who the evidence was actually collected in, read off the records
     # rather than taken from the prose. The breakdown prints it under
@@ -2612,7 +2612,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         # stamp means, or repeats the short answer.
         explanation = (NO_REASON_LEFT if verdict == "insufficient" else tldr) or left_out
     if not tldr:
-        tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
+        tldr = _cap(breakdown.first_sentence(explanation).strip(), TLDR_MAX)
     if deeper is not None:
         for key in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):
             if deeper.get(key):

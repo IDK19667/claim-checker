@@ -1469,19 +1469,44 @@ _ABBREV = re.compile(r"\b(?:e\.g|i\.e|vs|approx|no|fig|cf|et al|dr|mr|ms|prof)\.
                      re.IGNORECASE)
 
 
+# A single capital letter and a stop: a genus abbreviation when a lowercase
+# word follows ("E. coli", "S. aureus", "H. pylori"), never a sentence's end.
+# "vitamin C. It ..." still splits, because a capital follows.
+_INITIAL = re.compile(r"(?:^|(?<=[\s(\[\"\u201c]))[A-Z]\.$")
+
+
+def _joins(before: str, after: str) -> bool:
+    """Whether a split between these two pieces fell inside "E. coli"."""
+    return bool(_INITIAL.search(before)) and after[:1].islower()
+
+
 def sentences(text: str) -> list[str]:
-    """Split prose into sentences without splitting "e.g." or "12.5%"."""
+    """Split prose into sentences without splitting "e.g.", "12.5%" or
+    "E. coli"."""
     out, buf = [], ""
-    for piece in re.split(r"(?<=[.!?])(\s+)", text or ""):
+    pieces = re.split(r"(?<=[.!?])(\s+)", text or "")
+    for i, piece in enumerate(pieces):
         if piece.strip() == "" and piece != "":
             buf += piece
             continue
         buf += piece
-        if buf.strip() and not _ABBREV.search(buf.strip()):
+        after = pieces[i + 2] if i + 2 < len(pieces) else ""
+        if buf.strip() and not _ABBREV.search(buf.strip()) and not _joins(buf.rstrip(), after):
             out.append(buf.strip())
             buf = ""
     if buf.strip():
         out.append(buf.strip())
+    return out
+
+
+def first_sentence(text: str) -> str:
+    """The text up to its first ". ", read past "E. coli" (sentences)."""
+    parts = str(text or "").split(". ")
+    out = parts[0]
+    for nxt in parts[1:]:
+        if not _joins(out + ".", nxt):
+            break
+        out += ". " + nxt
     return out
 
 

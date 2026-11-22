@@ -6674,6 +6674,16 @@ t("  says Study, not Studies, when one is left",
   == "It rests on reviews (Study 1).")
 t("  and leaves text that cites nothing alone",
   breakdown.relied_only("Nothing here cites a study.", {1}, 8) == "Nothing here cites a study.")
+# L4: "E. coli" is one sentence. Live: raw milk, "Coli frequently contaminate".
+_L4 = "Bacteria such as E. coli frequently contaminate raw milk (Studies 7, 8). S. aureus and H. pylori were also found."
+t("L4: a stop after a single capital before a lowercase word does not end a sentence",
+  breakdown.sentences(_L4) == ["Bacteria such as E. coli frequently contaminate raw milk (Studies 7, 8).",
+                               "S. aureus and H. pylori were also found."]
+  and breakdown.sentences("It has vitamin C. It also has iron.") == ["It has vitamin C.", "It also has iron."]
+  and breakdown.drop_any_citing(_L4, {9}, 9) == _L4
+  and breakdown.first_sentence("E. coli grew in raw milk. Boiling killed it.") == "E. coli grew in raw milk"
+  and breakdown.first_sentence("It has vitamin C. It also has iron.") == "It has vitamin C",
+  breakdown.sentences(_L4))
 _RO = [dict(_BD_STUDIES[0]), dict(_BD_STUDIES[1])]
 _ro_raw = json.dumps({
     "verdict": "true", "tldr": "Vitamin D lowers infections a little.",
