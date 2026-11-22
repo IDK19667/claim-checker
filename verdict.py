@@ -914,17 +914,12 @@ def unrated_guidance_tldr(tldr: str, lead: str = "") -> str:
     no study was relied on for: the untested takeaway (or `lead`, the
     no-studies one when none was found), then the guidance sentence
     (without the doctor line _restamp adds to a rated answer)."""
-    return f"{lead or UNTESTED_TLDR} {without_doctor(tldr)}".strip()
-
-
-def without_doctor(tldr: str) -> str:
-    """A takeaway without the doctor line _restamp adds to a rated guidance
-    answer, which the page already prints once, under the takeaway."""
     line = str(tldr or "").strip()
     for doctor in _GUIDE_DOCTORS:
         if line.endswith(doctor) and line != doctor:
-            return line[: -len(doctor)].rstrip()
-    return line
+            line = line[: -len(doctor)].rstrip()
+            break
+    return f"{lead or UNTESTED_TLDR} {line}".strip()
 
 
 def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
@@ -2019,15 +2014,6 @@ UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unpro
 # (weigh_evidence), and so does a saved answer that lists none (app._nothing_relied).
 NO_STUDIES_TLDR = "No published studies on this yet. Unproven, not disproven."
 NO_REASON_LEFT = "There isn't enough evidence in the studies found to rate this claim."
-
-
-def no_reason_left(verdict: str, tldr: str, left_out: str = "") -> str:
-    """The explanation when none of the model's own words are left: what the
-    stamp means for "Not enough evidence", or else the short answer (without
-    a doctor line, already printed under it), or `left_out`. A fresh check
-    (weigh_evidence) and a saved one on the way out (app._check_response)
-    both use it."""
-    return (NO_REASON_LEFT if verdict == "insufficient" else without_doctor(tldr)) or left_out
 CONFOUNDED_TLDR = ("The main review says lifestyle and other factors likely explain much of "
                    "the link these studies found.")
 
@@ -2624,7 +2610,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         # A reason that is only about a missing unit is no reason at all.
         # With none of the model's own words left, the page says what the
         # stamp means, or repeats the short answer.
-        explanation = no_reason_left(verdict, tldr, left_out)
+        explanation = (NO_REASON_LEFT if verdict == "insufficient" else tldr) or left_out
     if not tldr:
         tldr = _cap(breakdown.first_sentence(explanation).strip(), TLDR_MAX)
     if deeper is not None:

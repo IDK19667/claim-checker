@@ -983,9 +983,6 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # a rated verdict resting on nothing, the rule a fresh check obeys
     # applies: it becomes "Not enough evidence".
     cited = display.relied_pmids(cited_studies, studies)
-    # Whether the answer arrived with any reasoning, so that one this page's
-    # own rules empty gets the fallback a fresh check writes (below).
-    reasoned = bool(str(explanation or "").strip())
     # No sentence a reader sees as reasoning cites a study the page shows as
     # set aside (withdrawn, a journal notice, or off topic), whether or not
     # the answer listed it: a fresh check has already taken it out of the
@@ -1024,8 +1021,8 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # its studies do not give. "Still open" is never touched.
     relied = {i + 1 for i, s in enumerate(studies or []) if s.get("pmid") in cited}
     if relied:
-        # An explanation the gate empties gets the fallback below, as one
-        # emptied by any rule here does.
+        # An explanation the gate empties stays empty: the short answer is
+        # already on the page, and repeating it would pass it off as reasoning.
         explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim)
         breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
     # An answer the guidance rule set is never followed by words saying the
@@ -1104,12 +1101,6 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         tldr = evidence.cap_certainty(tldr, level)
         explanation = evidence.cap_certainty(explanation, level)
         breakdown = breakdown_mod.map_prose(breakdown, lambda t: evidence.cap_certainty(t, level))
-    # Reasoning this page's own rules emptied (every sentence cited a study set
-    # aside, or leaned on one not relied on) is never left blank: it gets what
-    # a fresh check writes when none of the model's words are left, from the
-    # same code. An answer that arrived with none is left as it came.
-    if reasoned and not str(explanation or "").strip():
-        explanation = verdict.no_reason_left(verdict_value, tldr)
     # An answer the guidance rule set did not come from these studies, so the
     # line shown makes no claim about how strong they are for or against the
     # claim. The studies' own line still set the cap on the prose above.
