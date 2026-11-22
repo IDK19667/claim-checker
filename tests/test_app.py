@@ -1246,6 +1246,23 @@ t("  a number followed by a unit is a measure, not a ratio: no odds ratio of 45 
   and (evidence.effect_size("OR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
   and (evidence.effect_size("The hazard ratio for death was 0.8.") or {}).get("figure") == "hazard ratio 0.8",
   (evidence.effect_size("Time in the OR was 45 minutes (Study 2)."), evidence.effect_size("OR 1.45 mg")))
+_es = lambda x_: (evidence.effect_size(x_) or {}).get("figure")
+t("  a heart rate is no hazard ratio: not per minute, not in beats, not after 'mean' or 'resting', not above the bound",
+  [_es(x_) for x_ in ("Mean HR was 72 per minute (Study 1).", "HR 72 bpm", "HR was 64 beats", "HR 88/min",
+                      "Resting HR was 0.9 above baseline", "Peak HR 1.4", "Maximum HR was 1.2", "heart rate (HR) 1.2",
+                      "HR 72 in the control group", "OR 60")] == [None] * 10,
+  [_es(x_) for x_ in ("Mean HR was 72 per minute", "HR 72 in the control group", "OR 60")])
+t("  and the same care for RR as a respiratory rate and OR as an operating room",
+  [_es(x_) for x_ in ("RR was 18 breaths per minute", "RR 18/min", "respiratory rate (RR) 1.5",
+                      "operating room (OR) 1.4", "mean RR 1.3")] == [None] * 5)
+t("  while real ratios still read: per a dose, per day of use, in a number of patients, as times, up to the bound",
+  [_es(x_) for x_ in ("OR 1.3 per 10 g", "HR 0.80 in 1,200 patients", "RR 2 times", "OR 1.3 per day of use",
+                      "HR 1.05 per year of age", "The matched odds ratio was 41.3", "OR 50",
+                      "Mean HR was 72 per minute, and the HR for death was 0.8")]
+  == ["odds ratio 1.3", "hazard ratio 0.80", "risk ratio 2", "odds ratio 1.3", "hazard ratio 1.05",
+      "odds ratio 41.3", "odds ratio 50", "hazard ratio 0.8"],
+  [_es(x_) for x_ in ("OR 1.3 per 10 g", "HR 0.80 in 1,200 patients", "RR 2 times",
+                      "Mean HR was 72 per minute, and the HR for death was 0.8")])
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))

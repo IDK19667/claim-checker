@@ -709,6 +709,34 @@ def _ratio_word(name: str) -> str:
     return "risk"
 
 
+# A ratio is read only when the number can be one. "HR" is also a heart
+# rate, "RR" a respiratory rate and "OR" an operating room: "Mean HR was 72
+# per minute" printed "about 7100% higher risk over time". So the number is
+# no ratio when it is a rate per second, minute or hour (a heart or
+# breathing rate; "OR 1.3 per day of use" is still a ratio), or when the abbreviation
+# follows a word that makes it a measurement ("mean", "resting", "peak",
+# "maximum", "heart rate (HR)"). Nor is any number above RATIO_BOUND: no
+# pooled ratio reaches it (the largest in every saved answer is an odds
+# ratio of 41.3), while heart rates sit above it, so a bare "HR 72" is a
+# heart rate. Saying no size is safer than printing a wrong one.
+RATIO_BOUND = 50.0
+_PER_TIME = re.compile(
+    r"\s*(?:(?:per|a|an|each|every)\s+|/\s*)(?:seconds?|secs?|s|minutes?|mins?|hours?|hrs?|h)\b"
+    r"|\s*(?:beats|breaths|bpm)\b", re.IGNORECASE)
+_MEASURE_BEFORE = re.compile(
+    r"\b(?:mean|median|average|resting|peak|max(?:imum|imal)?|min(?:imum)?|baseline|target"
+    r"|(?:heart|respiratory|breathing|pulse) rates?|operating (?:room|theatre)s?)\s*[(,:]?\s*$",
+    re.IGNORECASE)
+
+
+def _can_be_ratio(text: str, m) -> bool:
+    if float(m.group(2)) > RATIO_BOUND or _PER_TIME.match(text, m.end(2)):
+        return False
+    if "ratio" in m.group(1).lower() or "relative" in m.group(1).lower():
+        return True
+    return not _MEASURE_BEFORE.search(text[max(0, m.start(1) - 40):m.start(1)])
+
+
 def effect_size(text: str) -> dict | None:
     """
     The first effect this text reports, read as a size rather than a number.
@@ -722,7 +750,7 @@ def effect_size(text: str) -> dict | None:
     """
     t = str(text or "")
 
-    m = _RATIO.search(t) or _RATIO_WAS.search(t)
+    m = next((x for x in [*_RATIO.finditer(t), *_RATIO_WAS.finditer(t)] if _can_be_ratio(t, x)), None)
     if m:
         name, value = m.group(1), float(m.group(2))
         pair = _interval_after(t, m.end())
