@@ -9068,6 +9068,20 @@ t("  where the size was the whole statement the sentence goes, with its citation
 t("  and the arithmetic stays where code wrote it beside the size",
   all("That is about " in o["breakdown"]["effect_size"] for o in _g5_out[0::3]),
   [o["breakdown"]["effect_size"] for o in _g5_out[0::3]])
+# G5b: the size comes out of a "That is" sentence only where what is left is
+# still whole; where words that depend on it follow, the sentence goes.
+_G5B_BROKEN = "That is a large increase in risk, about 3 times the odds (Study 3)."
+_g5b = lambda x: breakdown.unsized({"says": [x], "effect_size": x, "effect": {"label": "large"}})
+_g5b_all = [breakdown.unsized(dict(b_, says=list(b_["says"]) + [_G5B_BROKEN])) for b_ in _g5_bds]
+_g5b_said = [x for o in _g5b_all for x in breakdown.sentences(o["effect_size"] or "") + list(o["says"])]
+t("G5b: a size phrase that words depend on takes its whole sentence with it, citation and all",
+  _g5b(_G5B_BROKEN)["says"] == [] and _g5b(_G5B_BROKEN)["effect_size"] == "", _g5b(_G5B_BROKEN))
+t("  one that ends its clause comes out and the arithmetic stays; one that is the whole statement goes",
+  _g5b("That is about 12% lower odds, a small effect (Study 2).")["says"] == ["That is about 12% lower odds (Study 2)."]
+  and _g5b("That is a large effect (Study 3).")["says"] == [])
+t("  and no output over the writers' shapes is broken or holds a size word",
+  not any(x.startswith(("That is in", "That is of", "That is ,")) for x in _g5b_said)
+  and not any(x.startswith(breakdown.TRANSLATION_LEAD) and _G5_SIZE.search(x) for x in _g5b_said), _g5b_said)
 _g5_db = "Cold showers boost immunity G5"
 db.put_cached_verdict(_g5_db, _EL_Q, "complicated", "Inflammation was higher (Study 1).", ["G5A"],
                       [dict(s) for s in _G5_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",

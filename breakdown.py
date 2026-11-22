@@ -1732,6 +1732,13 @@ def unsized(bd: dict | None) -> dict | None:
             return t
         if NULL_SAID in t:
             return ""
+        # The size comes out only where what is left is still a whole
+        # statement: the phrase ends its clause (a comma, a citation, a stop
+        # or the end follows). Where words that depend on it follow ("a
+        # large increase in risk"), the whole sentence goes, with its
+        # citation: saying less is fine, a broken sentence is not.
+        if any(not re.match(r"\s*(?:[,.;:!?(]|$)", t[m.end():]) for m in _SIZE_TAIL.finditer(t)):
+            return ""
         left = _SIZE_TAIL.sub("", t)
         # Where the size was the whole statement, the sentence goes, with
         # its citation; the figure's own sentence stays.
