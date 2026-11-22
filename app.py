@@ -270,14 +270,25 @@ LIST_OVERFETCH = 3
 EXAMPLE_CLAIM = "Apple cider vinegar cures diabetes"
 
 
+def _as_shown(studies) -> list:
+    """`studies` as a reader is shown them: a withdrawn paper (retracted, or
+    a journal notice) is set aside for that reason, whatever else is true of
+    it, so its off-topic reason is not shown or counted beside it. Each
+    paper is counted once, as background. Copies; the records themselves,
+    and every reading made from them, are left as they are."""
+    return [dict(s, off_topic=None, background=evidence.withdrawn(s))
+            if isinstance(s, dict) and evidence.withdrawn(s) and s.get("off_topic") else s
+            for s in studies or []]
+
+
 def _list_entries(rows) -> list[dict]:
     """
     Saved answers as a public list shows them: the stamp the result page
     would show (_listed) and the evidence behind it. The Latest list and the
     trust section's example both go through here, so the two cannot disagree.
     """
-    return [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
-                 shelf=evidence.shelf(v["studies"], v["cited"]))
+    return [dict(v, evidence=evidence.snapshot(_as_shown(v["studies"]), v["cited"]),
+                 shelf=evidence.shelf(_as_shown(v["studies"]), v["cited"]))
             for v in map(_listed, rows)]
 
 
@@ -1122,7 +1133,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(search_query or claim)}",
         # Counts the reader can check us on, computed from PubMed's own
         # metadata rather than from anything the model said.
-        "evidence": evidence.snapshot(studies, cited),
+        "evidence": evidence.snapshot(_as_shown(studies), cited),
         # What that evidence shows about the claim, for the line under the
         # chart: "Strong evidence of a small effect, not a cure". The level
         # word alone described the designs, not the claim.
@@ -1130,7 +1141,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
-        "studies": [_study_payload(s, cited) for s in studies],
+        "studies": [_study_payload(s, cited) for s in _as_shown(studies)],
     }
 
 

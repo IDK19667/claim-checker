@@ -9664,6 +9664,38 @@ with appmod.app.test_request_context("/"):
                                       "http://x", still_open="Longer trials.")
 t("H1: with nothing relied on and no set-aside study cited, the explanation comes back unchanged",
   _h1_same["explanation"] == _H1_PLAIN, _h1_same["explanation"])
+# H7: a withdrawn paper also read as off topic is shown, and counted once,
+# as withdrawn. Live: a "Retracted Publication" shown as "tests something
+# other than what this claim is about".
+def _h7_ok(r):
+    s_ = next((x for x in r.get("studies") or [] if x["pmid"] == "HA1"), None)
+    return (s_ is not None and not s_["off_topic"] and s_["background"] and not s_["cited_in_verdict"]
+            and s_["background_why"] == evidence.BG_RETRACTED
+            and _display.study_why(s_) == "Background only, not counted: retracted by the journal."
+            and r["evidence"]["off_topic"] == 0 and r["evidence"]["background"] == 1
+            and evidence.BG_RETRACTED in r["evidence"]["background_kinds"])
+_h7 = []
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_H1_A["retracted"]), dict(_H1_B)]
+for _h7_i, _h7_way in enumerate(("plain", "streamed")):
+    fg.models.script = [Resp("(turmeric) AND (knee pain)"),
+                        Resp(VJ("true", [2], tldr="Turmeric eases knee pain.", explanation=_H1_SAID_B, relevance=_H1_OFF))]
+    _cl = "Turmeric eases knee pain H7 %s" % _h7_way
+    _h7.append(P(_cl, ip="7.9.8.%d" % (_h7_i + 1)).get_json() if _h7_way == "plain"
+               else stream(_cl, ip="7.9.8.%d" % (_h7_i + 3))[1][-1].get("result") or {})
+with appmod.app.test_request_context("/"):
+    _h7.append(appmod._check_response("Turmeric eases knee pain H7 saved", "(turmeric) AND (knee pain)", "true",
+                                      "Turmeric eases knee pain.", _H1_SAID_B, ["HB2"],
+                                      [dict(_H1_A["retracted"], off_topic=verdict.OFF_SUBJECT + "."), dict(_H1_B)],
+                                      "http://x", still_open="Longer trials."))
+_h7_html = c.get("/?q=" + urllib.parse.quote("Turmeric eases knee pain H7 plain")).get_data(as_text=True)
+pubmed.search_and_fetch = _rt_search
+t("H7: a paper both off topic and retracted shows the retracted reason, plain, streamed and saved, counted once",
+  len(_h7) == 3 and all(_h7_ok(r_) for r_ in _h7),
+  [next((x for x in r_.get("studies") or [] if x["pmid"] == "HA1"), None) and
+   (next(x for x in r_["studies"] if x["pmid"] == "HA1")["off_topic"], r_["evidence"]["off_topic"]) for r_ in _h7])
+t("  and the server page says retracted, not off topic, for it",
+  "Background only, not counted: retracted by the journal." in _h7_html
+  and "Read and set aside: " + verdict.OFF_SUBJECT.rstrip(".") not in _h7_html)
 pubmed.search_and_fetch = _rt_search
 
 # ---- where the rounds meet: final fixes and rc-live-fix --------------------------
