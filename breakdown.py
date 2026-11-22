@@ -3924,7 +3924,13 @@ def says(explanation: str, bd: dict, studies: list[dict], skip=()) -> list[str]:
     figure = re.search(r"\d+(?:\.\d+)?",
                        ((bd.get("effect") or {}).get("figure") or ""))
     pair = [line for line in said if figure and figure.group(0) in line][:1]
-    pair += [line for line in said if line.startswith(TRANSLATION_LEAD)][:1]
+    plain_at = next((i for i, line in enumerate(said) if line.startswith(TRANSLATION_LEAD)), None)
+    # With no figure named (a null read from a mean difference), the
+    # translation is taken with the sentence it follows, never alone: alone
+    # it lands under another study's figure.
+    if not pair and plain_at:
+        pair = [said[plain_at - 1]]
+    pair += [said[plain_at]] if plain_at is not None else []
     take(" ".join(pair) if pair else bd.get("effect_size"), 2)
     # Who was studied is often written as a bare noun phrase ("Adults with
     # type 2 diabetes (Study 1)."), which under a heading about what the

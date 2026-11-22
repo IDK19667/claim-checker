@@ -2282,6 +2282,14 @@ t("  the figure and its plain words are picked as a pair",
   any(line.startswith(breakdown.TRANSLATION_LEAD) for line in _pair)
   and any("0.30" in line for line in _pair)
   and not any("0.88" in line for line in _pair), _pair)
+# L3b: with no figure named in the effect (a null read from a mean
+# difference), the translation is picked with the sentence it follows.
+_PAIR_NULL = {"effect_size": "The average difference in weight loss was 0.26 kg (Study 1). That is no clear difference "
+                             "between the groups, because the result was not statistically significant (Study 1).",
+              "effect": dict(evidence.NULL_EFFECT, figure="")}
+_pair_n = breakdown.says("", _PAIR_NULL, _BD_STUDIES)
+t("L3: a translation with no figure named is picked with its own figure sentence, never alone",
+  _pair_n[:2] == breakdown.sentences(_PAIR_NULL["effect_size"]), _pair_n)
 t("  a sentence the gate rejects never reaches it",
   breakdown.says("Colds fell by 47% (Study 1). This one cites nothing.",
                  _vd["breakdown"], _BD_STUDIES)[:1]
