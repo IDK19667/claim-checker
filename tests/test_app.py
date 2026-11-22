@@ -9272,6 +9272,21 @@ _h8_side = breakdown.translations_follow({"says": ["Hospital stays did not fall,
                                           "effect_size": "The relative risk was 0.81 (Study 1). " + _H8_NULL})
 t("  and beside its figure it stays",
   _h8_side["says"][1] == _H8_NULL and _h8_side["effect_size"].endswith(_H8_NULL), _h8_side)
+# J3: only the "That is ..." sentences code writes are held to their figure.
+_J3_MODEL = ["That is because trials used different doses (Study 2).", "That is why the evidence is mixed (Study 1).",
+             "That is not what the trials found (Study 1)."]
+_j3 = [breakdown.translations_follow({"says": ["Studies disagree on dose (Study 1).", x],
+                                      "effect_size": "Trials disagreed (Study 1). " + x}, w)
+       for x in _J3_MODEL for w in (False, True)]
+t("J3: a model sentence that only starts 'That is' stays after a sentence with no figure",
+  all(r_["says"][1] in _J3_MODEL and r_["effect_size"].endswith(r_["says"][1]) for r_ in _j3), _j3)
+_J3_CODE = [_H8_NULL, "That is about 54% lower risk over time (Study 1).", "That is, about 12% lower odds (Study 1).",
+            "That is a difference of 0.4 standard deviations (Study 1).", "That is an effect size of 1.03 (Study 1).",
+            "That is a large effect (Study 1).", "That is a risk drop of 26% (Study 1)."]
+t("  and every form code writes (or the faithfulness rewrite leaves) still goes after a sentence with no figure",
+  all(breakdown.code_translation(x) for x in _J3_CODE) and not any(breakdown.code_translation(x) for x in _J3_MODEL)
+  and all(breakdown.translations_follow({"says": ["Studies disagree on dose (Study 1).", x]})["says"]
+          == ["Studies disagree on dose (Study 1)."] for x in _J3_CODE))
 _f8_db = "Cold showers boost immunity F8"
 db.put_cached_verdict(_f8_db, _EL_Q, "complicated", "The review pooled 11 trials (Study 1).", ["EL1"],
                       [dict(s) for s in _EL_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",

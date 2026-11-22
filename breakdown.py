@@ -1755,6 +1755,30 @@ def unsized(bd: dict | None) -> dict | None:
     return out
 
 
+# What a "That is ..." sentence code wrote can say, built from its writers:
+# ground() writes TRANSLATION_LEAD + evidence.effect_size's plain words
+# ("about 12% lower odds", "a difference of 0.4 standard deviations") or
+# NULL_SAID, and the faithfulness rewrite keeps the lead but rewords the
+# figure ("That is an effect size of 1.03", "That is, about 12% lower
+# odds") or leaves only the size ("That is a large effect"). A sentence
+# that merely starts "That is" ("That is because ...", "That is why ...")
+# is the model's and is not one of these.
+_CODE_TRANSLATION = re.compile(
+    r"That is,?\s+(?:"
+    + re.escape(evidence.NULL_EFFECT["plain"]) + "|" + re.escape(NULL_SAID)
+    + r"|about\s+[-−]?\d[\d.,]*\s?(?:%|per ?cent)"
+    + r"|a\s+difference\s+of\s+[-−]?\d"
+    + r"|(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)"
+      r"\s+(?:effect|benefit|reduction|increase|improvement|difference)\b"
+    + r"|an?\s+(?:[A-Za-z-]+\s+){0,3}?of\s+(?:about\s+)?[-−]?\d"
+    + r")", re.IGNORECASE)
+
+
+def code_translation(t: str) -> bool:
+    """Whether t is a "That is ..." sentence code wrote beside a figure."""
+    return bool(_CODE_TRANSLATION.match(str(t or "")))
+
+
 def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
     """
     The breakdown with each "That is ..." sentence code wrote shown only
@@ -1779,12 +1803,12 @@ def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
     def block(units: list[str]) -> list[str]:
         kept = []
         for i, t in enumerate(units):
-            if str(t).startswith(TRANSLATION_LEAD):
+            if code_translation(t):
                 if not kept or not figure(kept[-1]):
                     continue
                 if withheld and figure(t):
                     said = {w for u in units[:i] + units[i + 1:] for w in words(u)}
-                    if set(words(t[len(TRANSLATION_LEAD):])) <= said:
+                    if set(words(re.sub(r"^That is,?\s+", "", t))) <= said:
                         continue
             kept.append(t)
         return kept
