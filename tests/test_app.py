@@ -2800,6 +2800,54 @@ for _lbl, _kw in (("the study ids differ by one", {"studies": STUDIES[:2] + [dic
     t(f"  and the row is replaced by one with the current stamp ({_lbl})",
       _saved_row(_c)["method_stamp"] == verdict.METHOD_STAMP and _saved_row(_c)["tldr"] == "Made again.")
 
+# The same ids are not enough: each study must be the same record as the one
+# the saved answer read (id, title, abstract, publication types).
+import copy as _copy  # noqa: E402
+
+
+def _changed(field, value, i=0):
+    out = _copy.deepcopy(STUDIES)
+    if value is None:
+        out[i].pop(field)
+    else:
+        out[i][field] = value
+    return out
+
+
+for _lbl, _fresh, _saved in (
+        ("study 1 is now marked retracted", _changed("publication_types", ["Journal Article", "Retracted Publication"]), None),
+        ("study 1 now carries an expression of concern", _changed("publication_types", ["Journal Article", "Expression of Concern"]), None),
+        ("study 2 now has a correction", _changed("publication_types", ["Journal Article", "Published Erratum"], 1), None),
+        ("study 1's abstract changed", _changed("abstract", "A new abstract that reverses the finding."), None),
+        ("study 3's title changed", _changed("title", "A corrected title", 2), None),
+        ("a saved study lacks its abstract", STUDIES, _changed("abstract", None)),
+        ("a saved study lacks its publication types", STUDIES, _changed("publication_types", None, 1))):
+    _c = "Steady record check when " + _lbl
+    _steady_row(_c, studies=_saved)
+    _real_saf = pubmed.search_and_fetch
+    pubmed.search_and_fetch = lambda q, max_results=8, surrogate="", _f=_fresh: _copy.deepcopy(_f)
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made again.", still_open="New open line."))]
+    fg.models.calls = 0
+    try:
+        d = P(_c, ip="7.7.10.6").get_json()
+    finally:
+        pubmed.search_and_fetch = _real_saf
+    t(f"steady: checked again when {_lbl}",
+      not d["cached"] and d["tldr"] == "Made again." and fg.models.calls >= 1, (d.get("tldr"), fg.models.calls))
+_RS = _copy.deepcopy(STUDIES)
+_RS[0]["publication_types"] = ["Review", "Journal Article"]
+t("steady: the same records in another order, repeated, or with their types listed in another order are the same",
+  appmod._same_records(STUDIES, list(reversed(_copy.deepcopy(STUDIES))) + [STUDIES[0]])
+  and appmod._same_records(_changed("publication_types", ["Journal Article", "Review"]), _RS)
+  and appmod._same_records(STUDIES + [STUDIES[1]], STUDIES)
+  and not appmod._same_records(STUDIES, STUDIES[:2])
+  and not appmod._same_records(STUDIES, _changed("abstract", None)))
+_steady_row("Steady record check unchanged")
+fg.models.script = []; fg.models.calls = 0
+d = P("Steady record check unchanged", ip="7.7.10.7").get_json()
+t("  and unchanged records keep the saved answer, with no model call",
+  d["cached"] and d["tldr"] == "Saved short answer." and fg.models.calls == 0, (d.get("tldr"), fg.models.calls))
+
 _SR = "Steady claim saved in its own words"
 _steady_row(_SR)
 fg.models.script = []; fg.models.calls = 0

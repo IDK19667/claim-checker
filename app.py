@@ -1167,7 +1167,7 @@ def _steady(claim: str, studies: list) -> dict | None:
     A saved answer past the cache window, kept rather than made again: when
     it is whole, has no problem the page cannot repair, was made by the code
     and model in force now (its method stamp), and the search just run found
-    exactly the studies it read (PubMed ids, as a set). Its date is refreshed
+    exactly the records it read (`_same_records`). Its date is refreshed
     and it is returned as get_cached_verdict reads it. Otherwise None, and the
     check runs as before: a row with no stamp or an old one is always made
     again once, so every fix reaches every saved claim.
@@ -1178,13 +1178,43 @@ def _steady(claim: str, studies: list) -> dict | None:
         saved = db.get_cached_by_key(db.normalize_claim(claim))
         if not (db.servable(saved) and saved.get("method_stamp") == verdict.METHOD_STAMP):
             return None
-        if {s.get("pmid") for s in saved["studies"]} != {s.get("pmid") for s in studies or []}:
+        if not _same_records(saved["studies"], studies or []):
             return None
         db.refresh_saved(saved["claim_text"])
         return db.get_cached_verdict(saved["claim_text"], VERDICT_CACHE_HOURS)
     except sqlite3.Error as e:
         app.logger.warning("Could not read a saved answer to keep: %s", e)
         return None
+
+
+# What makes a study the same record as the one a saved answer read: its id,
+# its title, its abstract and its publication types, which is where PubMed
+# marks a retraction, a correction or an expression of concern.
+_RECORD_FIELDS = ("pmid", "title", "abstract", "publication_types")
+
+
+def _record(study) -> tuple | None:
+    """A study's identity as a record, or None when it lacks a field above."""
+    if not isinstance(study, dict) or any(k not in study for k in _RECORD_FIELDS):
+        return None
+    types = study["publication_types"]
+    if not isinstance(types, (list, tuple)):
+        return None
+    return (str(study["pmid"]), study["title"], study["abstract"], tuple(sorted(map(str, types))))
+
+
+def _same_records(saved: list, fresh: list) -> bool:
+    """
+    True when the search found the same records the saved answer read: the
+    same set of studies, each with the same id, title, abstract and
+    publication types. Order and repeats do not matter. A study on either
+    side that lacks one of those fields is never the same.
+    """
+    a = [_record(s) for s in saved or []]
+    b = [_record(s) for s in fresh or []]
+    if None in a or None in b:
+        return False
+    return set(a) == set(b)
 
 
 def _equivalent(claim: str) -> str | None:
