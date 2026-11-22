@@ -2349,7 +2349,7 @@ _S = lambda types, title="Vitamin D in adults", abstract="": evidence.spine(
 t("a spine is lettered with the design in a reader's words, and no year",
   _S(["Meta-Analysis"]) == "Meta-analysis" and _S(["Randomized Controlled Trial"]) == "Randomized trial"
   and _S(["Case Reports"]) == "One case" and _S(["Journal Article"]) == "Study"
-  and _S(["Retracted Publication", "Meta-Analysis"]) == "Meta-analysis")
+  and _S(["Retracted Publication", "Meta-Analysis"]) == "Retracted")
 t("  a lab study says what it was run on, unless it is a pooled design",
   _S(["Comparative Study"], "Vinegar lowers glucose in diabetic rats",
      "Male Wistar rats were fed vinegar for 8 weeks.") == "Animal or lab"
@@ -9259,6 +9259,29 @@ _rt_v = verdict._format_study_for_prompt(1, dict(_RT_ST[0]), claim="Vinegar lowe
 t("  the model is told the journal retracted it and not to cite it",
   "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
 pubmed.search_and_fetch = _rt_search
+
+# ---- final fix F12: a withdrawn paper is never a strong design -----------------
+_F12_T = ["Journal Article", "Randomized Controlled Trial", "Retracted Publication"]
+_f12_s = _study("F12", "A trial later withdrawn", types=_F12_T, abstract="Adults were randomized to it or placebo.")
+t("F12: a paper typed both a randomized trial and retracted is retracted in classify, kind and its label",
+  evidence.classify(_F12_T) == "retracted" and evidence.kind(_f12_s) == "retracted"
+  and evidence.strongest_label(_F12_T) == "Retracted Publication",
+  (evidence.classify(_F12_T), evidence.kind(_f12_s), evidence.strongest_label(_F12_T)))
+t("F12: it is never counted as a strong design, a trial or a strong bar",
+  evidence.snapshot([_f12_s], ["F12"])["strong"] == 0 and evidence.snapshot([_f12_s], ["F12"])["trials"] == 0
+  and not any(b_.get("tier") == "strong" and b_.get("count") for b_ in (evidence.mix([_f12_s]) or [])
+              if isinstance(b_, dict)))
+t("F12: the study's own description and the card say retracted, not trial",
+  _display.design_note(_F12_T)[1] == "retracted"
+  and og.strongest_cited([_f12_s, _study("F13", "A plain observational study", types=["Observational Study"])],
+                         ["F12", "F13"])[2] == "A plain observational study"
+  and og.strongest_cited([_f12_s], ["F12"])[0] == "Retracted Publication")
+if _shutil.which("node"):
+    _f12src = (ROOT / "static" / "app.js").read_text()
+    _f12fn = "const TYPES = [" + _f12src.split("const TYPES = [")[1].split("function escapeHtml")[0]
+    _f12js = _subprocess.run(["node", "-e", _f12fn + "console.log(typeInfo(" + json.dumps(_F12_T) + ").cls);"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+    t("F12: and the script's badge for it is retracted too", _f12js == "retracted", _f12js)
 
 # ---- L2: narrative reviews do not lift small trials ---------------------------
 _NR_TRIAL = _study("NR1", "Creatine and scalp hair in young men: a randomized trial",

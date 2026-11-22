@@ -34,6 +34,8 @@ const EXAMPLES = [
 
 // The first matching label wins, so the badge shows the most informative type.
 const TYPES = [
+  // retracted first: a withdrawn trial is retracted, never strong
+  ["Retracted Publication", "retracted", "Withdrawn by the journal after publication. Its findings should not be relied on."],
   // strong
   ["Meta-Analysis", "strong", "Combines the results of several studies into one estimate. It is only as sound as the studies it pools, and it can mix very different ones."],
   ["Network Meta-Analysis", "strong", "Combines many studies to compare several treatments at once. Comparisons made only indirectly are less certain than head-to-head trials."],
@@ -41,7 +43,6 @@ const TYPES = [
   ["Randomized Controlled Trial", "strong", "Randomly assigns people to a treatment or a comparison group. A small size, a short run or a narrow group limits what it shows."],
   ["Practice Guideline", "strong", "Recommendations a medical body wrote after reviewing the evidence. They reflect that body's judgment and can lag behind newer studies."],
   // weak
-  ["Retracted Publication", "retracted", "Withdrawn by the journal after publication. Its findings should not be relied on."],
   ["Case Reports", "weak", "Describes one patient or a few. It can raise a question, but it cannot show cause or how common something is."],
   ["Editorial", "weak", "An opinion piece by the journal's editors. It gives a view, not data."],
   ["Comment", "weak", "A published reply to another paper. It is not a study."],

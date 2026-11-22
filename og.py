@@ -137,6 +137,9 @@ def strongest_cited(studies: list[dict], cited: list[str]) -> tuple[str, str, st
 
     def rank(s):
         types = s.get("publication_types") or []
+        # A withdrawn paper ranks last, whatever design it was.
+        if any(t.startswith("Retracted Publication") for t in types):
+            return 0
         if any(t.startswith(x) for x in STRONG for t in types):
             return 3
         if any(t.startswith(x) for x in WEAK for t in types):
@@ -148,7 +151,8 @@ def strongest_cited(studies: list[dict], cited: list[str]) -> tuple[str, str, st
         return None
     best = sorted(pool, key=rank, reverse=True)[0]
     types = [t for t in (best.get("publication_types") or []) if not t.startswith(("Journal Article", "Research Support", "English Abstract"))]
-    label = types[0] if types else "Journal article"
+    label = ("Retracted Publication" if "Retracted Publication" in types
+             else types[0] if types else "Journal article")
     return label, str(best.get("year") or ""), str(best.get("title") or "")
 
 

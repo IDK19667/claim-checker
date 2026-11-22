@@ -15,14 +15,15 @@ record, not an opinion about it.
 import re
 
 # Ordered: the first match wins, so a paper tagged both "Meta-Analysis"
-# and "Journal Article" reads as the meta-analysis it is.
+# and "Journal Article" reads as the meta-analysis it is. "Retracted
+# Publication" comes first: a withdrawn trial is retracted, never strong.
 TYPES = [
+    ("Retracted Publication", "retracted"),
     ("Meta-Analysis", "strong"),
     ("Network Meta-Analysis", "strong"),
     ("Systematic Review", "strong"),
     ("Randomized Controlled Trial", "strong"),
     ("Practice Guideline", "strong"),
-    ("Retracted Publication", "retracted"),
     ("Case Reports", "weak"),
     ("Editorial", "weak"),
     ("Comment", "weak"),

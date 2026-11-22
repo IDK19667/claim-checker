@@ -119,14 +119,15 @@ def confidence_line(result) -> str:
 # ---- Sources: why each study is on the page --------------------------------
 # What each study design does and where it stops. static/app.js carries the
 # same table (TYPES) for the study sheet; a test compares the two. The first
-# matching label wins, as in the script.
+# matching label wins, as in the script, so "Retracted Publication" is first:
+# a withdrawn trial is described as retracted, never as a trial.
 DESIGN_NOTES = (
+    ('Retracted Publication', 'retracted', 'Withdrawn by the journal after publication. Its findings should not be relied on.'),
     ('Meta-Analysis', 'strong', 'Combines the results of several studies into one estimate. It is only as sound as the studies it pools, and it can mix very different ones.'),
     ('Network Meta-Analysis', 'strong', 'Combines many studies to compare several treatments at once. Comparisons made only indirectly are less certain than head-to-head trials.'),
     ('Systematic Review', 'strong', 'Searches for every study on a question, using set rules for what counts. It is only as sound as the studies it found.'),
     ('Randomized Controlled Trial', 'strong', 'Randomly assigns people to a treatment or a comparison group. A small size, a short run or a narrow group limits what it shows.'),
     ('Practice Guideline', 'strong', "Recommendations a medical body wrote after reviewing the evidence. They reflect that body's judgment and can lag behind newer studies."),
-    ('Retracted Publication', 'retracted', 'Withdrawn by the journal after publication. Its findings should not be relied on.'),
     ('Case Reports', 'weak', 'Describes one patient or a few. It can raise a question, but it cannot show cause or how common something is.'),
     ('Editorial', 'weak', "An opinion piece by the journal's editors. It gives a view, not data."),
     ('Comment', 'weak', 'A published reply to another paper. It is not a study.'),
