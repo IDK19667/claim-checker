@@ -2973,6 +2973,19 @@ try:
         _steady_row(_c, stamp=_st)
         t(f"steady: an empty current stamp keeps nothing, against a row with {_lbl}",
           appmod._steady(_c, STUDIES) is None and _saved_row(_c)["created_at"] == _OLD_DATE)
+    _c = "Steady claim stored with an empty stamp straight in the table"
+    _steady_row(_c)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET method_stamp = '' WHERE claim_key = ?", (db.normalize_claim(_c),))
+    _real_by_key = db.get_cached_by_key
+    _as_read = dict(_real_by_key(db.normalize_claim(_c)), method_stamp="")
+    db.get_cached_by_key = lambda key: dict(_as_read)
+    try:
+        _kept_empty = appmod._steady(_c, STUDIES)
+    finally:
+        db.get_cached_by_key = _real_by_key
+    t("  a row whose stored stamp is an empty string is not kept while the stamp in force is empty, even read as empty",
+      appmod._steady(_c, STUDIES) is None and _kept_empty is None and _saved_row(_c)["created_at"] == _OLD_DATE)
     _c = "Steady claim saved while the stamp is empty"
     fg.models.script = [Resp("(steady) AND (empty)"), Resp(VJ("complicated", [1], tldr="Made with no stamp."))]
     d = P(_c, ip="7.7.10.8").get_json()
@@ -3055,6 +3068,11 @@ t("steady: the same records in another order, repeated, or with their types list
   and appmod._same_records(STUDIES + [STUDIES[1]], STUDIES)
   and not appmod._same_records(STUDIES, STUDIES[:2])
   and not appmod._same_records(STUDIES, _changed("abstract", None)))
+_lack = lambda pmid, title: {"pmid": pmid, "title": title, "publication_types": ["Journal Article"]}
+t("steady: two different studies that each lack a field are never the same record, nor two copies of one",
+  not appmod._same_records([_lack("A1", "One study")], [_lack("B2", "Another study")])
+  and not appmod._same_records([_lack("A1", "One study")], [_lack("A1", "One study")])
+  and not appmod._same_records(STUDIES[:1] + [_lack("A1", "One")], STUDIES[:1] + [_lack("B2", "Two")]))
 _steady_row("Steady record check unchanged")
 fg.models.script = []; fg.models.calls = 0
 d = P("Steady record check unchanged", ip="7.7.10.7").get_json()
