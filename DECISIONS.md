@@ -55,6 +55,25 @@ key, the newest under its own wording; an empty key is never merged.
 ("cures", "helps" and "causes"). On the owner's claims this folds exactly
 the three pairs `find_equivalent` merges and leaves the newest ten as they were.
 
+## 2026-11-21 (later): A reworded match reads at most the newest 2,000 saved claims
+
+`db.find_equivalent` read and folded every saved claim on each miss: about
+0.2 ms a claim, so 0.21 s at 1,000 rows, 2.8 s at 10,000 and 71 s at
+100,000, holding a request thread, and on Turso one slow read trips its
+timeout and, three in a row, sets Turso aside for all storage. Now it makes
+one lookup by the claim's own key (any age, first), then reads only the
+newest `db.EQUIVALENT_SCAN` (2,000) saved claims, newest first. The
+exact-key path is unchanged. A claim older than the newest 2,000 is not
+matched: a miss costs one fresh check, never a wrong answer. No new column;
+one new index, on `verdict_cache.created_at`, so the newest rows are read
+in order instead of sorting the whole table. Timed on one machine at
+10,000 rows: a miss took 0.9 to 1.7 s before, and 0.2 to 0.3 s after.
+Follow-up, when `verdict_cache` nears 2,000 rows: store the fold key in an
+indexed column, written on save and filled once for old rows, so a miss is
+one indexed lookup and no saved claim is out of reach. The fold is stable
+(folding a folded key gives the same key), so that change gives the same
+matches.
+
 ## 2026-11-21: Steady answers: a stale saved answer is kept when nothing changed
 
 The same claim got different verdicts on different days from the same
@@ -3017,7 +3036,6 @@ any deployed domain, and every dated entry above this one: those describe
 what was actually true at the time and are left as they read. Only this
 document's own title line was brought current, on the same reasoning as
 `README.md`'s and `CLAUDE.md`'s.
-
 
 ## 2026-09-29: Second reversal within the same branch — real stock footage, not generated imagery
 

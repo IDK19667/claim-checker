@@ -31,6 +31,39 @@ import ratelimit  # noqa: E402
 import verdict  # noqa: E402
 from google.genai import errors  # noqa: E402
 import requests  # noqa: E402
+import socket  # noqa: E402
+
+# No test may use the network: the provider and PubMed are faked. Any test
+# that opens a real connection, or looks a host up, fails here loudly and is
+# counted at the end, whatever the code under test does with the error.
+NET_TRIES = []
+
+
+def _no_network(*a, **k):
+    NET_TRIES.append(repr(a[1:] if a and isinstance(a[0], socket.socket) else a)[:120])
+    raise OSError("tests/test_app.py: a test tried to use the network")
+
+
+import _socket  # noqa: E402
+
+for _name in ("connect", "connect_ex", "sendto", "sendmsg"):
+    setattr(socket.socket, _name, _no_network)
+
+
+class _GuardedRawSocket(_socket.socket):
+    """`_socket.socket` itself cannot be patched, so its name is pointed at
+    this subclass: code that builds a raw socket gets one that refuses."""
+    connect = connect_ex = sendto = sendmsg = _no_network
+
+
+_socket.socket = _GuardedRawSocket
+for _mod in (socket, _socket):
+    for _name in ("getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr"):
+        setattr(_mod, _name, _no_network)
+socket.create_connection = _no_network
+# Child processes (node for the parity checks, python for the schema race)
+# are separate interpreters: this guard is not in them. None of them is
+# given network work, and they are not covered.
 
 # Gemini calls are retried after a pause. No test waits for it: verdict's
 # clock is a recorder, and the retry tests below read what it was asked for.
@@ -51,6 +84,29 @@ appmod._study_payload = lambda s_, cited_: _PAYLOADS.append(_real_study_payload(
 def t(label, cond, extra=""):
     results.append(bool(cond))
     print(f"{'PASS' if cond else 'FAIL'} {label} {extra if not cond else ''}")
+
+
+try:
+    requests.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi", timeout=1)
+    _net_refused = False
+except Exception:  # noqa: BLE001 — any failure is the guard working
+    _net_refused = True
+t("network guard: a real request from a test is refused and recorded", _net_refused and NET_TRIES, NET_TRIES)
+_net_kinds = []
+for _lbl, _try in (("gethostbyname", lambda: socket.gethostbyname("localhost")),
+                   ("gethostbyname_ex", lambda: socket.gethostbyname_ex("localhost")),
+                   ("a raw lookup", lambda: _socket.gethostbyname("localhost")),
+                   ("a UDP sendto", lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b"x", ("127.0.0.1", 9))),
+                   ("a raw socket connect", lambda: _socket.socket().connect(("127.0.0.1", 9)))):
+    _before = len(NET_TRIES)
+    try:
+        _try(); _refused = False
+    except OSError:
+        _refused = True
+    _net_kinds.append((_lbl, _refused and len(NET_TRIES) == _before + 1))
+t("  and so are a host lookup, a UDP send and a raw socket's connect, each counted",
+  all(ok for _, ok in _net_kinds), _net_kinds)
+NET_TRIES.clear()
 
 
 def P(claim, ip="1.1.1.1", **hdr):
@@ -347,7 +403,8 @@ def _no_row(claim):
                              (db.normalize_claim(claim),)).fetchone()["n"] == 0
 
 
-for _lbl, _so in (("empty", ""), ("blank", "   ")):
+for _lbl, _so in (("empty", ""), ("blank", "   "), ("a zero-width space", "\u200b"),
+                  ("a lone full stop", "."), ("a lone dash", "\u2014"), ("only marks", " - ,. ")):
     fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=_so))]
     _n_logs = len(db.recent_checks(1000))
     r = P(f"empty line claim {_lbl}", ip="7.7.9.1")
@@ -366,6 +423,26 @@ t("  the streamed check ends on the same error, never on a done stage",
   and not any(e["stage"] == "done" for e in _evs) and _no_row("empty line claim streamed"), _evs[-1])
 t("  and the streamed error offers both ways out too", _evs[-1].get("way_out") == "either", _evs[-1])
 t("  and the message has no dash", not any(ch in verdict.INCOMPLETE_REPLY for ch in "\u2013\u2014"))
+for _lbl, _kw in (("still-open line is a lone full stop", {"still_open": "."}),
+                  ("still-open line is a zero-width space", {"still_open": "\u200b"}),
+                  ("short answer is a zero-width space", {"tldr": "\u200b"})):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _r, _evs = stream(f"wordless line claim streamed {_lbl}", ip="7.7.9.5")
+    t(f"  a streamed reply whose {_lbl} ends on the error, with nothing saved",
+      _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502
+      and not any(e["stage"] == "done" for e in _evs) and _no_row(f"wordless line claim streamed {_lbl}"), _evs[-1])
+t("  a line needs a letter or digit, in any script",
+  verdict.has_lines({"tldr": "Ja.", "still_open": "长期研究"}) and verdict.has_lines({"tldr": "No.", "still_open": "2"})
+  and not verdict.has_lines({"tldr": "No.", "still_open": "\u200b\u00a0"})
+  and not verdict.has_lines({"tldr": "\u2014", "still_open": "Open."}))
+for _lbl, _kw in (("a lone full stop", {"still_open": "."}), ("a zero-width space", {"tldr": "\u200b"}),
+                  ("a lone dash", {"still_open": "\u2014"})):
+    _c = f"Wordless saved row with {_lbl}"
+    db.put_cached_verdict(_c, "(q)", "complicated", "Mixed (Study 1).", ["P1"], STUDIES,
+                          **{"tldr": "Short.", "still_open": "Open.", **_kw})
+    t(f"  a saved row whose line is {_lbl} is no saved answer: not served, not on a link, never matched",
+      db.get_cached_verdict(_c, 24) is None and db.get_cached_by_key(db.normalize_claim(_c)) is None
+      and db.find_equivalent("Is it true that " + _c.lower() + "?") is None)
 fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("false", [], still_open=""))]
 d = P("empty line claim resting on nothing", ip="7.7.9.3").get_json()
 t("  a reply the code turns to 'Not enough evidence' gets its still-open line from code, and is an answer",
@@ -1453,9 +1530,17 @@ _ranked = pubmed.prioritise([_study("OFF", "Topical lotion for alopecia",
                             "dihydrotestosterone OR DHT")
 t("  a paper that never mentions the claim's subject sinks under the ones that do",
   [s["pmid"] for s in _ranked] == ["I1", "I2", "OFF"], [s["pmid"] for s in _ranked])
+_sur_asked = []
+_real_search_pubmed = pubmed.search_pubmed
+pubmed.search_pubmed = lambda q, max_results=8: _sur_asked.append((q, max_results)) or ["S1"]
+try:
+    _sur = pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
+                                   max_results=2)
+finally:
+    pubmed.search_pubmed = _real_search_pubmed
 t("  the surrogate search asks for the subject plus the stand-in, never the outcome",
-  pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
-                          max_results=2) is not None)
+  _sur is not None and _sur == ["S1"]
+  and _sur_asked == [("(creatine) AND (DHT OR dihydrotestosterone)", 2)], _sur_asked)
 
 # ---- the answer must not contradict itself ----------------------------------------
 t("consistency: calling a reported condition untested is caught",
@@ -2992,10 +3077,12 @@ t("  the page has the note, hidden until a check fills it",
 # in tests/equivalent_pairs.json are the approved rule, one test each.
 _EQ_PAIRS = json.loads((ROOT / "tests" / "equivalent_pairs.json").read_text())
 for _p in _EQ_PAIRS:
-    _same = db.claim_fold(_p["a"]) == db.claim_fold(_p["b"])
+    _same = db.claim_fold(_p["a"]) == db.claim_fold(_p["b"]) != ()
     t(f"equivalent [{_p['cat']}] {_p['a']!r} vs {_p['b']!r}: {_p['expect']}",
       _same == (_p["expect"] == "match"), (db.claim_fold(_p["a"]), db.claim_fold(_p["b"])))
-_eqf = lambda a, b: db.claim_fold(a) == db.claim_fold(b)
+# Two claims match when they fold to the same key and that key is not empty
+# (find_equivalent never matches an empty key).
+_eqf = lambda a, b: db.claim_fold(a) == db.claim_fold(b) != ()
 t("equivalent: question form, plural, punctuation and articles fold together",
   _eqf("Coffee causes cancer", "Does coffee cause cancer?")
   and _eqf("Eggs raise cholesterol", "Egg raises cholesterol")
@@ -3022,6 +3109,92 @@ t("  cures, helps and causes are three claims",
       ("Apple cider vinegar cures diabetes", "Apple cider vinegar helps diabetes"),
       ("Apple cider vinegar helps diabetes", "Apple cider vinegar causes diabetes"),
       ("Apple cider vinegar cures diabetes", "Apple cider vinegar causes diabetes")]))
+t("equivalent: a short form is spelled out as its own word, never glued into another word",
+  not any(_eqf(a, b) for a, b in [
+      ("Shell fish causes allergies", "She'll fish causes allergies"),
+      ("Shell fish causes allergies", "She\u2019ll fish causes allergies"),
+      ("Were healthier on keto", "We're healthier on keto"),
+      ("Id causes anxiety", "I'd causes anxiety")])
+  and _eqf("She'll get sick from vaccines", "She will get sick from vaccines")
+  and _eqf("I'm tired after sugar", "I am tired after sugar"))
+# The grader's 84 hostile pairs (tests/hostile_pairs.json): every one stays
+# apart, except three the approved rule folds on purpose (each says why).
+for _p in json.loads((ROOT / "tests" / "hostile_pairs.json").read_text()):
+    t(f"hostile pair {_p['a'][:60]!r} vs {_p['b'][:60]!r}: {_p['expect']}",
+      _eqf(_p["a"], _p["b"]) == (_p["expect"] == "match"), (db.claim_fold(_p["a"])[:12], db.claim_fold(_p["b"])[:12]))
+t("equivalent: a number keeps its sign and its decimal point",
+  not any(_eqf(a, b) for a, b in [
+      ("Ice baths at -5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u22125 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u20135 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Take .5 mg melatonin for sleep", "Take 5 mg melatonin for sleep"),
+      ("Take.5 mg melatonin for sleep", "Take 5 mg melatonin for sleep"),
+      ("Take -.5 mg", "Take .5 mg"), ("Take -0.5 mg", "Take 0.5 mg"),
+      ("Salt -10% raises blood pressure", "Salt 10% raises blood pressure")])
+  and _eqf("Ice baths at -5 C help recovery", "Ice baths at \u22125 C help recovery")
+  and _eqf("Omega-3 improves memory", "Omega 3 improves memory")
+  and db.claim_fold("Take 2-5 mg") == ("take", "2-5", "mg"))
+t("  a dash standing free right before a number is kept, never dropped",
+  not any(_eqf(a, b) for a, b in [
+      ("Ice baths at - 5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u2212 5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Lose 5 - 10 kg on keto", "Lose 5 10 kg on keto"),
+      ("Take vitamin C - 500 mg", "Take vitamin C 500 mg"),
+      ("Ice baths at - .5 C help", "Ice baths at .5 C help")])
+  and _eqf("Ice baths at - 5 C help recovery", "Ice baths at \u2013 5 C help recovery")
+  and _eqf("Coffee - the drink - causes cancer", "Coffee the drink causes cancer"))
+db.put_cached_verdict("Ice baths at 5 C help recovery", "(ice) AND (recovery)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+db.put_cached_verdict("Take 5 mg melatonin for sleep", "(melatonin) AND (sleep)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+t("  and a saved claim with another sign or decimal point is never served for it",
+  db.find_equivalent("Do ice baths at -5 C help recovery?") is None
+  and db.find_equivalent("Take .5 mg melatonin for sleep") is None
+  and db.find_equivalent("Does taking 5 mg melatonin for sleep?") is None
+  and db.find_equivalent("Ice baths at 5 C helps recovery") == "Ice baths at 5 C help recovery")
+# No letter is silently dropped: a claim whose folding would lose any part of
+# a word (a combining mark, an invisible joiner) has no key and matches nothing.
+_nokey = lambda c: db.claim_fold(c) == ()
+t("equivalent: a vowel sign or other combining mark is never dropped, in any script",
+  all(_nokey(x) for x in (
+      "दाल से कैंसर होता है", "दिल से कैंसर होता है", "का", "की",    # Devanagari
+      "ডাল খেলে ক্যান্সার হয়", "ডিল খেলে ক্যান্সার হয়",              # Bengali
+      "กาแฟทำให้เป็นมะเร็ง",                                       # Thai
+      "القَهوة تسبب السرطان",                                       # Arabic with a vowel mark
+      "קָפֶה גורם לסרטן",                                           # Hebrew with points
+      "காபி புற்றுநோயை உண்டாக்கும்",                                 # Tamil
+      "Coq\u0301 au vin raises cholesterol"))                       # a Latin accent with no composed form
+  and not _eqf("दाल से कैंसर होता है", "दिल से कैंसर होता है") and not _eqf("का", "की")
+  and not _eqf("ডাল খেলে ক্যান্সার হয়", "ডিল খেলে ক্যান্সার হয়"))
+t("  an invisible character inside a word is part of the word too",
+  _nokey("Vaccines n\u200bot cause autism") and _nokey("Soft\u00adware causes stress")
+  and not _eqf("Vaccines n\u200bot cause autism", "Vaccines n ot cause autism"))
+t("equivalent: a raised or lowered digit or a fraction character never becomes a plain digit",
+  all(_nokey(x) for x in ("10\u2079 CFU probiotics work", "10\u00b2 mg zinc", "H\u2082O cures colds",
+                          "Take \u00bd tablet", "Take 1\u00bd tablets"))
+  and not _eqf("Take 1\u20442 tablet", "Take 12 tablet")
+  and not _eqf("10\u2079 CFU probiotics work", "109 CFU probiotics work")
+  and not _eqf("10\u00b2 mg zinc", "102 mg zinc") and not _eqf("H\u2082O cures colds", "H2O cures colds")
+  and not _eqf("Take \u00bd tablet", "Take 12 tablet")
+  and _eqf("\u2460 vitamin C works", "1 vitamin C works"))
+t("equivalent: no letter is folded into more than one letter",
+  all(_nokey(x) for x in ("Die Ma\u00dfe des Fetts", "\ufb01sh oil helps", "Take 5 \u338e zinc",
+                          "\u0130la\u00e7 yarar"))
+  and not _eqf("Die Ma\u00dfe des Fetts", "Die Masse des Fetts")
+  and not _eqf("\ufb01sh oil helps", "fish oil helps")
+  and _eqf("Coffee causes cancer\u2026", "Coffee causes cancer...")
+  and _eqf("\uff11\uff10 mg zinc helps", "10 mg zinc helps"))
+t("  scripts written without combining marks still fold as before",
+  _eqf("кофе вызывает рак", "Кофе вызывает рак?") and _eqf("咖啡致癌", "咖啡致癌？")
+  and _eqf("القهوة تسبب السرطان", "القهوة تسبب السرطان؟") and not _eqf("咖啡致癌", "茶致癌"))
+t("  café is never cafe; a composed and a decomposed é are the same letter",
+  not _eqf("Café au lait raises cholesterol", "Cafe au lait raises cholesterol")
+  and _eqf("Café au lait raises cholesterol", "Cafe\u0301 au lait raises cholesterol")
+  and db.claim_fold("Café au lait raises cholesterol") != ())
+db.put_cached_verdict("दाल से कैंसर होता है", "(lentils) AND (cancer)", "false", "No (Study 1).",
+                      ["P1"], STUDIES, tldr="No.", still_open="Open.")
+t("  and a claim with no key is never matched to a saved claim", db.find_equivalent("दिल से कैंसर होता है") is None
+  and db.find_equivalent("दाल से कैंसर होता है?") is None)
 t("  the small words dropped never include a negation, a preposition that sets direction or a hedge",
   not (db._FOLD_DROP & {"not", "no", "never", "without", "over", "under", "before", "after", "more",
                         "less", "to", "from", "and", "or", "can", "may", "might", "should", "will"}))
@@ -3051,6 +3224,38 @@ d = P("Creatine can cause hair loss in men", ip="7.7.8.4").get_json()
 t("  a hedged wording is another claim: it is checked fresh under its own words",
   not d["cached"] and d["claim"] == "Creatine can cause hair loss in men" and d["typed"] is None, d)
 t("  a claim checked under its own words carries no note reason", d["typed_reason"] is None, d)
+
+# The second look for a reworded match, after the spelling switch: a
+# misspelled rewording of a saved claim gets the saved answer, with one model
+# call (the search) and none for the verdict.
+_EQ_SP = "Creatine causes hair loss in women"
+db.put_cached_verdict(_EQ_SP, "(creatine) AND (hair loss)", "false", "No trial found it (Study 1).",
+                      ["P1"], STUDIES, tldr="No, the trials found no hair loss in women.", still_open="Longer trials.")
+fg.models.script = [Resp("(creatine) AND (hair loss)\nClaim: Does creatine cause hair loss in women?")]
+fg.models.calls = 0
+d = P("Does creatin cause hair los in women?", ip="7.7.8.7").get_json()
+t("equivalent: after the spelling fix, a reworded match is looked for again and answered from the saved check",
+  d.get("cached") and d.get("claim") == _EQ_SP and d.get("typed") == "Does creatin cause hair los in women?"
+  and d.get("typed_reason") == "spelling" and fg.models.calls == 1 and not fg.models.script, (d, fg.models.calls))
+
+# Own key first: a stale row under the claim's own words is checked again
+# under those words, even when a newer row of the same claim in other words
+# is fresh. It is never swapped for the other wording.
+_OWN = "Turmeric eases joint pain in adults"
+db.put_cached_verdict(_OWN, "(turmeric) AND (joint pain)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Own old answer.", still_open="Own open line.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                  ("2020-01-01T00:00:00+00:00", db.normalize_claim(_OWN)))
+db.put_cached_verdict("Does turmeric ease joint pain in adults?", "(turmeric) AND (joint pain)", "complicated",
+                      "Mixed (Study 1).", ["P1"], STUDIES, tldr="Other wording answer.", still_open="Open.")
+t("equivalent: a row under the claim's own key comes before a newer row in other words",
+  db.find_equivalent(_OWN) == _OWN)
+fg.models.script = [Resp("(turmeric) AND (joint pain)"), Resp(VJ("complicated", [1], tldr="Own fresh answer."))]
+d = P(_OWN, ip="7.7.8.8").get_json()
+t("  so its stale row is checked again under its own words, with no note",
+  not d.get("cached") and d.get("claim") == _OWN and d.get("tldr") == "Own fresh answer."
+  and d.get("typed") is None, d)
 
 # A saved check older than the window is checked again under its saved
 # wording: its one row is refreshed, and no second row for it is made.
@@ -3090,6 +3295,53 @@ db.put_cached_verdict(_EQ_PERS, "(milk) AND (illness)", "complicated", "Mixed (S
 t("  nor is a record with a problem the page cannot repair",
   bool(appmod.display.saved_record_problems(_EQ_PERS, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
   and db.find_equivalent("My son Jake 7 get sick from milk") is None)
+
+# The search for a reworded match reads at most the newest EQUIVALENT_SCAN
+# saved claims, newest first; the claim's own key is one lookup at any age.
+t("equivalent: the search for a reworded match reads at most the newest 2,000 saved claims",
+  db.EQUIVALENT_SCAN == 2000)
+_scan_db = os.path.join(tempfile.mkdtemp(), "scan.db")
+_real_db_path = db.DB_PATH
+_real_scan = db.EQUIVALENT_SCAN
+db.DB_PATH = _scan_db
+db.EQUIVALENT_SCAN = 5
+try:
+    db.init_db()
+
+    def _scan_put(claim, date):
+        db.put_cached_verdict(claim, "(q)", "complicated", "Mixed (Study 1).", ["P1"], STUDIES,
+                              tldr="Short.", still_open="Open.")
+        with db.get_conn() as _conn:
+            _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                          (date, db.normalize_claim(claim)))
+
+    _scan_put("Saffron lifts mood in adults", "2020-01-01T00:00:00+00:00")
+    _scan_put("Beetroot juice lowers blood pressure", "2020-01-02T00:00:00+00:00")
+    for _i in range(4):
+        _scan_put(f"Filler claim number {_i} about sleep", f"2021-01-0{_i + 1}T00:00:00+00:00")
+    t("  a match among the newest N is found", db.find_equivalent("Does beetroot juice lower blood pressure?")
+      == "Beetroot juice lowers blood pressure")
+    _folded = []
+    _real_fold = db.claim_fold
+    db.claim_fold = lambda c: _folded.append(c) or _real_fold(c)
+    try:
+        _beyond = db.find_equivalent("Does saffron lift mood in adults?")
+    finally:
+        db.claim_fold = _real_fold
+    t("  a row beyond the newest N is not read, so it is not matched",
+      _beyond is None and "Saffron lifts mood in adults" not in _folded
+      and len(_folded) <= db.EQUIVALENT_SCAN + 1, (_beyond, _folded))
+    with db.get_conn() as _conn:
+        _plan = " ".join(str(tuple(r)) for r in _conn.execute(
+            "EXPLAIN QUERY PLAN SELECT claim_key, claim_text, tldr, still_open FROM verdict_cache "
+            "ORDER BY created_at DESC, rowid DESC LIMIT 5").fetchall())
+    t("  the newest rows are read from an index on the date, not by sorting the whole table",
+      "verdict_cache_time" in _plan and "TEMP B-TREE" not in _plan, _plan)
+    t("  the claim's own saved row is found at any age, first",
+      db.find_equivalent("Saffron lifts mood in adults") == "Saffron lifts mood in adults")
+finally:
+    db.DB_PATH = _real_db_path
+    db.EQUIVALENT_SCAN = _real_scan
 
 # Both renderers say the same line, from the same two fields.
 _TN = [("x", None), ("Does coffee cause cancer?", "wording"), ("smokng causs cancr", "spelling"), (None, "wording"), ("", None)]
@@ -3152,6 +3404,78 @@ verdict.ANSWER_FILES = _real_files[:-1]
 _fewer = verdict._method_stamp()
 verdict.ANSWER_FILES = _real_files
 t("  and it changes when the files it is made from change", _fewer != verdict._method_stamp())
+# A stamp that cannot be worked out is empty: the app still starts, a warning
+# is logged, nothing is kept on an empty stamp and an empty stamp is not stored.
+import builtins as _bi  # noqa: E402
+import importlib.util as _ilu  # noqa: E402
+_real_open = _bi.open
+
+
+def _unreadable(path, *a, **k):
+    if os.path.basename(str(path)) in verdict.ANSWER_FILES:
+        raise PermissionError("unreadable")
+    return _real_open(path, *a, **k)
+
+
+class _Grab(logging.Handler):
+    def __init__(self): super().__init__(); self.lines = []
+    def emit(self, rec): self.lines.append(rec.getMessage())
+
+
+_grab = _Grab()
+logging.getLogger("evident.stamp").addHandler(_grab)
+_bi.open = _unreadable
+try:
+    try:
+        _empty = verdict._method_stamp()
+    except Exception as _e:  # noqa: BLE001
+        _empty = _e
+    _spec = _ilu.spec_from_file_location("verdict_nostamp", ROOT / "verdict.py")
+    _vcopy = _ilu.module_from_spec(_spec)
+    try:
+        _spec.loader.exec_module(_vcopy)
+        _copy_stamp = _vcopy.METHOD_STAMP
+    except Exception as _e:  # noqa: BLE001
+        _copy_stamp = _e
+finally:
+    _bi.open = _real_open
+    logging.getLogger("evident.stamp").removeHandler(_grab)
+t("steady: a stamp that cannot be worked out is empty and logged, never an exception",
+  _empty == "" and any("No method stamp" in x for x in _grab.lines), (_empty, _grab.lines))
+t("  and verdict.py still imports with an empty stamp when a source file cannot be read",
+  _copy_stamp == "", _copy_stamp)
+_real_stamp = verdict.METHOD_STAMP
+verdict.METHOD_STAMP = ""
+try:
+    for _lbl, _st in (("no stamp", None), ("an empty stamp", "")):
+        _c = "Steady claim with an empty current stamp and " + _lbl
+        _steady_row(_c, stamp=_st)
+        t(f"steady: an empty current stamp keeps nothing, against a row with {_lbl}",
+          appmod._steady(_c, STUDIES) is None and _saved_row(_c)["created_at"] == _OLD_DATE)
+    _c = "Steady claim stored with an empty stamp straight in the table"
+    _steady_row(_c)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET method_stamp = '' WHERE claim_key = ?", (db.normalize_claim(_c),))
+    _real_by_key = db.get_cached_by_key
+    _as_read = dict(_real_by_key(db.normalize_claim(_c)), method_stamp="")
+    db.get_cached_by_key = lambda key: dict(_as_read)
+    try:
+        _kept_empty = appmod._steady(_c, STUDIES)
+    finally:
+        db.get_cached_by_key = _real_by_key
+    t("  a row whose stored stamp is an empty string is not kept while the stamp in force is empty, even read as empty",
+      appmod._steady(_c, STUDIES) is None and _kept_empty is None and _saved_row(_c)["created_at"] == _OLD_DATE)
+    _c = "Steady claim saved while the stamp is empty"
+    fg.models.script = [Resp("(steady) AND (empty)"), Resp(VJ("complicated", [1], tldr="Made with no stamp."))]
+    d = P(_c, ip="7.7.10.8").get_json()
+    t("  and a check saved with an empty stamp stores no stamp",
+      d.get("tldr") == "Made with no stamp." and _saved_row(_c)["method_stamp"] is None, (d, _saved_row(_c) and dict(_saved_row(_c))))
+finally:
+    verdict.METHOD_STAMP = _real_stamp
+db.put_cached_verdict("Stamp stored as given", "(q)", "complicated", "E.", ["P1"], STUDIES,
+                      tldr="T.", still_open="O.", method_stamp="")
+t("  db stores an empty stamp as none", _saved_row("Stamp stored as given")["method_stamp"] is None)
+
 _SK = "Steady claim kept as saved"
 _steady_row(_SK)
 fg.models.script = []; fg.models.calls = 0
@@ -3180,6 +3504,78 @@ for _lbl, _kw in (("the study ids differ by one", {"studies": STUDIES[:2] + [dic
       not d["cached"] and d["tldr"] == "Made again." and fg.models.calls >= 1, (d.get("tldr"), fg.models.calls))
     t(f"  and the row is replaced by one with the current stamp ({_lbl})",
       _saved_row(_c)["method_stamp"] == verdict.METHOD_STAMP and _saved_row(_c)["tldr"] == "Made again.")
+
+# The same ids are not enough: each study must be the same record as the one
+# the saved answer read (id, title, abstract, publication types).
+import copy as _copy  # noqa: E402
+
+
+def _changed(field, value, i=0):
+    out = _copy.deepcopy(STUDIES)
+    if value is None:
+        out[i].pop(field)
+    else:
+        out[i][field] = value
+    return out
+
+
+for _lbl, _fresh, _saved in (
+        ("study 1 is now marked retracted", _changed("publication_types", ["Journal Article", "Retracted Publication"]), None),
+        ("study 1 now carries an expression of concern", _changed("publication_types", ["Journal Article", "Expression of Concern"]), None),
+        ("study 2 now has a correction", _changed("publication_types", ["Journal Article", "Published Erratum"], 1), None),
+        ("study 1's abstract changed", _changed("abstract", "A new abstract that reverses the finding."), None),
+        ("study 3's title changed", _changed("title", "A corrected title", 2), None),
+        ("a saved study lacks its abstract", STUDIES, _changed("abstract", None)),
+        ("a saved study lacks its publication types", STUDIES, _changed("publication_types", None, 1))):
+    _c = "Steady record check when " + _lbl
+    _steady_row(_c, studies=_saved)
+    _real_saf = pubmed.search_and_fetch
+    pubmed.search_and_fetch = lambda q, max_results=8, surrogate="", _f=_fresh: _copy.deepcopy(_f)
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made again.", still_open="New open line."))]
+    fg.models.calls = 0
+    try:
+        d = P(_c, ip="7.7.10.6").get_json()
+    finally:
+        pubmed.search_and_fetch = _real_saf
+    t(f"steady: checked again when {_lbl}",
+      not d["cached"] and d["tldr"] == "Made again." and fg.models.calls >= 1, (d.get("tldr"), fg.models.calls))
+_RS = _copy.deepcopy(STUDIES)
+_RS[0]["publication_types"] = ["Review", "Journal Article"]
+t("steady: the same records in another order, repeated, or with their types listed in another order are the same",
+  appmod._same_records(STUDIES, list(reversed(_copy.deepcopy(STUDIES))) + [STUDIES[0]])
+  and appmod._same_records(_changed("publication_types", ["Journal Article", "Review"]), _RS)
+  and appmod._same_records(STUDIES + [STUDIES[1]], STUDIES)
+  and not appmod._same_records(STUDIES, STUDIES[:2])
+  and not appmod._same_records(STUDIES, _changed("abstract", None)))
+_lack = lambda pmid, title: {"pmid": pmid, "title": title, "publication_types": ["Journal Article"]}
+t("steady: two different studies that each lack a field are never the same record, nor two copies of one",
+  not appmod._same_records([_lack("A1", "One study")], [_lack("B2", "Another study")])
+  and not appmod._same_records([_lack("A1", "One study")], [_lack("A1", "One study")])
+  and not appmod._same_records(STUDIES[:1] + [_lack("A1", "One")], STUDIES[:1] + [_lack("B2", "Two")]))
+_steady_row("Steady record check unchanged")
+fg.models.script = []; fg.models.calls = 0
+d = P("Steady record check unchanged", ip="7.7.10.7").get_json()
+t("  and unchanged records keep the saved answer, with no model call",
+  d["cached"] and d["tldr"] == "Saved short answer." and fg.models.calls == 0, (d.get("tldr"), fg.models.calls))
+
+# _steady refuses a row with a problem the page cannot repair, even with the
+# current stamp and the same records, and keeps nothing while the cache is off.
+_SP = "My son Jake 7 gets sick from oat milk"
+_steady_row(_SP)
+t("steady: a row with a problem the page cannot repair is not kept, even with the same stamp and records",
+  bool(appmod.display.saved_record_problems(_SP, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
+  and appmod._steady(_SP, STUDIES) is None and _saved_row(_SP)["created_at"] == _OLD_DATE)
+_SH = "Steady claim while the cache is switched off"
+_steady_row(_SH)
+_real_hours = appmod.VERDICT_CACHE_HOURS
+appmod.VERDICT_CACHE_HOURS = 0
+try:
+    _off = appmod._steady(_SH, STUDIES)
+finally:
+    appmod.VERDICT_CACHE_HOURS = _real_hours
+t("  with the cache switched off nothing is kept and the saved date is left alone",
+  _off is None and _saved_row(_SH)["created_at"] == _OLD_DATE)
+t("  and with it on, the same row is kept", appmod._steady(_SH, STUDIES) is not None)
 
 _SR = "Steady claim saved in its own words"
 _steady_row(_SR)
@@ -3214,6 +3610,71 @@ t("steady: an old database without the column opens, gains it, and serves its sa
   "method_stamp" in _cols and d.get("cached") and d.get("tldr") == "Old short." and fg.models.calls == 0, d)
 t("  and a row read from it has no stamp, so past the window it would be made again",
   db.get_cached_by_key("x") is None and appmod._steady("never saved claim", STUDIES) is None)
+
+# Two processes starting at once never crash on the schema change: each runs
+# init_db on the same 100 old scratch files at the same moments.
+_RACE_CHILD = r"""
+import os, sys, time
+sys.path.insert(0, sys.argv[1])
+import db
+paths, t0, gap = sys.argv[4].split("|"), float(sys.argv[2]), float(sys.argv[3])
+bad = 0
+for i, p in enumerate(paths):
+    while time.time() < t0 + i * gap:
+        pass
+    db.DB_PATH = p
+    try:
+        db.init_db()
+    except Exception as e:
+        bad += 1
+        print(type(e).__name__, e, file=sys.stderr)
+print(bad)
+"""
+_race_dir = tempfile.mkdtemp()
+_race_paths = []
+for _i in range(100):
+    _rp = os.path.join(_race_dir, f"old{_i}.db"); _race_paths.append(_rp)
+    _rc = _sq3.connect(_rp)
+    _rc.executescript("""CREATE TABLE verdict_cache (claim_key TEXT PRIMARY KEY, claim_text TEXT NOT NULL,
+      search_query TEXT, verdict TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE checks (id INTEGER PRIMARY KEY, claim_text TEXT, verdict TEXT, checked_at TEXT);""")
+    _rc.commit(); _rc.close()
+_race_env = {k: v for k, v in os.environ.items() if not k.startswith("TURSO_")}
+import time as _time  # noqa: E402
+_race_t0 = _time.time() + 3
+_race = [_subprocess.Popen([sys.executable, "-c", _RACE_CHILD, str(ROOT), str(_race_t0), "0.06", "|".join(_race_paths)],
+                           stdout=_subprocess.PIPE, stderr=_subprocess.PIPE, text=True, env=_race_env)
+         for _ in range(2)]
+_race_out = [p.communicate(timeout=120) for p in _race]
+_race_bad = sum(int(o[0].strip() or 99) for o in _race_out)
+t("schema: two processes starting at once on the same 100 old files never crash on adding a column",
+  _race_bad == 0 and all(p.returncode == 0 for p in _race), [o[1][:200] for o in _race_out])
+t("  and every file ends with every column",
+  all({"tldr", "still_open", "breakdown_json", "method_stamp"} <= {r[1] for r in _sq3.connect(_rp).execute(
+      "PRAGMA table_info(verdict_cache)")} for _rp in _race_paths))
+
+
+class _AlterConn:
+    """A connection whose ALTER is refused; the column is or is not there after."""
+    def __init__(self, err, there):
+        self.err, self.there = err, there
+
+    def execute(self, sql, params=()):
+        if sql.startswith("ALTER"):
+            raise self.err
+        return _Rows([{"name": "x"}] + ([{"name": "tldr"}] if self.there else []))
+
+
+_Rows = db._Rows
+_alter = []
+for _err in (_sq3.OperationalError("duplicate column name: tldr"), db.TursoError("statement rejected")):
+    db._add_column(_AlterConn(_err, True), "verdict_cache", "tldr")
+    try:
+        db._add_column(_AlterConn(_err, False), "verdict_cache", "tldr"); _alter.append(False)
+    except type(_err):
+        _alter.append(True)
+t("  either driver's refusal counts as done when the column is there, and is raised when it is not",
+  _alter == [True, True], _alter)
 
 # ---- prevention claims and comparisons said in other words -------------------
 _T2D = "Regular physical activity reduces the risk of type 2 diabetes"
@@ -7717,5 +8178,6 @@ t("no response in this run ever carried a study both cited in the answer and off
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
 
+t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

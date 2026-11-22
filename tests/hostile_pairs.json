@@ -1,0 +1,506 @@
+[
+ {
+  "a": "Vaccines cause autism",
+  "b": "Vaccines do not cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines cause autism",
+  "b": "Vaccines never cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines cause autism",
+  "b": "No vaccines cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Babies sleep better with formula",
+  "b": "Babies sleep better without formula",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines cause autism",
+  "b": "Vaccines don’t cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines cause autism",
+  "b": "Vaccines dont cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee is harmful",
+  "b": "Coffee isnt harmful",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee is harmful",
+  "b": "Coffee isn't harmful",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee is harmful",
+  "b": "Coffee is not harmful",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Statins can cause diabetes",
+  "b": "Statins can't cause diabetes",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Statins can cause diabetes",
+  "b": "Statins cannot cause diabetes",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Statins can cause diabetes",
+  "b": "Statins can’t cause diabetes",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Fluoride is safe",
+  "b": "Fluoride is unsafe",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Fasting glucose < 100 is healthy",
+  "b": "Fasting glucose > 100 is healthy",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Fasting glucose ≤ 100 is healthy",
+  "b": "Fasting glucose ≥ 100 is healthy",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Glucose ≤100 is fine",
+  "b": "Glucose <100 is fine",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Ice baths at -5 C help recovery",
+  "b": "Ice baths at 5 C help recovery",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Ice baths at −5 C help recovery",
+  "b": "Ice baths at 5 C help recovery",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take .5 mg melatonin for sleep",
+  "b": "Take 5 mg melatonin for sleep",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 0.5 mg melatonin for sleep",
+  "b": "Take 5 mg melatonin for sleep",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 1,000 mg vitamin C",
+  "b": "Take 1 000 mg vitamin C",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 1,000 mg vitamin C",
+  "b": "Take 1 mg vitamin C",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "16:8 fasting helps weight loss",
+  "b": "18:6 fasting helps weight loss",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "16:8 fasting helps weight loss",
+  "b": "168 fasting helps weight loss",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "1/2 a glass of wine is healthy",
+  "b": "12 a glass of wine is healthy",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Salt +10% raises blood pressure",
+  "b": "Salt -10% raises blood pressure",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Salt 10% raises blood pressure",
+  "b": "Salt 10 raises blood pressure",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Saunas at 80° are safe",
+  "b": "Saunas at 80 are safe",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 2.5 mg",
+  "b": "Take 25 mg",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 2-5 mg",
+  "b": "Take 25 mg",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 5-10 mg melatonin",
+  "b": "Take 5 10 mg melatonin",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 5 to 10 mg melatonin",
+  "b": "Take 5 mg melatonin",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 50 mg zinc",
+  "b": "Take 50 g zinc",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take 50 mcg vitamin D",
+  "b": "Take 50 mg vitamin D",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Drink 8 glasses of water",
+  "b": "Drink 3 glasses of water",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "More protein builds muscle",
+  "b": "Less protein builds muscle",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Eating before bed causes weight gain",
+  "b": "Eating after bed causes weight gain",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Exercise before breakfast burns more fat",
+  "b": "Exercise after breakfast burns more fat",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Statins are safe for people over 75",
+  "b": "Statins are safe for people under 75",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee causes cancer",
+  "b": "Cancer causes coffee",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Obesity causes depression",
+  "b": "Depression causes obesity",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee may cause cancer",
+  "b": "Coffee will cause cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee may cause cancer",
+  "b": "Coffee causes cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee might cause cancer",
+  "b": "Coffee could cause cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Weight loss improves diabetes",
+  "b": "Weight less improves diabetes",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "The virus causes cancer",
+  "b": "The viru causes cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Gas causes bloating",
+  "b": "Ga causes bloating",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "This diet works",
+  "b": "Thi diet works",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Diabetes causes blindness",
+  "b": "Diabete causes blindness",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Stress causes ulcers",
+  "b": "Stres causes ulcers",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "His risk of cancer is higher",
+  "b": "Her risk of cancer is higher",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Hair loss is caused by stress",
+  "b": "Hair lose is caused by stress",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Dates help labour",
+  "b": "Date help labour",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Lens implants are safe",
+  "b": "Len implants are safe",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "दाल से कैंसर होता है",
+  "b": "दिल से कैंसर होता है",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "मीठा खाना ठीक है",
+  "b": "मोटा खाना ठीक है",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "咖啡致癌",
+  "b": "茶致癌",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "القهوة تسبب السرطان",
+  "b": "الشاي يسبب السرطان",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "кофе вызывает рак",
+  "b": "чай вызывает рак",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "the a is",
+  "b": "it is the",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "???",
+  "b": "!!!",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "…",
+  "b": "...",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "का",
+  "b": "की",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Café au lait raises cholesterol",
+  "b": "Cafe au lait raises cholesterol",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines cause autism really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really",
+  "b": "Vaccines cause autism really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really really",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines\u0000 do not cause autism",
+  "b": "Vaccines cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Vaccines n​ot cause autism",
+  "b": "Vaccines cause autism",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "We'll live longer on keto",
+  "b": "Well live longer on keto",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "I'll get ill from vaccines",
+  "b": "Ill get ill from vaccines",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Shell fish causes allergies",
+  "b": "She'll fish causes allergies",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Smoking and drinking cause cancer",
+  "b": "Smoking or drinking cause cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Kids should not drink coffee",
+  "b": "Should kids not drink coffee",
+  "expect": "match",
+  "why": "the approved rule: one hedge counts wherever it stands, so the question form is the same claim"
+ },
+ {
+  "a": "Non-smokers live longer",
+  "b": "Smokers live longer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Anti-inflammatory diets help arthritis",
+  "b": "Inflammatory diets help arthritis",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Sugar is addictive or not",
+  "b": "Sugar is addictive",
+  "expect": "match",
+  "why": "the approved rule: a trailing 'or not' is the question form"
+ },
+ {
+  "a": "Pregnant women can eat fish",
+  "b": "Pregnant women can eat no fish",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Low-fat diets work",
+  "b": "Low fat diets dont work",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Alcohol in moderation is healthy",
+  "b": "Alcohol is healthy",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Men 50+ need statins",
+  "b": "Men 50 need statins",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Take vitamin D at 4000 IU",
+  "b": "Take vitamin D at 400 IU",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Caffeine raises BP by 5%",
+  "b": "Caffeine raises BP by 5‰",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Coffee: helps memory",
+  "b": "Coffee helps memory?",
+  "expect": "match",
+  "why": "the approved rule: punctuation is ignored"
+ },
+ {
+  "a": "Red meat & cancer",
+  "b": "Red meat or cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ },
+ {
+  "a": "Is it true that coffee causes cancer",
+  "b": "Coffee causes that cancer",
+  "expect": "no match",
+  "why": "hostile pair from the grader: must never share a fold key"
+ }
+]

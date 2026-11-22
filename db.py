@@ -338,25 +338,42 @@ def _run_many(conn, stmts) -> list[_Rows]:
     return [conn.execute(sql, params) for sql, params in stmts]
 
 
+def _columns(conn, table: str) -> set:
+    return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _add_column(conn, table: str, column: str, kind: str = "TEXT"):
+    """
+    Add a column an older database lacks. Two processes starting at once can
+    both see it missing and both add it: the second ALTER is then refused
+    (sqlite3.OperationalError "duplicate column name" locally, a rejected
+    statement, TursoError, from Turso). Whatever the error, when the column
+    is there afterwards the job is done; only when it is still missing is the
+    error raised.
+    """
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+    except Exception:
+        if column not in _columns(conn, table):
+            raise
+
+
 def _init_schema(conn):
     conn.executescript(SCHEMA)
-    # Lightweight migration for databases created before claim_key existed.
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(checks)").fetchall()}
-    if "claim_key" not in cols:
-        conn.execute("ALTER TABLE checks ADD COLUMN claim_key TEXT")
-    vcols = {r["name"] for r in conn.execute("PRAGMA table_info(verdict_cache)").fetchall()}
-    if "tldr" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN tldr TEXT")
-    if "still_open" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN still_open TEXT")
-    if "breakdown_json" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN breakdown_json TEXT")
-    if "method_stamp" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN method_stamp TEXT")
+    # Lightweight migration for databases created before these columns existed.
+    if "claim_key" not in _columns(conn, "checks"):
+        _add_column(conn, "checks", "claim_key")
+    vcols = _columns(conn, "verdict_cache")
+    for column in ("tldr", "still_open", "breakdown_json", "method_stamp"):
+        if column not in vcols:
+            _add_column(conn, "verdict_cache", column)
     conn.execute(
         "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
     )
     conn.execute("CREATE INDEX IF NOT EXISTS checks_key_time ON checks (claim_key, checked_at)")
+    # The newest saved claims first (find_equivalent, the latest list) are
+    # read from this index, not by sorting the whole table.
+    conn.execute("CREATE INDEX IF NOT EXISTS verdict_cache_time ON verdict_cache (created_at)")
 
 
 def init_db():
@@ -455,9 +472,12 @@ def _whole(row) -> bool:
     One saved before those columns existed (they are NULL), or damaged since,
     is not served: to the check it is a miss, so the check runs again and the
     row is replaced; to a shared link or a card it is no saved answer at all.
+    A line counts only when it has at least one letter or digit, in any
+    script: a zero-width space, a lone full stop or a lone dash is empty.
     Nor is one saved from a reply that could not be read (_failed).
     """
-    return all(str(row[k] or "").strip() for k in ("tldr", "still_open")) and not _failed(row)
+    return (all(any(ch.isalnum() for ch in str(row[k] or "")) for k in ("tldr", "still_open"))
+            and not _failed(row))
 
 
 # The short answer the fallback for a reply that could not be read at all (cut
@@ -539,7 +559,7 @@ def put_cached_verdict(
                 json.dumps(cited_studies),
                 json.dumps(studies),
                 _now(),
-                method_stamp,
+                method_stamp or None,   # an empty stamp is no stamp
             ),
         )
 
@@ -662,7 +682,16 @@ _FOLD_DASHES = "‐‑‒–—―−"
 _FOLD_LEAD = [("is", "it", "true", "that"), ("is", "it", "true"), ("true", "or", "false")]
 _FOLD_TRAIL = [("true", "or", "false"), ("or", "not")]
 # A number stays one token with its inner separators: 2.5, 2-5, 4,000, 1/2, 3:1.
-_FOLD_TOKEN = re.compile(r"\w*\d(?:[.,/:\-]\d+)+\w*|\w+|\S")
+# It also keeps its sign and its decimal point: a "-" right before a digit,
+# with no letter or digit just before it, is a minus sign (-5, but the joiner
+# in omega-3 and 2-5), and a "." right before a digit, with no digit just
+# before it, is a decimal point (.5, -.5). So "-5 C" is never "5 C", nor
+# ".5 mg" "5 mg". Every dash, the minus sign U+2212 included, is a "-" by then.
+_FOLD_NUMBER = r"[.,/:\-]\d+"
+_FOLD_TOKEN = re.compile(
+    r"(?<!\w)-\.?\d+(?:" + _FOLD_NUMBER + r")*\w*"
+    r"|(?<!\d)\.\d+(?:" + _FOLD_NUMBER + r")*\w*"
+    r"|\w*\d(?:" + _FOLD_NUMBER + r")+\w*|\w+|\S")
 
 
 def _fold_contractions(t: str) -> str:
@@ -672,6 +701,11 @@ def _fold_contractions(t: str) -> str:
     t = re.sub(r"\bwon'?t\b", "will not", t)
     t = re.sub(r"\bshan'?t\b", "shall not", t)
     t = re.sub(r"n't\b", " not", t)
+    # The other short forms are spelled out as their own word, so "she'll"
+    # never becomes "shell" nor "we're" "were". The "'d" of "I'd" can mean
+    # had or would, so it is kept apart as a bare "d" and never guessed.
+    t = re.sub(r"(?<=\w)'(ll|re|ve|m|d)\b",
+               lambda m: " " + {"ll": "will", "re": "are", "ve": "have", "m": "am", "d": "d"}[m.group(1)], t)
     return re.sub(r"\b(do|does|did|is|are|was|were|has|have|had|should|would|could|must)nt\b",
                   r"\1 not", t)
 
@@ -690,28 +724,61 @@ def _fold_plural(w: str) -> str:
     return w[:-1] if w.endswith("s") else w
 
 
+# Compatibility forms whose plain form loses what they say: a raised or
+# lowered digit (10⁹ is not 109, H₂O is not H2O) and a fraction (½ is not 12).
+_FOLD_LOSSY_TAGS = ("<super>", "<sub>", "<fraction>")
+_FOLD_BEFORE_NUMBER = re.compile(r"\s+\.?\d")
+
+
 def _fold_tokens(claim: str) -> list:
     import unicodedata
-    t = unicodedata.normalize("NFKC", str(claim or ""))
+    raw = str(claim or "")
+    if any(unicodedata.decomposition(ch).startswith(_FOLD_LOSSY_TAGS) for ch in raw):
+        return None   # such a claim has no fold key at all
+    # No letter is folded into more than one: ß would become ss (Maße is not
+    # Masse), a ligature such as ﬁ fi, ㎎ mg. A character that folding turns
+    # into several, any of them a letter or digit, leaves the claim no key.
+    for ch in set(raw):
+        folded = unicodedata.normalize("NFKC", ch).casefold()
+        if len(folded) > 1 and any(c.isalnum() for c in folded):
+            return None
+    t = unicodedata.normalize("NFKC", raw)
     for k, v in _FOLD_QUOTES.items():
         t = t.replace(k, v)
     for d in _FOLD_DASHES:
         t = t.replace(d, "-")
     t = _fold_contractions(t.casefold().replace("&", " and ")).replace("'", "")
     out = []
-    for tok in _FOLD_TOKEN.findall(t):
+    for m in _FOLD_TOKEN.finditer(t):
+        tok = m.group()
+        if tok == "-" and _FOLD_BEFORE_NUMBER.match(t, m.end()):
+            # A dash standing free right before a number ("at - 5 C",
+            # "5 - 10 kg") may be a minus or a range: it is kept, never dropped.
+            out.append(tok)
+            continue
         if len(tok) == 1 and not tok.isalnum():
+            cat = unicodedata.category(tok)
             # Symbols (% + < > $ # and emoji) stay; punctuation goes.
-            if unicodedata.category(tok).startswith("S") or tok in "%‰#":
+            if cat.startswith("S") or tok in "%‰#":
                 out.append(tok)
+            elif cat[0] in "MLN" or cat == "Cf":
+                # A combining mark (a vowel sign, an accent that does not
+                # compose), a letter or digit the tokens do not keep, or an
+                # invisible joiner inside a word: dropping it could make two
+                # different words one. Such a claim has no fold key at all.
+                return None
             continue
         out.append(tok)
     return out
 
 
 def claim_fold(claim: str) -> tuple:
-    """The ordered key two wordings of one claim share. See the notes above."""
+    """The ordered key two wordings of one claim share. See the notes above.
+    Empty, so it matches nothing, when folding would drop any character that
+    is part of a word (see `_fold_tokens`): no letter is ever silently lost."""
     toks = _fold_tokens(claim)
+    if toks is None:
+        return ()
     changed = True
     while changed:
         changed = False
@@ -736,27 +803,41 @@ def claim_fold(claim: str) -> tuple:
 _REPAIRED_AT_RENDER = frozenset({"count_mismatch", "cited_off_topic"})
 
 
+# How many saved claims a search for a reworded match reads: the newest ones.
+# Folding costs about 0.2 ms a claim, and on Turso the rows come back in one
+# request under its timeout, so the cost of a miss is bounded. An older claim
+# past this many is not matched (a miss only costs a fresh check). See
+# DECISIONS.md: when the table nears this size, add an indexed fold key.
+EQUIVALENT_SCAN = 2000
+
+
 @_routed
 def find_equivalent(claim: str) -> str | None:
     """
     The stored wording of a saved answer to this same claim, or None. Only a
     whole row (`_whole`) whose record has no problem the page cannot repair
-    is returned. A row stored under this claim's own key comes first, then
-    the newest. Any age: the caller decides whether it is fresh enough.
-    Every saved claim is read, with no cap, so an old one is never missed.
+    is returned. A row stored under this claim's own key comes first (one
+    lookup by key, at any age), then the newest of the EQUIVALENT_SCAN
+    newest saved claims. Any age: the caller decides whether it is fresh
+    enough.
     """
     key = claim_fold(claim)
     if not key:
         return None
     own = normalize_claim(claim)
+    # The unrouted reader: this call already runs on one backend.
+    mine = get_cached_by_key.__wrapped__(own)
+    if mine and claim_fold(mine["claim_text"]) == key and servable(mine):
+        return mine["claim_text"]
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT claim_key, claim_text, tldr, still_open FROM verdict_cache "
-            "ORDER BY created_at DESC, rowid DESC").fetchall()
-    found = [r for r in rows if r["claim_text"] and _whole(r) and claim_fold(r["claim_text"]) == key]
-    found.sort(key=lambda r: r["claim_key"] != own)
-    for r in found:
-        # The unrouted reader: this call already runs on one backend.
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (EQUIVALENT_SCAN,)).fetchall()
+    for r in rows:
+        if r["claim_key"] == own or not (r["claim_text"] and _whole(r)):
+            continue
+        if claim_fold(r["claim_text"]) != key:
+            continue
         saved = get_cached_by_key.__wrapped__(r["claim_key"])
         if servable(saved):
             return saved["claim_text"]
