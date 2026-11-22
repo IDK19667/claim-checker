@@ -1180,7 +1180,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     typed, reason = None, None
     same = _equivalent(claim)
     if same:
-        cached = db.get_cached_verdict(same, VERDICT_CACHE_HOURS)
+        cached = _current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same)
         if cached:
             yield from_cache(cached, claim, "wording", same)
             return
@@ -1222,7 +1222,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
                 return
             same = _equivalent(claim)
             if same:
-                cached = db.get_cached_verdict(same, VERDICT_CACHE_HOURS)
+                cached = _current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same)
                 if cached:
                     yield from_cache(cached, typed, reason, same)
                     return

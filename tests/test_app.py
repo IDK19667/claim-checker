@@ -7668,6 +7668,51 @@ with db.get_conn() as _conn:
 t("failed rows: the rows themselves stay in the database", _fr_kept >= 2, _fr_kept)
 appmod._sitemap_memo["stamp"] = None
 
+# ---- where the fixes meet: an out-of-date saved answer, reworded and on its page ----
+# rc-reading: a saved answer that relied on a study code now sets aside is out
+# of date. rc-site-fix and the equivalence lookup: the same claim in other
+# words reaches that saved row. Out of date is out of date whichever wording
+# reaches it; and the row's own page shows the saved answer as it stands.
+_OD_SAVED = "Creatine raises strength in boys"
+_OD_WORDED = "Does creatine raise strength in boys?"
+_od_rows = (_OD_SAVED, _OD_WORDED)
+db.put_cached_verdict(_OD_SAVED, "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", _hair["pmid"]],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+t("meet: the reworded claim reaches the saved row", appmod._equivalent(_OD_WORDED) == _OD_SAVED,
+  appmod._equivalent(_OD_WORDED))
+_od_pg = c.get("/?q=" + urllib.parse.quote(_OD_SAVED)).get_data(as_text=True)
+_od_sr = json.loads(_od_pg.split('<script id="server-result" type="application/json"')[1].split(">", 1)[1]
+                    .split("</script>")[0])
+_od_h = [s_ for s_ in _od_sr["studies"] if s_["pmid"] == _hair["pmid"]]
+t("meet: the out-of-date row's own page shows the saved answer, as any row past its window does",
+  _od_pg.count('id="server-result"') == 1 and _od_sr["claim"] == _OD_SAVED
+  and _od_sr["tldr"].startswith("Creatine raises strength and hormones"), (_od_sr.get("claim"), _od_sr.get("tldr")))
+t("  and it never both relies on a study and sets it aside: the study is cited, with no 'Set aside' group",
+  _od_h and _od_h[0]["cited_in_verdict"] and not _od_h[0].get("off_topic")
+  and "Set aside: off topic" not in _od_pg, _od_h)
+_calls0 = fg.models.calls
+fg.models.script = [Resp("(creatine) AND (strength)"), Resp(VJ("complicated", [1]))]
+_od_p = P(_OD_WORDED, ip="7.7.7.81").get_json()
+t("meet: the same claim in other words does not get that out-of-date answer: it is checked fresh",
+  _od_p.get("cached") is False and fg.models.calls > _calls0 and _od_p.get("claim") == _OD_SAVED,
+  (_od_p.get("cached"), fg.models.calls - _calls0, _od_p.get("claim")))
+db.put_cached_verdict(_OD_SAVED, "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", _hair["pmid"]],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+_calls0 = fg.models.calls
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_od_r, _od_evs = stream(_OD_WORDED, ip="7.7.7.82")
+_od_done = [e_ for e_ in _od_evs if e_.get("stage") == "done"]
+t("  nor on the streamed check",
+  _od_done and _od_done[0]["result"].get("cached") is False and fg.models.calls > _calls0,
+  ([e_.get("stage") for e_ in _od_evs], fg.models.calls - _calls0))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                  tuple(db.normalize_claim(x) for x in _od_rows))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
