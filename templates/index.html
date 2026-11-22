@@ -22,26 +22,17 @@
   <meta name="twitter:title" content="{{ preview.title }}" />
   <meta name="twitter:description" content="{{ preview.description }}" />
   <meta name="twitter:image" content="{{ preview.image }}" />
-  {% elif checks_page %}
-  <title>Check a health claim · Evident</title>
-  <meta name="description" content="The Evident checker on its own: paste a health claim and get a verdict from the studies on PubMed, with the studies shown." />
-  <meta property="og:title" content="Check a health claim · Evident" />
-  <meta property="og:description" content="Saw a health claim? Check it against the research." />
-  <meta property="og:image" content="{{ base_url }}/og/_.png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta name="twitter:card" content="summary_large_image" />
   {% else %}
   <title>Evident: check a health claim against real research</title>
   <meta name="description" content="Paste a health claim you saw online. Evident searches real medical studies on PubMed, weighs how strong they are, and gives you a straight answer with sources." />
   <meta property="og:title" content="Evident" />
   <meta property="og:description" content="Saw a health claim? Check it against the research." />
-  <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta property="og:image" content="{{ base_url }}/og/_.png?v=2" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   {% endif %}
-  {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% elif checks_page %}<link rel="canonical" href="{{ base_url }}/checks" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
+  {% if preview %}<link rel="canonical" href="{{ preview.url }}" />{% else %}<link rel="canonical" href="{{ base_url }}/" />{% endif %}
   {% if noindex %}<meta name="robots" content="noindex" />{% else %}<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />{% endif %}
   {% if jsonld %}<script type="application/ld+json" nonce="{{ csp_nonce }}">{{ jsonld | tojson }}</script>{% endif %}
   <meta property="og:type" content="website" />
@@ -164,13 +155,6 @@
 
   <main class="wrap">
     <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>
-        {% if ledger and ledger.studies_read %}
-        <dl class="ledger">
-          <div><dt>Studies read</dt><dd>{{ "{:,}".format(ledger.studies_read) }}</dd></div>
-          <div><dt>Claims checked</dt><dd>{{ "{:,}".format(ledger.claims) }}</dd></div>
-          <div><dt>Pooled analyses</dt><dd>{{ "{:,}".format(ledger.pooled) }}</dd></div>
-        </dl>
-        {% endif %}
       {% if latest %}
       <div class="latest">
         <h2 class="sec-title">Latest checks</h2>
@@ -178,8 +162,8 @@
           {% for v in latest %}
           <li class="entry">
             <a class="entry-link" href="/?q={{ v.claim_text | urlencode }}">
-              <span class="entry-no">No. {{ v.issue }}</span>
-              <span class="entry-claim">{{ v.claim_text }}</span>
+              {# Sentence case on the page only: the stored text and the link keep the wording as typed. #}
+              <span class="entry-claim">{{ v.claim_text[:1] | upper }}{{ v.claim_text[1:] }}</span>
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
             {% if v.evidence.mix %}
@@ -514,7 +498,7 @@
         <!-- The sources fold into groups: what the verdict leaned on, open;
              background only (animal and lab studies for a claim about
              people, opinion pieces, buying guides), closed; what was
-             read and not relied on, closed; and what was excluded as off
+             read and not relied on, closed; and what was set aside as off
              topic, closed, never under relied on. Every study stays in the
              HTML either way, so crawlers and a reader with no JavaScript get
              the whole file. -->
@@ -528,7 +512,7 @@
           <summary class="group-head"><span class="group-name">{% if g.cited %}Read, not relied on{% else %}Read{% endif %}</span><span class="group-count">{{ g.others | length }}</span></summary>
           <ol class="studies">{% for i in g.others %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
         </details>{% endif %}{% if g.excluded %}<details class="source-group">
-          <summary class="group-head"><span class="group-name">Excluded (off-topic)</span><span class="group-count">{{ g.excluded | length }}</span></summary>
+          <summary class="group-head"><span class="group-name">Set aside: off topic</span><span class="group-count">{{ g.excluded | length }}</span></summary>
           <ol class="studies">{% for i in g.excluded %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
         </details>{% endif %}{% if not result.studies %}<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>{% endif %}{% endif %}</div>
         <!-- Shown only when the check found nothing to stand on. Every line
@@ -690,7 +674,7 @@
     </p>
     <p class="fine">
       Studies from PubMed, U.S. National Library of Medicine. Verdicts written
-      by an AI model that reads the abstracts. {{ privacy_line }}
+      by an AI model that reads the abstracts. {{ privacy_line(provider) }} <a href="/privacy">Privacy details</a>
     </p>
     <p class="fine foot-links"><span class="foot-row"><a href="/about">About</a><a href="/method">Methodology</a><a href="/corrections">Corrections and contact</a><a href="/privacy">Privacy</a></span></p>
   </footer>

@@ -382,7 +382,7 @@ purpose, never the browser's dark mode.
 
 - **Bricolage Grotesque**, 300 to 500, pinned at its 96pt optical size
   because it is only ever set large: the wordmark, headlines, the
-  verdict, the ledger's figures, section titles. Weight 350 with tight
+  verdict, section titles. Weight 350 with tight
   tracking (`-0.03em` to `-0.04em`); it is rounded and modern without
   being soft.
 - **Instrument Sans**, 400 to 600: everything you read. The claim, the
@@ -544,11 +544,10 @@ the shape of the evidence before opening a check.
   screen, the button, and three examples as quiet outlines. The first
   screen is exactly that, at 375px and at 1440px, and a measured test
   (`scripts/ui_measure.mjs --assert`) fails if the field and button are
-  not both on it. Then by day the ledger of real counts in light 30px
-  figures under a `--rule`, the latest checks and "Before you trust a
-  verdict".
-- **Latest checks:** a 32px title, then rows on 1px rules: the issue
-  number in mono, the claim, the verdict at the right in plain ink, and
+  not both on it. Then by day the latest checks and "Before you trust a
+  verdict". There is no strip of site counts.
+- **Latest checks:** a 32px title, then rows on 1px rules: the claim
+  (no issue number), the verdict at the right in plain ink, and
   under it the mini shelf and its counts. On a wide screen the title sits
   in a left column and the rows in a right one.
 - **Before you trust a verdict:** the same grammar, one question per row,

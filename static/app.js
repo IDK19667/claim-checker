@@ -639,7 +639,7 @@ function renderResult(data) {
                        || "Background only: animal and lab studies"),
             backRows, !citedRows.length && !otherRows.length) +
       group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0) +
-      group("Excluded (off-topic)", rows(g.excluded), false)
+      group("Set aside: off topic", rows(g.excluded), false)
     : `<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>`;
 
   const list = $("sources");

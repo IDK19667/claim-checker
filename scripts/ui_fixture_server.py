@@ -69,6 +69,8 @@ SEED = [
     "Creatine builds strength",
     "Creatine improves strength",
     "Creatine is not safe for the kidneys",
+    # app.EXAMPLE_CLAIM: the home page's real example is read from the saved answers.
+    "Apple cider vinegar cures diabetes",
 ]
 REPLAY_FROM = "Taking vitamin D supplements in winter cuts your risk of catching a cold or flu, but only if you're deficient to begin with"
 

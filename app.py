@@ -98,9 +98,19 @@ app.jinja_env.globals["source_groups"] = display.source_groups
 app.jinja_env.globals["typed_note"] = display.typed_note
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
-# full: the claim text is kept, and nothing that identifies the person is.
-PRIVACY_LINE = "Claims you check are saved without your name, an account or your IP address."
-app.jinja_env.globals["privacy_line"] = PRIVACY_LINE
+# full: the claim text is kept, nothing that identifies the person is, and
+# the text goes to the AI provider the page names.
+PRIVACY_LINE = "Claim text is stored without anything that identifies you and is sent to {provider} to check it."
+
+
+def privacy_line(provider: str, after_colon: bool = False) -> str:
+    """The privacy sentence for this provider. after_colon lowers its first
+    letter, for the /privacy lede, where it runs on after "The short version:"."""
+    line = PRIVACY_LINE.format(provider=provider)
+    return line[0].lower() + line[1:] if after_colon else line
+
+
+app.jinja_env.globals["privacy_line"] = privacy_line
 
 
 @app.before_request
@@ -253,26 +263,49 @@ def _public_claims(rows, n, key="claim_text", indexable=False):
 LIST_OVERFETCH = 3
 
 
+# The real check the trust section offers as proof. It is read from the
+# saved answers by its key, so the proof is always the answer the site serves.
+EXAMPLE_CLAIM = "Apple cider vinegar cures diabetes"
+
+
+def _list_entries(rows) -> list[dict]:
+    """
+    Saved answers as a public list shows them: the stamp the result page
+    would show (_listed) and the evidence behind it. The Latest list and the
+    trust section's example both go through here, so the two cannot disagree.
+    """
+    return [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
+                 shelf=evidence.shelf(v["studies"], v["cited"]))
+            for v in map(_listed, rows)]
+
+
 def _trust_example():
     """
-    The real check the trust section offers as proof, read from the exported
-    check.json so it is never invented. None if
-    it is not built, and the section renders without it rather than with an
-    invented example.
+    The trust section's real example, {claim, verdict, tldr, checked, read,
+    href}, from the saved answer for EXAMPLE_CLAIM. None when that answer is
+    missing or incomplete (no studies, no short answer, no still-open line, an
+    unknown verdict or an unreadable date): the section then renders without
+    it rather than with an invented example.
     """
     try:
-        with open(os.path.join(app.static_folder, "flight", "check.json")) as f:
-            check = json.load(f)
-        d = datetime.fromisoformat(check["checkedAt"])
-        return {"claim": check["claim"], "verdict": check["verdict"], "tldr": check["tldr"],
-                "checked": f"{d.day} {d.strftime('%B %Y')}",
-                "read": len(check.get("studies") or []),
-                "href": "/?q=" + quote(check["claim"])}
-    except (OSError, ValueError, KeyError, TypeError):
+        row = db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM))
+        if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
+                or not row["tldr"].strip() or not row["still_open"].strip():
+            return None
+        d = datetime.fromisoformat(str(row["cached_at"]))
+        v = _list_entries([{"claim_text": row["claim_text"], "search_query": row["search_query"],
+                            "verdict": row["verdict"], "tldr": row["tldr"], "still_open": row["still_open"],
+                            "created_at": row["cached_at"], "studies": row["studies"],
+                            "cited": row["cited_studies"]}])[0]
+    except (sqlite3.Error, ValueError, KeyError, TypeError, AttributeError) as e:
+        app.logger.warning("Could not build the trust example: %s", e)
         return None
+    return {"claim": v["claim_text"], "verdict": v["verdict"], "tldr": v["tldr"],
+            "checked": f"{d.day} {d.strftime('%B %Y')}", "read": v["evidence"]["read"],
+            "href": "/?q=" + quote(v["claim_text"])}
 
 
-def _render_home(checks_page: bool = False):
+def _render_home():
     claim = _claim_from_query_args()
     preview = None
     cached = None
@@ -307,40 +340,37 @@ def _render_home(checks_page: bool = False):
             jsonld["reviewRating"]["ratingValue"] = RATING.get(cached["verdict"], 3)
             jsonld["reviewRating"]["alternateName"] = label
             jsonld["reviewRating"]["ratingExplanation"] = cached["tldr"] or cached["explanation"]
-    # The front page carries the work instead of describing it: real counts
-    # and the most recent verdicts with the evidence behind each. Both are
-    # best-effort; an empty database must still render a usable page.
+    # The front page carries the work instead of describing it: the most
+    # recent verdicts with the evidence behind each. Best-effort; an empty
+    # database must still render a usable page.
     try:
-        ledger = db.ledger()
-        latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
-                       shelf=evidence.shelf(v["studies"], v["cited"]))
-                  for v in map(_listed, _public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))]
+        latest = _list_entries(_public_claims(db.recent_verdicts(10 * LIST_OVERFETCH), 10))
     except sqlite3.Error as e:
-        app.logger.warning("Could not build the front page ledger: %s", e)
-        ledger, latest = None, []
+        app.logger.warning("Could not build the front page's latest checks: %s", e)
+        latest = []
     db.count_event("view.result" if cached else "view.home")
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
-                           ledger=ledger, latest=latest,
+                           latest=latest,
                            example=None if cached else _trust_example(),
-                           provider=verdict.provider_label(), on_gemini=_on_gemini(), checks_page=checks_page,
+                           provider=verdict.provider_label(), on_gemini=_on_gemini(),
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 
 @app.route("/")
 def index():
-    """The checker first, then the ledger and recent checks."""
+    """The checker first, then the recent checks."""
     return _render_home()
 
 
 @app.route("/checks")
 def checks():
     """
-    The checker on its own, with no footage above it: the page the home
-    page used to be. Same ledger, same recent checks, same everything, for
-    anyone who wants the tool and not the film.
+    The checker on its own once had this address. The home page is that page
+    now, so old links land there, with any ?q= they carry.
     """
-    return _render_home(checks_page=True)
+    qs = request.query_string.decode("utf-8", "replace")
+    return redirect("/" + ("?" + qs if qs else ""), code=301)
 
 
 @app.route("/flight")
@@ -410,7 +440,7 @@ def sitemap():
     base = _base_url()
     # The pages, then the curated example claims whose saved answer is sound. Any
     # other result page is left out and is marked noindex on its own page.
-    urls = [(f"{base}/", "1.0", ""), (f"{base}/checks", "0.8", ""), (f"{base}/about", "0.5", ""),
+    urls = [(f"{base}/", "1.0", ""), (f"{base}/about", "0.5", ""),
             (f"{base}/method", "0.5", ""), (f"{base}/corrections", "0.4", ""),
             (f"{base}/privacy", "0.3", "")]
     urls += [(base + path, "0.6", day) for path, day in _sitemap_result_paths()]
@@ -453,7 +483,6 @@ def llms_txt():
         "## Pages",
         "",
         f"- [Check a claim]({base}/): the checker, with how a check works below it",
-        f"- [Check a claim, tool only]({base}/checks): the checker on its own",
         f"- [About]({base}/about): who makes Evident, what it does and what it does not do",
         f"- [Method]({base}/method): how a check works and the rules every verdict must pass",
         f"- [Corrections]({base}/corrections): report a wrong answer or get in touch",

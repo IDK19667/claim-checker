@@ -214,19 +214,6 @@ body {
 .lede { margin: 14px 0 0; font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 34ch; }
 .band .lede { color: var(--on-deep-2); }
 
-/* The ledger: real counts, set large and light. */
-/* Below the checker, by day: the counts are proof the desk works, not the
-   first thing to read. */
-.ledger {
-  display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 30px;
-  margin: 48px 0 0; padding-top: 20px; border-top: 1px solid var(--rule);
-}
-.ledger dt { font: 500 13px/1.3 var(--mono); color: var(--ink-3); }
-.ledger dd {
-  margin: 6px 0 0; font: 300 30px/1 var(--display); letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums; color: var(--ink);
-}
-
 .claim-form { margin: 18px 0 0; }
 /* The field is named out loud: the placeholder is an example, never the label. */
 .field-title { display: block; font: 500 15px/1.3 var(--body); color: inherit; }
@@ -330,7 +317,7 @@ body {
 .claim-list, .ledger-list { list-style: none; margin: 0; padding: 0; }
 .claim-list { border-top: 1px solid var(--rule); }
 
-/* A check in a list: its number, the claim, the verdict in words (never
+/* A check in a list: the claim, the verdict in words (never
    coloured), then a mini shelf of the books it was read from. */
 .entry {
   display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: 0 14px;
@@ -340,9 +327,11 @@ body {
   grid-column: 1 / -1;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px;
   align-items: baseline; text-decoration: none; color: var(--ink);
+  /* A 44px tap height for a one-line row, grown into the row's own padding
+     so nothing on the page moves. */
+  padding: 10px 0; margin: -10px 0;
 }
 .entry-link:hover .entry-claim { text-decoration: underline; text-decoration-color: var(--rule-2); }
-.entry-no { grid-column: 1 / -1; font: 500 13px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .entry-claim { font-size: 18px; line-height: 1.35; overflow-wrap: break-word; }
 .entry-verdict { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
 .entry-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
@@ -1050,6 +1039,11 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
 .foot b, .foot strong { color: var(--on-deep); font-weight: 500; }
 .foot .fine { color: var(--on-deep-3); }
 .foot a { color: var(--on-deep-2); }
+/* The link after the privacy sentence: a 44px tap area grown around it, as
+   under the claim box, so the sentence itself does not move. It grows
+   upward, over its own sentence, because the row of links sits just below. */
+.foot .fine:not(.foot-links) a { position: relative; }
+.foot .fine:not(.foot-links) a::after { content: ""; position: absolute; inset: -26px -6px -2px; }
 /* The footer links are controls, not a sentence: each one is a 44px row. */
 .doc-back { margin-top: 28px; }
 .tap { display: inline-flex; align-items: center; min-height: 44px; }

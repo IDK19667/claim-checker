@@ -3932,8 +3932,10 @@ What was deliberately rejected:
   version below the form would still have been a scroll-scrubbed 23MB frame
   sequence. Taking the safer option: no intro on the home page. Its files
   (template, flight.css/js/decoder, the frames, test_flight.py) are in
-  `_old/`, kept rather than deleted; `static/flight/check.json` stays
-  because the trust section's real example reads it. The label ("Health
+  `_old/`, kept rather than deleted. (`static/flight/check.json`, a frozen
+  export the trust section's real example once read, left the repo on
+  2026-11-21: the example is now the saved answer for `app.EXAMPLE_CLAIM`,
+  read from the database through the Latest list's own path.) The label ("Health
   claim to check") is visible, the counters moved below the form, and
   `scripts/ui_measure.mjs --assert` fails if field, label, submit and three
   examples are not on the first screen at 1440x900, 768x1024, 390x844 and

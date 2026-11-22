@@ -681,10 +681,37 @@ pubmed.deep_dive = _real_dive
 
 # ---- the front page carries the work ---------------------------------------------
 _html = c.get("/").data.decode()
-t("the front page shows the ledger", "Studies read" in _html and "Pooled analyses" in _html)
+t("the front page shows no counts strip: the latest checks carry the work",
+  'class="ledger"' not in _html and "Studies read" not in _html and "Pooled analyses" not in _html
+  and "Claims checked" not in _html)
+import inspect as _insp_led  # noqa: E402
+_css_led = (ROOT / "static" / "style.css").read_text()
+t("  its CSS is gone and the home page stops computing it, while db.ledger() stays",
+  not re.search(r"^\.ledger[ ,{]", _css_led, re.M) and ".entry-no" not in _css_led
+  and "db.ledger()" not in _insp_led.getsource(appmod._render_home) and callable(db.ledger))
 t("the front page lists recent checks with their evidence",
-  "Latest checks" in _html and "entry-no" in _html and 'class="mini"' in _html)
+  "Latest checks" in _html and 'class="entry-claim"' in _html and 'class="mini"' in _html)
+_entry_css = re.search(r"^\.entry-link \{(.*?)\}", _css_led, re.M | re.S).group(1)
+t("  without the number line, a list row's link still has a 44px tap height, with the layout unmoved",
+  "padding: 10px 0" in _entry_css and "margin: -10px 0" in _entry_css, _entry_css)
+_404_led = c.get("/no-such-page-led").get_data(as_text=True)
+t("  with no issue numbers, on the home page or the 404 page",
+  "entry-no" not in _html and "entry-no" not in _404_led and not re.search(r">No\. \d+<", _html + _404_led)
+  and 'class="entry-claim"' in _404_led)
 t("the front page never says '1 studies'", "1 studies read" not in _html)
+# Sentence case is the template's: the stored text and the link keep the
+# wording as typed, only the first letter shown is raised.
+db.put_cached_verdict("green tea speeds up METABOLISM", "green tea AND metabolism", "complicated", "x",
+                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "a", "journal": "J", "year": "2020",
+                        "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Randomized Controlled Trial"]}],
+                      tldr="Maybe a little.", still_open="How much is unclear.")
+_sc_html = c.get("/").data.decode()
+_sc_row = db.get_cached_by_key(db.normalize_claim("green tea speeds up METABOLISM"))
+t("the Latest list shows a claim in sentence case, and only the first letter changes",
+  '<span class="entry-claim">Green tea speeds up METABOLISM</span>' in _sc_html
+  and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_html
+  and _sc_row["claim_text"] == "green tea speeds up METABOLISM",
+  [x for x in _sc_html.split('class="entry-claim">')[1:3]])
 
 _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
@@ -2040,8 +2067,8 @@ t("a result that rests on evidence carries no next_steps in its payload",
   or "next_steps" in _r.data.decode())
 
 # The fly-through is out of the home page (its files are in _old/, with its
-# test). /flight still redirects, and static/flight/check.json still feeds the
-# trust section's real example.
+# test). /flight still redirects; the trust section's real example is read
+# from the saved answers (see the trust tests below).
 
 # ---- the checker comes first (queue 7, step 2) -----------------------------
 _home = c.get("/").get_data(as_text=True)
@@ -2053,9 +2080,9 @@ t("home: the field has a visible label and a helper line, not just a placeholder
 t("  the nav is How it works, About, Privacy, and the page loads no footage",
   all(x in _home for x in ('id="how-btn"', 'id="about-link"', 'href="/privacy">Privacy</a>'))
   and "flight" not in _home.replace("inFlight", "") and 'id="flight"' not in _home)
-t("  the examples sit in the form, after the submit button; the counters come after the form",
+t("  the examples sit in the form, after the submit button; the latest checks come after the form",
   _home.index('id="submit-btn"') < _home.index('id="chips"') < _home.index("</form>")
-  < (_home.index('class="ledger"') if 'class="ledger"' in _home else 10**9))
+  < _home.index('class="latest"'))
 t("  the first three examples are the ones app.js renders",
   "EXAMPLES.slice(0, 3)" in _js)
 _pl = _re.search(r'<p class="privacy-line"[^>]*>(.*?)</p>', _home, _re.S)
@@ -2832,6 +2859,15 @@ t("  an unknown outcome phrase is dropped and the search asked again",
 import html as _html
 import inspect as _inspect
 import re as _re
+# The proof is the saved answer itself, read from the database by its key,
+# so it is seeded here the way a real check would have saved it.
+_EXS = [_study("EX1", "Vinegar and fasting glucose: a meta-analysis", types=["Meta-Analysis"]),
+        _study("EX2", "Vinegar with meals in type 2 diabetes", types=["Randomized Controlled Trial"]),
+        _study("EX3", "Vinegar and insulin in rats", types=["Journal Article"])]
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
 _home = c.get("/").get_data(as_text=True)
 _trust = _home.split('<section id="trust"')[1].split("</section>")[0] if '<section id="trust"' in _home else ""
 _rows = _trust.split('<div class="trust-row">')[1:]
@@ -2852,12 +2888,54 @@ t("  the study count it states is the one PubMed is asked for",
 t("  and it names the labels the code actually forces",
   f"“{appmod.VERDICT_LABELS['insufficient']}”" in _trust_text and f"“{appmod.VERDICT_LABELS['complicated']}”" in _trust_text)
 _ex = appmod._trust_example()
-t("  the real check is the exported one, linked as a result page",
-  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=Apple%20cider%20vinegar%20cures%20diabetes"
+t("  the real check is the saved one, linked as a result page",
+  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=" + urllib.parse.quote(appmod.EXAMPLE_CLAIM)
   and "The footage at the top" not in _trust_text, _ex)
-_checks_page = c.get("/checks").get_data(as_text=True)
-t("  /checks carries it too, and neither page points at footage that is gone",
-  '<section id="trust"' in _checks_page and "The footage at the top" not in _checks_page)
+_ex_row = db.get_cached_by_key(db.normalize_claim(appmod.EXAMPLE_CLAIM))
+t("  its claim, verdict, short answer, date and count are the saved row's, not a frozen file's",
+  _ex and _ex["claim"] == _ex_row["claim_text"] and _ex["verdict"] == "complicated"
+  and _ex["tldr"] == _ex_row["tldr"] and _ex["read"] == 3
+  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(appmod.datetime.fromisoformat(_ex_row["cached_at"]))
+  and "check.json" not in _inspect.getsource(appmod._trust_example), _ex)
+t("  the frozen file and the script that wrote it are gone from the repo",
+  not (ROOT / "static" / "flight" / "check.json").exists() and not (ROOT / "scripts" / "export_flight_check.py").exists())
+# It goes through the Latest list's own path: a stored "true" whose only cited
+# study is off topic shows the same capped verdict in both places.
+_EXO = [dict(_EXS[0], off_topic=verdict.OFF_OUTCOME), _EXS[1]]
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "true",
+                      "Study 1 shows a cure.", ["EX1"], _EXO, tldr="It cures diabetes.", still_open="Doses vary.")
+_ex2 = appmod._trust_example()
+_ex2_home = c.get("/").get_data(as_text=True)
+_ex2_latest = [x for x in _ex2_home.split('<ol class="ledger-list">')[1].split("</ol>")[0].split('<li class="entry">')
+               if appmod.EXAMPLE_CLAIM.lower() in _html.unescape(x).lower()]
+_ex2_proof = _re.search(r'<p class="proof-verdict">([^<]*)</p>', _ex2_home)
+t("  the proof and the Latest list show the same verdict, through the same listing path",
+  _ex2 and _ex2["verdict"] == "insufficient" and _ex2_proof and _ex2_latest
+  and _ex2_proof.group(1) == appmod.VERDICT_LABELS["insufficient"]
+  and f'<span class="entry-verdict">{appmod.VERDICT_LABELS["insufficient"]}</span>' in _ex2_latest[0]
+  and _ex2["tldr"] == verdict.UNTESTED_TLDR, (_ex2, _ex2_proof and _ex2_proof.group(1), _ex2_latest))
+# Missing or incomplete, the section renders without it.
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "x", [], [], tldr="A short answer.", still_open="Open.")
+t("  a saved row with no studies is not offered as proof", appmod._trust_example() is None)
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "x", ["EX1"], _EXS, tldr="A short answer.", still_open="")
+t("  nor one with no still-open line", appmod._trust_example() is None
+  and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+with db.get_conn() as _exc:
+    _exc.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(appmod.EXAMPLE_CLAIM),))
+t("  nor a missing one", appmod._trust_example() is None and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+_fx_src = (ROOT / "scripts" / "ui_fixture_server.py").read_text()
+t("  the local fixture page seeds the example claim, so its screenshots show the proof",
+  f'    "{appmod.EXAMPLE_CLAIM}",' in _fx_src.split("SEED = [")[1].split("]")[0])
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
+_checks_r = c.get("/checks")
+t("  /checks is gone: it sends the reader to the home page, which points at no footage that is gone",
+  _checks_r.status_code == 301 and _checks_r.headers["Location"].endswith("/")
+  and '<section id="trust"' in _home and "The footage at the top" not in _home, _checks_r.headers.get("Location"))
 _ex_res = c.get(_ex["href"] if _ex else "/").get_data(as_text=True)
 t("  and a result page renders it hidden, so the verdict owns that screen",
   ('<section id="trust" class="trust" aria-labelledby="trust-heading" hidden>' in _ex_res)
@@ -4676,20 +4754,33 @@ t("the privacy page says a report's note is kept, anonymously", "report a wrong 
 # 5. The sitemap lists static pages only; a claim somebody typed never appears.
 _sm = c.get("/sitemap.xml").get_data(as_text=True)
 t("the sitemap has the static pages, absolute",
-  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")))
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/privacy")))
+t("  and /checks, now a redirect, is not in it", "/checks" not in _sm)
 _rb = c.get("/robots.txt").get_data(as_text=True)
 t("the sitemap and llms.txt list /about, /method and /corrections as absolute URLs",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/about", "/method", "/corrections"))
   and all(f"](http://localhost{x})" in c.get("/llms.txt").get_data(as_text=True) for x in ("/about", "/method", "/corrections", "/privacy")))
 t("robots.txt points at the sitemap with an absolute URL", "Sitemap: http://localhost/sitemap.xml" in _rb)
 
-# 6. Page identity: /checks has its own title and canonical; every result has a card.
-_ck = c.get("/checks").get_data(as_text=True)
-_home_t = _re2.search("<title>(.*?)</title>", c.get("/").get_data(as_text=True)).group(1)
-_ck_t = _re2.search("<title>(.*?)</title>", _ck).group(1)
-t("/checks has its own title and canonical, and the same card tags as home",
-  _home_t != _ck_t and 'rel="canonical" href="http://localhost/checks"' in _ck
-  and 'name="twitter:card" content="summary_large_image"' in _ck and 'property="og:image" content="http://localhost/og/_.png"' in _ck)
+# 6. Page identity: /checks is a permanent redirect to /; every result has a card.
+_ck_r = c.get("/checks")
+_ckq_r = c.get("/checks?q=garlic%20shortens%20colds")
+_ck_home = c.get("/").get_data(as_text=True)
+t("/checks answers 301 to /, and keeps a query string an old shared link may carry",
+  _ck_r.status_code == 301 and urllib.parse.urlsplit(_ck_r.headers["Location"]).path == "/"
+  and not urllib.parse.urlsplit(_ck_r.headers["Location"]).query
+  and _ckq_r.status_code == 301 and _ckq_r.headers["Location"].endswith("/?q=garlic%20shortens%20colds"),
+  (_ck_r.headers.get("Location"), _ckq_r.headers.get("Location")))
+t("  the home page is the one canonical tool page, with the card tags",
+  'rel="canonical" href="http://localhost/"' in _ck_home and "/checks" not in _ck_home
+  and 'name="twitter:card" content="summary_large_image"' in _ck_home and 'property="og:image" content="http://localhost/og/_.png?v=2"' in _ck_home)
+_ck_sw = (ROOT / "static" / "sw.js").read_text()
+t("  /checks is out of the service worker's SHELL, llms.txt and the templates",
+  '"/checks"' not in _ck_sw.split("const SHELL")[1].split("];")[0]
+  and "/checks" not in c.get("/llms.txt").get_data(as_text=True)
+  and not any("checks_page" in (ROOT / "templates" / f).read_text() or "/checks" in (ROOT / "templates" / f).read_text()
+              for f in ("index.html", "info.html", "privacy.html", "404.html"))
+  and "checks_page" not in (ROOT / "app.py").read_text())
 _png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_dl["claim"]), safe="") + ".png")
 from PIL import Image as _Im2  # noqa: E402
 import io as _io2  # noqa: E402
@@ -4698,7 +4789,7 @@ t("a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twi
   and _png.status_code == 200 and _Im2.open(_io2.BytesIO(_png.data)).size == (1200, 630))
 
 # 7. Beta and the doctor line are on the first screen of the ask, the 404 and the error screen.
-_ask = c.get("/checks").get_data(as_text=True)
+_ask = c.get("/").get_data(as_text=True)
 t("the ask screen carries Not medical advice and the doctor sentence right under its introduction",
   'class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
 t("  so do the 404 page and the error screen",
@@ -6222,6 +6313,14 @@ _cw = " ".join(_claim_words)
 t("og per-claim card: still draws its claim, its claim label and its verdict",
   "Garlic shortens colds" in _cw and "The claim you checked" in _cw and "Verdict" in _cw
   and "It's complicated" in _claim_words and "4 PubMed studies read" in _claim_words, _claim_words)
+# The brand card's address carries a version, so a link service that cached
+# the old card (the tagline drawn as a claim) fetches the new one.
+_ogv = {p: _re2.findall(r'property="og:image" content="([^"]*)"', c.get(p).get_data(as_text=True))
+        for p in ("/", "/privacy", "/about", "/method")}
+t("og brand card: every page that is not a result points og:image at /og/_.png?v=2",
+  all(v == ["http://localhost/og/_.png?v=2"] for v in _ogv.values()), _ogv)
+t("  and no template still names the unversioned address",
+  not any('/og/_.png"' in (ROOT / "templates" / f).read_text() for f in ("index.html", "info.html", "privacy.html")))
 
 # ---- Polish: sitemap, robots, canonical, noindex ---------------------------------------
 _gs = {"pmid": "S1", "title": "Garlic and colds", "abstract": "A randomized trial.", "journal": "J", "year": "2020",
@@ -6248,9 +6347,11 @@ t("sitemap: a curated example whose saved record is unsound (cited study missing
   urllib.parse.quote(_cur_bad) not in _sm)
 t("sitemap: a saved result that fails the check (a cited study that is not among the studies) is left out", _loc_bad not in _sm)
 _sm_locs = _re.findall(r"<loc>([^<]*)</loc>", _sm)
-t("sitemap: only the six static pages and curated results, nothing else",
+t("sitemap: only the five static pages (/checks is a redirect now) and curated results, nothing else",
   all(u.startswith("http://localhost/?q=") is False or urllib.parse.unquote(u.split("?q=", 1)[1]) in _dsp.CURATED_CLAIMS
-      for u in _sm_locs) and len(_sm_locs) == 7, _sm_locs)
+      for u in _sm_locs) and len(_sm_locs) == 6
+  and [u for u in _sm_locs if "?q=" not in u] == ["http://localhost" + x for x in ("/", "/about", "/method", "/corrections", "/privacy")],
+  _sm_locs)
 t("sitemap: the five pages the brief names are all there, absolute",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/method", "/about", "/privacy", "/corrections")))
 _gh = c.get("/", query_string={"q": _good_c}).get_data(as_text=True)
@@ -6271,7 +6372,7 @@ t("CURATED_CLAIMS in display.py is the EXAMPLES array in app.js, same claims in 
 t("curated match ignores case, whitespace and trailing punctuation, and nothing else",
   _dsp.is_curated_claim("  5g weakens   your IMMUNE system. ") and not _dsp.is_curated_claim("5G weakens your immune system in kids")
   and not _dsp.is_curated_claim("") and not _dsp.is_curated_claim(None))
-t("the claim the trust section offers is a curated example", _dsp.is_curated_claim(appmod._trust_example()["claim"]))
+t("the claim the trust section offers is a curated example", _dsp.is_curated_claim(appmod.EXAMPLE_CLAIM))
 t("noindex: the home page and the info pages stay indexable", 'content="noindex"' not in c.get("/").get_data(as_text=True)
   and 'content="noindex"' not in c.get("/method").get_data(as_text=True))
 _canon = lambda h: _re.search(r'<link rel="canonical" href="([^"]*)"', h).group(1)
@@ -6281,7 +6382,7 @@ t("canonical: every phrasing of one claim has one stable canonical, the saved cl
   _cs == {"http://localhost/?q=" + urllib.parse.quote(_good_c)}, _cs)
 t("canonical: every page that can be indexed has one, absolute",
   all(_re.search(r'<link rel="canonical" href="http://localhost[^"]*"', c.get(u).get_data(as_text=True))
-      for u in ("/", "/checks", "/about", "/method", "/corrections", "/privacy"))
+      for u in ("/", "/about", "/method", "/corrections", "/privacy"))
   and _canon(c.get("/", query_string={"q": "never checked at all"}).get_data(as_text=True)) == "http://localhost/")
 _rb = c.get("/robots.txt").get_data(as_text=True)
 _groups = [g for g in _rb.split("\n\n") if g.startswith("User-agent")]
@@ -6353,12 +6454,12 @@ t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt
 _pers, _ordc = "My son Tom has asthma, does honey help", "Honey soothes a cough in adults"
 for _cl, _q in ((_pers, "honey AND asthma"), (_ordc, "honey AND cough")):
     db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], [_gs], tldr="Mixed.", still_open="Doses vary.")
-_pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/checks", "/no-such-page-xyz")}
+_pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/no-such-page-xyz")}
 _pages["/llms.txt"] = c.get("/llms.txt").get_data(as_text=True)
-t("lists: a personal saved claim is on no public list (/, /checks, 404, /llms.txt)",
+t("lists: a personal saved claim is on no public list (/, 404, /llms.txt)",
   all("Tom" not in v and "asthma" not in v for v in _pages.values()), [u for u, v in _pages.items() if "Tom" in v])
-t("lists: an ordinary saved claim still shows on /, /checks and the 404 page",
-  all(_ordc in _pages[u] for u in ("/", "/checks", "/no-such-page-xyz")))
+t("lists: an ordinary saved claim still shows on / and the 404 page",
+  all(_ordc in _pages[u] for u in ("/", "/no-such-page-xyz")))
 t("lists: /llms.txt lists only curated claims, so an ordinary typed one is left out", _ordc not in _pages["/llms.txt"]
   and "Vaccines cause autism" in _pages["/llms.txt"])
 for _ in range(2):
@@ -6388,8 +6489,8 @@ _b = _tot()
 c.get("/"); c.get("/checks"); c.get("/", query_string={"q": _good_c}); c.get("/about"); c.get("/method"); c.get("/corrections"); c.get("/privacy")
 c.get("/", query_string={"q": "a claim nobody has checked yet"}); c.get("/no-such-page"); c.get("/healthz"); c.get("/sitemap.xml")
 _d = _delta(_b, _tot())
-t("counts: page views by kind: home (and /checks and an unchecked ?q=) 3, a saved result 1, info pages 4; 404s, the sitemap and healthz are not views",
-  _d == {"view.home": 3, "view.result": 1, "view.info": 4}, _d)
+t("counts: page views by kind: home (and an unchecked ?q=) 2, a saved result 1, info pages 4; the /checks redirect, 404s, the sitemap and healthz are not views",
+  _d == {"view.home": 2, "view.result": 1, "view.info": 4}, _d)
 _b = _tot()
 P(_good_c, ip="9.9.9.1"); P("", ip="9.9.9.1"); P("x" * 600, ip="9.9.9.1")
 _d = _delta(_b, _tot())
@@ -6569,8 +6670,8 @@ _otg = {name: (opened, n, pm) for name, opened, n, pm in _ot_groups}
 t("off topic: a study both cited and off topic is never under 'Relied on' on the server-rendered page",
   "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
   and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
-t("  it sits in an 'Excluded (off-topic)' group, folded, with the other off-topic study",
-  _otg.get("Excluded (off-topic)") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
+t("  it sits in a 'Set aside: off topic' group, folded, with the other off-topic study",
+  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
 t("  and its line says it was set aside, not relied on",
   "Read and set aside: measures a different outcome" in _ot_src.split("PMID OT3")[1].split("</li>")[0])
 _otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
@@ -6654,7 +6755,11 @@ if _shutil.which("node"):
 _ot_rr = _ot_js[_ot_js.index("function renderResult"):] if _shutil.which("node") else (ROOT / "static" / "app.js").read_text()
 t("  renderResult clears the stale flags first and builds the list from sourceGroups, with the excluded group folded",
   _ot_rr.index("dropOffTopicCites(data)") < _ot_rr.index("currentResult = data")
-  and "sourceGroups(data.studies)" in _ot_rr and 'group("Excluded (off-topic)", rows(g.excluded), false)' in _ot_rr)
+  and "sourceGroups(data.studies)" in _ot_rr and 'group("Set aside: off topic", rows(g.excluded), false)' in _ot_rr)
+_ot_tpl = (ROOT / "templates" / "index.html").read_text()
+t("  both renderers name the off-topic group in the same words, and the old label is gone from both",
+  '<span class="group-name">Set aside: off topic</span>' in _ot_tpl and 'group("Set aside: off topic",' in _ot_rr
+  and not any("Excluded (off-topic)" in x for x in (_ot_tpl, (ROOT / "static" / "app.js").read_text())))
 
 # ---- /privacy says exactly what is counted -------------------------------------------------
 _pv = c.get("/privacy").get_data(as_text=True)
@@ -6671,15 +6776,33 @@ t("privacy: it has no dash", not _DASH.search(_pt))
 _ft_home = c.get("/").get_data(as_text=True)
 _ft_foot = " ".join(_re_s.sub(r"<[^>]+>", " ", _ft_home.split('<footer class="foot')[1].split("</footer>")[0]).split())
 _ft_lede = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv.split('<p class="lede">')[1].split("</p>")[0]).split())
-_ft_line = appmod.PRIVACY_LINE
-t("footer privacy: the footer and the /privacy short version print the same sentence",
-  _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line, (_ft_foot, _ft_lede))
-t("  and it says the claims are saved, with nothing that identifies you, as the page's 'What we keep' does",
-  "saved" in _ft_line and all(x in _ft_line for x in ("name", "account", "IP address"))
-  and all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check")))
+import html as _ft_html  # noqa: E402
+_ft_foot = _ft_html.unescape(_ft_foot)
+_ft_lede = _ft_html.unescape(_ft_lede)
+_ft_prov = verdict.provider_label()
+_ft_line = appmod.privacy_line(_ft_prov)
+t("footer privacy: the sentence is the owner's, naming the provider the claim is sent to",
+  _ft_line == f"Claim text is stored without anything that identifies you and is sent to {_ft_prov} to check it.", _ft_line)
+t("  the footer and the /privacy short version print the same sentence",
+  _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line[0].lower() + _ft_line[1:], (_ft_foot, _ft_lede))
+t("  the lede runs on after its colon in lower case, with no stray capital",
+  _ft_lede.startswith("The short version: claim text is stored"), _ft_lede)
+_ft_p = _ft_home.split('<footer class="foot')[1].split("</footer>")[0]
+_ft_p = [x for x in _ft_p.split("<p") if "identifies you" in x][0].split("</p>")[0]
+t("  in the footer the sentence is followed by a link to /privacy",
+  _re_s.search(r'identifies you and is sent to [^<]* to check it\.\s*<a href="/privacy">[^<]+</a>\s*$', _ft_p), _ft_p)
+_ft_css = (ROOT / "static" / "style.css").read_text()
+t("  the footer's Privacy details link has a tap area of 44px or more, grown around it, so the sentence does not move",
+  re.search(r"\.foot \.fine:not\(\.foot-links\) a \{[^}]*position: relative", _ft_css)
+  and re.search(r"\.foot \.fine:not\(\.foot-links\) a::after \{[^}]*inset: -26px -6px -2px", _ft_css))
+t("  and it stays true: /privacy keeps the claim text with nothing that identifies the person, and sends it to the same provider",
+  all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check",
+                         "it does not get your IP address or anything else that identifies you"))
+  and f"and {_ft_prov} to turn the claim into a search" in _ft_html.unescape(_pt))
 t("  the stronger line is gone from both, and neither template hard-codes the sentence",
   "tied to you" not in _ft_foot and "tied to you" not in _ft_lede
-  and all(_ft_line not in (ROOT / "templates" / f_).read_text() and "{{ privacy_line }}" in (ROOT / "templates" / f_).read_text()
+  and all("identifies you and is sent" not in (ROOT / "templates" / f_).read_text()
+          and "privacy_line(provider" in (ROOT / "templates" / f_).read_text()
           for f_ in ("index.html", "privacy.html"))
   and not _DASH.search(_ft_line))
 _pc = (ROOT / "CLAUDE.md").read_text()
