@@ -9038,6 +9038,31 @@ t("  the model is told the journal retracted it and not to cite it",
   "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
 pubmed.search_and_fetch = _rt_search
 
+# ---- L2: narrative reviews do not lift small trials ---------------------------
+_NR_TRIAL = _study("NR1", "Creatine and scalp hair in young men: a randomized trial",
+                   abstract="In this 12-week randomized, placebo-controlled trial, 38 healthy men took creatine "
+                            "or placebo. Scalp hair counts did not differ between groups.")
+_NR_REV = [_study("NR2", "Creatine and hair: a narrative review", types=["Journal Article", "Review"],
+                  abstract="We review what is known about creatine and hair."),
+           _study("NR3", "Creatine safety: an overview", types=["Review"],
+                  abstract="This review summarises creatine safety reports.")]
+_NR_GL = _study("NR4", "Clinical practice guideline on creatine", types=["Practice Guideline"],
+                abstract="The panel recommends creatine for strength.")
+_NR_ALL = [_NR_TRIAL] + _NR_REV + [_NR_GL]
+t("L2: a narrative review is neither solid nor limited, so two of them do not lift one small trial",
+  evidence.trial_caveats(_NR_TRIAL) and evidence.narrative_review(_NR_REV[0]) and evidence.narrative_review(_NR_REV[1])
+  and evidence.certainty_cap(_NR_ALL, ["NR1", "NR2", "NR3"])
+  == evidence.certainty_cap(_NR_ALL, ["NR1"]) == "it rests on small, pilot or uncontrolled studies",
+  (evidence.trial_caveats(_NR_TRIAL), evidence.certainty_cap(_NR_ALL, ["NR1", "NR2", "NR3"])))
+t("  a guideline still counts, and a pooled review or a guideline is never a narrative review",
+  evidence.certainty_cap(_NR_ALL, ["NR1", "NR4"]) is None and not evidence.narrative_review(_NR_GL)
+  and not evidence.narrative_review(_study("NR5", "x", types=["Systematic Review", "Review"])))
+t("  so the line over the trial and the reviews is no surer than over the trial alone",
+  evidence.line_certainty(evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"))
+  == evidence.line_certainty(evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")),
+  (evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"),
+   evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

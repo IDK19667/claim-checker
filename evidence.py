@@ -1473,6 +1473,17 @@ def is_review(study) -> bool:
     return any(t.startswith(REVIEW_TYPES) for t in study.get("publication_types") or [])
 
 
+_GUIDELINE_TYPES = ("Practice Guideline", "Guideline", "Consensus Development")
+
+
+def narrative_review(study) -> bool:
+    """A review PubMed tags only as a review: not pooled (REVIEW_TYPES), not
+    a guideline, not a trial. It summarises others and measured nothing."""
+    types = [str(t) for t in study.get("publication_types") or []]
+    return (any(t.startswith("Review") for t in types) and not is_review(study)
+            and not any(t.startswith(_GUIDELINE_TYPES + TRIAL_TYPES) for t in types))
+
+
 def is_trial(study) -> bool:
     if is_review(study):
         return False
@@ -1955,6 +1966,10 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
         return None
     solid, limited = [], []
     for s in cited:
+        # A narrative review pools nothing and measured nothing itself: like
+        # an unlabelled paper, it is neither the strength nor the weakness.
+        if narrative_review(s):
+            continue
         caveats = [c for c in trial_caveats(s)
                    if not (comparative and c == "no untreated comparison group")]
         # A study that says neither its size nor its design is not evidence
