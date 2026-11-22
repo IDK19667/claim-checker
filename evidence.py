@@ -507,17 +507,19 @@ _RATIO_WORDS = [
     (r"odds ratios?|\bORs?\b|\baORs?\b", "odds"),
     (r"hazard ratios?|\bHRs?\b|\baHRs?\b", "risk over time"),
     (r"risk ratios?|relative risks?|\bRRs?\b|\baRRs?\b", "risk"),
-    (r"incidence rate ratios?|\bIRRs?\b", "rate"),
+    (r"incidence rate ratios?|\ba?IRRs?\b", "rate"),
     (r"rate ratios?", "rate"),
 ]
 
 # "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)". An
 # abbreviation names a ratio only in capitals: "35 people or 80 adults" is
 # not an odds ratio of 80, and reading it as one printed "7900% higher odds".
+# "aOR" and "AOR", "aHR" and "AHR" are the adjusted ratios; "Hr" is not a
+# ratio, and nor is "ARR", which usually means an absolute risk reduction.
 _RATIO = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
     r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
-    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
+    r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
     r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 
 # The same figure with the outcome named in between: "the hazard ratio for
@@ -528,7 +530,7 @@ _RATIO = re.compile(
 _RATIO_WAS = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
     r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
-    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
+    r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
     r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
     r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 
@@ -569,7 +571,7 @@ NOT_SIGNIFICANT = re.compile(
     r"\bnot (?:statistically )?significant(?:ly)?\b|\bnon-?significant\b|"
     r"\bno (?:statistically )?significant\b|\bdid not (?:significantly )?differ\b|"
     r"\bno (?:clear |significant |real )?difference\b|\bcould be chance\b", re.IGNORECASE)
-_RATIO_BEFORE = re.compile(r"\b(?:(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?)|odds ratios?|hazard ratios?|"
+_RATIO_BEFORE = re.compile(r"\b(?:(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?)|odds ratios?|hazard ratios?|"
                            r"risk ratios?|relative risks?|rate ratios?)\b", re.IGNORECASE)
 _DIFF_BEFORE = re.compile(r"\b(?:W?MDs?|SMDs?|mean difference|difference|net|"
                           r"standardi[sz]ed mean difference|Hedges'? g|Cohen'?s d)\b",
@@ -662,7 +664,7 @@ def _smd_label(d: float) -> str:
 
 
 _RATIO_NAMES = [(r"a?ORs?", "odds ratio"), (r"a?HRs?", "hazard ratio"),
-                (r"a?RRs?", "risk ratio"), (r"IRRs?", "incidence rate ratio")]
+                (r"a?RRs?", "risk ratio"), (r"a?IRRs?", "incidence rate ratio")]
 
 
 def _ratio_name(name: str) -> str:
@@ -674,7 +676,7 @@ def _ratio_name(name: str) -> str:
 
 
 _RATIO_NAMED = re.compile(r"\b(?:odds ratios?|hazard ratios?|risk ratios?|relative risks?"
-                          r"|incidence rate ratios?|rate ratios?|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))\b",
+                          r"|incidence rate ratios?|rate ratios?|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))\b",
                           re.IGNORECASE)
 
 

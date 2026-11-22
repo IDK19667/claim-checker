@@ -1186,6 +1186,15 @@ t("  the word 'or' before a number is not an odds ratio: no '7900% higher odds' 
   and evidence.effect_size("aOR = 1.5")["figure"] == "odds ratio 1.5"
   and evidence.effect_size("RRs of 1.2")["figure"] == "risk ratio 1.2",
   (evidence.effect_size("such as 35 people or 80 adults"), evidence.effect_size("OR 0.88")))
+t("  the adjusted ratios read in capitals too: AOR, AHR and aIRR",
+  (evidence.effect_size("AOR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
+  and (evidence.effect_size("The AHR for death was 0.8") or {}).get("figure") == "hazard ratio 0.8"
+  and (evidence.effect_size("aIRR 1.3") or {}).get("figure") == "incidence rate ratio 1.3"
+  and evidence.ratio_kinds("AOR 1.45 and AHR 0.8") == {"odds ratio", "hazard ratio"},
+  (evidence.effect_size("AOR 1.45"), evidence.effect_size("The AHR for death was 0.8")))
+t("  but ARR (an absolute risk reduction) and mixed case 'Hr' are no ratio",
+  evidence.effect_size("ARR 0.05") is None and evidence.effect_size("Hr 0.8") is None
+  and evidence.ratio_kinds("ARR 0.05, Hr 0.8") == set())
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))
