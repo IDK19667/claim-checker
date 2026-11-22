@@ -5495,6 +5495,16 @@ t("F2c: a word that says only how bad or how felt, or one the claim uses, still 
   and breakdown.line_label(_f2_bd("Oxidative stress fell, SMD -1.75.", *_F2_SMD),
                            "Ashwagandha reduces oxidative stress", "(stress)") == "large")
 
+# ---- final fix F6: the plain-word swap leaves a quoted title as written -------
+_f6_s = breakdown.plain('The trial "Effects of creatine in male participants" enrolled 40 male participants.')
+_f6_c = breakdown.plain("The review \u201cMortality and hypertension in older subjects\u201d found it in subjects "
+                        "with hypertension.")
+t("F6: inside straight quotation marks the title keeps 'male participants', outside it becomes 'males'",
+  _f6_s == 'The trial "Effects of creatine in male participants" enrolled 40 males.', _f6_s)
+t("F6: inside curly quotation marks the title keeps its words, outside they are swapped",
+  _f6_c == "The review \u201cMortality and hypertension in older subjects\u201d found it in people "
+           "with high blood pressure (hypertension).", _f6_c)
+
 # ---- final fix F3: what "cannot be rated" means under a guidance stamp --------
 # verdict.unrated_said removes a sentence (or its closing clause) that says the
 # claim, the evidence, "this" or "it" cannot be rated or judged, in any of the

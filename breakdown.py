@@ -1305,6 +1305,10 @@ def _no_repeats(text: str) -> str:
     return _REPEATED.sub(lambda m: m.group(1), text)
 
 
+# Text between straight or curly double quotation marks: a quoted title.
+_QUOTED = re.compile(r'"[^"\n]{1,300}"|\u201c[^\u201d\n]{1,300}\u201d')
+
+
 def plain(text: str, kept: set | None = None) -> str:
     """
     Swap medical vocabulary for the everyday words that mean the same.
@@ -1332,6 +1336,15 @@ def plain(text: str, kept: set | None = None) -> str:
         parked.append(term)
         return f" (\x00{len(parked) - 1}\x00)"
 
+    # A quoted title is the paper's own words: what sits between straight or
+    # curly double quotation marks is held out, as written, until the end.
+    quoted: list[str] = []
+
+    def hold(m) -> str:
+        quoted.append(m.group(0))
+        return f"\x01{len(quoted) - 1}\x01"
+
+    out = _QUOTED.sub(hold, out)
     for pattern, replacement, keep_term in _PLAIN:
 
         def swap(m, replacement=replacement, keep_term=keep_term):
@@ -1345,7 +1358,8 @@ def plain(text: str, kept: set | None = None) -> str:
         out = pattern.sub(swap, out)
 
     out = re.sub(r"\x00(\d+)\x00", lambda m: parked[int(m.group(1))], out)
-    return _fix_articles(_no_repeats(out))
+    out = _fix_articles(_no_repeats(out))
+    return re.sub(r"\x01(\d+)\x01", lambda m: quoted[int(m.group(1))], out)
 
 
 # ---------------------------------------------------------------------
