@@ -8181,6 +8181,67 @@ with db.get_conn() as _conn:
                   tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]))
 appmod._sitemap_memo["stamp"] = None
 
+# ---- where the fixes meet: a reworded link reads the bounded lookup -----------
+# rc-site-fix renders a reworded link as the saved answer (app._equivalent);
+# rc-saved-fix bounds that lookup (db.find_equivalent, db.EQUIVALENT_SCAN). A
+# reworded link still renders the saved answer with its note; one whose row is
+# past the newest EQUIVALENT_SCAN is an unknown claim; and a claim folding
+# gives no key renders as an unknown claim, with no error.
+_BL_SAVED, _BL_TYPED = "Kelp lozenges shorten colds", "Do kelp lozenges shorten colds?"
+db.put_cached_verdict(_BL_SAVED, "(kelp) AND (cold)", "complicated", "Mixed (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Kelp may shorten a cold a little.", still_open="Doses vary.")
+_bl = c.get("/?q=" + urllib.parse.quote(_BL_TYPED))
+_bl_pg = _bl.get_data(as_text=True)
+t("meet: a reworded link, through the bounded lookup, renders the saved answer with its note",
+  _bl.status_code == 200 and "Kelp may shorten a cold a little." in _bl_pg
+  and "Showing the saved check for this claim. You typed \u201c<bdi>" in _bl_pg
+  and '<h1 class="claim-echo" id="claim-echo">' + _BL_SAVED + "</h1>" in _bl_pg)
+_bl_scan = db.EQUIVALENT_SCAN
+db.EQUIVALENT_SCAN = 1
+db.put_cached_verdict("Kelp newer row pushes the scan", "(kelp) AND (x)", "complicated", "Mixed (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Something.", still_open="Doses vary.")
+try:
+    _bl_far = c.get("/?q=" + urllib.parse.quote(_BL_TYPED)).get_data(as_text=True)
+finally:
+    db.EQUIVALENT_SCAN = _bl_scan
+t("  and a link whose saved row is past the newest EQUIVALENT_SCAN claims is an unknown claim, as the check finds",
+  'id="server-result"' not in _bl_far and 'id="typed-note" hidden></p>' in _bl_far)
+_NK_SAVED, _NK_TYPED = "H2O cures colds", "H\u2082O cures colds"
+db.put_cached_verdict(_NK_SAVED, "(water) AND (cold)", "insufficient", "None (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Not tested.", still_open="Everything.")
+_nk = c.get("/?q=" + urllib.parse.quote(_NK_TYPED))
+_nk_pg = _nk.get_data(as_text=True)
+t("meet: a link whose claim has no fold key renders as an unknown claim, with no error",
+  db.claim_fold(_NK_TYPED) == () and _nk.status_code == 200 and 'id="server-result"' not in _nk_pg
+  and "Not tested." not in _nk_pg and 'id="typed-note" hidden></p>' in _nk_pg, _nk.status_code)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in (_BL_SAVED, "Kelp newer row pushes the scan", _NK_SAVED)))
+
+# ---- where the fixes meet: a wordless line ends on the "either" way out --------
+# rc-saved-fix: a line with no letter or digit is an empty line. rc-site-fix: a
+# reply with a line missing names both ways out. A wordless short answer or
+# still-open line reaches the reader with that exact message and both actions,
+# on the plain check and the streamed check.
+_EW_BODY = {"error": "The AI model sent back an answer with a line missing. "
+                     "Try again, or try the claim in other words.", "way_out": "either"}
+for _i, (_lbl, _kw) in enumerate((("short answer is a lone dash", {"tldr": "\u2014"}),
+                                  ("still-open line is a zero-width space", {"still_open": "\u200b"}))):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _ew = P(f"either way out claim {_i}", ip=f"7.7.8.{_i + 1}")
+    t(f"meet: a reply whose {_lbl} gets the exact 'line missing' message and both ways out",
+      _ew.status_code == 502 and _ew.get_json() == _EW_BODY and _no_row(f"either way out claim {_i}"), _ew.get_json())
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _ew_r, _ew_evs = stream(f"either way out streamed {_i}", ip=f"7.7.8.{_i + 11}")
+    t(f"  and on the streamed check ({_lbl})",
+      _ew_evs[-1]["stage"] == "error" and _ew_evs[-1]["status"] == 502
+      and _ew_evs[-1]["error"] == _EW_BODY["error"] and _ew_evs[-1].get("way_out") == "either"
+      and _no_row(f"either way out streamed {_i}"), _ew_evs[-1])
+_ew_js = (ROOT / "static" / "app.js").read_text()
+t("  and the page turns 'either' into both actions, Retry this claim and Edit claim",
+  re.search(r'id="error-retry"[^>]*>\s*Retry this claim', (ROOT / "templates" / "index.html").read_text())
+  and 'if (wayOut === "either") return { retry: true, back: "Edit claim" };' in _ew_js)
+
 # ---- where the fixes meet: an out-of-date saved answer, reworded and on its page ----
 # rc-reading: a saved answer that relied on a study code now sets aside is out
 # of date. rc-site-fix and the equivalence lookup: the same claim in other
