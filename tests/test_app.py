@@ -8129,6 +8129,58 @@ with db.get_conn() as _conn:
 t("failed rows: the rows themselves stay in the database", _fr_kept >= 2, _fr_kept)
 appmod._sitemap_memo["stamp"] = None
 
+# ---- where the fixes meet: a wordless line is no line, in every list ----------
+# rc-saved-fix: a line needs a letter or digit (db._whole), so a saved row whose
+# short answer or still-open line is only a dash, a full stop or an invisible
+# character is no answer. The release branch's lists filter failed replies in
+# SQL; a wordless row is one too, so it is listed nowhere. An old real answer
+# that only lacks the newer still-open field stays where it stood (above).
+_WL_ROWS = (("Quokka oil heals warts", "\u2014", "Doses vary."),
+            ("Quokka tea soothes throats", "It helps a little.", "\u200b"),
+            ("Quokka honey eases coughs", "It may help.", "."),
+            ("Ozempic cures alcoholism", "\u2014", "Doses vary."))   # curated, for the sitemap and llms.txt
+_WL_GOOD = "Quokka ginger eases nausea"
+with db.get_conn() as _conn:
+    _wl_cur_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
+                                (db.normalize_claim(_WL_ROWS[3][0]),)).fetchone()["n"]
+for _wc, _wt, _wo in _WL_ROWS:
+    db.put_cached_verdict(_wc, "(quokka) AND (warts)", "true", "Because (Study 1).", ["P1"],
+                          [dict(s_) for s_ in STUDIES], tldr=_wt, still_open=_wo)
+db.put_cached_verdict(_WL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+for _x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]:
+    db.log_check(_x, "true", "x", [])
+    db.log_check(_x, "true", "x", [])
+_WL_BAD = [r_[0] for r_ in _WL_ROWS[:3]]
+t("wordless rows: none is a whole saved answer (db.whole), and the ordinary one is",
+  not any(db.whole({"tldr": _wt, "still_open": _wo}) for _wc, _wt, _wo in _WL_ROWS)
+  and db.whole({"tldr": "It helps a little.", "still_open": "For how long."}))
+_wl_home = c.get("/").get_data(as_text=True)
+_wl_404 = c.get("/no-such-page-quokka").get_data(as_text=True)
+_wl_trend = [r_["claim"] for r_ in c.get("/api/trending").get_json()]
+_wl_sugg = [r_["claim_text"] for r_ in c.get("/api/suggest?q=quokka").get_json()["suggestions"]]
+_wl_all = [r_["claim_text"] for r_ in db.all_claims()]
+_wl_rel = str(_ns_fr.related_checks("Quokka remedies", db.all_claims()))
+appmod._sitemap_memo["stamp"] = None
+_wl_map = c.get("/sitemap.xml").get_data(as_text=True)
+_wl_llms = c.get("/llms.txt").get_data(as_text=True)
+_wl_q = urllib.parse.quote(_WL_ROWS[3][0])
+t("wordless rows: none is on the home page's Latest list, and the ordinary answer is",
+  not any(b_[1:] in _wl_home for b_ in _WL_BAD) and _WL_GOOD[1:] in _wl_home)
+t("wordless rows: nor on the 404 page's list", not any(b_[1:] in _wl_404 for b_ in _WL_BAD) and _WL_GOOD[1:] in _wl_404)
+t("wordless rows: nor in /api/trending", not set(_WL_BAD) & set(_wl_trend) and _WL_GOOD in _wl_trend, _wl_trend)
+t("wordless rows: nor in type-ahead (/api/suggest)", not set(_WL_BAD) & set(_wl_sugg) and _WL_GOOD in _wl_sugg, _wl_sugg)
+t("wordless rows: nor among the claims related claims are drawn from",
+  not set(_WL_BAD) & set(_wl_all) and _WL_GOOD in _wl_all and not any(b_ in _wl_rel for b_ in _WL_BAD), _wl_rel)
+t("wordless rows: nor in the sitemap or llms.txt, even under a curated claim",
+  _wl_q not in _wl_map and f"?q={_wl_q})" not in _wl_llms
+  and all(r_["claim_text"] != _WL_ROWS[3][0] for r_ in db.saved_records(5000))
+  and all(r_["claim_text"] != _WL_ROWS[3][0] for r_ in db.recent_cached(5000)))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]))
+appmod._sitemap_memo["stamp"] = None
+
 # ---- where the fixes meet: an out-of-date saved answer, reworded and on its page ----
 # rc-reading: a saved answer that relied on a study code now sets aside is out
 # of date. rc-site-fix and the equivalence lookup: the same claim in other

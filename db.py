@@ -476,8 +476,25 @@ def _whole(row) -> bool:
     script: a zero-width space, a lone full stop or a lone dash is empty.
     Nor is one saved from a reply that could not be read (_failed).
     """
-    return (all(any(ch.isalnum() for ch in str(row[k] or "")) for k in ("tldr", "still_open"))
-            and not _failed(row))
+    return all(_worded(row[k]) for k in ("tldr", "still_open")) and not _failed(row)
+
+
+def _worded(line) -> bool:
+    """A line that says something: at least one letter or digit, in any script."""
+    return any(ch.isalnum() for ch in str(line or ""))
+
+
+def _listable(row) -> bool:
+    """
+    A row a public list may show (type-ahead, trending, related claims, the
+    sitemap, llms.txt): the same line test as _whole, with one allowance kept
+    from before, that an old real answer saved before the short answer or the
+    still-open line existed (NULL or blank) still stands in those lists. A
+    line that is there but has no letter or digit is no line, so that row is
+    left out, as a failed reply is.
+    """
+    return not _failed(row) and all(
+        not str(row[k] or "").strip() or _worded(row[k]) for k in ("tldr", "still_open"))
 
 
 # The short answer the fallback for a reply that could not be read at all (cut
@@ -599,7 +616,7 @@ def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT c.claim_key, v.claim_text, v.verdict, COUNT(*) AS n
+            """SELECT c.claim_key, v.claim_text, v.verdict, v.tldr, v.still_open, COUNT(*) AS n
                FROM checks c
                JOIN verdict_cache v ON v.claim_key = c.claim_key
                WHERE c.checked_at > ? AND """ + _ANSWERED.format(t="v.") + """
@@ -609,7 +626,8 @@ def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
                LIMIT ?""",
             (since, FAILED_REPLY_TLDR, min_checks, limit),
         ).fetchall()
-        return [{"claim": r["claim_text"], "verdict": r["verdict"], "checks": r["n"]} for r in rows]
+        return [{"claim": r["claim_text"], "verdict": r["verdict"], "checks": r["n"]}
+                for r in rows if _listable(r)]
 
 
 @_routed
@@ -617,11 +635,11 @@ def recent_cached(limit: int = 200) -> list[dict]:
     """Cached claims, newest first. Used for the sitemap and llms.txt."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT claim_text, verdict, created_at FROM verdict_cache "
+            "SELECT claim_text, verdict, created_at, tldr, still_open FROM verdict_cache "
             "WHERE " + _ANSWERED.format(t="") + " "
             "ORDER BY created_at DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{k: r[k] for k in ("claim_text", "verdict", "created_at")} for r in rows if _listable(r)]
 
 
 @_routed
@@ -972,11 +990,11 @@ def all_claims(limit: int = 500) -> list[dict]:
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT claim_text, verdict FROM verdict_cache "
+            "SELECT claim_text, verdict, tldr, still_open FROM verdict_cache "
             "WHERE " + _ANSWERED.format(t="") + " "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [{"claim_text": r["claim_text"], "verdict": r["verdict"]} for r in rows if _listable(r)]
 
 
 @_routed
@@ -996,11 +1014,12 @@ def saved_records(limit: int = 500) -> list[dict]:
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT claim_text, verdict, search_query, cited_json, studies_json, breakdown_json, created_at "
-            "FROM verdict_cache WHERE " + _ANSWERED.format(t="") + " "
+            "SELECT claim_text, verdict, search_query, cited_json, studies_json, breakdown_json, created_at, "
+            "tldr, still_open FROM verdict_cache WHERE " + _ANSWERED.format(t="") + " "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
-    return [dict(r) for r in rows]
+    keep = ("claim_text", "verdict", "search_query", "cited_json", "studies_json", "breakdown_json", "created_at")
+    return [{k: r[k] for k in keep} for r in rows if _listable(r)]
 
 
 # ---- Daily counts -----------------------------------------------------------------
