@@ -254,11 +254,15 @@ function linkStudyRefs(text, count) {
 // How much to lean on the answer, in one sentence. The wording of a real check
 // is made on the server (evidence.evidence_line); mirrors display.confidence_line.
 function confidenceLine(data) {
+  // verdict.GUIDANCE_LINE, the same words (a test holds them equal).
+  const GUIDANCE_LINE = "Rests on health guidance, not on these studies";
   const studies = data.studies || [];
   const cited = studies.filter((s) => s.cited_in_verdict);
   if (!studies.length) return "No direct evidence either way: nothing on PubMed matched well enough to weigh.";
-  if (!cited.length) return "No direct evidence either way: none of the studies tests this claim.";
   const line = String(data.evidence_line || "").trim().replace(/\.+$/, "");
+  // An answer set by health guidance says so even when no study listed is relied on.
+  if (line === GUIDANCE_LINE) return line + ".";
+  if (!cited.length) return "No direct evidence either way: none of the studies tests this claim.";
   if (line) return line + ".";
   const tiers = new Set(cited.map((s) => s.tier || "moderate"));
   const word = tiers.has("strong") ? "Strong"

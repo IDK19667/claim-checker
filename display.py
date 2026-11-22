@@ -83,6 +83,11 @@ def breakdown_view(result):
     }
 
 
+# verdict.GUIDANCE_LINE, the same words (a test holds them equal; display
+# does not import verdict and its provider plumbing).
+GUIDANCE_LINE = "Rests on health guidance, not on these studies"
+
+
 def confidence_line(result) -> str:
     """
     How much to lean on the answer, in one sentence, from fields already saved.
@@ -95,9 +100,13 @@ def confidence_line(result) -> str:
     cited = [s for s in studies if s.get("cited_in_verdict")]
     if not studies:
         return "No direct evidence either way: nothing on PubMed matched well enough to weigh."
+    line = str(result.get("evidence_line") or "").strip().rstrip(".")
+    # An answer set by health guidance says so even when no study listed is
+    # relied on (the one it cited was set aside).
+    if line == GUIDANCE_LINE:
+        return line + "."
     if not cited:
         return "No direct evidence either way: none of the studies tests this claim."
-    line = str(result.get("evidence_line") or "").strip().rstrip(".")
     if line:
         return line + "."
     tiers = {s.get("tier") or "moderate" for s in cited}

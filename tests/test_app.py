@@ -8945,6 +8945,36 @@ t("F8: the server-rendered page shows the figure and no code-written size word",
 with db.get_conn() as _conn:
     _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_f8_db),))
 
+# ---- final fix F9: a guidance answer shows its line whenever a study is listed --
+# Live: antibiotics for a cold was a guidance answer whose only cited study was
+# set aside as an opinion piece, so the line was blank.
+_F9_ST = [{"pmid": "OP9", "title": "Antibiotics and the common cold: a view", "url": "https://pubmed.ncbi.nlm.nih.gov/OP9/",
+           "abstract": "Antibiotics do not help colds caused by viruses.", "publication_types": ["Editorial"],
+           "background": True, "background_why": "opinion piece", "year": "2020", "authors": [], "journal": "J"}]
+_F9_TLDR = verdict.GUIDELINE_LEAD + "antibiotics do not treat colds. Ask a doctor about this."
+with appmod.app.test_request_context("/"):
+    _f9_one = appmod._check_response("Antibiotics cure a cold", "(antibiotics) AND (common cold)", "false", _F9_TLDR,
+                                     "Guidance says no.", [], [dict(s) for s in _F9_ST], "http://x",
+                                     still_open="Whether new drugs help.")
+    _f9_none = appmod._check_response("Antibiotics cure a cold", "(antibiotics) AND (common cold)", "false", _F9_TLDR,
+                                      "Guidance says no.", [], [], "http://x", still_open="Whether new drugs help.")
+t("F9: a guidance answer with a study listed but none relied on shows the guidance line, not a blank",
+  _f9_one["evidence_line"] == verdict.GUIDANCE_LINE, _f9_one["evidence_line"])
+t("F9: with no study listed at all, the line stays blank for the page's own wording",
+  _f9_none["evidence_line"] == "", _f9_none["evidence_line"])
+t("F9: the guidance line has the same words in verdict, display and the script",
+  verdict.GUIDANCE_LINE == _display.GUIDANCE_LINE
+  and '  const GUIDANCE_LINE = "' + verdict.GUIDANCE_LINE + '";' in (ROOT / "static" / "app.js").read_text())
+t("F9: the server's confidence line shows it, not 'none of the studies tests this claim'",
+  _display.confidence_line(_f9_one) == verdict.GUIDANCE_LINE + ".", _display.confidence_line(_f9_one))
+if _shutil.which("node"):
+    _f9src = (ROOT / "static" / "app.js").read_text()
+    _f9fn = ("function confidenceLine(data) {"
+             + _f9src.split("function confidenceLine(data) {")[1].split("\n}\n")[0] + "\n}\n")
+    _f9js = _subprocess.run(["node", "-e", _f9fn + "console.log(confidenceLine(" + json.dumps(_f9_one) + "));"],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    t("F9: and the script's confidence line says the same", _f9js == verdict.GUIDANCE_LINE + ".", _f9js)
+
 _EL_NONE = {"figure": "", "label": "none", "null": True, "plain": "no clear difference between the groups"}
 _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)", "false",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
