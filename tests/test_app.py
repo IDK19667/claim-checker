@@ -5392,6 +5392,14 @@ t("  a real null whose figure is 0.95 or 95% still gets its sentence",
   .endswith(_K2_N)
   and evidence.significance("odds ratio 4.0 (95% CI 0.9 to 9.0)", "4") is None
   and evidence.significance("odds ratio 4 (95% CI 0.9 to 9.0)", "4") == "null")
+# K4: the explanation path has its own assertion: a saved explanation with
+# the false null after a significant figure loses it.
+with appmod.app.test_request_context("/"):
+    _k4 = appmod._check_response("Vitamin D prevents winter infections K4", "(vitamin d) AND (infection)", "complicated",
+                                 "It may help a little.", _L1_SIG + _K2_N, ["L1"], [dict(s) for s in _L1_ST], "http://x",
+                                 still_open="Which doses.")
+t("K4: L1 on the explanation path: a saved false null after a significant figure goes, the figure stays",
+  "not statistically significant" not in _k4["explanation"] and "0.79" in _k4["explanation"], _k4["explanation"])
 t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
   breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
   == "A pooled review estimated the global rate of alcohol use during pregnancy."
@@ -9371,8 +9379,13 @@ _J3_MODEL = ["That is because trials used different doses (Study 2).", "That is 
 _j3 = [breakdown.translations_follow({"says": ["Studies disagree on dose (Study 1).", x],
                                       "effect_size": "Trials disagreed (Study 1). " + x}, w)
        for x in _J3_MODEL for w in (False, True)]
+# K4: read without indexing past the end, so holding every "That is" again
+# fails here instead of stopping the suite.
 t("J3: a model sentence that only starts 'That is' stays after a sentence with no figure",
-  all(r_["says"][1] in _J3_MODEL and r_["effect_size"].endswith(r_["says"][1]) for r_ in _j3), _j3)
+  all(len(r_["says"]) == 2 and r_["says"][1] in _J3_MODEL and r_["effect_size"].endswith(r_["says"][1]) for r_ in _j3), _j3)
+t("K4: J3 in full: each model 'That is' sentence comes back where it was, in 'What the research says' and in the field",
+  [r_["says"] for r_ in _j3] == [["Studies disagree on dose (Study 1).", x] for x in _J3_MODEL for w in (False, True)]
+  and [r_["effect_size"] for r_ in _j3] == ["Trials disagreed (Study 1). " + x for x in _J3_MODEL for w in (False, True)], _j3)
 _J3_CODE = [_H8_NULL, "That is about 54% lower risk over time (Study 1).", "That is, about 12% lower odds (Study 1).",
             "That is a difference of 0.4 standard deviations (Study 1).", "That is an effect size of 1.03 (Study 1).",
             "That is a large effect (Study 1).", "That is a risk drop of 26% (Study 1)."]
