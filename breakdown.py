@@ -2514,20 +2514,43 @@ def names_outcome(text: str, outcome: str) -> bool:
     return evidence.names_any(text, evidence.outcome_kin(stems))
 
 
+# Words that set what follows aside: "pain in the joints, not muscle, rose"
+# is about the joints. Read on the text just before a mention of the outcome.
+_SET_ASIDE = re.compile(r"\b(?:not|rather\s+than|instead\s+of|other\s+than|except(?:\s+for)?|excluding"
+                        r"|apart\s+from|unlike|but\s+not)\s+(?:(?:the|in|of|on|for)\s+){0,2}$", re.IGNORECASE)
+
+
+def _outcome_mentions(text: str, outcome: str):
+    """(text, match) for each word in `text` that names the query's outcome
+    group or its kin, read as names_outcome reads it."""
+    t = evidence._us(text or "")
+    for stem in evidence.outcome_kin(evidence.outcome_stems(outcome)):
+        for m in re.finditer(r"\b" + re.escape(stem) + r"\w*", t, re.IGNORECASE):
+            yield t, m
+
+
+def sets_outcome_aside(text: str, outcome: str) -> bool:
+    """True when the sentence names the outcome only to set it aside ("not
+    muscle", "rather than pain"): its figure is about something else."""
+    return any(_SET_ASIDE.search(t[:m.start()]) for t, m in _outcome_mentions(text, outcome))
+
+
 def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | None:
     """
     The effect label the evidence line may carry, or None. The line puts a
     size ("a large effect", "no clear effect") next to the claim, so it
     takes one only when the sentence the figure came from names the claim's
     own outcome. A large rise in inflammation is not a large effect on
-    immunity. The effect box keeps its figure and its own sentence either way.
+    immunity, nor is one in a sentence that names the outcome only to set it
+    aside ("not muscle"). The effect box keeps its figure and its own
+    sentence either way.
     """
     effect = (bd or {}).get("effect") or {}
     label = effect.get("label")
     if not label:
         return None
     said = figure_sentence(bd)
-    if not names_outcome(said, outcome):
+    if not names_outcome(said, outcome) or sets_outcome_aside(said, outcome):
         return None
     if label in ("small", "moderate", "large") and not agrees_direction(effect, said, claim):
         return None

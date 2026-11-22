@@ -5456,6 +5456,25 @@ t("  and the saved answer's page, its markup and its short answer say the same",
   'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
   [m.group(0) for m in _UNRATED.finditer(_gu_page)])
 
+# ---- final fix F2: the evidence line sizes only a figure about the outcome ----
+# breakdown.line_label lends the line a size only when the figure's sentence
+# is about the claim's outcome, not one that merely contains the word.
+def _f2_bd(said, figure, plain, label="large"):
+    return {"effect_size": said, "evidence": [], "effect": {"figure": figure, "label": label, "plain": plain}}
+_F2_MP = ("Statins cause muscle pain", "(muscle pain OR myalgia)")
+t("F2a: a sentence that sets the outcome aside ('not muscle') lends the line no size",
+  breakdown.line_label(_f2_bd("Pain in the joints, not muscle, rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"),
+                       *_F2_MP) is None)
+t("F2a: nor one that puts it 'rather than' or 'instead of' the thing measured",
+  breakdown.line_label(_f2_bd("Joint pain rather than muscle pain rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"),
+                       *_F2_MP) is None
+  and breakdown.line_label(_f2_bd("Headache instead of myalgia rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"),
+                           *_F2_MP) is None)
+t("F2a: a sentence about the outcome itself still sizes it, a 'did not' before the verb included",
+  breakdown.line_label(_f2_bd("Muscle pain rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"), *_F2_MP) == "large"
+  and breakdown.line_label(_f2_bd("Statins did not raise muscle pain, RR 1.02.", "RR 1.02", "", label="none"),
+                           *_F2_MP) == "none")
+
 # ---- final fix F3: what "cannot be rated" means under a guidance stamp --------
 # verdict.unrated_said removes a sentence (or its closing clause) that says the
 # claim, the evidence, "this" or "it" cannot be rated or judged, in any of the
