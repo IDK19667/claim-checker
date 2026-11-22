@@ -9317,6 +9317,18 @@ t("  and every form code writes (or the faithfulness rewrite leaves) still goes 
   all(breakdown.code_translation(x) for x in _J3_CODE) and not any(breakdown.code_translation(x) for x in _J3_MODEL)
   and all(breakdown.translations_follow({"says": ["Studies disagree on dose (Study 1).", x]})["says"]
           == ["Studies disagree on dose (Study 1)."] for x in _J3_CODE))
+# L2: one that only repeats goes whether or not the size is withheld.
+_L2_FIG = "The risk drop was 26% among those who achieved about 11 MET h/week (Study 1)."
+_l2 = [breakdown.translations_follow({"says": [_L2_FIG, "That is a risk drop of 26% (Study 1)."],
+                                      "effect_size": _L2_FIG + " That is a risk drop of 26% (Study 1)."}, w) for w in (False, True)]
+t("L2: a 'That is' sentence that only repeats its figure goes, size withheld or not",
+  all(r_["says"] == [_L2_FIG] and r_["effect_size"] == _L2_FIG for r_ in _l2), _l2)
+_L2_HR = "Mortality was lower (HR = 0.46, 95% CI 0.30 to 0.70) (Study 6)."
+_L2_KEEP = ["That is a hazard ratio of 0.46, meaning a lower risk over time (Study 6).",
+            "That is about 54% lower risk (Study 6)."]
+t("  one that spells out or converts the figure stays",
+  all(breakdown.translations_follow({"says": [_L2_HR, x]}, w)["says"] == [_L2_HR, x]
+      for x in _L2_KEEP for w in (False, True)))
 _f8_db = "Cold showers boost immunity F8"
 db.put_cached_verdict(_f8_db, _EL_Q, "complicated", "The review pooled 11 trials (Study 1).", ["EL1"],
                       [dict(s) for s in _EL_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",

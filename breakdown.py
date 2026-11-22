@@ -1779,17 +1779,22 @@ def code_translation(t: str) -> bool:
     return bool(_CODE_TRANSLATION.match(str(t or "")))
 
 
+# Words a restatement can add without saying anything new.
+_FILLER = frozenset("a an the of is was were that".split())
+
+
 def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
     """
     The breakdown with each "That is ..." sentence code wrote shown only
     beside the figure it explains. In each block ("What the research says",
     each list item, each field), one whose sentence before it is missing or
     gives no figure goes: "That is no clear difference ... (Study 2)." under
-    a sentence with no number explains nothing. With the size withheld, one
-    that only repeats what the block already says ("That is an effect size
-    of 1.03 (Study 1)." after "... an effect size of 1.03 (Study 1).") goes
-    too; one that converts the figure ("That is about 54% lower risk")
-    stays. Everything else comes back as it was.
+    a sentence with no number explains nothing. One that only repeats what
+    the block already says, short words aside ("That is a risk drop of 26%
+    (Study 1)." after "The risk drop was 26% ... (Study 1)."), goes too,
+    whether or not the size is withheld; one that converts the figure
+    ("That is about 54% lower risk") or adds to it ("..., meaning a lower
+    risk over time") stays. Everything else comes back as it was.
     """
     if not bd:
         return bd
@@ -1798,7 +1803,8 @@ def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
         return bool(_FIGURE.search(_REF.sub(" ", t)))
 
     def words(t: str) -> list[str]:
-        return re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", _REF.sub(" ", t).lower())
+        return [w for w in re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", _REF.sub(" ", t).lower())
+                if w not in _FILLER]
 
     def block(units: list[str]) -> list[str]:
         kept = []
@@ -1806,7 +1812,7 @@ def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
             if code_translation(t):
                 if not kept or not figure(kept[-1]):
                     continue
-                if withheld and figure(t):
+                if figure(t):
                     said = {w for u in units[:i] + units[i + 1:] for w in words(u)}
                     if set(words(re.sub(r"^That is,?\s+", "", t))) <= said:
                         continue
