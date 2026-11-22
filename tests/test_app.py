@@ -6948,13 +6948,26 @@ t("plain agreement: a plural subject keeps a plural verb after 'protect against'
   and breakdown.soften("These foods ward off colds (Study 1).") == "These foods lower the risk of colds (Study 1)."
   and breakdown.soften("Vitamin C protects against colds (Study 1).") == "Vitamin C lowers the risk of colds (Study 1).",
   breakdown.soften("It is unknown if these changes protect against illness (Study 1)."))
-t("  and 'male participants' reads 'men', 'female subjects' 'women', and in a sentence about children, boys and girls",
-  breakdown.plain("A trial of 72 male participants (Study 3).") == "A trial of 72 men (Study 3)."
-  and breakdown.plain("72 female subjects lost weight (Study 1).") == "72 women lost weight (Study 1)."
-  and breakdown.plain("Male and female participants took part (Study 1).") == "Men and women took part (Study 1)."
-  and breakdown.plain("The trial had 40 male participants aged 8, all children (Study 2).")
-  == "The trial had 40 boys aged 8, all children (Study 2).",
-  breakdown.plain("Male and female participants took part (Study 1)."))
+_sx = [breakdown.plain(x) for x in (
+    "A trial of 72 male participants (Study 3).",
+    "72 female subjects lost weight (Study 1).",
+    "Male and female participants took part (Study 1).",
+    "Male or female individuals were eligible (Study 1).",
+    "Male, female participants were enrolled (Study 1).",
+    "It enrolled female participants of childbearing age (Study 2).",
+    "It followed female participants and their babies (Study 2).",
+    "It enrolled female participants (university students) (Study 2).",
+    "The trial had 40 male participants aged 8 (Study 2).")]
+t("  and 'male participants' reads 'males', 'female subjects' 'females', with no age the sentence did not state",
+  _sx == ["A trial of 72 males (Study 3).", "72 females lost weight (Study 1).",
+          "Males and females took part (Study 1).", "Males or females were eligible (Study 1).",
+          "Males and females were enrolled (Study 1).",
+          "It enrolled females of childbearing age (Study 2).",
+          "It followed females and their babies (Study 2).",
+          "It enrolled females (university students) (Study 2).",
+          "The trial had 40 males aged 8 (Study 2)."]
+  and not any(re.search(r"\b(?:men|women|boys|girls)\b", x, re.I) for x in _sx)
+  and not hasattr(breakdown, "_YOUNG"), _sx)
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

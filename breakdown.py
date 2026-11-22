@@ -196,14 +196,11 @@ def _rate(clause: str):
     return swap
 
 
-_YOUNG = re.compile(r"\b(?:child\w*|boys?|girls?|infants?|bab(?:y|ies)|adolescen\w*|teen\w*|youths?|"
-                    r"p(?:a)?ediatric\w*|newborns?|students?|juvenile\w*)\b", re.IGNORECASE)
-
-
 def _sexed(m: re.Match) -> str:
-    """The plain nouns for "male participants", "male and female subjects"."""
-    names = ({"male": "boys", "female": "girls"} if _YOUNG.search(_sentence_around(m))
-             else {"male": "men", "female": "women"})
+    """The plain nouns for "male participants", "male and female subjects":
+    "males", "males and females". No age: "men" or "girls" would state one
+    the sentence did not."""
+    names = {"male": "males", "female": "females"}
     if m.group(3):
         return names[m.group(3).lower()]
     joint = re.search(r" or | and |, ", m.group(0)).group(0)
@@ -331,8 +328,8 @@ PLAIN = [
     (r"\bhowever,\s+", "but ", None),
     (r"\bhowever\b", "but", None),
     (r"\btherefore\b", "so", None),
-    # "72 male participants" is "72 men", never "72 male people"; in a
-    # sentence about children, boys and girls.
+    # "72 male participants" is "72 males", never "72 male people", and
+    # never "72 men": the sentence may not say how old they were.
     (r"\b(?:(male|female)(?: or | and |, )(male|female) |(male|female) )(?:participants|subjects|individuals|people)\b",
      lambda m: _sexed(m), None),
     (r"\bparticipants\b|\bsubjects\b|\bindividuals\b", "people", None),
