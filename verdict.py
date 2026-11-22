@@ -97,12 +97,21 @@ def _method_stamp() -> str:
     reads it, worked out once at start-up. Any deploy that changes one of
     those files, or the provider or model in force, changes the stamp, so a
     saved answer made by other code is never kept as if this code had made it.
+    When a file cannot be read (a deploy that ships no source, say) the stamp
+    is empty and a warning is logged: the app still starts, and an empty
+    stamp keeps nothing (app._steady) and is never stored (db).
     """
     h = hashlib.sha256()
     here = os.path.dirname(os.path.abspath(__file__))
-    for name in ANSWER_FILES:
-        with open(os.path.join(here, name), "rb") as f:
-            h.update(name.encode() + b"\0" + f.read() + b"\0")
+    try:
+        for name in ANSWER_FILES:
+            with open(os.path.join(here, name), "rb") as f:
+                h.update(name.encode() + b"\0" + f.read() + b"\0")
+    except Exception as e:  # noqa: BLE001 — start-up must never fail on this
+        logging.getLogger("evident.stamp").warning(
+            "No method stamp: could not read the answer files (%s); saved answers will not be kept",
+            type(e).__name__)
+        return ""
     try:
         mode = f"{provider()}/{model_name()}"
     except RuntimeError:

@@ -2771,6 +2771,65 @@ verdict.ANSWER_FILES = _real_files[:-1]
 _fewer = verdict._method_stamp()
 verdict.ANSWER_FILES = _real_files
 t("  and it changes when the files it is made from change", _fewer != verdict._method_stamp())
+# A stamp that cannot be worked out is empty: the app still starts, a warning
+# is logged, nothing is kept on an empty stamp and an empty stamp is not stored.
+import builtins as _bi  # noqa: E402
+import importlib.util as _ilu  # noqa: E402
+_real_open = _bi.open
+
+
+def _unreadable(path, *a, **k):
+    if os.path.basename(str(path)) in verdict.ANSWER_FILES:
+        raise PermissionError("unreadable")
+    return _real_open(path, *a, **k)
+
+
+class _Grab(logging.Handler):
+    def __init__(self): super().__init__(); self.lines = []
+    def emit(self, rec): self.lines.append(rec.getMessage())
+
+
+_grab = _Grab()
+logging.getLogger("evident.stamp").addHandler(_grab)
+_bi.open = _unreadable
+try:
+    try:
+        _empty = verdict._method_stamp()
+    except Exception as _e:  # noqa: BLE001
+        _empty = _e
+    _spec = _ilu.spec_from_file_location("verdict_nostamp", ROOT / "verdict.py")
+    _vcopy = _ilu.module_from_spec(_spec)
+    try:
+        _spec.loader.exec_module(_vcopy)
+        _copy_stamp = _vcopy.METHOD_STAMP
+    except Exception as _e:  # noqa: BLE001
+        _copy_stamp = _e
+finally:
+    _bi.open = _real_open
+    logging.getLogger("evident.stamp").removeHandler(_grab)
+t("steady: a stamp that cannot be worked out is empty and logged, never an exception",
+  _empty == "" and any("No method stamp" in x for x in _grab.lines), (_empty, _grab.lines))
+t("  and verdict.py still imports with an empty stamp when a source file cannot be read",
+  _copy_stamp == "", _copy_stamp)
+_real_stamp = verdict.METHOD_STAMP
+verdict.METHOD_STAMP = ""
+try:
+    for _lbl, _st in (("no stamp", None), ("an empty stamp", "")):
+        _c = "Steady claim with an empty current stamp and " + _lbl
+        _steady_row(_c, stamp=_st)
+        t(f"steady: an empty current stamp keeps nothing, against a row with {_lbl}",
+          appmod._steady(_c, STUDIES) is None and _saved_row(_c)["created_at"] == _OLD_DATE)
+    _c = "Steady claim saved while the stamp is empty"
+    fg.models.script = [Resp("(steady) AND (empty)"), Resp(VJ("complicated", [1], tldr="Made with no stamp."))]
+    d = P(_c, ip="7.7.10.8").get_json()
+    t("  and a check saved with an empty stamp stores no stamp",
+      d.get("tldr") == "Made with no stamp." and _saved_row(_c)["method_stamp"] is None, (d, _saved_row(_c) and dict(_saved_row(_c))))
+finally:
+    verdict.METHOD_STAMP = _real_stamp
+db.put_cached_verdict("Stamp stored as given", "(q)", "complicated", "E.", ["P1"], STUDIES,
+                      tldr="T.", still_open="O.", method_stamp="")
+t("  db stores an empty stamp as none", _saved_row("Stamp stored as given")["method_stamp"] is None)
+
 _SK = "Steady claim kept as saved"
 _steady_row(_SK)
 fg.models.script = []; fg.models.calls = 0

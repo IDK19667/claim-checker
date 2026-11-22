@@ -1176,7 +1176,10 @@ def _steady(claim: str, studies: list) -> dict | None:
         return None
     try:
         saved = db.get_cached_by_key(db.normalize_claim(claim))
-        if not (db.servable(saved) and saved.get("method_stamp") == verdict.METHOD_STAMP):
+        # An empty stamp (one that could not be worked out) equals nothing,
+        # a missing stamp included.
+        if not (verdict.METHOD_STAMP and db.servable(saved)
+                and saved.get("method_stamp") == verdict.METHOD_STAMP):
             return None
         if not _same_records(saved["studies"], studies or []):
             return None

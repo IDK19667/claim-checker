@@ -517,7 +517,7 @@ def put_cached_verdict(
                 json.dumps(cited_studies),
                 json.dumps(studies),
                 _now(),
-                method_stamp,
+                method_stamp or None,   # an empty stamp is no stamp
             ),
         )
 
