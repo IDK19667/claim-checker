@@ -1,11 +1,37 @@
 ---
 version: alpha
 name: Evident
-description: The reading room after hours. Night, a charcoal with the green of the stacks in it, is where a claim arrives and where its answer is read. Day, cool stone, is the desk the evidence is laid out on, and the studies stand on it as a shelf of books whose cloth says what kind of study each one is. Three faces, one accent, and nothing ever coloured by what the verdict was.
+description: One lamp-lit desk is the whole front page. A claim is typed into the dark beside a desk under a lamp; the answer arrives as a paper card on the desk, and the reasoning waits below it one stop at a time. The pages beside it keep a night masthead over the text by day. Three faces, one accent, and nothing ever coloured by what the verdict was.
 colors:
-  primary: "#121514"
-  secondary: "#f1f2ee"
-  tertiary: "#2c5848"
+  primary: "#0b0d0c"
+  secondary: "#efe6d2"
+  tertiary: "#9fc3b0"
+  desk-night: "#0b0d0c"
+  desk-deep: "#0f1211"
+  desk-deep-2: "#181c1a"
+  desk-line: "#2a302d"
+  desk-edge: "#3a423e"
+  desk-edge-2: "#3c4440"
+  desk-edge-3: "#59625d"
+  desk-quote: "#4a534e"
+  desk-ref: "#4f6a5d"
+  desk-on: "#eceee9"
+  desk-on-2: "#a9b0ab"
+  desk-on-3: "#8f9792"
+  desk-white: "#ffffff"
+  desk-sage: "#9fc3b0"
+  desk-paper: "#f1f2ee"
+  desk-card: "#efe6d2"
+  desk-ink: "#121514"
+  desk-ink-2: "#434a46"
+  desk-card-label: "#3a403c"
+  desk-card-ink: "#222624"
+  desk-card-verdict: "#0f1110"
+  desk-panel: "#0c0e0d"
+  desk-well: "rgba(15, 18, 17, 0.72)"
+  desk-scrim: "rgba(8, 10, 9, 0.8)"
+  desk-scrim-0: "rgba(8, 10, 9, 0)"
+  desk-focus: "#9fc3b0"
   deep: "#0f1211"
   deep-2: "#181c1a"
   deep-line: "#2a302d"
@@ -22,655 +48,613 @@ colors:
   green: "#2c5848"
   sage: "#9fc3b0"
   tint: "#d4e4da"
+  focus: "#2c5848"
   c-strong: "#35594c"
   c-human: "#3a4e6b"
   c-lab: "#5a4760"
   c-weak: "#7e4f3d"
-  wood: "#2b2622"
-  on-cloth: "#f1f2ee"
-  foil: "rgba(241, 242, 238, 0.45)"
-  spine-light: "rgba(255, 255, 255, 0.07)"
-  spine-shade: "rgba(0, 0, 0, 0.18)"
-  plate: "rgba(15, 18, 17, 0.8)"
-  film-top: "rgba(15, 18, 17, 0.35)"
-  scrim: "rgba(8, 10, 9, 0.55)"
-  shadow: "rgba(8, 10, 9, 0.22)"
-  focus: "#2c5848"
 typography:
-  label:
-    fontFamily: IBM Plex Mono
-    fontSize: 11px
+  headline:
+    fontFamily: Bricolage Grotesque
+    fontSize: 104px
+    fontWeight: 600
+    lineHeight: 0.98
+    letterSpacing: -0.035em
+  headline-min:
+    fontFamily: Bricolage Grotesque
+    fontSize: 46px
+    fontWeight: 600
+    lineHeight: 0.98
+    letterSpacing: -0.035em
+  stop-title:
+    fontFamily: Bricolage Grotesque
+    fontSize: 84px
+    fontWeight: 600
+    lineHeight: 0.98
+    letterSpacing: -0.035em
+  still-open:
+    fontFamily: Bricolage Grotesque
+    fontSize: 50px
     fontWeight: 500
-    lineHeight: 1.4
-  label-sm:
-    fontFamily: IBM Plex Mono
-    fontSize: 10.5px
-    fontWeight: 500
-    lineHeight: 1.3
-  label-xs:
-    fontFamily: IBM Plex Mono
-    fontSize: 10px
-    fontWeight: 500
-    lineHeight: 1.4
-  code:
-    fontFamily: IBM Plex Mono
-    fontSize: 12.5px
-    fontWeight: 500
-    lineHeight: 1.5
-  code-sm:
-    fontFamily: IBM Plex Mono
-    fontSize: 12px
-    fontWeight: 500
-  spine:
-    fontFamily: Instrument Sans
-    fontSize: 10px
-    fontWeight: 500
+    lineHeight: 1.08
+    letterSpacing: -0.025em
+  panel-title:
+    fontFamily: Bricolage Grotesque
+    fontSize: 40px
+    fontWeight: 600
+    lineHeight: 1.04
+    letterSpacing: -0.03em
+  card-verdict:
+    fontFamily: Bricolage Grotesque
+    fontSize: 64px
+    fontWeight: 700
     lineHeight: 1
-    letterSpacing: 0.06em
-  caption-xs:
+  wordmark:
+    fontFamily: Bricolage Grotesque
+    fontSize: 22px
+    fontWeight: 600
+    letterSpacing: -0.01em
+  sure:
     fontFamily: Instrument Sans
-    fontSize: 12px
-    fontWeight: 500
-  caption:
-    fontFamily: Instrument Sans
-    fontSize: 12.5px
+    fontSize: 22px
     fontWeight: 400
-  caption-md:
-    fontFamily: Instrument Sans
-    fontSize: 13px
-    fontWeight: 400
-  note:
-    fontFamily: Instrument Sans
-    fontSize: 13.5px
-    fontWeight: 400
-  small:
-    fontFamily: Instrument Sans
-    fontSize: 14px
-    fontWeight: 500
-  small-lg:
-    fontFamily: Instrument Sans
-    fontSize: 14.5px
-    fontWeight: 400
-  body-sm:
-    fontFamily: Instrument Sans
-    fontSize: 15px
-    fontWeight: 400
-    lineHeight: 1.55
-  body-read:
-    fontFamily: Instrument Sans
-    fontSize: 15.5px
-    fontWeight: 400
-    lineHeight: 1.6
-  body:
-    fontFamily: Instrument Sans
-    fontSize: 16px
-    fontWeight: 400
-    lineHeight: 1.6
+    lineHeight: 1.38
   lede:
-    fontFamily: Instrument Sans
-    fontSize: 17px
-    fontWeight: 400
-    lineHeight: 1.55
-  claim-input:
-    fontFamily: Instrument Sans
-    fontSize: 18px
-    fontWeight: 400
-    lineHeight: 1.4
-  claim-min:
     fontFamily: Instrument Sans
     fontSize: 19px
     fontWeight: 400
-    lineHeight: 1.35
-  tldr:
+    lineHeight: 1.45
+  claim-input:
     fontFamily: Instrument Sans
-    fontSize: 21px
+    fontSize: 19px
+    fontWeight: 400
+    lineHeight: 1.4
+  body:
+    fontFamily: Instrument Sans
+    fontSize: 17px
+    fontWeight: 400
+    lineHeight: 1.6
+  button:
+    fontFamily: Instrument Sans
+    fontSize: 17px
+    fontWeight: 600
+    lineHeight: 1.2
+  helper:
+    fontFamily: Instrument Sans
+    fontSize: 15px
     fontWeight: 400
     lineHeight: 1.45
-  claim-max:
-    fontFamily: Instrument Sans
-    fontSize: 24px
-    fontWeight: 400
-    lineHeight: 1.35
-  wordmark:
-    fontFamily: Bricolage Grotesque
-    fontSize: 20px
+  label:
+    fontFamily: IBM Plex Mono
+    fontSize: 13px
     fontWeight: 500
-    lineHeight: 1
-    letterSpacing: -0.02em
-  chapter-sm:
-    fontFamily: Bricolage Grotesque
-    fontSize: 22px
-    fontWeight: 350
-    lineHeight: 1.15
-    letterSpacing: -0.025em
-  doc-head:
-    fontFamily: Bricolage Grotesque
-    fontSize: 24px
-    fontWeight: 350
-    lineHeight: 1.2
-    letterSpacing: -0.025em
-  title:
-    fontFamily: Bricolage Grotesque
-    fontSize: 26px
-    fontWeight: 350
-    lineHeight: 1.15
-    letterSpacing: -0.03em
-  section-sm:
-    fontFamily: Bricolage Grotesque
-    fontSize: 28px
-    fontWeight: 350
-    lineHeight: 1.1
-    letterSpacing: -0.03em
-  figure:
-    fontFamily: Bricolage Grotesque
-    fontSize: 30px
-    fontWeight: 300
-    lineHeight: 1
-    letterSpacing: -0.03em
-    fontFeature: "'tnum' 1"
-  section:
-    fontFamily: Bricolage Grotesque
-    fontSize: 32px
-    fontWeight: 350
-    lineHeight: 1.06
-    letterSpacing: -0.035em
-  flight-verdict-min:
-    fontFamily: Bricolage Grotesque
-    fontSize: 34px
-    fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
-  verdict-min:
-    fontFamily: Bricolage Grotesque
-    fontSize: 38px
-    fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
-  section-wide:
-    fontFamily: Bricolage Grotesque
-    fontSize: 40px
-    fontWeight: 350
-    lineHeight: 1.06
-    letterSpacing: -0.035em
-  hero:
-    fontFamily: Bricolage Grotesque
-    fontSize: 36px
-    fontWeight: 350
-    lineHeight: 1.08
-    letterSpacing: -0.02em
-  flight-verdict-max:
-    fontFamily: Bricolage Grotesque
-    fontSize: 54px
-    fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
-  hero-mid:
-    fontFamily: Bricolage Grotesque
-    fontSize: 52px
-    fontWeight: 350
-    lineHeight: 1.08
-    letterSpacing: -0.02em
-  verdict:
-    fontFamily: Bricolage Grotesque
-    fontSize: 60px
-    fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
-  verdict-wide:
-    fontFamily: Bricolage Grotesque
-    fontSize: 64px
-    fontWeight: 350
-    lineHeight: 1.04
-    letterSpacing: -0.04em
-  hero-wide:
+    lineHeight: 1.5
+    letterSpacing: 0.08em
+  log:
+    fontFamily: IBM Plex Mono
+    fontSize: 13px
+    fontWeight: 500
+    lineHeight: 1.5
+  page-title:
     fontFamily: Bricolage Grotesque
     fontSize: 56px
     fontWeight: 350
     lineHeight: 1.08
     letterSpacing: -0.02em
+  page-title-min:
+    fontFamily: Bricolage Grotesque
+    fontSize: 36px
+    fontWeight: 350
+    lineHeight: 1.08
+    letterSpacing: -0.02em
+  page-head:
+    fontFamily: Bricolage Grotesque
+    fontSize: 24px
+    fontWeight: 350
+    lineHeight: 1.2
+    letterSpacing: -0.025em
+  page-body:
+    fontFamily: Instrument Sans
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.6
+  headline-narrow:
+    fontFamily: Bricolage Grotesque
+    fontSize: 42px
+    fontWeight: 600
+    lineHeight: 0.98
+    letterSpacing: -0.035em
+  stop-title-narrow:
+    fontFamily: Bricolage Grotesque
+    fontSize: 38px
+    fontWeight: 600
+    lineHeight: 0.98
+    letterSpacing: -0.035em
+  stop-title-mid:
+    fontFamily: Bricolage Grotesque
+    fontSize: 52px
+    fontWeight: 600
+    lineHeight: 1.02
+    letterSpacing: -0.035em
+  stop-title-mid-min:
+    fontFamily: Bricolage Grotesque
+    fontSize: 34px
+    fontWeight: 600
+    lineHeight: 1.02
+    letterSpacing: -0.035em
+  error-title:
+    fontFamily: Bricolage Grotesque
+    fontSize: 44px
+    fontWeight: 600
+    lineHeight: 1.04
+    letterSpacing: -0.03em
+  panel-title-min:
+    fontFamily: Bricolage Grotesque
+    fontSize: 30px
+    fontWeight: 600
+    lineHeight: 1.04
+    letterSpacing: -0.03em
+  still-open-phone:
+    fontFamily: Bricolage Grotesque
+    fontSize: 28px
+    fontWeight: 500
+    lineHeight: 1.08
+    letterSpacing: -0.025em
+  still-open-narrow:
+    fontFamily: Bricolage Grotesque
+    fontSize: 23px
+    fontWeight: 500
+    lineHeight: 1.08
+    letterSpacing: -0.025em
+  home-title:
+    fontFamily: Bricolage Grotesque
+    fontSize: 34px
+    fontWeight: 600
+    lineHeight: 1.06
+    letterSpacing: -0.03em
+  home-title-min:
+    fontFamily: Bricolage Grotesque
+    fontSize: 26px
+    fontWeight: 600
+    lineHeight: 1.06
+    letterSpacing: -0.03em
+  figure:
+    fontFamily: Bricolage Grotesque
+    fontSize: 26px
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: -0.03em
+  study-number:
+    fontFamily: Bricolage Grotesque
+    fontSize: 26px
+    fontWeight: 600
+    lineHeight: 1
+  evidence-line:
+    fontFamily: Instrument Sans
+    fontSize: 20px
+    fontWeight: 400
+    lineHeight: 1.4
+  wordmark-phone:
+    fontFamily: Bricolage Grotesque
+    fontSize: 20px
+    fontWeight: 600
+    letterSpacing: -0.01em
+  scope:
+    fontFamily: Instrument Sans
+    fontSize: 18px
+    fontWeight: 400
+    lineHeight: 1.5
+  figure-label:
+    fontFamily: IBM Plex Mono
+    fontSize: 14px
+    fontWeight: 400
+    lineHeight: 1.5
+  page-title-mid:
+    fontFamily: Bricolage Grotesque
+    fontSize: 52px
+    fontWeight: 350
+    lineHeight: 1.08
+    letterSpacing: -0.02em
+  page-claim:
+    fontFamily: Instrument Sans
+    fontSize: 18px
+    fontWeight: 400
+    lineHeight: 1.4
+  page-small:
+    fontFamily: Instrument Sans
+    fontSize: 14px
+    fontWeight: 400
+    lineHeight: 1.4
 spacing:
-  gutter: 20px
-  row: 8px
+  strip: 32px
+  gutter: 16px
+  page-gutter: 20px
   block: 24px
-  group: 36px
-  section: 72px
+  bar-space: 84px
 rounded:
   control: 3px
   panel: 4px
 components:
-  night:
+  desk-ground:
+    backgroundColor: "{colors.desk-night}"
+    textColor: "{colors.desk-on}"
+  desk-quiet:
+    backgroundColor: "{colors.desk-night}"
+    textColor: "{colors.desk-on-2}"
+  desk-rail:
+    backgroundColor: "{colors.desk-night}"
+    textColor: "{colors.desk-on-3}"
+  desk-solid:
+    backgroundColor: "{colors.desk-deep}"
+    textColor: "{colors.desk-on}"
+  desk-strip:
+    backgroundColor: "{colors.desk-deep-2}"
+    textColor: "{colors.desk-on-2}"
+    typography: "{typography.label}"
+  desk-wordmark:
+    backgroundColor: "{colors.desk-deep-2}"
+    textColor: "{colors.desk-white}"
+    typography: "{typography.wordmark}"
+  desk-rule:
+    backgroundColor: "{colors.desk-line}"
+  desk-edge:
+    backgroundColor: "{colors.desk-edge}"
+  desk-field-edge:
+    backgroundColor: "{colors.desk-edge-2}"
+  desk-ghost-edge:
+    backgroundColor: "{colors.desk-edge-3}"
+  desk-quote-rule:
+    backgroundColor: "{colors.desk-quote}"
+  desk-ref-box:
+    backgroundColor: "{colors.desk-ref}"
+  desk-link:
+    backgroundColor: "{colors.desk-night}"
+    textColor: "{colors.desk-sage}"
+  desk-focus-ring:
+    backgroundColor: "{colors.desk-focus}"
+  desk-button:
+    backgroundColor: "{colors.desk-paper}"
+    textColor: "{colors.desk-ink}"
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+  desk-card:
+    backgroundColor: "{colors.desk-card}"
+    textColor: "{colors.desk-card-verdict}"
+    typography: "{typography.card-verdict}"
+    rounded: "{rounded.control}"
+  desk-card-claim:
+    backgroundColor: "{colors.desk-card}"
+    textColor: "{colors.desk-card-ink}"
+  desk-card-label:
+    backgroundColor: "{colors.desk-card}"
+    textColor: "{colors.desk-card-label}"
+    typography: "{typography.label}"
+  desk-card-text:
+    backgroundColor: "{colors.desk-card}"
+    textColor: "{colors.desk-ink-2}"
+  desk-panel:
+    backgroundColor: "{colors.desk-panel}"
+    textColor: "{colors.desk-on}"
+    typography: "{typography.body}"
+    rounded: "{rounded.control}"
+  desk-well:
+    backgroundColor: "{colors.desk-well}"
+    textColor: "{colors.desk-on}"
+    typography: "{typography.claim-input}"
+    rounded: "{rounded.control}"
+  desk-scrim:
+    backgroundColor: "{colors.desk-scrim}"
+  desk-scrim-edge:
+    backgroundColor: "{colors.desk-scrim-0}"
+  brand:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.tertiary}"
+  brand-card:
+    backgroundColor: "{colors.secondary}"
+    textColor: "{colors.desk-ink}"
+  page-night:
     backgroundColor: "{colors.deep}"
     textColor: "{colors.on-deep}"
-  night-quiet:
+  page-night-quiet:
     backgroundColor: "{colors.deep}"
     textColor: "{colors.on-deep-2}"
-  night-label:
+  page-night-label:
     backgroundColor: "{colors.deep}"
     textColor: "{colors.on-deep-3}"
-  beta-tag:
-    backgroundColor: "{colors.deep}"
-    textColor: "{colors.on-deep-2}"
-    typography: "{typography.label}"
-    rounded: "{rounded.control}"
-  doctor-line:
-    backgroundColor: "{colors.deep}"
-    textColor: "{colors.on-deep-2}"
-    typography: "{typography.note}"
-  night-well:
+  page-night-well:
     backgroundColor: "{colors.deep-2}"
     textColor: "{colors.on-deep}"
-  night-rule:
+  page-night-rule:
     backgroundColor: "{colors.deep-line}"
-  day:
+  page-night-focus:
+    backgroundColor: "{colors.deep}"
+    textColor: "{colors.sage}"
+  page-day:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
-  day-quiet:
+    typography: "{typography.page-body}"
+  page-day-quiet:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink-2}"
-  day-label:
+  page-day-label:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink-3}"
-  panel:
+  page-panel:
     backgroundColor: "{colors.panel}"
     textColor: "{colors.ink}"
     rounded: "{rounded.panel}"
-  hairline:
+  page-hairline:
     backgroundColor: "{colors.rule}"
-  hairline-2:
+  page-hairline-2:
     backgroundColor: "{colors.rule-2}"
-  button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.panel}"
-    rounded: "{rounded.control}"
-  button-on-night:
-    backgroundColor: "{colors.on-deep}"
-    textColor: "{colors.deep}"
-    rounded: "{rounded.control}"
-  link:
+  page-link:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.green}"
-  pen:
-    backgroundColor: "{colors.deep}"
-    textColor: "{colors.sage}"
-  highlighter:
+  page-focus-ring:
+    backgroundColor: "{colors.focus}"
+  page-selection:
     backgroundColor: "{colors.tint}"
     textColor: "{colors.ink}"
-  spine-strong:
+  share-spine-strong:
     backgroundColor: "{colors.c-strong}"
-    textColor: "{colors.on-cloth}"
-  spine-human:
+    textColor: "{colors.paper}"
+  share-spine-human:
     backgroundColor: "{colors.c-human}"
-    textColor: "{colors.on-cloth}"
-  spine-lab:
+    textColor: "{colors.paper}"
+  share-spine-lab:
     backgroundColor: "{colors.c-lab}"
-    textColor: "{colors.on-cloth}"
-  spine-weak:
+    textColor: "{colors.paper}"
+  share-spine-weak:
     backgroundColor: "{colors.c-weak}"
-    textColor: "{colors.on-cloth}"
-  spine-foil:
-    backgroundColor: "{colors.foil}"
-  spine-light:
-    backgroundColor: "{colors.spine-light}"
-  spine-shade:
-    backgroundColor: "{colors.spine-shade}"
-  spine-band:
-    backgroundColor: "{colors.on-cloth}"
-  breakdown-open:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-  shelf:
-    backgroundColor: "{colors.wood}"
-  bookend:
-    backgroundColor: "{colors.wood}"
-  caption-plate:
-    backgroundColor: "{colors.plate}"
-    textColor: "{colors.on-deep}"
-  film-top:
-    backgroundColor: "{colors.film-top}"
-  scrim:
-    backgroundColor: "{colors.scrim}"
-  sheet-shadow:
-    backgroundColor: "{colors.shadow}"
-  focus-ring:
-    backgroundColor: "{colors.focus}"
+    textColor: "{colors.paper}"
 ---
 
 # DESIGN.md: Evident
 
 The visual system, written down. `DECISIONS.md` holds why each choice was
 made; this holds what the choice is. Refinement preserves this world. A
-redesign replaces this file on purpose, never by drift.
+redesign replaces this file on purpose, never by drift: this version
+replaced "the reading room after hours" on 2026-11-22, when the owner
+chose the lamp-lit desk as the front page.
 
-## The idea
+## Overview
 
-**The reading room after hours.** A claim arrives at night: it is typed
-into a dark room, and the answer is given there. Then the
-lights come up on the desk and the evidence is laid out by day: what the
-research says, what is still open, and the studies themselves, standing
-on a shelf as books.
+**One lamp-lit desk is the whole front page.** A claim is typed into
+the dark beside a desk under a lamp; the answer arrives as a paper card
+laid on the desk, and the reasoning waits below it, one stop at a time.
+Scrolling moves the camera, the light and the words together, and a
+Next control at the foot of the screen always says what comes next.
 
-Every screen is built from those two grounds and the line that joins
-them. Night carries the question and the answer; day carries the working.
-Nothing in between, no third surface, no gradient from one to the other.
+Two stylesheets, two grounds:
 
-This world replaced a stamped ticket on blue and white, and before that a
-facts panel. The reader asked for something more engaging than blue and
-white, darker, with no glowing cyan, and then twice for something less
-playful and more premium. The answer is restraint in the colour and
-craft in the details: one accent, three faces, and a shelf that reports
-something true about every study on it.
+- **The front** (`templates/index.html`, `static/desk.css`,
+  `static/desk.js`, three.js in `static/vendor/`) stands on the night,
+  `--desk-night`. The six stops of a result: the claim (1), the answer
+  (2), what was read (3), the studies weighed (4), the research (5), and
+  what is still open with the search that ran (6). Home is stop 1 alone.
+- **Every other page** (about, how it works, corrections, privacy,
+  the 404 and the stats page) keeps `static/style.css`: a night masthead
+  and footer, the text by day on `--paper`, no scripts.
 
-## Night and day
+The page works without the desk. Text mode (no WebGL, Save-Data, 2G,
+reduced data, `?nogl=1`, or three.js refused) sets the same six stops on
+the night ground with the answer card as a block of card stock; with
+scripts off a result reads top to bottom from the server's HTML.
 
-- **Night**, `#0f1211`, a charcoal with the green of the stacks in it:
-  never navy, never pure black, never glowing. The masthead, the ask, the
-  report's head, an error, a check still running, and the footer.
-  Night surfaces run to both edges of the screen by a border image of the
-  same colour pushed out sideways, which paints outside the box without
-  widening it: it can never scroll, and there is no clipped edge to leave
-  a hairline of paper between two night blocks.
-- **Day**, `#f1f2ee`, cool stone, not cream. Everything you read at
-  length: the short answer, the research, the shelf, the sources, the
-  trust questions, the privacy page.
+## Colors
 
-The page is day stock in every light. `color-scheme: light` keeps the
-browser's own furniture light; night is a surface the page lays down on
-purpose, never the browser's dark mode.
+The desk's colours are the approved sample's, under desk names in
+`desk.css` (`--desk-*`, with short aliases that mean those values on the
+front only). No other hue may appear on the front.
 
-## Three faces
+| Role | Token | Hex | Used for |
+|---|---|---|---|
+| Ground | `--desk-night` | `#0b0d0c` | The room beyond the lamp; the page |
+| Solid ground | `--desk-deep` | `#0f1211` | Words over the desk, the sheets, the menu |
+| Strip | `--desk-deep-2` | `#181c1a` | The top strip and the bar |
+| Rule | `--desk-line` | `#2a302d` | Hairlines on the night |
+| Edges | `--desk-edge`, `-2`, `-3` | `#3a423e`, `#3c4440`, `#59625d` | Outlines of bar controls, fields, ghost buttons, rail dots |
+| Quote rule | `--desk-quote` | `#4a534e` | The rule beside a quoted conclusion |
+| Ref box | `--desk-ref` | `#4f6a5d` | The box round a study number in the prose |
+| Words | `--desk-on`, `-2`, `-3` | `#eceee9`, `#a9b0ab`, `#8f9792` | Text on the night, quieter text, the rail's names |
+| White | `--desk-white` | `#ffffff` | The wordmark, a lifted study's title |
+| Accent | `--desk-sage` | `#9fc3b0` | Links, the live dot, a stop number, focus |
+| Light shape | `--desk-paper` | `#f1f2ee` | The button to press, Next |
+| Card | `--desk-card` | `#efe6d2` | The answer card |
+| Card words | `--desk-ink`, `-ink-2`, `-card-label`, `-card-ink`, `-card-verdict` | `#121514` to `#0f1110` | Words on the card and on the light shape |
+| Panel | `--desk-panel` | `#0c0e0d` | The reading panels |
+| Well | `--desk-well` | `rgba(15, 18, 17, 0.72)` | The claim box, a well in the night |
+| Scrim | `--desk-scrim`, `--desk-scrim-0` | `rgba(8, 10, 9, 0.8)` and clear | The two scrims behind words over the desk |
 
-- **Bricolage Grotesque**, 300 to 500, pinned at its 96pt optical size
-  because it is only ever set large: the wordmark, headlines, the
-  verdict, section titles. Weight 350 with tight
-  tracking (`-0.03em` to `-0.04em`); it is rounded and modern without
-  being soft.
-- **Instrument Sans**, 400 to 600: everything you read. The claim, the
-  short answer, the research, the sources, every control.
-- **IBM Plex Mono**, 500: everything you scan. Labels ("The claim you
-  checked", "Still open"), counts, study numbers, the search query, the
-  live lines of a check. Sentence case, never tracked.
+The other pages keep `style.css`'s own tokens: night (`--deep`,
+`--deep-2`, `--deep-line`, `--on-deep` to `--on-deep-3`), day
+(`--paper`, `--panel`, `--ink` to `--ink-3`, `--rule`, `--rule-2`), and
+one accent, bottle green `--green` by day for links and focus, with sage
+for links on the night masthead.
 
-All three are self-hosted latin subsets in `static/fonts/woff2/`, 77KB
-together, with their OFL licences beside them. Do not reintroduce a Google
-Fonts link: it costs a third party connection, breaks the offline first
-paint, and the Content Security Policy allows `font-src 'self'` only.
+**One accent, and it means "you can act on this".** Sage on the night,
+green by day. It never signals safe, good or true.
 
-The one place caps are tracked is the lettering on a spine, uppercase at
-`0.06em`, because that is how a bound volume is lettered.
-
-## Colour, and what it may not mean
-
-**One accent**: bottle green `#2c5848` by day for what you can act on
-(links, focus), sage `#9fc3b0` by night for the pen, and a pale tint
-`#d4e4da` for the highlighter. That is all the colour the interface has.
-
-**The cloth of the books** is the only other colour, and it says one
-thing: what kind of study a book is.
-
-| Cloth | Token | Kind |
-|---|---|---|
-| Green | `--c-strong` | Strong design: meta-analysis, systematic review, randomized trial |
-| Slate blue | `--c-human` | A study in people of another design |
-| Plum | `--c-lab` | Animal or lab |
-| Rust | `--c-weak` | Opinion or a single case |
-| Hatched | `--ink-2` on `--panel` | Retracted |
-
-The four cloths are matched in tone so the shelf reads as one set.
 **No verdict is ever coloured.** "Likely true", "Likely false", "It's
-complicated" and "Not enough evidence" are set identically, in the same
-ink, the same face and the same ring. A tool whose only product is
-credibility does not get to colour its own answers, and green for true
-would imply a certainty the studies do not support. No stylesheet may
-select on `data-verdict`; a test enforces it.
+complicated" and "Not enough evidence" are set identically, on the same
+card, in the same ink. No stylesheet may select on `data-verdict`; a
+test enforces it.
 
-### Palette roles: which colour is for what
+**The cloths mean the kind of study and nothing else.** On the desk the
+studies are sheets. The share image (drawn by `app.js`) and the link
+preview (`og.py`) show the kind of study by colour with the four cloths
+only: `--c-strong` `#35594c` for a strong design, `--c-human` `#3a4e6b`
+for another study in people, `--c-lab` `#5a4760` for animal or lab,
+`--c-weak` `#7e4f3d` for opinion or a single case. Never for a result.
+
+### Palette roles
+
+The roles on the pages beside the desk (`style.css`):
 
 | Role | Token | Hex | Used for |
 |---|---|---|---|
 | Background | `--paper` | `#f1f2ee` | The day ground every long read sits on |
-| Surface | `--panel` | `#fafaf8` | Raised day surfaces: panels, the study rows, the sheet |
-| Text | `--ink` | `#121514` | Headings and body copy, and the primary button fill |
-| Secondary text | `--ink-2` | `#434a46` | Explanations, helper text, link text in a footer on day |
-| Muted text | `--ink-3` | `#5d6560` | Metadata and labels: dates, counts, mono labels |
-| Action | `--green` | `#2c5848` | Links, focus rings, the one thing you can press by day |
-| Highlight | `--tint` | `#d4e4da` | The highlighter stroke under relied-on study titles |
-| Dark surface | `--deep` | `#0f1211` | Night: masthead, the ask, the report head, errors, the footer |
+| Surface | `--panel` | `#fafaf8` | Raised day surfaces |
+| Text | `--ink` | `#121514` | Headings and body copy |
+| Secondary text | `--ink-2` | `#434a46` | Explanations, helper text |
+| Muted text | `--ink-3` | `#5d6560` | Metadata and mono labels |
+| Action | `--green` | `#2c5848` | Links and the focus ring by day |
+| Selection | `--tint` | `#d4e4da` | Selected text |
+| Dark surface | `--deep` | `#0f1211` | The masthead and the footer |
 
-Night adds its own inks (`--on-deep`, `--on-deep-2`, `--on-deep-3`), its
-hairline (`--deep-line`) and the sage pen (`--sage`); every pairing was
-checked for contrast and `scripts/qa.mjs` keeps checking it. The role of a
-colour is its whole job: a colour that is not in this table, or the cloth
-table above, has no business on the page.
+**Green never signals "safe", "good" or "true".** Green, like sage on
+the desk, means "you can act on this" and nothing about the evidence.
+No verdict, confidence or study count may borrow it to look
+reassuring.
 
-**Green never signals "safe", "good" or "true".** Green here means
-"you can act on this" (a link, a focus ring) and nothing about the
-evidence. A verdict is never coloured, not green, not red, not amber, and
-no verdict, confidence or study count may borrow the action green to look
-reassuring. The one green book cloth means a strong study design, not a
-good result.
+## Typography
 
-### Type and spacing floors
+Three self-hosted families, latin subsets in `static/fonts/woff2/`. No
+Google Fonts link: it costs a third-party connection, breaks the offline
+first paint, and the Content Security Policy allows `font-src 'self'`.
 
-- Main heading (`.hero`): 36px on a phone (34 to 38), 52px from 720px and
-  56px from 1024px (48 to 56), tracked at `-0.02em`.
-- Body 16px on a 1.6 line height. Helper text 14 to 15px. Metadata (dates,
-  study counts, labels, the privacy line, footer links) 13 to 14px.
-- **Nothing a reader needs is under 13px.** The single exception is the
-  lettering on a book spine (10px, uppercase), which is `aria-hidden`
-  decoration: the same words are in the book's accessible name, its tip and
-  the key. `scripts/qa.mjs` fails any other text under 13px.
-- Every link and button a reader taps is 44px or more in both directions,
-  by its box or by a grown hit area (`::after`); `scripts/qa.mjs` hit-tests
-  it at every width. The exemptions are a plain link inside a sentence of
-  running text, and the shelf columns, which are at least 38px wide (eight
-  books across a phone) and the full height of the shelf.
+- **Bricolage Grotesque**, the full variable file on the front (optical
+  sizes 12 to 96, weights 200 to 800), 600 for headlines and 700 for the
+  verdict painted on the card. Tight tracking (`-0.035em` on the
+  headline).
+- **Instrument Sans**, 400 to 600: everything read. Body 17px on the
+  front, 16px on the other pages.
+- **IBM Plex Mono**, 400 and 500: labels a reader scans, the strip, the
+  log of a running check, counts, study numbers. Labels are uppercase and
+  tracked on the desk (`0.06em` to `0.08em`), as the sample sets them.
 
-## The answer, not a ring
+Sizes and floors:
 
-The verdict is no longer an oversized oval. The answer sentence leads in
-display type (26 to 34px) and the assessment sits under it as two plain
-rows: the label in 24px display, and one line on how much to lean on it,
-counted from the studies the check used. The thread, its knots and the
-pen ring are gone.
+- **The front's headline** is sized by the screen's height as well as
+  its width: `clamp(46px, min(7.2vw, 11.5vh), 104px)`, 42px under 360px
+  wide. On a short laptop it gets smaller; it is never cut, squeezed or
+  swapped for other words.
+- The other pages' title: 34 to 38px on a phone, 48 to 56px on a
+  desktop.
+- **Nothing a reader needs is under 13px.** `scripts/qa.mjs` fails any
+  visible text under 13px on every page.
 
-## The highlighter
+## Layout
 
-Titles of the studies the verdict relied on carry a highlighter stroke in
-`--tint` along the lower part of the line, never a block. On a check the
-reader just ran it sweeps in left to right, once; restored or shared
-results draw it already there. The key under the sources says what it
-means: "Highlighted: relied on".
+- **The strip** is fixed at the top of the front, 32px: the wordmark
+  (it goes home), Beta, and "Not medical advice". It never scrolls away.
+- **A stop** is one screen tall when its words fit, and as tall as its
+  words when they do not (`.long`). Words sit beside the desk, never on
+  it: right of the lamp, left of it, or at the foot, behind one of the
+  two scrims. On a phone or a portrait screen there is one column, and
+  on the long stops the picture shows at the top.
+- **The bar** is fixed at the foot once a result shows: Back, where you
+  are, and Next, which names the next stop. On a wide screen a rail of
+  stop names sits at the right edge.
+- **The first screen holds the claim box.** At 1366x650, 1280x720,
+  1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
+  the claim box and "Check the research" are wholly on screen with no
+  scrolling; the privacy line too, wherever it fits. On a phone
+  (390x844, 375x667, 320x568) the claim box and the button are. A short
+  laptop screen sets stop 1 closer together; nothing scrolls itself.
+- **While a check runs** the form goes quiet: the wordmark, lede,
+  helper, privacy line, examples and button step aside, the claim stays
+  in its box, and the reading log prints under it. A line the check has
+  moved past keeps two lines of its words; on a screen under 600px high
+  the line it is on keeps four. The newest line and Cancel stay on the
+  first screen at every size listed above.
+- **An error** is a title naming the problem, a line saying what to do,
+  and the way out (Try again, Edit claim), all on the first screen.
+- Every link and button a thumb hits is 44px or more both ways, by its
+  box or a grown hit area; `scripts/qa.mjs` hit-tests it. A plain link in
+  a sentence is exempt.
 
-## The shelf
+## Elevation & Depth
 
-The evidence chart is a shelf of books, one per study, in the order of
-the list of studies, under a line that says in words what the shelf says
-in shapes: "Based on 7 studies, 2 used for this verdict, 4 strong".
+Depth on the front is the scene's: the lamp's light falling off across
+the wood, the card lying on the desk, the room going dark beyond it. The
+interface adds none. No shadows on content, no glow, no blur, no glass.
+The two scrims (a radial one behind words over the desk, a vertical one
+on a phone) are the only gradients. The strip, the bar, the panels and
+the sheets are flat solid grounds.
 
-- **Height is the strength of the design and nothing else.** Three fixed
-  heights off a dark wood base: strong 100%, moderate 72%, weak 44%. A
-  withdrawn paper stands at the weak height, hatched, whatever it was
-  published as: a retraction is not thin evidence, it is no evidence.
-- **Cloth is the kind of study**, from the table above.
-- **The spine is lettered** with the design in a reader's words
-  ("Randomized trial", "Review", "One case"), small, uppercase, reading
-  up the spine, under two foil rules at the head the way a bound volume
-  is lettered. A word that cannot stand up on its book is left off,
-  never cut: `fitSpines()` hides it, and the tip and the key carry it.
-  A retracted book is never lettered; the hatch and the key say it.
-- **Solid or outlined is whether the verdict relied on it.** A relied-on
-  book is solid cloth, and the two foil rules at its head become one band
-  of silver foil (`--on-cloth` to `--rule-2` and back), the way a library
-  marks a volume, with a small green dot above. A book read but not
-  relied on is the same book outlined: a 2px edge of its cloth on a pale
-  wash of it (18% cloth into `--paper`), lettered in the cloth, like a
-  paperback beside the bound volumes. Nothing is ever faded with opacity,
-  which would let a strong study pass for a weak one: the colour always
-  says the kind of study, and the key always matches the shelf.
+The other pages are flat too: a night masthead and footer, the text by
+day, rules and space between groups.
 
-Under each book its study number, 01 to 08, the number the prose points
-at and the list carries. A book is a `<button>`: pressing one marks it,
-opens the matching study and scrolls to it. Hover and focus open a small
-ink tip with the type and year. **A book is as wide as a book:** a column
-is 46px at most, 2px between spines, so five studies stand as a short
-row and never stretch into a bar chart. The row ends at a **bookend**, a
-9px slab of the ledge's wood half the shelf's height, and the rest of the
-ledge is empty shelf. The gap between books is padding inside each
-button, so no strip between them is dead to a finger; eight books shrink
-to fit a phone. A key under the shelf names only the cloths present.
+## Shapes
 
-The **mini shelf** on each of the latest checks, and on the share card, is
-the same shelf at 20px: the same heights, relied-on books solid and the
-rest outlined on their wash, as on the big shelf. It carries no band: at
-5px wide a band reads as a letter, not a band. A reader can see
-the shape of the evidence before opening a check.
+Every corner on the front is 3px: buttons, fields, panels, the card,
+the sheets' top corners. The other pages keep 3px controls and 4px
+panels. No pills, no circles but the rail's dots and the live dot,
+no icon circles, no badges, no card grids. Panels are a solid ground
+with a 2px sage rule on top; groups are made with rules and space, not
+boxes.
 
-## Structure
+## Components
 
-- **The masthead:** night, the wordmark with "Beta" beside it, the date in
-  mono, "How it works". **Beta** is a label, not a control: a hairline tag
-  (`--deep-line`, `--r-control`, no fill) set in the mono at 11px in
-  `--on-deep-2`, on the wordmark's baseline, outside the link, on every
-  screen that has a masthead (the front page, a result, the privacy page
-  and the 404). It is not tracked, not coloured and not clickable.
-- **The front page:** the checker first, all on night: the masthead with
-  its short nav (How it works, About, Privacy), the question as a headline
-  (36px on a phone, 54px, 64px on a wide screen: "Heard a health claim?"
-  with "Check it against the research." a step quieter), the lede and the
-  doctor line, then the field with its label ("Health claim to check") and
-  one helper line above it, the claim box as a well in the night (its edge
-  in `--on-deep-3` so it never blends in), the one light shape on the
-  screen, the button, and three examples as quiet outlines. The first
-  screen is exactly that, at 375px and at 1440px, and a measured test
-  (`scripts/ui_measure.mjs --assert`) fails if the field and button are
-  not both on it. Then by day the latest checks and "Before you trust a
-  verdict". There is no strip of site counts.
-- **Latest checks:** a 32px title, then rows on 1px rules: the claim
-  (no issue number), the verdict at the right in plain ink, and
-  under it the mini shelf and its counts. On a wide screen the title sits
-  in a left column and the rows in a right one.
-- **Before you trust a verdict:** the same grammar, one question per row,
-  every answer ending on a link back to the claim box, and a real check
-  as an aside.
-- **The report:** no picture at any stage: the night head (back, the case line,
-  the claim as checked with an "Edit claim" button under it, the reading
-  log while it runs). Then by day, one reading column: the answer
-  sentence in display type, the assessment (verdict label and how much to
-  lean on it, as plain rows), the doctor line, "What the research says",
-  "Who and what this applies to", "Still open" under an ink rule, the
-  closed breakdown, the evidence chart. The sources, each saying why it
-  is listed, and the search details follow, then share, feedback and
-  report. From 1024px the sources are a 340px rail beside the column; on
-  a phone it is one column. Each saved sentence is printed once: the
-  later blocks drop what an earlier one already said (`display.py`,
-  mirrored by `breakdownView` in `app.js`).
-- **The answer** is flat on the page: no panel, no shadow, no lift. The
-  one thing that floats is the study sheet.
-- **The full breakdown** sits straight under "Still open", closed, so a
-  reader meets it before the shelf rather than after the sources. Its
-  head is a heading, not a link: a 2px ink rule over it, "Rests on N
-  studies" in mono, "Read the full breakdown" in 26px Bricolage, a line
-  of what is inside ("The claim part by part, each study's own
-  conclusion, how big the effect is and who it applies to."), and at the
-  right an Open control, the layer's one rounded thing, at
-  `--r-control`, that inverts on hover and reads Close when open.
-  Inside: the claim part by part, what the evidence shows, **what each
-  study concluded** (each relied-on study's conclusion quoted from its
-  abstract, under "Study N · type · year", in curly quotes from the
-  stylesheet), why the verdict is what it is, who it applies to, and what
-  is still unknown. No cards, no colour by verdict. On a wide screen the head
-  spans the page, the reading takes the left column and the sources the
-  right.
-- **The sources:** two folds, "Relied on for the verdict" open and "Read,
-  not relied on" closed. Each study row carries a 3px stripe of its cloth
-  down its left edge, and a relied-on title carries the highlighter.
-  Every study stays in the HTML in both states.
-- **A check still running, and an error,** are all night: the head (or
-  the error's message in 26px Bricolage and the way out) runs straight
-  into the footer with only a `--deep-line` rule between them, no strip
-  of paper. While a countdown runs, "Try again" is drawn as an outline
-  and plainly not yet open.
-- **The study sheet:** a panel that rises from the foot of the screen
-  over a scrim, `--r-panel` at its top corners. Alone in that,
-  the only shadows in the design. A bar sticks to its top with the only
-  Close (a word, 44px tall) while the abstract scrolls.
-- **The share bar (phones):** fixed to the foot, but only once the short
-  answer has scrolled above the top edge. It never covers the answer on
-  first view, and goes again when the reader scrolls back up to it.
-- **Failures:** an error is a title naming the problem (invalid claim, no
-  connection, a limit, the checker) and a line saying what to do. The
-  kind follows the status the server sent; the way out follows what
-  failed: a reply the model declined offers Edit claim and no Retry, one
-  cut off offers Retry and Edit claim. No studies is an answer, not
-  an error: the result says nothing on PubMed matched and what to try.
-- **Documents** (privacy, the 404): the masthead, a 52 to 56px title, the lede,
-  then the text by day under 24px heads. The 404 offers the claim box
-  again and the latest checks.
-- **The doctor line:** directly under the assessment on the report, "Check important health decisions with a doctor.", 13.5px
-  Instrument Sans in `--on-deep-2`, balanced so it never strands a word.
-  It is the same words and the same setting whatever the verdict says. It
-  is in the server-rendered HTML, so a shared link has it before any
-  script runs, and it shows only while a verdict shows (hidden during a
-  check). The same line ends the shared text.
-- **Cards:** the share image (1080 square, drawn in the browser) and the
-  link preview (1200x630, drawn by `og.py`) are one composition: night on
-  top with the wordmark, the claim, the verdict and the
-  doctor line under it;
-  day below with the short answer, what is still open, the mini shelf;
-  a mono colophon with "Not medical advice".
-
-## The footage
-
-None. The home page lost its fly-through on 2026-11-18, and the band of
-footage above a running check went the same week: the claim and the
-reading log are the whole checking screen, printed straight under the
-masthead, with the claim at the same place the verdict will put it.
-
-## The keyboard
-
-Arrow up and down walk between studies, Enter opens one. Arrow left and
-right walk the books on the shelf. **`/` returns to the claim box** from
-anywhere outside a sheet or a text field. Focus is a 2px outline in green
-by day and sage by night.
+- **The claim box**: a well in the night (`--desk-well`) with a 1px
+  `--desk-edge-2` edge, Clear and Speak inside it at the right, a helper
+  line above, the type-ahead of saved checks under it.
+- **The button**: the one light shape on the screen, `--desk-paper`
+  with `--desk-ink` words, 52px tall. Next in the bar is the same shape.
+  A ghost button is an outline in `--desk-edge-3`; a quiet one is
+  underlined words.
+- **The answer card**: card stock (`--desk-card`) with the claim in
+  quotes, the verdict in Bricolage 700, and the short answer. In 3D it is
+  painted on the paper on the desk and the same words are laid over it as
+  real text; in text mode it is a block of the same stock.
+- **The reading log**: Plex Mono 13px in `--desk-on-2`, a short rule
+  before each line, the live line in `--desk-on` with a sage dot, Cancel
+  as underlined words under it.
+- **Panels**: `--desk-panel`, a sage rule on top, 17px reading text,
+  mono section labels over a hairline.
+- **The study rows**: a number in Bricolage, the design in mono, the
+  title in 600; pressing one lifts its sheet on the desk.
+- **The sheets** (a study's abstract, How it works): rise from the foot
+  over the scrim on `--desk-deep`, with a sticky bar holding Close.
+- **The strip and the bar**: `--desk-deep-2` with a `--desk-line` rule.
 
 ## Motion
 
-Two moments in the reading, and the live check:
+The camera, the light and the words move with the scroll: one eased
+value, so the scene is never ahead of the reader. Beyond that:
 
-1. **The shelf** grows its books up from the wood, 250ms each, staggered
-   20ms, on a check the reader just ran. Transform and opacity only.
-2. **The highlighter** sweeps across relied-on titles, once, on a check
-   the reader just ran.
-3. **A live check:** the sheet arrives once when the check starts, each line of the reading log prints as its stage happens, and
-   the live line's dot pulses.
-4. **The nudge:** 900ms after a check the reader just ran comes back,
-   the page moves down once so the claim sits near the top and the short
-   answer and the start of the reading show under the claim. It is the
-   one time the page scrolls itself. It never runs on a shared link, any
-   touch, wheel or key from the reader cancels it, it waits for a hidden
-   tab to come back, and under reduced motion it jumps rather than glides.
+1. **One glide to the answer**, once, after a check the reader just ran.
+   A saved or shared result opens at the answer with no glide. Any touch,
+   wheel or key stops it; it waits for a hidden tab; under reduced motion
+   it is a cut. It is the only time the page moves itself.
+2. **A press of Next, Back, the rail or the menu** glides to that stop.
+3. **A live check**: at "found N" the desk stands N blank sheets in its
+   stack (none under reduced motion), and each line of the log fades in
+   as its stage happens.
+4. **The card's words** fade in over 150ms once the card has settled.
+5. **Next pulses once** after a check the reader just ran, cancelled by
+   any input.
+6. **A sheet** rises in 260ms and its scrim fades in.
 
-Nothing else animates: no entrances on
-sections, no parallax, no cursor effects, no scroll hijacking (the nudge
-is one move the reader can cancel, not a hijack), no animated
-backgrounds. All of it collapses under `prefers-reduced-motion`.
+Nothing else animates: no entrances on sections, no parallax beyond the
+scene, no cursor effects, no scroll hijacking, no animated backgrounds.
+Everything collapses under `prefers-reduced-motion`.
 
 ## Copy
 
-Plain, specific and finished. Controls name their action, errors name the
-problem and the way out, every verdict ends by naming what is still open.
-Numbers from the abstracts beat adjectives.
+Plain, specific and finished. Controls name their action, errors name
+the problem and the way out, every verdict names what is still open.
+**No em-dashes or en-dashes anywhere a user can see**, in hand-written
+copy or model output: a test enforces it on the rendered page and
+`verdict.tidy_prose` on the model's prose. "Not medical advice" is
+visible on every screen.
 
-**No em-dashes or en-dashes anywhere a user can see**, in hand written
-copy or model output. A test enforces it on the rendered page;
-`verdict.tidy_prose` enforces it on the model's prose.
+## Do's and Don'ts
 
-## Anti-patterns
-
-Never reintroduce: a glowing or neon accent, cyan light cues, a navy or
-pure black night, a cream ground, a colour coded verdict, a second accent,
-gradient washes, glass or backdrop blur, pill buttons, shadows used for
-depth on ordinary content (the study sheet is the one that floats), emoji icons, stat-card rows, gauges, generated
-hero imagery or video, animated backgrounds, cursor effects, per-person analytics, cookies
-or any third-party tracking.
+- Do keep the claim box, the button and the newest log line on the
+  first screen at every size this file lists; check with
+  `scripts/qa.mjs`.
+- Do change the Jinja in `templates/index.html` and `renderResult` in
+  `app.js` together, so a result reads with scripts off.
+- Do keep every desk colour in `desk.css`'s `:root` and in this file's
+  frontmatter; `scripts/qa.mjs` fails on drift.
+- Don't colour a verdict, add a second accent, or give the cloths any
+  meaning but the kind of study.
+- Don't add glow, neon, cyan, shadows on content, blur, glass, gradient
+  washes (beyond the two scrims), pills, badges, card grids, icon
+  circles, emoji, stat-card rows or gauges.
+- Don't add another automatic scroll, entrance animations or cursor
+  effects.
+- Don't add analytics, cookies or anything that ties a check to a
+  person.

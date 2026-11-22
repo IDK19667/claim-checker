@@ -10440,6 +10440,19 @@ t("  no shadow, blur or glow, and every corner is 3px or round",
   and set(re.findall(r"border-radius:\s*([^;]+);", _dk_css)) <= {"3px", "50%", "3px 3px 0 0"},
   set(re.findall(r"border-radius:\s*([^;]+);", _dk_css)))
 
+# ---- CP3: the written system follows the desk ---------------------------------
+_dm = (ROOT / "DESIGN.md").read_text()
+_dm_fm = _dm.split("\n---", 1)[0]
+_dm_vals = {v.lower().replace(" ", "") for v in re.findall(r'^\s{2}[a-z0-9-]+:\s*"(#[0-9a-fA-F]{3,8}|rgba?\([^"]+\))"', _dm_fm, re.M)}
+_root_vals = lambda f: [v.strip().lower().replace(" ", "") for v in re.findall(r"--[a-z0-9-]+:\s*(#[0-9a-fA-F]{3,8}|rgba?\([^;]+\));", (ROOT / "static" / f).read_text().split(":root {", 1)[1].split("\n}", 1)[0])]
+t("DESIGN.md was replaced for the desk: its frontmatter carries every colour in desk.css's and style.css's :root",
+  "One lamp-lit desk is the whole front page" in _dm and "The reading room after hours" not in _dm.split("\n---", 2)[1][:400]
+  and set(_root_vals("desk.css")) <= _dm_vals and set(_root_vals("style.css")) <= _dm_vals,
+  sorted(set(_root_vals("desk.css") + _root_vals("style.css")) - _dm_vals))
+t("  and it writes down the first-screen sizes and the one automatic move",
+  all(z in _dm for z in ("1366x650", "1280x720", "1440x900", "1024x768", "1920x1080", "320x568"))
+  and "One glide to the answer" in _dm and "No verdict is ever coloured" in _dm)
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template
