@@ -2063,6 +2063,16 @@ t("  \"Or try one of these:\" shows only with examples under it: the server send
   and "#examples:has(.chips:empty), html:not(.js) #examples { display: none; }" in (ROOT / "static" / "desk.css").read_text())
 t("  a list of saved claims that answers after Enter never opens over the check it started",
   "if (inFlight) return;" in _js[_js.find("function askSuggest"):][:1200].split("renderSuggest(rows);")[0])
+_dcss = (ROOT / "static" / "desk.css").read_text()
+t("  short laptop screens: the headline is sized by the screen's height too, and stop 1 sits closer together",
+  "font-size: clamp(46px, min(7.2vw, 11.5vh), 104px);" in _dcss
+  and "@media (min-width: 761px) and (max-height: 760px)" in _dcss)
+t("  short screens: while a check runs the wordmark, lede and button step aside and older log lines keep to two lines, so the newest line and Cancel stay on screen",
+  'html[data-screen="checking"] #ask .wordmark, html[data-screen="checking"] #ask .lede, html[data-screen="checking"] #submit-btn { display: none; }' in _dcss
+  and ".reading li:not(.live):not(.cancel-row) {" in _dcss and "-webkit-line-clamp: 2;" in _dcss
+  and "@media (max-height: 600px) { .reading li.live {" in _dcss)
+t("  short screens: on home the fold never pushes the claim box or button off the first screen",
+  'if (k === 0 && !checked) { [].forEach.call(s0.querySelectorAll("[data-pushed]")' in _deskjs)
 t("  a check started from a result's claim box first goes back to stop 1",
   'if (root.classList.contains("checked")) show(askSection);' in _js[_js.find("function renderPending"):][:400])
 # Engine rules (E1, E2, E4, E5), checked in a browser by the builder's scripts; here

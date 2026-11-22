@@ -223,6 +223,8 @@
     var vh = innerHeight, bar = parseFloat(getComputedStyle(sections[0]).paddingBottom) || 84;
     sections.forEach(function (s0, k) {
       if (s0.classList.contains("long")) return;
+      // home has no bar: stop 1 keeps its headline, claim box and button together on the first screen
+      if (k === 0 && !checked) { [].forEach.call(s0.querySelectorAll("[data-pushed]"), function (c) { c.style.marginTop = ""; delete c.dataset.pushed; }); return; }
       var s = sections[k], inner = s.querySelector(".inner"); if (!inner) return;
       // the blocks as they are seen: a display: contents wrapper gives its children, and a reordered column is read top to bottom
       var kids = [];
