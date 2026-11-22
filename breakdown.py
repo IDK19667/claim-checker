@@ -1629,6 +1629,22 @@ def null_alone(text: str) -> str:
     return re.sub(re.escape(TRANSLATION_LEAD + NULL_SAID), NULL_SAID_ALONE, text or "")
 
 
+# The effect's own plain words, under the same answer. The page no longer
+# prints "no clear difference between the groups" there, so the response's
+# effect field does not carry it either.
+NULL_PLAIN_ALONE = "a result that could be chance, because it was not statistically significant"
+
+
+def effect_alone(bd: dict | None) -> dict | None:
+    """The breakdown with a null effect's plain words reworded as null_alone
+    rewords the sentence, for a page whose answer is that there is an
+    effect. Its label and figure stay."""
+    effect = (bd or {}).get("effect") or {}
+    if effect.get("null") and effect.get("plain") == evidence.NULL_EFFECT["plain"]:
+        return {**bd, "effect": {**effect, "plain": NULL_PLAIN_ALONE}}
+    return bd
+
+
 def answers_effect(verdict: str, claim: str) -> bool:
     """True when the answer says there is an effect: "true" on a claim of
     one, or "false" on a claim of none ("vaccines do not cause autism")."""

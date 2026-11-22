@@ -922,6 +922,14 @@ t("wording: under 'Likely true' on a claim of an effect, a figure that was not s
   in _ns_yes["breakdown"]["effect_size"], (_ns_yes["verdict"], _ns_yes["breakdown"]["effect_size"]))
 t("  and under an answer of no effect it still says no clear difference",
   "That is no clear difference between the groups" in _ns_no["breakdown"]["effect_size"], _ns_no["breakdown"]["effect_size"])
+t("  and no field of the response carries the words the page replaced: the effect's plain words say the same",
+  "no clear difference" not in json.dumps({k: v for k, v in _ns_yes.items() if k != "studies"})
+  and _ns_yes["breakdown"]["effect"]["plain"] == breakdown.NULL_PLAIN_ALONE
+  == "a result that could be chance, because it was not statistically significant"
+  and _ns_yes["breakdown"]["effect"]["label"] == "none"
+  and _ns_yes["breakdown"]["effect"]["figure"] == "hazard ratio 0.50", _ns_yes["breakdown"]["effect"])
+t("  and under an answer of no effect the effect's plain words stay",
+  _ns_no["breakdown"]["effect"]["plain"] == evidence.NULL_EFFECT["plain"], _ns_no["breakdown"]["effect"])
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")

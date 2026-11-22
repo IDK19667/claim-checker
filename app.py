@@ -922,6 +922,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         tldr = evidence.cap_certainty(tldr, level)
         explanation = evidence.cap_certainty(explanation, level)
         breakdown = breakdown_mod.map_prose(breakdown, lambda t: evidence.cap_certainty(t, level))
+    # The response's effect field says what the page says (after every
+    # rewrite above, since settling the effect can set it afresh).
+    if breakdown and breakdown_mod.answers_effect(verdict_value, claim):
+        breakdown = breakdown_mod.effect_alone(breakdown)
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in
