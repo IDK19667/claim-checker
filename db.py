@@ -649,6 +649,11 @@ def _fold_contractions(t: str) -> str:
     t = re.sub(r"\bwon'?t\b", "will not", t)
     t = re.sub(r"\bshan'?t\b", "shall not", t)
     t = re.sub(r"n't\b", " not", t)
+    # The other short forms are spelled out as their own word, so "she'll"
+    # never becomes "shell" nor "we're" "were". The "'d" of "I'd" can mean
+    # had or would, so it is kept apart as a bare "d" and never guessed.
+    t = re.sub(r"(?<=\w)'(ll|re|ve|m|d)\b",
+               lambda m: " " + {"ll": "will", "re": "are", "ve": "have", "m": "am", "d": "d"}[m.group(1)], t)
     return re.sub(r"\b(do|does|did|is|are|was|were|has|have|had|should|would|could|must)nt\b",
                   r"\1 not", t)
 

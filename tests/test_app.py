@@ -2577,6 +2577,14 @@ t("  cures, helps and causes are three claims",
       ("Apple cider vinegar cures diabetes", "Apple cider vinegar helps diabetes"),
       ("Apple cider vinegar helps diabetes", "Apple cider vinegar causes diabetes"),
       ("Apple cider vinegar cures diabetes", "Apple cider vinegar causes diabetes")]))
+t("equivalent: a short form is spelled out as its own word, never glued into another word",
+  not any(_eqf(a, b) for a, b in [
+      ("Shell fish causes allergies", "She'll fish causes allergies"),
+      ("Shell fish causes allergies", "She\u2019ll fish causes allergies"),
+      ("Were healthier on keto", "We're healthier on keto"),
+      ("Id causes anxiety", "I'd causes anxiety")])
+  and _eqf("She'll get sick from vaccines", "She will get sick from vaccines")
+  and _eqf("I'm tired after sugar", "I am tired after sugar"))
 t("  the small words dropped never include a negation, a preposition that sets direction or a hedge",
   not (db._FOLD_DROP & {"not", "no", "never", "without", "over", "under", "before", "after", "more",
                         "less", "to", "from", "and", "or", "can", "may", "might", "should", "will"}))
