@@ -455,8 +455,10 @@ def _whole(row) -> bool:
     One saved before those columns existed (they are NULL), or damaged since,
     is not served: to the check it is a miss, so the check runs again and the
     row is replaced; to a shared link or a card it is no saved answer at all.
+    A line counts only when it has at least one letter or digit, in any
+    script: a zero-width space, a lone full stop or a lone dash is empty.
     """
-    return all(str(row[k] or "").strip() for k in ("tldr", "still_open"))
+    return all(any(ch.isalnum() for ch in str(row[k] or "")) for k in ("tldr", "still_open"))
 
 
 def _stamp(row) -> str | None:

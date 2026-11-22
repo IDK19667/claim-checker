@@ -1566,9 +1566,16 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
 INCOMPLETE_REPLY = "The AI model sent back an answer with a line missing. Try again in a moment."
 
 
+def has_words(text) -> bool:
+    """A line with at least one letter or digit, in any script. A zero-width
+    space, a lone full stop or a lone dash is an empty line."""
+    return any(ch.isalnum() for ch in str(text or ""))
+
+
 def has_lines(result: dict) -> bool:
-    """Both lines every finished answer carries: the short answer and what is still open."""
-    return all(str((result or {}).get(k) or "").strip() for k in ("tldr", "still_open"))
+    """Both lines every finished answer carries: the short answer and what is
+    still open, each with at least one word in it (`has_words`)."""
+    return all(has_words((result or {}).get(k)) for k in ("tldr", "still_open"))
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:

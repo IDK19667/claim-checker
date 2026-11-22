@@ -332,7 +332,8 @@ def _no_row(claim):
                              (db.normalize_claim(claim),)).fetchone()["n"] == 0
 
 
-for _lbl, _so in (("empty", ""), ("blank", "   ")):
+for _lbl, _so in (("empty", ""), ("blank", "   "), ("a zero-width space", "\u200b"),
+                  ("a lone full stop", "."), ("a lone dash", "\u2014"), ("only marks", " - ,. ")):
     fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=_so))]
     _n_logs = len(db.recent_checks(1000))
     r = P(f"empty line claim {_lbl}", ip="7.7.9.1")
@@ -347,6 +348,26 @@ t("  the streamed check ends on the same error, never on a done stage",
   _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502 and _evs[-1]["error"] == verdict.INCOMPLETE_REPLY
   and not any(e["stage"] == "done" for e in _evs) and _no_row("empty line claim streamed"), _evs[-1])
 t("  and the message has no dash", not any(ch in verdict.INCOMPLETE_REPLY for ch in "\u2013\u2014"))
+for _lbl, _kw in (("still-open line is a lone full stop", {"still_open": "."}),
+                  ("still-open line is a zero-width space", {"still_open": "\u200b"}),
+                  ("short answer is a zero-width space", {"tldr": "\u200b"})):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _r, _evs = stream(f"wordless line claim streamed {_lbl}", ip="7.7.9.5")
+    t(f"  a streamed reply whose {_lbl} ends on the error, with nothing saved",
+      _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502
+      and not any(e["stage"] == "done" for e in _evs) and _no_row(f"wordless line claim streamed {_lbl}"), _evs[-1])
+t("  a line needs a letter or digit, in any script",
+  verdict.has_lines({"tldr": "Ja.", "still_open": "长期研究"}) and verdict.has_lines({"tldr": "No.", "still_open": "2"})
+  and not verdict.has_lines({"tldr": "No.", "still_open": "\u200b\u00a0"})
+  and not verdict.has_lines({"tldr": "\u2014", "still_open": "Open."}))
+for _lbl, _kw in (("a lone full stop", {"still_open": "."}), ("a zero-width space", {"tldr": "\u200b"}),
+                  ("a lone dash", {"still_open": "\u2014"})):
+    _c = f"Wordless saved row with {_lbl}"
+    db.put_cached_verdict(_c, "(q)", "complicated", "Mixed (Study 1).", ["P1"], STUDIES,
+                          **{"tldr": "Short.", "still_open": "Open.", **_kw})
+    t(f"  a saved row whose line is {_lbl} is no saved answer: not served, not on a link, never matched",
+      db.get_cached_verdict(_c, 24) is None and db.get_cached_by_key(db.normalize_claim(_c)) is None
+      and db.find_equivalent("Is it true that " + _c.lower() + "?") is None)
 fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("false", [], still_open=""))]
 d = P("empty line claim resting on nothing", ip="7.7.9.3").get_json()
 t("  a reply the code turns to 'Not enough evidence' gets its still-open line from code, and is an answer",
