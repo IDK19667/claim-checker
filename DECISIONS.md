@@ -9,9 +9,12 @@ the visual system; this holds why.
 Output rules from the last two reviews and the last two runs on real
 claims, each in code with a test, all but one in the direction of
 saying less. None makes an answer surer: 245 saved rows rebuilt before
-and after the last round, no stamp changed and no line surer. The round
-before moved five saved rows from "It's complicated" to "Not enough
-evidence".
+and after round 5 and 316 before and after round 6, no stamp changed and
+no line surer. The round before moved eight saved rows from "It's
+complicated" to "Not enough evidence", all saved answers that relied on
+no study: eight in the 224 rows the fourth review rebuilt (out3 and out4
+of its probes); the 201 rows that round rebuilt itself held five of them,
+the other three only in dev.db.
 
 - **A sentence that cites a set-aside study goes whole**
   (`app._check_response`, `breakdown.drop_any_citing`). A study the page
@@ -70,9 +73,39 @@ evidence".
   and judging it against the abstract's first "95% confidence interval",
   a null one. A saved check loses such a sentence on the way out
   (`breakdown.unsaid_nulls`).
+- **Reasoning this page's own rules empty is never left blank**
+  (`verdict.no_reason_left`, one helper for a fresh check and a saved
+  one). An explanation that arrived with words and lost them all (every
+  sentence cited a study set aside, or leaned on one not relied on) says
+  what "Not enough evidence" means, or else the takeaway without its
+  doctor line, as a fresh check already did. One that arrived empty is
+  left as it came. This replaces "An emptied explanation stays empty" in
+  the entry on the gate after review: a saved answer and a fresh one now
+  do the same thing.
+- **An interval in code's own plain words is still an interval**
+  (`evidence._interval_after`). Code prints a confidence interval as
+  "likely range" (`breakdown.JARGON`), so "0.79 with a likely range from
+  0.71 to 0.89" is read as ruling out no effect, and a saved "not
+  statistically significant" after it goes. It fires only when the
+  printed range excludes no effect: 1 for a ratio, 0 for a difference.
+- **A figure is matched to a whole result in its abstract**
+  (`evidence.significance`). The "0" of "aged 0 to 95 years" matched the
+  "0" of "odds ratio 0.88", and in another abstract the "95" matched "95%
+  confidence interval" after a null ratio, so code wrote "not
+  statistically significant" after an age range. A figure now matches
+  only a whole number ("4" still matches "4.0"), and an interval's level
+  is never a result.
+- **A cited PMID that names no listed study is not relied on**
+  (`display.relied_pmids`). A saved "true" citing only such PMIDs kept
+  its stamp, with or without studies listed; it is now "Not enough
+  evidence" by the rule above, on the page and in every list.
 - **"E. coli" is one sentence.** A stop after a single capital letter
   before a lowercase word does not end a sentence (`breakdown.sentences`,
-  `breakdown.first_sentence`); "vitamin C. It ..." still splits. The
+  `breakdown.first_sentence`); "vitamin C. It ..." still splits. Nor does
+  code give "coli" a sentence's capital when it restores capitals after a
+  rewrite (`breakdown.heads_up`, used by `soften` and `natural`): that
+  turned "Like E. coli" into "Like E. Coli" and the empty-takeaway
+  fallback then cut it at "E.". The
   other splitters (`display.split_sentences`, `evidence`, `verdict`, the
   page's own) already need a capital after the stop.
 - **An emptied reference goes with its lead-in** ("see", "see also",
@@ -88,7 +121,10 @@ it is the owner's decision, not a fix. Text written wrong into a saved
 row before a rule existed ("cold helps with" from the old softening of
 the noun "cures", "Coli" from the old split of "E. coli") stays until
 that claim is checked again: putting back words code took out would be
-guessing.
+guessing. What the whole-sentence rule costs: when the model writes one
+sentence about several studies and one of them is set aside, the
+sentence is not shown, and a hedge can go with it; the stamp and the
+evidence line do not change.
 
 ## 2026-11-21 (release): A public list shows only rows a page would serve
 
