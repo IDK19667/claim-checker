@@ -1615,6 +1615,26 @@ def label(text: str, limit: int = 120) -> str:
 NOT_SIGNIFICANT_SAID = "That difference was not statistically significant ({ref})."
 NULL_SAID = ("no clear difference between the groups, because the result was "
              "not statistically significant")
+# The same translation under an answer that there is an effect ("Likely
+# true" on "sunscreen lowers skin cancer"). "No clear difference between the
+# groups" under it reads as a contradiction; what the figure shows is that
+# this one result could be chance.
+NULL_SAID_ALONE = ("On its own, that result could be chance, because it was not "
+                   "statistically significant")
+
+
+def null_alone(text: str) -> str:
+    """The null translation code wrote under a figure, reworded for a page
+    whose answer is that there is an effect. Model prose is not touched."""
+    return re.sub(re.escape(TRANSLATION_LEAD + NULL_SAID), NULL_SAID_ALONE, text or "")
+
+
+def answers_effect(verdict: str, claim: str) -> bool:
+    """True when the answer says there is an effect: "true" on a claim of
+    one, or "false" on a claim of none ("vaccines do not cause autism")."""
+    return verdict in ("true", "false") and (verdict == "true") != claim_denies(claim)
+
+
 _SIZE_SAID = re.compile(
     r"\b(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)\s+"
     r"(?:effect|benefit|reduction|increase|improvement|difference)\b", re.IGNORECASE)
@@ -2475,10 +2495,13 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
     sized = evidence.effect_size(effect)
     # A figure its own abstract reports as no clear difference is sized as
     # none, whatever its distance from 1. The sentence say_nulls added under
-    # it becomes the translation, so it is picked as one by says().
+    # it becomes the translation, so it is picked as one by says(). So is an
+    # effect line that itself says there was no clear difference, whether or
+    # not a ratio could be read from it: "no drop in viral titer at 30 or 60
+    # minutes" is no effect, not a missing size for the line to guess at.
     null_ref = next((r for r in (null_figure(t, studies) for t in sentences(effect))
                      if r is not None), None)
-    if null_ref is not None or (sized and _SAID_NULL.search(effect)):
+    if null_ref is not None or _SAID_NULL.search(effect):
         sized = dict(evidence.NULL_EFFECT, figure=(sized or {}).get("figure", ""))
         if null_ref:
             effect = effect.replace(NOT_SIGNIFICANT_SAID.format(ref=null_ref),
@@ -2581,7 +2604,7 @@ _CHANGE_BEFORE = re.compile(
     re.IGNORECASE)
 # Ratios and standardized differences have no unit, and need none.
 _UNITLESS_BEFORE = re.compile(
-    r"\b(?:a?ORs?|a?RRs?|a?HRs?|IRRs?|SMDs?|ratio|relative risk|standardi[sz]ed|"
+    r"\b(?:(?-i:a?ORs?|a?RRs?|a?HRs?|IRRs?|SMDs?)|ratio|relative risk|standardi[sz]ed|"
     r"Hedges|Cohen|effect size|g)\b[^.\d]{0,12}$", re.IGNORECASE)
 _P_BEFORE = re.compile(r"\bp\s*(?:-?value)?\s*(?:=|<|>|\u2264|\u2265|of)\s*$", re.IGNORECASE)
 _CI_BEFORE = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval|\b95%",
@@ -3224,11 +3247,22 @@ def settle_effect(bd: dict | None) -> dict | None:
     """
     Take the effect line out when it points at figures that are no longer
     above it: rounding, the faithfulness check or the unit rule can remove
-    the last one after the line was written.
+    the last one after the line was written. The effect's size goes too
+    when the ratio it was read from is printed nowhere.
     """
-    if not bd or bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+    if not bd:
         return bd
     said = list(bd.get("evidence") or []) + [p.get("assessment") or "" for p in bd.get("parts") or []]
+    # The size the evidence line words ("a large effect") stands on a ratio
+    # only when the page prints a ratio of that kind. One saved from a misread
+    # ("35 people or 80 adults" read as an odds ratio of 80) is no finding.
+    # An effect line that says no clear difference still means none.
+    kind = evidence.ratio_kind((bd.get("effect") or {}).get("figure") or "")
+    if kind and not any(kind in evidence.ratio_kinds(t) for t in [bd.get("effect_size") or ""] + said):
+        bd = {**bd, "effect": (dict(evidence.NULL_EFFECT, figure="")
+                               if _SAID_NULL.search(bd.get("effect_size") or "") else None)}
+    if bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+        return bd
     return bd if any(shows_effect(t) for t in said) else {**bd, "effect_size": ""}
 
 

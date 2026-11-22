@@ -511,11 +511,13 @@ _RATIO_WORDS = [
     (r"rate ratios?", "rate"),
 ]
 
-# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)".
+# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)". An
+# abbreviation names a ratio only in capitals: "35 people or 80 adults" is
+# not an odds ratio of 80, and reading it as one printed "7900% higher odds".
 _RATIO = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
-    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
-    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
+    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
     r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 
 # The same figure with the outcome named in between: "the hazard ratio for
@@ -525,8 +527,8 @@ _RATIO = re.compile(
 # figure is always read against the nearest ratio it belongs to.
 _RATIO_WAS = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
-    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
-    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
+    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
     r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
     r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 
@@ -567,7 +569,7 @@ NOT_SIGNIFICANT = re.compile(
     r"\bnot (?:statistically )?significant(?:ly)?\b|\bnon-?significant\b|"
     r"\bno (?:statistically )?significant\b|\bdid not (?:significantly )?differ\b|"
     r"\bno (?:clear |significant |real )?difference\b|\bcould be chance\b", re.IGNORECASE)
-_RATIO_BEFORE = re.compile(r"\b(?:a?ORs?|a?HRs?|a?RRs?|IRRs?|odds ratios?|hazard ratios?|"
+_RATIO_BEFORE = re.compile(r"\b(?:(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?)|odds ratios?|hazard ratios?|"
                            r"risk ratios?|relative risks?|rate ratios?)\b", re.IGNORECASE)
 _DIFF_BEFORE = re.compile(r"\b(?:W?MDs?|SMDs?|mean difference|difference|net|"
                           r"standardi[sz]ed mean difference|Hedges'? g|Cohen'?s d)\b",
@@ -669,6 +671,24 @@ def _ratio_name(name: str) -> str:
         if re.fullmatch(pattern, name, re.IGNORECASE):
             return full
     return name.lower()
+
+
+_RATIO_NAMED = re.compile(r"\b(?:odds ratios?|hazard ratios?|risk ratios?|relative risks?"
+                          r"|incidence rate ratios?|rate ratios?|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))\b",
+                          re.IGNORECASE)
+
+
+def ratio_kinds(text: str) -> set[str]:
+    """The kinds of ratio a text names ("odds ratio", "hazard ratio"...),
+    abbreviations read only in capitals."""
+    return {_ratio_name(m.group(0)).rstrip("s") for m in _RATIO_NAMED.finditer(str(text or ""))}
+
+
+def ratio_kind(figure: str) -> str:
+    """The kind of ratio an effect's figure is ("odds ratio 0.88" gives
+    "odds ratio"), or "" when it is not a ratio."""
+    m = _RATIO_NAMED.match(str(figure or ""))
+    return _ratio_name(m.group(0)).rstrip("s") if m else ""
 
 
 def _ratio_word(name: str) -> str:
@@ -820,6 +840,10 @@ _OUTCOME_KIN = [
     ("weight", "obes", "adipos", "bmi", "body mass", "fat"),
     ("sleep", "insomnia"),
     ("depress", "mood"),
+    # Stress is reported as anxiety, or as tension on a mood scale.
+    ("stress", "anxi", "tension"),
+    # Hyperactivity is measured as behaviour, on a rating scale.
+    ("hyperactiv", "adhd", "behavio"),
     ("memory", "cognit", "dementia"),
     ("skin", "derma", "cutaneous"),
     ("hair", "alopecia", "bald"),
@@ -890,6 +914,76 @@ def indirect(study, outcome: str, surrogate: str) -> str | None:
         if len(term) > 2 and re.search(re.escape(term), body, re.IGNORECASE):
             return term
     return None
+
+
+# The section of a structured abstract that says why a study was done, not
+# what it did: it can name an outcome the study never went on to measure
+# ("creatine is known to raise strength; we tested its effect on hair").
+_BACKGROUND_HEAD = re.compile(r"(?i)^(?:backgrounds?|introduction|context|rationale|importance)$")
+# A heading that says what a study did or found. An abstract whose only
+# headings are a label ("UNLABELLED:") and its trial registration is, for
+# reading, an abstract with no headings at all.
+_FINDINGS_HEAD = re.compile(r"(?i)method|result|finding|conclusion|outcome|design|interpretation"
+                            r"|measure|intervention|participant|patients|subjects|setting|data"
+                            r"|search|selection|synthesis|analys")
+# A background sentence that states the study's own aim ("We report on the
+# safety of...", "the purpose was to determine..."). Some journals put the
+# aim there, and an aim names what the study set out to measure.
+_AIM_SENTENCE = re.compile(
+    r"(?i)\b(?:we (?:report|aim|aimed|sought|examine|examined|investigate|investigated|assess|assessed"
+    r"|evaluate|evaluated|test|tested|compare|compared|studied)"
+    r"|th(?:is|e present) (?:study|trial|review|analysis|meta-analysis) (?:aim|examin|investigat|assess"
+    r"|evaluat|test|compar|sought|was designed)"
+    r"|(?:aim|purpose|objective|goal)s? (?:of (?:this|the present)|was|were|is|are)\b)")
+
+
+def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
+    """
+    Whether a study with a structured abstract measured the claim's outcome:
+    False when its title and every section but the background (methods,
+    results, conclusions, and any other) never name the outcome, its kin,
+    or the declared stand-in for it. A background sentence is the authors'
+    reason for the study, not something it measured, unless it states the
+    study's aim. None when this cannot be read: no outcome, an outcome also
+    named in general words, no abstract, or an abstract without a methods,
+    results or conclusions heading, where there is no telling the
+    background from the findings.
+    """
+    stems = outcome_stems(outcome)
+    abstract = str((study or {}).get("abstract") or "").strip()
+    if not stems or not abstract or abstract.lower().startswith("(no abstract"):
+        return None
+    # An outcome named in general words as well ("health", "complications")
+    # is met by any finding, so its absence in words proves nothing.
+    if any(not outcome_stems(term) for term in re.split(r"\s+OR\s+", outcome.strip("() "))):
+        return None
+    text = " ".join(ln.strip() for ln in abstract.split("\n") if ln.strip())
+    # A heading run into the sentence before it ("quality.Conclusions") is
+    # given back its space, as conclusion() does.
+    text = re.sub(r"(?<=[a-z0-9)][.])(?=[A-Z][a-z])", " ", text)
+    if not _ANY_HEAD.match(text):
+        return None
+    heads = list(_ANY_HEAD.finditer(text))
+    kept, findings = [], False
+    for i, m in enumerate(heads):
+        body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        name = re.sub(r"^\(\d\)\s*", "", m.group().strip()).rstrip(":").strip()
+        if _BACKGROUND_HEAD.match(name):
+            kept += [sent for sent in _SENTENCE.split(body) if _AIM_SENTENCE.search(sent)]
+        else:
+            kept.append(body)
+            findings = findings or bool(_FINDINGS_HEAD.search(name))
+    if not findings:
+        return None
+    read = f"{study.get('title') or ''} {' '.join(kept)}"
+    if names_any(read, outcome_kin(stems)):
+        return True
+    if surrogate:
+        for term in re.split(r"\s+OR\s+", surrogate.strip("() ")):
+            term = term.strip("() ").strip()
+            if len(term) > 2 and re.search(re.escape(term), _us(read), re.IGNORECASE):
+                return True
+    return False
 
 
 # How the chart's description counts each kind of study. The count follows
@@ -1097,11 +1191,16 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
         return f"{level} evidence, but only in {', '.join(narrow)}"
+    # Weak or low certainty evidence is the reason there is no plain answer,
+    # so the line says "so"; "but" is for evidence sure enough that a reader
+    # would expect one. "Low certainty evidence, but no plain yes or no"
+    # read as a contradiction.
+    joint = "so" if line_certainty(level) in ("low", "very low") else "but"
     if effect_label == "none":
-        return f"{level} evidence of no clear effect, but no plain yes or no"
+        return f"{level} evidence of no clear effect, {joint} no plain yes or no"
     if size:
-        return f"{level} evidence of a {size} effect, but no plain yes or no"
-    return f"{level} evidence, but no plain yes or no"
+        return f"{level} evidence of a {size} effect, {joint} no plain yes or no"
+    return f"{level} evidence, {joint} no plain yes or no"
 
 
 # ---------------------------------------------------------------------------

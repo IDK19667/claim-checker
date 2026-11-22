@@ -59,6 +59,23 @@ is not whole, or has a problem the page cannot repair, is never matched.
 Every saved claim is scanned (no stored key, so no new column); on the
 owner's 97 saved claims it merges exactly three pairs.
 
+## 2026-11-21: A study that never measured the outcome is set aside in code
+
+A hair-loss trial was relied on for a muscle-strength claim because its
+background says creatine "enhances muscle strength". `evidence.measured_outcome`
+now reads a structured abstract without its background (keeping any
+background sentence that states the study's aim) and `verdict._relevance`
+marks the study off outcome when the title and the rest never name the
+outcome, its kin or the declared stand-in. It never rules on an abstract
+without a methods, results or conclusions heading, nor on an outcome group
+that also names something general ("health", "complications"): there,
+absence in words proves nothing. Measured on 461 saved answers before it
+shipped: the first version set aside five studies that had measured the
+outcome, and each led to one of those limits or a new kin family (stress,
+hyperactivity). Studies of a stand-in (DHT for hair loss, blood pressure
+for heart disease) are set aside when the query step named no stand-in;
+the live runs should check those answers first.
+
 ## 2026-11-20: An off-topic study is never relied on, on any record
 
 An outside audit saw "Does creatine cause hair loss?" under "Relied on for

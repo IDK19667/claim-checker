@@ -41,6 +41,12 @@ appmod.app.logger.setLevel(logging.ERROR)
 c = appmod.app.test_client()
 results = []
 
+# Every study any response carries, from every route, is recorded here so
+# the last test can say none was ever both relied on and off topic.
+_PAYLOADS = []
+_real_study_payload = appmod._study_payload
+appmod._study_payload = lambda s_, cited_: _PAYLOADS.append(_real_study_payload(s_, cited_)) or _PAYLOADS[-1]
+
 
 def t(label, cond, extra=""):
     results.append(bool(cond))
@@ -924,6 +930,65 @@ t("  and a figure that is in them is quoted as it stands",
   "was 0.88, and 0.30 in the lowest (Study 1)." in _bd["effect_size"],
   _bd["effect_size"])
 
+# An effect line that says there was no clear difference is no effect, even
+# when no ratio can be read from it. Read as a missing size, a "cure" claim's
+# evidence line fell back to "a partial effect, not a cure".
+_NULL_ST = [{"pmid": "NL1", "title": "A mouthwash trial in mild infection", "journal": "J", "year": "2020",
+             "authors": ["A B"], "data_banks": None, "url": "https://pubmed.ncbi.nlm.nih.gov/NL1/",
+             "publication_types": ["Randomized Controlled Trial"],
+             "abstract": "METHODS: 49 patients used the mouthwash or placebo. RESULTS: The mouthwash did not "
+                         "reduce salivary viral titer at 10, 30, or 60 minutes compared to placebo, and the "
+                         "difference was not statistically significant."}]
+_null_bd = breakdown.ground(
+    {"parts": [], "evidence": ["The mouthwash did not reduce viral titer compared to placebo (Study 1)."],
+     "effect_size": "The trial found no drop in viral titer at 10, 30, or 60 minutes compared to placebo (Study 1). "
+                    "That difference was not statistically significant (Study 1).",
+     "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _NULL_ST, verdict.tidy_prose)
+t("grounding: an effect line that says no clear difference is sized as none, with no ratio read from it",
+  (_null_bd["effect"] or {}).get("label") == "none"
+  and evidence.evidence_line("false", _NULL_ST, ["NL1"], "Gargling mouthwash cures the infection",
+                             _null_bd["effect"]["label"], breakdown.absolute_claim("Gargling mouthwash cures the infection"))
+  .endswith("evidence of no clear effect"), (_null_bd["effect"], _null_bd["effect_size"]))
+# A saved answer whose size was read from a misread ratio keeps no size on the
+# way out; one whose ratio the page prints keeps it.
+_mis = breakdown.settle_effect({"evidence": ["Trials enrolled 35 people or 80 adults (Studies 4, 6)."],
+                                "parts": [], "effect_size": "Scores dropped by 3.9 points (Study 7).",
+                                "effect": {"label": "large", "plain": "about 7900% higher odds", "figure": "odds ratio 80"}})
+_mis_null = breakdown.settle_effect({"evidence": [], "parts": [],
+                                     "effect_size": "No drop at 30, or 60 minutes (Study 5). That difference was not "
+                                                    "statistically significant (Study 5).",
+                                     "effect": {"label": "none", "plain": "x", "null": True, "figure": "odds ratio 60"}})
+_real = {"evidence": [], "parts": [], "effect_size": "The matched odds ratio (how much more likely an outcome was) "
+                                                    "was 41.3 (Study 1).",
+         "effect": {"label": "large", "plain": "about 4030% higher odds", "figure": "odds ratio 41.3"}}
+t("grounding: a saved size read from a ratio the page never prints is dropped on the way out",
+  _mis["effect"] is None and (_mis_null["effect"] or {}).get("label") == "none"
+  and breakdown.settle_effect(_real)["effect"] == _real["effect"], (_mis["effect"], _mis_null["effect"]))
+# A figure that was not significant, under an answer that there is an effect,
+# is said in words that do not contradict the answer. Under an answer of no
+# effect, "no clear difference" is the point and stays.
+_NS_ST = [dict(_NULL_ST[0], pmid="NS1", publication_types=["Meta-Analysis"],
+               abstract="METHODS: Twelve trials in 50,000 adults were pooled. RESULTS: Melanoma was less common "
+                        "with daily use (hazard ratio 0.50, 95% CI 0.24 to 1.02).")]
+_NS_EFF = ("The hazard ratio for melanoma was 0.50 with a likely range of 0.24 to 1.02 (Study 1). "
+           "That is no clear difference between the groups, because the result was not statistically significant (Study 1).")
+_NS_BD = {"parts": [], "evidence": ["Melanoma was less common with daily use (Study 1)."], "effect_size": _NS_EFF,
+          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+          "effect": dict(evidence.NULL_EFFECT, figure="hazard ratio 0.50")}
+with appmod.app.test_request_context("/"):
+    _ns_yes = appmod._check_response("Daily sunscreen lowers melanoma risk", "(sunscreen) AND (melanoma)", "true",
+                                     "Daily sunscreen lowers melanoma risk.", "Less melanoma (Study 1).", ["NS1"],
+                                     [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+    _ns_no = appmod._check_response("Daily sunscreen does not lower melanoma risk", "(sunscreen) AND (melanoma)", "true",
+                                    "It does not.", "No clear change (Study 1).", ["NS1"],
+                                    [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+t("wording: under 'Likely true' on a claim of an effect, a figure that was not significant is never 'no clear difference'",
+  _ns_yes["verdict"] == "true" and "no clear difference" not in " ".join(breakdown.prose_of(_ns_yes["breakdown"]))
+  and "On its own, that result could be chance, because it was not statistically significant (Study 1)."
+  in _ns_yes["breakdown"]["effect_size"], (_ns_yes["verdict"], _ns_yes["breakdown"]["effect_size"]))
+t("  and under an answer of no effect it still says no clear difference",
+  "That is no clear difference between the groups" in _ns_no["breakdown"]["effect_size"], _ns_no["breakdown"]["effect_size"])
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
@@ -1155,6 +1220,14 @@ t("  a ratio with its outcome named in between is still read",
 t("  but a figure the sentence does not pin to that ratio is left alone",
   evidence.effect_size("The hazard ratio was not given, but mortality was 1.09.")
   is None)
+t("  the word 'or' before a number is not an odds ratio: no '7900% higher odds' from '35 people or 80 adults'",
+  evidence.effect_size("Trials enrolled small groups, such as 35 people or 80 adults (Studies 4, 6).") is None
+  and evidence.effect_size("exposure up to 10.4 UK units or 83 grams per week (Study 8).") is None
+  and evidence.significance("in 20 or 30 (10 to 40) people", "30") is None
+  and evidence.effect_size("OR 0.88 (95% CI 0.80 to 0.95)")["figure"] == "odds ratio 0.88"
+  and evidence.effect_size("aOR = 1.5")["figure"] == "odds ratio 1.5"
+  and evidence.effect_size("RRs of 1.2")["figure"] == "risk ratio 1.2",
+  (evidence.effect_size("such as 35 people or 80 adults"), evidence.effect_size("OR 0.88")))
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))
@@ -1694,7 +1767,7 @@ t("  the assessment and its confidence are two labelled rows under the answer",
   and '<span class="assess-label">Confidence</span>' in _ord
   and _at('id="tldr"') < _at('id="assess"') < _at('id="doctor-line"') < _at("What the research says"))
 t("  the confidence is the sentence the check worded, once",
-  "<mark>Low certainty evidence, but no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
+  "<mark>Low certainty evidence, so no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
   or "<mark>" in _ord.split('id="assess"')[1].split("</p>")[1], _ord.split('id="assess"')[1][:500])
 
 # ---- no sentence is printed twice -----------------------------------------------
@@ -2416,6 +2489,67 @@ t("the model's own 'wrong outcome' judgement removes the sports review from what
   and not any("sports" in p for p in (_v["breakdown"] or {}).get("evidence", [])), _v)
 t("  a judgement left out rules nothing out",
   verdict._relevance({"relevance": [{"study": 1}]}, _IF, "c") == {})
+# A study that never measured the claim's outcome is not evidence for it, even
+# when its background names that outcome. The case: a hair trial whose
+# background says creatine "enhances muscle strength", read as a test of
+# strength. Only a structured abstract can be told apart this way.
+_HAIR = json.loads((ROOT / "tests" / "off_outcome_hair_trial.json").read_text())
+_hair_out = _HAIR["outcome"]
+_hair = dict(_HAIR["study"])
+t("off outcome: a structured abstract that names the outcome only in its background did not measure it",
+  evidence.measured_outcome(_hair, _hair_out) is False)
+_RES_ONLY = _study("MO1", "Creatine supplementation in older adults: a randomised trial",
+                   abstract="BACKGROUND: Ageing brings frailty.\nMETHODS: Sixty adults took creatine or placebo.\n"
+                            "RESULTS: One repetition maximum rose by 8 kg with creatine.\nCONCLUSION: Creatine helped.")
+t("  one that names the outcome only in its results did measure it",
+  evidence.measured_outcome(_RES_ONLY, _hair_out) is True)
+t("  one that names only the declared stand-in in its results is left for the stand-in label",
+  evidence.measured_outcome(_study("MO2", "Creatine and hormones", abstract="BACKGROUND: Strength matters.\n"
+                                   "METHODS: Men took creatine.\nRESULTS: Lean mass rose.\nCONCLUSION: Fine."),
+                            _hair_out, "(lean mass)") is True)
+_UNSTRUCT = _study("MO3", "Creatine and hair", abstract="Creatine is known to raise muscle strength. "
+                   "We tested its effect on hair density in 40 men and found none.")
+t("  an abstract with no headings, or none at all, is left as it is",
+  evidence.measured_outcome(_UNSTRUCT, _hair_out) is None
+  and evidence.measured_outcome(_study("MO4", "Creatine and hair", abstract=""), _hair_out) is None
+  and evidence.measured_outcome(_study("MO5", "Creatine and hair", abstract="(No abstract available)"), _hair_out) is None
+  and evidence.measured_outcome(_hair, "") is None)
+# Three readings found by measuring the rule on saved answers, each a study
+# that did measure the outcome and must stay in.
+t("off outcome: an outcome named in general words too ('health', 'complications') is never ruled on",
+  evidence.measured_outcome(_study("MO6", "Acute effects of coffee", abstract="BACKGROUND: Effects are uncertain.\n"
+                                   "METHODS: 100 adults wore monitors.\nRESULTS: More ectopic beats.\nCONCLUSIONS: Some."),
+                            "(health OR disease risk OR mortality OR health effects)") is None
+  and evidence.measured_outcome(_hair, f"({_hair_out}) OR (complications)") is None)
+t("  headings that are only a label and a registration are no headings",
+  evidence.measured_outcome(_study("MO7", "A sit-stand desk trial", abstract="UNLABELLED: Desks reduced regional "
+                                   "musculoskeletal discomfort.\nTRIAL REGISTRATION: OSF."),
+                            "(back pain OR low back pain)") is None)
+t("  a background sentence that states the study's aim counts as what it set out to measure",
+  evidence.measured_outcome(_study("MO8", "Efficacy of a vaccine in males", abstract="BACKGROUND: Infection is common. "
+                                   "We report on the safety of the vaccine and its efficacy.\nMETHODS: 4000 men.\n"
+                                   "RESULTS: Fewer lesions; more injection-site pain.\nCONCLUSIONS: It prevents lesions."),
+                            "(safety OR adverse events OR side effects)") is True
+  and evidence.measured_outcome(_hair, _hair_out) is False)
+t("off outcome: hyperactivity rated as behaviour, and stress rated as tension, were measured",
+  evidence.measured_outcome(_study("MO9", "Diets high in sucrose and the behavior of children",
+                                   abstract="BACKGROUND: Sugar is said to cause hyperactivity.\nMETHODS: 48 children, three "
+                                            "diets.\nRESULTS: No differences in 39 behavioral measures.\nCONCLUSIONS: None."),
+                            "(hyperactivity OR hyperactive OR ADHD)") is True
+  and evidence.measured_outcome(_study("MO10", "Ashwagandha, cognition and mood",
+                                       abstract="BACKGROUND: It is said to reduce stress.\nMETHODS: 59 adults, POMS.\n"
+                                                "RESULTS: Less tension and fatigue.\nCONCLUSION: Some benefit."),
+                                "(stress OR psychological stress OR cortisol)") is True)
+_MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
+fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
+                            explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",
+                            relevance=[{"study": i, "subject": True, "outcome": True} for i in range(1, 4)]))]
+_v = verdict.weigh_evidence("Creatine increases muscle strength", _MO, f"(creatine) AND ({_hair_out})")
+t("  in an answer the code sets the hair trial aside as off outcome, whatever the model judged",
+  _MO[1].get("off_topic") == verdict.OFF_OUTCOME and "40265319" not in _v["cited_studies"], (_v["cited_studies"], _MO[1].get("off_topic")))
+t("  and keeps the trial that measured it and the unstructured abstract",
+  "MO1" in _v["cited_studies"] and not _MO[0].get("off_topic") and not _MO[2].get("off_topic"),
+  (_v["cited_studies"], [m_.get("off_topic") for m_ in _MO]))
 t("the prompt asks for subject and outcome for every study, and marks OFF TOPIC",
   '"relevance"' in verdict.weigh_prompt("c", "s") and "relevance" in verdict.VERDICT_SCHEMA["required"]
   and "OFF TOPIC" in verdict._format_study_for_prompt(2, _SMOKE[1], claim="Smoking causes lung cancer"))
@@ -3512,9 +3646,19 @@ _LOWREV = _gin_review("L1", "Ten randomized trials were pooled. Low-certainty ev
 _VLREV = _gin_review("L2", "Ten randomized trials were pooled. Very low certainty evidence suggests ginger reduces vomiting.")
 _MODREV = _gin_review("L3", _SPLIT)
 _PLAIN = _gin_review("L4", "Ten randomized trials were pooled and ginger reduced vomiting.")
+t("  weak or low certainty evidence is the reason for no plain answer, so the line says 'so', never 'but'",
+  evidence.evidence_line("complicated", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Very low certainty evidence, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, "small", outcome="(vomiting)")
+  == "Low certainty evidence of a small effect, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_gin_review("L5", "Ten trials.", types=["Case Reports"])], ["L5"],
+                             _GIN_CLAIM) == "Weak evidence, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_PLAIN], ["L4"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Strong evidence, but no plain yes or no",
+  [evidence.evidence_line("complicated", [x_], [x_["pmid"]], _GIN_CLAIM, outcome="(vomiting)") for x_ in (_VLREV, _PLAIN)])
 t("  the evidence line never says Strong when the lead review says low or very low",
   evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, outcome="(vomiting)")
-  == "Low certainty evidence, but no plain yes or no"
+  == "Low certainty evidence, so no plain yes or no"
   and evidence.evidence_line("false", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
   == "Very low certainty evidence against this claim"
   and evidence.evidence_line("true", [_MODREV], ["L3"], _GIN_CLAIM, outcome="(vomiting OR emesis)")
@@ -6913,6 +7057,10 @@ _rclick = _rjs.split('$("recent-list").addEventListener("click"')[1].split("\n})
 t("old rows: a recent check on this device is replayed only when it has its short answer and still-open line",
   re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
   and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
+
+t("no response in this run ever carried a study both cited in the answer and off topic",
+  _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
+  (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
