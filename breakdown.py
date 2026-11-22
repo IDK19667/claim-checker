@@ -196,6 +196,20 @@ def _rate(clause: str):
     return swap
 
 
+_YOUNG = re.compile(r"\b(?:child\w*|boys?|girls?|infants?|bab(?:y|ies)|adolescen\w*|teen\w*|youths?|"
+                    r"p(?:a)?ediatric\w*|newborns?|students?|juvenile\w*)\b", re.IGNORECASE)
+
+
+def _sexed(m: re.Match) -> str:
+    """The plain nouns for "male participants", "male and female subjects"."""
+    names = ({"male": "boys", "female": "girls"} if _YOUNG.search(_sentence_around(m))
+             else {"male": "men", "female": "women"})
+    if m.group(3):
+        return names[m.group(3).lower()]
+    joint = re.search(r" or | and |, ", m.group(0)).group(0)
+    return f"{names[m.group(1).lower()]}{' and ' if joint == ', ' else joint}{names[m.group(2).lower()]}"
+
+
 # A range or interval just before "including": "intervals including",
 # "a likely range including". There "including" is a verb, not "like".
 _RANGE_BEFORE = re.compile(r"\b(?:intervals?|ranges?|CIs?|C\.I\.)\s*(?:\([^)]*\)\s*)?(?:all\s+)?$",
@@ -317,6 +331,10 @@ PLAIN = [
     (r"\bhowever,\s+", "but ", None),
     (r"\bhowever\b", "but", None),
     (r"\btherefore\b", "so", None),
+    # "72 male participants" is "72 men", never "72 male people"; in a
+    # sentence about children, boys and girls.
+    (r"\b(?:(male|female)(?: or | and |, )(male|female) |(male|female) )(?:participants|subjects|individuals|people)\b",
+     lambda m: _sexed(m), None),
     (r"\bparticipants\b|\bsubjects\b|\bindividuals\b", "people", None),
     (r"\belevated\b", "raised", None),
     (r"\bglycaemic control\b|\bglycemic control\b", "blood sugar control", None),
@@ -509,9 +527,13 @@ PROMPT_SHAPE = """  "parts": [{"part": "a piece of the claim, in the reader's wo
 # ---------------------------------------------------------------------
 
 SOFTEN = [
-    (r"\bwards?\s+off\b", "lowers the risk of"),
+    # The verb keeps its own number: "these changes protect against" is
+    # "these changes lower the risk of", never "lowers".
+    (r"\bwards\s+off\b", "lowers the risk of"),
+    (r"\bward\s+off\b", "lower the risk of"),
     (r"\bwarded\s+off\b", "lowered the risk of"),
-    (r"\bprotects?\s+against\b", "lowers the risk of"),
+    (r"\bprotects\s+against\b", "lowers the risk of"),
+    (r"\bprotect\s+against\b", "lower the risk of"),
     (r"\bprotected\s+against\b", "lowered the risk of"),
     (r"\bimmune\s+to\b", "at lower risk of"),
     (r"\bimmunity\s+to\b", "lower risk of"),

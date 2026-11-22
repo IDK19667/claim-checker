@@ -6918,6 +6918,22 @@ t("  and after a verb that asks what was measured, or at the head of a sentence,
   and breakdown.plain("It lacked efficacy (Study 1).") == "It lacked an effect (Study 1).",
   breakdown.plain("The trial tested efficacy in adults (Study 1)."))
 
+# ---- Plain words keep the verb's number, and name men and women ----
+# Live run: "these short term immune changes lowers the risk of", "72 male people".
+t("plain agreement: a plural subject keeps a plural verb after 'protect against' and 'ward off' are swapped",
+  breakdown.soften("It is unknown if these changes protect against illness (Study 1).")
+  == "It is unknown if these changes lower the risk of illness (Study 1)."
+  and breakdown.soften("These foods ward off colds (Study 1).") == "These foods lower the risk of colds (Study 1)."
+  and breakdown.soften("Vitamin C protects against colds (Study 1).") == "Vitamin C lowers the risk of colds (Study 1).",
+  breakdown.soften("It is unknown if these changes protect against illness (Study 1)."))
+t("  and 'male participants' reads 'men', 'female subjects' 'women', and in a sentence about children, boys and girls",
+  breakdown.plain("A trial of 72 male participants (Study 3).") == "A trial of 72 men (Study 3)."
+  and breakdown.plain("72 female subjects lost weight (Study 1).") == "72 women lost weight (Study 1)."
+  and breakdown.plain("Male and female participants took part (Study 1).") == "Men and women took part (Study 1)."
+  and breakdown.plain("The trial had 40 male participants aged 8, all children (Study 2).")
+  == "The trial had 40 boys aged 8, all children (Study 2).",
+  breakdown.plain("Male and female participants took part (Study 1)."))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
