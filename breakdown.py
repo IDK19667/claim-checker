@@ -183,6 +183,12 @@ def _rate(clause: str):
     return swap
 
 
+# A range or interval just before "including": "intervals including",
+# "a likely range including". There "including" is a verb, not "like".
+_RANGE_BEFORE = re.compile(r"\b(?:intervals?|ranges?|CIs?|C\.I\.)\s*(?:\([^)]*\)\s*)?(?:all\s+)?$",
+                           re.IGNORECASE)
+
+
 # Each row is (pattern, replacement, term-to-keep-in-brackets-or-None).
 #
 # Patterns, not bare words, because English does not let a noun be swapped
@@ -333,7 +339,13 @@ PLAIN = [
     (r"\bdetrimental\b", "harmful", None),
     (r"\bexhibited\b", "showed", None),
     (r"\bnevertheless\b", "even so", None),
-    (r"\bincluding\b", "like", None),
+    # "Including" introduces examples ("studies including adults") and is
+    # also the verb of a range: "confidence intervals including zero" is not
+    # "likely ranges like zero". Before a number, zero, one, the null or no
+    # effect, or after a range or interval, it stays.
+    (r"\bincluding\b(?!\s+(?:[-\u2212+]?\d|zero\b|one\b|unity\b|the null\b|null\b|no\s+"
+     r"(?:effect|difference|change)\b))", lambda m: m.group(0) if _RANGE_BEFORE.search(
+        m.string[max(0, m.start() - 40):m.start()]) else "like", None),
 ]
 
 _PLAIN = [(re.compile(p, re.IGNORECASE), r, keep) for p, r, keep in PLAIN]

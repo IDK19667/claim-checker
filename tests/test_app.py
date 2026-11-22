@@ -6894,6 +6894,19 @@ t("  and it never raises a line already at very low",
                          ["TH1"]).startswith("Very low certainty"),
   evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")], ["TH1"]))
 
+# ---- Plain words: "including" is swapped only where it brings in examples ----
+# Live run: "with likely ranges like zero" (sugar and hyperactivity).
+t("plain including: the verb of a range or interval stays 'including'",
+  breakdown.plain("The effect size ranged from -0.14 to 0.30, with confidence intervals including zero (Study 4).")
+  .endswith("including zero (Study 4).")
+  and "including 1" in breakdown.plain("The 95% CI including 1 (Study 2).")
+  and "including the null" in breakdown.plain("The likely ranges all including the null (Study 2).")
+  and "including no effect" in breakdown.plain("The range was wide, including no effect (Study 2)."),
+  breakdown.plain("with confidence intervals including zero (Study 4)."))
+t("  and where it brings in examples it still reads 'like'",
+  breakdown.plain("Trials including adults and children (Study 1).") == "Trials like adults and children (Study 1).",
+  breakdown.plain("Trials including adults and children (Study 1)."))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
