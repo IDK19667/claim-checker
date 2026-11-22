@@ -10297,6 +10297,17 @@ t("  the library is r128 and carries its licence line",
 t("  the fonts' licences are in the repo beside them",
   (ROOT / "static/fonts/OFL-BricolageGrotesque.txt").exists() and (ROOT / "static/fonts/OFL-IBMPlexMono.txt").exists())
 
+_dk_css = (ROOT / "static/desk.css").read_text()
+_dk_root = _dk_css.split(":root {", 1)[1].split("}", 1)[0]
+_dk_rest = _dk_css.replace(_dk_root, "")
+t("desk.css: every colour is a token on :root, and the rules only name tokens",
+  re.findall(r"#[0-9a-fA-F]{3,8}\b|rgba?\(", _dk_root) and not re.findall(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b(?![-\w])|rgba?\(", _dk_rest),
+  re.findall(r"#[0-9a-fA-F]{6}\b|rgba?\([^)]*\)", _dk_rest)[:8])
+t("  no shadow, blur or glow, and every corner is 3px or round",
+  "box-shadow" not in _dk_css and "blur(" not in _dk_css and "text-shadow" not in _dk_css
+  and set(re.findall(r"border-radius:\s*([^;]+);", _dk_css)) <= {"3px", "50%", "3px 3px 0 0"},
+  set(re.findall(r"border-radius:\s*([^;]+);", _dk_css)))
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template
