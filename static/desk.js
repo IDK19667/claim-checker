@@ -203,6 +203,7 @@
   // ---- the page's shape: stop tops, where the camera holds, and the fold on small screens ----
   var anchors = [], holds = [], stripH = 32;
   function measure() {
+    textCache = null;
     stripH = document.getElementById("strip").offsetHeight;
     root.style.setProperty("--strip", stripH + "px");
     var max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
@@ -386,10 +387,10 @@
     }
   }
   // ---- Next never skips what the reader has not seen ------------------------------------
-  // a stop whose last line is more than 40 px below the bar's top edge reads "Keep reading": a press moves one screen
-  // down inside it (64 px overlap, so the last line in view stays in view) and never past the stop's last line; once
-  // that line is above the bar, Next names the next stop. Back mirrors it down to the stop's top
-  var barEl = document.getElementById("bar"), CONTENT = "p, h1, h2, h3, li, summary, button, textarea, label, .row, .vcard";
+  // a stop whose last line of text is more than 2 px below the bar's top edge reads "Keep reading": a press moves down
+  // inside it (keepDown) and never past the stop's last line; once that line is above the bar, Next names the next
+  // stop. Back mirrors it, a screen at a time, up to the stop's top
+  var barEl = document.getElementById("bar");
   var wayKey = "", wordsT = 0;
   // what a reader can see: laid out, and not inside a closed fold (Chrome still gives those a box)
   function shown(e) {
@@ -397,60 +398,60 @@
     var d = e.closest("details:not([open])"); if (!d) return true;
     var sm = e.closest("summary"); return !!sm && sm.parentElement === d;
   }
-  function blocks(k) {
-    var els = sections[k].querySelectorAll(CONTENT), out = [], sy = window.scrollY;
-    for (var i = 0; i < els.length; i++) {
-      var r = els[i].getBoundingClientRect();
-      if (r.height > 2 && r.width > 2 && shown(els[i])) out.push({ top: r.top + sy, bottom: r.bottom + sy, el: els[i], leaf: !els[i].querySelector(CONTENT) });
+  // E5: the words laid over the 3D card (position fixed, placed by the camera each frame) are not on the page: they
+  // move with every scroll and settle after the glide, so they are never measured; the camera keeps the card in view
+  function overlay(e) { var c = e.closest("#vcard, #short-label"); return !!c && getComputedStyle(c).position === "fixed"; }
+  // E4: the stop's lines of text, top and bottom on the page, read from its text itself (a box's padding is not a
+  // line); a form field counts as one line. Kept until the page is next measured, and never longer than 250 ms
+  var textCache = null;
+  function textLines(k) {
+    var now = performance.now();
+    if (textCache && textCache.k === k && now - textCache.t < 250) return textCache.lines;
+    var sec = sections[k], sy = window.scrollY, out = [], rg = document.createRange();
+    var w = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT), t;
+    while ((t = w.nextNode())) {
+      if (!t.data.trim()) continue;
+      var el = t.parentElement; if (!el || overlay(el) || !shown(el)) continue;
+      rg.selectNodeContents(t); var mine = [];
+      [].forEach.call(rg.getClientRects(), function (q) {
+        if (q.height < 2 || q.width < 1) return;
+        var top = q.top + sy, bottom = q.bottom + sy, last = mine[mine.length - 1];
+        if (last && top < last.bottom - 2) { last.top = Math.min(last.top, top); last.bottom = Math.max(last.bottom, bottom); } else mine.push({ top: top, bottom: bottom });
+      });
+      out.push.apply(out, mine);
     }
-    return out;
-  }
-  // the lines of text inside a block, top and bottom on the page
-  function lineBoxes(e) {
-    var rg = document.createRange(), sy = window.scrollY, out = [];
-    rg.selectNodeContents(e);
-    [].forEach.call(rg.getClientRects(), function (q) {
-      if (q.height < 2 || q.width < 1) return;
-      var top = q.top + sy, bottom = q.bottom + sy, last = out[out.length - 1];
-      if (last && top < last.bottom - 2) { last.top = Math.min(last.top, top); last.bottom = Math.max(last.bottom, bottom); } else out.push({ top: top, bottom: bottom });
+    [].forEach.call(sec.querySelectorAll("textarea, input:not([type=hidden])"), function (f) {
+      var r = f.getBoundingClientRect(); if (r.height > 2 && shown(f) && !overlay(f)) out.push({ top: r.top + sy, bottom: r.bottom + sy });
     });
+    textCache = { k: k, t: now, lines: out };
     return out;
   }
-  function contentBottom(k) { var bs = blocks(k), b = -1e9; for (var i = 0; i < bs.length; i++) if (bs[i].bottom > b) b = bs[i].bottom; return b; }
+  function contentBottom(k) { var ls = textLines(k), b = -1e9; for (var i = 0; i < ls.length; i++) if (ls[i].bottom > b) b = ls[i].bottom; return b; }
   function barTop() { var r = barEl.getBoundingClientRect(); return r.height ? r.top : innerHeight; }
   function pageStep() { return Math.max(120, Math.round(barTop() - stripH - 64)); }
   // E2: any line of the stop still under the bar is more to read; the label never says Next while a line is hidden
   function moreBelow(k, y) { return checked && contentBottom(k) - (y + barTop()) > 2; }
+  // E2/E4: the place where the stop's last line of text sits 2 px above the bar
   function readEnd(k) {
     var max = Math.max(0, root.scrollHeight - innerHeight), lim = k < LAST ? anchors[k + 1] - 1 : max;
-    return Math.min(max, lim, Math.round(contentBottom(k) - barTop() + 16));
+    return Math.min(max, lim, Math.ceil(contentBottom(k) - barTop() + 2));
   }
   function baseY() { return tween && curGlide ? Math.round(curGlide.at()) : window.scrollY; }
-  // E1: the last line wholly in view between the top strip and the bar, as the page is at y
-  function lastLineIn(bs, y, bt) {
+  // E1: L, the last line of text wholly in view between the top strip and the bar, as the page is at y
+  function lastLineIn(k, y, bt) {
     var best = null;
-    function take(top, bottom) { if (top >= y + stripH - 1 && bottom <= bt + 1 && (!best || bottom > best.bottom)) best = { top: top, bottom: bottom }; }
-    bs.forEach(function (b) {
-      if (!b.leaf) return;
-      if (b.top >= y + stripH - 1 && b.bottom <= bt + 1) take(b.top, b.bottom);
-      else if (b.top < bt && b.bottom > bt) lineBoxes(b.el).forEach(function (l) { take(l.top, l.bottom); });
-    });
+    textLines(k).forEach(function (l) { if (l.top >= y + stripH - 0.5 && l.bottom <= bt + 0.5 && (!best || l.bottom > best.bottom)) best = l; });
     return best;
   }
+  // a press inside a long stop: E1 before E2. After the press L is still wholly in view below the strip (E1's limit,
+  // L just under the strip); within that limit the press goes exactly far enough to bring the stop's last line of text
+  // above the bar (E2), and no further. With no whole line in view (one block taller than the screen) it moves a screen
   function keepDown() {
     var k = curStop, y = baseY(); if (!moreBelow(k, y)) return false;
-    // the first block not wholly above the bar moves up to just under the top strip, leaving room for the line before
-    // it, so nothing is ever cut off at both edges; a block taller than the screen moves by one screen
-    // (a block already begun at the top and taller than the screen is passed by: the next one starting below is used)
-    var bt = y + barTop(), bs = blocks(k), first = null;
-    for (var i = 0; i < bs.length; i++) if (bs[i].bottom > bt + 1 && bs[i].top - y - stripH - 40 >= 60 && (!first || bs[i].top < first.top)) first = bs[i];
-    var step = pageStep();
-    if (first) step = Math.min(step, Math.round(first.top - y - stripH - 40));
-    // E2: when the rest of the stop fits, its last line comes to just above the bar and the press stops there (readEnd)
-    var to = Math.min(readEnd(k), y + step);
-    // E1: the last line that was wholly in view above the bar stays wholly in view below the strip
-    var keep = lastLineIn(bs, y, bt);
-    if (keep && Math.floor(keep.top - stripH - 2) - y >= 2) to = Math.min(to, Math.floor(keep.top - stripH - 2));
+    var bt = y + barTop(), to = readEnd(k), L = lastLineIn(k, y, bt);
+    var lim = L ? Math.floor(L.top - stripH - 2) : y + pageStep();
+    if (lim - y < 2) lim = y + pageStep();
+    to = Math.min(to, lim);
     if (to - y < 2) return false;
     goingTo = k; scrollToY(to); return true;
   }

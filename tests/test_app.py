@@ -2034,6 +2034,17 @@ _nudge = _nudge[:_nudge.find("\n  }\n")]
 t("after a check the page moves to the answer, once",
   _deskjs.count("glideToAnswer(") == 2 and "if (detail.fresh) glideToAnswer(" in _deskjs
   and "nudgeToAnswer" not in _js and 'tellDesk("desk:result", { data, fresh: !data.cached && !data.restored })' in _js)
+# Engine rules (E1, E2, E4, E5), checked in a browser by the builder's scripts; here
+# the rules' shape: lines are read from the text itself, the words laid over the
+# 3D card are never measured, and a press goes to min(last line 2 px above the
+# bar, L 2 px under the strip).
+t("E4/E5: the stop is measured on its lines of text, never on the words laid over the 3D card",
+  "function textLines(k)" in _deskjs and "NodeFilter.SHOW_TEXT" in _deskjs
+  and 'e.closest("#vcard, #short-label")' in _deskjs and "if (!el || overlay(el) || !shown(el)) continue;" in _deskjs
+  and "contentBottom(k) - (y + barTop()) > 2" in _deskjs)
+t("E1 before E2: a press goes exactly to the stop's last line 2 px above the bar, or to L 2 px under the strip",
+  "Math.ceil(contentBottom(k) - barTop() + 2)" in _deskjs and "Math.floor(L.top - stripH - 2)" in _deskjs
+  and "to = Math.min(to, lim);" in _deskjs and "pageStep() - " not in _deskjs)
 t("  any touch, wheel or key from the reader cancels it",
   all(e in _nudge for e in ('"wheel"', '"touchstart"', '"pointerdown"', '"keydown"')))
 t("  it honours reduced motion and waits for a hidden tab",
