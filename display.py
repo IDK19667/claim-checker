@@ -192,6 +192,25 @@ def study_why(study) -> str:
     return "Read, not relied on."
 
 
+def sentence_case(text) -> str:
+    """
+    A listed claim as a list shows it: the first letter raised only when the
+    first word is all lower case letters (its parts joined by a hyphen or an
+    apostrophe, trailing punctuation aside). "mRNA", "pH", "DNA", "COVID-19",
+    a number or a quotation mark at the start are left exactly as stored.
+    The page only: stored text and links keep the wording as saved.
+    static/app.js sentenceCase is the same; a test runs both on the same inputs.
+    """
+    text = str(text or "")
+    word = text.split(None, 1)[0] if text.strip() else ""
+    if text[:1] != word[:1]:
+        return text
+    parts = re.split(r"[-'\u2019]", word.rstrip(".,;:!?"))
+    if all(p.isalpha() and p.islower() for p in parts):
+        return text[:1].upper() + text[1:]
+    return text
+
+
 def typed_note(typed, reason=None) -> str:
     """
     The line under the claim when the answer is to other words than the

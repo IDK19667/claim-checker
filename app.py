@@ -96,6 +96,7 @@ app.jinja_env.globals["design_note"] = display.design_note
 app.jinja_env.globals["study_why"] = display.study_why
 app.jinja_env.globals["source_groups"] = display.source_groups
 app.jinja_env.globals["typed_note"] = display.typed_note
+app.jinja_env.filters["sentence_case"] = display.sentence_case
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
 # full: the claim text is kept, nothing that identifies the person is, and

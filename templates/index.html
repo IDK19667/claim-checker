@@ -162,8 +162,8 @@
           {% for v in latest %}
           <li class="entry">
             <a class="entry-link" href="/?q={{ v.claim_text | urlencode }}">
-              {# Sentence case on the page only: the stored text and the link keep the wording as typed. #}
-              <span class="entry-claim">{{ v.claim_text[:1] | upper }}{{ v.claim_text[1:] }}</span>
+              {# Sentence case on the page only (display.sentence_case): the stored text and the link keep the wording as typed. #}
+              <span class="entry-claim">{{ v.claim_text | sentence_case }}</span>
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
             {% if v.evidence.mix %}

@@ -758,6 +758,67 @@ t("the Latest list shows a claim in sentence case, and only the first letter cha
   and _sc_row["claim_text"] == "green tea speeds up METABOLISM",
   [x for x in _sc_html.split('class="entry-claim">')[1:3]])
 
+# One rule for every list of claims: the first letter is raised only when the
+# first word is all lower case letters. Mixed or upper case words, numbers and
+# quotation marks at the start are left exactly as stored.
+import display as _dsc  # noqa: E402
+import shutil as _shutil, subprocess as _subprocess  # noqa: E402
+from markupsafe import escape as _msc_escape  # noqa: E402
+_SC_CASES = [("mRNA vaccines change DNA", "mRNA vaccines change DNA"),
+             ("pH balanced water is healthier", "pH balanced water is healthier"),
+             ("iPhone screens harm sleep", "iPhone screens harm sleep"),
+             ("DNA tests predict disease", "DNA tests predict disease"),
+             ("HIV can be cured", "HIV can be cured"),
+             ("COVID-19 vaccines cause infertility", "COVID-19 vaccines cause infertility"),
+             ("5G towers cause headaches", "5G towers cause headaches"),
+             ("10,000 steps a day is needed", "10,000 steps a day is needed"),
+             ("\u201cdetox\u201d teas work", "\u201cdetox\u201d teas work"),
+             ('"natural" sugar is better', '"natural" sugar is better'),
+             ("coffee causes cancer", "Coffee causes cancer"),
+             ("coffee, daily, causes cancer", "Coffee, daily, causes cancer"),
+             ("e-cigarettes help people quit", "E-cigarettes help people quit"),
+             ("vitamin D prevents colds", "Vitamin D prevents colds"),
+             ("Garlic lowers blood pressure", "Garlic lowers blood pressure"),
+             ("\u00e9pinards are rich in iron", "\u00c9pinards are rich in iron"),
+             (" leading space stays", " leading space stays"), ("", "")]
+t("sentence case: the first letter is raised only when the first word is all lower case letters",
+  [_dsc.sentence_case(x) for x, _ in _SC_CASES] == [w for _, w in _SC_CASES],
+  [(x, _dsc.sentence_case(x)) for x, w in _SC_CASES if _dsc.sentence_case(x) != w])
+_sc_js = (ROOT / "static" / "app.js").read_text()
+if _shutil.which("node"):
+    _sc_fn = _sc_js[_sc_js.index("function sentenceCase"):_sc_js.index("function claimListHtml")]
+    _sc_out = json.loads(_subprocess.run(["node", "-e", _sc_fn + "console.log(JSON.stringify("
+                                          + json.dumps([x for x, _ in _SC_CASES]) + ".map(sentenceCase)));"],
+                                         capture_output=True, text=True, check=True).stdout)
+    t("  and the script's sentenceCase gives the same on every case", _sc_out == [w for _, w in _SC_CASES], _sc_out)
+t("  every list the script builds uses it: recent and trending, related claims, type-ahead",
+  "${escapeHtml(sentenceCase(r.claim))}</span>" in _sc_js
+  and '<span class="entry-claim">${escapeHtml(sentenceCase(r.claim_text))}</span>' in _sc_js
+  and '<span class="suggest-claim">${escapeHtml(sentenceCase(r.claim_text))}' in _sc_js
+  and 'data-claim="${escapeHtml(r.claim)}"' in _sc_js and "href=\"/?q=${encodeURIComponent(r.claim_text)}\"" in _sc_js)
+_sc_tpls = {n: (ROOT / "templates" / n).read_text() for n in ("index.html", "404.html")}
+t("  and both templates' lists use the one filter, with no first-letter upper of their own",
+  all("{{ v.claim_text | sentence_case }}" in x and "[:1] | upper" not in x for x in _sc_tpls.values()))
+db.put_cached_verdict("mRNA vaccines change DNA", "mrna AND dna", "false", "x",
+                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "a", "journal": "J", "year": "2021",
+                        "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Review"]}],
+                      tldr="No.", still_open="Long-term data are still coming.")
+_sc_home = c.get("/").data.decode()
+_sc_404 = c.get("/no-such-page-sc").get_data(as_text=True)
+t("  the home page's Latest list shows 'mRNA vaccines change DNA' as stored, and the link is untouched",
+  '<span class="entry-claim">mRNA vaccines change DNA</span>' in _sc_home and "MRNA" not in _sc_home
+  and 'href="/?q=mRNA%20vaccines%20change%20DNA"' in _sc_home, _sc_home.count("entry-claim"))
+t("  and the 404 list raises a lower case first word and leaves a mixed case one",
+  '<span class="entry-claim">Green tea speeds up METABOLISM</span>' in _sc_404
+  and '<span class="entry-claim">mRNA vaccines change DNA</span>' in _sc_404
+  and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_404, _sc_404.count("entry-claim"))
+with appmod.app.test_request_context("/"):
+    _sc_r404 = appmod.render_template("404.html", labels=appmod.VERDICT_LABELS,
+                                      latest=[{"claim_text": x, "verdict": "false"} for x, _ in _SC_CASES if x.strip()])
+t("  and on each case the 404 list prints what the rule says",
+  all(f'<span class="entry-claim">{_msc_escape(w)}</span>' in _sc_r404 for x, w in _SC_CASES if x.strip()),
+  [w for x, w in _SC_CASES if x.strip() and f'<span class="entry-claim">{_msc_escape(w)}</span>' not in _sc_r404])
+
 _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
   'id="chart-sec"' in _res and 'class="barcol' in _res

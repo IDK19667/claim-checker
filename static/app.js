@@ -440,7 +440,7 @@ function renderNextSteps(ns, claim) {
     $("nosteps-related").innerHTML = rel.map((r) => `
       <li class="entry">
         <a class="entry-link" href="/?q=${encodeURIComponent(r.claim_text)}">
-          <span class="entry-claim">${escapeHtml(r.claim_text)}</span>
+          <span class="entry-claim">${escapeHtml(sentenceCase(r.claim_text))}</span>
           <span class="entry-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
         </a>
       </li>`).join("");
@@ -1119,7 +1119,7 @@ function renderSuggest(rows) {
 
   suggestList.innerHTML = rows.map((r, i) => `
     <li class="suggest-row" id="suggest-${i}" role="option" aria-selected="false" data-i="${i}">
-      <span class="suggest-claim">${escapeHtml(r.claim_text)}${suggestAlso(r)}</span>
+      <span class="suggest-claim">${escapeHtml(sentenceCase(r.claim_text))}${suggestAlso(r)}</span>
       <span class="suggest-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
     </li>`).join("");
 
@@ -1216,11 +1216,25 @@ $("chips").addEventListener("click", (e) => {
   check(chip.textContent);
 });
 
+// A listed claim as every list shows it: the first letter raised only when the
+// first word is all lower case letters (parts joined by a hyphen or an
+// apostrophe, trailing punctuation aside). "mRNA", "pH", "DNA", "COVID-19", a
+// number or a quotation mark first are left as stored. The page only: the
+// data and links keep the saved wording. display.sentence_case is the same.
+function sentenceCase(text) {
+  text = String(text || "");
+  const word = text.trim() ? text.trim().split(/\s+/)[0] : "";
+  if (text.slice(0, 1) !== word.slice(0, 1)) return text;
+  const parts = word.replace(/[.,;:!?]+$/, "").split(/[-'\u2019]/);
+  if (parts.every((p) => /^\p{Ll}+$/u.test(p))) return text.slice(0, 1).toUpperCase() + text.slice(1);
+  return text;
+}
+
 function claimListHtml(items) {
   return items.map((r) => `
     <li>
       <button type="button" class="recent-btn" data-claim="${escapeHtml(r.claim)}">
-        <span>${escapeHtml(r.claim)}</span>
+        <span>${escapeHtml(sentenceCase(r.claim))}</span>
         <span class="tag v-${escapeHtml(r.verdict)}">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict)}</span>
       </button>
     </li>`).join("");
