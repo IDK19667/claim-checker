@@ -9260,6 +9260,54 @@ t("  the model is told the journal retracted it and not to cite it",
   "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
 pubmed.search_and_fetch = _rt_search
 
+# ---- where the rounds meet: final fixes and rc-live-fix --------------------------
+# F8 (a withheld size is said nowhere by code) meets L4 (a false answer to a
+# cure claim with no size says the evidence does not show the promise).
+_mc = _f8("Cold showers cure the common cold", "(cold shower) AND (common cold)", "false", _f8_bd)
+_mc_text = json.dumps(_mc).lower()
+t("meet F8 and L4: a false answer to a cure claim whose size is withheld shows the cure line and no code size word",
+  "none of it shows a cure" in _mc["evidence_line"] and _mc["breakdown"]["effect"]["label"] == ""
+  and not re.search(r"\b(?:small|moderate|large) effect", _mc_text), (_mc["evidence_line"], _mc["breakdown"]))
+# F9 (the guidance line whenever a study is listed) meets L1 (a retracted
+# paper is background): the only cited study is retracted.
+with appmod.app.test_request_context("/"):
+    _mg = appmod._check_response("Vinegar cures diabetes", "(vinegar) AND (diabetes)", "false", _F9_TLDR,
+                                 "Guidance says no (Study 1).", ["RT1"], [dict(_RT_ST[0])], "http://x",
+                                 still_open="Whether it helps at all.")
+_mg_s = _mg["studies"][0]
+t("meet F9 and L1: a guidance answer whose only cited study is retracted shows the guidance line",
+  _mg["evidence_line"] == verdict.GUIDANCE_LINE and _display.confidence_line(_mg) == verdict.GUIDANCE_LINE + ".",
+  _mg["evidence_line"])
+t("  and the paper is shown as retracted, not used",
+  not _mg_s["cited_in_verdict"] and _mg_s["background"] and _mg_s["tier"] == "retracted"
+  and _display.study_why(_mg_s) == "Background only, not counted: retracted by the journal.", _mg_s)
+# F1a and F1b (type-ahead shows only whole rows, at the stamp its page would
+# show) meet L1: a saved "true" that cites a retracted paper is out of date.
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]
+for _mt_c, _mt_cited in (("Retracted kelp lowers blood sugar", ["RT1"]),
+                         ("Retracted dulse lowers blood sugar", ["RT1", "RT2"])):
+    db.put_cached_verdict(_mt_c, "(vinegar) AND (blood sugar)", "true", "Trials found it (Study 1).", _mt_cited,
+                          [dict(x) for x in _RT_ST], tldr="It lowers blood sugar.", still_open="Longer trials.")
+_mt_rows = {k: db.get_cached_verdict(k, 24) for k in ("Retracted kelp lowers blood sugar",
+                                                      "Retracted dulse lowers blood sugar")}
+_mt_sugg = {r_["claim_text"]: r_["verdict"] for r_ in c.get("/api/suggest?q=retracted").get_json()["suggestions"]}
+def _mt_page(k):
+    r_ = _mt_rows[k]
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(k, r_["search_query"], r_["verdict"], r_["tldr"], r_["explanation"],
+                                      r_["cited_studies"], r_["studies"], "http://x", still_open=r_["still_open"])["verdict"]
+t("meet F1 and L1: a saved 'true' citing a retracted paper is out of date",
+  all(appmod._current(r_, k) is None for k, r_ in _mt_rows.items()))
+t("  and type-ahead never shows it as 'true' when its page would not: it shows the page's stamp or nothing",
+  _mt_sugg.get("Retracted kelp lowers blood sugar") in (None, _mt_page("Retracted kelp lowers blood sugar"))
+  and _mt_sugg.get("Retracted kelp lowers blood sugar") != "true"
+  and _mt_sugg.get("Retracted dulse lowers blood sugar") in (None, _mt_page("Retracted dulse lowers blood sugar")),
+  (_mt_sugg, [_mt_page(k) for k in _mt_rows]))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                  tuple(db.normalize_claim(k) for k in _mt_rows))
+pubmed.search_and_fetch = _rt_search
+
 # ---- final fix F12: a withdrawn paper is never a strong design -----------------
 _F12_T = ["Journal Article", "Randomized Controlled Trial", "Retracted Publication"]
 _f12_s = _study("F12", "A trial later withdrawn", types=_F12_T, abstract="Adults were randomized to it or placebo.")

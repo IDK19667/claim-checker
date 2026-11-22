@@ -953,7 +953,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         off_numbers = {i + 1 for i, s in enumerate(studies or [])
                        if s.get("off_topic") or evidence.withdrawn(s)}
         explanation = breakdown_mod.drop_citing(explanation, off_numbers, len(studies or []))
-        if not cited and verdict_value != "insufficient":
+        # An answer the guidance rule set is the one exception, as in a fresh
+        # check (verdict.py): it rests on guidance, not on the studies, so a
+        # citation set aside (a retracted paper) does not unseat it.
+        if not cited and verdict_value != "insufficient" and not verdict.from_guidance(tldr):
             verdict_value = "insufficient"
             tldr = verdict.UNTESTED_TLDR
             explanation = (explanation.rstrip() + " None of the studies found directly "
