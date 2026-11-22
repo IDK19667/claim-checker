@@ -9292,7 +9292,11 @@ t("  and the list of what each study concluded leaves it out",
 fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2]))]
 _r, _evs = stream("Retracted vinegar lowers blood sugar streamed", ip="7.7.31.2")
 _rts = [s for s in _evs[-1].get("result", {}).get("studies", []) if s["cited_in_verdict"]]
-t("  and a streamed check the same", [s["pmid"] for s in _rts] == ["RT2"], _evs[-1])
+_rtb = {s["pmid"]: s for s in _evs[-1].get("result", {}).get("studies", [])}
+t("  and a streamed check the same: its final event sets the cited retracted paper aside, with the reason",
+  _evs[-1]["stage"] == "done" and [s["pmid"] for s in _rts] == ["RT2"]
+  and _rtb["RT1"]["background"] and _rtb["RT1"]["background_why"] == "retracted by the journal"
+  and not _rtb["RT1"]["cited_in_verdict"], _evs[-1])
 # A saved row from before the rule, citing the retracted paper.
 _rt_old = [dict(x) for x in _RT_ST]
 db.put_cached_verdict("Retracted vinegar saved row", "(vinegar) AND (blood sugar)", "true",
