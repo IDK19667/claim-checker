@@ -73,15 +73,6 @@ the other three only in dev.db.
   and judging it against the abstract's first "95% confidence interval",
   a null one. A saved check loses such a sentence on the way out
   (`breakdown.unsaid_nulls`).
-- **Reasoning this page's own rules empty is never left blank**
-  (`verdict.no_reason_left`, one helper for a fresh check and a saved
-  one). An explanation that arrived with words and lost them all (every
-  sentence cited a study set aside, or leaned on one not relied on) says
-  what "Not enough evidence" means, or else the takeaway without its
-  doctor line, as a fresh check already did. One that arrived empty is
-  left as it came. This replaces "An emptied explanation stays empty" in
-  the entry on the gate after review: a saved answer and a fresh one now
-  do the same thing.
 - **An interval in code's own plain words is still an interval**
   (`evidence._interval_after`). Code prints a confidence interval as
   "likely range" (`breakdown.JARGON`), so "0.79 with a likely range from
@@ -98,7 +89,9 @@ the other three only in dev.db.
 - **A cited PMID that names no listed study is not relied on**
   (`display.relied_pmids`). A saved "true" citing only such PMIDs kept
   its stamp, with or without studies listed; it is now "Not enough
-  evidence" by the rule above, on the page and in every list.
+  evidence" by the rule above, on the page and in every list. The saved
+  record check still names such a PMID "cited_not_in_studies" only;
+  "cited_off_topic" means a listed study set aside.
 - **"E. coli" is one sentence.** A stop after a single capital letter
   before a lowercase word does not end a sentence (`breakdown.sentences`,
   `breakdown.first_sentence`); "vitamin C. It ..." still splits. Nor does
@@ -124,7 +117,12 @@ that claim is checked again: putting back words code took out would be
 guessing. What the whole-sentence rule costs: when the model writes one
 sentence about several studies and one of them is set aside, the
 sentence is not shown, and a hedge can go with it; the stamp and the
-evidence line do not change.
+evidence line do not change. And an explanation the page's own rules
+empty stays empty, as decided after the earlier review: the short answer
+is already on the page, and repeating it would pass it off as reasoning.
+The page hides the research block, or shows the lines stored for it. The
+fifth review saw this in two saved "False" answers, and it is part of
+what the whole-sentence rule costs.
 
 ## 2026-11-21 (release): A public list shows only rows a page would serve
 
