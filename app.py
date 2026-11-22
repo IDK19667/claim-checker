@@ -1033,6 +1033,34 @@ def _run_check(claim: str, client_ip: str, base_url: str):
         yield ev
 
 
+def _current(cached, claim):
+    """
+    A saved answer, or None when it is out of date because it relied on a
+    study the current code sets aside as measuring another outcome. Its short
+    answer and reasons were written with that study in view, and code cannot
+    tell which of its sentences lean on it, so it is not patched and served:
+    the check runs fresh, as it does for any answer past its window.
+    """
+    if not cached:
+        return cached
+    groups = pubmed.split_and(cached.get("search_query") or "")
+    if len(groups) < 2:
+        return cached
+    cited = set(cached.get("cited_studies") or [])
+    hit = [s for s in cached.get("studies") or [] if isinstance(s, dict) and s.get("pmid") in cited
+           and evidence.measured_outcome(s, groups[1], "", groups[0]) is False]
+    if not hit:
+        return cached
+    try:
+        saved = db.get_cached_query(claim, verdict.QUERY_PROMPT_VERSION)
+    except sqlite3.Error:
+        saved = None
+    surrogate = saved[1] if saved else ""
+    if any(evidence.measured_outcome(s, groups[1], surrogate or "", groups[0]) is False for s in hit):
+        return None
+    return cached
+
+
 def _run_check_stages(claim: str, client_ip: str, base_url: str):
     """
     Yields stage dicts. Terminal stages are "done" (with "result") and
@@ -1058,7 +1086,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
 
     # 1. Cache first: a repeat of a recent claim costs nothing and is
     #    never rate-limited. Viral claims get checked by many people.
-    cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
+    cached = _current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim)
     if cached:
         yield from_cache(cached)
         return
@@ -1093,7 +1121,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             # the verdict, the code's own checks, the cache and the share
             # link. A correctly spelled check of it may already be cached.
             typed, claim = claim, understood
-            cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
+            cached = _current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim)
             if cached:
                 yield from_cache(cached, typed)
                 return

@@ -2588,6 +2588,25 @@ with appmod.app.test_request_context("/"):
 t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
   _sa["evidence_line"].startswith("Very low certainty") and _sa["verdict"] == "complicated",
   (_sa["verdict"], _sa["evidence_line"]))
+# A saved answer that relied on a study the current code sets aside was written
+# with that study in view, and code cannot tell which of its sentences lean
+# on it. It is not patched and served: it is out of date, and checked fresh.
+db.put_cached_verdict("creatine raises strength in men", "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", "40265319"],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+db.put_cached_verdict("creatine raises strength in women", "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1).", ["MO1"], [dict(_RES_ONLY), dict(_hair)],
+                      tldr="Creatine raises strength.", still_open="Doses vary.")
+_calls0 = fg.models.calls
+fg.models.script = [Resp("(creatine) AND (strength)"), Resp(VJ("complicated", [1]))]
+_od = P("creatine raises strength in men", ip="7.7.7.71").get_json()
+t("a saved answer that relied on a study code now sets aside is out of date and checked fresh",
+  _od.get("cached") is False and fg.models.calls > _calls0, (_od.get("cached"), fg.models.calls - _calls0))
+_calls0 = fg.models.calls
+_ok = P("creatine raises strength in women", ip="7.7.7.72").get_json()
+t("  and one that only listed that study, without relying on it, is served as saved",
+  _ok.get("cached") is True and fg.models.calls == _calls0, (_ok.get("cached"), fg.models.calls - _calls0))
 _MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
 fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
                             explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",
