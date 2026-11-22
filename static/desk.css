@@ -460,6 +460,8 @@ html:not(.checked) .bar, html:not(.checked) .rail { display: none; }
 
 /* while a check runs the form goes quiet: the log prints right under the claim and nothing else asks to be read */
 html[data-screen="checking"] #claim-help, html[data-screen="checking"] #privacy-line, html[data-screen="checking"] #examples { display: none; }
+/* "Or try one of these:" shows only with examples under it: with scripts off the chips are never filled */
+#examples:has(.chips:empty), html:not(.js) #examples { display: none; }
 /* the reading log: what the check is doing, printed as it happens */
 .reading { list-style: none; margin: 24px 0 0; padding: 0; font: 500 13px/1.5 var(--mono); color: var(--on-deep-2); }
 .reading li { display: flex; gap: 10px; padding: 4px 0; animation: line-in 240ms ease-out both; }

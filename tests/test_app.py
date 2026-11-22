@@ -2057,6 +2057,10 @@ t("  the desk stands that many blank sheets in its stack, placed, none under red
   and "var td = o.placed ? 1 :" in _deskjs and "if (stagedN) { stagedN = 0; CHECK = { studies: [] }; dropSheets(); }" in _deskjs)
 t("  while a check runs the form goes quiet, so the log prints right under the claim",
   'html[data-screen="checking"] #claim-help, html[data-screen="checking"] #privacy-line, html[data-screen="checking"] #examples { display: none; }' in (ROOT / "static" / "desk.css").read_text())
+_ex_home = c.get("/").get_data(as_text=True)
+t("  \"Or try one of these:\" shows only with examples under it: the server sends the chips empty and the style hides the line until a script fills them",
+  re.search(r'<div class="chips" id="chips"[^>]*></div>', _ex_home) is not None
+  and "#examples:has(.chips:empty), html:not(.js) #examples { display: none; }" in (ROOT / "static" / "desk.css").read_text())
 t("  a check started from a result's claim box first goes back to stop 1",
   'if (root.classList.contains("checked")) show(askSection);' in _js[_js.find("function renderPending"):][:400])
 # Engine rules (E1, E2, E4, E5), checked in a browser by the builder's scripts; here
