@@ -7116,6 +7116,59 @@ for _i, (_lbl, _so) in enumerate((("no still-open line", ""), ("a still-open lin
       and db.get_cached_verdict(_cl, 24)["tldr"] == "Fresh short answer.", _fr.get_json())
 pubmed.search_and_fetch = _fr_search
 
+# Nor is such a row in any public list, count, suggestion, feed or sitemap. An
+# ordinary answer is, and so is an old real answer that only lacks a newer
+# field (its still-open line), as before.
+import nextsteps as _ns_fr  # noqa: E402
+_FR_BAD, _FR_GOOD, _FR_OLD = ("Zanzibar clove oil heals warts", "Zanzibar honey soothes sore throats",
+                              "Zanzibar ginger eases nausea")
+_FR_CUR = "Ozempic cures alcoholism"   # a curated claim, so the sitemap and llms.txt would list it
+_ledger0 = db.ledger()["claims"]
+db.put_cached_verdict(_FR_GOOD, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+db.put_cached_verdict(_FR_OLD, "(ginger) AND (nausea)", "complicated", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Maybe, a little.", still_open=None)
+_fr_put(_FR_BAD)
+with db.get_conn() as _conn:
+    _fr_cur_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
+                                (db.normalize_claim(_FR_CUR),)).fetchone()["n"]
+_fr_put(_FR_CUR)
+for _x in (_FR_BAD, _FR_GOOD, _FR_OLD, _FR_BAD, _FR_GOOD, _FR_OLD):
+    db.log_check(_x, "complicated", "x", [])
+_fr_home = c.get("/").get_data(as_text=True)
+_fr_404 = c.get("/no-such-page-zanzibar").get_data(as_text=True)
+_fr_trend = [r_["claim"] for r_ in c.get("/api/trending").get_json()]
+_fr_sugg = [r_["claim_text"] for r_ in c.get("/api/suggest?q=zanzibar").get_json()["suggestions"]]
+_fr_rel = [r_["claim"] if "claim" in r_ else r_.get("claim_text") for r_ in
+           _ns_fr.related_checks("Zanzibar remedies", db.all_claims())]
+appmod._sitemap_memo["stamp"] = None
+_fr_map = c.get("/sitemap.xml").get_data(as_text=True)
+_fr_llms = c.get("/llms.txt").get_data(as_text=True)
+_fr_q = urllib.parse.quote(_FR_CUR)
+t("failed rows: one is not on the home page's Latest list, and an ordinary answer is",
+  _FR_BAD[1:] not in _fr_home and _FR_GOOD[1:] in _fr_home)
+t("failed rows: nor on the 404 page's list", _FR_BAD[1:] not in _fr_404 and _FR_GOOD[1:] in _fr_404)
+t("failed rows: nor in /api/trending, where the ordinary and the old answer stay",
+  _FR_BAD not in _fr_trend and _FR_GOOD in _fr_trend and _FR_OLD in _fr_trend, _fr_trend)
+t("failed rows: nor in type-ahead (/api/suggest), where the ordinary and the old answer stay",
+  _FR_BAD not in _fr_sugg and _FR_GOOD in _fr_sugg and _FR_OLD in _fr_sugg, _fr_sugg)
+t("failed rows: nor among the related claims a dead end offers (they read the same saved claims)",
+  _FR_BAD not in [r_["claim_text"] for r_ in db.all_claims()]
+  and _FR_GOOD in [r_["claim_text"] for r_ in db.all_claims()] and _FR_BAD not in str(_fr_rel), _fr_rel)
+t("failed rows: nor in the sitemap or llms.txt, even under a curated claim",
+  _fr_q not in _fr_map and f"?q={_fr_q})" not in _fr_llms
+  and all(r_["claim_text"] != _FR_CUR for r_ in db.saved_records(5000))
+  and all(r_["claim_text"] != _FR_CUR for r_ in db.recent_cached(5000)))
+t("failed rows: nor in the count of claims checked, which counts the two answers",
+  db.ledger()["claims"] == _ledger0 + 2 - _fr_cur_had, (db.ledger()["claims"], _ledger0, _fr_cur_had))
+with db.get_conn() as _conn:
+    _fr_kept = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE tldr = ?",
+                             (db.FAILED_REPLY_TLDR,)).fetchone()["n"]
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in (_FR_BAD, _FR_GOOD, _FR_OLD, _FR_CUR)))
+t("failed rows: the rows themselves stay in the database", _fr_kept >= 2, _fr_kept)
+appmod._sitemap_memo["stamp"] = None
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

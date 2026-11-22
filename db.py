@@ -466,6 +466,9 @@ def _whole(row) -> bool:
 # served, and left out of every public list, count, suggestion, feed and sitemap.
 # A failed reply is no longer saved; this keeps the ones saved before that out.
 FAILED_REPLY_TLDR = "Couldn't reach a verdict from the evidence found."
+# The same test in SQL, for the readers that feed a public list. Its one
+# parameter is FAILED_REPLY_TLDR.
+_ANSWERED = "TRIM(COALESCE({t}tldr, '')) != ?"
 
 
 def _failed(row) -> bool:
@@ -574,12 +577,12 @@ def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
             """SELECT c.claim_key, v.claim_text, v.verdict, COUNT(*) AS n
                FROM checks c
                JOIN verdict_cache v ON v.claim_key = c.claim_key
-               WHERE c.checked_at > ?
+               WHERE c.checked_at > ? AND """ + _ANSWERED.format(t="v.") + """
                GROUP BY c.claim_key
                HAVING n >= ?
                ORDER BY n DESC, MAX(c.checked_at) DESC
                LIMIT ?""",
-            (since, min_checks, limit),
+            (since, FAILED_REPLY_TLDR, min_checks, limit),
         ).fetchall()
         return [{"claim": r["claim_text"], "verdict": r["verdict"], "checks": r["n"]} for r in rows]
 
@@ -590,7 +593,8 @@ def recent_cached(limit: int = 200) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT claim_text, verdict, created_at FROM verdict_cache "
-            "ORDER BY created_at DESC LIMIT ?", (limit,)
+            "WHERE " + _ANSWERED.format(t="") + " "
+            "ORDER BY created_at DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -812,9 +816,10 @@ def ledger() -> dict:
     """
     with get_conn() as conn:
         a, b, c = _run_many(conn, [
-            ("SELECT COUNT(*) n FROM verdict_cache", ()),
+            ("SELECT COUNT(*) n FROM verdict_cache WHERE " + _ANSWERED.format(t=""), (FAILED_REPLY_TLDR,)),
             ("SELECT COUNT(*) n FROM checks", ()),
-            ("SELECT studies_json FROM verdict_cache WHERE studies_json IS NOT NULL", ()),
+            ("SELECT studies_json FROM verdict_cache WHERE studies_json IS NOT NULL AND "
+             + _ANSWERED.format(t=""), (FAILED_REPLY_TLDR,)),
         ])
         claims, checks, rows = a.fetchone()["n"], b.fetchone()["n"], c.fetchall()
     pmids, pooled = set(), set()
@@ -849,9 +854,10 @@ def recent_verdicts(limit: int = 12) -> list[dict]:
     """
     with get_conn() as conn:
         a, b = _run_many(conn, [
-            ("SELECT COUNT(*) n FROM verdict_cache", ()),
+            ("SELECT COUNT(*) n FROM verdict_cache WHERE " + _ANSWERED.format(t=""), (FAILED_REPLY_TLDR,)),
             ("SELECT claim_text, search_query, verdict, tldr, still_open, studies_json, cited_json, created_at "
-             "FROM verdict_cache ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)),
+             "FROM verdict_cache WHERE " + _ANSWERED.format(t="") + " "
+             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)),
         ])
         total, rows = a.fetchone()["n"], b.fetchall()
     out = []
@@ -881,7 +887,8 @@ def all_claims(limit: int = 500) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT claim_text, verdict FROM verdict_cache "
-            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+            "WHERE " + _ANSWERED.format(t="") + " "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -904,7 +911,8 @@ def saved_records(limit: int = 500) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT claim_text, verdict, search_query, cited_json, studies_json, breakdown_json, created_at "
-            "FROM verdict_cache ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+            "FROM verdict_cache WHERE " + _ANSWERED.format(t="") + " "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
     return [dict(r) for r in rows]
 
