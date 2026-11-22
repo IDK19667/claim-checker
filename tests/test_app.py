@@ -9922,6 +9922,33 @@ t("G2b: for each case the stamp in the lists (recent, type-ahead) equals the sta
   and [x[2] for x in _g2b.values()] == ["false", "insufficient", "insufficient"], _g2b)
 t("  and the lists reach it through the page's own decision",
   "_nothing_relied" in _inspect.getsource(appmod._listed))
+# J4: a saved rated answer that lists no study at all gets the takeaway a
+# fresh check writes when the search finds nothing.
+_J4_C = "Humming at noon cures hiccups J4"
+db.put_cached_verdict(_J4_C, "(humming) AND (hiccups)", "complicated", "Some say so.", [], [],
+                      tldr="Humming may help hiccups.", still_open="Whether anyone has tested it.")
+_j4_row = db.get_cached_by_key(db.normalize_claim(_J4_C))
+with appmod.app.test_request_context("/"):
+    _j4_p = appmod._check_response(_J4_C, _j4_row["search_query"], _j4_row["verdict"], _j4_row["tldr"],
+                                   _j4_row["explanation"], _j4_row["cited_studies"], _j4_row["studies"], "http://x",
+                                   still_open=_j4_row["still_open"])
+    _j4_s = appmod._check_response("Humming at noon cures hiccups J4 s", "(humming) AND (hiccups)", "complicated",
+                                   "Humming may help hiccups.", "Some say so (Study 1).", ["J4A"],
+                                   [dict(_study("J4A", "Humming and hiccups", types=["Editorial"]),
+                                         off_topic=verdict.OFF_SUBJECT + ".")], "http://x", still_open="Whether.")
+_j4_l = appmod._listed({"claim_text": _J4_C, "verdict": _j4_row["verdict"], "tldr": _j4_row["tldr"],
+                        "search_query": _j4_row["search_query"], "studies": _j4_row["studies"],
+                        "cited": _j4_row["cited_studies"]})
+_j4_html = c.get("/?q=" + urllib.parse.quote(_J4_C)).get_data(as_text=True)
+t("J4: a saved rated answer listing no study shows the no-studies takeaway, on the page, the server page and a list entry",
+  _j4_p["verdict"] == _j4_l["verdict"] == "insufficient" and _j4_p["tldr"] == _j4_l["tldr"] == verdict.NO_STUDIES_TLDR
+  and verdict.NO_STUDIES_TLDR in _j4_html and verdict.UNTESTED_TLDR not in _j4_html,
+  (_j4_p["verdict"], _j4_p["tldr"], _j4_l))
+t("  with a study listed and none relied on, the untested takeaway as before; one string for fresh and saved",
+  _j4_s["verdict"] == "insufficient" and _j4_s["tldr"] == verdict.UNTESTED_TLDR
+  and "NO_STUDIES_TLDR" in _inspect.getsource(verdict.weigh_evidence), _j4_s["tldr"])
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_J4_C),))
 # F1a and F1b (type-ahead shows only whole rows, at the stamp its page would
 # show) meet L1: a saved "true" that cites a retracted paper is out of date.
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]

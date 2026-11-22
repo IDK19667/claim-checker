@@ -930,7 +930,7 @@ def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool
     return bool(evidence.certainty_cap(studies, cited, comparative, outcome))
 
 
-def _nothing_relied(claim, verdict_value, tldr):
+def _nothing_relied(claim, verdict_value, tldr, studies=None):
     """(stamp, takeaway, unseated) for an answer none of whose citations is
     relied on, the one decision a result page and every list share. An
     answer the guidance rule set keeps its stamp only where a fresh check
@@ -938,13 +938,16 @@ def _nothing_relied(claim, verdict_value, tldr):
     (verdict.guidance_may_rate): a citation set aside (a retracted paper)
     does not unseat it there. Anywhere else a rated answer becomes "Not
     enough evidence", a guidance answer with the guidance sentence after
-    the untested takeaway, the shape a fresh check writes."""
+    the untested takeaway, the shape a fresh check writes. An answer that
+    lists no study at all gets the takeaway a fresh check writes when the
+    search finds nothing, not one about studies that "don't test" it."""
     if verdict_value == "insufficient":
         return verdict_value, tldr, False
     guided = verdict.from_guidance(tldr, claim)
     if guided and verdict.guidance_may_rate(claim, verdict_value):
         return verdict_value, tldr, False
-    return "insufficient", (verdict.unrated_guidance_tldr(tldr) if guided else verdict.UNTESTED_TLDR), True
+    lead = verdict.UNTESTED_TLDR if studies else verdict.NO_STUDIES_TLDR
+    return "insufficient", (verdict.unrated_guidance_tldr(tldr, lead) if guided else lead), True
 
 
 def _listed(v: dict) -> dict:
@@ -952,10 +955,11 @@ def _listed(v: dict) -> dict:
     # Off-topic studies are not relied on here either (see _check_response),
     # so the shelf marks and the stamp match the result page.
     cited = display.relied_pmids(v.get("cited"), v.get("studies"))
-    if set(v.get("cited") or []) - cited:
+    if not cited or set(v.get("cited") or []) - cited:
         v = dict(v, cited=[p for p in v.get("cited") or [] if p in cited])
         if not cited:
-            stamp, tldr, unseated = _nothing_relied(v.get("claim_text"), v.get("verdict"), v.get("tldr"))
+            stamp, tldr, unseated = _nothing_relied(v.get("claim_text"), v.get("verdict"), v.get("tldr"),
+                                                    v.get("studies"))
             if unseated:
                 return dict(v, verdict=stamp, **({"tldr": tldr} if "tldr" in v else {}))
     outcome = _outcome_group(v.get("search_query"))
@@ -999,7 +1003,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     if not cited or set(cited_studies or []) - cited:
         unseated = False
         if not cited:
-            verdict_value, tldr, unseated = _nothing_relied(claim, verdict_value, tldr)
+            verdict_value, tldr, unseated = _nothing_relied(claim, verdict_value, tldr, studies)
         if unseated:
             explanation = (explanation.rstrip() + " None of the studies found directly "
                            "test this claim, so there isn't enough evidence to rate it.").strip()

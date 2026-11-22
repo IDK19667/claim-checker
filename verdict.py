@@ -439,7 +439,7 @@ Return JSON: {{"lines": [{{"line": 0, "verdict": "ok", "problem": "none",
 # The takeaways code writes for itself are not the model's reading of a
 # study, so there is nothing in an abstract to hold them to.
 def _code_takeaway(tldr: str) -> bool:
-    fixed = {UNTESTED_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
+    fixed = {UNTESTED_TLDR, NO_STUDIES_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
              *RANKED_TLDR.values()}
     return (tldr in fixed or tldr.startswith((
         "The strongest studies here", "No randomized trial or major review here",
@@ -909,16 +909,17 @@ def guidance_may_rate(claim: str, stamp: str) -> bool:
 _GUIDE_DOCTORS = (FORGO_DOCTOR, CURE_DOCTOR, PREGNANCY_DOCTOR, CHILD_DOCTOR)
 
 
-def unrated_guidance_tldr(tldr: str) -> str:
+def unrated_guidance_tldr(tldr: str, lead: str = "") -> str:
     """The takeaway a fresh check writes when guidance may not rate a claim
-    no study was relied on for: the untested takeaway, then the guidance
-    sentence (without the doctor line _restamp adds to a rated answer)."""
+    no study was relied on for: the untested takeaway (or `lead`, the
+    no-studies one when none was found), then the guidance sentence
+    (without the doctor line _restamp adds to a rated answer)."""
     line = str(tldr or "").strip()
     for doctor in _GUIDE_DOCTORS:
         if line.endswith(doctor) and line != doctor:
             line = line[: -len(doctor)].rstrip()
             break
-    return f"{UNTESTED_TLDR} {line}".strip()
+    return f"{lead or UNTESTED_TLDR} {line}".strip()
 
 
 def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
@@ -1725,7 +1726,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             "No relevant studies were found on PubMed for this claim. "
             "That doesn't mean the claim is false, it may just not be "
             "well studied yet, or the search terms need refining.",
-            tldr="No published studies on this yet. Unproven, not disproven.",
+            tldr=NO_STUDIES_TLDR,
             still_open="Whether anyone has tested this claim directly. PubMed found nothing that does.",
             verdict="insufficient",
         ), studies, claim)
@@ -2009,6 +2010,9 @@ def _faults(result: dict, claim: str, reported: list[str],
 LOW_CERTAINTY_TLDR = ("The studies found point towards yes, but the certainty of "
                       "that evidence is low.")
 UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
+# The takeaway when the search found no study at all: a fresh check writes it
+# (weigh_evidence), and so does a saved answer that lists none (app._nothing_relied).
+NO_STUDIES_TLDR = "No published studies on this yet. Unproven, not disproven."
 NO_REASON_LEFT = "There isn't enough evidence in the studies found to rate this claim."
 CONFOUNDED_TLDR = ("The main review says lifestyle and other factors likely explain much of "
                    "the link these studies found.")
