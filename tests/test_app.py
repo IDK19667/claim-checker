@@ -9326,7 +9326,8 @@ t("meet F8 and L4: a false answer to a cure claim whose size is withheld shows t
 # F9 (the guidance line whenever a study is listed) meets L1 (a retracted
 # paper is background): the only cited study is retracted.
 with appmod.app.test_request_context("/"):
-    _mg = appmod._check_response("Vinegar cures diabetes", "(vinegar) AND (diabetes)", "false", _F9_TLDR,
+    _mg = appmod._check_response("Stop taking insulin and treat diabetes with vinegar", "(vinegar) AND (diabetes)",
+                                 "false", _F9_TLDR,
                                  "Guidance says no (Study 1).", ["RT1"], [dict(_RT_ST[0])], "http://x",
                                  still_open="Whether it helps at all.")
 _mg_s = _mg["studies"][0]
@@ -9336,6 +9337,55 @@ t("meet F9 and L1: a guidance answer whose only cited study is retracted shows t
 t("  and the paper is shown as retracted, not used",
   not _mg_s["cited_in_verdict"] and _mg_s["background"] and _mg_s["tier"] == "retracted"
   and _display.study_why(_mg_s) == "Background only, not counted: retracted by the journal.", _mg_s)
+# G2: with every citation set aside, the saved answer follows the fresh
+# check's rule (verdict.guidance_may_rate): guidance alone sets False on a
+# forgo-treatment claim, and never "safe" for a pregnancy; a general
+# guideline-topic claim stays "Not enough evidence" with the guidance
+# sentence after the untested takeaway.
+_G2_OT = dict(_study("OT1", "Sun exposure habits in office workers", types=["Observational Study"]),
+              off_topic="tests something other than what this claim is about.")
+_G2_CASES = [("Stop taking insulin and treat diabetes with vinegar", "false",
+              "people with type one diabetes need insulin.", verdict.FORGO_DOCTOR, dict(_RT_ST[0])),
+             ("Ibuprofen is safe during pregnancy", "true",
+              "ibuprofen is safe to take in pregnancy.", verdict.PREGNANCY_DOCTOR, dict(_RT_ST[0])),
+             ("Sunscreen prevents skin cancer", "true",
+              "daily sunscreen use lowers the risk of skin cancer.", "", _G2_OT)]
+_g2 = {}
+for _g2_i, (_g2_c, _g2_v, _g2_says, _g2_doc, _g2_st) in enumerate(_G2_CASES):
+    with appmod.app.test_request_context("/"):
+        _g2_saved = appmod._check_response(
+            _g2_c, "(x) AND (y)", _g2_v, (verdict.GUIDELINE_LEAD + _g2_says + " " + _g2_doc).strip(),
+            "Guidance says so (Study 1).", [_g2_st["pmid"]], [dict(_g2_st)], "http://x",
+            still_open="Whether a trial would settle it.")
+    verdict.guideline_view = _guide(_g2_v, _g2_says)
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_g2_c),))
+        _conn.execute("DELETE FROM query_cache")
+    fg.models.script = [Resp("q"), Resp(VJ(_g2_v, [], tldr="It works."))]
+    _g2_fresh = P(_g2_c, ip="9.7.2.%d" % (_g2_i + 1)).get_json()
+    verdict.guideline_view = lambda claim: None
+    _g2[_g2_c] = (_g2_saved, _g2_fresh)
+_g2_f = _g2[_G2_CASES[0][0]][0]
+t("G2: a guidance False on a forgo-treatment claim whose only citation is retracted keeps False and the guidance line",
+  _g2_f["verdict"] == "false" and _g2_f["evidence_line"] == verdict.GUIDANCE_LINE, (_g2_f["verdict"], _g2_f["evidence_line"]))
+for _g2_c, _g2_label in ((_G2_CASES[1][0], "a pregnancy claim that says safe, set True by guidance, its only citation retracted"),
+                         (_G2_CASES[2][0], "a protective-practice claim set True by guidance, its only citation set aside")):
+    _g2_s = _g2[_g2_c][0]
+    _g2_says = [x[2] for x in _G2_CASES if x[0] == _g2_c][0]
+    t("G2: " + _g2_label + ": Not enough evidence, the guidance sentence after the untested takeaway, no guidance line",
+      _g2_s["verdict"] == "insufficient" and _g2_s["evidence_line"] != verdict.GUIDANCE_LINE
+      and _g2_s["tldr"] == verdict.UNTESTED_TLDR + " " + verdict.GUIDELINE_LEAD + _g2_says
+      and not verdict.from_guidance(_g2_s["tldr"]), (_g2_s["verdict"], _g2_s["tldr"], _g2_s["evidence_line"]))
+t("G2: for each case a fresh check with nothing cited and the saved answer with everything set aside give the same stamp",
+  all(_s["verdict"] == _f["verdict"] for _s, _f in _g2.values())
+  and [_f["verdict"] for _s, _f in _g2.values()] == ["false", "insufficient", "insufficient"],
+  {k: (v[0]["verdict"], v[1]["verdict"], v[1]["tldr"]) for k, v in _g2.items()})
+t("  and the same takeaway where the stamp is Not enough evidence",
+  all(_s["tldr"] == _f["tldr"] for _s, _f in list(_g2.values())[1:]),
+  {k: (v[0]["tldr"], v[1]["tldr"]) for k, v in _g2.items()})
+t("  and one rule says when guidance alone may rate, for both paths",
+  "guidance_may_rate" in _inspect.getsource(verdict.follow_guidelines)
+  and "guidance_may_rate" in _inspect.getsource(appmod._check_response))
 # F1a and F1b (type-ahead shows only whole rows, at the stamp its page would
 # show) meet L1: a saved "true" that cites a retracted paper is out of date.
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]

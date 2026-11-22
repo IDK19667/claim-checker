@@ -953,12 +953,17 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         off_numbers = {i + 1 for i, s in enumerate(studies or [])
                        if s.get("off_topic") or evidence.withdrawn(s)}
         explanation = breakdown_mod.drop_citing(explanation, off_numbers, len(studies or []))
-        # An answer the guidance rule set is the one exception, as in a fresh
-        # check (verdict.py): it rests on guidance, not on the studies, so a
-        # citation set aside (a retracted paper) does not unseat it.
-        if not cited and verdict_value != "insufficient" and not verdict.from_guidance(tldr):
+        # An answer the guidance rule set keeps its stamp only where a fresh
+        # check would let guidance alone rate the claim with nothing cited
+        # (verdict.guidance_may_rate): a citation set aside (a retracted
+        # paper) does not unseat it there. Anywhere else it becomes "Not
+        # enough evidence" with the guidance sentence after the untested
+        # takeaway, the shape a fresh check writes.
+        guided = verdict.from_guidance(tldr)
+        if (not cited and verdict_value != "insufficient"
+                and not (guided and verdict.guidance_may_rate(claim, verdict_value))):
+            tldr = verdict.unrated_guidance_tldr(tldr) if guided else verdict.UNTESTED_TLDR
             verdict_value = "insufficient"
-            tldr = verdict.UNTESTED_TLDR
             explanation = (explanation.rstrip() + " None of the studies found directly "
                            "test this claim, so there isn't enough evidence to rate it.").strip()
             breakdown = None

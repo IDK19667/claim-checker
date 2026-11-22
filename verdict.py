@@ -889,6 +889,35 @@ def guideline_view(claim: str) -> dict | None:
             "says": says, "bodies": bodies}
 
 
+def guidance_may_rate(claim: str, stamp: str) -> bool:
+    """Whether guidance alone, with no study relied on, may rate this claim
+    with this stamp. Two exceptions to "no citations, no rating": guidance
+    that plainly rejects stopping a treatment, or a medicine curing
+    something, sets False (it must not read as "maybe it's fine"); and
+    guidance may say "not safe" (or that a vaccine protects) for a pregnancy
+    or a child, never "safe", which still needs a study. Used by
+    follow_guidelines on a fresh check and by app._check_response on a saved
+    one, so the two paths cannot drift. Applies even with nothing cited."""
+    if forgoes_treatment(claim) and stamp == "false":
+        return True
+    return bool(vulnerable_group(claim)) and not (says_safe(claim) and stamp == "true")
+
+
+_GUIDE_DOCTORS = (FORGO_DOCTOR, CURE_DOCTOR, PREGNANCY_DOCTOR, CHILD_DOCTOR)
+
+
+def unrated_guidance_tldr(tldr: str) -> str:
+    """The takeaway a fresh check writes when guidance may not rate a claim
+    no study was relied on for: the untested takeaway, then the guidance
+    sentence (without the doctor line _restamp adds to a rated answer)."""
+    line = str(tldr or "").strip()
+    for doctor in _GUIDE_DOCTORS:
+        if line.endswith(doctor) and line != doctor:
+            line = line[: -len(doctor)].rstrip()
+            break
+    return f"{UNTESTED_TLDR} {line}".strip()
+
+
 def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     """
     The last word on a high-stakes claim. When the major health bodies give
@@ -918,20 +947,14 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
                            line, view["verdict"])
         return result
     kind = forgoes_treatment(claim)
-    if kind and view["verdict"] == "false" and verdict in ("insufficient", "complicated"):
-        # The one exception to "no citations, no rating": guidance that plainly
-        # rejects stopping a treatment, or a medicine curing something, must
-        # not read as "maybe it's fine". Applies even with nothing cited.
-        _guide_log.warning("health guidance (%s) rejects a forgo-treatment claim, so the %r "
-                           "becomes false: %r", ", ".join(view["bodies"]), verdict, line)
-        doctor = FORGO_DOCTOR if kind == "forgo" else CURE_DOCTOR
-        return _restamp(result, "false", line, doctor, claim)
     group = vulnerable_group(claim)
     group_doctor = PREGNANCY_DOCTOR if group == "pregnancy" else CHILD_DOCTOR
-    if (group and verdict in ("insufficient", "complicated")
-            and not (says_safe(claim) and view["verdict"] == "true")):
-        # Guidance alone may say "not safe" (or that a vaccine protects) for a
-        # pregnancy or a child, never "safe": that still needs a study.
+    if verdict in ("insufficient", "complicated") and guidance_may_rate(claim, view["verdict"]):
+        if kind and view["verdict"] == "false":
+            _guide_log.warning("health guidance (%s) rejects a forgo-treatment claim, so the %r "
+                               "becomes false: %r", ", ".join(view["bodies"]), verdict, line)
+            doctor = FORGO_DOCTOR if kind == "forgo" else CURE_DOCTOR
+            return _restamp(result, "false", line, doctor, claim)
         _guide_log.warning("health guidance (%s) is plain on a %s claim, so the %r becomes %s: %r",
                            ", ".join(view["bodies"]), group, verdict, view["verdict"], line)
         return _restamp(result, view["verdict"], line, group_doctor, claim)
