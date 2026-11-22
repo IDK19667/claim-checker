@@ -2639,6 +2639,15 @@ _hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR
 t("  and the mirror for a claim that something is safe: 'complicated', saying safety is not shown, never 'false' made firm",
   _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
   and _hr["tldr"] == verdict._UNSAFE_UNPROVEN, (_hr["verdict"], _hr["tldr"]))
+# Put back, a set-aside study counts as it would have in view: one the model
+# cited is cited again, one it never cited is back in view, uncited.
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_RCT, "against")], [1])
+t("  a strong set-aside trial the model never cited does not weaken the safe answer it would not have weakened in view",
+  _hr["off_topic"].get("HG3") == verdict.OFF_OUTCOME and _hr["verdict"] == "true"
+  and _hr["tldr"].startswith("The strongest studies here support this claim."), (_hr["verdict"], _hr["tldr"]))
+_hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR, "for")], [1], subject="(melatonin)")
+t("  and the mirror for a claim that something is safe: an uncited set-aside trial leaves 'false' as it stands",
+  _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "false", (_hr["verdict"], _hr["tldr"]))
 t("  a cap either reading earns applies: the studies used, and those with the set-aside put back",
   verdict._with_aside(["A"], ["B"]) == [["A"], ["A", "B"]] and verdict._with_aside(["A"], []) == [["A"]])
 _SA_TRIAL = _study("SA1", "Creatine and muscle strength in 900 older adults: a randomized controlled trial",

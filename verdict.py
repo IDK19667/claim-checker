@@ -2004,6 +2004,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # the evidence is or which sentence leads, it still counts as a study that
     # was read and may disagree, so the answer never grows surer for it.
     aside = set_aside(studies, off, outcome, surrogate, subject)
+    aside_cited = [p for p in cited_pmids if p in aside]
     cited_pmids = [p for p in cited_pmids if p not in off]
 
     # Animal and lab studies are background for a claim about people. They
@@ -2088,7 +2089,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # call something safe, has to rest on a randomized trial or a major
     # review that says so. Otherwise it follows the strongest evidence and
     # states the risk plainly.
-    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids, aside, aside_reasons)
+    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids, aside, aside_reasons,
+                          aside_cited)
     if guarded:
         for n in guarded["follows"]:
             pmid = studies[n - 1]["pmid"]
@@ -2451,11 +2453,12 @@ def _strong(study: dict) -> bool:
 
 def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
                 reasons: dict, cited_pmids: list[str], aside: list[str] = (),
-                aside_reasons: dict | None = None) -> dict | None:
+                aside_reasons: dict | None = None, aside_cited: list[str] = ()) -> dict | None:
     """
     The guard below, worked out twice when code set studies aside: on the
-    studies as they stand, and with the set-aside ones put back (not off,
-    cited, with the background reason they would have had). A study set
+    studies as they stand, and with the set-aside ones put back as they
+    were (not off, cited again only if the model cited them, with the
+    background reason they would have had). A study set
     aside counts exactly as it would have in view, never more: when both
     readings act, the answer is the one the studies as they stand give;
     when only the standing one acts, because a set-aside study would have
@@ -2469,7 +2472,7 @@ def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off
     put_back = _guard_reading(
         claim, verdict, parsed, studies, {p: why for p, why in off.items() if p not in back},
         {**reasons, **{p: why for p, why in (aside_reasons or {}).items() if p in back}},
-        list(cited_pmids) + [p for p in back if p not in cited_pmids])
+        list(cited_pmids) + [p for p in back if p in aside_cited and p not in cited_pmids])
     if put_back:
         return stand
     return {**stand, "verdict": "complicated", "follows": []}
