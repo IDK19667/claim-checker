@@ -2651,6 +2651,14 @@ t("equivalent: a vowel sign or other combining mark is never dropped, in any scr
 t("  an invisible character inside a word is part of the word too",
   _nokey("Vaccines n\u200bot cause autism") and _nokey("Soft\u00adware causes stress")
   and not _eqf("Vaccines n\u200bot cause autism", "Vaccines n ot cause autism"))
+t("equivalent: a raised or lowered digit or a fraction character never becomes a plain digit",
+  all(_nokey(x) for x in ("10\u2079 CFU probiotics work", "10\u00b2 mg zinc", "H\u2082O cures colds",
+                          "Take \u00bd tablet", "Take 1\u00bd tablets"))
+  and not _eqf("Take 1\u20442 tablet", "Take 12 tablet")
+  and not _eqf("10\u2079 CFU probiotics work", "109 CFU probiotics work")
+  and not _eqf("10\u00b2 mg zinc", "102 mg zinc") and not _eqf("H\u2082O cures colds", "H2O cures colds")
+  and not _eqf("Take \u00bd tablet", "Take 12 tablet")
+  and _eqf("\u2460 vitamin C works", "1 vitamin C works"))
 t("  scripts written without combining marks still fold as before",
   _eqf("кофе вызывает рак", "Кофе вызывает рак?") and _eqf("咖啡致癌", "咖啡致癌？")
   and _eqf("القهوة تسبب السرطان", "القهوة تسبب السرطان؟") and not _eqf("咖啡致癌", "茶致癌"))

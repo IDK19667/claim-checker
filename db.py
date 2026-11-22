@@ -700,9 +700,17 @@ def _fold_plural(w: str) -> str:
     return w[:-1] if w.endswith("s") else w
 
 
+# Compatibility forms whose plain form loses what they say: a raised or
+# lowered digit (10⁹ is not 109, H₂O is not H2O) and a fraction (½ is not 12).
+_FOLD_LOSSY_TAGS = ("<super>", "<sub>", "<fraction>")
+
+
 def _fold_tokens(claim: str) -> list:
     import unicodedata
-    t = unicodedata.normalize("NFKC", str(claim or ""))
+    raw = str(claim or "")
+    if any(unicodedata.decomposition(ch).startswith(_FOLD_LOSSY_TAGS) for ch in raw):
+        return None   # such a claim has no fold key at all
+    t = unicodedata.normalize("NFKC", raw)
     for k, v in _FOLD_QUOTES.items():
         t = t.replace(k, v)
     for d in _FOLD_DASHES:
