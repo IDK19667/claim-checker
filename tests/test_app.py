@@ -941,6 +941,11 @@ with appmod.app.test_request_context("/"):
     _ns_no = appmod._check_response("Daily sunscreen does not lower melanoma risk", "(sunscreen) AND (melanoma)", "true",
                                     "It does not.", "No clear change (Study 1).", ["NS1"],
                                     [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+t("wording: 'false' on a claim that denies an effect is an answer that there is one",
+  breakdown.answers_effect("false", "Vaccines do not cause autism")
+  and not breakdown.answers_effect("false", "Vaccines cause autism")
+  and breakdown.answers_effect("true", "Vaccines cause autism")
+  and not breakdown.answers_effect("complicated", "Vaccines do not cause autism"))
 t("wording: under 'Likely true' on a claim of an effect, a figure that was not significant is never 'no clear difference'",
   _ns_yes["verdict"] == "true" and "no clear difference" not in " ".join(breakdown.prose_of(_ns_yes["breakdown"]))
   and "On its own, that result could be chance, because it was not statistically significant (Study 1)."
@@ -1195,6 +1200,12 @@ t("  the adjusted ratios read in capitals too: AOR, AHR and aIRR",
 t("  but ARR (an absolute risk reduction) and mixed case 'Hr' are no ratio",
   evidence.effect_size("ARR 0.05") is None and evidence.effect_size("Hr 0.8") is None
   and evidence.ratio_kinds("ARR 0.05, Hr 0.8") == set())
+t("  capitals rule the ratio read across a gap too: 'patients or their carers were 80' is no odds ratio",
+  evidence.effect_size("Patients or their carers were 80 (Study 1).") is None
+  and (evidence.effect_size("The OR for patients was 1.4 (Study 1).") or {}).get("figure") == "odds ratio 1.4")
+t("  and a figure after the word 'or' still needs its unit, while one after OR needs none",
+  breakdown._unit_in("80", "Trials had 35 people or 80 in all.") is None
+  and breakdown._unit_in("0.88", "The OR 0.88 (95% CI 0.80 to 0.95) was small.") == "")
 t("  a number followed by a unit is a measure, not a ratio: no odds ratio of 45 from 'the OR was 45 minutes'",
   evidence.effect_size("Time in the OR was 45 minutes (Study 2).") is None
   and evidence.effect_size("OR 12 patients were excluded.") is None
@@ -2526,6 +2537,12 @@ t("  a title naming another outcome is not enough when the findings never name i
                             _hair_out) is None)
 t("  the hair trial is still set aside: its background names strength, its title and results name hair",
   evidence.measured_outcome(_hair, _hair_out) is False)
+t("  text before the first heading is no structure to read, so nothing is set aside on it",
+  evidence.measured_outcome(_study("MO13", "Creatine and hair: a randomized trial",
+                                   abstract="Muscle strength was measured by 1RM in every participant. "
+                                            "BACKGROUND: Creatine raises muscle strength.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Hair density did not change.\nCONCLUSIONS: Hair was unchanged."),
+                            _hair_out) is None)
 # Setting a study aside removes its citation and nothing else. Two trials
 # disagree and the answer is "complicated"; code sets one aside; the page must
 # not then say "Randomized trials say yes". The mirror: the one set aside is
