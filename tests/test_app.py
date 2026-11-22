@@ -7083,6 +7083,39 @@ t("old rows: a recent check on this device is replayed only when it has its shor
   re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
   and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
 
+# ---- rows saved from a reply that could not be read ---------------------------
+# Before a failed reply was refused, its fallback was saved as a row. Such rows
+# stay in the database, recognised by the fallback's own short answer, and are
+# never served as an answer, whatever else the row holds.
+import inspect as _insp_fr  # noqa: E402
+t("failed rows: the marker is the fallback's own short answer",
+  db.FAILED_REPLY_TLDR == _insp_fr.signature(verdict._fallback).parameters["tldr"].default)
+
+
+def _fr_put(claim, still_open=""):
+    db.put_cached_verdict(claim, "(honey) AND (cough)", "complicated",
+                          "The evidence-weighing step returned an unexpected format. "
+                          "Raw studies are still available below for manual review.",
+                          [], [dict(s_) for s_ in STUDIES], tldr=db.FAILED_REPLY_TLDR, still_open=still_open)
+
+
+_fr_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s_) for s_ in STUDIES]
+for _i, (_lbl, _so) in enumerate((("no still-open line", ""), ("a still-open line", "Whether it lasts."))):
+    _cl = f"failed row honey cough {_i}"
+    _fr_put(_cl, _so)
+    t(f"failed rows: one with {_lbl} is not served from the saved table",
+      db.get_cached_verdict(_cl, 24) is None and db.get_cached_by_key(db.normalize_claim(_cl)) is None
+      and db.find_equivalent(_cl) is None)
+    _pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
+    t(f"  its shared link renders no verdict from it", 'id="server-result"' not in _pg and "ClaimReview" not in _pg)
+    fg.models.script = [Resp("(honey) AND (cough)"), Resp(VJ("complicated", [1], tldr="Fresh short answer."))]
+    _fr = P(_cl, ip=f"9.7.{_i}.1")
+    t(f"  and a check of the claim runs again and replaces it",
+      _fr.status_code == 200 and _fr.get_json()["cached"] is False and _fr.get_json()["tldr"] == "Fresh short answer."
+      and db.get_cached_verdict(_cl, 24)["tldr"] == "Fresh short answer.", _fr.get_json())
+pubmed.search_and_fetch = _fr_search
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

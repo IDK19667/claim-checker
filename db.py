@@ -455,8 +455,22 @@ def _whole(row) -> bool:
     One saved before those columns existed (they are NULL), or damaged since,
     is not served: to the check it is a miss, so the check runs again and the
     row is replaced; to a shared link or a card it is no saved answer at all.
+    Nor is one saved from a reply that could not be read (_failed).
     """
-    return all(str(row[k] or "").strip() for k in ("tldr", "still_open"))
+    return all(str(row[k] or "").strip() for k in ("tldr", "still_open")) and not _failed(row)
+
+
+# The short answer the fallback for a reply that could not be read at all (cut
+# off, declined, not JSON) wrote in its place: verdict._fallback's own line.
+# Rows saved with it are kept, but they are a failed check, not a verdict: never
+# served, and left out of every public list, count, suggestion, feed and sitemap.
+# A failed reply is no longer saved; this keeps the ones saved before that out.
+FAILED_REPLY_TLDR = "Couldn't reach a verdict from the evidence found."
+
+
+def _failed(row) -> bool:
+    """A row saved from a reply that could not be read: its short answer is the fallback's own line."""
+    return str(row["tldr"] or "").strip() == FAILED_REPLY_TLDR
 
 
 def _stamp(row) -> str | None:
