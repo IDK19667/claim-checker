@@ -146,6 +146,12 @@ _ARTICLE_AFTER = {"lacked", "lack", "lacks", "showed", "show", "shows", "demonst
                   "confirmed", "confirm", "confirms", "without", "with"}
 
 
+_CLAUSE_SLOT = {"measured", "measure", "measures", "measuring", "estimated", "estimate", "assessed",
+                "assess", "assesses", "examined", "examine", "examines", "studied", "tested", "test",
+                "tests", "compared", "compare", "compares", "evaluated", "evaluate", "evaluates",
+                "about", "on", "for", "in", "regarding", "whether", "to", "into"}
+
+
 def _how_well(m: re.Match) -> str:
     before = re.search(r"([\w-]+)\s+$", m.string[:m.start()])
     word = before.group(1).lower() if before else ""
@@ -158,7 +164,14 @@ def _how_well(m: re.Match) -> str:
     # "Safety and efficacy of X" needs a noun too: "safety and effect of X".
     if re.match(r"\s+of\b", m.string[m.end():]):
         return "effect"
-    return "how well it works"
+    # A clause reads only where a clause can stand: at the head of the
+    # sentence, or after a verb or preposition asking what was measured
+    # ("tested how well it works"). After any other word, a modifier, the
+    # word stays: "the pooled efficacy" is English, "the pooled how well it
+    # works" is not.
+    if not before or word in _CLAUSE_SLOT or re.search(r"[.;:,(]\s*$", m.string[:m.start()]):
+        return "how well it works"
+    return m.group(0)
 
 
 # "Prevalence" and "incidence" are nouns in nearly every slot they fill:
@@ -181,6 +194,23 @@ def _rate(clause: str):
             return clause
         return "rate"
     return swap
+
+
+def _sexed(m: re.Match) -> str:
+    """The plain nouns for "male participants", "male and female subjects":
+    "males", "males and females". No age: "men" or "girls" would state one
+    the sentence did not."""
+    names = {"male": "males", "female": "females"}
+    if m.group(3):
+        return names[m.group(3).lower()]
+    joint = re.search(r" or | and |, ", m.group(0)).group(0)
+    return f"{names[m.group(1).lower()]}{' and ' if joint == ', ' else joint}{names[m.group(2).lower()]}"
+
+
+# A range or interval just before "including": "intervals including",
+# "a likely range including". There "including" is a verb, not "like".
+_RANGE_BEFORE = re.compile(r"\b(?:intervals?|ranges?|CIs?|C\.I\.)\s*(?:\([^)]*\)\s*)?(?:all\s+)?$",
+                           re.IGNORECASE)
 
 
 # Each row is (pattern, replacement, term-to-keep-in-brackets-or-None).
@@ -298,6 +328,10 @@ PLAIN = [
     (r"\bhowever,\s+", "but ", None),
     (r"\bhowever\b", "but", None),
     (r"\btherefore\b", "so", None),
+    # "72 male participants" is "72 males", never "72 male people", and
+    # never "72 men": the sentence may not say how old they were.
+    (r"\b(?:(male|female)(?: or | and |, )(male|female) |(male|female) )(?:participants|subjects|individuals|people)\b",
+     lambda m: _sexed(m), None),
     (r"\bparticipants\b|\bsubjects\b|\bindividuals\b", "people", None),
     (r"\belevated\b", "raised", None),
     (r"\bglycaemic control\b|\bglycemic control\b", "blood sugar control", None),
@@ -333,7 +367,13 @@ PLAIN = [
     (r"\bdetrimental\b", "harmful", None),
     (r"\bexhibited\b", "showed", None),
     (r"\bnevertheless\b", "even so", None),
-    (r"\bincluding\b", "like", None),
+    # "Including" introduces examples ("studies including adults") and is
+    # also the verb of a range: "confidence intervals including zero" is not
+    # "likely ranges like zero". Before a number, zero, one, the null or no
+    # effect, or after a range or interval, it stays.
+    (r"\bincluding\b(?!\s+(?:[-\u2212+]?\d|zero\b|one\b|unity\b|the null\b|null\b|no\s+"
+     r"(?:effect|difference|change)\b))", lambda m: m.group(0) if _RANGE_BEFORE.search(
+        m.string[max(0, m.start() - 40):m.start()]) else "like", None),
 ]
 
 _PLAIN = [(re.compile(p, re.IGNORECASE), r, keep) for p, r, keep in PLAIN]
@@ -484,9 +524,13 @@ PROMPT_SHAPE = """  "parts": [{"part": "a piece of the claim, in the reader's wo
 # ---------------------------------------------------------------------
 
 SOFTEN = [
-    (r"\bwards?\s+off\b", "lowers the risk of"),
+    # The verb keeps its own number: "these changes protect against" is
+    # "these changes lower the risk of", never "lowers".
+    (r"\bwards\s+off\b", "lowers the risk of"),
+    (r"\bward\s+off\b", "lower the risk of"),
     (r"\bwarded\s+off\b", "lowered the risk of"),
-    (r"\bprotects?\s+against\b", "lowers the risk of"),
+    (r"\bprotects\s+against\b", "lowers the risk of"),
+    (r"\bprotect\s+against\b", "lower the risk of"),
     (r"\bprotected\s+against\b", "lowered the risk of"),
     (r"\bimmune\s+to\b", "at lower risk of"),
     (r"\bimmunity\s+to\b", "lower risk of"),
@@ -1629,6 +1673,22 @@ def null_alone(text: str) -> str:
     return re.sub(re.escape(TRANSLATION_LEAD + NULL_SAID), NULL_SAID_ALONE, text or "")
 
 
+# The effect's own plain words, under the same answer. The page no longer
+# prints "no clear difference between the groups" there, so the response's
+# effect field does not carry it either.
+NULL_PLAIN_ALONE = "a result that could be chance, because it was not statistically significant"
+
+
+def effect_alone(bd: dict | None) -> dict | None:
+    """The breakdown with a null effect's plain words reworded as null_alone
+    rewords the sentence, for a page whose answer is that there is an
+    effect. Its label and figure stay."""
+    effect = (bd or {}).get("effect") or {}
+    if effect.get("null") and effect.get("plain") == evidence.NULL_EFFECT["plain"]:
+        return {**bd, "effect": {**effect, "plain": NULL_PLAIN_ALONE}}
+    return bd
+
+
 def answers_effect(verdict: str, claim: str) -> bool:
     """True when the answer says there is an effect: "true" on a claim of
     one, or "false" on a claim of none ("vaccines do not cause autism")."""
@@ -2397,6 +2457,117 @@ def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "
         evidence.never_mentions(studies[n - 1], stems)
         and (not stand_in or evidence.never_mentions(studies[n - 1], stand_in))
         for n in numbers)
+
+
+def figure_sentence(bd: dict | None) -> str:
+    """
+    The sentence the breakdown's sized figure (`effect`) was read from: the
+    first sentence of the effect box, then of the evidence paragraphs, that
+    gives the same figure, or failing that names its number. A figureless
+    "no clear difference" is the effect box's own first sentence. The
+    "That is ..." translation is code's arithmetic, never the source. ""
+    when it cannot be found.
+    """
+    bd = bd or {}
+    figure = str((bd.get("effect") or {}).get("figure") or "")
+    pool = [t for text in [bd.get("effect_size")] + list(bd.get("evidence") or [])
+            for t in sentences(str(text or "")) if not t.startswith(TRANSLATION_LEAD)]
+    if not figure:
+        return pool[0] if pool and bd.get("effect_size") else ""
+    for t in pool:
+        if (evidence.effect_size(t) or {}).get("figure") == figure:
+            return t
+    number = figure.split()[-1].rstrip("%")
+    exact = re.compile(r"(?<![\d.])" + re.escape(number) + r"(?![\d])")
+    return next((t for t in pool if exact.search(t)), "")
+
+
+def _general_term(term: str) -> bool:
+    """An outcome term made only of words that name no outcome ("health",
+    "disease risk"). A short name such as "ASD" is not general: it is just
+    too short to read a stem from."""
+    words = re.findall(r"[a-z]+", term.lower())
+    return bool(words) and all(w in evidence._NOT_AN_OUTCOME for w in words)
+
+
+def names_outcome(text: str, outcome: str) -> bool:
+    """True when `text` names the query's outcome group, or its kin, by the
+    words evidence.measured_outcome reads a study by. False when that cannot
+    be told: no outcome group, or one also named in general words ("health"),
+    which any sentence would meet."""
+    stems = evidence.outcome_stems(outcome)
+    if not stems or any(_general_term(term)
+                        for term in re.split(r"\s+OR\s+", outcome.strip("() "))):
+        return False
+    return evidence.names_any(text, evidence.outcome_kin(stems))
+
+
+def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | None:
+    """
+    The effect label the evidence line may carry, or None. The line puts a
+    size ("a large effect", "no clear effect") next to the claim, so it
+    takes one only when the sentence the figure came from names the claim's
+    own outcome. A large rise in inflammation is not a large effect on
+    immunity. The effect box keeps its figure and its own sentence either way.
+    """
+    effect = (bd or {}).get("effect") or {}
+    label = effect.get("label")
+    if not label:
+        return None
+    said = figure_sentence(bd)
+    if not names_outcome(said, outcome):
+        return None
+    if label in ("small", "moderate", "large") and not agrees_direction(effect, said, claim):
+        return None
+    return label
+
+
+# Which way a claim says its outcome moves. The verbs are the ones the code
+# already reads a cause claim and a prevent claim by (evidence.CAUSE_CLAIM,
+# evidence.PREVENT_CLAIM and the protective verbs). "Improves" and "is good
+# for" say no direction in numbers: a better score can be a higher or a
+# lower one.
+_CLAIM_UP = re.compile(r"\b(?:causes?|caused|causing|leads? to|gives? you|triggers?|raises?|"
+                       r"increases?|boosts?)\b", re.IGNORECASE)
+# Which way a figure's own sentence says it moved, for a figure (a
+# standardised difference) whose number alone does not say.
+_MOVED_UP = re.compile(r"\b(?:increas\w*|rose|rise[sn]?|rising|higher|raised|elevat\w*|gain\w*)\b",
+                       re.IGNORECASE)
+_MOVED_DOWN = re.compile(r"\b(?:reduc\w*|decreas\w*|lower\w*|fell|fall\w*|drop\w*|declin\w*|"
+                         r"less|fewer)\b", re.IGNORECASE)
+
+
+def claim_direction(claim: str) -> str | None:
+    """'up' for a claim that something raises its outcome ("smoking causes
+    lung cancer"), 'down' for one that lowers it ("exercise lowers the risk
+    of depression"), None when it says neither, both, or is itself a no."""
+    claim = str(claim or "")
+    if claim_denies(claim):
+        return None
+    up = bool(evidence.caused_outcome(claim) or _CLAIM_UP.search(claim))
+    down = bool(evidence.prevented_outcome(claim) or evidence._PROTECTIVE_VERB.search(claim))
+    return "up" if up and not down else "down" if down and not up else None
+
+
+def figure_direction(effect: dict, said: str) -> str | None:
+    """'up' or 'down' for the figure the line would size: a ratio or a
+    percentage by the words code wrote beside it ("about 28% lower risk"),
+    a standardised difference by its own sentence's change word. None when
+    that cannot be told."""
+    plain = str((effect or {}).get("plain") or "")
+    if re.search(r"\blower\b", plain):
+        return "down"
+    if re.search(r"\bhigher\b", plain):
+        return "up"
+    up, down = bool(_MOVED_UP.search(said or "")), bool(_MOVED_DOWN.search(said or ""))
+    return "up" if up and not down else "down" if down and not up else None
+
+
+def agrees_direction(effect: dict, said: str, claim: str) -> bool:
+    """True when the figure moves the way the claim says. A claim that
+    something raises a risk is not sized by a figure of lower risk."""
+    want = claim_direction(claim)
+    return want is not None and figure_direction(effect, said) == want
 
 
 def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: str = "",

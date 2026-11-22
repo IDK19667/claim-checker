@@ -1109,7 +1109,7 @@ t("  and a figure that is in them is quoted as it stands",
 
 # An effect line that says there was no clear difference is no effect, even
 # when no ratio can be read from it. Read as a missing size, a "cure" claim's
-# evidence line fell back to "a partial effect, not a cure".
+# evidence line fell back to an unsized effect "not a cure".
 _NULL_ST = [{"pmid": "NL1", "title": "A mouthwash trial in mild infection", "journal": "J", "year": "2020",
              "authors": ["A B"], "data_banks": None, "url": "https://pubmed.ncbi.nlm.nih.gov/NL1/",
              "publication_types": ["Randomized Controlled Trial"],
@@ -1196,6 +1196,14 @@ t("wording: under 'Likely true' on a claim of an effect, a figure that was not s
   in _ns_yes["breakdown"]["effect_size"], (_ns_yes["verdict"], _ns_yes["breakdown"]["effect_size"]))
 t("  and under an answer of no effect it still says no clear difference",
   "That is no clear difference between the groups" in _ns_no["breakdown"]["effect_size"], _ns_no["breakdown"]["effect_size"])
+t("  and no field of the response carries the words the page replaced: the effect's plain words say the same",
+  "no clear difference" not in json.dumps({k: v for k, v in _ns_yes.items() if k != "studies"})
+  and _ns_yes["breakdown"]["effect"]["plain"] == breakdown.NULL_PLAIN_ALONE
+  == "a result that could be chance, because it was not statistically significant"
+  and _ns_yes["breakdown"]["effect"]["label"] == "none"
+  and _ns_yes["breakdown"]["effect"]["figure"] == "hazard ratio 0.50", _ns_yes["breakdown"]["effect"])
+t("  and under an answer of no effect the effect's plain words stay",
+  _ns_no["breakdown"]["effect"]["plain"] == evidence.NULL_EFFECT["plain"], _ns_no["breakdown"]["effect"])
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
@@ -2107,7 +2115,7 @@ t("the service worker no longer precaches the still",
 # ---- the confidence line: the same sentence from the server and the script -------
 _CL = [{"studies": [], "evidence_line": "x"},
        {"studies": [{"cited_in_verdict": False, "tier": "strong"}], "evidence_line": "x"},
-       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a partial effect, not a cure"},
+       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a small effect, not a cure"},
        {"studies": [{"cited_in_verdict": True, "tier": "strong"}, {"cited_in_verdict": True, "tier": "weak"}]},
        {"studies": [{"cited_in_verdict": True, "tier": "moderate"}]},
        {"studies": [{"cited_in_verdict": True, "tier": "weak"}]}]
@@ -2115,7 +2123,7 @@ _cl = [_display.confidence_line(r) for r in _CL]
 t("the confidence line: nothing found, nothing used, the checked wording, or the designs of an old record",
   _cl == ["No direct evidence either way: nothing on PubMed matched well enough to weigh.",
           "No direct evidence either way: none of the studies tests this claim.",
-          "Moderate evidence of a partial effect, not a cure.",
+          "Moderate evidence of a small effect, not a cure.",
           "Strong study designs.", "Moderate study designs.", "Weak study designs."], _cl)
 if _shutil.which("node"):
     _csrc = "function confidenceLine" + (ROOT / "static" / "app.js").read_text().split("function confidenceLine")[1].split("\n}\n")[0] + "\n}"
@@ -4207,13 +4215,23 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # false" read as strong evidence for the cure.
 _el = evidence.evidence_line
 t("the evidence line says what the evidence is evidence of",
-  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence of a partial effect, not a cure"
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence against this claim"
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
   and _el("false", _ACV, ["A1"], "Vinegar raises blood sugar") == "Strong evidence against this claim"
   and _el("complicated", _ACV, ["A1"], "Vinegar lowers blood sugar in diabetes", "small")
   == "Strong evidence of a small effect, but no plain yes or no")
+# A false answer to a promise with no size: the line asserts no effect
+# nobody measured, and keeps its level word.
+_el_ns = [evidence.evidence_line(verdict_v, _ACV, ["A1", "A2"], c, lab, "cure") for verdict_v, c, lab in
+          (("false", "Homeopathy cures cancer", None), ("false", "Garlic cures HIV", ""),
+           ("false", "Ivermectin cures COVID-19", "unclear"))]
+t("  a false answer to a promise with no size says 'against this claim', never 'partial'",
+  _el_ns == ["Strong evidence against this claim"] * 3
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "moderate", "cure") == "Strong evidence of a moderate effect, not a cure"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence against this claim"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "none", "cure") == "Strong evidence of no clear effect", _el_ns)
 t("  it names the one group, says low certainty, and is empty with nothing used",
   _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
   and _el("complicated", [_study("L1", "Pilot trial of vinegar", abstract="A pilot trial in 12 adults.")],
@@ -4229,7 +4247,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence of a partial effect, not a cure", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence against this claim", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -5256,6 +5274,131 @@ t("  with no dash anywhere in what the reader sees",
   not re.search("[–—]", json.dumps(_sun, ensure_ascii=False)))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 verdict.guideline_view = lambda claim: None
+
+# ---- Under an answer the guidance rule set, nothing says the claim cannot be rated ----
+# The live safety run: "type 1 diabetes and insulin" and "antibiotics and the
+# cold" were False from guidance, with the model's "so there isn't enough
+# evidence to rate it" still under the stamp.
+_UNRATED = re.compile(r"enough evidence[^.]*\bto rate\b|\bcannot be rated\b|\bto rate (?:it|this claim)\b", re.I)
+_GU_STUDIES = [_study("GU1", "Antibiotic prescribing for colds", types=["Editorial"],
+                      abstract="Antibiotics should not be used for the common cold, which viruses cause."),
+               _study("GU2", "Respiratory infections in general practice", types=["Review"],
+                      abstract="Recovery from colds is usually spontaneous without antibiotics.")]
+_GU_TLDR = verdict.GUIDELINE_LEAD + "antibiotics do not cure colds. Check treatment decisions with a doctor."
+_GU_EXPL = ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually spontaneous "
+            "(Study 2). Nothing here tests this claim in people, only opinion pieces, so there isn't "
+            "enough evidence to rate it.")
+_GU_BD = {"parts": [], "evidence": ["Antibiotics should not be used for the common cold (Study 1).",
+                                    "No trial here tests the claim, so there isn't enough evidence to rate it (Study 2)."],
+          "says": ["Antibiotics should not be used for the common cold (Study 1)."],
+          "effect_size": "", "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "", "effect": None}
+def _gu_seen(r):
+    return " ".join([r["tldr"], r["explanation"], r["still_open"], r["evidence_line"] or ""]
+                    + breakdown.prose_of(r["breakdown"]))
+with appmod.app.test_request_context("/"):
+    _gu = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                 _GU_TLDR, _GU_EXPL, ["GU1", "GU2"], [dict(s) for s in _GU_STUDIES], "http://x",
+                                 still_open="Whether a trial would settle it, since there isn't enough evidence to rate it.",
+                                 breakdown=dict(_GU_BD))
+    _gu_none = appmod._check_response("People with type 1 diabetes can replace insulin with a strict diet",
+                                      "(diet) AND (type 1 diabetes)", "false",
+                                      verdict.GUIDELINE_LEAD + "people with type one diabetes need insulin. "
+                                      "Stopping a prescribed medicine without a doctor's advice can be risky.",
+                                      "None of the studies found directly test this claim, so there isn't "
+                                      "enough evidence to rate it.", [], [dict(s) for s in _GU_STUDIES], "http://x",
+                                      still_open="Whether diet changes insulin needs.", breakdown=None)
+    _gu_plain = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)",
+                                       "insufficient", verdict.UNTESTED_TLDR, _GU_EXPL, ["GU1", "GU2"],
+                                       [dict(s) for s in _GU_STUDIES], "http://x", still_open="Whether it works.",
+                                       breakdown=dict(_GU_BD))
+t("guidance prose: under an answer the guidance rule set, no line says the claim cannot be rated",
+  _gu["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu))
+  and _gu_none["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu_none)),
+  (_gu_seen(_gu), _gu_seen(_gu_none)))
+t("  what the studies did and did not test stays, and the fixed line says what the answer rests on",
+  _gu["explanation"] == ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually "
+                         "spontaneous (Study 2). Nothing here tests this claim in people, only opinion pieces. "
+                         + verdict.GUIDANCE_RESTS)
+  and _gu_none["explanation"] == "None of the studies found directly test this claim. " + verdict.GUIDANCE_RESTS
+  and verdict.GUIDANCE_RESTS == "This answer rests on what major health guidelines say, not on these studies."
+  and "No trial here tests the claim (Study 2)." in " ".join(_gu["breakdown"]["evidence"])
+  and _gu["still_open"] == "Whether a trial would settle it.", (_gu["explanation"], _gu["breakdown"], _gu["still_open"]))
+t("  and an answer the guidance rule did not set keeps its own words",
+  _gu_plain["verdict"] == "insufficient" and _gu_plain["explanation"].endswith("enough evidence to rate it.")
+  and verdict.GUIDANCE_RESTS not in _gu_seen(_gu_plain), _gu_plain["explanation"])
+db.put_cached_verdict("People with type 1 diabetes can replace insulin with a strict diet",
+                      "(diet) AND (type 1 diabetes)", "false",
+                      "None of the studies found directly test this claim, so there isn't enough evidence to rate it.",
+                      [], [dict(s) for s in _GU_STUDIES],
+                      tldr=verdict.GUIDELINE_LEAD + "people with type one diabetes need insulin.",
+                      still_open="Whether diet changes insulin needs.")
+_gu_page = c.get("/?q=" + urllib.parse.quote("People with type 1 diabetes can replace insulin with a strict diet")
+                 ).get_data(as_text=True)
+t("  and the saved answer's page, its markup and its short answer say the same",
+  'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
+  [m.group(0) for m in _UNRATED.finditer(_gu_page)])
+
+# ---- Under an answer the guidance rule set, the effect box headlines no study figure ----
+# The live safety run: "alcohol in pregnancy" (False) headlined "found no
+# consistently significant effects"; "raw milk" (False, set by the guidance
+# rule) headlined the vitamin loss from pasteurising, sized large.
+_GE_ST = [_study("GE1", "Low to moderate prenatal alcohol exposure: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Exposure of up to 83 grams per week found no consistently significant effects. "
+                          "CONCLUSIONS: Weaknesses in the evidence preclude the conclusion that drinking at these "
+                          "levels is safe.")]
+_GE_EFF = "The review on exposure of up to 83 grams per week found no consistently significant effects (Study 1)."
+_GE_BD = {"parts": [], "evidence": ["The review found no consistently significant effects (Study 1)."],
+          "says": ["The review found no consistently significant effects (Study 1)."], "effect_size": _GE_EFF,
+          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+          "effect": {"figure": "standardised mean difference 1.77", "label": "large",
+                     "plain": "a difference of 1.77 standard deviations"}}
+_GE_CLAIM = "Drinking a little alcohol during pregnancy is safe"
+_GE_TLDR = verdict.GUIDELINE_LEAD + "no amount of alcohol is safe during pregnancy. Ask a doctor or midwife about this."
+with appmod.app.test_request_context("/"):
+    _ge = appmod._check_response(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false", _GE_TLDR,
+                                 "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
+                                 "http://x", still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
+    _ge_plain = appmod._check_response(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
+                                       "Drinking during pregnancy is not shown to be safe.",
+                                       "The review found no consistent effects (Study 1).", ["GE1"],
+                                       [dict(s) for s in _GE_ST], "http://x", still_open="Exact low dose limits.",
+                                       breakdown=json.loads(json.dumps(_GE_BD)))
+t("guidance effect: under an answer the guidance rule set, the effect box says it rests on guidance, not a figure",
+  _ge["breakdown"]["effect_size"] == verdict.GUIDANCE_EFFECT
+  == "This answer rests on what major health guidelines say, not on a measured effect size."
+  and not re.search(r"\d|\b(?:small|moderate|large)\b", _ge["breakdown"]["effect_size"]), _ge["breakdown"])
+t("  and the study and its finding stay exactly as they were",
+  _ge["studies"] == _ge_plain["studies"] and _ge["studies"][0]["abstract"] == _GE_ST[0]["abstract"]
+  and _ge["breakdown"]["evidence"] == _ge_plain["breakdown"]["evidence"], _ge["breakdown"]["evidence"])
+t("guidance line: under an answer the guidance rule set, the evidence line says what the answer rests on, "
+  "with no strength word",
+  _ge["evidence_line"] == verdict.GUIDANCE_LINE == "Rests on health guidance, not on these studies"
+  and not re.search(r"(?i)\b(?:strong|moderate|weak|low|high|certainty|small|large|against|for this claim)\b",
+                    _ge["evidence_line"])
+  and _ge_plain["evidence_line"].endswith("evidence against this claim"),
+  (_ge["evidence_line"], _ge_plain["evidence_line"]))
+t("  and an answer the guidance rule did not set keeps its own figure",
+  _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
+_ge_said = verdict.guidance_effect(dict(_GE_BD, says=["Experts advise avoiding it (Study 1).", _GE_EFF]))
+t("  and a line of 'What the research says' picked from the effect box goes with it; the others stay",
+  _ge_said["says"] == ["Experts advise avoiding it (Study 1)."], _ge_said["says"])
+_ge_none = verdict.guidance_effect(dict(_GE_BD, effect_size=""))
+t("  and a breakdown with no effect box is not given one",
+  _ge_none["effect_size"] == "" and verdict.guidance_effect(None) is None, _ge_none)
+db.put_cached_verdict(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
+                      "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
+                      tldr=_GE_TLDR, still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
+_ge_page = c.get("/?q=" + urllib.parse.quote(_GE_CLAIM)).get_data(as_text=True)
+_ge_box = re.search(r'<p class="effect"><b>How big the effect is</b><span>(.*?)</span></p>', _ge_page)
+_ge_conf = re.search(r'<span class="confidence" id="confidence"><mark>(.*?)</mark>', _ge_page)
+t("  and the server-rendered page shows that line as its confidence, and the script renders the same field",
+  _ge_conf and _ge_conf.group(1) == verdict.GUIDANCE_LINE + "."
+  and "Strong evidence against this claim" not in _ge_page
+  and 'String(data.evidence_line || "")' in (ROOT / "static" / "app.js").read_text(),
+  _ge_conf and _ge_conf.group(1))
+t("  and the server-rendered page prints the same words in its effect box",
+  _ge_box and _ge_box.group(1) == verdict.GUIDANCE_EFFECT and _GE_EFF not in _ge_page.split('id="server-result"')[0],
+  _ge_box and _ge_box.group(1))
 
 # ---- Guidance that rejects a forgo-treatment or medicine-cures claim is a False ----
 _FG_SAYS = "this is not safe, and the medicine is still advised."
@@ -8456,6 +8599,180 @@ finally:
     with db.get_conn() as _conn:
         _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
                       tuple(db.normalize_claim(x) for x in (_KS_BAD, _KS_OK)))
+
+# ---- The evidence line sizes only an effect on the claim's own outcome ----
+# Live run: "Cold showers boost immunity" read "Strong evidence of a large
+# effect", where the large effect was a rise in inflammation.
+_EL_ST = [_study("EL1", "Cold water immersion and health: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Inflammation increased with an effect size of 1.03. Immune function rose with an "
+                          "effect size of 1.03. There was no drop in salivary viral titer. The autism hazard ratio "
+                          "was 0.93 (95% CI 0.85 to 1.02). Deaths were lower with a relative risk of 0.83. "
+                          "CONCLUSIONS: Effects on immunity, autism and health were mixed.")]
+
+
+def _el_bd(effect_size, effect, evidence_=()):
+    return {"parts": [], "evidence": list(evidence_) or ["The review pooled 11 trials (Study 1)."],
+            "effect_size": effect_size, "strength": "", "applies_to": "", "not_applies_to": "",
+            "unknowns": "", "effect": effect}
+
+
+def _el(claim, query, verdict_, bd, tldr="The studies point both ways."):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, tldr, "The review pooled 11 trials (Study 1).",
+                                      ["EL1"], [dict(s) for s in _EL_ST], "http://x", still_open="Whether it lasts.",
+                                      breakdown=json.loads(json.dumps(bd)))["evidence_line"]
+
+
+_EL_LARGE = {"figure": "standardised mean difference 1.03", "label": "large",
+             "plain": "a difference of 1.03 standard deviations"}
+_EL_Q = "(cold shower OR cold water immersion) AND (immune system OR immunity OR immune function)"
+_el_off = _el("Cold showers boost immunity", _EL_Q, "complicated",
+              _el_bd("Inflammation increased with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+                     "standard deviations, a large effect (Study 1).", _EL_LARGE))
+_el_on = _el("Cold showers boost immunity", _EL_Q, "complicated",
+             _el_bd("Immune function rose with an effect size of 1.03 (Study 1).", _EL_LARGE))
+t("effect line: a figure whose sentence names another outcome gives the evidence line no size",
+  _el_off == "Strong evidence, but no plain yes or no", _el_off)
+t("  and a figure whose sentence names the claim's outcome keeps it",
+  _el_on == "Strong evidence of a large effect, but no plain yes or no", _el_on)
+_EL_NONE = {"figure": "", "label": "none", "null": True, "plain": "no clear difference between the groups"}
+_el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)", "false",
+               _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
+               tldr="No, it does not cure it.")
+t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
+  _el_cure == "Strong evidence against this claim", _el_cure)
+_el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
+              _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
+                     dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
+t("  and a short name in the outcome group (ASD) does not make the outcome unreadable",
+  _el_asd == "Strong evidence of no clear effect", _el_asd)
+_el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
+              _el_bd("Deaths were lower with a relative risk of 0.83 (Study 1).",
+                     {"figure": "relative risk 0.83", "label": "small", "plain": "about 17% lower risk"}),
+              tldr="Yes, coffee drinkers lived longer.")
+t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
+  _el_gen == "Strong evidence for this claim", _el_gen)
+
+# ---- The evidence line sizes only a figure that moves the way the claim says ----
+# Live run: "Smoking causes lung cancer" (True) read "a moderate effect", from
+# a relative risk of 0.72 for heavy smokers who cut down.
+_ED_ST = [_study("EL1", "Smoking and lung cancer: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Heavy smokers who cut down had a relative risk of 0.72 for lung cancer. "
+                          "Current smokers had a relative risk of 4.21 for lung cancer. Depression odds ratio "
+                          "was 0.83. CONCLUSIONS: Smoking raises lung cancer risk.")]
+
+
+def _ed(claim, query, effect_size, effect, verdict_="true"):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, "Yes.", "The review found it (Study 1).",
+                                      ["EL1"], [dict(s) for s in _ED_ST], "http://x", still_open="Dose.",
+                                      breakdown=json.loads(json.dumps(_el_bd(effect_size, effect))))["evidence_line"]
+
+
+_ED_Q = "(smoking) AND (lung cancer)"
+_ed_down = _ed("Smoking causes lung cancer", _ED_Q,
+               "Heavy smokers who cut down had a relative risk of 0.72 for lung cancer (Study 1).",
+               {"figure": "relative risk 0.72", "label": "moderate", "plain": "about 28% lower risk"})
+_ed_up = _ed("Smoking causes lung cancer", _ED_Q,
+             "Current smokers had a relative risk of 4.21 for lung cancer (Study 1).",
+             {"figure": "relative risk 4.21", "label": "large", "plain": "about 321% higher risk"})
+t("effect direction: a claim that something raises a risk, answered True, is not sized by a figure of lower risk",
+  _ed_down == "Strong evidence for this claim", _ed_down)
+t("  and a figure of higher risk under it keeps its size",
+  _ed_up == "Strong evidence for this claim, a large effect", _ed_up)
+_ed_mirror = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
+                 "The depression odds ratio was 0.83 (Study 1).",
+                 {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% lower odds"})
+_ed_mirror_up = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
+                    "The depression odds ratio was 0.83 (Study 1).",
+                    {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% higher odds"})
+t("  and the mirror case: a lowers claim keeps a figure of lower odds and loses one of higher odds",
+  _ed_mirror == "Strong evidence for this claim, a small effect"
+  and _ed_mirror_up == "Strong evidence for this claim", (_ed_mirror, _ed_mirror_up))
+t("  and a claim that says no direction ('improves'), or a figure that says none, gives no size",
+  breakdown.claim_direction("Creatine improves memory") is None
+  and breakdown.claim_direction("Smoking does not cause lung cancer") is None
+  and breakdown.figure_direction({"plain": "a difference of 0.3 standard deviations"},
+                                     "The effect size for memory was 0.3 (Study 1).") is None
+  and breakdown.figure_direction({"plain": "a difference of 1.03 standard deviations"},
+                                     "Inflammation increased with an effect size of 1.03 (Study 1).") == "up")
+
+# ---- A review that calls its own evidence thin lowers the evidence line ----
+# Live run: the cold water review concluded "the current evidence base is
+# constrained by few RCTs, small sample sizes", and the line said "Strong".
+_TH_ABS = ("RESULTS: Eleven studies were included. CONCLUSIONS: Cold water has time-dependent effects. "
+           "However, the current evidence base is constrained by few RCTs, small sample sizes, and a lack "
+           "of diversity in study populations.")
+_TH = _study("TH1", "Cold water immersion: a systematic review", types=["Systematic Review"], abstract=_TH_ABS)
+_TH_OK = _study("TH2", "Cold water immersion: a systematic review", types=["Systematic Review"],
+                abstract="RESULTS: Forty large trials were included. CONCLUSIONS: The evidence is consistent.")
+t("thin evidence: a relied-on review that says its evidence is held back by few or small studies lowers the line",
+  evidence.evidence_line("complicated", [_TH], ["TH1"]) == "Low certainty evidence, so no plain yes or no"
+  and evidence.evidence_line("true", [_TH_OK], ["TH2"]) == "Strong evidence for this claim",
+  (evidence.evidence_line("complicated", [_TH], ["TH1"]), evidence.evidence_line("true", [_TH_OK], ["TH2"])))
+t("  and the family is general: 'limited by the small number of included trials' and 'small sample sizes limit'",
+  evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: The findings are limited by the small number of included trials."))
+  and evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: Small sample sizes limit these results."))
+  and not evidence.says_thin(dict(_TH, abstract="METHODS: Searches were limited to English. Studies were small."))
+  and not evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: The evidence is limited by few trials.",
+                                  publication_types=["Randomized Controlled Trial"])))
+t("  and it never raises a line already at very low",
+  evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")],
+                         ["TH1"]).startswith("Very low certainty"),
+  evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")], ["TH1"]))
+
+# ---- Plain words: "including" is swapped only where it brings in examples ----
+# Live run: "with likely ranges like zero" (sugar and hyperactivity).
+t("plain including: the verb of a range or interval stays 'including'",
+  breakdown.plain("The effect size ranged from -0.14 to 0.30, with confidence intervals including zero (Study 4).")
+  .endswith("including zero (Study 4).")
+  and "including 1" in breakdown.plain("The 95% CI including 1 (Study 2).")
+  and "including the null" in breakdown.plain("The likely ranges all including the null (Study 2).")
+  and "including no effect" in breakdown.plain("The range was wide, including no effect (Study 2)."),
+  breakdown.plain("with confidence intervals including zero (Study 4)."))
+t("  and where it brings in examples it still reads 'like'",
+  breakdown.plain("Trials including adults and children (Study 1).") == "Trials like adults and children (Study 1).",
+  breakdown.plain("Trials including adults and children (Study 1)."))
+
+# ---- Plain words: "efficacy" becomes a clause only where a clause can stand ----
+# Live log: "The pooled how well it works is about 69 percent".
+t("plain efficacy: after a modifier the word stays, so no sentence reads 'the pooled how well it works'",
+  breakdown.plain("The pooled efficacy is about 69 percent (Study 4).") == "The pooled efficacy is about 69 percent (Study 4).",
+  breakdown.plain("The pooled efficacy is about 69 percent (Study 4)."))
+t("  and after a verb that asks what was measured, or at the head of a sentence, the clause still reads",
+  breakdown.plain("The trial tested efficacy in adults (Study 1).") == "The trial tested how well it works in adults (Study 1)."
+  and breakdown.plain("Efficacy was 69 percent (Study 1).") == "How well it works was 69 percent (Study 1)."
+  and breakdown.plain("It lacked efficacy (Study 1).") == "It lacked an effect (Study 1).",
+  breakdown.plain("The trial tested efficacy in adults (Study 1)."))
+
+# ---- Plain words keep the verb's number, and name men and women ----
+# Live run: "these short term immune changes lowers the risk of", "72 male people".
+t("plain agreement: a plural subject keeps a plural verb after 'protect against' and 'ward off' are swapped",
+  breakdown.soften("It is unknown if these changes protect against illness (Study 1).")
+  == "It is unknown if these changes lower the risk of illness (Study 1)."
+  and breakdown.soften("These foods ward off colds (Study 1).") == "These foods lower the risk of colds (Study 1)."
+  and breakdown.soften("Vitamin C protects against colds (Study 1).") == "Vitamin C lowers the risk of colds (Study 1).",
+  breakdown.soften("It is unknown if these changes protect against illness (Study 1)."))
+_sx = [breakdown.plain(x) for x in (
+    "A trial of 72 male participants (Study 3).",
+    "72 female subjects lost weight (Study 1).",
+    "Male and female participants took part (Study 1).",
+    "Male or female individuals were eligible (Study 1).",
+    "Male, female participants were enrolled (Study 1).",
+    "It enrolled female participants of childbearing age (Study 2).",
+    "It followed female participants and their babies (Study 2).",
+    "It enrolled female participants (university students) (Study 2).",
+    "The trial had 40 male participants aged 8 (Study 2).")]
+t("  and 'male participants' reads 'males', 'female subjects' 'females', with no age the sentence did not state",
+  _sx == ["A trial of 72 males (Study 3).", "72 females lost weight (Study 1).",
+          "Males and females took part (Study 1).", "Males or females were eligible (Study 1).",
+          "Males and females were enrolled (Study 1).",
+          "It enrolled females of childbearing age (Study 2).",
+          "It followed females and their babies (Study 2).",
+          "It enrolled females (university students) (Study 2).",
+          "The trial had 40 males aged 8 (Study 2)."]
+  and not any(re.search(r"\b(?:men|women|boys|girls)\b", x, re.I) for x in _sx)
+  and not hasattr(breakdown, "_YOUNG"), _sx)
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

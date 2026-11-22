@@ -967,6 +967,11 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # already on the page, and repeating it would pass it off as reasoning.
         explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim)
         breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
+    # An answer the guidance rule set is never followed by words saying the
+    # claim cannot be rated: the page says it rests on that guidance instead.
+    if verdict.from_guidance(tldr):
+        explanation, still_open, breakdown = verdict.guidance_prose(explanation, still_open, breakdown)
+        breakdown = verdict.guidance_effect(breakdown)
     # One certainty for the whole page, settled on the way out so a check
     # cached before the rule existed gets it too. The evidence line is never
     # surer than the least sure thing the page says, and a certainty phrase
@@ -975,16 +980,18 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # A study code set aside as measuring another outcome loses its citation,
     # never its say: the line is the less sure of the one over the studies
     # used and the one with those put back, so setting one aside never lifts
-    # a certainty word, and a cap either reading earns applies.
+    # a certainty word, and a cap either reading earns applies. Every reading
+    # sizes only a figure about the claim itself (line_label).
     readings = _readings(studies, cited, search_query)
+    sized = breakdown_mod.line_label(breakdown, claim, outcome)
+    withheld = bool(((breakdown or {}).get("effect") or {}).get("label")) and not sized
 
     def line_for(stamp):
         lines = [evidence.evidence_line(
-            stamp, studies, used, claim,
-            ((breakdown or {}).get("effect") or {}).get("label"),
+            stamp, studies, used, claim, sized,
             breakdown_mod.absolute_claim(claim),
             bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-            outcome, stated=stated) for used in readings]
+            outcome, stated=stated, withheld=withheld) for used in readings]
         sure = lambda line: (evidence._rank(evidence.line_certainty(line))
                              if evidence.line_certainty(line) else len(evidence.CERTAINTY_LEVELS))
         return min(lines, key=sure)
@@ -1012,6 +1019,15 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         tldr = evidence.cap_certainty(tldr, level)
         explanation = evidence.cap_certainty(explanation, level)
         breakdown = breakdown_mod.map_prose(breakdown, lambda t: evidence.cap_certainty(t, level))
+    # An answer the guidance rule set did not come from these studies, so the
+    # line shown makes no claim about how strong they are for or against the
+    # claim. The studies' own line still set the cap on the prose above.
+    if verdict.from_guidance(tldr) and evidence_line:
+        evidence_line = verdict.GUIDANCE_LINE
+    # The response's effect field says what the page says (after every
+    # rewrite above, since settling the effect can set it afresh).
+    if breakdown and breakdown_mod.answers_effect(verdict_value, claim):
+        breakdown = breakdown_mod.effect_alone(breakdown)
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in
@@ -1053,7 +1069,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # metadata rather than from anything the model said.
         "evidence": evidence.snapshot(studies, cited),
         # What that evidence shows about the claim, for the line under the
-        # chart: "Strong evidence of a partial effect, not a cure". The level
+        # chart: "Strong evidence of a small effect, not a cure". The level
         # word alone described the designs, not the claim.
         "evidence_line": evidence_line,
         # Present only when the check came back without usable evidence, so

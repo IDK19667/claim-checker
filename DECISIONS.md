@@ -163,6 +163,18 @@ saved answer that relied on one is checked fresh rather than patched
 without them the classic sugar and behaviour trial and an ashwagandha trial
 rated on tension are set aside.
 
+## 2026-11-21: A false line names an effect only when it has a size
+
+Under "Likely false" for a claim that promises a cure, the evidence line
+read "evidence of a partial effect, not a cure" whenever the breakdown had
+no size. That asserted an effect nobody measured: "Strong evidence of a
+partial effect, not a cure" sat under a claim whose studies found nothing.
+`evidence.evidence_line` now words "a {size} effect, not a cure" only with
+a size the line may carry (small, moderate or large from
+`breakdown.line_label`); with none it says "{level} evidence against this
+claim", the same level word. The word "partial" left the line. On the 454
+saved answers 29 lines changed, every one to "against this claim".
+
 ## 2026-11-21: A study that never measured the outcome is set aside in code
 
 A hair-loss trial was relied on for a muscle-strength claim because its

@@ -974,6 +974,97 @@ def _restamp(result: dict, stamp: str, line: str, doctor: str, claim: str,
     return out
 
 
+# ---------------------------------------------------------------------
+# The words under an answer the guidance rule set
+#
+# The stamp follows the guidance, but the prose under it was written about
+# the studies before the guidance was asked. "None of the studies found
+# directly test this claim, so there isn't enough evidence to rate it" under
+# a False contradicts the stamp a reader sees above it. What the studies did
+# and did not test stays, said as it was; the part that says the claim
+# cannot be rated goes, and a fixed sentence says what the answer rests on.
+# Read on the way out (app._check_response), so a saved answer gets it too.
+# ---------------------------------------------------------------------
+
+GUIDANCE_RESTS = "This answer rests on what major health guidelines say, not on these studies."
+_CANNOT_RATE = re.compile(
+    r"(?:\bnot|n[’']t|\btoo little|\binsufficient)\s+(?:\w+\s+){0,2}?(?:enough\s+)?evidence\b"
+    r"[^.!?]*?\bto\s+(?:rate|judge|grade)\b"
+    r"|\bcan(?:not|[’']t)\s+(?:yet\s+)?be\s+(?:rated|judged|graded)\b"
+    r"|\b(?:unable|impossible)\s+to\s+(?:rate|judge|grade)\b", re.IGNORECASE)
+# The joint before a closing "so it can't be rated": what comes before it is
+# a statement about the studies and stays.
+_SO_JOINT = re.compile(r",?\s+(?:and\s+)?(?:so|since)\b|,\s+(?:which means|meaning)\b", re.IGNORECASE)
+_END_REF = re.compile(r"\s*(\((?:Study|Studies)\b[^)]*\))\s*[.!?]?\s*$")
+
+
+def from_guidance(tldr) -> bool:
+    """An answer the guidance rule set: its takeaway opens with the lead.
+    Guidance only added to a "Not enough evidence" takeaway does not."""
+    return str(tldr or "").startswith(GUIDELINE_LEAD)
+
+
+def unrated_said(text: str) -> str:
+    """`text` without any saying that the claim cannot be rated. A sentence
+    that ends "..., so there isn't enough evidence to rate it" keeps what
+    it says before the "so" (and its closing citation); one that says
+    nothing else goes."""
+    out = []
+    for s in breakdown.sentences(text or ""):
+        m = _CANNOT_RATE.search(s)
+        if not m:
+            out.append(s)
+            continue
+        joints = list(_SO_JOINT.finditer(s, 0, m.start()))
+        head = s[:joints[-1].start()].rstrip(" ,;:") if joints else ""
+        ref = _END_REF.search(s)
+        if ref and ref.group(1) not in head:
+            head = f"{head} {ref.group(1)}"
+        if len(head.split()) >= 3:
+            out.append(head + ".")
+    return " ".join(out)
+
+
+def guidance_prose(explanation: str, still_open: str, bd: dict | None):
+    """(explanation, still_open, breakdown) for an answer the guidance rule
+    set, with nothing in them saying the claim cannot be rated. When the
+    explanation said so, it now ends on GUIDANCE_RESTS instead."""
+    if _CANNOT_RATE.search(explanation or ""):
+        explanation = f"{unrated_said(explanation)} {GUIDANCE_RESTS}".strip()
+    if _CANNOT_RATE.search(still_open or ""):
+        still_open = unrated_said(still_open) or "Whether any study has tested this claim directly."
+    if bd and any(_CANNOT_RATE.search(t) for t in breakdown.prose_of(bd)):
+        bd = breakdown.map_prose(bd, unrated_said)
+    return explanation, still_open, bd
+
+
+# The effect box under an answer the guidance rule set. The stamp did not
+# come from a study's figure, so the box does not headline one, or a size
+# word: under "False" on alcohol in pregnancy it read "found no consistently
+# significant effects", which a reader skimming could take as permission.
+# Each study and its own finding stay in the study list as they are.
+GUIDANCE_EFFECT = ("This answer rests on what major health guidelines say, "
+                   "not on a measured effect size.")
+# The evidence line under an answer the guidance rule set. The studies did
+# not decide that answer, so the line rates none of them: it says, with no
+# strength word, what the answer rests on.
+GUIDANCE_LINE = "Rests on health guidance, not on these studies"
+
+
+def guidance_effect(bd: dict | None) -> dict | None:
+    """The breakdown of an answer the guidance rule set, its effect box
+    saying GUIDANCE_EFFECT in place of a study's figure. A breakdown with no
+    effect box gets none. A line of "What the research says" that was picked
+    from the effect box (breakdown.says takes its figure) goes with it, so
+    the figure is not headlined there instead."""
+    if not bd or not str(bd.get("effect_size") or "").strip():
+        return bd
+    key = lambda t: re.sub(r"[^a-z0-9]+", "", t.lower())
+    boxed = {key(t) for t in breakdown.sentences(bd["effect_size"])}
+    says = [t for t in bd.get("says") or [] if key(t) not in boxed]
+    return {**bd, "effect_size": GUIDANCE_EFFECT, "says": says}
+
+
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
     return (_gemini_json if provider() == "gemini" else _anthropic_json)(
         prompt, schema, max_tokens, temperature)

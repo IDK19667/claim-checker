@@ -1133,8 +1133,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
 # not cure diabetes, and "strong" printed beside "Likely false" read as
 # strong evidence for the cure. The level word still comes from the designs
 # that were used (the meter's legend explains it), but the line now says
-# what that evidence is evidence of: "Strong evidence of a partial effect,
-# not a cure". Built here from facts the page already has (the stamp, the
+# what that evidence is evidence of: "Strong evidence of a small effect,
+# not a cure", or with no size, "Strong evidence against this claim". Built here from facts the page already has (the stamp, the
 # size of the effect, the claim's own words), so it costs no model call and
 # a streamed check and a shared link cannot word it differently.
 # ---------------------------------------------------------------------------
@@ -1176,7 +1176,7 @@ def observational_only(studies, cited_pmids=()) -> bool:
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
                   comparative: bool = False, outcome: str = "",
-                  stated: str | None = None) -> str:
+                  stated: str | None = None, withheld: bool = False) -> str:
     """
     What the evidence used shows about the claim, as one short line with no
     full stop, or "" when nothing was used (the page says "no direct
@@ -1184,7 +1184,10 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     breakdown.absolute_claim; `effect_label` is the breakdown's size label;
     `outcome` is the query's outcome group; `stated` is the lowest certainty
     the page's own prose already states (stated_certainty), and the line is
-    never surer than it.
+    never surer than it. `withheld` says the breakdown had a size the line
+    may not carry (breakdown.line_label): the line then says no size at
+    all. A false line names an effect ("a small effect, not a cure") only
+    with a size; with none it says "against this claim".
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1206,6 +1209,13 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # A review that puts the link down to other factors weakens the case for
     # the claim, not the case against it.
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
+        level = "Low certainty"
+    # A relied-on review that says its own evidence is held back by few or
+    # small studies has said how sure it is, and the line is no surer. Only
+    # ever lowers: a line already at low or very low stays.
+    cited = set(cited_pmids or ())
+    if (line_certainty(level) not in ("low", "very low")
+            and any(says_thin(s) for s in studies or [] if s.get("pmid") in cited)):
         level = "Low certainty"
     # One certainty for the whole page. The line is never surer than the
     # least sure thing the page already says: the lowest rating any review
@@ -1233,8 +1243,10 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     if verdict == "false":
         if effect_label == "none":
             return f"{level} evidence of no clear effect"
-        if absolute:
-            return f"{level} evidence of a {size or 'partial'} effect, not {promise}"
+        # "effect, not a cure" only with a size the line may carry: with no
+        # size it would assert an effect nobody measured.
+        if absolute and size:
+            return f"{level} evidence of a {size} effect, not {promise}"
         return f"{level} evidence against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
@@ -1853,6 +1865,37 @@ def confounded(study) -> bool:
     """A systematic review or meta-analysis that says its link is likely
     explained by lifestyle or other factors rather than the thing itself."""
     return is_review(study) and bool(_CONFOUNDED.search(_text(study)))
+
+
+# A review that says its own evidence is thin: "the current evidence base is
+# constrained by few RCTs, small sample sizes", "limited by the small number
+# of included trials". Three things in one sentence: the evidence (or the
+# data, the findings, the studies), a word that it is held back, and the
+# reason being few studies or small ones. A review's own word that its
+# evidence is thin is a rating of it, though not in GRADE's words.
+_THIN_SUBJECT = re.compile(r"\b(?:evidence|data|literature|findings|results|conclusions?|studies|trials)\b",
+                           re.IGNORECASE)
+_THIN_HELD = re.compile(r"\b(?:limit(?:s|ed|ing)?|constrain(?:s|ed)?|hamper(?:s|ed)?|weaken(?:s|ed)?|"
+                        r"restrict(?:s|ed)?|undermin(?:es|ed))\b", re.IGNORECASE)
+_THIN_REASON = re.compile(
+    r"\b(?:few|small number of|limited number of|low number of|paucity of|scarcity of|lack of)\s+"
+    r"(?:[\w-]+\s+){0,3}?(?:RCTs?|trials?|studies)\b|"
+    r"\bsmall(?:er)?\s+(?:sample(?:\s+size)?s?|trials|studies|cohorts)\b|"
+    r"\bsample sizes?\s+(?:were|was|are|is)\s+(?:\w+\s+)?small\b", re.IGNORECASE)
+_THIN_NOT = re.compile(r"\bnot\s+(?:\w+\s+)?(?:limited|constrained|hampered|restricted)\b", re.IGNORECASE)
+
+
+def says_thin(study) -> bool:
+    """True when a review says its own evidence is held back by few
+    studies or small ones (_THIN_REASON), in one sentence that names the
+    evidence and says it is limited."""
+    if not is_review(study):
+        return False
+    for sentence in _SENTENCE.split(" ".join(str(study.get("abstract") or "").split())):
+        if (_THIN_SUBJECT.search(sentence) and _THIN_HELD.search(sentence)
+                and _THIN_REASON.search(sentence) and not _THIN_NOT.search(sentence)):
+            return True
+    return False
 
 
 CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "
