@@ -348,15 +348,24 @@ def _render_home():
     cached = None
     jsonld = None
     noindex = False
+    typed = None
     if claim:
         cached = db.get_cached_by_key(db.normalize_claim(claim))
+        # A link in other words than a saved claim's (a shared or typed
+        # address) reaches the same saved answer the check would give, so
+        # the page is complete before any script runs: the saved answer,
+        # under its saved wording, with the note naming the reader's words.
+        if not cached:
+            same = _equivalent(claim)
+            cached = db.get_cached_by_key(db.normalize_claim(same)) if same else None
+            typed = claim if cached else None
         if cached:
             label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
             share_url = f"{_base_url()}/?q={quote(cached['claim_text'])}"
             preview = {
                 "title": f"{label}: “{cached['claim_text']}”",
                 "description": cached["tldr"] or cached["explanation"],
-                "image": f"{_base_url()}/og/{quote(db.normalize_claim(claim), safe='')}.png",
+                "image": f"{_base_url()}/og/{quote(db.normalize_claim(cached['claim_text'] if typed else claim), safe='')}.png",
                 "url": share_url,
             }
             jsonld = _claim_review_jsonld(cached, share_url)
@@ -369,7 +378,7 @@ def _render_home():
                 cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
-                breakdown=cached.get("breakdown"))
+                breakdown=cached.get("breakdown"), typed=typed, typed_reason="wording" if typed else None)
             # The link preview and the markup say what the page says, with
             # the page's one certainty and stamp (both can be capped above).
             label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])

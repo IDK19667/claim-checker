@@ -7234,6 +7234,30 @@ t("  and the script puts the typed part in a <bdi> as text, never as markup",
   'document.createElement("bdi")' in _bd_show and "bdi.textContent = parts[1]" in _bd_show
   and "note.append(parts[0], bdi, parts[2])" in _bd_show and "innerHTML" not in _bd_show)
 
+# A reworded match reached by a link (a shared or typed address) is complete
+# in the HTML before any script runs: the saved answer, its verdict, and the
+# note naming the reader's words.
+_ln = c.get("/?q=" + urllib.parse.quote(_RW_TYPED)).get_data(as_text=True)
+_ln_res = json.loads(_ln.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+t("link: a reworded match by address is server-rendered with its verdict and the note",
+  '<h1 class="claim-echo" id="claim-echo">' + _RW_SAVED + "</h1>" in _ln
+  and '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>'
+      + str(_msc_escape(_RW_TYPED)) + "</bdi>\u201d.</p>" in _ln
+  and "Zinc may shorten a cold a little." in _ln and _ln_res.get("typed") == _RW_TYPED
+  and _ln_res.get("typed_reason") == "wording" and _ln_res.get("claim") == _RW_SAVED, _ln[:0])
+t("  its link preview and canonical name the saved wording, and its card is the saved row's",
+  '<link rel="canonical" href="http://localhost/?q=Zinc%20lozenges%20shorten%20colds" />' in _ln
+  and "/og/" + urllib.parse.quote(db.normalize_claim(_RW_SAVED), safe="") + ".png" in _ln,
+  re.findall(r'<link rel="canonical"[^>]*>', _ln))
+_ln_exact = c.get("/?q=" + urllib.parse.quote(_RW_SAVED)).get_data(as_text=True)
+_ln_exact_res = json.loads(_ln_exact.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+t("  and the saved wording's own address carries no note",
+  'id="typed-note" hidden></p>' in _ln_exact and _ln_exact_res.get("typed") is None
+  and _ln_exact_res.get("claim") == _RW_SAVED, _ln_exact_res.get("typed"))
+_ln_none = c.get("/?q=" + urllib.parse.quote("a claim nobody has saved in any words")).get_data(as_text=True)
+t("  and a claim with no saved answer in any words still renders the checker, for the script to run",
+  'id="server-result"' not in _ln_none and 'id="typed-note" hidden></p>' in _ln_none)
+
 # ---- where the slices meet: a study set aside as off outcome -------------------
 # rc-reading's rule sets aside a structured abstract that names the claim's
 # outcome only in its background. What a reader sees for it is the same in the
