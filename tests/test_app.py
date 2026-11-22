@@ -5475,6 +5475,14 @@ t("F2a: a sentence about the outcome itself still sizes it, a 'did not' before t
   and breakdown.line_label(_f2_bd("Statins did not raise muscle pain, RR 1.02.", "RR 1.02", "", label="none"),
                            *_F2_MP) == "none")
 
+_F2_TG = ("Fish oil lowers triglycerides", "(triglycerides)")
+t("F2b: a sentence where the outcome only describes another noun ('triglyceride-lowering drugs') lends no size",
+  breakdown.line_label(_f2_bd("Triglyceride-lowering drugs used 30% more.", "30%", "about 30% lower"), *_F2_TG) is None)
+t("F2b: a sentence that also names the outcome itself still sizes it",
+  breakdown.line_label(_f2_bd("Triglycerides fell by 30% more.", "30%", "about 30% lower"), *_F2_TG) == "large"
+  and breakdown.line_label(_f2_bd("Triglycerides fell 30% more than with triglyceride-lowering drugs.", "30%",
+                                  "about 30% lower"), *_F2_TG) == "large")
+
 # ---- final fix F3: what "cannot be rated" means under a guidance stamp --------
 # verdict.unrated_said removes a sentence (or its closing clause) that says the
 # claim, the evidence, "this" or "it" cannot be rated or judged, in any of the

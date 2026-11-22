@@ -2535,6 +2535,18 @@ def sets_outcome_aside(text: str, outcome: str) -> bool:
     return any(_SET_ASIDE.search(t[:m.start()]) for t, m in _outcome_mentions(text, outcome))
 
 
+def _modifies_another(t: str, m) -> bool:
+    """The mention is the first half of a hyphened word that describes
+    another noun: "triglyceride-lowering drugs" are drugs."""
+    return bool(re.match(r"-[a-z]", t[m.end():], re.IGNORECASE))
+
+
+def names_outcome_itself(text: str, outcome: str) -> bool:
+    """True when at least one mention of the outcome in `text` is the
+    outcome itself, not a word that only describes something else."""
+    return any(not _modifies_another(t, m) for t, m in _outcome_mentions(text, outcome))
+
+
 def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | None:
     """
     The effect label the evidence line may carry, or None. The line puts a
@@ -2542,7 +2554,8 @@ def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | Non
     takes one only when the sentence the figure came from names the claim's
     own outcome. A large rise in inflammation is not a large effect on
     immunity, nor is one in a sentence that names the outcome only to set it
-    aside ("not muscle"). The effect box keeps its figure and its own
+    aside ("not muscle") or only as a word describing another noun
+    ("triglyceride-lowering drugs"). The effect box keeps its figure and its own
     sentence either way.
     """
     effect = (bd or {}).get("effect") or {}
@@ -2550,7 +2563,8 @@ def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | Non
     if not label:
         return None
     said = figure_sentence(bd)
-    if not names_outcome(said, outcome) or sets_outcome_aside(said, outcome):
+    if (not names_outcome(said, outcome) or sets_outcome_aside(said, outcome)
+            or not names_outcome_itself(said, outcome)):
         return None
     if label in ("small", "moderate", "large") and not agrees_direction(effect, said, claim):
         return None
