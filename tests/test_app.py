@@ -9792,6 +9792,21 @@ with appmod.app.test_request_context("/"):
                                       "http://x", still_open="Longer trials.")
 t("H1: with nothing relied on and no set-aside study cited, the explanation comes back unchanged",
   _h1_same["explanation"] == _H1_PLAIN, _h1_same["explanation"])
+# J5: the breakdown is cleaned too, where nothing later would do it: a
+# saved "Not enough evidence" answer relies on nothing, so no gate holds its
+# prose to sources, yet its fields cite the retracted Study 1.
+with appmod.app.test_request_context("/"):
+    _j5 = appmod._check_response("Turmeric eases knee pain J5", "(turmeric) AND (knee pain)", "insufficient",
+                                 "Unproven either way.", _H1_PLAIN, [], [dict(_H1_A["retracted"]), dict(_H1_B)],
+                                 "http://x", still_open="Longer trials.",
+                                 breakdown={"parts": [], "evidence": [_H1_SAID_A + " A second trial is under way."],
+                                            "effect_size": "", "strength": "Trials disagree (Studies 1, 2).",
+                                            "applies_to": "Adults with knee pain (Study 1).", "not_applies_to": "",
+                                            "unknowns": "", "says": [_H1_SAID_A, "A second trial is under way."]})
+t("J5: a breakdown prose field that cites a set-aside study loses that sentence, the rest stays",
+  not any(1 in breakdown.refs(x, 2) for x in breakdown.prose_of(_j5["breakdown"]))
+  and _j5["breakdown"]["evidence"] == ["A second trial is under way."]
+  and _j5["breakdown"]["says"] == ["A second trial is under way."], _j5["breakdown"])
 # H7: a withdrawn paper also read as off topic is shown, and counted once,
 # as withdrawn. Live: a "Retracted Publication" shown as "tests something
 # other than what this claim is about".
