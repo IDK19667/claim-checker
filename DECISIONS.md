@@ -4,6 +4,92 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-22 (release): The reasoning cites only studies the answer stands on
+
+Output rules from the last two reviews and the last two runs on real
+claims, each in code with a test, all but one in the direction of
+saying less. None makes an answer surer: 245 saved rows rebuilt before
+and after the last round, no stamp changed and no line surer. The round
+before moved five saved rows from "It's complicated" to "Not enough
+evidence".
+
+- **A sentence that cites a set-aside study goes whole**
+  (`app._check_response`, `breakdown.drop_any_citing`). A study the page
+  shows as withdrawn (retracted, a journal notice) or off topic is cited
+  in no sentence of the explanation or the breakdown, on every path:
+  plain, streamed, saved, aged, fallback. A sentence citing it and a study
+  relied on goes too: taking only its number out of "(Studies 1, 2)"
+  credited words about the set-aside study to the other one.
+  `breakdown.relied_only`, which keeps a mixed sentence, stays for studies
+  that are merely not relied on.
+- **A saved rated answer that rests on nothing is "Not enough
+  evidence"**, as a fresh one already was, unless guidance alone may
+  rate that claim. When the row lists no study at all, its takeaway is the
+  one a fresh check writes when the search finds nothing
+  (`verdict.NO_STUDIES_TLDR`, one string for both), on the page, the card,
+  the share text and every list, not one about studies that "don't test"
+  it.
+- **A guidance answer that relies on no study carries no sentence that
+  cites one**, in its explanation and in its folded sections (the parts,
+  "What the evidence shows", "Why", "Who", "What is still unknown"). A
+  part whose answer went is dropped rather than pointed at paragraphs
+  below; a section left with nothing is not rendered. The two closing
+  sentences code writes stand, and so does the effect box's "rests on
+  what major health guidelines say". A guidance answer that relies on
+  studies is untouched, and so is a "Not enough evidence" answer that
+  describes background papers.
+- **A takeaway is a guidance answer only on a claim guidance is read
+  for** (`verdict.from_guidance(tldr, claim)`). The lead alone no longer
+  earns the guidance line or skips the caps.
+- **`verdict.without_lead`** also removes a lead the model wrote after
+  quotes, dashes, bold or italic marks or a zero-width character, or as "state:"
+  or "states:". The colon is still required, at the start only.
+- **The "cannot be rated" reader.** A sentence reporting what a study or
+  its people judged stays, whatever it says about rating. "No basis to
+  rate it" and "Rating this claim is not possible" go. "No conclusion
+  can be drawn" stays, on purpose.
+- **A withdrawn paper is shown and counted once, as withdrawn**
+  (`app._as_shown`), whatever else is true of it. Before, a retracted
+  paper that was also off topic showed the off-topic reason.
+- **A "That is ..." sentence code wrote travels with its figure**
+  (`breakdown.translations_follow`). Code's sentences are recognised by
+  the forms their writers produce (`breakdown.code_translation`: the
+  arithmetic, the null sentence, a size alone, a restated figure); a
+  model sentence that merely starts "That is" ("That is because ...")
+  stays. One goes when the sentence before it has no figure or cites
+  another study, and when it only repeats words already said in its
+  block, short words aside, whether or not the size is withheld. One
+  that converts the figure or spells it out stays. "What the research
+  says" picks a translation with the figure sentence it follows, never
+  alone, when the effect names no figure (`breakdown.says`).
+- **Code never calls a figure not significant when its own interval or
+  p value rules that out** (`breakdown.say_nulls`, `significant_figure`).
+  This is the one rule that takes a hedge away, and only where the
+  printed interval or p value itself shows an effect. The fault came from
+  reading an interval's confidence level ("95 percent CI") as a result
+  and judging it against the abstract's first "95% confidence interval",
+  a null one. A saved check loses such a sentence on the way out
+  (`breakdown.unsaid_nulls`).
+- **"E. coli" is one sentence.** A stop after a single capital letter
+  before a lowercase word does not end a sentence (`breakdown.sentences`,
+  `breakdown.first_sentence`); "vitamin C. It ..." still splits. The
+  other splitters (`display.split_sentences`, `evidence`, `verdict`, the
+  page's own) already need a capital after the stop.
+- **An emptied reference goes with its lead-in** ("see", "see also",
+  "e.g.", "cf.", "as in").
+- **No status number in a failure message a reader sees.** The number
+  moves to `ProviderError.code` and the log.
+
+Left as it is, and why: the level word ("Moderate", "Strong") follows
+the design of the relied-on studies, so a line can read stronger than
+one survey or one small trial deserves when the model relies on it. A
+stricter cap changes what the level words mean and can move stamps, so
+it is the owner's decision, not a fix. Text written wrong into a saved
+row before a rule existed ("cold helps with" from the old softening of
+the noun "cures", "Coli" from the old split of "E. coli") stays until
+that claim is checked again: putting back words code took out would be
+guessing.
+
 ## 2026-11-21 (release): A public list shows only rows a page would serve
 
 An old row saved before the short answer or the still-open line existed
