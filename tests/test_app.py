@@ -2587,6 +2587,32 @@ t("equivalent: a short form is spelled out as its own word, never glued into ano
       ("Id causes anxiety", "I'd causes anxiety")])
   and _eqf("She'll get sick from vaccines", "She will get sick from vaccines")
   and _eqf("I'm tired after sugar", "I am tired after sugar"))
+# The grader's 84 hostile pairs (tests/hostile_pairs.json): every one stays
+# apart, except three the approved rule folds on purpose (each says why).
+for _p in json.loads((ROOT / "tests" / "hostile_pairs.json").read_text()):
+    t(f"hostile pair {_p['a'][:60]!r} vs {_p['b'][:60]!r}: {_p['expect']}",
+      _eqf(_p["a"], _p["b"]) == (_p["expect"] == "match"), (db.claim_fold(_p["a"])[:12], db.claim_fold(_p["b"])[:12]))
+t("equivalent: a number keeps its sign and its decimal point",
+  not any(_eqf(a, b) for a, b in [
+      ("Ice baths at -5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u22125 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u20135 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Take .5 mg melatonin for sleep", "Take 5 mg melatonin for sleep"),
+      ("Take.5 mg melatonin for sleep", "Take 5 mg melatonin for sleep"),
+      ("Take -.5 mg", "Take .5 mg"), ("Take -0.5 mg", "Take 0.5 mg"),
+      ("Salt -10% raises blood pressure", "Salt 10% raises blood pressure")])
+  and _eqf("Ice baths at -5 C help recovery", "Ice baths at \u22125 C help recovery")
+  and _eqf("Omega-3 improves memory", "Omega 3 improves memory")
+  and db.claim_fold("Take 2-5 mg") == ("take", "2-5", "mg"))
+db.put_cached_verdict("Ice baths at 5 C help recovery", "(ice) AND (recovery)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+db.put_cached_verdict("Take 5 mg melatonin for sleep", "(melatonin) AND (sleep)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+t("  and a saved claim with another sign or decimal point is never served for it",
+  db.find_equivalent("Do ice baths at -5 C help recovery?") is None
+  and db.find_equivalent("Take .5 mg melatonin for sleep") is None
+  and db.find_equivalent("Does taking 5 mg melatonin for sleep?") is None
+  and db.find_equivalent("Ice baths at 5 C helps recovery") == "Ice baths at 5 C help recovery")
 # No letter is silently dropped: a claim whose folding would lose any part of
 # a word (a combining mark, an invisible joiner) has no key and matches nothing.
 _nokey = lambda c: db.claim_fold(c) == ()

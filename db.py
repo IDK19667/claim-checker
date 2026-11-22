@@ -639,7 +639,16 @@ _FOLD_DASHES = "‐‑‒–—―−"
 _FOLD_LEAD = [("is", "it", "true", "that"), ("is", "it", "true"), ("true", "or", "false")]
 _FOLD_TRAIL = [("true", "or", "false"), ("or", "not")]
 # A number stays one token with its inner separators: 2.5, 2-5, 4,000, 1/2, 3:1.
-_FOLD_TOKEN = re.compile(r"\w*\d(?:[.,/:\-]\d+)+\w*|\w+|\S")
+# It also keeps its sign and its decimal point: a "-" right before a digit,
+# with no letter or digit just before it, is a minus sign (-5, but the joiner
+# in omega-3 and 2-5), and a "." right before a digit, with no digit just
+# before it, is a decimal point (.5, -.5). So "-5 C" is never "5 C", nor
+# ".5 mg" "5 mg". Every dash, the minus sign U+2212 included, is a "-" by then.
+_FOLD_NUMBER = r"[.,/:\-]\d+"
+_FOLD_TOKEN = re.compile(
+    r"(?<!\w)-\.?\d+(?:" + _FOLD_NUMBER + r")*\w*"
+    r"|(?<!\d)\.\d+(?:" + _FOLD_NUMBER + r")*\w*"
+    r"|\w*\d(?:" + _FOLD_NUMBER + r")+\w*|\w+|\S")
 
 
 def _fold_contractions(t: str) -> str:
