@@ -338,21 +338,35 @@ def _run_many(conn, stmts) -> list[_Rows]:
     return [conn.execute(sql, params) for sql, params in stmts]
 
 
+def _columns(conn, table: str) -> set:
+    return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _add_column(conn, table: str, column: str, kind: str = "TEXT"):
+    """
+    Add a column an older database lacks. Two processes starting at once can
+    both see it missing and both add it: the second ALTER is then refused
+    (sqlite3.OperationalError "duplicate column name" locally, a rejected
+    statement, TursoError, from Turso). Whatever the error, when the column
+    is there afterwards the job is done; only when it is still missing is the
+    error raised.
+    """
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+    except Exception:
+        if column not in _columns(conn, table):
+            raise
+
+
 def _init_schema(conn):
     conn.executescript(SCHEMA)
-    # Lightweight migration for databases created before claim_key existed.
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(checks)").fetchall()}
-    if "claim_key" not in cols:
-        conn.execute("ALTER TABLE checks ADD COLUMN claim_key TEXT")
-    vcols = {r["name"] for r in conn.execute("PRAGMA table_info(verdict_cache)").fetchall()}
-    if "tldr" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN tldr TEXT")
-    if "still_open" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN still_open TEXT")
-    if "breakdown_json" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN breakdown_json TEXT")
-    if "method_stamp" not in vcols:
-        conn.execute("ALTER TABLE verdict_cache ADD COLUMN method_stamp TEXT")
+    # Lightweight migration for databases created before these columns existed.
+    if "claim_key" not in _columns(conn, "checks"):
+        _add_column(conn, "checks", "claim_key")
+    vcols = _columns(conn, "verdict_cache")
+    for column in ("tldr", "still_open", "breakdown_json", "method_stamp"):
+        if column not in vcols:
+            _add_column(conn, "verdict_cache", column)
     conn.execute(
         "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
     )

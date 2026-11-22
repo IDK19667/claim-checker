@@ -2962,6 +2962,71 @@ t("steady: an old database without the column opens, gains it, and serves its sa
 t("  and a row read from it has no stamp, so past the window it would be made again",
   db.get_cached_by_key("x") is None and appmod._steady("never saved claim", STUDIES) is None)
 
+# Two processes starting at once never crash on the schema change: each runs
+# init_db on the same 100 old scratch files at the same moments.
+_RACE_CHILD = r"""
+import os, sys, time
+sys.path.insert(0, sys.argv[1])
+import db
+paths, t0, gap = sys.argv[4].split("|"), float(sys.argv[2]), float(sys.argv[3])
+bad = 0
+for i, p in enumerate(paths):
+    while time.time() < t0 + i * gap:
+        pass
+    db.DB_PATH = p
+    try:
+        db.init_db()
+    except Exception as e:
+        bad += 1
+        print(type(e).__name__, e, file=sys.stderr)
+print(bad)
+"""
+_race_dir = tempfile.mkdtemp()
+_race_paths = []
+for _i in range(100):
+    _rp = os.path.join(_race_dir, f"old{_i}.db"); _race_paths.append(_rp)
+    _rc = _sq3.connect(_rp)
+    _rc.executescript("""CREATE TABLE verdict_cache (claim_key TEXT PRIMARY KEY, claim_text TEXT NOT NULL,
+      search_query TEXT, verdict TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE checks (id INTEGER PRIMARY KEY, claim_text TEXT, verdict TEXT, checked_at TEXT);""")
+    _rc.commit(); _rc.close()
+_race_env = {k: v for k, v in os.environ.items() if not k.startswith("TURSO_")}
+import time as _time  # noqa: E402
+_race_t0 = _time.time() + 3
+_race = [_subprocess.Popen([sys.executable, "-c", _RACE_CHILD, str(ROOT), str(_race_t0), "0.06", "|".join(_race_paths)],
+                           stdout=_subprocess.PIPE, stderr=_subprocess.PIPE, text=True, env=_race_env)
+         for _ in range(2)]
+_race_out = [p.communicate(timeout=120) for p in _race]
+_race_bad = sum(int(o[0].strip() or 99) for o in _race_out)
+t("schema: two processes starting at once on the same 100 old files never crash on adding a column",
+  _race_bad == 0 and all(p.returncode == 0 for p in _race), [o[1][:200] for o in _race_out])
+t("  and every file ends with every column",
+  all({"tldr", "still_open", "breakdown_json", "method_stamp"} <= {r[1] for r in _sq3.connect(_rp).execute(
+      "PRAGMA table_info(verdict_cache)")} for _rp in _race_paths))
+
+
+class _AlterConn:
+    """A connection whose ALTER is refused; the column is or is not there after."""
+    def __init__(self, err, there):
+        self.err, self.there = err, there
+
+    def execute(self, sql, params=()):
+        if sql.startswith("ALTER"):
+            raise self.err
+        return _Rows([{"name": "x"}] + ([{"name": "tldr"}] if self.there else []))
+
+
+_Rows = db._Rows
+_alter = []
+for _err in (_sq3.OperationalError("duplicate column name: tldr"), db.TursoError("statement rejected")):
+    db._add_column(_AlterConn(_err, True), "verdict_cache", "tldr")
+    try:
+        db._add_column(_AlterConn(_err, False), "verdict_cache", "tldr"); _alter.append(False)
+    except type(_err):
+        _alter.append(True)
+t("  either driver's refusal counts as done when the column is there, and is raised when it is not",
+  _alter == [True, True], _alter)
+
 # ---- prevention claims and comparisons said in other words -------------------
 _T2D = "Regular physical activity reduces the risk of type 2 diabetes"
 _offt = lambda title: evidence.off_topic({"title": title, "abstract": ""}, _T2D)
