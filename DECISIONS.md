@@ -163,6 +163,16 @@ saved answer that relied on one is checked fresh rather than patched
 without them the classic sugar and behaviour trial and an ashwagandha trial
 rated on tension are set aside.
 
+A known limit stays. A study that reports the claim's outcome only under an
+instrument's name or another word (1RM, PHQ-9, SBP, A1C, eGFR, "died"),
+while its title or aim names another outcome family (body fat, bone,
+sleep), is still set aside. A second grader set aside 36 of 42 abstracts
+they wrote to this shape. Among the saved records it happened once, in
+3341 studies, to a study no answer cited. Reading instruments as their
+outcome needs a list of instruments per outcome, which is not built yet.
+In the meantime the set-aside study still counts as read wherever code
+weighs agreement, so the limit can make an answer less sure, never more.
+
 ## 2026-11-21: A false line names an effect only when it has a size
 
 Under "Likely false" for a claim that promises a cure, the evidence line
