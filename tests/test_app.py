@@ -1239,6 +1239,12 @@ t("  and under an answer of no effect the effect's plain words stay",
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
+t("  and it leaves 'cure' the noun alone where nothing else would: before a bracket, 'for' or 'rates'",
+  breakdown.soften("Cure rates rose (Study 1).") == "Cure rates rose (Study 1)."
+  and breakdown.soften("The cure rate was 80% (Study 2).") == "The cure rate was 80% (Study 2)."
+  and breakdown.soften("A cure for colds was sought (Study 1).") == "A cure for colds was sought (Study 1)."
+  and breakdown.soften("Effect sizes for cold cures (Study 5) were small.")
+  == "Effect sizes for cold cures (Study 5) were small.")
 t("  and under a 'not' it leaves the verb alone, since weakening it there would strengthen the sentence",
   breakdown.soften("Vitamin C does not cure cancer.") == "Vitamin C does not cure cancer."
   and breakdown.soften("Garlic doesn't cure HIV.") == "Garlic doesn't cure HIV."
@@ -2708,6 +2714,61 @@ t("  a study that says nothing about its size or design is never the reason to c
 t("  a comparative claim is not capped for comparing two treatments",
   evidence.certainty_cap([_study("C", "c", abstract="We randomised 300 adults to diet A or diet B.")],
                          ["C"], comparative=True) is None)
+# A narrative review is never the strength, but its caveats count as any
+# paper's do: only one with no caveat is in neither list.
+_G3 = {
+    "trial, caveats": dict(title="Turmeric in 20 adults: a pilot study", types=["Clinical Trial"],
+                           abstract="A pilot study of 20 adults, uncontrolled. Pain fell."),
+    "trial, none": dict(title="Turmeric and joint pain: a randomized trial", types=["Randomized Controlled Trial"],
+                        abstract="We randomised 400 adults to turmeric or placebo. Pain fell more with turmeric."),
+    "narrative, caveats": dict(title="Turmeric for joint health: a narrative review", types=["Review"],
+                               abstract="This review summarises a pilot study of 12 patients without a control "
+                                        "group and industry-funded reports. Turmeric may ease joint pain."),
+    "narrative, none": dict(title="Turmeric and joints: a review", types=["Review"],
+                            abstract="We review what is known about turmeric and joint pain."),
+    "unlabelled": dict(title="Turmeric and joints", types=["Journal Article"], abstract="Turmeric and joints."),
+}
+
+
+def _g3(kind, n=0):
+    k = _G3[kind]
+    return _study(f"G{list(_G3).index(kind)}{n}", k["title"], types=k["types"], abstract=k["abstract"])
+
+
+def _cap_231c774(studies, cited):
+    """certainty_cap's trial loop as it stood at 231c774, the reference: no
+    narrative review rule (none of these papers is a pooled review)."""
+    pool = [s for s in studies if s["pmid"] in set(cited)]
+    solid, limited = [], []
+    for s in pool:
+        labelled = any(not t.startswith(evidence.IGNORE_PREFIXES) for t in s.get("publication_types") or [])
+        if evidence.trial_caveats(s):
+            limited.append(s)
+        elif evidence.sample_size(s) is not None or labelled:
+            solid.append(s)
+    return None if solid or not limited else "capped"
+
+
+t("G3: a 'true' resting only on a narrative review with caveats is capped again, and its line says low certainty",
+  evidence.trial_caveats(_g3("narrative, caveats")) and evidence.narrative_review(_g3("narrative, caveats"))
+  and evidence.certainty_cap([_g3("narrative, caveats")], ["G20"]) is not None
+  and evidence.line_certainty(evidence.evidence_line("true", [_g3("narrative, caveats")], ["G20"],
+                                                     "Turmeric eases joint pain")) == "low",
+  evidence.evidence_line("true", [_g3("narrative, caveats")], ["G20"], "Turmeric eases joint pain"))
+t("  and a trial with caveats beside narrative reviews with none is still capped (L2)",
+  evidence.certainty_cap([_g3("trial, caveats"), _g3("narrative, none", 1), _g3("narrative, none", 2)],
+                         ["G00", "G31", "G32"]) is not None
+  and evidence.certainty_cap([_g3("narrative, none")], ["G30"]) is None)
+import itertools as _it  # noqa: E402
+_g3_looser = []
+for _size in (1, 2, 3):
+    for _combo in _it.combinations_with_replacement(list(_G3), _size):
+        _ps = [_g3(k, i) for i, k in enumerate(_combo)]
+        _ids = [p_["pmid"] for p_ in _ps]
+        if _cap_231c774(_ps, _ids) and not evidence.certainty_cap(_ps, _ids):
+            _g3_looser.append(_combo)
+t("  property: for every set of up to three of these papers, the cap is never looser than at 231c774",
+  not _g3_looser, _g3_looser)
 fg.models.script = [Resp(VJ("true", [1, 2], tldr="Ashwagandha reduces stress.",
                             evidence=["Ashwagandha reduced stress (Study 1)."]))]
 _v = verdict.weigh_evidence("Ashwagandha reduces stress", _ASHWA, "(ashwagandha) AND (stress)")
@@ -9380,7 +9441,11 @@ t("  and the list of what each study concluded leaves it out",
 fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2]))]
 _r, _evs = stream("Retracted vinegar lowers blood sugar streamed", ip="7.7.31.2")
 _rts = [s for s in _evs[-1].get("result", {}).get("studies", []) if s["cited_in_verdict"]]
-t("  and a streamed check the same", [s["pmid"] for s in _rts] == ["RT2"], _evs[-1])
+_rtb = {s["pmid"]: s for s in _evs[-1].get("result", {}).get("studies", [])}
+t("  and a streamed check the same: its final event sets the cited retracted paper aside, with the reason",
+  _evs[-1]["stage"] == "done" and [s["pmid"] for s in _rts] == ["RT2"]
+  and _rtb["RT1"]["background"] and _rtb["RT1"]["background_why"] == "retracted by the journal"
+  and not _rtb["RT1"]["cited_in_verdict"], _evs[-1])
 # A saved row from before the rule, citing the retracted paper.
 _rt_old = [dict(x) for x in _RT_ST]
 db.put_cached_verdict("Retracted vinegar saved row", "(vinegar) AND (blood sugar)", "true",
@@ -9594,6 +9659,20 @@ t("  a citation that was part of the sentence itself takes the sentence with it,
   breakdown.relied_only("Studies 6 and 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5)."
   and breakdown.relied_only("As in other trials (see earlier studies).", {5}, 8)
   == "As in other trials (see earlier studies).")
+_G4_PLAIN = ["The effect was significant (p = .03).", "Vitamin D (and calcium) improved bone density.",
+             "A mean difference of .5 points was seen (Study 2).", "The ratio was 1 : 2 in both arms."]
+t("G4: a sentence in which no reference was emptied comes back byte for byte",
+  all(breakdown.without_empty_refs(x) == x and breakdown.relied_only(x, {2, 5}, 8) == x for x in _G4_PLAIN),
+  [breakdown.relied_only(x, {2, 5}, 8) for x in _G4_PLAIN])
+t("  an empty reference goes with the space before it, and only that bracket changes",
+  [breakdown.without_empty_refs(x) for x in ("Harm (Studies ), (p = .03).", "Harm (Study ) here.", "Harm ( ) here.")]
+  == ["Harm, (p = .03).", "Harm here.", "Harm here."])
+t("  a dangling separator or an odd reference is rebuilt from the numbers it still has",
+  breakdown.relied_only("Harm (Study 5; Study 6).", {5}, 8) == "Harm (Study 5)."
+  and [breakdown.without_empty_refs(x) for x in ("Harm (Studies , 4).", "Harm (Study and 4).", "Harm (Studies 2, ).")]
+  == ["Harm (Study 4).", "Harm (Study 4).", "Harm (Study 2)."])
+t("  a sentence whose subject was the reference still goes whole",
+  breakdown.relied_only("Study 6 and Study 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5).")
 _er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", "complicated", "Mixed.", _ER,
                                 ["P5"], [_study(f"P{i}", f"Study of alcohol {i}") for i in range(1, 9)],
                                 "http://x", still_open="Whether small amounts harm.")
@@ -9607,7 +9686,7 @@ _L4_ST = [_study("Q1", "Vinegar and blood sugar: a meta-analysis", types=["Meta-
 _l4 = {noun: (evidence.evidence_line("false", _L4_ST, ["Q1"], "x", None, word),
               evidence.evidence_line("false", _L4_ST, ["Q1"], "x", "small", word))
        for word, noun in (("cure", "a cure"), ("reverse", "a reversal"), ("prevent", "complete prevention"),
-                          ("stop", "a complete stop"), ("eliminate", "getting rid of it"), ("heal", "a full fix"))}
+                          ("stop", "a complete stop"), ("eliminate", "complete removal"), ("heal", "a full fix"))}
 t("L4: a false answer to a promise with no size says none of the evidence shows it, for every promise",
   all(a == f"Strong evidence, and none of it shows {n}" and b == f"Strong evidence of a small effect, not {n}"
       for n, (a, b) in _l4.items()), _l4)

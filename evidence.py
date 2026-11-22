@@ -1175,7 +1175,7 @@ _PROMISES = [
     (re.compile(r"revers", re.IGNORECASE), "a reversal"),
     (re.compile(r"prevent|protect|block", re.IGNORECASE), "complete prevention"),
     (re.compile(r"stop", re.IGNORECASE), "a complete stop"),
-    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "getting rid of it"),
+    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "complete removal"),
     (re.compile(r"heal|fix", re.IGNORECASE), "a full fix"),
 ]
 
@@ -1973,10 +1973,6 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
         return None
     solid, limited = [], []
     for s in cited:
-        # A narrative review pools nothing and measured nothing itself: like
-        # an unlabelled paper, it is neither the strength nor the weakness.
-        if narrative_review(s):
-            continue
         caveats = [c for c in trial_caveats(s)
                    if not (comparative and c == "no untreated comparison group")]
         # A study that says neither its size nor its design is not evidence
@@ -1986,6 +1982,11 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
                        for t in s.get("publication_types") or [])
         if caveats:
             limited.append(s)
+        # A narrative review pools nothing and measured nothing itself: it is
+        # never the strength. Its caveats count as any paper's do (above);
+        # with none, like an unlabelled paper, it is in neither list.
+        elif narrative_review(s):
+            continue
         elif sample_size(s) is not None or labelled:
             solid.append(s)
     if solid or not limited:
