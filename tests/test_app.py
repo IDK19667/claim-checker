@@ -5351,6 +5351,25 @@ t("  and a saved check that has the false sentence loses it on the page; one aft
   and breakdown.unsaid_nulls(_L1_NUL + " That difference was not statistically significant (Study 1).")
   == _L1_NUL + " That difference was not statistically significant (Study 1).",
   _l1["breakdown"]["effect_size"])
+# K2: an interval in code's own plain words ("likely range", breakdown.JARGON)
+# is still an interval. Live: the saved vitamin D evidence paragraph.
+_K2_N = " That difference was not statistically significant (Study 1)."
+_K2_SIG = "The risk ratio for winter-dominant seasons was 0.79 with a likely range from 0.71 to 0.89 (Study 1)."
+_K2_CROSS = "The risk ratio for winter-dominant seasons was 0.92 with a likely range from 0.80 to 1.10 (Study 1)."
+_K2_DIFF = "The average difference was -0.40 points with a likely range from -0.90 to 0.10 (Study 1)."
+_K2_AB = [_study("K2", "Vitamin D: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="RESULTS: Overall RR 0.79 (95% CI 0.60 to 1.04). Winter RR 0.79 (95% CI 0.71 to 0.89).")]
+t("K2: a paragraph whose plain-words range rules out no effect loses the false null sentence",
+  breakdown.unsaid_nulls(_K2_SIG + _K2_N) == _K2_SIG and breakdown.significant_figure(_K2_SIG),
+  breakdown.unsaid_nulls(_K2_SIG + _K2_N))
+t("  a ratio whose plain-words range includes 1, or a difference whose range crosses 0, keeps it",
+  breakdown.unsaid_nulls(_K2_CROSS + _K2_N) == _K2_CROSS + _K2_N
+  and breakdown.unsaid_nulls(_K2_DIFF + _K2_N) == _K2_DIFF + _K2_N
+  and evidence.significance(_K2_CROSS, "0.92") == "null" and evidence.significance(_K2_DIFF, "-0.40") == "null")
+t("  and say_nulls writes no null after the plain-words form on fresh text, though the abstract's first 0.79 is a null",
+  breakdown.say_nulls(_K2_SIG, _K2_AB) == _K2_SIG
+  and breakdown.say_nulls("The risk ratio for winter-dominant seasons was 0.79 (Study 1).", _K2_AB).endswith(_K2_N),
+  breakdown.say_nulls(_K2_SIG, _K2_AB))
 t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
   breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
   == "A pooled review estimated the global rate of alcohol use during pregnancy."

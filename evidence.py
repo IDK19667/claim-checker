@@ -572,7 +572,11 @@ _INTERVAL = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval", re
 
 _NUM = r"[-\u2212]?\d+(?:\.\d+)?"
 _SEP = r"\s*(?:to|\u2013|-|,|;)\s*"
-_CI_PAIR = re.compile(r"(?:C\.?I\.?|confidence interval|credible interval)\]?"
+# An interval in code's own plain words is still one: breakdown.JARGON prints
+# "95% CI" and "confidence interval" as "likely range" ("0.79 with a likely
+# range from 0.71 to 0.89").
+_CI_NAME = r"(?:C\.?I\.?|confidence interval|credible interval|likely ranges?)"
+_CI_PAIR = re.compile(_CI_NAME + r"\]?"
                       r"[\s,:=]*(?:of\s+|was\s+|from\s+)?[\(\[]?\s*(" + _NUM + ")" + _SEP
                       + "(" + _NUM + ")", re.IGNORECASE)
 _BARE_PAIR = re.compile(r"^\s*[\(\[]\s*(" + _NUM + ")" + _SEP + "(" + _NUM + r")\s*[\)\]]")
@@ -607,7 +611,7 @@ def _interval_after(text: str, start: int):
     # confidence level is not such a number, written "95%" or, as the plain
     # words print it, "95 percent".
     between = CONFIDENCE_LEVEL.sub("", window[:m.start(1)])
-    if re.search(r"\d", re.sub(r"(?:C\.?I\.?|confidence interval).*", "", between,
+    if re.search(r"\d", re.sub(_CI_NAME + r".*", "", between,
                                 flags=re.IGNORECASE | re.DOTALL)):
         return None
     return _num(m.group(1)), _num(m.group(2))
