@@ -2697,6 +2697,66 @@ t("  a strong set-aside trial the model never cited does not weaken the safe ans
 _hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR, "for")], [1], subject="(melatonin)")
 t("  and the mirror for a claim that something is safe: an uncited set-aside trial leaves 'false' as it stands",
   _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "false", (_hr["verdict"], _hr["tldr"]))
+# Guards a change could remove unnoticed. An aim stated under its own heading,
+# or in a background sentence by any of the aim wordings, names what a study
+# set out to measure.
+def _aim_st(pmid, background, objective=""):
+    return _study(pmid, "Creatine in 250 older women: a randomized controlled trial", types=["Randomized Controlled Trial"],
+                  abstract=f"BACKGROUND: Creatine is said to raise muscle strength in older adults. {background}\n"
+                           + (f"OBJECTIVE: {objective}\n" if objective else "")
+                           + "METHODS: 250 women were randomized to creatine or placebo.\n"
+                             "RESULTS: Hair density did not differ between groups (p = 0.6).\nCONCLUSIONS: Hair was unchanged.")
+_STR_OUT = "(muscle strength OR strength)"
+t("set aside: an aim under its own heading names what the study set out to measure",
+  evidence.measured_outcome(_aim_st("AM1", "", "To test whether creatine changes hair density."), _STR_OUT, "", "(creatine)")
+  is False
+  and evidence.measured_outcome(_aim_st("AM2", ""), _STR_OUT, "", "(creatine)") is None)
+t("  and so does a background sentence in each of the aim wordings",
+  [evidence.measured_outcome(_aim_st(f"AM{i}", b_), _STR_OUT, "", "(creatine)") for i, b_ in enumerate((
+      "The trial was designed to measure hair density.", "Hair density was assessed in each woman.",
+      "Hair density and shedding were examined at 12 weeks.", "To determine whether creatine changes hair density."), 3)]
+  == [False] * 4)
+# all_null asks every figure line to be a null: one real effect among nulls is an effect.
+t("  'no clear effect' needs every line with a figure to be a null, not any one of them",
+  not breakdown.all_null("Adults on the diet lost 4.1 kg more over 5 years (Study 1). Waist size changed by 0.4 cm, "
+                         "which was not statistically significant (Study 1).", _WT_ST)
+  and breakdown.all_null("Waist size changed by 0.4 cm, which was not statistically significant (Study 1).", _WT_ST))
+# A set-aside trial still counts as read when the size is checked: one that
+# found the effect and calls it significant keeps "no clear effect" off.
+_NUL_STR = dict(_FL_AGAINST, abstract=_FL_AGAINST["abstract"].replace(
+    "Leg press strength did not differ between groups (p = 0.6).",
+    "Leg press strength rose by 1.2 kg more with creatine, which did not differ significantly between groups (p = 0.6)."))
+_SIG_HAIR = dict(_FL_HAIR, pmid="FL5", abstract=_FL_HAIR["abstract"].replace(
+    "Hair density did not differ between groups (p = 0.6)", "Hair density rose with creatine (p < 0.001)"))
+_sp = {"verdict": "complicated", "tldr": "Trials disagree on whether creatine raises strength in older adults.",
+       "explanation": "One trial found no strength gain (Study 1).", "still_open": "Which doses help.",
+       "cited_study_numbers": [1, 2],
+       "relevance": [{"study": 1, "subject": True, "outcome": True, "in_people": True, "finding": "against"},
+                     {"study": 2, "subject": True, "outcome": True, "in_people": True, "finding": "for"}],
+       "parts": [], "evidence": ["Leg press strength did not differ between groups (Study 1)."],
+       "effect_size": "Leg press strength rose by 1.2 kg more with creatine, which was not statistically significant (Study 1).",
+       "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""}
+_sr = verdict._read_verdict(json.dumps(_sp), None, [dict(_NUL_STR), dict(_SIG_HAIR)],
+                            "Creatine increases muscle strength in older adults",
+                            subject="(creatine)", outcome=_STR_OUT, surrogate="")
+t("  a significant trial for the claim that code set aside still keeps 'no clear effect' off the size",
+  _sr["off_topic"].get("FL5") == verdict.OFF_OUTCOME and not ((_sr["breakdown"] or {}).get("effect") or {}).get("null"),
+  ((_sr["breakdown"] or {}).get("effect"), _sr["off_topic"]))
+# A saved answer that relied on a study set aside without the claim's stand-in
+# is current when the stand-in it was saved with says the study measured it.
+db.put_cached_verdict("creatine raises strength via hair", "(creatine) AND " + _STR_OUT, "true",
+                      "Strength rose (Study 1).", ["FL3"], [dict(_FL_HAIR)], tldr="Creatine raises strength.",
+                      still_open="Doses vary.")
+db.put_cached_query("creatine raises strength via hair", verdict.QUERY_PROMPT_VERSION, "(creatine) AND " + _STR_OUT,
+                    "hair density", "creatine raises strength")
+db.put_cached_verdict("creatine raises strength no stand-in", "(creatine) AND " + _STR_OUT, "true",
+                      "Strength rose (Study 1).", ["FL3"], [dict(_FL_HAIR)], tldr="Creatine raises strength.",
+                      still_open="Doses vary.")
+t("  a saved answer whose set-aside study its saved stand-in covers is current, and without the stand-in it is not",
+  appmod._current(db.get_cached_verdict("creatine raises strength via hair", 24), "creatine raises strength via hair")
+  is not None
+  and appmod._current(db.get_cached_verdict("creatine raises strength no stand-in", 24),
+                      "creatine raises strength no stand-in") is None)
 t("  a cap either reading earns applies: the studies used, and those with the set-aside put back",
   verdict._with_aside(["A"], ["B"]) == [["A"], ["A", "B"]] and verdict._with_aside(["A"], []) == [["A"]])
 _SA_TRIAL = _study("SA1", "Creatine and muscle strength in 900 older adults: a randomized controlled trial",
