@@ -1367,6 +1367,9 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         shown = UNAVAILABLE_MESSAGE if e.kind == "auth" else e.detail + suffix
         if e.kind == "auth":
             app.logger.error("The AI provider rejected its key: %s", e.detail)
+        elif getattr(e, "code", None) is not None:
+            # The provider's status code is for the log, never the page.
+            app.logger.warning("AI provider error %s (%s): %s", e.code, e.kind, e.detail)
         ev = {"stage": "error", "status": status, "error": shown}
         # Which way out the page offers beside the message: other words only,
         # or other words beside trying again. Absent, trying again is the way.

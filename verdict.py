@@ -53,11 +53,14 @@ class ProviderError(Exception):
     may or may not help, so trying other words is offered beside it.
     """
 
-    def __init__(self, kind: str, detail: str = "", way_out: str = ""):
+    def __init__(self, kind: str, detail: str = "", way_out: str = "", code=None):
         super().__init__(detail or kind)
         self.kind = kind
         self.detail = detail
         self.way_out = way_out
+        # The provider's status code, for the log only: `detail` is shown to
+        # readers and never carries a number they cannot act on.
+        self.code = code
 
 
 def _key(name: str) -> str | None:
@@ -176,7 +179,7 @@ def _anthropic_wrap(fn):
     except anthropic.APIConnectionError:
         raise ProviderError("unavailable", "Couldn't reach the AI service.")
     except anthropic.APIStatusError as e:
-        raise ProviderError("other", f"The AI service returned an error ({e.status_code}).")
+        raise ProviderError("other", "The AI service returned an error.", code=e.status_code)
 
 
 def _anthropic_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
@@ -272,11 +275,11 @@ def _gemini_wrap(fn):
                                         "Check it at aistudio.google.com.")
         if code == 429:
             raise ProviderError("rate_limit", "The free Gemini tier is rate-limited right now.")
-        raise ProviderError("other", f"The AI service returned an error ({code}).")
+        raise ProviderError("other", "The AI service returned an error.", code=code)
     except errors.ServerError as e:
-        raise ProviderError("unavailable", f"The AI service is having trouble ({getattr(e, 'code', '?')}).")
+        raise ProviderError("unavailable", "The AI service is having trouble.", code=getattr(e, "code", None))
     except errors.APIError as e:
-        raise ProviderError("other", f"The AI service returned an error ({getattr(e, 'code', '?')}).")
+        raise ProviderError("other", "The AI service returned an error.", code=getattr(e, "code", None))
     except (ConnectionError, TimeoutError, OSError):
         raise ProviderError("unavailable", "Couldn't reach the AI service.")
 

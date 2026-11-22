@@ -492,8 +492,21 @@ t("gemini retry: 503, 503, then success returns the answer after 3 tries, pausin
   _v == "ok" and _e is None and _n == 3 and _p == [1.0, 3.0], (_v, _e, _n, _p))
 _v, _e, _n, _p = _run_wrap(_e503(), _e503(), _e503())
 t("  503 three times: the same 'unavailable' error and message as before, after 3 tries",
-  _e is not None and _e.kind == "unavailable" and _e.detail == "The AI service is having trouble (503)."
+  _e is not None and _e.kind == "unavailable" and _e.detail == "The AI service is having trouble." and _e.code == 503
   and _n == 3 and _p == [1.0, 3.0], (_e, _n, _p))
+# H9: no status number in a message a reader sees; the code stays on the error
+# for the log. Every ProviderError message built in verdict.py, then the page
+# and the stream for a provider 503.
+import re  # noqa: E402
+_h9_src = open(os.path.join(os.path.dirname(os.path.abspath(verdict.__file__)), "verdict.py")).read()
+_h9_built = re.findall(r'ProviderError\(\s*"\w+",\s*(f?"[^"]*")', _h9_src)
+t("H9: no ProviderError message built in verdict.py carries a status number or a {code}",
+  _h9_built and not any(re.search(r"\d{3}|\{", m_) for m_ in _h9_built), _h9_built)
+_h9_e = [_run_wrap(x(), x(), x())[1] for x in (_e503, _e500)] + [
+    _run_wrap(errors.ClientError(404, {"error": {"message": "no model", "status": "NOT_FOUND"}}))[1]]
+t("  and the errors a 5xx or a 4xx raises keep the code for the log, not in their words",
+  all(e_ is not None and e_.code in (503, 500, 404) and not re.search(r"\d", e_.detail) for e_ in _h9_e),
+  [(e_.code, e_.detail) for e_ in _h9_e if e_])
 _v, _e, _n, _p = _run_wrap(_e429(), "ok")
 t("  429 then success returns the answer, pausing 1s once", _v == "ok" and _n == 2 and _p == [1.0], (_v, _n, _p))
 _v, _e, _n, _p = _run_wrap(_e429(), _e429(), _e429())
@@ -9054,6 +9067,23 @@ finally:
         _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF),))
     ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
     ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+# H9: a provider 503 with no saved answer: the page and the stream say the
+# service is having trouble, with the Retry, and no status number.
+_h9_503 = _run_wrap(_e503(), _e503(), _e503())[1]
+verdict.weigh_evidence = _sf_raise(_h9_503)
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(_RES_ONLY), dict(_hair)], q, False)
+try:
+    fg.models.script = [Resp("(creatine) AND (rowing)")]
+    _h9_p = P("Creatine helps rowers H9 never saved", ip="7.6.99.1")
+    fg.models.script = [Resp("(creatine) AND (rowing)")]
+    _h9_ev = stream("Creatine helps rowers H9 never saved", ip="7.6.99.2")[1][-1]
+finally:
+    verdict.weigh_evidence, pubmed.search_with_fallback = _sf_weigh, _sf_search
+_h9_pj = _h9_p.get_json() or {}
+t("H9: a provider 503 shows the trouble sentence and no status number, on the page and in the stream",
+  _h9_503.code == 503
+  and all("The AI service is having trouble." in str(x_.get("error")) and not re.search(r"\b[45]\d\d\b", str(x_.get("error")))
+          for x_ in (_h9_pj, _h9_ev)) and _h9_ev.get("stage") == "error", (_h9_pj, _h9_ev))
 # A GET never calls the model: the page, the card and the lists show the saved
 # row as stored until a fresh check replaces it.
 _sf_row()
