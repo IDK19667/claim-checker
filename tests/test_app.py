@@ -2587,6 +2587,58 @@ _fs, _fr = _flip([(_FL_HAIR, "for"), (_FL_AGAINST, "against")], "for", ("stronge
 t("  and the mirror: the one set aside agreed, and the answer still does not become 'trials say no'",
   "FL3" not in _fr["cited_studies"] and _fr["verdict"] == "complicated"
   and "Randomized trials say no" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+# The harm guard with a study set aside: it is worked out on the studies as
+# they stand and with the set-aside ones put back, and the set-aside study
+# counts exactly as it would have in view, never more.
+def _hg_st(pmid, title, results, types, background="Flu vaccines are given to adults each winter."):
+    return _study(pmid, title, types=types,
+                  abstract=f"BACKGROUND: {background}\nMETHODS: Adults took part over two winters.\n"
+                           f"RESULTS: {results}\nCONCLUSIONS: See results.")
+_HG_FOR = _hg_st("HG1", "Flu vaccine and hospital admissions in 3,000 adults: a randomized controlled trial",
+                 "Hospital admissions fell with the vaccine (p < 0.01).", ["Randomized Controlled Trial"])
+_HG_HAIR_WEAK = _hg_st("HG2", "Flu vaccine and hair loss in 800 adults: a cohort study",
+                       "Hair loss did not differ between groups.", ["Observational Study"],
+                       background="Flu vaccines are said to reduce hospital admissions.")
+_HG_HAIR_RCT = _hg_st("HG3", "Flu vaccine and hair loss in 2,000 adults: a randomized controlled trial",
+                      "Hair loss did not differ between groups (p = 0.6).", ["Randomized Controlled Trial"],
+                      background="Flu vaccines are said to reduce hospital admissions.")
+def _hg(claim, outcome, model_verdict, studies_findings, cited, subject="(flu vaccine OR influenza vaccine)"):
+    sts = [dict(s_) for s_, _ in studies_findings]
+    parsed = {"verdict": model_verdict, "tldr": "The studies here lean one way.",
+              "explanation": "The trials were read (Study 1).", "still_open": "Who it helps most.",
+              "cited_study_numbers": cited,
+              "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f_}
+                            for i, (_, f_) in enumerate(studies_findings)],
+              "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+              "not_applies_to": "", "unknowns": ""}
+    return verdict._read_verdict(json.dumps(parsed), None, sts, claim, subject=subject,
+                                 outcome=outcome, surrogate="")
+_HG_C = "Flu vaccines reduce hospital admissions"
+_HG_O = "(hospital admissions)"
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_WEAK, "against")], [1, 2])
+t("harm guard, set aside: strong trials point the safe way and a weak set-aside study disagrees, so the safe answer stands",
+  _hr["off_topic"].get("HG2") == verdict.OFF_OUTCOME and _hr["verdict"] == "true" and "HG1" in _hr["cited_studies"],
+  (_hr["verdict"], _hr["tldr"], _hr["off_topic"]))
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_WEAK, "against")], [1])
+t("  and the same with the set-aside study never cited",
+  _hr["off_topic"].get("HG2") == verdict.OFF_OUTCOME and _hr["verdict"] == "true", (_hr["verdict"], _hr["tldr"]))
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_RCT, "against")], [1, 2])
+t("  a strong, cited set-aside trial that backs the risky answer stops it at 'complicated', with the risk said",
+  _hr["off_topic"].get("HG3") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
+  and "Going without vaccination" in _hr["tldr"] and "support this claim" not in _hr["tldr"],
+  (_hr["verdict"], _hr["tldr"]))
+_HG_SAFE_C = "Melatonin is safe for children"
+_HG_SAFE_O = "(adverse events OR side effects)"
+_HG_HARM = _hg_st("HG4", "Melatonin and adverse events in 400 children: a randomized controlled trial",
+                  "Adverse events were more common with melatonin (p < 0.01).", ["Randomized Controlled Trial"],
+                  background="Melatonin is given to children who sleep badly.")
+_HG_SAFE_HAIR = _hg_st("HG5", "Melatonin and hair growth in 300 children: a randomized controlled trial",
+                       "Hair growth did not differ between groups (p = 0.6).", ["Randomized Controlled Trial"],
+                       background="Melatonin is said to cause few adverse events in children.")
+_hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR, "for")], [1, 2], subject="(melatonin)")
+t("  and the mirror for a claim that something is safe: 'complicated', saying safety is not shown, never 'false' made firm",
+  _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
+  and _hr["tldr"] == verdict._UNSAFE_UNPROVEN, (_hr["verdict"], _hr["tldr"]))
 t("  a cap either reading earns applies: the studies used, and those with the set-aside put back",
   verdict._with_aside(["A"], ["B"]) == [["A"], ["A", "B"]] and verdict._with_aside(["A"], []) == [["A"]])
 _SA_TRIAL = _study("SA1", "Creatine and muscle strength in 900 older adults: a randomized controlled trial",

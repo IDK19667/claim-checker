@@ -2016,6 +2016,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # "not tested in people", which says more than "nothing cited".
     reasons = {**_not_tested(parsed, studies, claim),
                **evidence.background_reasons(studies, claim)}
+    aside_reasons = {p: why for p, why in reasons.items() if p in aside}
     reasons = {p: why for p, why in reasons.items() if p not in off}
     background = [s["pmid"] for s in studies if s["pmid"] in reasons]
     leaned_on = cited_pmids
@@ -2087,7 +2088,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # call something safe, has to rest on a randomized trial or a major
     # review that says so. Otherwise it follows the strongest evidence and
     # states the risk plainly.
-    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids, aside)
+    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids, aside, aside_reasons)
     if guarded:
         for n in guarded["follows"]:
             pmid = studies[n - 1]["pmid"]
@@ -2449,7 +2450,33 @@ def _strong(study: dict) -> bool:
 
 
 def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
-                reasons: dict, cited_pmids: list[str], aside: list[str] = ()) -> dict | None:
+                reasons: dict, cited_pmids: list[str], aside: list[str] = (),
+                aside_reasons: dict | None = None) -> dict | None:
+    """
+    The guard below, worked out twice when code set studies aside: on the
+    studies as they stand, and with the set-aside ones put back (not off,
+    cited, with the background reason they would have had). A study set
+    aside counts exactly as it would have in view, never more: when both
+    readings act, the answer is the one the studies as they stand give;
+    when only the standing one acts, because a set-aside study would have
+    backed the model's verdict, the answer stops at "complicated" with the
+    risk said, never the safe way made firm by removing that study.
+    """
+    stand = _guard_reading(claim, verdict, parsed, studies, off, reasons, cited_pmids)
+    back = [p for p in aside if p in off]
+    if not stand or not back:
+        return stand
+    put_back = _guard_reading(
+        claim, verdict, parsed, studies, {p: why for p, why in off.items() if p not in back},
+        {**reasons, **{p: why for p, why in (aside_reasons or {}).items() if p in back}},
+        list(cited_pmids) + [p for p in back if p not in cited_pmids])
+    if put_back:
+        return stand
+    return {**stand, "verdict": "complicated", "follows": []}
+
+
+def _guard_reading(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
+                   reasons: dict, cited_pmids: list[str]) -> dict | None:
     """
     When this verdict would steer a reader away from a protective practice
     (sunscreen, vaccination, pasteurization, a prescribed medicine), or
@@ -2480,11 +2507,6 @@ def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off
         return None
     toward = "for" if safe_way == "true" else "against"
     follows = sorted(n for n in usable if findings[n] == toward)
-    # A study code set aside that points the other way still disagrees, so
-    # the guard stops short of a firm answer rather than following.
-    if any(findings[n] != toward and findings[n] in ("for", "against", "mixed")
-           for n in findings if studies[n - 1]["pmid"] in aside):
-        follows = []
     return {"verdict": safe_way if follows else "complicated", "follows": follows,
             "risk": risk, "subject": subject}
 
