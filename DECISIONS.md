@@ -4,6 +4,31 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21: A reply that could not be read is a failed check, not a verdict
+
+A model reply that could not be read at all (cut off, declined, not JSON)
+used to be saved and listed as "It's complicated" with "Couldn't reach a
+verdict", and counted in trending, type-ahead, related claims and the
+sitemap: a failure presented as a verdict about the evidence. This reverses
+the "left as they were" note in the entry below. Now `weigh_evidence` raises
+`ProviderError("other")` for it, the path an empty-line reply already takes,
+so the reader gets the 502 naming what went wrong and "Try again in a
+moment", on the plain and the streamed check; nothing is saved or logged.
+Rows saved that way before are kept but recognised by the fallback's own
+short answer (`db.FAILED_REPLY_TLDR`): never served, and left out of every
+public reader in db.py. An old real answer that only lacks its still-open
+line is not one of them and stays where it was listed. On the owner's 97
+saved claims there were none.
+
+## 2026-11-21: The Latest list: whole rows only, each question once
+
+The home and 404 lists go through `app._latest`: only whole rows (the test
+the trust example and a result page use), then one row per `db.claim_fold`
+key, the newest under its own wording; an empty key is never merged.
+`suggest.group_similar` was not used: it merges different questions
+("cures", "helps" and "causes"). On the owner's claims this folds exactly
+the three pairs `find_equivalent` merges and leaves the newest ten as they were.
+
 ## 2026-11-21: Steady answers: a stale saved answer is kept when nothing changed
 
 The same claim got different verdicts on different days from the same
