@@ -816,6 +816,17 @@ def _on_gemini() -> bool:
         return True
 
 
+def _readings(studies, cited, search_query) -> list[set]:
+    """The studies used, and, when code set any aside as measuring another
+    outcome, the same with those put back (verdict.set_aside). A cap or a
+    lower certainty either reading earns applies to the page."""
+    groups = pubmed.split_and(search_query or "")
+    aside = set(verdict.set_aside(
+        studies or [], {s.get("pmid"): s.get("off_topic") for s in studies or [] if isinstance(s, dict)},
+        groups[1] if len(groups) > 1 else "", "", groups[0] if groups else "")) - set(cited)
+    return [set(cited), set(cited) | aside] if cited and aside else [set(cited)]
+
+
 def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool:
     """Whether a "true" has to be shown as "complicated": exactly the cap a
     fresh check gets in verdict.py (the lead review, read strictly, rates
@@ -841,7 +852,8 @@ def _listed(v: dict) -> dict:
             return dict(v, verdict="insufficient", **({"tldr": verdict.UNTESTED_TLDR} if "tldr" in v else {}))
     outcome = _outcome_group(v.get("search_query"))
     try:
-        if _capped_true(v["verdict"], v["claim_text"], v["studies"], cited, outcome, v.get("tldr")):
+        if any(_capped_true(v["verdict"], v["claim_text"], v["studies"], used, outcome, v.get("tldr"))
+               for used in _readings(v["studies"], cited, v.get("search_query"))):
             return dict(v, verdict="complicated")
     except Exception:  # noqa: BLE001
         if v.get("verdict") == "true" and not _from_guidance(v.get("tldr")):
@@ -884,30 +896,37 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # surer than the least sure thing the page says, and a certainty phrase
     # in the prose that is surer than the line is rewritten down to it.
     stated = evidence.stated_certainty(tldr, explanation, *breakdown_mod.prose_of(breakdown))
-    evidence_line = evidence.evidence_line(
-        verdict_value, studies, cited, claim,
-        ((breakdown or {}).get("effect") or {}).get("label"),
-        breakdown_mod.absolute_claim(claim),
-        bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-        outcome, stated=stated)
+    # A study code set aside as measuring another outcome loses its citation,
+    # never its say: the line is the less sure of the one over the studies
+    # used and the one with those put back, so setting one aside never lifts
+    # a certainty word, and a cap either reading earns applies.
+    readings = _readings(studies, cited, search_query)
+
+    def line_for(stamp):
+        lines = [evidence.evidence_line(
+            stamp, studies, used, claim,
+            ((breakdown or {}).get("effect") or {}).get("label"),
+            breakdown_mod.absolute_claim(claim),
+            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
+            outcome, stated=stated) for used in readings]
+        sure = lambda line: (evidence._rank(evidence.line_certainty(line))
+                             if evidence.line_certainty(line) else len(evidence.CERTAINTY_LEVELS))
+        return min(lines, key=sure)
+
+    evidence_line = line_for(verdict_value)
     # The stamp follows the same cap a fresh check gets in verdict.py: a
     # "true" the evidence cannot carry (the lead review rates itself low, or
     # only small and pilot trials) is not shown as likely true, and nor is a
     # "true" over a line that says low certainty. A check cached before the
     # cap existed, or before its line was scoped, gets it here.
-    if _capped_true(verdict_value, claim, studies, cited, outcome, tldr):
+    if any(_capped_true(verdict_value, claim, studies, used, outcome, tldr) for used in readings):
         verdict_value = "complicated"
         if not re.search(r"\bcertainty\b[^.]*\blow\b", tldr or "", re.IGNORECASE):
             leaned = f"{(tldr or '').rstrip().rstrip('.')}, but the certainty of that evidence is low."
             tldr = (leaned if tldr and len(leaned) <= verdict.TLDR_MAX
                     and not breakdown_mod.stamp_conflict(verdict_value, leaned, "", claim)
                     else verdict.LOW_CERTAINTY_TLDR)
-        evidence_line = evidence.evidence_line(
-            verdict_value, studies, cited, claim,
-            ((breakdown or {}).get("effect") or {}).get("label"),
-            breakdown_mod.absolute_claim(claim),
-            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-            outcome, stated=stated)
+        evidence_line = line_for(verdict_value)
     # A figure that was not significant is said as one, in words that do not
     # contradict an answer that there is an effect.
     if breakdown and breakdown_mod.answers_effect(verdict_value, claim):

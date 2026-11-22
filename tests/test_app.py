@@ -2484,6 +2484,68 @@ t("  a title naming another outcome is not enough when the findings never name i
                             _hair_out) is None)
 t("  the hair trial is still set aside: its background names strength, its title and results name hair",
   evidence.measured_outcome(_hair, _hair_out) is False)
+# Setting a study aside removes its citation and nothing else. Two trials
+# disagree and the answer is "complicated"; code sets one aside; the page must
+# not then say "Randomized trials say yes". The mirror: the one set aside is
+# the one that agreed.
+def _flip_st(pmid, title, abstract, types):
+    return _study(pmid, title, abstract=abstract, types=types)
+_FL_FOR = _flip_st("FL1", "Creatine and muscle strength in 240 older adults: a randomized controlled trial",
+                   "BACKGROUND: Ageing lowers strength.\nMETHODS: 240 adults were randomized to creatine or placebo.\n"
+                   "RESULTS: Muscle strength rose more with creatine (mean difference 8 kg, p < 0.001).\n"
+                   "CONCLUSIONS: Creatine raised strength.", ["Randomized Controlled Trial"])
+_FL_AGAINST = _flip_st("FL2", "Creatine and muscle strength in 260 older women: a randomized controlled trial",
+                       "BACKGROUND: Creatine is said to help.\nMETHODS: 260 women were randomized to creatine or placebo.\n"
+                       "RESULTS: Leg press strength did not differ between groups (p = 0.6).\n"
+                       "CONCLUSIONS: Creatine gave no strength benefit.", ["Randomized Controlled Trial"])
+_FL_HAIR = _flip_st("FL3", "Creatine and hair in 250 older women: a randomized controlled trial",
+                    "BACKGROUND: Creatine is said to raise muscle strength in older adults.\n"
+                    "METHODS: 250 women were randomized to creatine or placebo.\n"
+                    "RESULTS: Hair density did not differ between groups (p = 0.6).\nCONCLUSIONS: Hair was unchanged.",
+                    ["Randomized Controlled Trial"])
+_FL_SURVEY = _flip_st("FL4", "Creatine use and muscle strength in 5,000 gym members: a cross-sectional study",
+                      "BACKGROUND: Many take creatine.\nMETHODS: A survey of 5,000 gym members.\n"
+                      "RESULTS: Creatine users were {} than non-users.\nCONCLUSIONS: {}.",
+                      ["Journal Article", "Observational Study"])
+def _flip(trials_findings, survey_finding, survey_words):
+    survey = dict(_FL_SURVEY, abstract=_FL_SURVEY["abstract"].format(*survey_words))
+    sts = [dict(s_) for s_, _ in trials_findings] + [survey]
+    finds = [f_ for _, f_ in trials_findings] + [survey_finding]
+    parsed = {"verdict": "complicated", "tldr": "Trials disagree on whether creatine raises strength in older adults.",
+              "explanation": "One trial found more strength with creatine (Study 1). Another found none (Study 2).",
+              "still_open": "Which doses help, and for whom.", "cited_study_numbers": list(range(1, len(sts) + 1)),
+              "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f_}
+                            for i, f_ in enumerate(finds)],
+              "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+              "not_applies_to": "", "unknowns": ""}
+    return sts, verdict._read_verdict(json.dumps(parsed), None, sts, "Creatine increases muscle strength in older adults",
+                                      subject="(creatine)", outcome="(muscle strength OR strength)", surrogate="")
+_fs, _fr = _flip([(_FL_FOR, "for"), (_FL_HAIR, "against")], "against", ("no stronger", "No association"))
+t("set aside: a trial code sets aside that disagreed still disagrees, so the trials settle nothing",
+  "FL3" not in _fr["cited_studies"] and _fr["off_topic"].get("FL3") == verdict.OFF_OUTCOME
+  and _fr["verdict"] == "complicated" and "Randomized trials say yes" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+_fs, _fr = _flip([(_FL_HAIR, "for"), (_FL_AGAINST, "against")], "for", ("stronger", "Users were stronger"))
+t("  and the mirror: the one set aside agreed, and the answer still does not become 'trials say no'",
+  "FL3" not in _fr["cited_studies"] and _fr["verdict"] == "complicated"
+  and "Randomized trials say no" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+t("  a cap either reading earns applies: the studies used, and those with the set-aside put back",
+  verdict._with_aside(["A"], ["B"]) == [["A"], ["A", "B"]] and verdict._with_aside(["A"], []) == [["A"]])
+_SA_TRIAL = _study("SA1", "Creatine and muscle strength in 900 older adults: a randomized controlled trial",
+                   abstract="BACKGROUND: Ageing lowers strength.\nMETHODS: 900 adults were randomized.\n"
+                            "RESULTS: Muscle strength rose more with creatine (p < 0.001).\nCONCLUSIONS: Creatine raised strength.",
+                   types=["Randomized Controlled Trial"])
+_SA_REVIEW = dict(_study("SA2", "Creatine and hair loss: a systematic review and meta-analysis",
+                         abstract="BACKGROUND: Creatine raises muscle strength.\nMETHODS: We pooled 12 trials.\n"
+                                  "RESULTS: Hair loss did not differ between groups.\nCONCLUSIONS: Hair was unchanged. "
+                                  "The certainty of the evidence was very low.",
+                         types=["Systematic Review", "Meta-Analysis"]), off_topic=verdict.OFF_OUTCOME)
+with appmod.app.test_request_context("/"):
+    _sa = appmod._check_response("Creatine increases muscle strength", "(creatine) AND (muscle strength OR strength)",
+                                 "true", "Creatine raises strength.", "Strength rose (Study 1).", ["SA1"],
+                                 [dict(_SA_TRIAL), dict(_SA_REVIEW)], "http://x", still_open="Doses.")
+t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
+  _sa["evidence_line"].startswith("Very low certainty") and _sa["verdict"] == "complicated",
+  (_sa["verdict"], _sa["evidence_line"]))
 _MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
 fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
                             explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",
