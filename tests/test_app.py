@@ -8287,6 +8287,125 @@ with db.get_conn() as _conn:
     _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
                   tuple(db.normalize_claim(x) for x in _od_rows))
 
+# ---- where the fixes meet: an out-of-date answer whose fresh check fails -----
+# A saved answer in its window that _current calls out of date is checked
+# fresh. When that fresh check cannot finish, for any defined reason, the
+# reader gets the saved answer exactly as before this release, never an
+# error, and the failure overwrites nothing. Exact, misspelled and reworded
+# lookups, on the plain and the streamed check.
+import requests as _rq_sf  # noqa: E402
+import ratelimit as _rl_sf  # noqa: E402
+_SF = "Creatine raises strength in swimmers"
+_SF_TLDR = "Creatine raises strength and hormones in swimmers."
+
+
+def _sf_row():
+    db.put_cached_verdict(_SF, "(creatine) AND (" + _hair_out + ")", "true",
+                          "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", _hair["pmid"]],
+                          [dict(_RES_ONLY), dict(_hair)], tldr=_SF_TLDR, still_open="Doses vary.")
+    with db.get_conn() as _conn:
+        return dict(_conn.execute("SELECT * FROM verdict_cache WHERE claim_key = ?",
+                                  (db.normalize_claim(_SF),)).fetchone())
+
+
+def _sf_raise(exc):
+    def go(*a, **k):
+        raise exc
+    return go
+
+
+_SF_FAILS = (
+    ("the provider is busy", "weigh", verdict.ProviderError("unavailable", "busy")),
+    ("the provider is out of quota", "weigh", verdict.ProviderError("rate_limit", "quota")),
+    ("the reply is declined", "weigh", verdict.ProviderError("other", verdict.unread_reply(verdict.DECLINED), "reword")),
+    ("the reply is cut off", "weigh", verdict.ProviderError("other", verdict.unread_reply(verdict.CUT_OFF), "either")),
+    ("the reply cannot be read", "weigh", verdict.ProviderError("other", verdict.unread_reply(verdict.UNREADABLE))),
+    ("the reply has a line missing", "weigh", verdict.ProviderError("other", verdict.INCOMPLETE_REPLY, "either")),
+    ("the provider key is missing", "weigh", RuntimeError("No AI provider key is set.")),
+    ("PubMed cannot be reached", "search", _rq_sf.ConnectionError("down")),
+    ("something unforeseen breaks", "weigh", ValueError("boom")),
+    ("the reader's rate limit is reached", "limit", None),
+)
+_sf_row0 = _sf_row()
+# Many checks run here: fresh global windows, before and after, as elsewhere.
+ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
+ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+_sf_weigh, _sf_search, _sf_limit = verdict.weigh_evidence, pubmed.search_with_fallback, _rl_sf.check
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(_RES_ONLY), dict(_hair)], q, False)
+try:
+    for _i, (_lbl, _where, _exc) in enumerate(_SF_FAILS):
+        if _where == "weigh":
+            verdict.weigh_evidence = _sf_raise(_exc)
+        elif _where == "search":
+            pubmed.search_with_fallback = _sf_raise(_exc)
+        else:
+            _rl_sf.check = lambda key: (False, "Slow down a little.", 30)
+        for _how, _typed, _script in (
+                ("exact", _SF, []),
+                ("misspelled", "Creatin raises strenght in swimmers",
+                 [Resp("(creatine) AND (" + _hair_out + ")\nClaim: " + _SF)]),
+                ("reworded", "Does creatine raise strength in swimmers?", []),
+                ("misspelled and reworded", "Does creatin raise strenght in swimmers?",
+                 [Resp("(creatine) AND (" + _hair_out + ")\nClaim: Does creatine raise strength in swimmers?")])):
+            if _where == "limit" and _how.startswith("misspelled"):
+                continue    # the limit is met before the spelling is known: nothing saved is found yet
+            fg.models.script = list(_script)
+            _sf = P(_typed, ip=f"7.6.{_i}.1")
+            _sfj = _sf.get_json() or {}
+            t(f"stale on failure: when {_lbl}, a {_how} check gets the saved answer, not an error",
+              _sf.status_code == 200 and _sfj.get("cached") is True and _sfj.get("claim") == _SF
+              and (_sfj.get("tldr") or "").startswith(_SF_TLDR[:-1])
+              and (_sfj.get("typed") is None) == (_how == "exact"), (_sf.status_code, _sfj.get("error"), _sfj.get("typed")))
+            fg.models.script = list(_script)
+            _sf_r, _sf_evs = stream(_typed, ip=f"7.6.{_i}.2")
+            t(f"  and the streamed {_how} check too ({_lbl})",
+              _sf_evs and _sf_evs[-1]["stage"] == "done" and _sf_evs[-1]["result"]["cached"] is True
+              and _sf_evs[-1]["result"]["claim"] == _SF and not any(e_["stage"] == "error" for e_ in _sf_evs),
+              _sf_evs[-1] if _sf_evs else None)
+        with db.get_conn() as _conn:
+            _sf_now = dict(_conn.execute("SELECT * FROM verdict_cache WHERE claim_key = ?",
+                                         (db.normalize_claim(_SF),)).fetchone())
+        t(f"  and the failure overwrites nothing ({_lbl})",
+          {k: _sf_now[k] for k in _sf_now if k != "created_at"} == {k: _sf_row0[k] for k in _sf_row0 if k != "created_at"}
+          and _sf_now["created_at"] == _sf_row0["created_at"])
+        verdict.weigh_evidence, pubmed.search_with_fallback, _rl_sf.check = (
+            _sf_weigh, lambda q, max_results=8, surrogate="": ([dict(_RES_ONLY), dict(_hair)], q, False), _sf_limit)
+    # The misspelling call site: with the model at hand, the saved wording an
+    # out-of-date answer stands under is checked fresh, as on the other paths.
+    _calls0 = fg.models.calls
+    # (Its search was saved by the checks above, so only the verdict is asked for.)
+    fg.models.script = [Resp(VJ("complicated", [1]))]
+    _sf_ok = P("Creatin raises strenght in swimmers", ip="7.6.99.1").get_json()
+    t("meet: a misspelled claim whose saved wording is out of date is checked fresh",
+      _sf_ok.get("cached") is False and _sf_ok.get("claim") == _SF and _sf_ok.get("typed_reason") == "spelling"
+      and fg.models.calls - _calls0 == 1, (_sf_ok.get("cached"), _sf_ok.get("claim"), fg.models.calls - _calls0))
+    # And the second look after the spelling switch, for a reworded match.
+    _sf_row()
+    _calls0 = fg.models.calls
+    fg.models.script = [Resp(VJ("complicated", [1]))]
+    _sf_ok = P("Does creatin raise strenght in swimmers?", ip="7.6.99.2").get_json()
+    t("meet: a misspelled rewording of an out-of-date saved answer is checked fresh",
+      _sf_ok.get("cached") is False and _sf_ok.get("claim") == _SF and fg.models.calls - _calls0 == 1,
+      (_sf_ok.get("cached"), _sf_ok.get("claim"), fg.models.calls - _calls0))
+finally:
+    verdict.weigh_evidence, pubmed.search_with_fallback, _rl_sf.check = _sf_weigh, _sf_search, _sf_limit
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF),))
+    ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
+    ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+# A GET never calls the model: the page, the card and the lists show the saved
+# row as stored until a fresh check replaces it.
+_sf_row()
+_calls0 = fg.models.calls
+_sf_pg = c.get("/?q=" + urllib.parse.quote(_SF))
+_sf_og = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_SF), safe="") + ".png")
+c.get("/"); c.get("/api/suggest?q=creatine+swimmers"); c.get("/api/trending")
+t("stale on GET: the page and the card show the saved row, and no GET calls the model",
+  _sf_pg.status_code == 200 and _SF_TLDR[:-1] in _sf_pg.get_data(as_text=True) and _sf_og.status_code == 200
+  and _sf_og.mimetype == "image/png" and fg.models.calls == _calls0, (_sf_pg.status_code, _sf_og.status_code))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF),))
+
 # ---- where the fixes meet: a kept answer is never an out-of-date one ----------
 # rc-saved-fix keeps a saved answer past its window when the stamp and every
 # record are the same; rc-reading calls one that relied on a study code now

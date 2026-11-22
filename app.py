@@ -1167,9 +1167,29 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"), typed=typed,
             typed_reason=reason)}
 
+    # A saved answer in its window that _current calls out of date is checked
+    # fresh. Until a fresh answer replaces it, it is still the answer this
+    # site gave: when the fresh check cannot finish, for any defined reason,
+    # the reader gets it, exactly as before, and nothing is overwritten.
+    stale = []
+
+    def current(found, key, typed=None, reason=None):
+        now = _current(found, key)
+        if found and now is None and not stale:
+            stale.append((found, typed, reason, key))
+        return now
+
+    def or_saved(ev):
+        """The error stage, or the out-of-date saved answer when there is one."""
+        if stale:
+            app.logger.warning("A fresh check of an out-of-date saved answer did not finish "
+                               "(%s); the saved answer is shown", ev.get("status"))
+            return from_cache(*stale[0])
+        return ev
+
     # 1. Cache first: a repeat of a recent claim costs nothing and is
     #    never rate-limited. Viral claims get checked by many people.
-    cached = _current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim)
+    cached = current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim)
     if cached:
         yield from_cache(cached)
         return
@@ -1180,7 +1200,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     typed, reason = None, None
     same = _equivalent(claim)
     if same:
-        cached = _current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same)
+        cached = current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same, claim, "wording")
         if cached:
             yield from_cache(cached, claim, "wording", same)
             return
@@ -1189,7 +1209,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     # 2. Rate limit only the checks that will actually hit the AI provider.
     allowed, message, retry_after = ratelimit.check(f"ip:{client_ip}")
     if not allowed:
-        yield {"stage": "error", "status": 429, "error": message, "retry_after": retry_after}
+        yield or_saved({"stage": "error", "status": 429, "error": message, "retry_after": retry_after})
         return
 
     # 3. The real thing, stage by stage.
@@ -1216,13 +1236,13 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             # link. A correctly spelled check of it may already be cached.
             # The note says what the reader typed, and that it was spelling.
             typed, reason, claim = typed or claim, "spelling", understood
-            cached = _current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim)
+            cached = current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim, typed, reason)
             if cached:
                 yield from_cache(cached, typed, reason)
                 return
             same = _equivalent(claim)
             if same:
-                cached = _current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same)
+                cached = current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same, typed, reason)
                 if cached:
                     yield from_cache(cached, typed, reason, same)
                     return
@@ -1247,7 +1267,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         # reader's. The detail goes to the log; the page says what to do.
         app.logger.error("Check could not run: %s", e)
         db.count_event("provider.auth")
-        yield {"stage": "error", "status": 500, "error": UNAVAILABLE_MESSAGE}
+        yield or_saved({"stage": "error", "status": 500, "error": UNAVAILABLE_MESSAGE})
         return
     except verdict.ProviderError as e:
         status = {"auth": 500, "rate_limit": 429, "unavailable": 502}.get(e.kind, 502)
@@ -1265,19 +1285,19 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             ev["way_out"] = e.way_out
         if e.kind == "rate_limit":
             ev["retry_after"] = 20
-        yield ev
+        yield or_saved(ev)
         return
     except requests.RequestException:
         db.count_event("pubmed.failure")
-        yield {"stage": "error", "status": 502,
-               "error": "Couldn't reach PubMed right now. Try again in a minute."}
+        yield or_saved({"stage": "error", "status": 502,
+                        "error": "Couldn't reach PubMed right now. Try again in a minute."})
         return
     except Exception:  # noqa: BLE001 — last line of defence; never crash a check
         # The exception text is for the log. A reader gets the problem and a way out.
         app.logger.exception("Check failed")
         db.count_event("error.server")
-        yield {"stage": "error", "status": 500,
-               "error": "Something went wrong while checking this claim. Try again in a moment."}
+        yield or_saved({"stage": "error", "status": 500,
+                        "error": "Something went wrong while checking this claim. Try again in a moment."})
         return
 
     db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],

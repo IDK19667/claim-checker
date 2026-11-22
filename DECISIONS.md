@@ -4,6 +4,20 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21 (release): An out-of-date saved answer stands until a fresh one replaces it
+
+A saved answer that relied on a study the code now sets aside is out of
+date (`app._current`), so a typed check runs fresh on every path: the exact
+claim, a misspelling, a rewording and a kept answer past its window. When
+that fresh check cannot finish for any defined reason (the provider busy,
+out of quota or without a key, a reply declined, cut off, unreadable or
+with a line missing, PubMed down, the reader's rate limit, an unforeseen
+error), the reader gets the saved answer, as before this release, never an
+error, and nothing is overwritten. Before this, a failed fresh check of
+such an answer was an error (a 500 when no provider key was set). A GET
+(the result page, the card, every list) never calls the model: it shows
+the saved row as stored until a fresh check replaces it.
+
 ## 2026-11-21: A reworded match reached by a link is server-rendered
 
 The page looked a saved answer up by the claim's exact key only, so an
