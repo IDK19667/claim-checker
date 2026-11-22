@@ -9425,6 +9425,20 @@ t("  a citation that was part of the sentence itself takes the sentence with it,
   breakdown.relied_only("Studies 6 and 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5)."
   and breakdown.relied_only("As in other trials (see earlier studies).", {5}, 8)
   == "As in other trials (see earlier studies).")
+_G4_PLAIN = ["The effect was significant (p = .03).", "Vitamin D (and calcium) improved bone density.",
+             "A mean difference of .5 points was seen (Study 2).", "The ratio was 1 : 2 in both arms."]
+t("G4: a sentence in which no reference was emptied comes back byte for byte",
+  all(breakdown.without_empty_refs(x) == x and breakdown.relied_only(x, {2, 5}, 8) == x for x in _G4_PLAIN),
+  [breakdown.relied_only(x, {2, 5}, 8) for x in _G4_PLAIN])
+t("  an empty reference goes with the space before it, and only that bracket changes",
+  [breakdown.without_empty_refs(x) for x in ("Harm (Studies ), (p = .03).", "Harm (Study ) here.", "Harm ( ) here.")]
+  == ["Harm, (p = .03).", "Harm here.", "Harm here."])
+t("  a dangling separator or an odd reference is rebuilt from the numbers it still has",
+  breakdown.relied_only("Harm (Study 5; Study 6).", {5}, 8) == "Harm (Study 5)."
+  and [breakdown.without_empty_refs(x) for x in ("Harm (Studies , 4).", "Harm (Study and 4).", "Harm (Studies 2, ).")]
+  == ["Harm (Study 4).", "Harm (Study 4).", "Harm (Study 2)."])
+t("  a sentence whose subject was the reference still goes whole",
+  breakdown.relied_only("Study 6 and Study 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5).")
 _er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", "complicated", "Mixed.", _ER,
                                 ["P5"], [_study(f"P{i}", f"Study of alcohol {i}") for i in range(1, 9)],
                                 "http://x", still_open="Whether small amounts harm.")

@@ -1944,20 +1944,42 @@ _GONE = "\x00"
 def without_empty_refs(sentence: str) -> str:
     """
     `sentence` with every citation left with no number taken out whole:
-    "(Studies )", "(Study )", "( )", the space before it, and a separator
-    left dangling in the same brackets ("(Study 5; )"). A citation that was
-    part of the sentence itself ("Studies and show") cannot be taken out
-    without rewriting it, so the sentence goes: "" is returned.
+    "(Studies )", "(Study )", "( )" and the space before it. A citation
+    that still has numbers but lost some, or whose list begins or ends
+    with a separator ("(Study 5; )", "(Studies , 4)"), is rebuilt from the
+    numbers it has: "(Study 5)", "(Study 4)". A citation that was part of
+    the sentence itself ("Studies and show") cannot be taken out without
+    rewriting it, so the sentence goes: "" is returned. Everything else in
+    the sentence, a sentence with no such citation included, comes back
+    byte for byte.
     """
-    s = re.sub(r"(?<=[(\[,;])\s*Stud(?:y|ies)\s*(?=[)\]])", _GONE, sentence)
-    # Inside brackets: the gap and a separator on either side of it.
-    s = re.sub(r"(?:\s*(?:[,;&]|\band\b))?\s*" + _GONE + r"(?=[^()\[\]]*[)\]])", "", s)
-    s = re.sub(r"([(\[])\s*(?:[,;&]|\band\b)\s*", r"\1", s)
-    s = re.sub(r"\s*(?:[,;&]|\band\b)\s*([)\]])", r"\1", s)
-    s = re.sub(r"\s*\(\s*\)|\s*\[\s*\]", "", s)
-    if _GONE in s:
-        return ""
-    return re.sub(r"\s+([.,;:!?])", r"\1", s).strip()
+    def fix(m: re.Match) -> str:
+        body = m.group("body")
+        if not body.strip():
+            return ""
+        if not _REF_BODY.fullmatch(body) or not (_GONE in body or re.search(r"\bStud", body)):
+            return m.group(0)
+        nums = re.findall(r"\d+", body)
+        if not nums:
+            return ""
+        if _GONE not in body and not _ODD_REF.search(body):
+            return m.group(0)
+        open_, close = m.group("open"), m.group("close")
+        said = f"Study {nums[0]}" if len(nums) == 1 else "Studies " + ", ".join(nums)
+        return f"{m.group('space')}{open_}{said}{close}"
+
+    out = _BRACKET_REF.sub(fix, sentence)
+    return "" if _GONE in out else out
+
+
+# A bracket and the space before it; its body is judged in without_empty_refs.
+_BRACKET_REF = re.compile(r"(?P<space>\s*)(?P<open>[(\[])(?P<body>[^()\[\]]*)(?P<close>[)\]])")
+# A body made only of the words, numbers and separators of a citation.
+_REF_BODY = re.compile(r"(?:\s|Stud(?:y|ies)\b|\d+|[,;&]|\band\b|\x00)*")
+# A list that begins or ends with a separator, or a "Study" with no number
+# after it.
+_ODD_REF = re.compile(r"^\s*(?:Stud(?:y|ies)\s*)?(?:[,;&]|and\b)|(?:[,;&]|\band)\s*$|"
+                      r"Stud(?:y|ies)\s*(?:[,;&]|\band\b|$)")
 
 
 # ---------------------------------------------------------------------
