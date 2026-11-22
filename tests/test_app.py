@@ -2708,6 +2708,61 @@ t("  a study that says nothing about its size or design is never the reason to c
 t("  a comparative claim is not capped for comparing two treatments",
   evidence.certainty_cap([_study("C", "c", abstract="We randomised 300 adults to diet A or diet B.")],
                          ["C"], comparative=True) is None)
+# A narrative review is never the strength, but its caveats count as any
+# paper's do: only one with no caveat is in neither list.
+_G3 = {
+    "trial, caveats": dict(title="Turmeric in 20 adults: a pilot study", types=["Clinical Trial"],
+                           abstract="A pilot study of 20 adults, uncontrolled. Pain fell."),
+    "trial, none": dict(title="Turmeric and joint pain: a randomized trial", types=["Randomized Controlled Trial"],
+                        abstract="We randomised 400 adults to turmeric or placebo. Pain fell more with turmeric."),
+    "narrative, caveats": dict(title="Turmeric for joint health: a narrative review", types=["Review"],
+                               abstract="This review summarises a pilot study of 12 patients without a control "
+                                        "group and industry-funded reports. Turmeric may ease joint pain."),
+    "narrative, none": dict(title="Turmeric and joints: a review", types=["Review"],
+                            abstract="We review what is known about turmeric and joint pain."),
+    "unlabelled": dict(title="Turmeric and joints", types=["Journal Article"], abstract="Turmeric and joints."),
+}
+
+
+def _g3(kind, n=0):
+    k = _G3[kind]
+    return _study(f"G{list(_G3).index(kind)}{n}", k["title"], types=k["types"], abstract=k["abstract"])
+
+
+def _cap_231c774(studies, cited):
+    """certainty_cap's trial loop as it stood at 231c774, the reference: no
+    narrative review rule (none of these papers is a pooled review)."""
+    pool = [s for s in studies if s["pmid"] in set(cited)]
+    solid, limited = [], []
+    for s in pool:
+        labelled = any(not t.startswith(evidence.IGNORE_PREFIXES) for t in s.get("publication_types") or [])
+        if evidence.trial_caveats(s):
+            limited.append(s)
+        elif evidence.sample_size(s) is not None or labelled:
+            solid.append(s)
+    return None if solid or not limited else "capped"
+
+
+t("G3: a 'true' resting only on a narrative review with caveats is capped again, and its line says low certainty",
+  evidence.trial_caveats(_g3("narrative, caveats")) and evidence.narrative_review(_g3("narrative, caveats"))
+  and evidence.certainty_cap([_g3("narrative, caveats")], ["G20"]) is not None
+  and evidence.line_certainty(evidence.evidence_line("true", [_g3("narrative, caveats")], ["G20"],
+                                                     "Turmeric eases joint pain")) == "low",
+  evidence.evidence_line("true", [_g3("narrative, caveats")], ["G20"], "Turmeric eases joint pain"))
+t("  and a trial with caveats beside narrative reviews with none is still capped (L2)",
+  evidence.certainty_cap([_g3("trial, caveats"), _g3("narrative, none", 1), _g3("narrative, none", 2)],
+                         ["G00", "G31", "G32"]) is not None
+  and evidence.certainty_cap([_g3("narrative, none")], ["G30"]) is None)
+import itertools as _it  # noqa: E402
+_g3_looser = []
+for _size in (1, 2, 3):
+    for _combo in _it.combinations_with_replacement(list(_G3), _size):
+        _ps = [_g3(k, i) for i, k in enumerate(_combo)]
+        _ids = [p_["pmid"] for p_ in _ps]
+        if _cap_231c774(_ps, _ids) and not evidence.certainty_cap(_ps, _ids):
+            _g3_looser.append(_combo)
+t("  property: for every set of up to three of these papers, the cap is never looser than at 231c774",
+  not _g3_looser, _g3_looser)
 fg.models.script = [Resp(VJ("true", [1, 2], tldr="Ashwagandha reduces stress.",
                             evidence=["Ashwagandha reduced stress (Study 1)."]))]
 _v = verdict.weigh_evidence("Ashwagandha reduces stress", _ASHWA, "(ashwagandha) AND (stress)")

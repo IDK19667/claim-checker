@@ -1973,10 +1973,6 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
         return None
     solid, limited = [], []
     for s in cited:
-        # A narrative review pools nothing and measured nothing itself: like
-        # an unlabelled paper, it is neither the strength nor the weakness.
-        if narrative_review(s):
-            continue
         caveats = [c for c in trial_caveats(s)
                    if not (comparative and c == "no untreated comparison group")]
         # A study that says neither its size nor its design is not evidence
@@ -1986,6 +1982,11 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
                        for t in s.get("publication_types") or [])
         if caveats:
             limited.append(s)
+        # A narrative review pools nothing and measured nothing itself: it is
+        # never the strength. Its caveats count as any paper's do (above);
+        # with none, like an unlabelled paper, it is in neither list.
+        elif narrative_review(s):
+            continue
         elif sample_size(s) is not None or labelled:
             solid.append(s)
     if solid or not limited:
