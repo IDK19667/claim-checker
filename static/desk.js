@@ -1523,6 +1523,29 @@
       var o = hiSlot, f = o.mesh.userData.face, t = f.map; f.map = o.lowMap; f.emissiveMap = o.lowMap; t.dispose(); hiSlot = null;
     }
 
+    // ---- the browser drops the drawing context (a phone backgrounding the tab, low memory) ----
+    // The canvas goes blank, and the card's dark words would sit on the dark page. The page goes to
+    // the text mode at once, on the same stop, and stays there: no frame is drawn again.
+    var glLost = false;
+    canvas.addEventListener("webglcontextlost", function () {
+      if (glLost) return; glLost = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      looping = false; scene3d = false;
+      wake = function () {}; drawImpl = function () {}; layoutHook = function () {};
+      onLoad = function () {}; onHome = function () {}; onStage = function () {};
+      // the first row or paragraph on screen in the stop the reader is on keeps its place on screen
+      var k = curStop, keep = null, keepTop = 0, cands = sections[k] ? sections[k].querySelectorAll(".row, p, h3, summary") : [];
+      for (var i = 0; i < cands.length; i++) { var q = cands[i].getBoundingClientRect(); if (q.height && q.top >= stripH && q.top < innerHeight - 80) { keep = cands[i]; keepTop = q.top; break; } }
+      endTween();
+      // the card and its label leave the desk's layout: no position, size or type set for the painted card stays
+      vcard.classList.remove("on", "compact"); shortLabel.classList.remove("on");
+      [vcard, shortLabel, capAnswer, stage].concat([].slice.call(vcard.querySelectorAll("[style]"))).forEach(function (n) { n.removeAttribute("style"); });
+      fallback();
+      var to = keep ? window.scrollY + keep.getBoundingClientRect().top - keepTop : anchors[Math.min(LAST, k)];
+      window.scrollTo({ top: Math.max(0, Math.round(to)), behavior: "instant" });
+      prevY = progY = restY = landY = window.scrollY; nextWords(Math.min(LAST, k), window.scrollY); noteRest(); updateWay();
+    }, false);
+
     // ---- the test hook ----------------------------------------------------------------
     statsImpl = function () {
       updateWay(); return { mode: "3d", checked: checked, stop: curStop + 1, stops: NS, pixelRatio: lastRatio, fullPixelRatio: DPR_CAP, fog: !!scene.fog, looping: looping, frames: frames,

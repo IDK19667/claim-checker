@@ -2104,6 +2104,17 @@ t("desk.js loads after app.js with the page's nonce, and is one closure",
   '<script src="{{ url_for(\'static\', filename=\'desk.js\') }}" nonce="{{ csp_nonce }}"></script>' in _desk_tpl
   and _desk_tpl.find("filename='app.js'") < _desk_tpl.find("filename='desk.js'")
   and _deskjs.lstrip().startswith(("/*", "//", "(function")) and _deskjs.rstrip().endswith("})();"))
+# A lost drawing context (a phone backgrounding the tab) blanks the canvas under the
+# card's dark words. The page goes to text mode at once and draws no frame again.
+# scripts/ui_desk.mjs loses the context on purpose in a browser and measures the
+# words after; here the handler's shape is held so the browser check has something to hold.
+_lost = _deskjs.split('canvas.addEventListener("webglcontextlost"', 1)[1].split("}, false);", 1)[0] if 'canvas.addEventListener("webglcontextlost"' in _deskjs else ""
+t("desk.js answers a lost drawing context: the frame loop stops for good, the card's desk layout is cleared, text mode on the same stop",
+  _lost and "cancelAnimationFrame(raf)" in _lost and "wake = function () {}" in _lost and "fallback();" in _lost
+  and 'removeAttribute("style")' in _lost and "var k = curStop" in _lost and "anchors[Math.min(LAST, k)]" in _lost
+  and "webglcontextrestored" not in _deskjs and "if (mode !== \"loading\") return;" in _deskjs)
+t("  and the browser check that loses it on purpose is in scripts/ui_desk.mjs, at the Answer and at Weighed, contrast measured",
+  all(x in (ROOT / "scripts" / "ui_desk.mjs").read_text() for x in ("WEBGL_lose_context", '[[2, "Answer"], [4, "Weighed"]]', "ratio(p) >= 4.5")))
 t("desk.js writes no markup from strings and sets no inline handler or style attribute from data",
   ".innerHTML" not in _deskjs and "insertAdjacentHTML" not in _deskjs and "outerHTML" not in _deskjs
   and not re.search(r"setAttribute\(\"on", _deskjs) and "eval(" not in _deskjs and "new Function" not in _deskjs)
