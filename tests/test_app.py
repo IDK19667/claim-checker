@@ -2033,7 +2033,32 @@ _nudge = _deskjs[_deskjs.find("function glideToAnswer"):]
 _nudge = _nudge[:_nudge.find("\n  }\n")]
 t("after a check the page moves to the answer, once",
   _deskjs.count("glideToAnswer(") == 2 and "if (detail.fresh) glideToAnswer(" in _deskjs
-  and "nudgeToAnswer" not in _js and 'tellDesk("desk:result", { data, fresh: !data.cached && !data.restored })' in _js)
+  and "nudgeToAnswer" not in _js and 'tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay })' in _js)
+# R5: Back and Forward show the same result again without a second glide, and the
+# place the browser restores (Back, Forward, a reload) is kept, not cut to stop 2.
+_pop = _js[_js.find('window.addEventListener("popstate"'):][:300]
+t("R5: Forward to a result shows it again as a replay, never a second glide",
+  "renderResult(currentResult, true)" in _pop and "function renderResult(data, replay)" in _js
+  and "load(detail.data, !!detail.fresh, !!detail.replay)" in _deskjs and "else if (replay) adoptScroll(" in _deskjs)
+t("  a reload or Back/Forward into the page keeps the place the browser restores",
+  'navEntry.type === "reload" || navEntry.type === "back_forward"' in _deskjs
+  and "if (checked && restoring) adoptScroll(" in _deskjs
+  and "if (!tween && performance.now() < adoptUntil) { adoptScroll(0);" in _deskjs
+  and "pressing || window.scrollY !== r.y || performance.now() < adoptUntil) return;" in _deskjs)
+# The live check on the desk: at "found N" the desk stands N blank sheets in its
+# stack, placed and not moved, none under reduced motion, gone again on an error
+# or Cancel (both show stop 1, which tells the desk desk:home).
+_hs = _js[_js.find("function handleStage"):][:1400]
+t("the live check tells the desk how many papers were found",
+  'tellDesk("desk:stage", { stage: "found", count: ev.count || 0 })' in _hs
+  and 'document.addEventListener("desk:stage"' in _deskjs)
+t("  the desk stands that many blank sheets in its stack, placed, none under reduced motion, dropped on the way home",
+  "if (reduce.matches || checked) return;" in _deskjs and "o.placed = true" in _deskjs
+  and "var td = o.placed ? 1 :" in _deskjs and "if (stagedN) { stagedN = 0; CHECK = { studies: [] }; dropSheets(); }" in _deskjs)
+t("  while a check runs the form goes quiet, so the log prints right under the claim",
+  'html[data-screen="checking"] #claim-help, html[data-screen="checking"] #privacy-line, html[data-screen="checking"] #examples { display: none; }' in (ROOT / "static" / "desk.css").read_text())
+t("  a check started from a result's claim box first goes back to stop 1",
+  'if (root.classList.contains("checked")) show(askSection);' in _js[_js.find("function renderPending"):][:400])
 # Engine rules (E1, E2, E4, E5), checked in a browser by the builder's scripts; here
 # the rules' shape: lines are read from the text itself, the words laid over the
 # 3D card are never measured, and a press goes to min(last line 2 px above the
@@ -6242,7 +6267,7 @@ _cold = c.get("/?q=never%20checked%20for%20the%20line").get_data(as_text=True)
 t("  an unchecked page keeps the line hidden until a verdict shows",
   '<p class="doctor" id="doctor-line" hidden>' + _DOC in _cold)
 _js = (ROOT / "static" / "app.js").read_text()
-_rr = _js.split("function renderResult(data) {")[1].split("\nfunction ")[0]
+_rr = _js.split("function renderResult(data, replay) {")[1].split("\nfunction ")[0]
 _rp = _js.split("function renderPending(claim) {")[1].split("\nfunction ")[0]
 t("  a live check shows it with the verdict and hides it while a check runs",
   '$("doctor-line").hidden = false' in _rr and '$("doctor-line").hidden = true' in _rp)
@@ -6430,7 +6455,7 @@ _srv = c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
 t("a server-rendered result has the Report a wrong answer button and its form",
   "Report a wrong answer" in _srv and 'id="report-form"' in _srv and 'id="report-open"' in _srv)
 t("  and the script posts it to /api/feedback and resets it for every result",
-  "report: true" in _jsrc and "function resetReport()" in _jsrc and "resetReport();" in _jsrc.split("function renderResult(data) {")[1].split("\nfunction ")[0])
+  "report: true" in _jsrc and "function resetReport()" in _jsrc and "resetReport();" in _jsrc.split("function renderResult(data, replay) {")[1].split("\nfunction ")[0])
 _before = _sq.connect(os.environ["DB_PATH"]).execute("select count(*) from feedback").fetchone()[0]
 _r = c.post("/api/feedback", json={"claim": _dl["claim"], "verdict": "true", "report": True,
                                     "note": "  The   study says\nthe opposite.  "},

@@ -558,7 +558,9 @@ function tellDesk(name, detail) {
   document.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
-function renderResult(data) {
+// `replay` is the same result shown again by Back or Forward: the desk keeps the
+// place the browser restores and never glides to the answer a second time.
+function renderResult(data, replay) {
   dropOffTopicCites(data);
   currentResult = data;
   const n = data.studies.length, stops = deskStops(data), dl = deskLines(data);
@@ -618,12 +620,15 @@ function renderResult(data) {
   setTitle(data);
   screenState.settle("result");
   show(resultSection);
-  tellDesk("desk:result", { data, fresh: !data.cached && !data.restored });
+  tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay });
 }
 
 // While a check runs the claim stays in its box and the work prints under it,
 // in stop 1. Cached results skip this and land directly.
 function renderPending(claim) {
+  // A check started from a result's claim box goes back to stop 1 on its own:
+  // the old answer's stops go, and the desk clears for the new sheets.
+  if (root.classList.contains("checked")) show(askSection);
   currentResult = null;
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
@@ -810,6 +815,8 @@ function handleStage(ev) {
   else if (ev.stage === "found") {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
     else { logLine(`Found ${ev.count} ${ev.count === 1 ? "study" : "studies"}${ev.broadened ? " after widening the search" : ""}`); logLine("Reading the studies", true); }
+    // The desk stands one blank sheet in its stack for each paper found.
+    tellDesk("desk:stage", { stage: "found", count: ev.count || 0 });
   } else if (ev.stage === "weigh") logLine("Weighing the evidence", true);
 }
 
@@ -1100,7 +1107,7 @@ $("edit-claim").addEventListener("click", () => {
   input.setSelectionRange(claim.length, claim.length);
 });
 window.addEventListener("popstate", () => {
-  if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult); return; }
+  if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult, true); return; }
   goHome();
 });
 $("error-retry").addEventListener("click", () => { if (lastClaim) { input.value = lastClaim; check(lastClaim); } });

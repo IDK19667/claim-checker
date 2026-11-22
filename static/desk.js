@@ -177,13 +177,14 @@
 
   // ---- a result arrives, or the reader goes back to the claim box -------------------------
   var onLoad = function () {}, onHome = function () {};
-  function load(data, fresh) {
+  function load(data, fresh, replay) {
     endTween(); clearStudy();
     readStops(); readFolds(); qAuto = true;
     CHECK = deskCheck(data);
     onLoad();
     layout();
     if (fresh) { window.scrollTo({ top: 0, behavior: "instant" }); prevY = progY = restY = 0; updateWay(); }
+    else if (replay) adoptScroll(1000);
     else {
       // a saved result opens on the answer, with no glide
       window.scrollTo({ top: anchors[Math.min(1, LAST)], behavior: "instant" }); prevY = progY = restY = window.scrollY;
@@ -193,9 +194,12 @@
   }
   document.addEventListener("desk:result", function (e) {
     var detail = e.detail || {};
-    load(detail.data, !!detail.fresh);
+    load(detail.data, !!detail.fresh, !!detail.replay);
     if (detail.fresh) glideToAnswer();
   });
+  // during a check: at "found N", N blank sheets stand in the stack (3D only; text mode has no sheets)
+  var onStage = function () {};
+  document.addEventListener("desk:stage", function (e) { var d = e.detail || {}; if (d.stage === "found") onStage(Math.max(0, Math.min(40, +d.count || 0))); });
   document.addEventListener("desk:home", function () {
     endTween(); clearStudy(); closeMenu();
     readStops(); onHome(); layout(); updateWay(); wake();
@@ -497,7 +501,8 @@
     restRef = { y: y, k: k, el: el, top: top };
   }
   function keepRest() {
-    var r = restRef; if (!r || tween || touching || pressing || window.scrollY !== r.y) return;
+    // while the browser is still putting the reader back (R5) the place is the browser's, not this
+    var r = restRef; if (!r || tween || touching || pressing || window.scrollY !== r.y || performance.now() < adoptUntil) return;
     var to = r.k >= 0 ? anchors[r.k] : (r.el && r.el.isConnected ? window.scrollY + r.el.getBoundingClientRect().top - r.top : r.y);
     to = Math.round(to); if (Math.abs(to - r.y) < 1) return;
     window.scrollTo({ top: to, behavior: "instant" });
@@ -507,7 +512,16 @@
   // the reader's own move since the page last rested: its direction and how far it ran that way.
   // Moves the page made itself (a glide, a cut, the handover) are not counted
   var runDir = 0, runLen = 0, prevY = window.scrollY, progY = -1;
+  // R5: a place the browser restores (Back, Forward, a reload) is where the reader was, at rest: taken as it is, never
+  // counted as the reader's move and never settled away. For ms after the page asks, a scroll is the browser's
+  var adoptUntil = 0;
+  function adoptScroll(ms) {
+    if (ms) adoptUntil = performance.now() + ms;
+    var y = window.scrollY; prevY = progY = restY = landY = y; runLen = 0; glideLeft = null; clearTimeout(settleT);
+    measure(); updateWay(); nextWords(curStop, y); noteRest();
+  }
   addEventListener("scroll", function () {
+    if (!tween && performance.now() < adoptUntil) { adoptScroll(0); lastInput = lastScrollAt = performance.now(); wake(); return; }
     var y = window.scrollY, dy = y - prevY; prevY = y;
     if (!tween && Math.abs(y - progY) >= 2 && dy) { var s = dy > 0 ? 1 : -1; if (s === runDir) runLen += Math.abs(dy); else { runDir = s; runLen = Math.abs(dy); } lastMoveAt = performance.now(); }
     lastInput = lastScrollAt = performance.now(); updateWay(); wake(); armSettle();
@@ -598,7 +612,12 @@
   readStops(); readFolds();
   if (checked) CHECK = deskCheck(serverData() || {});
   layout(); updateWay();
-  if (checked) {
+  // a saved result opens on the answer; on a reload or Back/Forward into the page the browser puts the reader back
+  // where they were, and that place is kept (R5)
+  var navEntry = performance.getEntriesByType ? performance.getEntriesByType("navigation")[0] : null;
+  var restoring = !!navEntry && (navEntry.type === "reload" || navEntry.type === "back_forward") && history.scrollRestoration !== "manual";
+  if (checked && restoring) adoptScroll(1500);
+  else if (checked) {
     window.scrollTo({ top: anchors[Math.min(1, LAST)], behavior: "instant" }); prevY = progY = restY = landY = window.scrollY;
     nextWords(Math.min(1, LAST), window.scrollY); updateWay(); noteRest();
   }
@@ -1151,7 +1170,7 @@
       sheets.forEach(function (o, i) {
         var m = o.mesh, x, y, z, yaw, tilt = 0, roll = 0, landY;
         // the reading beat: a quick drop on the way to the answer
-        var td = reduce.matches ? (P >= 0.3 ? 1 : 0) : c01((P - 0.02 - i * 0.04) / 0.26);
+        var td = o.placed ? 1 : reduce.matches ? (P >= 0.3 ? 1 : 0) : c01((P - 0.02 - i * 0.04) / 0.26);
         var vt = c01(td / 0.62), ht = eo(td);
         x = o.from.x + (o.rest.x - o.from.x) * ht;
         z = o.from.z + (o.rest.z - o.from.z) * ht;
@@ -1569,14 +1588,24 @@
       wake();
     };
     // a new result: its sheets, its card and its framings; the page is laid out again around them
+    // a check running: at "found N", N blank sheets stand in the stack, placed, not moved (none under reduced motion).
+    // The result's own sheets then take their places in the stack, already there
+    var stagedN = 0;
+    onStage = function (n) {
+      if (reduce.matches || checked) return;
+      var list = []; for (var i = 0; i < n; i++) list.push({ n: i + 1, group: "read", design: "", title: "", journal: "", year: "", pmid: "" });
+      CHECK = { studies: list }; buildSheets(); sheets.forEach(function (o) { o.placed = true; }); stagedN = n; wake();
+    };
     onLoad = function () {
-      buildSheets(); cardPainted = false; csvKey = ""; cardKey = ""; pickKeys();
+      var staged = stagedN > 0; stagedN = 0;
+      buildSheets(); if (staged) sheets.forEach(function (o) { o.placed = true; });
+      cardPainted = false; csvKey = ""; cardKey = ""; pickKeys();
       checked = false; check();
       if (frames) setTimeout(paintLazy, 0);
       Ps = rawProgress(); wake();
     };
     // back to the claim box: the camera is at the first stop at once
-    onHome = function () { pickKeys(); Ps = 0; hoverN = 0; wake(); };
+    onHome = function () { if (stagedN) { stagedN = 0; CHECK = { studies: [] }; dropSheets(); } pickKeys(); Ps = 0; hoverN = 0; wake(); };
     buildSheets(); pickKeys();
     if (checked) { checked = false; check(); }
     layout(); updateWay();
