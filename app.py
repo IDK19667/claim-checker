@@ -925,6 +925,11 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         tldr = evidence.cap_certainty(tldr, level)
         explanation = evidence.cap_certainty(explanation, level)
         breakdown = breakdown_mod.map_prose(breakdown, lambda t: evidence.cap_certainty(t, level))
+    # An answer the guidance rule set did not come from these studies, so the
+    # line shown makes no claim about how strong they are for or against the
+    # claim. The studies' own line still set the cap on the prose above.
+    if verdict.from_guidance(tldr) and evidence_line:
+        evidence_line = verdict.GUIDANCE_LINE
     # The response's effect field says what the page says (after every
     # rewrite above, since settling the effect can set it afresh).
     if breakdown and breakdown_mod.answers_effect(verdict_value, claim):

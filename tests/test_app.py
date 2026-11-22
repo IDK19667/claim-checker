@@ -4213,10 +4213,16 @@ t("guidance effect: under an answer the guidance rule set, the effect box says i
   _ge["breakdown"]["effect_size"] == verdict.GUIDANCE_EFFECT
   == "This answer rests on what major health guidelines say, not on a measured effect size."
   and not re.search(r"\d|\b(?:small|moderate|large)\b", _ge["breakdown"]["effect_size"]), _ge["breakdown"])
-t("  and the study, its finding and the evidence line stay exactly as they were",
+t("  and the study and its finding stay exactly as they were",
   _ge["studies"] == _ge_plain["studies"] and _ge["studies"][0]["abstract"] == _GE_ST[0]["abstract"]
-  and _ge["breakdown"]["evidence"] == _ge_plain["breakdown"]["evidence"]
-  and _ge["evidence_line"] == _ge_plain["evidence_line"], (_ge["evidence_line"], _ge_plain["evidence_line"]))
+  and _ge["breakdown"]["evidence"] == _ge_plain["breakdown"]["evidence"], _ge["breakdown"]["evidence"])
+t("guidance line: under an answer the guidance rule set, the evidence line says what the answer rests on, "
+  "with no strength word",
+  _ge["evidence_line"] == verdict.GUIDANCE_LINE == "Rests on health guidance, not on these studies"
+  and not re.search(r"(?i)\b(?:strong|moderate|weak|low|high|certainty|small|large|against|for this claim)\b",
+                    _ge["evidence_line"])
+  and _ge_plain["evidence_line"].endswith("evidence against this claim"),
+  (_ge["evidence_line"], _ge_plain["evidence_line"]))
 t("  and an answer the guidance rule did not set keeps its own figure",
   _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
 _ge_said = verdict.guidance_effect(dict(_GE_BD, says=["Experts advise avoiding it (Study 1).", _GE_EFF]))
@@ -4230,6 +4236,12 @@ db.put_cached_verdict(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
                       tldr=_GE_TLDR, still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
 _ge_page = c.get("/?q=" + urllib.parse.quote(_GE_CLAIM)).get_data(as_text=True)
 _ge_box = re.search(r'<p class="effect"><b>How big the effect is</b><span>(.*?)</span></p>', _ge_page)
+_ge_conf = re.search(r'<span class="confidence" id="confidence"><mark>(.*?)</mark>', _ge_page)
+t("  and the server-rendered page shows that line as its confidence, and the script renders the same field",
+  _ge_conf and _ge_conf.group(1) == verdict.GUIDANCE_LINE + "."
+  and "Strong evidence against this claim" not in _ge_page
+  and 'String(data.evidence_line || "")' in (ROOT / "static" / "app.js").read_text(),
+  _ge_conf and _ge_conf.group(1))
 t("  and the server-rendered page prints the same words in its effect box",
   _ge_box and _ge_box.group(1) == verdict.GUIDANCE_EFFECT and _GE_EFF not in _ge_page.split('id="server-result"')[0],
   _ge_box and _ge_box.group(1))

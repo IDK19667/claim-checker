@@ -1001,6 +1001,10 @@ def guidance_prose(explanation: str, still_open: str, bd: dict | None):
 # Each study and its own finding stay in the study list as they are.
 GUIDANCE_EFFECT = ("This answer rests on what major health guidelines say, "
                    "not on a measured effect size.")
+# The evidence line under an answer the guidance rule set. The studies did
+# not decide that answer, so the line rates none of them: it says, with no
+# strength word, what the answer rests on.
+GUIDANCE_LINE = "Rests on health guidance, not on these studies"
 
 
 def guidance_effect(bd: dict | None) -> dict | None:
