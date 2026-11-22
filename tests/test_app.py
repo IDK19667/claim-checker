@@ -297,21 +297,31 @@ t("gemini 503 -> 502", P("err c").status_code == 502)
 # A reply that could not be read at all is a failed check, not a verdict:
 # the app's 502 with what went wrong and a way out, on the plain check and
 # the streamed one, and nothing saved, logged or listed. One per kind.
-_UNREAD_KINDS = (("not JSON", Resp("not json"), verdict.UNREADABLE),
-                 ("JSON that is not an object", Resp("[1, 2]"), verdict.UNREADABLE),
-                 ("cut off", Resp("", "FinishReason.MAX_TOKENS"), "ran out of room before finishing"),
-                 ("declined", Resp(""), "declined to answer this one"))
-for _i, (_kind, _reply, _why) in enumerate(_UNREAD_KINDS):
-    _want = f"The AI model {_why}, so this check did not finish. Try again in a moment."
+# The way out follows the kind of failure: a declined reply is declined again
+# at temperature 0, so only other words can help ("reword": Edit claim, no
+# Retry); a reply cut off may or may not come back whole ("either": both); a
+# reply that could not be read is cleared by trying again (no way_out field).
+_UNREAD_KINDS = (("not JSON", Resp("not json"), verdict.UNREADABLE,
+                  "The AI model sent back a reply that could not be read, so this check did not finish. Try again in a moment.", None),
+                 ("JSON that is not an object", Resp("[1, 2]"), verdict.UNREADABLE,
+                  "The AI model sent back a reply that could not be read, so this check did not finish. Try again in a moment.", None),
+                 ("cut off", Resp("", "FinishReason.MAX_TOKENS"), "ran out of room before finishing",
+                  "The AI model ran out of room before finishing, so this check did not finish. Try again, or try the claim in other words.", "either"),
+                 ("declined", Resp(""), "declined to answer this one",
+                  "The AI model declined to answer this one, so this check did not finish. Try the claim in other words.", "reword"))
+for _i, (_kind, _reply, _why, _want, _way) in enumerate(_UNREAD_KINDS):
+    t(f"a reply that is {_kind}: the message names its own way out",
+      verdict.unread_reply(_why) == _want and (verdict.way_out(_why) or None) == _way)
+    _body = {"error": _want, **({"way_out": _way} if _way else {})}
     _logs0 = len(db.recent_checks(1000))
     fg.models.script = [Resp("q"), _reply]
     r = P(f"err d{_i}")
     t(f"a reply that is {_kind} is a failed check: 502, naming the problem and the way out",
-      r.status_code == 502 and r.get_json() == {"error": _want}, (r.status_code, r.get_json()))
+      r.status_code == 502 and r.get_json() == _body, (r.status_code, r.get_json()))
     fg.models.script = [Resp("q"), _reply]
     _r, _evs = stream(f"err s{_i}", ip=f"8.8.6.{_i}")
     t(f"  and the streamed check ends in the same error event",
-      _evs and _evs[-1] == {"stage": "error", "status": 502, "error": _want}, _evs[-1:])
+      _evs and _evs[-1] == {"stage": "error", "status": 502, **_body}, _evs[-1:])
     t(f"  and neither is saved or logged as a verdict",
       db.get_cached_by_key(db.normalize_claim(f"err d{_i}")) is None
       and db.get_cached_by_key(db.normalize_claim(f"err s{_i}")) is None
@@ -344,6 +354,9 @@ for _lbl, _so in (("empty", ""), ("blank", "   ")):
     t(f"a reply whose still-open line is {_lbl} is a failed reply: 502 with the reason and a way out",
       r.status_code == 502 and r.get_json()["error"] == verdict.INCOMPLETE_REPLY
       and "Try again" in r.get_json()["error"], r.get_json())
+    t(f"  and it offers both ways out: try again, or try the claim in other words ({_lbl})",
+      r.get_json() == {"error": "The AI model sent back an answer with a line missing. "
+                                "Try again, or try the claim in other words.", "way_out": "either"}, r.get_json())
     t(f"  and it is never saved, and not logged as a check ({_lbl})",
       _no_row(f"empty line claim {_lbl}") and len(db.recent_checks(1000)) == _n_logs)
 fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=""))]
@@ -351,6 +364,7 @@ _r, _evs = stream("empty line claim streamed", ip="7.7.9.2")
 t("  the streamed check ends on the same error, never on a done stage",
   _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502 and _evs[-1]["error"] == verdict.INCOMPLETE_REPLY
   and not any(e["stage"] == "done" for e in _evs) and _no_row("empty line claim streamed"), _evs[-1])
+t("  and the streamed error offers both ways out too", _evs[-1].get("way_out") == "either", _evs[-1])
 t("  and the message has no dash", not any(ch in verdict.INCOMPLETE_REPLY for ch in "\u2013\u2014"))
 fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("false", [], still_open=""))]
 d = P("empty line claim resting on nothing", ip="7.7.9.3").get_json()
@@ -4880,6 +4894,19 @@ t("  no response at all (offline, a dropped stream, a silent server) is the netw
   _jsrc.count('renderError("network"') == 3)
 t("  an invalid claim offers Edit claim and no Retry; every other kind offers Retry",
   'back: "Edit claim"' in _kinds and _kinds.count("retry: true") == 3)
+if _shutil.which("node"):
+    _ea_fn = "const ERROR_KINDS = {" + _kinds + "};\n" + _jsrc[_jsrc.index("function errorActions"):_jsrc.index("// The draft stays in the field on every failure")]
+    _ea_cases = [["provider", None], ["provider", "reword"], ["provider", "either"], ["invalid", None], ["limit", None], ["network", None]]
+    _ea = json.loads(_subprocess.run(["node", "-e", _ea_fn + "console.log(JSON.stringify(" + json.dumps(_ea_cases)
+                                      + ".map(([k, w]) => errorActions(k, w))));"], capture_output=True, text=True, check=True).stdout)
+    t("  the ways out follow the server's way_out: none Retry and Check another claim, reword Edit claim only, either Retry and Edit claim",
+      _ea == [{"retry": True, "back": "Check another claim"}, {"retry": False, "back": "Edit claim"},
+              {"retry": True, "back": "Edit claim"}, {"retry": False, "back": "Edit claim"},
+              {"retry": True, "back": "Check another claim"}, {"retry": True, "back": "Check another claim"}], _ea)
+t("  both checks hand the server's way_out to the error screen, and it sets Retry and the back label from it",
+  "way_out: data && data.way_out" in _jsrc and "final.retry_after, final.way_out)" in _jsrc
+  and "const ways = errorActions(kind, wayOut)" in _jsrc and "back.hidden = !(ways.retry && lastClaim)" in _jsrc
+  and '$("error-back").textContent = ways.back' in _jsrc)
 t("  every failure keeps the draft in the field",
   "if (lastClaim && !input.value.trim()) input.value = lastClaim" in _jsrc)
 t("  the error screen has a title and a line under it, and none of that copy has a dash",

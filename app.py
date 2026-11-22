@@ -1085,7 +1085,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
 def _run_check_stages(claim: str, client_ip: str, base_url: str):
     """
     Yields stage dicts. Terminal stages are "done" (with "result") and
-    "error" (with "error", "status", optional "retry_after").
+    "error" (with "error", "status", optional "retry_after" and "way_out").
 
     Everything request-bound (ip, base_url) is passed in: when streamed,
     this generator runs after the request context has ended.
@@ -1201,6 +1201,10 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         if e.kind == "auth":
             app.logger.error("The AI provider rejected its key: %s", e.detail)
         ev = {"stage": "error", "status": status, "error": shown}
+        # Which way out the page offers beside the message: other words only,
+        # or other words beside trying again. Absent, trying again is the way.
+        if getattr(e, "way_out", ""):
+            ev["way_out"] = e.way_out
         if e.kind == "rate_limit":
             ev["retry_after"] = 20
         yield ev
@@ -1283,6 +1287,8 @@ def api_check():
         body = {"error": final["error"]}
         if "retry_after" in final:
             body["retry_after"] = final["retry_after"]
+        if "way_out" in final:
+            body["way_out"] = final["way_out"]
         resp = jsonify(body)
         if "retry_after" in final:
             resp.headers["Retry-After"] = str(final["retry_after"])

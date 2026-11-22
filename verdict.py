@@ -48,12 +48,16 @@ class ProviderError(Exception):
     Normalized failure from whichever provider is in use, so app.py can
     map it to a sensible HTTP response without knowing the provider.
     kind: "auth" | "rate_limit" | "unavailable" | "other"
+    way_out: "" when trying again is the way out; "reword" when only other
+    words can help (a retry would be declined again); "either" when a retry
+    may or may not help, so trying other words is offered beside it.
     """
 
-    def __init__(self, kind: str, detail: str = ""):
+    def __init__(self, kind: str, detail: str = "", way_out: str = ""):
         super().__init__(detail or kind)
         self.kind = kind
         self.detail = detail
+        self.way_out = way_out
 
 
 def _key(name: str) -> str | None:
@@ -200,9 +204,9 @@ def _anthropic_json(prompt: str, schema: dict, max_tokens: int, temperature: flo
             output_config={"format": {"type": "json_schema", "schema": schema}},
         )
         if m.stop_reason == "refusal":
-            return "", "declined to answer this one"
+            return "", DECLINED
         if m.stop_reason == "max_tokens":
-            return "", "ran out of room before finishing"
+            return "", CUT_OFF
         return _anthropic_text_of(m), None
 
     return _anthropic_wrap(go)
@@ -319,9 +323,9 @@ def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float 
         except (AttributeError, IndexError, TypeError):
             pass
         if finish and "MAX_TOKENS" in finish:
-            return text, "ran out of room before finishing"
+            return text, CUT_OFF
         if not text:
-            return "", "declined to answer this one"
+            return "", DECLINED
         return text, None
 
     return _gemini_wrap(go)
@@ -1530,7 +1534,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     # listed as a verdict.
     if result.get("unread"):
         _stamp_log.warning("the reply could not be read: %s", result["unread"])
-        raise ProviderError("other", unread_reply(result["unread"]))
+        raise ProviderError("other", unread_reply(result["unread"]), way_out(result["unread"]))
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
@@ -1557,18 +1561,36 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     if replied and not has_lines(result):
         _stamp_log.warning("the reply left its short answer or its still-open line empty: %r",
                            {k: result.get(k) for k in ("verdict", "tldr", "still_open")})
-        raise ProviderError("other", INCOMPLETE_REPLY)
+        raise ProviderError("other", INCOMPLETE_REPLY, "either")
     return result
 
 
-INCOMPLETE_REPLY = "The AI model sent back an answer with a line missing. Try again in a moment."
+# The way out a failure names follows the kind of failure. The weighing call
+# runs at temperature 0 and nothing is saved, so a reply the model declined
+# will almost always be declined again: only other words can help. A reply
+# cut off, or one with a line missing, may or may not come back whole, so
+# both ways are named. A reply that could not be read at all is a fault a
+# second try can clear.
+DECLINED = "declined to answer this one"
+CUT_OFF = "ran out of room before finishing"
 UNREADABLE = "sent back a reply that could not be read"
+REWORD = "Try the claim in other words."
+EITHER = "Try again, or try the claim in other words."
+INCOMPLETE_REPLY = f"The AI model sent back an answer with a line missing. {EITHER}"
+_WAY_OUT = {DECLINED: "reword", CUT_OFF: "either"}
+
+
+def way_out(why: str) -> str:
+    """Which way out a reply that could not be read leaves the reader:
+    "reword", "either", or "" when trying again is the way out."""
+    return _WAY_OUT.get(why, "")
 
 
 def unread_reply(why: str) -> str:
     """What the reader is told when the model's reply could not be read:
     what went wrong, that the check did not finish, and the way out."""
-    return f"The AI model {why}, so this check did not finish. Try again in a moment."
+    then = {"reword": REWORD, "either": EITHER}.get(way_out(why), "Try again in a moment.")
+    return f"The AI model {why}, so this check did not finish. {then}"
 
 
 def has_lines(result: dict) -> bool:

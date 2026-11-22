@@ -782,9 +782,19 @@ function errorKindOf(status) {
   if (status === 429) return "limit";
   return "provider";
 }
+// The ways out beside the message. The kind sets them, and the server's
+// way_out can narrow them: "reword" when only other words can help (a reply
+// the model declined is declined again), so Edit claim and no Retry;
+// "either" when a retry may or may not help, so Retry and Edit claim.
+function errorActions(kind, wayOut) {
+  const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
+  if (wayOut === "reword") return { retry: false, back: "Edit claim" };
+  if (wayOut === "either") return { retry: true, back: "Edit claim" };
+  return { retry: k.retry, back: k.back };
+}
 // The draft stays in the field on every failure. Retry and Edit both start
 // from it, so nothing has to be typed again.
-function renderError(kind, message, retryAfter) {
+function renderError(kind, message, retryAfter, wayOut) {
   // Same night ground, same way out. Only what the screen says changes.
   const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
   countEvent("client_error." + (ERROR_KINDS[kind] ? kind : "provider"));
@@ -797,10 +807,11 @@ function renderError(kind, message, retryAfter) {
   // here too: the reader sees what Retry will send.
   $("error-claim").textContent = lastClaim || input.value.trim();
   $("error-claim").hidden = !$("error-claim").textContent;
-  $("error-back").textContent = k.back;
+  const ways = errorActions(kind, wayOut);
+  $("error-back").textContent = ways.back;
   const cd = $("countdown");
   const back = $("error-retry");
-  back.hidden = !(k.retry && lastClaim);
+  back.hidden = !(ways.retry && lastClaim);
   clearInterval(countdownTimer);
   if (retryAfter && retryAfter > 0) {
     let left = retryAfter;
@@ -906,7 +917,7 @@ async function checkPlain(claim) {
   });
   let data = null;
   try { data = await resp.json(); } catch { /* non-JSON error page */ }
-  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after };
+  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after, way_out: data && data.way_out };
   return { stage: "done", result: data };
 }
 
@@ -988,7 +999,7 @@ async function check(claim) {
 
     if (final.stage === "error") {
       endPending();
-      renderError(errorKindOf(final.status), final.error, final.retry_after);
+      renderError(errorKindOf(final.status), final.error, final.retry_after, final.way_out);
     } else {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays

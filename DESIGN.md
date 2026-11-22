@@ -600,7 +600,9 @@ the shape of the evidence before opening a check.
   first view, and goes again when the reader scrolls back up to it.
 - **Failures:** an error is a title naming the problem (invalid claim, no
   connection, a limit, the checker) and a line saying what to do. The
-  kind follows the status the server sent. No studies is an answer, not
+  kind follows the status the server sent; the way out follows what
+  failed: a reply the model declined offers Edit claim and no Retry, one
+  cut off offers Retry and Edit claim. No studies is an answer, not
   an error: the result says nothing on PubMed matched and what to try.
 - **Documents** (privacy, the 404): the masthead, a 52 to 56px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
