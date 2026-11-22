@@ -44,10 +44,26 @@ def _no_network(*a, **k):
     raise OSError("tests/test_app.py: a test tried to use the network")
 
 
-socket.socket.connect = _no_network
-socket.socket.connect_ex = _no_network
-socket.getaddrinfo = _no_network
+import _socket  # noqa: E402
+
+for _name in ("connect", "connect_ex", "sendto", "sendmsg"):
+    setattr(socket.socket, _name, _no_network)
+
+
+class _GuardedRawSocket(_socket.socket):
+    """`_socket.socket` itself cannot be patched, so its name is pointed at
+    this subclass: code that builds a raw socket gets one that refuses."""
+    connect = connect_ex = sendto = sendmsg = _no_network
+
+
+_socket.socket = _GuardedRawSocket
+for _mod in (socket, _socket):
+    for _name in ("getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr"):
+        setattr(_mod, _name, _no_network)
 socket.create_connection = _no_network
+# Child processes (node for the parity checks, python for the schema race)
+# are separate interpreters: this guard is not in them. None of them is
+# given network work, and they are not covered.
 
 # Gemini calls are retried after a pause. No test waits for it: verdict's
 # clock is a recorder, and the retry tests below read what it was asked for.
@@ -70,6 +86,20 @@ try:
 except Exception:  # noqa: BLE001 — any failure is the guard working
     _net_refused = True
 t("network guard: a real request from a test is refused and recorded", _net_refused and NET_TRIES, NET_TRIES)
+_net_kinds = []
+for _lbl, _try in (("gethostbyname", lambda: socket.gethostbyname("localhost")),
+                   ("gethostbyname_ex", lambda: socket.gethostbyname_ex("localhost")),
+                   ("a raw lookup", lambda: _socket.gethostbyname("localhost")),
+                   ("a UDP sendto", lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b"x", ("127.0.0.1", 9))),
+                   ("a raw socket connect", lambda: _socket.socket().connect(("127.0.0.1", 9)))):
+    _before = len(NET_TRIES)
+    try:
+        _try(); _refused = False
+    except OSError:
+        _refused = True
+    _net_kinds.append((_lbl, _refused and len(NET_TRIES) == _before + 1))
+t("  and so are a host lookup, a UDP send and a raw socket's connect, each counted",
+  all(ok for _, ok in _net_kinds), _net_kinds)
 NET_TRIES.clear()
 
 
