@@ -1041,7 +1041,7 @@ _END_REF = re.compile(r"\s*(\((?:Study|Studies)\b[^)]*\))\s*[.!?]?\s*$")
 
 # The lead as a model might write it: any case, any spacing, with or
 # without "major" and "health", with or without the colon.
-_LEAD_SAID = re.compile(r"^\s*(?:major\s+)?(?:health\s+)?guidelines\s+say\b\s*:?\s*", re.IGNORECASE)
+_LEAD_SAID = re.compile(r"^\s*(?:major\s+)?(?:health\s+)?guidelines\s+say\s*:\s*", re.IGNORECASE)
 
 
 def without_lead(tldr: str) -> str:

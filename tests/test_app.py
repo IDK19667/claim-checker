@@ -5402,9 +5402,15 @@ verdict.guideline_view = lambda claim: None
 # plain and the streamed check both reach.
 t("G1: without_lead takes the model's own lead off, in any spacing or case, and gives the capital back",
   verdict.without_lead(verdict.GUIDELINE_LEAD + "stop your arthritis medicine.") == "Stop your arthritis medicine."
-  and verdict.without_lead("major  HEALTH guidelines say that turmeric works.") == "Turmeric works."
+  and verdict.without_lead("major  HEALTH guidelines say : that turmeric works.") == "Turmeric works."
   and verdict.without_lead("  Guidelines say: it is not safe.") == "It is not safe."
   and verdict.without_lead("Turmeric eases joint pain.") == "Turmeric eases joint pain.")
+_G1B_KEEP = ["Guidelines say that adults should get 150 minutes of exercise.",
+             "Guidelines say adults should get 150 minutes of exercise.",
+             "Major health guidelines say that adults should get 150 minutes of exercise.",
+             "health guidelines say adults need sleep."]
+t("G1b: only the lead with its colon is taken off; a takeaway that says what guidelines say stays byte for byte",
+  [verdict.without_lead(x) for x in _G1B_KEEP] == _G1B_KEEP, [verdict.without_lead(x) for x in _G1B_KEEP])
 def _g1_run(claim, tldr, ip, v="true", way=P):
     with db.get_conn() as _conn:
         _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
