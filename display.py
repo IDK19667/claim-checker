@@ -163,10 +163,13 @@ def relied_on(study) -> bool:
 def relied_pmids(cited, studies) -> set:
     """The cited PMIDs less any study classified off topic, retracted or a
     journal notice (evidence.withdrawn): the set every count, mark and line
-    on the page is read from, a saved answer's included."""
+    on the page is read from, a saved answer's included. A cited PMID that
+    names no listed study is not relied on either: nothing on the page can
+    show it, so an answer citing only such PMIDs rests on nothing."""
+    listed = {s.get("pmid") for s in studies or [] if isinstance(s, dict)}
     off = {s.get("pmid") for s in studies or [] if isinstance(s, dict)
            and (s.get("off_topic") or evidence.withdrawn(s))}
-    return set(cited or []) - off
+    return (set(cited or []) & listed) - off
 
 
 def source_groups(studies) -> dict:

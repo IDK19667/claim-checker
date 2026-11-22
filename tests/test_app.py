@@ -10128,6 +10128,20 @@ t("J4: a saved rated answer listing no study shows the no-studies takeaway, on t
 t("  with a study listed and none relied on, the untested takeaway as before; one string for fresh and saved",
   _j4_s["verdict"] == "insufficient" and _j4_s["tldr"] == verdict.UNTESTED_TLDR
   and "NO_STUDIES_TLDR" in _inspect.getsource(verdict.weigh_evidence), _j4_s["tldr"])
+# K5: a saved rated answer whose cited PMIDs name no listed study relies on
+# nothing, on the page and in the lists, whatever the row lists.
+_k5 = {}
+for _k5_st in ([], [dict(_H1_B)]):
+    with appmod.app.test_request_context("/"):
+        _k5_p = appmod._check_response("Turmeric eases knee pain K5", "q", "true", "Turmeric eases pain.", "Pain fell (Study 1).",
+                                       ["99"], [dict(x) for x in _k5_st], "http://x", still_open="o")
+    _k5_l = appmod._listed({"claim_text": "Turmeric eases knee pain K5", "verdict": "true", "tldr": "Turmeric eases pain.",
+                            "search_query": "q", "studies": [dict(x) for x in _k5_st], "cited": ["99"]})
+    _k5[len(_k5_st)] = (_k5_p["verdict"], _k5_p["tldr"], _k5_l["verdict"], _k5_l["tldr"])
+t("K5: a rated answer citing only PMIDs no listed study has is 'Not enough evidence', page and list alike",
+  _k5[0] == ("insufficient", verdict.NO_STUDIES_TLDR, "insufficient", verdict.NO_STUDIES_TLDR)
+  and _k5[1] == ("insufficient", verdict.UNTESTED_TLDR, "insufficient", verdict.UNTESTED_TLDR)
+  and _display.relied_pmids(["99", "HB2"], [dict(_H1_B)]) == {"HB2"}, _k5)
 with db.get_conn() as _conn:
     _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_J4_C),))
 # F1a and F1b (type-ahead shows only whole rows, at the stamp its page would
