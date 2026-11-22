@@ -2156,12 +2156,11 @@ t("  only rows that are shown are counted, and the accessible name is always the
 # answer, and the claim they typed can never be mistaken for it.
 
 _css = (ROOT / "static" / "style.css").read_text()
-_sheet = _css[_css.find(".verdict-block {"):].split("}")[0]
-t("the answer is flat on the page: no panel, no shadow, no lift onto the head",
-  "box-shadow" not in _sheet and "background: transparent" in _sheet and "border" not in _sheet
-  and "--shadow-near" not in _css)
-t("on a wide screen the sources are a narrow rail beside one reading column",
-  "grid-template-columns: minmax(0, 1fr) 340px" in _css)
+_dkc = (ROOT / "static" / "desk.css").read_text()
+t("the answer is flat on the page: no shadow, no lift; the old front's answer block is gone from style.css",
+  "box-shadow" not in _dkc and "--shadow-near" not in _dkc and ".verdict-block" not in _css and "--shadow-near" not in _css)
+t("on a wide screen the reading is one column beside the desk, never a full-width page",
+  ".inner.wide { width: min(600px, 47vw); }" in _dkc and ".inner.wider { width: min(700px, 54vw); }" in _dkc)
 _done = _js[_js.find("renderResult(final.result);"):][:900]
 t("after a check the address carries the claim as checked, so a fixed spelling stays fixed on reload",
   'encodeURIComponent(final.result.claim || claim)' in _done
@@ -2188,21 +2187,18 @@ t("  the claim is the result view's one h1; the home heading steps down to an h2
   and '<section id="ask" aria-labelledby="ask-heading" hidden>' in _ord
   and '<h2 class="h1" id="ask-heading">' in _ord and "<h2 class=\"claim-echo\"" not in _ord)
 t("  its quotation marks come from the stylesheet, so the text stays the text",
-  ".claim-echo::before" in _css and "\\201C" in _css)
-# Sizes are compared rather than eyeballed.
-_claim_px = [float(n) for n in re.findall(
-    r"\.claim-echo \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)",
-    _css, re.S)[0]]
-# The answer sentence is the biggest text on the result, at every width: its
-# smallest is above the claim's largest and the assessment's largest.
-_tldr_px = [float(n) for n in re.findall(
-    r"\.tldr \{[^}]*?clamp\((\d+(?:\.\d+)?)px,[^,]+,\s*(\d+(?:\.\d+)?)px\)", _css, re.S)[0]]
-_stamp_px = float(re.search(r"\.stamp \{[^}]*?font-size: (\d+(?:\.\d+)?)px", _css, re.S).group(1))
-t("  and the answer sentence is set larger than the claim and the assessment at every width",
-  _claim_px[1] < _tldr_px[0] and _stamp_px < _tldr_px[0], f"claim {_claim_px} tldr {_tldr_px} stamp {_stamp_px}")
+  '.vcard .q::before { content: "\\201C"; } .vcard .q::after { content: "\\201D"; }' in _dkc)
+# Sizes are compared rather than eyeballed. On the card (text mode, and with
+# scripts off) the verdict is the biggest words at every width: its smallest
+# is above the claim and the short answer.
+_v_px = [float(n) for n in re.search(r"\.no-gl \.vcard \.v, html:not\(\.js\) \.vcard \.v \{[^}]*?clamp\((\d+)px,[^,]+,\s*(\d+)px\)", _dkc).groups()]
+_q_px = float(re.search(r"\.no-gl \.vcard \.q, html:not\(\.js\) \.vcard \.q \{ font-size: (\d+)px", _dkc).group(1))
+_t_px = float(re.search(r"\.no-gl \.vcard \.t, html:not\(\.js\) \.vcard \.t \{ font-size: (\d+)px", _dkc).group(1))
+t("  and on the card the verdict is set larger than the claim and the short answer at every width",
+  _q_px < _v_px[0] and _t_px < _v_px[0], f"verdict {_v_px} claim {_q_px} short {_t_px}")
 t("  the assessment is plain text: no oval, no ring, no pen drawn round it on the result",
-  'class="ring"' not in _ord and 'class="vwrap"' not in _ord and ".ring" not in _css
-  and ".vwrap" not in _css and "fitRing" not in (ROOT / "static" / "app.js").read_text())
+  'class="ring"' not in _ord and 'class="vwrap"' not in _ord and ".ring" not in _css + _dkc
+  and ".vwrap" not in _css + _dkc and "fitRing" not in (ROOT / "static" / "app.js").read_text())
 t("  the verdict is on the card and how sure is the labelled line under it",
   '<h2 class="v" id="stamp">It' in _ord and '<p class="sure-label">How sure</p><p class="sure" id="confidence">' in re.sub(r">\s+<", "><", _ord)
   and _at('id="tldr"') < _at('id="confidence"') < _at('id="doctor-line"') < _at("What the research says"))
@@ -2288,10 +2284,10 @@ _sheet = _tpl.split('id="study-sheet"')[1].split("</dialog>")[0]
 t("the source dialog has one Close, in a bar that sticks to its top; the foot has none",
   _sheet.count("data-close") == 1 and 'class="sheet-bar"' in _sheet
   and _sheet.index("data-close") < _sheet.index('class="sheet-body"')
-  and "position: sticky" in _css.split(".sheet-bar {")[1].split("}")[0])
+  and "position: sticky" in _dkc.split(".sheet-bar {")[1].split("}")[0])
 t("  that Close is at least 44px tall and wide, and has a word, not just an icon",
-  "min-height: 44px" in _css.split(".sheet-close {")[1].split("}")[0]
-  and "min-width: 44px" in _css.split(".sheet-close {")[1].split("}")[0]
+  "min-height: 44px" in _dkc.split(".sheet-close {")[1].split("}")[0]
+  and "min-width: 44px" in _dkc.split(".sheet-close {")[1].split("}")[0]
   and ">Close</button>" in _sheet)
 t("  focus moves into the dialog on open, Escape closes it natively, and the opener gets focus back",
   "heading.focus(" in _appjs.split("function openSheet")[1].split("\n}")[0]
@@ -7064,8 +7060,9 @@ t("type: the main heading is 34 to 38px on a phone and 48 to 56px wide, tracked 
   bool(_hero_base) and 34 <= int(_hero_base.group(1)) <= 38 and float(_hero_base.group(2)) >= -0.025
   and len(_hero_wide) == 2 and all(48 <= n <= 56 for n in _hero_wide), (_hero_base and _hero_base.groups(), _hero_wide))
 _small_px = [(m.group(0)) for m in re.finditer(r"(?:font-size: ?|font: \d+ )(\d+(?:\.\d+)?)px", _css9) if float(m.group(1)) < 13]
-t("type: no font size under 13px in the stylesheet, except the lettering on a book spine (aria-hidden decoration)",
-  len(_small_px) == 1 and "10px" in _small_px[0] and "barcol-spine" in _css9.split(_small_px[0])[0].rsplit("}", 1)[1], _small_px)
+_small_px += [(m.group(0)) for m in re.finditer(r"(?:font-size: ?|font: \d+ )(\d+(?:\.\d+)?)px", (ROOT / "static" / "desk.css").read_text()) if float(m.group(1)) < 13]
+t("type: no font size under 13px in either stylesheet (the book spines and their 10px lettering left with the old front)",
+  len(_small_px) == 0 and "barcol-spine" not in _css9, _small_px)
 _body_css = re.search(r"body \{[^}]*font-size: (\d+)px; line-height: ([\d.]+)", _css9)
 t("type: body text is 16 to 17px on a 1.6 line height",
   bool(_body_css) and 16 <= int(_body_css.group(1)) <= 17 and 1.55 <= float(_body_css.group(2)) <= 1.65)

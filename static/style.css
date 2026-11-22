@@ -1,12 +1,10 @@
 /* ==========================================================================
-   Evident
-   The reading room after hours. Night is where a claim arrives and where its
-   verdict is given: a charcoal with the green of the stacks in it, never
-   navy, never black. Day is the desk the evidence is laid out on: cool
-   stone, not cream. One accent, bottle green by day and sage by night, for
-   what you can act on and for the pen that rings a verdict. The studies are
-   books: their cloth says what kind of study each one is, and nothing on
-   this page is ever coloured by what the verdict was.
+   Evident: the pages beside the desk (about, how it works, corrections,
+   privacy, the 404 and the stats page). The front page is the lamp-lit desk
+   and has its own stylesheet, static/desk.css. Here: a night masthead and
+   footer, a charcoal with the green of the stacks in it, and the text by day
+   on cool stone. One accent, bottle green by day and sage by night, for what
+   you can act on. Nothing is ever coloured by what a verdict was.
    ========================================================================== */
 
 /* Self-hosted latin subsets, trimmed to the axes the page uses. OFL; see
@@ -50,30 +48,12 @@
   --rule: #d9dcd5;
   --rule-2: #b9bfb7;
 
-  /* The one accent. Green by day for what you can act on; sage by night for
-     the pen; a pale tint for the highlighter. */
+  /* The one accent: green by day for what you can act on, sage for focus on
+     the night, a pale tint for a selection. */
   --green: #2c5848;
   --sage: #9fc3b0;
   --tint: #d4e4da;
 
-  /* Book cloth: what kind of study it is, matched in tone so the shelf reads
-     as one set. Never a verdict. */
-  --c-strong: #35594c;
-  --c-human: #3a4e6b;
-  --c-lab: #5a4760;
-  --c-weak: #7e4f3d;
-  --wood: #2b2622;
-  --on-cloth: #f1f2ee;
-  --foil: rgba(241, 242, 238, 0.45);
-  --spine-light: rgba(255, 255, 255, 0.07);
-  --spine-shade: rgba(0, 0, 0, 0.18);
-
-  /* Over the footage: a dark plate of the night stock, solid enough to carry
-     white text over any frame. */
-  --plate: rgba(15, 18, 17, 0.8);
-  --film-top: rgba(15, 18, 17, 0.35);
-  --scrim: rgba(8, 10, 9, 0.55);
-  --shadow: rgba(8, 10, 9, 0.22);
   --focus: #2c5848;
 
   --display: "Bricolage Grotesque", system-ui, sans-serif;
@@ -88,7 +68,6 @@
 }
 
 * { box-sizing: border-box; }
-[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 /* No sideways scroll on a phone, whatever a long word or a wide table does.
    `clip` where the browser has it, which is everywhere current: `hidden` on
@@ -117,7 +96,7 @@ body {
 
 /* Labels are set in the mono, small and in sentence case. Never tracked out,
    never in capitals: they are notes in the margin, not signage. */
-.section-label, .field-label, .case, .key, .meta {
+.section-label, .meta {
   font-family: var(--mono); font-size: 13px; font-weight: 500; line-height: 1.4;
   letter-spacing: 0; text-transform: none; color: var(--ink-3);
 }
@@ -127,12 +106,12 @@ body {
    image of the same colour pushed out to both edges of the viewport. It
    paints outside the box without widening it, so it can never scroll, and
    it has no clipped edge to leave a hairline of paper between two blocks. */
-.night, .band, .report-head, .foot, #error {
+.band, .foot {
   background-color: var(--deep); color: var(--on-deep);
   border-image: linear-gradient(var(--deep), var(--deep)) fill 0 / 0 / 0 100vmax;
 }
-.band, .report-head, .foot { position: relative; }
-.band :focus-visible, .report-head :focus-visible, .foot :focus-visible { outline-color: var(--sage); }
+.band, .foot { position: relative; }
+.band :focus-visible, .foot :focus-visible { outline-color: var(--sage); }
 
 /* ---- Masthead ------------------------------------------------------------ */
 
@@ -161,50 +140,26 @@ body {
   padding: 1px 6px; border: 1px solid var(--deep-line); border-radius: var(--r-control);
   color: var(--on-deep-2); white-space: nowrap; cursor: default;
 }
-.top-actions { display: flex; gap: 16px; align-items: center; }
-/* In the masthead the controls are words, not buttons: the page below has
-   the weight, and a bordered block up here competes with the nameplate. */
-.top .ghost, .top .install, .top .navlink {
-  border: 0; padding: 0; background: none; color: var(--on-deep-2);
-  font: 500 14px/1.2 var(--body); cursor: pointer; position: relative; text-decoration: none;
-}
-.top .ghost:hover, .top .install:hover, .top .navlink:hover { color: var(--on-deep); }
-.top .ghost::after, .top .install::after, .top .navlink::after { content: ""; position: absolute; inset: -14px -8px; }
-@media (max-width: 419px) { .top-actions { gap: 14px; } .top { gap: 12px; } }
-
-.link-btn {
-  background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
-  font: 500 14px/1.4 var(--body); color: var(--green);
-  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
-  position: relative;
-}
-.link-btn:hover { color: var(--ink); }
-/* Grown hit area, invisibly: the word stays small, the thumb target does not. */
-.link-btn::after { content: ""; position: absolute; inset: -14px -8px; }
+@media (max-width: 419px) {  .top { gap: 12px; } }
 
 /* ---- Buttons ------------------------------------------------------------- */
 
-.primary, .secondary, .ghost, .thumb, .chip {
+.primary {
   font-family: var(--body); cursor: pointer; border-radius: var(--r-control);
   transition: transform 70ms ease;
 }
-.primary, .secondary, .ghost {
+.primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 9px;
   font-size: 15px; font-weight: 500; line-height: 1.2;
   padding: 15px 18px; border: 1px solid var(--ink);
 }
 .primary { width: 100%; margin-top: 8px; background: var(--ink); color: var(--panel); }
-.secondary { background: var(--ink); color: var(--panel); }
-.primary:hover, .secondary:hover { background: var(--deep-2); }
-.ghost { background: transparent; color: var(--ink); }
-.ghost:hover { background: var(--panel); }
-.primary:active, .secondary:active, .ghost:active, .thumb:active, .chip:active { transform: translateY(1px); }
-.primary.small { width: auto; padding: 11px 16px; }
-.primary:disabled, .secondary:disabled { cursor: default; transform: none; }
+.primary:hover { background: var(--deep-2); }
+.primary:active { transform: translateY(1px); }
+.primary:disabled { cursor: default; transform: none; }
 
 /* ---- The ask: night ------------------------------------------------------ */
 
-.hero-block { padding: 14px 0 0; }
 .hero {
   margin: 0; font: 350 36px/1.08 var(--display); letter-spacing: -0.02em;
   color: inherit;
@@ -215,10 +170,6 @@ body {
 .band .lede { color: var(--on-deep-2); }
 
 .claim-form { margin: 18px 0 0; }
-/* The field is named out loud: the placeholder is an example, never the label. */
-.field-title { display: block; font: 500 15px/1.3 var(--body); color: inherit; }
-.field-help { margin: 4px 0 10px; font-size: 14px; line-height: 1.4; color: var(--ink-2); }
-.band .field-help { color: var(--on-deep-2); }
 .claim-box {
   position: relative; padding: 12px 14px 12px;
   background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--r-panel);
@@ -230,17 +181,7 @@ body {
   resize: none; min-height: 62px; padding: 0 64px 0 0;
 }
 #claim-input::placeholder { color: var(--ink-3); }
-.clear, .mic {
-  position: absolute; bottom: 6px; background: none; border: 0; cursor: pointer;
-  color: var(--ink-3); padding: 8px; font-family: inherit;
-}
-.clear { right: 42px; } .mic { right: 6px; }
-/* Small marks, 44px to touch: the target grows, the mark and the layout do not. */
-.clear::after, .mic::after { content: ""; position: absolute; inset: -4px -5px; }
-/* The mic sits against the clear button, so the clear button grows to its left only. */
-.clear::after { inset: -4px 0 -4px -10px; }
-.mic.listening { color: var(--green); animation: pulse 1s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: 0.25; } }
+ 
 
 /* On the night ground the box is a well in it, and the button is the light
    shape: the one bright thing on the screen is the thing to press. */
@@ -248,74 +189,18 @@ body {
 .band .claim-box:focus-within { outline-color: var(--sage); }
 .band #claim-input { color: var(--on-deep); }
 .band #claim-input::placeholder { color: var(--on-deep-3); }
-.band .clear, .band .mic { color: var(--on-deep-3); }
-.band .mic.listening { color: var(--sage); }
 .band .primary { background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
 .band .primary:hover { background: var(--panel); }
 
-.field-error { margin: 8px 0 0; padding-left: 10px; font-size: 14px; line-height: 1.4; color: var(--ink); box-shadow: inset 2px 0 0 currentColor; }
-.band .field-error { color: var(--on-deep); }
 .claim-box:has(#claim-input[aria-invalid="true"]) { border-color: currentColor; }
 
 /* ---- Type-ahead ---------------------------------------------------------- */
 
-.suggest {
-  margin: 4px 0 0; background: var(--deep-2);
-  border: 1px solid var(--deep-line); border-radius: var(--r-panel); overflow: hidden;
-}
-.suggest-head {
-  margin: 0; padding: 10px 14px 2px;
-  font: 500 13px/1.3 var(--mono); color: var(--on-deep-2);
-}
-.suggest-note { margin: 0; padding: 0 14px 9px; font-size: 13px; line-height: 1.4; color: var(--on-deep-2); border-bottom: 1px solid var(--deep-line); }
-.suggest-list { list-style: none; margin: 0; padding: 0; }
-.suggest-row {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 14px; padding: 12px 14px; cursor: pointer;
-  border-top: 1px solid var(--deep-line);
-}
-.suggest-row:first-child { border-top: 0; }
-.suggest-row:hover,
-.suggest-row[aria-selected="true"] { background: var(--deep); }
-/* The keyboard selection has to be visible without a hover, so it carries a
-   rule of its own rather than relying on the tint alone. */
-.suggest-row[aria-selected="true"] { box-shadow: inset 2px 0 0 var(--sage); }
-.suggest-claim { font-size: 15px; line-height: 1.4; color: var(--on-deep); }
-.suggest-also { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--on-deep-2); }
-.suggest-verdict { flex: none; font: 500 13px/1.3 var(--mono); color: var(--on-deep-2); white-space: nowrap; }
-
 /* ---- The front page, by day ---------------------------------------------- */
 
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  font-size: 14px; font-weight: 400; line-height: 1.3;
-  background: var(--panel); color: var(--ink); border: 1px solid var(--rule);
-  padding: 9px 12px; min-height: 44px;
-}
-.chip:hover { border-color: var(--ink); }
-/* On the night ground the examples are quiet outlines: the one bright shape is Check. */
-.band .chip { background: transparent; color: var(--on-deep); border-color: var(--deep-line); }
-.band .chip:hover { border-color: var(--on-deep-2); }
-
-.section-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .section-label { margin: 0; }
-.sec-title, .trust-title {
-  margin: 0 0 12px; font: 350 32px/1.06 var(--display); letter-spacing: -0.035em; color: var(--ink);
-}
-.latest { margin-top: 64px; }
-.examples, .trending, .recent, .nudge { margin-top: 40px; }
-/* Beside the button, where the choice to type is made. Plain words, a link to the page that says the rest. */
-.privacy-line { margin: 10px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
-.band .privacy-line { color: var(--on-deep-2); }
-.privacy-line a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; position: relative; }
-.privacy-line a::after { content: ""; position: absolute; inset: -14px -6px; }
-.claim-form .examples { margin-top: 12px; }
-.claim-form .chips { gap: 6px; }
-.claim-form .examples .field-help { margin: 0 0 6px; }
-.trending .section-label, .recent .section-label { margin-bottom: 12px; }
 
-.claim-list, .ledger-list { list-style: none; margin: 0; padding: 0; }
-.claim-list { border-top: 1px solid var(--rule); }
+.ledger-list { list-style: none; margin: 0; padding: 0; }
 
 /* A check in a list: the claim, the verdict in words (never
    coloured), then a mini shelf of the books it was read from. */
@@ -334,130 +219,13 @@ body {
 .entry-link:hover .entry-claim { text-decoration: underline; text-decoration-color: var(--rule-2); }
 .entry-claim { font-size: 18px; line-height: 1.35; overflow-wrap: break-word; }
 .entry-verdict { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
-.entry-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.entry-years { white-space: nowrap; }
-/* The mini shelf: one spine per study, stood strongest first. As on the
-   result page, a relied-on book is solid cloth and a book read but not used
-   is outlined in its cloth on a pale wash of it. No band: at 5px wide a band
-   reads as a letter. */
-.mini {
-  display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 10px;
-  padding: 0 2px; border-bottom: 1.5px solid var(--wood);
-}
-.mini i { display: block; width: 5px; background: var(--k, var(--ink-3)); }
-.mini i:not(.on):not(.h-retracted) {
-  background: color-mix(in oklab, var(--k, var(--ink-3)) 18%, var(--paper));
-  box-shadow: inset 0 0 0 1px var(--k, var(--ink-3));
-}
-
-/* Before you trust a verdict: the questions a stranger asks, in rows. */
-.trust { margin-top: 72px; }
-.trust-row { padding: 22px 0; border-top: 1px solid var(--rule); }
-.trust-q { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.35; }
-.trust-a { margin-top: 8px; max-width: var(--measure); }
-.trust-a > p { margin: 0; color: var(--ink-2); font-size: 15px; }
-.trust .link-btn { display: inline-block; margin-top: 12px; }
-.trust-links { display: flex; flex-wrap: wrap; gap: 4px 28px; margin: 0; }
-.proof { border-left: 1px solid var(--ink); padding-left: 14px; margin-bottom: 4px; }
-.proof-claim { margin: 0; font-size: 17px; line-height: 1.35; }
-.proof-verdict { margin: 8px 0 0; font: 350 26px/1.1 var(--display); letter-spacing: -0.03em; }
-.proof-tldr { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; }
-.proof-meta { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-
-.recent-btn, .clear { font-family: inherit; }
-.claim-list > li { border-bottom: 1px solid var(--rule); }
-.recent-btn {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline; gap: 0 14px; width: 100%;
-  background: none; border: 0; padding: 13px 0; cursor: pointer;
-  text-align: left; color: var(--ink); font-family: var(--body);
-}
-.recent-btn > span:first-child { font-size: 16px; line-height: 1.35; }
-.recent-btn:hover > span:first-child { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rule-2); }
-.recent-btn .tag { font: 500 13px/1.3 var(--mono); color: var(--ink-3); white-space: nowrap; }
-.recent-btn:active { transform: translateY(1px); }
-.nudge { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-panel); padding: 16px; }
-.nudge-body { margin: 8px 0 14px; font-size: 15px; }
-.nudge-actions { display: flex; gap: 8px; }
 
 .fine { font-size: 13px; line-height: 1.5; color: var(--ink-3); margin: 10px 0 0; }
 .band .fine { color: var(--on-deep-3); }
-.small { font-size: 13px; }
 
 /* ---- Nothing found: the page still owes the reader a next step ----------- */
 
-.nosteps { margin: 24px 0 0; padding: 18px 0 0; border-top: 1px solid var(--ink); }
-.nosteps-why { margin: 8px 0 14px; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
-.nosteps-acts { list-style: none; margin: 0; padding: 0; }
-.nosteps-acts li { padding: 11px 0; border-top: 1px solid var(--rule); font-size: 15px; line-height: 1.5; }
-.nosteps-acts a {
-  color: var(--green); text-decoration: underline; text-underline-offset: 3px;
-  display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;
-}
-.nosteps-acts code { font: 500 13px var(--mono); }
-.nosteps-sub { margin-top: 20px; }
-
 /* ---- The report: night --------------------------------------------------- */
-
-.back {
-  display: inline-flex; align-items: center; gap: 8px; background: none; border: 0;
-  padding: 14px 0; cursor: pointer; font: 500 14px/1.2 var(--body); color: var(--ink);
-}
-.report-head > .back { display: flex; width: 100%; margin-bottom: 12px; color: var(--on-deep-2); }
-.report-head > .back:hover { color: var(--on-deep); }
-.report-head { padding: 0 0 52px; }
-.case { margin: 0; color: var(--on-deep-3); }
-/* The case line and the standing "Not medical advice" share one row, so the
-   notice is on the first screen of every result without taking a line. */
-.case-row { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; margin: 0 0 26px; }
-.case-row .case-nma { color: var(--on-deep-2); }
-
-/* The head holds the claim and, while a check runs, the work printing under
-   it. Nothing links it to the answer by a drawn line: the answer is the next
-   thing down the page. */
-.thread { position: relative; }
-.field-label { margin: 0; color: var(--on-deep-3); }
-
-/* The claim is labelled as the claim and set as a quotation, plainly, well
-   below the verdict in size. It wraps for as long as it needs to: a claim is
-   never truncated. */
-.claim-echo {
-  margin: 8px 0 0; font-size: clamp(19px, 5.4vw, 24px); line-height: 1.35;
-  font-weight: 400; letter-spacing: -0.005em; color: var(--on-deep);
-  max-width: 30em; overflow-wrap: break-word;
-}
-.claim-echo::before { content: "\201C"; }
-.claim-echo::after { content: "\201D"; }
-/* Under the claim, when its spelling was fixed: what was actually typed.
-   Quieter than the claim, so the claim stays the thing that was checked. */
-.typed-note {
-  margin: 10px 0 0; font-size: 13.5px; line-height: 1.45;
-  color: var(--on-deep-2); max-width: 34em; overflow-wrap: break-word;
-}
-
-/* Edit sits under the claim, in the night's own ink, and is as tall as a
-   thumb. It is not offered while a check runs: Cancel is the way out then. */
-.edit-claim {
-  display: inline-flex; align-items: center; min-height: 44px; margin: 6px 0 0; padding: 0;
-  background: none; border: 0; cursor: pointer;
-  font: 500 15px/1.4 var(--body); color: var(--on-deep);
-  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
-}
-.edit-claim:hover { color: var(--sage); }
-#result.checking .edit-claim { display: none; }
-
-/* While a check runs, the work prints along the thread. */
-.reading { list-style: none; margin: 24px 0 0; padding: 0; font: 500 13px/1.5 var(--mono); color: var(--on-deep-2); }
-.reading li { display: flex; gap: 10px; padding: 4px 0; animation: line-in 240ms ease-out both; }
-.reading li::before { content: ""; width: 9px; height: 1px; margin-top: 9px; background: var(--on-deep-3); flex: none; }
-.reading li.live { color: var(--on-deep); }
-.reading li.live::before { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--sage); animation: pulse 1s ease-in-out infinite; }
-.reading li.cancel-row::before { display: none; }
-/* The log opens where Edit claim will be, so the answer arrives close to where
-   the head already ends. */
-#result.checking .reading { margin-top: 8px; }
-.reading .link-btn { color: var(--on-deep); font-family: var(--body); }
-@keyframes line-in { from { opacity: 0; transform: translateY(3px); } }
 
 /* ---- The answer ---------------------------------------------------------- *
    The sentence that answers the claim leads, in the display face and the
@@ -466,250 +234,17 @@ body {
    whatever the assessment says: a verdict is never coloured and never
    ringed. */
 
-.ticket { margin: 0; }
-.assess { margin: 22px 0 0; display: grid; row-gap: 10px; }
-.assess-row { margin: 0; display: grid; grid-template-columns: 7.5em minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
-.assess-label { font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-.stamp {
-  font-family: var(--display); font-weight: 350; font-size: 24px; line-height: 1.2;
-  letter-spacing: -0.02em; color: var(--ink);
-}
-.confidence { font-size: 16px; line-height: 1.55; color: var(--ink); }
-.confidence .what { font-size: 14px; }
-/* The one line under every verdict, the same whatever the verdict says: in
-   the night's quiet ink at the size of the note under the claim, so it reads
-   as part of the answer and not as a banner. Balanced, so on a narrow phone
-   it breaks into two even lines and never strands its last word. */
-.doctor-line {
-  margin: 14px 0 0; max-width: 34em;
-  font-size: 14px; line-height: 1.5; color: var(--ink-3);
-  text-wrap: balance;
-}
-/* The same quiet line on the screens that have no verdict yet: under the
-   claim field's introduction, on a dead end, and on an error. */
-/* When the check ran, under the doctor line: a margin note, not a banner. */
-.review-line { margin-top: 10px; color: var(--ink-3); }
-.ask-note, .error-note {
+.ask-note {
   margin: 12px 0 0; max-width: 28em;
   font-size: 13.5px; line-height: 1.45; color: var(--on-deep-2); text-wrap: balance;
 }
 .doc .ask-note { color: var(--ink-2); }
-.error-note { margin-top: 20px; }
 
 /* ---- By day: the reading behind the verdict ------------------------------- */
-
-/* The answer is a sheet laid on the desk: a shade lighter than the page,
-   edged in a fine rule, lifted onto the night head and casting a soft
-   shadow, so the part the reader came for sits above everything else. With
-   the study sheet, the only shadows in the design. */
-.verdict-block {
-  position: relative; z-index: 1;
-  margin: 0;
-  padding: 28px 0 8px;
-  background: transparent;
-}
-.answer { padding: 0; }
-.tldr {
-  margin: 10px 0 0; max-width: 24em;
-  font: 350 clamp(26px, 7.2vw, 34px)/1.22 var(--display); letter-spacing: -0.02em; text-wrap: balance;
-}
-.says-sec { margin-top: 36px; }
-.who-sec { margin-top: 32px; }
-.who { margin-top: 10px; }
-.who .label-2 { margin-top: 18px; }
-.says { margin-top: 10px; }
-.says-p { margin: 0 0 12px; font-size: 17px; line-height: 1.65; color: var(--ink-2); }
-.says-p:last-child { margin-bottom: 0; }
-
-.no-evidence { margin: 36px 0 0; padding: 18px 0 0; border-top: 1px solid var(--rule-2); font-size: 17px; line-height: 1.55; max-width: 34em; }
-.no-evidence b { display: block; margin-bottom: 8px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-.still-open { margin: 36px 0 0; padding: 18px 0 0; border-top: 1px solid var(--ink); font-size: 17px; line-height: 1.55; }
-.still-open b { display: block; margin-bottom: 8px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-
-/* ---- The evidence chart -------------------------------------------------- *
-   The shelf. One book per study, in the order of the list of studies. Height
-   is the kind of design and nothing else, so the same set always stands the
-   same way. Cloth is what the study was run on (evidence.kind), set as a
-   token on the book's own class: no colour is written out here, and none of
-   them is ever used for what the verdict was. Every book keeps its cloth;
-   the ones the verdict used carry a band of silver foil at the head and a
-   dot over them. */
-.chart-sec { margin-top: 52px; }
-.chart-sum { margin: 10px 0 0; font-size: 18px; line-height: 1.45; max-width: 30ch; text-wrap: balance; font-variant-numeric: tabular-nums; }
-.k-strong { --k: var(--c-strong); }
-.k-human { --k: var(--c-human); }
-.k-lab { --k: var(--c-lab); }
-.k-weak { --k: var(--c-weak); }
-.k-retracted { --k: var(--ink-2); }
-.chart {
-  --plot-h: 210px; --num-h: 26px; --ledge: 5px;
-  /* The top margin is the tip's room: a study's type and year open upward
-     out of the shelf, clear of the summary line above it. */
-  margin: 36px 0 0;
-}
-.chart-plot { position: relative; }
-/* The ledge the books stand on. */
-.chart-base {
-  position: absolute; left: 0; right: 0; bottom: var(--num-h);
-  height: var(--ledge); background: var(--wood);
-}
-
-/* A book is as wide as a book: a column is 46px at most, so a short list
-   stands as a short row against its bookend instead of stretching into a bar
-   chart, and the rest of the ledge is empty shelf. The gap between books is
-   padding inside the button, so the row has no dead strip between targets.
-   Eight columns cannot each be 44px wide on a 375px screen, so they shrink
-   to fit and the target takes its size the other way, the full height of
-   the shelf. */
-.chart-bars { display: flex; align-items: flex-end; padding: 0 4px; }
-/* The bookend: the row stops because the studies do. It stands on the
-   ledge, in the ledge's wood. */
-.chart-bars::after {
-  content: ""; flex: none; width: 9px; height: calc(var(--plot-h) * 0.52);
-  margin: 0 0 calc(var(--ledge) + var(--num-h)) 3px;
-  background: var(--wood); border-radius: var(--r-control) var(--r-control) 0 0;
-}
-.barcol {
-  flex: 0 1 46px; min-width: 0; height: calc(var(--plot-h) + var(--ledge) + var(--num-h));
-  display: flex; flex-direction: column; position: relative;
-  padding: 0; border: 0; background: none; font: inherit; color: inherit;
-  cursor: pointer;
-}
-.barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 1px; }
-.barcol-bar {
-  position: relative; width: 100%; transform-origin: bottom;
-  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;
-  background-color: var(--k, var(--ink-3));
-  background-image: linear-gradient(90deg, var(--spine-light), transparent 30%, transparent 70%, var(--spine-shade));
-  color: var(--on-cloth);
-}
-/* Two foil rules at the head of every spine, the way a bound volume is lettered. */
-.barcol-bar::before {
-  content: ""; position: absolute; left: 5px; right: 5px; top: 10px; height: 6px;
-  border-top: 1px solid var(--foil); border-bottom: 1px solid var(--foil);
-}
-.barcol-spine {
-  writing-mode: vertical-rl; transform: rotate(180deg);
-  max-height: calc(100% - 22px); overflow: hidden;
-  font: 500 10px/1 var(--body); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
-}
-.h-strong { height: 100%; }
-.h-moderate { height: 72%; }
-.h-weak { height: 44%; }
-/* A withdrawn paper is not thin evidence, it is no evidence: it stands at
-   the weak height, hatched, whether the verdict cited it or not. */
-.h-retracted { height: 44%; }
-.barcol-bar.h-retracted, .mini .h-retracted {
-  background-color: var(--panel);
-  background-image: repeating-linear-gradient(135deg, var(--ink-2) 0 2px, var(--panel) 2px 5px);
-}
-/* No word stands up on a book this short: the hatch and the key say it. */
-.h-retracted .barcol-spine { display: none; }
-/* Read but not used: the same book outlined in its cloth on a pale wash of
-   it, a paperback beside the bound volumes. The colour still says the kind
-   of study; solid or outlined says whether the verdict leaned on it. Never
-   faded with opacity, which would let a strong study pass for a weak one. */
-.barcol:not(.is-used) .barcol-bar:not(.h-retracted) {
-  background-color: color-mix(in oklab, var(--k, var(--ink-3)) 18%, var(--panel));
-  background-image: none;
-  border: 2px solid var(--k, var(--ink-3)); border-bottom: 0;
-  color: var(--k, var(--ink-3));
-}
-.barcol:not(.is-used) .barcol-bar:not(.h-retracted)::before {
-  left: 3px; right: 3px; top: 8px;
-  border-color: color-mix(in oklab, var(--k, var(--ink-3)) 50%, transparent);
-}
-/* Relied on: solid cloth, and the two rules at the head become one band of
-   silver foil, the way a library marks a volume. */
-.is-used .barcol-bar::before {
-  left: 0; right: 0; top: 9px; height: 8px; border: 0;
-  background: linear-gradient(180deg, var(--on-cloth), var(--rule-2) 60%, var(--on-cloth));
-}
-.is-used .barcol-bar::after {
-  content: ""; position: absolute; left: 50%; top: -12px; width: 5px; height: 5px; margin-left: -2.5px;
-  border-radius: 50%; background: var(--green);
-}
-.barcol-no {
-  height: var(--num-h); margin: var(--ledge) 3px 0; display: flex;
-  align-items: center; justify-content: center;
-  font: 500 13px/1 var(--mono); color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-.is-used .barcol-no { color: var(--ink); }
-.barcol:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
-/* The chosen book: a ring round its spine and its number reversed out, the
-   way a book is pulled half out of a row. */
-.barcol.is-on .barcol-bar {
-  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--ink);
-}
-.barcol.is-on .barcol-no { background: var(--ink); color: var(--panel); border-radius: var(--r-control); }
-
-.barcol-tip {
-  position: absolute; bottom: calc(var(--num-h) + var(--ledge) + var(--plot-h) + 8px);
-  left: 50%; transform: translateX(-50%); z-index: 2;
-  padding: 4px 8px; background: var(--ink); color: var(--panel); border-radius: var(--r-control);
-  font: 500 13px/1.3 var(--mono); white-space: nowrap;
-  opacity: 0; pointer-events: none;
-}
-/* The end columns anchor to their own edge: centred, the first and last tips
-   would hang off the page. */
-.barcol:first-child .barcol-tip { left: 0; transform: none; }
-.barcol:last-child .barcol-tip { left: auto; right: 0; transform: none; }
-.barcol:hover .barcol-tip, .barcol:focus-visible .barcol-tip, .barcol.is-on .barcol-tip { opacity: 1; }
-
-.shelf-key {
-  display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 18px 0 0; padding: 0; list-style: none;
-  font-size: 13px; line-height: 1.4; color: var(--ink-2);
-}
-.shelf-key i { display: inline-block; width: 7px; height: 11px; margin-right: 7px; vertical-align: -1px; background: var(--k); }
-.shelf-key .h-retracted {
-  height: 11px; background-color: var(--panel);
-  background-image: repeating-linear-gradient(135deg, var(--ink-2) 0 2px, var(--panel) 2px 4px);
-}
-.chart-key { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
-.chart-facts { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.chart-sec .record { margin: 10px 0 0; font-size: 14px; }
 
 /* The books stand up off the ledge, 20ms apart, under 400ms end to end, on
    a check that just happened. Transform and opacity only, and nothing at
    all under prefers-reduced-motion. */
-@keyframes bar-grow { from { transform: scaleY(0.04); opacity: 0; } }
-.chart-bars.reveal .barcol-bar {
-  animation: bar-grow 250ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
-  animation-delay: calc(var(--i, 0) * 20ms);
-}
-
-/* The study the reader jumped to from the shelf, marked for as long as the
-   result is on screen. */
-.study.target { box-shadow: inset 0 0 0 1px var(--ink); }
-
-.cached-note { margin: 28px 0 0; padding: 10px 0 0; border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-3); }
-
-/* While a check runs nothing has been counted yet, so nothing by day is drawn:
-   the claim and the work printing along the thread are the whole screen. */
-#result.checking .verdict-block,
-#result.checking .deeper,
-#result.checking .actions,
-#result.checking .toast,
-#result.checking .feedback,
-#result.checking .report,
-#result.checking .after { display: none; }
-
-.ref {
-  display: inline-block; min-width: 16px; padding: 0 1px; cursor: pointer;
-  background: none; border: 0; font: inherit; font-weight: 600; color: var(--green);
-  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px;
-  position: relative;
-}
-.ref::after { content: ""; position: absolute; inset: -15px -15px; }
-.record { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
-/* The highlighter: a pass of tint along the lower half of the line, never a
-   block. The UA's yellow <mark> is replaced by it. */
-mark, .key-mark, .hl {
-  background: linear-gradient(transparent 60%, var(--tint) 60% 94%, transparent 94%);
-  color: inherit; -webkit-box-decoration-break: clone; box-decoration-break: clone;
-}
-.perf { display: none; }
 
 /* ---- The deeper layer ---------------------------------------------------- *
    Closed, straight under what is still open and before the shelf. The lines
@@ -720,295 +255,19 @@ mark, .key-mark, .hl {
    heavy rule and a hairline. Nothing in it is a card and nothing in it is
    coloured; the one rounded thing is the control, at the controls' radius. */
 
-.deeper { margin: 40px 0 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); }
-.deeper-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 18px 0 20px; cursor: pointer; list-style: none;
-}
-.deeper-head::-webkit-details-marker { display: none; }
-.deeper-head:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
-.deeper-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.deeper-count { font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-.deeper-name { font: 350 26px/1.1 var(--display); letter-spacing: -0.03em; color: var(--ink); }
-.deeper-what { font-size: 15px; line-height: 1.5; color: var(--ink-2); max-width: 46ch; }
-.deeper-what:empty { display: none; }
-.deeper-open {
-  flex: none; display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px;
-  border: 1px solid var(--ink); border-radius: var(--r-control);
-  font: 600 14px/1 var(--body); color: var(--ink);
-}
-.deeper-open::after {
-  content: ""; width: 7px; height: 7px; margin-top: -4px;
-  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg);
-}
-.deeper-head:hover .deeper-open { background: var(--ink); color: var(--paper); }
-.when-open, .deeper[open] .when-shut { display: none; }
-.deeper[open] .when-open { display: inline; }
-.deeper[open] .deeper-open::after { transform: rotate(225deg); margin-top: 3px; }
-.deeper[open] .deeper-head { border-bottom: 1px solid var(--rule); }
-.deeper-body { padding: 4px 0 24px; }
-.deeper-sec { padding: 18px 0 0; }
-.deeper-sec + .deeper-sec { margin-top: 18px; border-top: 1px solid var(--rule); }
-.deeper-sec .label-2 { margin-top: 18px; }
-.deeper-p { margin: 8px 0 0; font-size: 16px; line-height: 1.65; color: var(--ink-2); }
-
-/* Who the studies were actually run in. A fact about the records rather than
-   a finding from them, so it reads as an aside off a rule. */
-.deeper-p.narrow { margin-top: 12px; padding-left: 14px; border-left: 1px solid var(--rule-2); font-size: 15px; }
-
-/* Each part of the claim is quoted, then answered. */
-.parts { list-style: none; margin: 10px 0 0; padding: 0; }
-.part { padding: 12px 0; border-bottom: 1px solid var(--rule); }
-.part:last-child { border-bottom: 0; }
-.part-claim { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 500; }
-.part-claim::before { content: "\201C"; }
-.part-claim::after { content: "\201D"; }
-.part-take { margin: 6px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--ink-2); }
-
-/* Each relied-on study's conclusion, quoted: who said it in the mono a
-   reader scans, then the authors' words in quotation marks, the way the
-   parts of the claim are quoted above. */
-.concluded { list-style: none; margin: 10px 0 0; padding: 0; }
-.said { padding: 14px 0; border-bottom: 1px solid var(--rule); }
-.said:last-child { border-bottom: 0; }
-.said-who { margin: 0; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-.said-q { margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: var(--ink); }
-.said-q::before { content: "\201C"; }
-.said-q::after { content: "\201D"; }
-.said-note { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
-
-/* The one figure a reader came for, given its own line and its own rule. The
-   text in it is copied out of an abstract or it says there is no figure. */
-.effect { margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--ink); font-size: 16px; line-height: 1.6; }
-.effect b { display: block; margin-bottom: 6px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-
-.actions { display: flex; gap: 8px; margin: 36px 0 0; }
-.actions .secondary { flex: 1; }
-.actions .ghost { flex: 0 0 54px; padding: 15px 0; }
-.toast { display: inline-block; margin: 10px 0 0; font-size: 13px; color: var(--ink-2); }
-.toast:empty { display: none; }
-
-.feedback {
-  display: flex; align-items: center; gap: 10px; margin: 24px 0 0;
-  padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
-  font-size: 14px;
-}
-.thumb { margin-left: 0; background: transparent; border: 1px solid var(--rule-2); padding: 8px 11px; min-height: 44px; color: var(--ink); }
-.thumb:first-of-type { margin-left: auto; }
-.thumb:hover, .thumb[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--panel); }
-
 /* ---- The sources --------------------------------------------------------- */
-
-.after { margin: 32px 0 0; }
-.evidence { margin: 48px 0 0; }
-.evidence .section-row { padding-top: 0; flex-wrap: wrap; row-gap: 6px; margin-bottom: 8px; }
-#evidence-label { margin: 0; font: 350 28px/1.1 var(--display); letter-spacing: -0.03em; color: var(--ink); }
-.key { margin: 0; white-space: nowrap; }
-.key-mark { color: var(--ink); }
-
-.sources { margin-top: 16px; }
-.studies { list-style: none; margin: 0; padding: 0; }
-.source-group { border-top: 1px solid var(--ink); }
-.source-group + .source-group { border-top-color: var(--rule); }
-.group-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 15px 0; cursor: pointer; list-style: none;
-  font-size: 15px; font-weight: 500;
-}
-.group-head::-webkit-details-marker { display: none; }
-.group-name { display: inline-flex; align-items: center; gap: 10px; }
-.group-name::before {
-  content: ""; width: 7px; height: 7px; flex: none; margin-top: -3px;
-  border-right: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink);
-  transform: rotate(-45deg); transition: transform 150ms ease;
-}
-.source-group[open] .group-name::before { transform: rotate(45deg); margin-top: -5px; }
-.group-count { font: 500 13px/1.4 var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
-
-/* A study row carries its book's cloth as a stripe down its edge. */
-.study {
-  position: relative;
-  border-top: 1px solid var(--rule);
-  margin-inline: calc(-1 * var(--gutter)); padding: 16px var(--gutter) 18px calc(var(--gutter) + 16px);
-  cursor: pointer;
-  background-image: linear-gradient(var(--k), var(--k));
-  background-repeat: no-repeat; background-size: 3px calc(100% - 32px); background-position: var(--gutter) 16px;
-}
-.study:hover { background-color: var(--panel); }
-.study .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
-.study .meta .ord { color: var(--ink); font-variant-numeric: tabular-nums; }
-.study .meta .type.retracted { color: var(--ink); text-decoration: line-through; }
-.study .title { margin: 6px 0 0; font-size: 16px; line-height: 1.45; font-weight: 400; color: var(--ink-2); }
-/* Relied on: highlighted, the way you mark the source you would quote. */
-.study.cited .title { font-weight: 500; color: var(--ink); }
-.study.cited .title span {
-  background-image: linear-gradient(transparent 60%, var(--tint) 60% 94%, transparent 94%);
-  background-repeat: no-repeat; background-size: 100% 100%;
-  box-decoration-break: clone; -webkit-box-decoration-break: clone;
-}
-.sweep .study.cited .title span {
-  background-size: 0 100%;
-  animation: mark-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  animation-delay: calc(460ms + var(--i, 0) * 120ms);
-}
-@keyframes mark-in { to { background-size: 100% 100%; } }
-.study .src { margin: 6px 0 0; font-size: 14px; color: var(--ink-3); }
-.study .why { margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
-.study .src a { position: relative; z-index: 1; color: var(--ink-3); }
-.study .src a::after { content: ""; position: absolute; inset: -14px -6px; }
-#more-link { position: relative; }
-#more-link::after { content: ""; position: absolute; inset: -13px -6px; }
-
-/* "Deep dive" is the button, and its hit area is stretched over the whole
-   row, so the row still opens its study wherever it is tapped. The PMID
-   link sits above the stretch. The focus ring is drawn round the row. */
-.study-go {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0;
-  border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 500;
-  color: var(--green); cursor: pointer;
-}
-.study-go::after { content: ""; position: absolute; inset: 0; }
-.study-go:focus-visible { outline: none; }
-.study:has(.study-go:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
-.study:hover .study-go, .study-go:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
-.studies.related .study-go { display: none; }
-.studies.related .study { cursor: default; padding-left: var(--gutter); }
-.studies.related .study:hover { background-color: transparent; }
-.studies .empty { padding: 16px 0; font-size: 15px; color: var(--ink-2); }
-
-.query { margin: 18px 0 0; font-size: 13px; color: var(--ink-3); }
-.query code { font: 500 13px var(--mono); color: var(--ink-2); }
-.query a { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-weight: 500; }
 
 /* ---- Sticky share bar (phones) ------------------------------------------- */
 
-.bar-sticky {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: flex; gap: 8px;
-  padding: 10px var(--gutter) max(12px, env(safe-area-inset-bottom));
-  background: var(--panel); border-top: 1px solid var(--rule);
-}
-.bar-sticky .primary { flex: 1; margin-top: 0; }
-.bar-sticky .ghost { width: 54px; flex: none; padding: 15px 0; }
-body.has-bar { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
-
 /* ---- Sheets -------------------------------------------------------------- */
 
-dialog.sheet {
-  border: 0; padding: 0; margin: 0;
-  width: 100%; max-width: 100%; max-height: 88dvh;
-  position: fixed; inset: auto 0 0 0;
-  background: var(--paper); color: var(--ink);
-  border-radius: var(--r-panel) var(--r-panel) 0 0;
-  box-shadow: 0 -8px 40px var(--shadow);
-  overflow: auto; overscroll-behavior: contain;
-  /* The sheet leaves the way it arrived: the closed state lives on the base
-     rule so one transition runs in both directions. */
-  opacity: 0; transform: translateY(40px);
-  transition: opacity 200ms ease,
-              transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1),
-              overlay 260ms allow-discrete,
-              display 260ms allow-discrete;
-}
-dialog.sheet[open] { opacity: 1; transform: translateY(0); }
-@starting-style { dialog.sheet[open] { opacity: 0; transform: translateY(40px); } }
-dialog.sheet.dragging { transition: none; }
-dialog.sheet::backdrop {
-  background: var(--scrim); opacity: 0;
-  transition: opacity 200ms ease, overlay 200ms allow-discrete, display 200ms allow-discrete;
-}
-dialog.sheet[open]::backdrop { opacity: 1; }
-@starting-style { dialog.sheet[open]::backdrop { opacity: 0; } }
-
-.sheet-handle { width: 40px; height: 4px; border-radius: var(--r-control); background: var(--rule-2); position: absolute; top: 8px; left: 50%; transform: translateX(-50%); }
-/* The bar that stays: Close at the right, the handle in the middle on a phone.
-   The sheet itself is the scroller, so sticky holds it at the top. */
-.sheet-bar {
-  position: sticky; top: 0; z-index: 2;
-  display: flex; justify-content: flex-end; align-items: center;
-  min-height: 52px; padding: 0 var(--gutter);
-  background: var(--paper); border-bottom: 1px solid var(--rule);
-}
-.sheet-close {
-  min-width: 44px; min-height: 44px; margin-right: -8px; padding: 0 8px;
-  background: none; border: 0; cursor: pointer;
-  font: 500 15px/1.4 var(--body); color: var(--ink);
-  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
-}
-.sheet-close:hover { color: var(--green); }
-.sheet-body { padding: 16px var(--gutter) max(24px, env(safe-area-inset-bottom)); }
-.sheet-title { margin: 8px 0 8px; font: 350 26px/1.15 var(--display); letter-spacing: -0.03em; }
-.sheet-title:focus { outline: none; }
-.sheet-src { margin: 0 0 16px; font-size: 13px; color: var(--ink-3); }
-.sheet-body .meta { margin: 8px 0 0; }
-.sheet-section { margin-top: 22px; }
-.sheet-section p { margin: 0; font-size: 15.5px; }
-.sheet-section .section-label { margin-bottom: 6px; }
-.type-card { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 12px 0; font-size: 15.5px; }
-.type-card b { display: block; margin-bottom: 4px; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-.type-card.retracted b { color: var(--ink); }
-.abstract p { margin: 0 0 12px; font-size: 15.5px; line-height: 1.65; }
-.abstract p b { display: block; font: 500 13px/1.4 var(--mono); color: var(--ink-3); }
-.sheet-actions { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
-.link-as-btn { text-decoration: none; flex: 1; }
 .steps { padding-left: 20px; margin: 12px 0 20px; }
 .steps li { margin-bottom: 12px; font-size: 15.5px; line-height: 1.6; }
 .legend { padding-left: 18px; margin: 8px 0 0; font-size: 15px; line-height: 1.55; }
 .legend li { margin-bottom: 6px; }
-.dive-figs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--ink); }
-.dive-figs > div { padding: 6px 0; }
-.dive-figs dt { font: 500 13px/1.3 var(--mono); color: var(--ink-3); }
-.dive-figs dd { margin: 4px 0 0; font: 300 26px/1 var(--display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.dive-status { font-size: 14px; color: var(--ink-3); margin: 10px 0 0; }
-.dive-links { margin: 14px 0 0; font-size: 14.5px; font-weight: 500; }
-.dive-links a { display: inline-flex; align-items: center; gap: 5px; color: var(--green); }
-.dive-sub { margin: 18px 0 6px; }
-
-/* "Report a wrong answer": under the thumbs, a plain outlined button that
-   opens a short anonymous note. 44px tall, the page's own controls, no new
-   colour. The form is shut until asked for. */
-.report { margin: 16px 0 0; }
-.report-open { min-height: 44px; font-size: 14px; padding: 10px 16px; }
-.report-form { margin: 12px 0 0; }
-.report-form[hidden], .report-done[hidden] { display: none; }
-.report-form label { display: block; font-size: 14px; margin: 0 0 6px; }
-.report-form textarea {
-  display: block; width: 100%; box-sizing: border-box; resize: vertical; min-height: 84px;
-  padding: 10px 12px; font: 400 16px/1.45 var(--body); color: var(--ink);
-  background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--r-control);
-}
-.report-actions { display: flex; gap: 8px; margin: 8px 0 0; }
-.report-actions .secondary, .report-actions .ghost { min-height: 44px; }
-.report-done { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
 
 /* ---- Status, errors, the wait -------------------------------------------- */
 
-.status { font-size: 13px; color: var(--ink-3); }
-.band .status { color: var(--on-deep-2); }
-.status.working::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--sage); margin-right: 8px; animation: pulse 1s ease-in-out infinite; vertical-align: 1px; }
-.error-msg { font-size: 18px; line-height: 1.5; margin: 28px 0 0; }
-.countdown { font-size: 13px; color: var(--ink-3); margin: 8px 0 0; font-variant-numeric: tabular-nums; }
-/* An error is the same night screen as a verdict, so the way out is the
-   light shape on it. */
-#error { padding: 8px 0 64px; }
-#error .error-title { margin: 28px 0 0; font: 350 26px/1.2 var(--display); letter-spacing: -0.025em; max-width: 24em; }
-#error .error-claim { margin: 16px 0 0; padding-left: 14px; border-left: 2px solid var(--deep-line); max-width: 30em; font-size: 16px; line-height: 1.5; color: var(--on-deep); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-#error .error-claim[hidden] { display: none; }
-#error .error-msg { margin: 12px 0 0; font-size: 17px; line-height: 1.5; color: var(--on-deep-2); max-width: 30em; }
-#error .countdown { color: var(--on-deep-2); }
-#error .secondary { margin-top: 24px; background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }
-#error .secondary:hover { background: var(--panel); }
-.error-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 0; }
-#error .error-actions > button { margin-top: 0; min-height: 44px; }
-#error .ghost { color: var(--on-deep); border-color: var(--deep-line); }
-#error .ghost:hover { background: var(--deep-2); }
-#error .ghost:disabled { color: var(--on-deep-2); }
-#error :focus-visible { outline-color: var(--sage); }
-/* While the countdown runs the way out is shown, but plainly not yet open. */
-#error .secondary:disabled { background: transparent; color: var(--on-deep-2); border-color: var(--deep-line); }
-/* An error, or a check still running, is all night: no strip of paper
-   between it and the footer, only a rule. */
-:root:is([data-screen="error"], [data-screen="checking"]) { background: var(--deep); }
 :root:is([data-screen="error"], [data-screen="checking"]) main.wrap { padding-bottom: 0; }
 :root:is([data-screen="error"], [data-screen="checking"]) .foot { margin-top: 0; }
 :root:is([data-screen="error"], [data-screen="checking"]) .foot::before { content: ""; position: absolute; top: 0; left: var(--gutter); right: var(--gutter); height: 1px; background: var(--deep-line); }
@@ -1032,8 +291,6 @@ dialog.sheet[open]::backdrop { opacity: 1; }
    on every screen. On the result and error views the masthead stands alone
    over the report. */
 .band { margin: 0; padding: 0; }
-body:not(.view-ask) .band .wrap { display: none; }
-body.view-ask .band .wrap { padding-bottom: 56px; }
 /* The footer is the last of the night: the line every screen ends on. */
 .foot { margin: 72px auto 0; padding: 36px var(--gutter) 52px; font-size: 13px; line-height: 1.55; color: var(--on-deep-2); }
 .foot b, .foot strong { color: var(--on-deep); font-weight: 500; }
@@ -1073,86 +330,24 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
   background-size: 100% 2px; background-repeat: no-repeat;
 }
 
-/* The entrance belongs to the live transition, not to a cold load: a shared
-   link is a page the reader navigated to, and it has no business fading in.
-   app.js carries the class for as long as a check owns the screen. */
-body.live-check main.wrap { animation: sheet-rise 420ms cubic-bezier(0.2, 0.9, 0.3, 1) both; }
-@keyframes sheet-rise { from { opacity: 0; transform: translateY(18px); } }
-
 /* ---- Motion -------------------------------------------------------------- */
 
-/* Nothing animates for a reader who cannot see it. app.js sets body.paused
-   while the tab is hidden, and .offscreen on the looping parts (the mic, the
-   reading list, the status line) while they are scrolled out of view. The
-   !important is the point: every looping rule here sets the animation
-   shorthand, which would otherwise put the play state back to running. */
-body.paused *, body.paused *::before, body.paused *::after { animation-play-state: paused !important; }
-.offscreen, .offscreen *, .offscreen::before, .offscreen *::before, .offscreen *::after { animation-play-state: paused !important; }
-
 @media (prefers-reduced-motion: reduce) {
-  body.live-check main.wrap { animation: none; }
-  .sweep .study.cited .title span { animation: none; background-size: 100% 100%; }
-  .reading li { animation: none; }
-  .chart-bars.reveal .barcol-bar { animation: none; }
-  dialog.sheet, dialog.sheet::backdrop { transition: none; }
-  .status.working::before, .mic.listening, .reading li.live::before { animation: none; }
-  .primary, .secondary, .ghost, .chip, .thumb { transition: none; }
-  .group-name::before { transition: none; }
+  .primary { transition: none; }
 }
 
 /* ---- Wide ---------------------------------------------------------------- */
 
 @media (min-width: 720px) {
   :root { --gutter: 28px; }
-  dialog.sheet {
-    inset: 50% auto auto 50%;
-    transform: translate(-50%, calc(-50% + 16px));
-    width: min(580px, calc(100% - 40px)); max-height: 86vh;
-    border-radius: var(--r-panel); box-shadow: 0 24px 80px var(--shadow);
-  }
-  dialog.sheet[open] { transform: translate(-50%, -50%); }
-  @starting-style { dialog.sheet[open] { transform: translate(-50%, calc(-50% + 16px)); } }
-  .sheet-handle { display: none; }
-  .sheet-bar { min-height: 48px; }
-  .bar-sticky { display: none; }
-  body.has-bar { padding-bottom: 0; }
   .hero { font-size: 52px; }
-  .sec-title, .trust-title { font-size: 40px; }
-  .chart { --plot-h: 240px; }
   .top { padding-top: 24px; padding-bottom: 24px; }
 }
 
 @media (min-width: 1024px) {
   body:not(.view-ask) .wrap, body:not(.view-ask) .top { max-width: 1040px; }
-  body.view-ask .band .wrap, body.view-ask main.wrap, body.view-ask .top { max-width: 1200px; }
   .foot { max-width: 1200px; }
   .hero { font-size: 56px; }
-  body.view-ask .band .wrap { padding-bottom: 96px; }
-  body.view-ask #ask { display: grid; grid-template-columns: 1.15fr 0.85fr; column-gap: 72px; align-items: end; }
-  body.view-ask #ask .hero-block { grid-column: 1; padding-top: 40px; }
-  body.view-ask #ask .claim-form { grid-column: 2; margin-top: 0; }
-  body.view-ask .nudge { grid-column: 1 / -1; }
-  /* By day, each section is a title on the left and its rows on the right. */
-  .latest, .trust { display: grid; grid-template-columns: 0.8fr 1.2fr; column-gap: 72px; align-items: start; }
-  .latest { margin-top: 96px; }
-  .trust { margin-top: 96px; }
-  .latest > .sec-title, .trust > .trust-title { grid-column: 1; grid-row: 1 / span 99; }
-  .latest > .ledger-list, .trust > .trust-row { grid-column: 2; }
-  .trending, .recent { max-width: calc(60% - 29px); margin-left: auto; }
-  /* The night head spans the page; by day the reading takes the left column
-     and the sources the right. While the check is still running there is
-     nothing to put in the second column, so checking stays one column. */
-  body:not(.view-ask) #result:not(.checking) {
-    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
-    column-gap: 64px; align-items: start;
-  }
-  body:not(.view-ask) #result:not(.checking) > .report-head { grid-column: 1 / -1; }
-  body:not(.view-ask) #result:not(.checking) > .evidence { grid-column: 2; grid-row: 2 / 99; margin-top: 44px; }
-  body:not(.view-ask) #result:not(.checking) > .verdict-block { grid-column: 1; grid-row: 2; }
-  body:not(.view-ask) #result:not(.checking) > .after { grid-column: 1; grid-row: 3; }
-  .verdict-block { margin: 0; padding: 40px 0 8px; }
-  .report-head { padding-bottom: 64px; }
-  .study { margin-inline: 0; padding-left: 16px; padding-right: 0; background-position: 0 16px; }
 }
 
 /* The stats page (/stats): a plain table in the doc-page grammar. */
