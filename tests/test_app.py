@@ -6826,6 +6826,50 @@ _el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
 t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
   _el_gen == "Strong evidence for this claim", _el_gen)
 
+# ---- The evidence line sizes only a figure that moves the way the claim says ----
+# Live run: "Smoking causes lung cancer" (True) read "a moderate effect", from
+# a relative risk of 0.72 for heavy smokers who cut down.
+_ED_ST = [_study("EL1", "Smoking and lung cancer: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Heavy smokers who cut down had a relative risk of 0.72 for lung cancer. "
+                          "Current smokers had a relative risk of 4.21 for lung cancer. Depression odds ratio "
+                          "was 0.83. CONCLUSIONS: Smoking raises lung cancer risk.")]
+
+
+def _ed(claim, query, effect_size, effect, verdict_="true"):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, "Yes.", "The review found it (Study 1).",
+                                      ["EL1"], [dict(s) for s in _ED_ST], "http://x", still_open="Dose.",
+                                      breakdown=json.loads(json.dumps(_el_bd(effect_size, effect))))["evidence_line"]
+
+
+_ED_Q = "(smoking) AND (lung cancer)"
+_ed_down = _ed("Smoking causes lung cancer", _ED_Q,
+               "Heavy smokers who cut down had a relative risk of 0.72 for lung cancer (Study 1).",
+               {"figure": "relative risk 0.72", "label": "moderate", "plain": "about 28% lower risk"})
+_ed_up = _ed("Smoking causes lung cancer", _ED_Q,
+             "Current smokers had a relative risk of 4.21 for lung cancer (Study 1).",
+             {"figure": "relative risk 4.21", "label": "large", "plain": "about 321% higher risk"})
+t("effect direction: a claim that something raises a risk, answered True, is not sized by a figure of lower risk",
+  _ed_down == "Strong evidence for this claim", _ed_down)
+t("  and a figure of higher risk under it keeps its size",
+  _ed_up == "Strong evidence for this claim, a large effect", _ed_up)
+_ed_mirror = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
+                 "The depression odds ratio was 0.83 (Study 1).",
+                 {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% lower odds"})
+_ed_mirror_up = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
+                    "The depression odds ratio was 0.83 (Study 1).",
+                    {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% higher odds"})
+t("  and the mirror case: a lowers claim keeps a figure of lower odds and loses one of higher odds",
+  _ed_mirror == "Strong evidence for this claim, a small effect"
+  and _ed_mirror_up == "Strong evidence for this claim", (_ed_mirror, _ed_mirror_up))
+t("  and a claim that says no direction ('improves'), or a figure that says none, gives no size",
+  breakdown.claim_direction("Creatine improves memory") is None
+  and breakdown.claim_direction("Smoking does not cause lung cancer") is None
+  and breakdown.figure_direction({"plain": "a difference of 0.3 standard deviations"},
+                                     "The effect size for memory was 0.3 (Study 1).") is None
+  and breakdown.figure_direction({"plain": "a difference of 1.03 standard deviations"},
+                                     "Inflammation increased with an effect size of 1.03 (Study 1).") == "up")
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

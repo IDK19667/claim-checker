@@ -2447,9 +2447,60 @@ def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | Non
     label = effect.get("label")
     if not label:
         return None
-    if not names_outcome(figure_sentence(bd), outcome):
+    said = figure_sentence(bd)
+    if not names_outcome(said, outcome):
+        return None
+    if label in ("small", "moderate", "large") and not agrees_direction(effect, said, claim):
         return None
     return label
+
+
+# Which way a claim says its outcome moves. The verbs are the ones the code
+# already reads a cause claim and a prevent claim by (evidence.CAUSE_CLAIM,
+# evidence.PREVENT_CLAIM and the protective verbs). "Improves" and "is good
+# for" say no direction in numbers: a better score can be a higher or a
+# lower one.
+_CLAIM_UP = re.compile(r"\b(?:causes?|caused|causing|leads? to|gives? you|triggers?|raises?|"
+                       r"increases?|boosts?)\b", re.IGNORECASE)
+# Which way a figure's own sentence says it moved, for a figure (a
+# standardised difference) whose number alone does not say.
+_MOVED_UP = re.compile(r"\b(?:increas\w*|rose|rise[sn]?|rising|higher|raised|elevat\w*|gain\w*)\b",
+                       re.IGNORECASE)
+_MOVED_DOWN = re.compile(r"\b(?:reduc\w*|decreas\w*|lower\w*|fell|fall\w*|drop\w*|declin\w*|"
+                         r"less|fewer)\b", re.IGNORECASE)
+
+
+def claim_direction(claim: str) -> str | None:
+    """'up' for a claim that something raises its outcome ("smoking causes
+    lung cancer"), 'down' for one that lowers it ("exercise lowers the risk
+    of depression"), None when it says neither, both, or is itself a no."""
+    claim = str(claim or "")
+    if claim_denies(claim):
+        return None
+    up = bool(evidence.caused_outcome(claim) or _CLAIM_UP.search(claim))
+    down = bool(evidence.prevented_outcome(claim) or evidence._PROTECTIVE_VERB.search(claim))
+    return "up" if up and not down else "down" if down and not up else None
+
+
+def figure_direction(effect: dict, said: str) -> str | None:
+    """'up' or 'down' for the figure the line would size: a ratio or a
+    percentage by the words code wrote beside it ("about 28% lower risk"),
+    a standardised difference by its own sentence's change word. None when
+    that cannot be told."""
+    plain = str((effect or {}).get("plain") or "")
+    if re.search(r"\blower\b", plain):
+        return "down"
+    if re.search(r"\bhigher\b", plain):
+        return "up"
+    up, down = bool(_MOVED_UP.search(said or "")), bool(_MOVED_DOWN.search(said or ""))
+    return "up" if up and not down else "down" if down and not up else None
+
+
+def agrees_direction(effect: dict, said: str, claim: str) -> bool:
+    """True when the figure moves the way the claim says. A claim that
+    something raises a risk is not sized by a figure of lower risk."""
+    want = claim_direction(claim)
+    return want is not None and figure_direction(effect, said) == want
 
 
 def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: str = "",
