@@ -1130,7 +1130,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
                           if s.get("background") and not s.get("off_topic")),
         # Why each background record is one, once each, in a fixed order:
         # the chart and the study list name the kinds that are there.
-        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED)
+        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED,
+                                       BG_RETRACTED, BG_NOTICE)
                              if any(background_why(s) == k for s in studies
                                     if not s.get("off_topic"))],
         "retracted": sum(1 for s in studies
@@ -2398,19 +2399,46 @@ BG_LAB = "animal or lab"
 BG_OPINION = "opinion piece"
 BG_GUIDE = "product guide"
 BG_NOT_TESTED = "not a test of this claim"
+BG_RETRACTED = "retracted by the journal"
+BG_NOTICE = "a journal notice, which measured nothing"
+
+# PubMed's marks on a paper the journal withdrew, and on the notices
+# themselves (a retraction, a correction, an expression of concern), which
+# report no study of their own.
+RETRACTED_TYPES = ("Retracted Publication",)
+NOTICE_TYPES = ("Retraction of Publication", "Expression of Concern", "Published Erratum")
+
+
+def withdrawn(study) -> str:
+    """
+    BG_RETRACTED for a paper PubMed marks as retracted, BG_NOTICE for a
+    retraction, correction or concern notice, else "". Read off the record
+    alone, for any claim, and before any other type: a retracted
+    meta-analysis is still retracted.
+    """
+    types = [str(t) for t in (study or {}).get("publication_types") or []]
+    if any(t.startswith(RETRACTED_TYPES) for t in types):
+        return BG_RETRACTED
+    if any(t.startswith(NOTICE_TYPES) for t in types):
+        return BG_NOTICE
+    return ""
 
 
 def background_reasons(studies, claim: str) -> dict:
     """
     {pmid: why} for the records that are background for this claim and are
-    never counted as used. Opinion pieces and buying guides, for any claim:
+    never counted as used. Retracted papers and journal notices, for any
+    claim: the journal withdrew the one, and the other measured nothing.
+    Opinion pieces and buying guides, for any claim:
     nothing in them was measured. Animal and lab studies, for a claim about
     people: they can say why a thing might work, never whether it does.
     """
     people = about_people(claim)
     out = {}
     for s in studies or []:
-        if product_guide(s):
+        if withdrawn(s):
+            out[s["pmid"]] = withdrawn(s)
+        elif product_guide(s):
             out[s["pmid"]] = BG_GUIDE
         elif people and preclinical(s):
             out[s["pmid"]] = BG_LAB

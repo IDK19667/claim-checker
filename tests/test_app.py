@@ -3657,7 +3657,9 @@ for _lbl, _fresh, _saved in (
     _steady_row(_c, studies=_saved)
     _real_saf = pubmed.search_and_fetch
     pubmed.search_and_fetch = lambda q, max_results=8, surrogate="", _f=_fresh: _copy.deepcopy(_f)
-    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made again.", still_open="New open line."))]
+    # Two studies cited: a retracted study 1 is background now, and the
+    # answer still rests on study 2.
+    fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Made again.", still_open="New open line."))]
     fg.models.calls = 0
     try:
         d = P(_c, ip="7.7.10.6").get_json()
@@ -8978,6 +8980,63 @@ t("meet: figure_sentence and effect_size agree on the sentence a figure came fro
   and _fs_sent.startswith("The hazard ratio for death was 0.80")
   and (evidence.effect_size(_fs_sent) or {}).get("figure") == (evidence.effect_size(_FS["effect_size"]) or {}).get("figure"),
   (_fs_sent, evidence.effect_size(_FS["effect_size"])))
+
+# ---- L1: a retracted paper, or a journal notice, is never relied on ----------
+_RT_ST = [_study("RT1", "Vinegar and blood sugar in adults with diabetes: a randomized trial",
+                 types=["Journal Article", "Randomized Controlled Trial", "Retracted Publication"],
+                 abstract="Adults with type 2 diabetes were randomized to vinegar or placebo for 12 weeks."),
+          _study("RT2", "Vinegar and fasting glucose: a randomized trial",
+                 abstract="Adults with type 2 diabetes were randomized to vinegar or placebo for 8 weeks."),
+          _study("RT3", "Retraction notice: vinegar and blood sugar", types=["Retraction of Publication"],
+                 abstract="This article has been retracted at the request of the authors.")]
+_rt_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]
+t("L1: a retracted paper and a retraction notice are background for any claim, with the reason in plain words",
+  evidence.background_reasons(_RT_ST, "Vinegar lowers blood sugar")
+  == {"RT1": evidence.BG_RETRACTED, "RT3": evidence.BG_NOTICE}
+  and evidence.background_reasons(_RT_ST, "Vinegar lowers blood sugar in rats")["RT1"] == evidence.BG_RETRACTED)
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2, 3]))]
+_rt = P("Retracted vinegar lowers blood sugar", ip="7.7.31.1").get_json()
+_rt_by = {s["pmid"]: s for s in _rt.get("studies") or []}
+t("  a fresh check never counts the retracted paper or the notice as used, whatever the model cites",
+  [p for p, s in _rt_by.items() if s["cited_in_verdict"]] == ["RT2"]
+  and _rt_by["RT1"]["background"] and _rt_by["RT1"]["background_why"] == "retracted by the journal"
+  and _rt_by["RT3"]["background"], _rt_by)
+t("  and the study list says so in plain words",
+  _display.study_why(_rt_by["RT1"]) == "Background only, not counted: retracted by the journal.")
+t("  and the list of what each study concluded leaves it out",
+  "RT1" not in json.dumps(((_rt.get("breakdown") or {}).get("concluded")) or []), _rt.get("breakdown"))
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2]))]
+_r, _evs = stream("Retracted vinegar lowers blood sugar streamed", ip="7.7.31.2")
+_rts = [s for s in _evs[-1].get("result", {}).get("studies", []) if s["cited_in_verdict"]]
+t("  and a streamed check the same", [s["pmid"] for s in _rts] == ["RT2"], _evs[-1])
+# A saved row from before the rule, citing the retracted paper.
+_rt_old = [dict(x) for x in _RT_ST]
+db.put_cached_verdict("Retracted vinegar saved row", "(vinegar) AND (blood sugar)", "true",
+                      "Both trials found it (Study 1) (Study 2).", ["RT1", "RT2"], _rt_old,
+                      tldr="It lowers blood sugar.", still_open="Longer trials.")
+_rt_row = db.get_cached_verdict("Retracted vinegar saved row", 24)
+t("  a saved answer that cites it is out of date, as one citing any study now set aside",
+  _rt_row and appmod._current(_rt_row, "Retracted vinegar saved row") is None)
+_rt_pg = appmod._check_response("Retracted vinegar saved row", _rt_row["search_query"], _rt_row["verdict"],
+                                _rt_row["tldr"], _rt_row["explanation"], _rt_row["cited_studies"],
+                                _rt_row["studies"], "http://x", still_open="Longer trials.")
+t("  and if it is ever served as saved, the page still sets the paper aside and no sentence leans on it alone",
+  [s["pmid"] for s in _rt_pg["studies"] if s["cited_in_verdict"]] == ["RT2"]
+  and next(s for s in _rt_pg["studies"] if s["pmid"] == "RT1")["background"]
+  and "(Study 1)" not in _rt_pg["explanation"], _rt_pg["explanation"])
+t("  the recent list and the card read the same set",
+  appmod._listed({"claim_text": "x", "verdict": "true", "cited": ["RT1"], "studies": _rt_old,
+                  "search_query": "(vinegar) AND (blood sugar)"})["verdict"] == "insufficient"
+  and (og.strongest_cited(_rt_old, _display.relied_pmids(["RT1", "RT2"], _rt_old)) or ("",))[0] != ""
+  and _display.relied_pmids(["RT1", "RT2"], _rt_old) == {"RT2"})
+_rt_html = c.get("/?q=" + urllib.parse.quote("Retracted vinegar lowers blood sugar")).data.decode()
+t("  the server-rendered page shows it set aside with the reason",
+  "Background only, not counted: retracted by the journal." in _rt_html)
+_rt_v = verdict._format_study_for_prompt(1, dict(_RT_ST[0]), claim="Vinegar lowers blood sugar")
+t("  the model is told the journal retracted it and not to cite it",
+  "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
+pubmed.search_and_fetch = _rt_search
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

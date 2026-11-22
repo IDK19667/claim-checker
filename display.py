@@ -9,6 +9,8 @@ the same records and compares them.
 """
 import re
 
+import evidence
+
 WHO_LABEL = "Who was studied: "
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9“\"(])")
@@ -144,13 +146,16 @@ def design_note(publication_types) -> tuple:
 def relied_on(study) -> bool:
     """True for a study the verdict relied on. A study classified off topic
     never is, whatever an old saved record put in its cited list."""
-    return bool(study.get("cited_in_verdict")) and not study.get("off_topic")
+    return (bool(study.get("cited_in_verdict")) and not study.get("off_topic")
+            and not evidence.withdrawn(study))
 
 
 def relied_pmids(cited, studies) -> set:
-    """The cited PMIDs less any study classified off topic: the set every
-    count, mark and line on the page is read from."""
-    off = {s.get("pmid") for s in studies or [] if isinstance(s, dict) and s.get("off_topic")}
+    """The cited PMIDs less any study classified off topic, retracted or a
+    journal notice (evidence.withdrawn): the set every count, mark and line
+    on the page is read from, a saved answer's included."""
+    off = {s.get("pmid") for s in studies or [] if isinstance(s, dict)
+           and (s.get("off_topic") or evidence.withdrawn(s))}
     return set(cited or []) - off
 
 
