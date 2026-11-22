@@ -865,7 +865,7 @@ t("  and a figure that is in them is quoted as it stands",
 
 # An effect line that says there was no clear difference is no effect, even
 # when no ratio can be read from it. Read as a missing size, a "cure" claim's
-# evidence line fell back to "a partial effect, not a cure".
+# evidence line fell back to an unsized effect "not a cure".
 _NULL_ST = [{"pmid": "NL1", "title": "A mouthwash trial in mild infection", "journal": "J", "year": "2020",
              "authors": ["A B"], "data_banks": None, "url": "https://pubmed.ncbi.nlm.nih.gov/NL1/",
              "publication_types": ["Randomized Controlled Trial"],
@@ -1810,7 +1810,7 @@ t("the service worker no longer precaches the still",
 # ---- the confidence line: the same sentence from the server and the script -------
 _CL = [{"studies": [], "evidence_line": "x"},
        {"studies": [{"cited_in_verdict": False, "tier": "strong"}], "evidence_line": "x"},
-       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a partial effect, not a cure"},
+       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a small effect, not a cure"},
        {"studies": [{"cited_in_verdict": True, "tier": "strong"}, {"cited_in_verdict": True, "tier": "weak"}]},
        {"studies": [{"cited_in_verdict": True, "tier": "moderate"}]},
        {"studies": [{"cited_in_verdict": True, "tier": "weak"}]}]
@@ -1818,7 +1818,7 @@ _cl = [_display.confidence_line(r) for r in _CL]
 t("the confidence line: nothing found, nothing used, the checked wording, or the designs of an old record",
   _cl == ["No direct evidence either way: nothing on PubMed matched well enough to weigh.",
           "No direct evidence either way: none of the studies tests this claim.",
-          "Moderate evidence of a partial effect, not a cure.",
+          "Moderate evidence of a small effect, not a cure.",
           "Strong study designs.", "Moderate study designs.", "Weak study designs."], _cl)
 if _shutil.which("node"):
     _csrc = "function confidenceLine" + (ROOT / "static" / "app.js").read_text().split("function confidenceLine")[1].split("\n}\n")[0] + "\n}"
@@ -3071,13 +3071,23 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # false" read as strong evidence for the cure.
 _el = evidence.evidence_line
 t("the evidence line says what the evidence is evidence of",
-  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence of a partial effect, not a cure"
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence against this claim"
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
   and _el("false", _ACV, ["A1"], "Vinegar raises blood sugar") == "Strong evidence against this claim"
   and _el("complicated", _ACV, ["A1"], "Vinegar lowers blood sugar in diabetes", "small")
   == "Strong evidence of a small effect, but no plain yes or no")
+# A false answer to a promise with no size: the line asserts no effect
+# nobody measured, and keeps its level word.
+_el_ns = [evidence.evidence_line(verdict_v, _ACV, ["A1", "A2"], c, lab, "cure") for verdict_v, c, lab in
+          (("false", "Homeopathy cures cancer", None), ("false", "Garlic cures HIV", ""),
+           ("false", "Ivermectin cures COVID-19", "unclear"))]
+t("  a false answer to a promise with no size says 'against this claim', never 'partial'",
+  _el_ns == ["Strong evidence against this claim"] * 3
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "moderate", "cure") == "Strong evidence of a moderate effect, not a cure"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence against this claim"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "none", "cure") == "Strong evidence of no clear effect", _el_ns)
 t("  it names the one group, says low certainty, and is empty with nothing used",
   _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
   and _el("complicated", [_study("L1", "Pilot trial of vinegar", abstract="A pilot trial in 12 adults.")],
@@ -3093,7 +3103,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence of a partial effect, not a cure", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence against this claim", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -6824,7 +6834,7 @@ _EL_NONE = {"figure": "", "label": "none", "null": True, "plain": "no clear diff
 _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)", "false",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
                tldr="No, it does not cure it.")
-t("  and under a promise of a cure, a withheld size is not turned into 'a partial effect'",
+t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
   _el_cure == "Strong evidence against this claim", _el_cure)
 _el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
               _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",

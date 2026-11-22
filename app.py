@@ -972,7 +972,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # metadata rather than from anything the model said.
         "evidence": evidence.snapshot(studies, cited),
         # What that evidence shows about the claim, for the line under the
-        # chart: "Strong evidence of a partial effect, not a cure". The level
+        # chart: "Strong evidence of a small effect, not a cure". The level
         # word alone described the designs, not the claim.
         "evidence_line": evidence_line,
         # Present only when the check came back without usable evidence, so

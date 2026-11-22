@@ -1085,8 +1085,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
 # not cure diabetes, and "strong" printed beside "Likely false" read as
 # strong evidence for the cure. The level word still comes from the designs
 # that were used (the meter's legend explains it), but the line now says
-# what that evidence is evidence of: "Strong evidence of a partial effect,
-# not a cure". Built here from facts the page already has (the stamp, the
+# what that evidence is evidence of: "Strong evidence of a small effect,
+# not a cure", or with no size, "Strong evidence against this claim". Built here from facts the page already has (the stamp, the
 # size of the effect, the claim's own words), so it costs no model call and
 # a streamed check and a shared link cannot word it differently.
 # ---------------------------------------------------------------------------
@@ -1138,7 +1138,8 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     the page's own prose already states (stated_certainty), and the line is
     never surer than it. `withheld` says the breakdown had a size the line
     may not carry (breakdown.line_label): the line then says no size at
-    all, not even "a partial effect".
+    all. A false line names an effect ("a small effect, not a cure") only
+    with a size; with none it says "against this claim".
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1194,8 +1195,10 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     if verdict == "false":
         if effect_label == "none":
             return f"{level} evidence of no clear effect"
-        if absolute and not (withheld and not size):
-            return f"{level} evidence of a {size or 'partial'} effect, not {promise}"
+        # "effect, not a cure" only with a size the line may carry: with no
+        # size it would assert an effect nobody measured.
+        if absolute and size:
+            return f"{level} evidence of a {size} effect, not {promise}"
         return f"{level} evidence against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
