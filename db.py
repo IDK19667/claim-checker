@@ -487,14 +487,12 @@ def _worded(line) -> bool:
 def _listable(row) -> bool:
     """
     A row a public list may show (type-ahead, trending, related claims, the
-    sitemap, llms.txt): the same line test as _whole, with one allowance kept
-    from before, that an old real answer saved before the short answer or the
-    still-open line existed (NULL or blank) still stands in those lists. A
-    line that is there but has no letter or digit is no line, so that row is
-    left out, as a failed reply is.
+    sitemap, llms.txt): the same test as _whole. No page serves a row without
+    its short answer and its still-open line, so no list offers one either:
+    an old row saved before those lines existed (NULL or blank), a line with
+    no letter or digit, and a failed reply are all left out.
     """
-    return not _failed(row) and all(
-        not str(row[k] or "").strip() or _worded(row[k]) for k in ("tldr", "still_open"))
+    return _whole(row)
 
 
 # The short answer the fallback for a reply that could not be read at all (cut

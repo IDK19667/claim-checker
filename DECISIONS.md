@@ -4,6 +4,16 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21 (release): A public list shows only rows a page would serve
+
+An old row saved before the short answer or the still-open line existed
+(NULL or blank) is in no public list: not type-ahead, trending, related
+claims, the sitemap or llms.txt. `db._listable` is now the same test as
+`db._whole`, because no page serves such a row, so a list offered a stamp
+the site would not show, and in type-ahead a "true" of that kind escaped
+the low-certainty cap. The row stays in the database and still counts as
+a claim checked; a fresh check of it replaces it with a whole one.
+
 ## 2026-11-21 (release): An out-of-date saved answer stands until a fresh one replaces it
 
 A saved answer that relied on a study the code now sets aside is out of

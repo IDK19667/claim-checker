@@ -6898,8 +6898,9 @@ def _work8(n):
     _old_path, _old_conn = db.DB_PATH, db.get_conn
     db.DB_PATH = os.path.join(tempfile.mkdtemp(), "f8.db")
     _con = _sqlite_b.connect(db.DB_PATH); _con.executescript(db.SCHEMA)
-    _con.executemany("INSERT INTO verdict_cache (claim_key, claim_text, verdict, explanation, created_at) "
-                     "VALUES (?, ?, 'complicated', 'x', ?)",
+    # Whole rows (a short answer and a still-open line), since a list shows only those.
+    _con.executemany("INSERT INTO verdict_cache (claim_key, claim_text, verdict, explanation, tldr, still_open, created_at) "
+                     "VALUES (?, ?, 'complicated', 'x', 'Mixed evidence.', 'Longer trials.', ?)",
                      [(f"k{i}", f"Claim {i}", f"2026-01-01T00:00:{i % 7:02d}") for i in range(n)])
     _con.commit(); _con.close()
     tally = {"steps": 0, "sql": []}
@@ -8338,8 +8339,9 @@ for _i, (_lbl, _so) in enumerate((("no still-open line", ""), ("a still-open lin
 pubmed.search_and_fetch = _fr_search
 
 # Nor is such a row in any public list, count, suggestion, feed or sitemap. An
-# ordinary answer is, and so is an old real answer that only lacks a newer
-# field (its still-open line), as before.
+# ordinary answer is. An old real answer that lacks a newer field (its
+# still-open line) is in no public list either, since no page serves it, but
+# it still counts as a claim checked.
 import nextsteps as _ns_fr  # noqa: E402
 _FR_BAD, _FR_GOOD, _FR_OLD = ("Zanzibar clove oil heals warts", "Zanzibar honey soothes sore throats",
                               "Zanzibar ginger eases nausea")
@@ -8369,10 +8371,10 @@ _fr_q = urllib.parse.quote(_FR_CUR)
 t("failed rows: one is not on the home page's Latest list, and an ordinary answer is",
   _FR_BAD[1:] not in _fr_home and _FR_GOOD[1:] in _fr_home)
 t("failed rows: nor on the 404 page's list", _FR_BAD[1:] not in _fr_404 and _FR_GOOD[1:] in _fr_404)
-t("failed rows: nor in /api/trending, where the ordinary and the old answer stay",
-  _FR_BAD not in _fr_trend and _FR_GOOD in _fr_trend and _FR_OLD in _fr_trend, _fr_trend)
-t("failed rows: nor in type-ahead (/api/suggest), where the ordinary and the old answer stay",
-  _FR_BAD not in _fr_sugg and _FR_GOOD in _fr_sugg and _FR_OLD in _fr_sugg, _fr_sugg)
+t("failed rows: nor in /api/trending, where the ordinary answer stays and an old one without its still-open line does not",
+  _FR_BAD not in _fr_trend and _FR_GOOD in _fr_trend and _FR_OLD not in _fr_trend, _fr_trend)
+t("failed rows: nor in type-ahead (/api/suggest), where the ordinary answer stays and an old one without its still-open line does not",
+  _FR_BAD not in _fr_sugg and _FR_GOOD in _fr_sugg and _FR_OLD not in _fr_sugg, _fr_sugg)
 t("failed rows: nor among the related claims a dead end offers (they read the same saved claims)",
   _FR_BAD not in [r_["claim_text"] for r_ in db.all_claims()]
   and _FR_GOOD in [r_["claim_text"] for r_ in db.all_claims()] and _FR_BAD not in str(_fr_rel), _fr_rel)
@@ -8394,8 +8396,8 @@ appmod._sitemap_memo["stamp"] = None
 # rc-saved-fix: a line needs a letter or digit (db._whole), so a saved row whose
 # short answer or still-open line is only a dash, a full stop or an invisible
 # character is no answer. The release branch's lists filter failed replies in
-# SQL; a wordless row is one too, so it is listed nowhere. An old real answer
-# that only lacks the newer still-open field stays where it stood (above).
+# SQL; a wordless row is one too, so it is listed nowhere. So is an old real
+# answer that lacks the newer still-open field (above, and the test below).
 _WL_ROWS = (("Quokka oil heals warts", "\u2014", "Doses vary."),
             ("Quokka tea soothes throats", "It helps a little.", "\u200b"),
             ("Quokka honey eases coughs", "It may help.", "."),
@@ -8440,6 +8442,54 @@ t("wordless rows: nor in the sitemap or llms.txt, even under a curated claim",
 with db.get_conn() as _conn:
     _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?, ?)",
                   tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]))
+appmod._sitemap_memo["stamp"] = None
+
+# ---- final fix F1a: public lists show whole rows only -------------------------
+# No page serves a row without its short answer or its still-open line (every
+# saved-answer lookup needs db._whole), so no public list offers one: not
+# type-ahead, trending, related claims, the sitemap or llms.txt. An old row
+# saved before those columns existed, NULL or blank, is left out everywhere.
+_OL_ROWS = (("Wombat tea soothes throats", None, "Doses vary."),
+            ("Wombat honey eases coughs", "It may help.", None),
+            ("Wombat oil heals warts", "  ", "Doses vary."),
+            ("Ozempic cures alcoholism", None, None))   # curated, for the sitemap and llms.txt
+_OL_GOOD = "Wombat ginger eases nausea"
+for _oc, _ot, _oo in _OL_ROWS:
+    db.put_cached_verdict(_oc, "(wombat) AND (throat)", "true", "Because (Study 1).", ["P1"],
+                          [dict(s_) for s_ in STUDIES], tldr=_ot, still_open=_oo)
+db.put_cached_verdict(_OL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+for _x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]:
+    db.log_check(_x, "true", "x", [])
+    db.log_check(_x, "true", "x", [])
+_OL_BAD = [r_[0] for r_ in _OL_ROWS[:3]]
+t("F1a: _listable is the same test as _whole on old, wordless, failed and whole rows",
+  all(db._listable(r_) == db._whole(r_) for r_ in (
+      {"tldr": None, "still_open": "x"}, {"tldr": "x", "still_open": None}, {"tldr": " ", "still_open": "x"},
+      {"tldr": "\u2014", "still_open": "x"}, {"tldr": db.FAILED_REPLY_TLDR, "still_open": "x"},
+      {"tldr": "It helps.", "still_open": "For how long."})))
+_ol_trend = [r_["claim"] for r_ in c.get("/api/trending").get_json()]
+_ol_sugg = [r_["claim_text"] for r_ in c.get("/api/suggest?q=wombat").get_json()["suggestions"]]
+_ol_all = [r_["claim_text"] for r_ in db.all_claims()]
+_ol_rel = str(_ns_fr.related_checks("Wombat remedies", db.all_claims()))
+appmod._sitemap_memo["stamp"] = None
+_ol_map = c.get("/sitemap.xml").get_data(as_text=True)
+_ol_llms = c.get("/llms.txt").get_data(as_text=True)
+_ol_q = urllib.parse.quote(_OL_ROWS[3][0])
+t("F1a: an old row without a short answer or a still-open line is not in type-ahead, and a whole one is",
+  not set(_OL_BAD) & set(_ol_sugg) and _OL_GOOD in _ol_sugg, _ol_sugg)
+t("F1a: nor in /api/trending", not set(_OL_BAD) & set(_ol_trend) and _OL_GOOD in _ol_trend, _ol_trend)
+t("F1a: nor among the claims related claims are drawn from",
+  not set(_OL_BAD) & set(_ol_all) and _OL_GOOD in _ol_all and not any(b_ in _ol_rel for b_ in _OL_BAD), _ol_rel)
+t("F1a: nor in the sitemap or llms.txt, even under a curated claim",
+  _ol_q not in _ol_map and f"?q={_ol_q})" not in _ol_llms
+  and all(r_["claim_text"] != _OL_ROWS[3][0] for r_ in db.saved_records(5000))
+  and all(r_["claim_text"] != _OL_ROWS[3][0] for r_ in db.recent_cached(5000)))
+t("F1a: and no page serves any of them, which is why no list offers them",
+  all(db.get_cached_by_key(db.normalize_claim(b_)) is None for b_ in _OL_BAD))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]))
 appmod._sitemap_memo["stamp"] = None
 
 # ---- where the fixes meet: a reworded link reads the bounded lookup -----------
