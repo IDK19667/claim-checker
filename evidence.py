@@ -15,14 +15,15 @@ record, not an opinion about it.
 import re
 
 # Ordered: the first match wins, so a paper tagged both "Meta-Analysis"
-# and "Journal Article" reads as the meta-analysis it is.
+# and "Journal Article" reads as the meta-analysis it is. "Retracted
+# Publication" comes first: a withdrawn trial is retracted, never strong.
 TYPES = [
+    ("Retracted Publication", "retracted"),
     ("Meta-Analysis", "strong"),
     ("Network Meta-Analysis", "strong"),
     ("Systematic Review", "strong"),
     ("Randomized Controlled Trial", "strong"),
     ("Practice Guideline", "strong"),
-    ("Retracted Publication", "retracted"),
     ("Case Reports", "weak"),
     ("Editorial", "weak"),
     ("Comment", "weak"),
@@ -93,7 +94,12 @@ def strongest_label(publication_types) -> str:
 POPULATIONS = [
     (r"\bcritically ill|\bintensive care|\bICU\b", "people in intensive care"),
     (r"\bpreterm|\bneonat|\binfants?\b", "newborn babies"),
-    (r"\bpregnan|\bpostpartum", "pregnant women"),
+    # Pregnancy and the months after birth are different groups: a review of
+    # postpartum exercise was labelled "pregnant women" (audit D3).
+    (r"\bpregnan\w*\b.{0,80}\b(?:postpartum|postnatal)|\b(?:postpartum|postnatal)\b.{0,80}\bpregnan|"
+     r"\bperinatal", "people during or after pregnancy"),
+    (r"\bpostpartum|\bpostnatal|\bafter (?:giving )?birth", "people after giving birth"),
+    (r"\bpregnan", "pregnant women"),
     (r"\bprediabet", "people with prediabetes"),
     (r"\btype [12] diabet|\bdiabetic", "people with diabetes"),
     (r"\bdialysis|\bchronic kidney|\brenal failure", "people with kidney failure"),
@@ -183,7 +189,10 @@ NATURAL_GROUPS = [
      r"\bteething|\bschool", ("children", "newborn babies")),
     (r"\bautis[mt]", ("children",)),
     (r"\bbreast.?fe|\bbab(?:y|ies)\b|\binfants?\b|\bnewborns?\b", ("newborn babies",)),
-    (r"\bpregnan|\bmorning sickness|\bpre.?eclampsia|\bgestational", ("pregnant women",)),
+    (r"\bpregnan|\bmorning sickness|\bpre.?eclampsia|\bgestational",
+     ("pregnant women", "people during or after pregnancy")),
+    (r"\bpostpartum|\bpostnatal|\bafter (?:giving )?birth|\bnew mothers?\b",
+     ("people after giving birth", "people during or after pregnancy")),
     (r"\bmenopaus|\bhot (?:flash|flush)", ("women after menopause",)),
     (r"\bosteoporosis", ("women after menopause", "older adults")),
     (r"\bperiod pain|\bmenstrua|\bPCOS\b|\bpolycystic ovar", ("women only",)),
@@ -499,16 +508,29 @@ _RATIO_WORDS = [
     (r"odds ratios?|\bORs?\b|\baORs?\b", "odds"),
     (r"hazard ratios?|\bHRs?\b|\baHRs?\b", "risk over time"),
     (r"risk ratios?|relative risks?|\bRRs?\b|\baRRs?\b", "risk"),
-    (r"incidence rate ratios?|\bIRRs?\b", "rate"),
+    (r"incidence rate ratios?|\ba?IRRs?\b", "rate"),
     (r"rate ratios?", "rate"),
 ]
 
-# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)".
+# "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)". An
+# abbreviation names a ratio only in capitals: "35 people or 80 adults" is
+# not an odds ratio of 80, and reading it as one printed "7900% higher odds".
+# "aOR" and "AOR", "aHR" and "AHR" are the adjusted ratios; "Hr" is not a
+# ratio, and nor is "ARR", which usually means an absolute risk reduction.
+# A number followed by a unit is a measure, not a ratio: "time in the OR was
+# 45 minutes" is no odds ratio of 45. The number is read whole first, so
+# "1.45 mg" is never read as a ratio of 1.
+_NOT_A_MEASURE = (
+    r"(?!\.?\d)\b(?!\s*%)(?!\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|h|days?|d|weeks?|wks?"
+    r"|months?|mos?|years?|yrs?|y|mg|g|kg|µg|mcg|ng|ml|mL|l|L|dL|cm|mm|m|km|lbs?|kcal|cal|IU|units?"
+    r"|mmHg|mmol|µmol|nmol|pmol|beats|bpm|steps|points?|patients?|people|persons?|participants?"
+    r"|adults?|children|subjects?|women|men|cases?|deaths?|studies|trials|cigarettes|drinks|servings?"
+    r"|cups?|times a)\b)")
 _RATIO = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
-    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
-    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
-    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+    r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
+    r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
+    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)" + _NOT_A_MEASURE, re.IGNORECASE)
 
 # The same figure with the outcome named in between: "the hazard ratio for
 # heart and blood vessel deaths for each more 50 g of egg was 1.09". The gap
@@ -517,10 +539,10 @@ _RATIO = re.compile(
 # figure is always read against the nearest ratio it belongs to.
 _RATIO_WAS = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
-    r"(odds ratios?|aORs?|ORs?|hazard ratios?|aHRs?|HRs?|risk ratios?|"
-    r"relative risks?|aRRs?|RRs?|incidence rate ratios?|IRRs?|rate ratios?)"
+    r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
+    r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
     r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
-    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)" + _NOT_A_MEASURE, re.IGNORECASE)
 
 _SMD = re.compile(
     r"\b(?:standardi[sz]ed mean difference|SMD|Cohen's d)\s*"
@@ -550,7 +572,11 @@ _INTERVAL = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval", re
 
 _NUM = r"[-\u2212]?\d+(?:\.\d+)?"
 _SEP = r"\s*(?:to|\u2013|-|,|;)\s*"
-_CI_PAIR = re.compile(r"(?:C\.?I\.?|confidence interval|credible interval)\]?"
+# An interval in code's own plain words is still one: breakdown.JARGON prints
+# "95% CI" and "confidence interval" as "likely range" ("0.79 with a likely
+# range from 0.71 to 0.89").
+_CI_NAME = r"(?:C\.?I\.?|confidence interval|credible interval|likely ranges?)"
+_CI_PAIR = re.compile(_CI_NAME + r"\]?"
                       r"[\s,:=]*(?:of\s+|was\s+|from\s+)?[\(\[]?\s*(" + _NUM + ")" + _SEP
                       + "(" + _NUM + ")", re.IGNORECASE)
 _BARE_PAIR = re.compile(r"^\s*[\(\[]\s*(" + _NUM + ")" + _SEP + "(" + _NUM + r")\s*[\)\]]")
@@ -559,7 +585,7 @@ NOT_SIGNIFICANT = re.compile(
     r"\bnot (?:statistically )?significant(?:ly)?\b|\bnon-?significant\b|"
     r"\bno (?:statistically )?significant\b|\bdid not (?:significantly )?differ\b|"
     r"\bno (?:clear |significant |real )?difference\b|\bcould be chance\b", re.IGNORECASE)
-_RATIO_BEFORE = re.compile(r"\b(?:a?ORs?|a?HRs?|a?RRs?|IRRs?|odds ratios?|hazard ratios?|"
+_RATIO_BEFORE = re.compile(r"\b(?:(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?)|odds ratios?|hazard ratios?|"
                            r"risk ratios?|relative risks?|rate ratios?)\b", re.IGNORECASE)
 _DIFF_BEFORE = re.compile(r"\b(?:W?MDs?|SMDs?|mean difference|difference|net|"
                           r"standardi[sz]ed mean difference|Hedges'? g|Cohen'?s d)\b",
@@ -570,6 +596,12 @@ def _num(text: str) -> float:
     return float(text.replace("\u2212", "-"))
 
 
+# The level an interval is given at: "95%", "90 percent", "99 per cent".
+CONFIDENCE_LEVEL = re.compile(r"\b9[059]\s?(?:%|per ?cent\b)", re.IGNORECASE)
+# What follows a number that is an interval's level, not a result.
+_LEVEL_NEXT = re.compile(r"\s?(?:%|per ?cent\b)\s*(?:C\.?I\.?\b|confidence|credible|likely range)", re.IGNORECASE)
+
+
 def _interval_after(text: str, start: int):
     """The (low, high) interval printed straight after a figure, or None."""
     window = text[start:start + 90]
@@ -577,9 +609,11 @@ def _interval_after(text: str, start: int):
     if not m:
         return None
     # The interval has to belong to this figure: another number in between
-    # ("OR 0.88 and RR 1.2 (95% CI ...)") means it belongs to that one.
-    between = re.sub(r"\b9[059]\s?%", "", window[:m.start(1)])
-    if re.search(r"\d", re.sub(r"(?:C\.?I\.?|confidence interval).*", "", between,
+    # ("OR 0.88 and RR 1.2 (95% CI ...)") means it belongs to that one. Its
+    # confidence level is not such a number, written "95%" or, as the plain
+    # words print it, "95 percent".
+    between = CONFIDENCE_LEVEL.sub("", window[:m.start(1)])
+    if re.search(r"\d", re.sub(_CI_NAME + r".*", "", between,
                                 flags=re.IGNORECASE | re.DOTALL)):
         return None
     return _num(m.group(1)), _num(m.group(2))
@@ -603,7 +637,13 @@ def significance(text: str, figure: str) -> str | None:
     bare = str(figure or "").lstrip("-\u2212")
     if not bare:
         return None
-    for m in re.finditer(r"(?<![\d.])[-\u2212]?" + re.escape(bare) + r"(?![\d])", t):
+    # A figure is matched whole: "0" in "aged 0 to 95" is not the "0" of
+    # "odds ratio 0.88" (a decimal part that is all zeros, "4" for "4.0",
+    # still matches). And an interval's level ("95% confidence interval",
+    # "95 percent CI") is not a result any figure is matched to.
+    for m in re.finditer(r"(?<![\d.])[-\u2212]?" + re.escape(bare) + r"(?!\d|\.0*[1-9])", t):
+        if _LEVEL_NEXT.match(t, m.end()):
+            continue
         before = t[max(0, m.start() - 60):m.start()]
         if _RATIO_BEFORE.search(before):
             null = 1.0
@@ -652,7 +692,7 @@ def _smd_label(d: float) -> str:
 
 
 _RATIO_NAMES = [(r"a?ORs?", "odds ratio"), (r"a?HRs?", "hazard ratio"),
-                (r"a?RRs?", "risk ratio"), (r"IRRs?", "incidence rate ratio")]
+                (r"a?RRs?", "risk ratio"), (r"a?IRRs?", "incidence rate ratio")]
 
 
 def _ratio_name(name: str) -> str:
@@ -663,11 +703,57 @@ def _ratio_name(name: str) -> str:
     return name.lower()
 
 
+_RATIO_NAMED = re.compile(r"\b(?:odds ratios?|hazard ratios?|risk ratios?|relative risks?"
+                          r"|incidence rate ratios?|rate ratios?|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))\b",
+                          re.IGNORECASE)
+
+
+def ratio_kinds(text: str) -> set[str]:
+    """The kinds of ratio a text names ("odds ratio", "hazard ratio"...),
+    abbreviations read only in capitals."""
+    return {_ratio_name(m.group(0)).rstrip("s") for m in _RATIO_NAMED.finditer(str(text or ""))}
+
+
+def ratio_kind(figure: str) -> str:
+    """The kind of ratio an effect's figure is ("odds ratio 0.88" gives
+    "odds ratio"), or "" when it is not a ratio."""
+    m = _RATIO_NAMED.match(str(figure or ""))
+    return _ratio_name(m.group(0)).rstrip("s") if m else ""
+
+
 def _ratio_word(name: str) -> str:
     for pattern, word in _RATIO_WORDS:
         if re.fullmatch(pattern, name, re.IGNORECASE):
             return word
     return "risk"
+
+
+# A ratio is read only when the number can be one. "HR" is also a heart
+# rate, "RR" a respiratory rate and "OR" an operating room: "Mean HR was 72
+# per minute" printed "about 7100% higher risk over time". So the number is
+# no ratio when it is a rate per second, minute or hour (a heart or
+# breathing rate; "OR 1.3 per day of use" is still a ratio), or when the abbreviation
+# follows a word that makes it a measurement ("mean", "resting", "peak",
+# "maximum", "heart rate (HR)"). Nor is any number above RATIO_BOUND: no
+# pooled ratio reaches it (the largest in every saved answer is an odds
+# ratio of 41.3), while heart rates sit above it, so a bare "HR 72" is a
+# heart rate. Saying no size is safer than printing a wrong one.
+RATIO_BOUND = 50.0
+_PER_TIME = re.compile(
+    r"\s*(?:(?:per|a|an|each|every)\s+|/\s*)(?:seconds?|secs?|s|minutes?|mins?|hours?|hrs?|h)\b"
+    r"|\s*(?:beats|breaths|bpm)\b", re.IGNORECASE)
+_MEASURE_BEFORE = re.compile(
+    r"\b(?:mean|median|average|resting|peak|max(?:imum|imal)?|min(?:imum)?|baseline|target"
+    r"|(?:heart|respiratory|breathing|pulse) rates?|operating (?:room|theatre)s?)\s*[(,:]?\s*$",
+    re.IGNORECASE)
+
+
+def _can_be_ratio(text: str, m) -> bool:
+    if float(m.group(2)) > RATIO_BOUND or _PER_TIME.match(text, m.end(2)):
+        return False
+    if "ratio" in m.group(1).lower() or "relative" in m.group(1).lower():
+        return True
+    return not _MEASURE_BEFORE.search(text[max(0, m.start(1) - 40):m.start(1)])
 
 
 def effect_size(text: str) -> dict | None:
@@ -683,7 +769,7 @@ def effect_size(text: str) -> dict | None:
     """
     t = str(text or "")
 
-    m = _RATIO.search(t) or _RATIO_WAS.search(t)
+    m = next((x for x in [*_RATIO.finditer(t), *_RATIO_WAS.finditer(t)] if _can_be_ratio(t, x)), None)
     if m:
         name, value = m.group(1), float(m.group(2))
         pair = _interval_after(t, m.end())
@@ -812,6 +898,10 @@ _OUTCOME_KIN = [
     ("weight", "obes", "adipos", "bmi", "body mass", "fat"),
     ("sleep", "insomnia"),
     ("depress", "mood"),
+    # Stress is reported as anxiety, or as tension on a mood scale.
+    ("stress", "anxi", "tension"),
+    # Hyperactivity is measured as behaviour, on a rating scale.
+    ("hyperactiv", "adhd", "behavio"),
     ("memory", "cognit", "dementia"),
     ("skin", "derma", "cutaneous"),
     ("hair", "alopecia", "bald"),
@@ -884,6 +974,113 @@ def indirect(study, outcome: str, surrogate: str) -> str | None:
     return None
 
 
+# The section of a structured abstract that says why a study was done, not
+# what it did: it can name an outcome the study never went on to measure
+# ("creatine is known to raise strength; we tested its effect on hair").
+_BACKGROUND_HEAD = re.compile(r"(?i)^(?:backgrounds?|introduction|context|rationale|importance)$")
+# A heading that says what a study did or found. An abstract whose only
+# headings are a label ("UNLABELLED:") and its trial registration is, for
+# reading, an abstract with no headings at all.
+_FINDINGS_HEAD = re.compile(r"(?i)method|result|finding|conclusion|outcome|design|interpretation"
+                            r"|measure|intervention|participant|patients|subjects|setting|data"
+                            r"|search|selection|synthesis|analys")
+# A background sentence that states the study's own aim ("We report on the
+# safety of...", "the purpose was to determine..."). Some journals put the
+# aim there, and an aim names what the study set out to measure.
+_AIM_SENTENCE = re.compile(
+    r"(?i)\b(?:we (?:report|aim|aimed|sought|examine|examined|investigate|investigated|assess|assessed"
+    r"|evaluate|evaluated|test|tested|compare|compared|studied|hypothesi[sz]ed)"
+    r"|th(?:is|e present) (?:study|trial|review|analysis|meta-analysis) (?:aim|examin|investigat|assess"
+    r"|evaluat|test|compar|sought|was designed)"
+    r"|(?:aim|purpose|objective|goal)s? (?:of (?:this|the present)|was|were|is|are)\b"
+    r"|was designed to|(?:was|were) (?:tested|examined|assessed|evaluated|investigated|compared)\b)"
+    r"|^to (?:determine|assess|evaluate|examine|investigate|test|compare|explore)\b")
+# A heading that states the study's aim, whatever the journal calls it.
+_AIM_HEAD = re.compile(r"(?i)^(?:objectives?|aims?|purposes?|goals?|aims? and objectives?"
+                       r"|study objectives?)$")
+
+
+# The headings under which a study reports what it found.
+_FOUND_HEAD = re.compile(r"(?i)result|finding|conclusion|interpretation")
+
+
+def other_outcomes(text: str, kin: list[str], skip: list[str] = ()) -> set[int]:
+    """The outcome word families the text names that share no word with
+    `kin` (a title about hair, for a claim about strength), as indexes into
+    _OUTCOME_KIN. A family that shares a word with `skip`, the claim's
+    subject, is the exposure, not another outcome ("sleep loss and word
+    learning", for a claim about memory)."""
+    near = lambda f, words: any(k.startswith(w) or w.startswith(k) for k in words for w in f)
+    return {i for i, family in enumerate(_OUTCOME_KIN)
+            if not near(family, kin) and not near(family, list(skip))
+            and names_any(text, list(family))}
+
+
+def measured_outcome(study, outcome: str, surrogate: str = "", subject: str = "") -> bool | None:
+    """
+    Whether a study with a structured abstract measured the claim's outcome.
+    True when its title, or a section past the background, or a background
+    sentence that states its aim, names the outcome, its kin or the declared
+    stand-in. False only on a positive sign that the study is about another
+    outcome: the background names the claim's outcome and nothing after it
+    does, and the title or the stated aim and the results or conclusions
+    both name the same outcome from another word family, one that is not
+    the claim's subject (a hair trial whose background says creatine raises
+    strength). A word missing proves nothing by itself, since a study can
+    report its outcome by an instrument, an abbreviation or other words, so
+    everything else is None and left to the model's reading. None too when
+    this cannot be read: no outcome, an outcome also named in general words,
+    no abstract, or no methods, results or conclusions heading.
+    """
+    stems = outcome_stems(outcome)
+    abstract = str((study or {}).get("abstract") or "").strip()
+    if not stems or not abstract or abstract.lower().startswith("(no abstract"):
+        return None
+    # An outcome named in general words as well ("health", "complications")
+    # is met by any finding, so its absence in words proves nothing.
+    if any(not outcome_stems(term) for term in re.split(r"\s+OR\s+", outcome.strip("() "))):
+        return None
+    text = " ".join(ln.strip() for ln in abstract.split("\n") if ln.strip())
+    # A heading run into the sentence before it ("quality.Conclusions") is
+    # given back its space, as conclusion() does.
+    text = re.sub(r"(?<=[a-z0-9)][.])(?=[A-Z][a-z])", " ", text)
+    if not _ANY_HEAD.match(text):
+        return None
+    heads = list(_ANY_HEAD.finditer(text))
+    kept, aims, background, found, findings = [], [], [], [], False
+    for i, m in enumerate(heads):
+        body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        name = re.sub(r"^\(\d\)\s*", "", m.group().strip()).rstrip(":").strip()
+        if _BACKGROUND_HEAD.match(name):
+            for sent in _SENTENCE.split(body):
+                (aims if _AIM_SENTENCE.search(sent.strip()) else background).append(sent)
+        else:
+            kept.append(body)
+            if _AIM_HEAD.match(name):
+                aims.append(body)
+            if _FOUND_HEAD.search(name):
+                found.append(body)
+            findings = findings or bool(_FINDINGS_HEAD.search(name))
+    if not findings:
+        return None
+    title = str(study.get("title") or "")
+    kin = outcome_kin(stems)
+    read = f"{title} {' '.join(kept + aims)}"
+    if names_any(read, kin):
+        return True
+    if surrogate:
+        for term in re.split(r"\s+OR\s+", surrogate.strip("() ")):
+            term = term.strip("() ").strip()
+            if len(term) > 2 and re.search(re.escape(term), _us(read), re.IGNORECASE):
+                return True
+    if not names_any(" ".join(background), kin):
+        return None
+    skip = outcome_stems(subject)
+    if other_outcomes(f"{title} {' '.join(aims)}", kin, skip) & other_outcomes(" ".join(found), kin, skip):
+        return False
+    return None
+
+
 # How the chart's description counts each kind of study. The count follows
 # `kind`, the same call that colours the shelf, so "human studies" is never a
 # default bucket for whatever is left over.
@@ -952,7 +1149,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
                           if s.get("background") and not s.get("off_topic")),
         # Why each background record is one, once each, in a fixed order:
         # the chart and the study list name the kinds that are there.
-        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED)
+        "background_kinds": [k for k in (BG_LAB, BG_OPINION, BG_GUIDE, BG_NOT_TESTED,
+                                       BG_RETRACTED, BG_NOTICE)
                              if any(background_why(s) == k for s in studies
                                     if not s.get("off_topic"))],
         "retracted": sum(1 for s in studies
@@ -983,8 +1181,8 @@ def snapshot(studies, cited_pmids=()) -> dict:
 # not cure diabetes, and "strong" printed beside "Likely false" read as
 # strong evidence for the cure. The level word still comes from the designs
 # that were used (the meter's legend explains it), but the line now says
-# what that evidence is evidence of: "Strong evidence of a partial effect,
-# not a cure". Built here from facts the page already has (the stamp, the
+# what that evidence is evidence of: "Strong evidence of a small effect,
+# not a cure", or with no size, "Strong evidence, and none of it shows a cure". Built here from facts the page already has (the stamp, the
 # size of the effect, the claim's own words), so it costs no model call and
 # a streamed check and a shared link cannot word it differently.
 # ---------------------------------------------------------------------------
@@ -995,7 +1193,7 @@ _PROMISES = [
     (re.compile(r"revers", re.IGNORECASE), "a reversal"),
     (re.compile(r"prevent|protect|block", re.IGNORECASE), "complete prevention"),
     (re.compile(r"stop", re.IGNORECASE), "a complete stop"),
-    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "getting rid of it"),
+    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "complete removal"),
     (re.compile(r"heal|fix", re.IGNORECASE), "a full fix"),
 ]
 
@@ -1025,13 +1223,20 @@ def observational_only(studies, cited_pmids=()) -> bool:
 
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
-                  comparative: bool = False, outcome: str = "") -> str:
+                  comparative: bool = False, outcome: str = "",
+                  stated: str | None = None, withheld: bool = False) -> str:
     """
     What the evidence used shows about the claim, as one short line with no
     full stop, or "" when nothing was used (the page says "no direct
     evidence" there). `absolute` is the claim's promise ("cure"), from
     breakdown.absolute_claim; `effect_label` is the breakdown's size label;
-    `outcome` is the query's outcome group.
+    `outcome` is the query's outcome group; `stated` is the lowest certainty
+    the page's own prose already states (stated_certainty), and the line is
+    never surer than it. `withheld` says the breakdown had a size the line
+    may not carry (breakdown.line_label): the line then says no size at
+    all. A false line names an effect ("a small effect, not a cure") only
+    with a size; with none it says "and none of it shows a cure" for a claim
+    that promises one, "against this claim" for any other.
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1054,6 +1259,31 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # the claim, not the case against it.
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
+    # A relied-on review that says its own evidence is held back by few or
+    # small studies has said how sure it is, and the line is no surer. Only
+    # ever lowers: a line already at low or very low stays.
+    cited = set(cited_pmids or ())
+    if (line_certainty(level) not in ("low", "very low")
+            and any(says_thin(s) for s in studies or [] if s.get("pmid") in cited)):
+        level = "Low certainty"
+    # One certainty for the whole page. The line is never surer than the
+    # least sure thing the page already says: the lowest rating any review
+    # it relied on gives its own evidence, or a certainty word in the prose
+    # above it. The audit found one page saying "low certainty" in the short
+    # answer, "Strong evidence" here and "moderate evidence" in the breakdown.
+    # A review's own rating may lower the line, and then supplies the
+    # "certainty" wording. The prose may only lower it, and in the line's own
+    # design words: "low certainty" is a review's phrase, never the model's.
+    # A floor equal to the level changes nothing.
+    floor = lowest_review_certainty(studies, cited_pmids, outcome)
+    now = line_certainty(level)
+    if floor and now and _rank(floor) < _rank(now):
+        level = f"{floor.capitalize()} certainty"
+    now = line_certainty(level)
+    if stated and now and _rank(stated) < _rank(now):
+        word = _STATED_WORD[stated]
+        if _rank(line_certainty(word)) < _rank(now):
+            level = word
     size = effect_label if effect_label in ("small", "moderate", "large") else ""
     promise = next((noun for pattern, noun in _PROMISES if pattern.search(absolute or "")),
                    "what the claim promises") if absolute else ""
@@ -1062,17 +1292,29 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     if verdict == "false":
         if effect_label == "none":
             return f"{level} evidence of no clear effect"
+        # "effect, not a cure" only with a size the line may carry: with no
+        # size it would assert an effect nobody measured.
+        if absolute and size:
+            return f"{level} evidence of a {size} effect, not {promise}"
+        # A claim that promises something absolute, with no size to carry:
+        # the level is the studies' design, never strength against a cure
+        # none of them tested, so the line says what they do not show.
         if absolute:
-            return f"{level} evidence of a {size or 'partial'} effect, not {promise}"
+            return f"{level} evidence, and none of it shows {promise}"
         return f"{level} evidence against this claim"
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
         return f"{level} evidence, but only in {', '.join(narrow)}"
+    # Weak or low certainty evidence is the reason there is no plain answer,
+    # so the line says "so"; "but" is for evidence sure enough that a reader
+    # would expect one. "Low certainty evidence, but no plain yes or no"
+    # read as a contradiction.
+    joint = "so" if line_certainty(level) in ("low", "very low") else "but"
     if effect_label == "none":
-        return f"{level} evidence of no clear effect, but no plain yes or no"
+        return f"{level} evidence of no clear effect, {joint} no plain yes or no"
     if size:
-        return f"{level} evidence of a {size} effect, but no plain yes or no"
-    return f"{level} evidence, but no plain yes or no"
+        return f"{level} evidence of a {size} effect, {joint} no plain yes or no"
+    return f"{level} evidence, {joint} no plain yes or no"
 
 
 # ---------------------------------------------------------------------------
@@ -1256,6 +1498,17 @@ def is_review(study) -> bool:
     return any(t.startswith(REVIEW_TYPES) for t in study.get("publication_types") or [])
 
 
+_GUIDELINE_TYPES = ("Practice Guideline", "Guideline", "Consensus Development")
+
+
+def narrative_review(study) -> bool:
+    """A review PubMed tags only as a review: not pooled (REVIEW_TYPES), not
+    a guideline, not a trial. It summarises others and measured nothing."""
+    types = [str(t) for t in study.get("publication_types") or []]
+    return (any(t.startswith("Review") for t in types) and not is_review(study)
+            and not any(t.startswith(_GUIDELINE_TYPES + TRIAL_TYPES) for t in types))
+
+
 def is_trial(study) -> bool:
     if is_review(study):
         return False
@@ -1322,7 +1575,45 @@ _RATED = re.compile(
     rf"(?:was|is|were|ranged from|ranging from) (?:rated |judged |graded |considered |assessed )?"
     rf"(?:as )?(?:to be )?(?:being )?({_LVL})(?: to ({_LVL}))?\b|"
     rf"\bevidence (?:was|is|were) of ({_LVL}) (?:certainty|quality)\b|"
-    rf"\bGRADE\W{{1,3}}({_LVL})\b", re.IGNORECASE)
+    rf"\bGRADE\W{{1,3}}({_LVL})\b|"
+    # CINeMA, the GRADE of network meta-analyses, says "confidence": "confidence
+    # in accordance with CINeMA was low for walking or jogging and very low for
+    # other treatments". Bare "confidence was high" is not a rating (it can be
+    # the participants'), so it counts only as confidence in the evidence,
+    # findings or estimates, or with CINeMA or GRADE named in the clause.
+    rf"\bconfidence (?:in|of) (?:the )?(?:evidence|findings|estimates?|results?|effect estimates?)"
+    rf"(?: (?:in accordance with|according to|using|by|with|from) (?:the )?(?:CINeMA|GRADE)"
+    rf"(?: approach| tool| framework)?)?,? (?:was|is|were|ranged from|ranging from) "
+    rf"(?:rated |judged |graded |considered |assessed )?(?:as )?(?:to be )?({_LVL})"
+    rf"(?:(?: to | for [^.;,]{{1,60}}? and )({_LVL}))?\b|"
+    rf"\bconfidence (?:in accordance with|according to|using|by|with|from) (?:the )?(?:CINeMA|GRADE)"
+    rf"(?: approach| tool| framework)?,? (?:was|is|were|ranged from|ranging from) "
+    rf"(?:rated |judged |graded |considered |assessed )?(?:as )?(?:to be )?({_LVL})"
+    rf"(?:(?: to | for [^.;,]{{1,60}}? and )({_LVL}))?\b|"
+    rf"\b({_LVL})[- ]confidence in (?:the )?(?:evidence|findings|estimates?|results?)\b",
+    re.IGNORECASE)
+# Words that may stand before a CINeMA "confidence": anything else makes it
+# someone's confidence ("participants' confidence", "patient confidence",
+# "self-confidence"), not a rating of the evidence.
+_BEFORE_CONFIDENCE = {"the", "overall", "our", "and", "with", "of", "in", "that", "but", "while",
+                      "whereas", "cinema", "grade", "however", "evidence", "where", "which"}
+
+
+def rated_matches(text: str):
+    """_RATED's matches in `text`, without someone's own "confidence"."""
+    for m in _RATED.finditer(text or ""):
+        if m.group(0)[:10].lower() == "confidence":
+            before = text[:m.start()]
+            if before.endswith("-"):
+                continue
+            stripped = before.rstrip()
+            if stripped and stripped[-1] not in ".;:(,[":
+                word = re.search(r"([\w'\u2019-]+)$", stripped)
+                if not word or word.group(1).lower() not in _BEFORE_CONFIDENCE:
+                    continue
+        yield m
+
+
 _CLAUSE = re.compile(r"[()\[\]]|(?<=[.;])\s+|,\s+(?:but|whereas|while)\s+")
 
 # Words an outcome group shares with every other outcome, so they say
@@ -1379,7 +1670,7 @@ def _ratings(study, outcome: str = "") -> tuple[list[str], list[str]]:
     outcome (empty when no finding names it)."""
     rated = []
     for clause in _clauses(_text(study)):
-        levels = [_level(g) for m in _RATED.finditer(clause) for g in m.groups() if g]
+        levels = [_level(g) for m in rated_matches(clause) for g in m.groups() if g]
         if levels:
             rated.append((clause, levels))
     on_outcome = []
@@ -1465,6 +1756,146 @@ def lead_certainty(studies, cited_pmids=(), outcome: str = "",
     return review_certainty(lead, outcome, strict) if lead else None
 
 
+# ---------------------------------------------------------------------------
+# One certainty per page
+#
+# A result page states how sure it is in three places: the short answer and
+# the breakdown (the model's words) and the evidence line (code's words).
+# The audit found all three disagreeing on one page. The rule, in code: the
+# page's certainty is the lowest of (a) the level read off the designs, (b)
+# the lowest rating any relied-on review gives its own evidence, and (c) any
+# certainty the prose itself states. The evidence line is worded from that
+# level, and any certainty phrase in the prose that is surer than it is
+# rewritten down to it. Nothing is ever rewritten upwards, and a phrase that
+# is negated ("no high-quality evidence") is neither counted nor touched.
+# ---------------------------------------------------------------------------
+
+_DESIGN_LEVEL = {"strong": "high", "moderate": "moderate", "weak": "low"}
+# The design word the line uses for a level the prose states.
+_STATED_WORD = {"high": "Strong", "moderate": "Moderate", "low": "Weak", "very low": "Weak"}
+# "Strong evidence", "moderate evidence", "weak evidence": the design words
+# the evidence line itself uses, said in prose.
+_PLAIN_STATED = re.compile(r"(?<![\w-])(weak|moderate|strong)\s+(evidence)\b", re.IGNORECASE)
+_NEGATED_STATED = re.compile(
+    r"\b(?:no|not|nor|without|lacks?|lacking|lack of|little|never|absence of|"
+    r"isn[’']t|aren[’']t|wasn[’']t|weren[’']t)\s+(?:\w+\s+){0,2}$",
+    re.IGNORECASE)
+
+
+def lowest_review_certainty(studies, cited_pmids=(), outcome: str = "") -> str | None:
+    """The lowest rating any review the verdict relied on gives its own
+    evidence on this outcome (review_certainty), or None when none rates it."""
+    cited = set(cited_pmids or ())
+    levels = [review_certainty(s, outcome) for s in studies or [] if s.get("pmid") in cited]
+    levels = [x for x in levels if x]
+    return min(levels, key=_rank) if levels else None
+
+
+def _stated_spans(text: str) -> list[tuple[int, int, str, str]]:
+    """
+    Every certainty a piece of prose states, as (start, end, level, kind):
+    the span is the level words themselves, or for a range ("low to
+    moderate certainty") both ends; `kind` is "rated" for the review words
+    ("low certainty", "certainty of evidence was low") and "plain" for the
+    design words ("moderate evidence"). Negated phrases are left out.
+    """
+    text = text or ""
+    out = []
+    for m in rated_matches(text):
+        if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
+            continue
+        if _NOT_YET.search(_sentence_around(text, m.start(), m.end())):
+            continue
+        spans = [m.span(i) for i, g in enumerate(m.groups(), 1) if g]
+        levels = [_level(g) for g in m.groups() if g]
+        if spans:
+            out.append((spans[0][0], spans[-1][1], min(levels, key=_rank), "rated"))
+    for m in _PLAIN_STATED.finditer(text):
+        if _NEGATED_STATED.search(text[max(0, m.start() - 40):m.start()]):
+            continue
+        if _NOT_YET.search(_sentence_around(text, m.start(), m.end())):
+            continue
+        if any(a <= m.start() < b for a, b, _, _ in out):
+            continue
+        out.append((m.start(1), m.end(1), _DESIGN_LEVEL[m.group(1).lower()], "plain"))
+    return sorted(out)
+
+
+def stated_certainty(*texts) -> str | None:
+    """The lowest certainty any of these texts states, or None."""
+    levels = [lvl for t in texts for _, _, lvl, _ in _stated_spans(str(t or ""))]
+    return min(levels, key=_rank) if levels else None
+
+
+def line_certainty(line: str) -> str | None:
+    """The certainty an evidence line (or its level word) states, read at
+    its low end: "Low to moderate certainty ..." is low, "Strong
+    evidence ..." is high. None when it states none."""
+    head = (line or "").strip().lower()
+    for level in sorted(CERTAINTY_LEVELS, key=len, reverse=True):
+        if head.startswith(level + " certainty") or head.startswith(level + " to "):
+            return level
+    word = head.split(" ", 1)[0]
+    return _DESIGN_LEVEL.get(word)
+
+
+# A certainty phrase cap_certainty leaves alone: one a study or review is
+# credited with, and one about evidence that does not exist yet ("more
+# high-quality evidence is needed", "a larger trial would give strong
+# evidence").
+_ATTRIBUTED = re.compile(
+    r"\bstud(?:y|ies) \d|\bauthors?\b|\bGRADE\b|\bCINeMA\b|\brated\b|\bgraded\b|\bjudged\b|"
+    r"\baccording to\b|\b(?:review|trial|meta-?analysis|study)s? (?:\w+ )?(?:found|finds|reported|reports|"
+    r"rated|rates|concluded|concludes|says|said|states|stated|describes|described|called)\b",
+    re.IGNORECASE)
+_NOT_YET = re.compile(
+    r"\b(?:more|larger|further|better|additional|bigger|longer|new)\b[^.]{0,60}?\b(?:needed|required)\b|"
+    r"\bneeded\b|\bwould\b|\bcould\b|\bmight\b", re.IGNORECASE)
+
+
+def _sentence_around(text: str, start: int, end: int) -> str:
+    a = max(text.rfind(". ", 0, start), text.rfind("? ", 0, start), text.rfind("! ", 0, start))
+    b = min([i for i in (text.find(". ", end), text.find("? ", end), text.find("! ", end)) if i >= 0]
+            or [len(text)])
+    return text[a + 1 if a >= 0 else 0:b + 1]
+
+
+def cap_certainty(text: str, level: str | None) -> str:
+    """
+    `text` with every certainty phrase surer than `level` rewritten down to
+    it, but only where the prose speaks for itself about the body of
+    evidence: "moderate certainty" becomes "low certainty", "strong
+    evidence" becomes "weak evidence", a range collapses to the one level.
+    Left exactly as they were: phrases at or below `level`, negated phrases,
+    any phrase in a sentence that credits a study, review or trial, and any
+    phrase about evidence still to come ("more high-quality evidence is
+    needed", "would").
+    """
+    if not text or not level or level not in CERTAINTY_LEVELS:
+        return text or ""
+    out, last = [], 0
+    for start, end, stated, kind in _stated_spans(text):
+        span = text[start:end]
+        # A range is surer than `level` when its top end is.
+        top = max((_level(x) for x in re.findall(r"very[- ]low|low|moderate|high", span, re.I)),
+                  key=_rank, default=stated)
+        if _rank(top) <= _rank(level):
+            continue
+        sentence = _sentence_around(text, start, end)
+        # A bracketed citation is where a sentence comes from, not who it
+        # credits the certainty to.
+        bare = re.sub(r"\([^)]*\)", " ", sentence)
+        if _ATTRIBUTED.search(bare) or _NOT_YET.search(bare):
+            continue
+        new = _STATED_WORD[level].lower() if kind == "plain" else level
+        if span[:1].isupper():
+            new = new[:1].upper() + new[1:]
+        out.append(text[last:start] + new)
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
 def trial_caveats(study) -> list[str]:
     """What keeps one primary study from carrying a confident answer alone."""
     if is_review(study):
@@ -1499,6 +1930,37 @@ def confounded(study) -> bool:
     """A systematic review or meta-analysis that says its link is likely
     explained by lifestyle or other factors rather than the thing itself."""
     return is_review(study) and bool(_CONFOUNDED.search(_text(study)))
+
+
+# A review that says its own evidence is thin: "the current evidence base is
+# constrained by few RCTs, small sample sizes", "limited by the small number
+# of included trials". Three things in one sentence: the evidence (or the
+# data, the findings, the studies), a word that it is held back, and the
+# reason being few studies or small ones. A review's own word that its
+# evidence is thin is a rating of it, though not in GRADE's words.
+_THIN_SUBJECT = re.compile(r"\b(?:evidence|data|literature|findings|results|conclusions?|studies|trials)\b",
+                           re.IGNORECASE)
+_THIN_HELD = re.compile(r"\b(?:limit(?:s|ed|ing)?|constrain(?:s|ed)?|hamper(?:s|ed)?|weaken(?:s|ed)?|"
+                        r"restrict(?:s|ed)?|undermin(?:es|ed))\b", re.IGNORECASE)
+_THIN_REASON = re.compile(
+    r"\b(?:few|small number of|limited number of|low number of|paucity of|scarcity of|lack of)\s+"
+    r"(?:[\w-]+\s+){0,3}?(?:RCTs?|trials?|studies)\b|"
+    r"\bsmall(?:er)?\s+(?:sample(?:\s+size)?s?|trials|studies|cohorts)\b|"
+    r"\bsample sizes?\s+(?:were|was|are|is)\s+(?:\w+\s+)?small\b", re.IGNORECASE)
+_THIN_NOT = re.compile(r"\bnot\s+(?:\w+\s+)?(?:limited|constrained|hampered|restricted)\b", re.IGNORECASE)
+
+
+def says_thin(study) -> bool:
+    """True when a review says its own evidence is held back by few
+    studies or small ones (_THIN_REASON), in one sentence that names the
+    evidence and says it is limited."""
+    if not is_review(study):
+        return False
+    for sentence in _SENTENCE.split(" ".join(str(study.get("abstract") or "").split())):
+        if (_THIN_SUBJECT.search(sentence) and _THIN_HELD.search(sentence)
+                and _THIN_REASON.search(sentence) and not _THIN_NOT.search(sentence)):
+            return True
+    return False
 
 
 CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "
@@ -1538,6 +2000,11 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
                        for t in s.get("publication_types") or [])
         if caveats:
             limited.append(s)
+        # A narrative review pools nothing and measured nothing itself: it is
+        # never the strength. Its caveats count as any paper's do (above);
+        # with none, like an unlabelled paper, it is in neither list.
+        elif narrative_review(s):
+            continue
         elif sample_size(s) is not None or labelled:
             solid.append(s)
     if solid or not limited:
@@ -1973,19 +2440,46 @@ BG_LAB = "animal or lab"
 BG_OPINION = "opinion piece"
 BG_GUIDE = "product guide"
 BG_NOT_TESTED = "not a test of this claim"
+BG_RETRACTED = "retracted by the journal"
+BG_NOTICE = "a journal notice, which measured nothing"
+
+# PubMed's marks on a paper the journal withdrew, and on the notices
+# themselves (a retraction, a correction, an expression of concern), which
+# report no study of their own.
+RETRACTED_TYPES = ("Retracted Publication",)
+NOTICE_TYPES = ("Retraction of Publication", "Expression of Concern", "Published Erratum")
+
+
+def withdrawn(study) -> str:
+    """
+    BG_RETRACTED for a paper PubMed marks as retracted, BG_NOTICE for a
+    retraction, correction or concern notice, else "". Read off the record
+    alone, for any claim, and before any other type: a retracted
+    meta-analysis is still retracted.
+    """
+    types = [str(t) for t in (study or {}).get("publication_types") or []]
+    if any(t.startswith(RETRACTED_TYPES) for t in types):
+        return BG_RETRACTED
+    if any(t.startswith(NOTICE_TYPES) for t in types):
+        return BG_NOTICE
+    return ""
 
 
 def background_reasons(studies, claim: str) -> dict:
     """
     {pmid: why} for the records that are background for this claim and are
-    never counted as used. Opinion pieces and buying guides, for any claim:
+    never counted as used. Retracted papers and journal notices, for any
+    claim: the journal withdrew the one, and the other measured nothing.
+    Opinion pieces and buying guides, for any claim:
     nothing in them was measured. Animal and lab studies, for a claim about
     people: they can say why a thing might work, never whether it does.
     """
     people = about_people(claim)
     out = {}
     for s in studies or []:
-        if product_guide(s):
+        if withdrawn(s):
+            out[s["pmid"]] = withdrawn(s)
+        elif product_guide(s):
             out[s["pmid"]] = BG_GUIDE
         elif people and preclinical(s):
             out[s["pmid"]] = BG_LAB

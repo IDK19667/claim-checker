@@ -4,6 +4,648 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-22 (release): The reasoning cites only studies the answer stands on
+
+Output rules from the last two reviews and the last two runs on real
+claims, each in code with a test, all but one in the direction of
+saying less. None makes an answer surer: 245 saved rows rebuilt before
+and after round 5 and 316 before and after round 6, no stamp changed and
+no line surer. The round before moved eight saved rows from "It's
+complicated" to "Not enough evidence", all saved answers that relied on
+no study: eight in the 224 rows the fourth review rebuilt (out3 and out4
+of its probes); the 201 rows that round rebuilt itself held five of them,
+the other three only in dev.db.
+
+- **A sentence that cites a set-aside study goes whole**
+  (`app._check_response`, `breakdown.drop_any_citing`). A study the page
+  shows as withdrawn (retracted, a journal notice) or off topic is cited
+  in no sentence of the explanation or the breakdown, on every path:
+  plain, streamed, saved, aged, fallback. A sentence citing it and a study
+  relied on goes too: taking only its number out of "(Studies 1, 2)"
+  credited words about the set-aside study to the other one.
+  `breakdown.relied_only`, which keeps a mixed sentence, stays for studies
+  that are merely not relied on.
+- **A saved rated answer that rests on nothing is "Not enough
+  evidence"**, as a fresh one already was, unless guidance alone may
+  rate that claim. When the row lists no study at all, its takeaway is the
+  one a fresh check writes when the search finds nothing
+  (`verdict.NO_STUDIES_TLDR`, one string for both), on the page, the card,
+  the share text and every list, not one about studies that "don't test"
+  it.
+- **A guidance answer that relies on no study carries no sentence that
+  cites one**, in its explanation and in its folded sections (the parts,
+  "What the evidence shows", "Why", "Who", "What is still unknown"). A
+  part whose answer went is dropped rather than pointed at paragraphs
+  below; a section left with nothing is not rendered. The two closing
+  sentences code writes stand, and so does the effect box's "rests on
+  what major health guidelines say". A guidance answer that relies on
+  studies is untouched, and so is a "Not enough evidence" answer that
+  describes background papers.
+- **A takeaway is a guidance answer only on a claim guidance is read
+  for** (`verdict.from_guidance(tldr, claim)`). The lead alone no longer
+  earns the guidance line or skips the caps.
+- **`verdict.without_lead`** also removes a lead the model wrote after
+  quotes, dashes, bold or italic marks or a zero-width character, or as "state:"
+  or "states:". The colon is still required, at the start only.
+- **The "cannot be rated" reader.** A sentence reporting what a study or
+  its people judged stays, whatever it says about rating. "No basis to
+  rate it" and "Rating this claim is not possible" go. "No conclusion
+  can be drawn" stays, on purpose.
+- **A withdrawn paper is shown and counted once, as withdrawn**
+  (`app._as_shown`), whatever else is true of it. Before, a retracted
+  paper that was also off topic showed the off-topic reason.
+- **A "That is ..." sentence code wrote travels with its figure**
+  (`breakdown.translations_follow`). Code's sentences are recognised by
+  the forms their writers produce (`breakdown.code_translation`: the
+  arithmetic, the null sentence, a size alone, a restated figure); a
+  model sentence that merely starts "That is" ("That is because ...")
+  stays. One goes when the sentence before it has no figure or cites
+  another study, and when it only repeats words already said in its
+  block, short words aside, whether or not the size is withheld. One
+  that converts the figure or spells it out stays. "What the research
+  says" picks a translation with the figure sentence it follows, never
+  alone, when the effect names no figure (`breakdown.says`).
+- **Code never calls a figure not significant when its own interval or
+  p value rules that out** (`breakdown.say_nulls`, `significant_figure`).
+  This is the one rule that takes a hedge away, and only where the
+  printed interval or p value itself shows an effect. The fault came from
+  reading an interval's confidence level ("95 percent CI") as a result
+  and judging it against the abstract's first "95% confidence interval",
+  a null one. A saved check loses such a sentence on the way out
+  (`breakdown.unsaid_nulls`).
+- **An interval in code's own plain words is still an interval**
+  (`evidence._interval_after`). Code prints a confidence interval as
+  "likely range" (`breakdown.JARGON`), so "0.79 with a likely range from
+  0.71 to 0.89" is read as ruling out no effect, and a saved "not
+  statistically significant" after it goes. It fires only when the
+  printed range excludes no effect: 1 for a ratio, 0 for a difference.
+- **A figure is matched to a whole result in its abstract**
+  (`evidence.significance`). The "0" of "aged 0 to 95 years" matched the
+  "0" of "odds ratio 0.88", and in another abstract the "95" matched "95%
+  confidence interval" after a null ratio, so code wrote "not
+  statistically significant" after an age range. A figure now matches
+  only a whole number ("4" still matches "4.0"), and an interval's level
+  is never a result.
+- **A cited PMID that names no listed study is not relied on**
+  (`display.relied_pmids`). A saved "true" citing only such PMIDs kept
+  its stamp, with or without studies listed; it is now "Not enough
+  evidence" by the rule above, on the page and in every list. The saved
+  record check still names such a PMID "cited_not_in_studies" only;
+  "cited_off_topic" means a listed study set aside.
+- **"E. coli" is one sentence.** A stop after a single capital letter
+  before a lowercase word does not end a sentence (`breakdown.sentences`,
+  `breakdown.first_sentence`); "vitamin C. It ..." still splits. Nor does
+  code give "coli" a sentence's capital when it restores capitals after a
+  rewrite (`breakdown.heads_up`, used by `soften` and `natural`): that
+  turned "Like E. coli" into "Like E. Coli" and the empty-takeaway
+  fallback then cut it at "E.". The
+  other splitters (`display.split_sentences`, `evidence`, `verdict`, the
+  page's own) already need a capital after the stop.
+- **An emptied reference goes with its lead-in** ("see", "see also",
+  "e.g.", "cf.", "as in").
+- **No status number in a failure message a reader sees.** The number
+  moves to `ProviderError.code` and the log.
+
+Left as it is, and why: the level word ("Moderate", "Strong") follows
+the design of the relied-on studies, so a line can read stronger than
+one survey or one small trial deserves when the model relies on it. A
+stricter cap changes what the level words mean and can move stamps, so
+it is the owner's decision, not a fix. Text written wrong into a saved
+row before a rule existed ("cold helps with" from the old softening of
+the noun "cures", "Coli" from the old split of "E. coli") stays until
+that claim is checked again: putting back words code took out would be
+guessing. What the whole-sentence rule costs: when the model writes one
+sentence about several studies and one of them is set aside, the
+sentence is not shown, and a hedge can go with it; the stamp and the
+evidence line do not change. And an explanation the page's own rules
+empty stays empty, as decided after the earlier review: the short answer
+is already on the page, and repeating it would pass it off as reasoning.
+The page hides the research block, or shows the lines stored for it. The
+fifth review saw this in two saved "False" answers, and it is part of
+what the whole-sentence rule costs.
+
+## 2026-11-21 (release): A public list shows only rows a page would serve
+
+An old row saved before the short answer or the still-open line existed
+(NULL or blank) is in no public list: not type-ahead, trending, related
+claims, the sitemap or llms.txt. `db._listable` is now the same test as
+`db._whole`, because no page serves such a row, so a list offered a stamp
+the site would not show, and in type-ahead a "true" of that kind escaped
+the low-certainty cap. The row stays in the database and still counts as
+a claim checked; a fresh check of it replaces it with a whole one.
+
+## 2026-11-21 (release): An out-of-date saved answer stands until a fresh one replaces it
+
+A saved answer that relied on a study the code now sets aside is out of
+date (`app._current`), so a typed check runs fresh on every path: the exact
+claim, a misspelling, a rewording and a kept answer past its window. When
+that fresh check cannot finish for any defined reason (the provider busy,
+out of quota or without a key, a reply declined, cut off, unreadable or
+with a line missing, PubMed down, the reader's rate limit, an unforeseen
+error), the reader gets the saved answer, as before this release, never an
+error, and nothing is overwritten. Before this, a failed fresh check of
+such an answer was an error (a 500 when no provider key was set). A GET
+(the result page, the card, every list) never calls the model: it shows
+the saved row as stored until a fresh check replaces it.
+
+## 2026-11-21: A reworded match reached by a link is server-rendered
+
+The page looked a saved answer up by the claim's exact key only, so an
+address in other words than the saved claim's (a shared or typed `/?q=`)
+rendered the empty checker and the note came only from app.js, after a live
+check. `_render_home` now also asks `db.find_equivalent` (offline, the same
+lookup the check makes) and renders the saved answer under its saved
+wording, with the "Showing the saved check for this claim" note, the
+canonical and card of the saved row. A misspelling is not handled there:
+knowing what was meant needs the model (or a saved query), so a misspelled
+link still runs the live check, which carries its own note.
+
+## 2026-11-21: A failed check names a way out that can work
+
+The weighing call runs at temperature 0 with a fixed seed and nothing is
+saved, so a reply the model declined is almost always declined again, and
+each retry spends the reader's rate limit. The way out now follows the kind
+of failure. Declined: "Try the claim in other words.", the error carries
+`way_out: "reword"` and the screen offers Edit claim (the draft stays in the
+box) and no Retry. Cut off, or a line missing: "Try again, or try the claim
+in other words.", `way_out: "either"`, and the screen offers Retry and Edit
+claim. A reply that could not be read and a busy provider are unchanged (no
+`way_out`). The status stays 502 and the title stays "The checker couldn't
+finish this check": the kind still follows the status; `way_out` only sets
+the actions, reusing the invalid kind's existing "Edit claim" label.
+
+## 2026-11-21: A reply that could not be read is a failed check, not a verdict
+
+A model reply that could not be read at all (cut off, declined, not JSON)
+used to be saved and listed as "It's complicated" with "Couldn't reach a
+verdict", and counted in trending, type-ahead, related claims and the
+sitemap: a failure presented as a verdict about the evidence. This reverses
+the "left as they were" note in the entry below. Now `weigh_evidence` raises
+`ProviderError("other")` for it, the path an empty-line reply already takes,
+so the reader gets the 502 naming what went wrong and "Try again in a
+moment", on the plain and the streamed check; nothing is saved or logged.
+Rows saved that way before are kept but recognised by the fallback's own
+short answer (`db.FAILED_REPLY_TLDR`): never served, and left out of every
+public reader in db.py. An old real answer that only lacks its still-open
+line is not one of them and stays where it was listed. On the owner's 97
+saved claims there were none.
+
+## 2026-11-21: The Latest list: whole rows only, each question once
+
+The home and 404 lists go through `app._latest`: only whole rows (the test
+the trust example and a result page use), then one row per `db.claim_fold`
+key, the newest under its own wording; an empty key is never merged.
+`suggest.group_similar` was not used: it merges different questions
+("cures", "helps" and "causes"). On the owner's claims this folds exactly
+the three pairs `find_equivalent` merges and leaves the newest ten as they were.
+
+## 2026-11-21 (later): A reworded match reads at most the newest 2,000 saved claims
+
+`db.find_equivalent` read and folded every saved claim on each miss: about
+0.2 ms a claim, so 0.21 s at 1,000 rows, 2.8 s at 10,000 and 71 s at
+100,000, holding a request thread, and on Turso one slow read trips its
+timeout and, three in a row, sets Turso aside for all storage. Now it makes
+one lookup by the claim's own key (any age, first), then reads only the
+newest `db.EQUIVALENT_SCAN` (2,000) saved claims, newest first. The
+exact-key path is unchanged. A claim older than the newest 2,000 is not
+matched: a miss costs one fresh check, never a wrong answer. No new column;
+one new index, on `verdict_cache.created_at`, so the newest rows are read
+in order instead of sorting the whole table. Timed on one machine at
+10,000 rows: a miss took 0.9 to 1.7 s before, and 0.2 to 0.3 s after.
+Follow-up, when `verdict_cache` nears 2,000 rows: store the fold key in an
+indexed column, written on save and filled once for old rows, so a miss is
+one indexed lookup and no saved claim is out of reach. The fold is stable
+(folding a folded key gives the same key), so that change gives the same
+matches.
+
+## 2026-11-21: Steady answers: a stale saved answer is kept when nothing changed
+
+The same claim got different verdicts on different days from the same
+studies, because a saved answer past the cache window was thrown away and
+the model asked again. Now `verdict_cache` has a nullable `method_stamp`
+column (added to old databases by `_init_schema`, like the columns before
+it). The stamp is `verdict.METHOD_STAMP`, worked out once at start-up with
+no hand-kept number: a 12-character hash of verdict.py (the weighing, the
+gates, the wording), evidence.py (screens and certainty rules), pubmed.py
+(the search), breakdown.py (the deeper layer's gates and wording) and
+display.py (what counts as a sound saved record), plus the provider and
+model in force. app.py is left out on purpose: what it does to an answer
+(`_check_response`) it does again on every render, so a saved answer gets
+those changes without being made again, and app.py changes with every UI
+deploy. Past the window the search runs as before (rate limit and every
+other gate unchanged); if the row is whole, has no problem the page cannot
+repair, carries the current stamp and the search found exactly the PubMed
+ids it read, the saved answer is kept, re-dated and served with no model
+call. Otherwise the check runs and saves a stamped row. A row with no stamp
+or an old one is always made again once, so every accuracy fix reaches
+every saved claim.
+
+## 2026-11-21: A reply with an empty line is a failed reply
+
+A fresh reply whose short answer or still-open line came back empty was
+saved and shown without it, and because the cache refuses such a row
+(`db._whole`) it cost a model call on every later visit. Now
+`verdict.weigh_evidence` treats it as failed: the one retry it already has
+does not take an answer missing a line, and prefers one that has both; if
+the final answer still lacks one, it raises `ProviderError("other")`, which
+the app already turns into a 502 with "Try again in a moment" and the
+page's Retry, before anything is saved or logged. The prompt and schema are
+unchanged. Left as they were, for the owner to decide: the fallbacks for a
+reply that could not be read at all (not JSON, cut off, declined) still
+show "Couldn't reach a verdict" over the studies and still save a row
+without a still-open line.
+
+## 2026-11-21: The same claim in other words gets the same saved answer
+
+"Does creatine cause hair loss?" and "Creatine causes hair loss" were two
+rows with two model calls, and could get two verdicts. `db.find_equivalent`
+folds a claim to an ordered key (`db.claim_fold`): case, punctuation, 16
+small words, the question form, a plural or verb "-s" and where one hedge
+stands are ignored; negations, digits, word order, prepositions, more/less,
+and/or, tense and which hedge it is are kept. No synonyms. The 140 approved
+pairs are a table in the suite. It is called after the cache miss and again
+after the spelling switch. A match is shown, shared and logged under its
+saved wording, with `typed_reason: "wording"` so the note reads "Showing
+the saved check for this claim" rather than "Spelling fixed". A match older
+than the cache window is checked again under its saved wording, so its one
+row is refreshed. A row under the claim's own key is preferred; a row that
+is not whole, or has a problem the page cannot repair, is never matched.
+Every saved claim is scanned (no stored key, so no new column); on the
+owner's 97 saved claims it merges exactly three pairs.
+
+## 2026-11-21 (later): Off outcome only on a positive sign, and never a surer answer
+
+An independent grader wrote 54 abstracts of studies that did measure the
+outcome in other words (1RM, A1C, PSQI, "died", "flu", an abbreviation the
+background defined) and the rule below set 43 aside. Absence of a word
+proves nothing, so the entry below is narrowed: code sets a study aside only
+when its background names the claim's outcome and nothing after it does,
+and its title or stated aim and its results or conclusions name the same
+outcome from another word family that is not the claim's subject. All else
+is the model's reading, as before. On the saved runs this leaves one study
+set aside (an onion and obesity study in mice, for a flu claim), and the
+stand-in studies (DHT, blood pressure) are no longer set aside. A study
+code sets aside loses its citation and nothing else: trial ranking, the
+harm guard, the certainty cap and the evidence line still count it as read
+and possibly disagreeing (`verdict.set_aside`, `app._readings`), and a
+saved answer that relied on one is checked fresh rather than patched
+(`app._current`). The kin families for stress and hyperactivity stay:
+without them the classic sugar and behaviour trial and an ashwagandha trial
+rated on tension are set aside.
+
+A known limit stays. A study that reports the claim's outcome only under an
+instrument's name or another word (1RM, PHQ-9, SBP, A1C, eGFR, "died"),
+while its title or aim names another outcome family (body fat, bone,
+sleep), is still set aside. A second grader set aside 36 of 42 abstracts
+they wrote to this shape. Among the saved records it happened once, in
+3341 studies, to a study no answer cited. Reading instruments as their
+outcome needs a list of instruments per outcome, which is not built yet.
+In the meantime the set-aside study still counts as read wherever code
+weighs agreement, so the limit can make an answer less sure, never more.
+
+## 2026-11-21: A false line names an effect only when it has a size
+
+Under "Likely false" for a claim that promises a cure, the evidence line
+read "evidence of a partial effect, not a cure" whenever the breakdown had
+no size. That asserted an effect nobody measured: "Strong evidence of a
+partial effect, not a cure" sat under a claim whose studies found nothing.
+`evidence.evidence_line` now words "a {size} effect, not a cure" only with
+a size the line may carry (small, moderate or large from
+`breakdown.line_label`); with none it says "{level} evidence against this
+claim", the same level word. The word "partial" left the line. On the 454
+saved answers 29 lines changed, every one to "against this claim".
+
+## 2026-11-21: A study that never measured the outcome is set aside in code
+
+A hair-loss trial was relied on for a muscle-strength claim because its
+background says creatine "enhances muscle strength". `evidence.measured_outcome`
+now reads a structured abstract without its background (keeping any
+background sentence that states the study's aim) and `verdict._relevance`
+marks the study off outcome when the title and the rest never name the
+outcome, its kin or the declared stand-in. It never rules on an abstract
+without a methods, results or conclusions heading, nor on an outcome group
+that also names something general ("health", "complications"): there,
+absence in words proves nothing. Measured on 461 saved answers before it
+shipped: the first version set aside five studies that had measured the
+outcome, and each led to one of those limits or a new kin family (stress,
+hyperactivity). Studies of a stand-in (DHT for hair loss, blood pressure
+for heart disease) are set aside when the query step named no stand-in;
+the live runs should check those answers first.
+
+## 2026-11-20: An off-topic study is never relied on, on any record
+
+An outside audit saw "Does creatine cause hair loss?" under "Relied on for
+the verdict" beside "3 off topic". A fresh check cannot do this: the
+relevance gate in `verdict.py` drops off-topic studies from the cited list
+in the same pass that marks them (a test proves it with a model that cites
+a study it also judges off subject). A saved record can still carry a PMID
+in both, and the page trusted the cited list. Now `display.relied_pmids`
+takes off-topic studies out of the cited set before anything reads it
+(`_check_response`, the ClaimReview markup, the card's receipt, the
+latest-checks list), so the "used" marks, "Rests on N", the chart caption
+and the relied-on group all count the same studies. If that leaves a rated
+verdict resting on nothing, it becomes "Not enough evidence", the rule a
+fresh check already obeys. A sentence resting only on an off-topic study is
+dropped. Off-topic studies get their own folded group, "Excluded
+(off-topic)", last, in both renderers (`display.source_groups`,
+`sourceGroups` in app.js; a test compares them). `renderResult` also clears
+the stale flag on a result saved on the device. The stored record is not
+rewritten; `saved_record_problems` names it `cited_off_topic` so it stays
+out of the index. Verdict logic for fresh checks is unchanged.
+
+## 2026-11-19: Only curated example claims are indexed
+
+Replaces the earlier rule "sound saved results are in the sitemap; the rest are
+noindex" (entry below). A claim is text a person typed and can hold a name, an
+age or a medical detail; the old screen (email, phone, first-person words) let
+through anything phrased in the third person ("Sarah's diabetes", "a 34 year
+old with gout"). A saved record being sound says nothing about whether the claim
+is safe to publish to a search engine. So a result page is indexable, and in the
+sitemap, only when all three hold: the claim is one of the curated examples
+(`display.CURATED_CLAIMS`, the same list as `EXAMPLES` in `static/app.js`,
+compared by a test, matched after case, whitespace and trailing punctuation);
+the saved record passes `display.saved_record_problems`; and the claim passes
+the personal-details screen (`display.looks_personal`: contact details, ages,
+names, personal medical wording, gendered pronouns). Every other result page is
+`noindex` and absent from the sitemap; it still renders for anyone with the
+link. When unsure, do not index: the screen is built to over-flag, since a false
+positive costs one index entry and a false negative exposes a person. The
+sitemap scans up to 50,000 saved rows so a curated claim is found however many
+typed claims came after it. `/privacy` says all of this. Every public list of
+claims (front page ledger, /checks, the 404 page, /api/trending) also drops a
+claim that `looks_personal` flags, through one helper (`_public_claims`), after
+fetching three times as many rows so the list stays near its size; /llms.txt,
+a machine index, lists only curated claims. Otherwise a personal claim's text
+would be indexed on the home page even though its own page is noindex.
+
+## 2026-11-19: Daily usage counts, with no identifiers (queue 8)
+
+Dhruva asked for usage counts and error monitoring. This reverses "no
+analytics" as written in CLAUDE.md non-negotiable 7 (and PRODUCT.md), and
+keeps what that rule was for: nothing ties a check to a person. The design
+that keeps the promise true:
+
+- A `counters` table of (day, name, count) and nothing else, in the same store
+  as the rest (Turso when configured, SQLite otherwise). The names are a
+  fixed list in `db.py` (`COUNTER_NAMES`); anything else is ignored by the
+  writer. No IP, user agent, claim text, cookie or visitor id is read, so
+  there is nothing to leak or subpoena beyond totals.
+- Page views, claims submitted, results completed and server-side errors
+  (500s, provider 429/503/key/other, PubMed) are counted on the server.
+  Share clicks and the kind of error screen shown are sent by the page to
+  `POST /api/count`: a name from an allow-list, no other field, rate-limited,
+  and not sent (nor counted, if `Sec-GPC: 1` arrives) when the browser has
+  Global Privacy Control on. Aggregates without identifiers need no consent;
+  the GPC courtesy is for anyone who would rather not be in even a total.
+- Counts are tallied in memory and written every 30 seconds by a background
+  thread (and at exit), so a page view never waits on Turso. A restart can
+  lose that half minute. That was chosen over a write per request.
+- `/stats?token=...` shows the last 30 days as a plain table. It is a 404
+  when `STATS_TOKEN` is unset or the token is wrong (constant-time compare,
+  rate-limited, token redacted from the web server's request log), noindex,
+  no-store, and out of the sitemap and robots.
+- `/privacy` lists exactly what is counted. Third-party analytics, cookies and
+  anything per-person stay out; adding any of them is a new decision, here.
+
+## 2026-11-19: Sound saved results are in the sitemap; the rest are noindex
+
+Reverses "the sitemap lists static pages only" (the audit decision that kept
+typed claims out). A saved result is already a public page with ClaimReview
+markup, the front page lists the latest ten and llms.txt lists recent ones, so
+the sitemap now lists up to 500 of them, newest first, each as its one
+canonical `/?q=<saved claim text>` address. Only a record that passes
+`display.saved_record_problems` is listed: no cited study missing from the
+studies, "rests on" equal to the studies cited, a search query, a readable
+and non-future save date, a known verdict, and a claim with no email address,
+phone number or first-person wording ("my", "I", "me"), since a claim is
+something a person typed and those are the ones likeliest to be about them
+(the reason the old rule existed). A record that fails is left out
+and its page carries `noindex` (it still renders for a person, because the
+page repairs those faults). robots.txt repeats its two Disallow lines in
+every group, since a crawler with its own group ignores the `*` group. Result
+titles are `<label>: "<claim>"` clipped to about 50 characters (60 with the
+site name), so a clipped claim still sits under its verdict.
+
+## 2026-11-17: The caution rule, last round: minimisers and rarity figures
+
+Closes the class "the harm is tiny": scarcely, practically, virtually,
+essentially, insignificant, trivial, isolated, sporadic, nil, unheard of,
+handful, modest, limited, just, merely join the softeners (minor, minimal,
+negligible, few, low, small, slight, mild, only, hardly, barely were
+already there). A rarity figure also softens: under, below, less than,
+fewer than, at most or up to a number, and "3 in 10,000" or "3 per 10,000".
+Cost: a real warning such as "Up to 40 children died" is now dropped when
+it fails its sources. 21 new must-drop tests; blind set still 29 of 30
+harms kept, 0 of 30 reassurances kept. /about now says plain warnings of
+harm are the exception to removing unsupported sentences.
+
+## 2026-11-17: Review fixes: reassurances by absence, and /method and /about made exact
+
+Negation list gained absence and denial words (absent, absence, ruled out,
+excluded, myth, misconception, exaggerated, overblown, overstated,
+unproven, disproven, debunked, refuted, false alarm, nonexistent,
+unaffected, normal, undetected, unobserved, clear of); 22 new must-drop
+tests. Blind set unchanged: 29 of 30 harms kept, 0 of 30 reassurances kept.
+/method (version 2) now says: an inline study naming stays when its clause
+passes; only cited sentences are checked, and with no relied-on study the
+text is left as is; what `follow_guidelines` really does by claim type;
+and that the low-certainty cap changes the stamp itself. /about no longer
+promises "will not claim more certainty" and says what the code does.
+
+## 2026-11-17: The caution rule, third round: conditions are not harms, killing germs is a benefit
+
+Removed from the harm list because they name conditions, not harms a
+product causes, and kept invented figures uncited: cancer, tumour,
+infection, sepsis, hypertension, insomnia, dependence, withdrawal.
+"Outbreak" still keeps "linked to outbreaks". "Kill", "destroy" or "attack"
+within three words of cells, bacteria, germs, microbes, viruses, parasites,
+fungi, pathogens, tumours or cancer is a benefit and softens; destroy,
+clear, eradicate and target are benefit softeners too. This closes the
+"kills cancer cells" leak noted in the second round.
+
+## 2026-11-17: The caution rule, second round: "can" is not a hedge, more harm words
+
+Owner's target is no real warning lost against the live site. "Can" came
+off the softening list ("can cause liver injury" states a harm; "may",
+"might", "could" stay, "cannot" stays a negation). To stop benefit claims
+riding through on "can", benefit verbs now soften: treat, cure, heal,
+relieve, ease, stop (the prohibition "stop taking" is removed first),
+control, manage, restore, boost, support, help, benefit, plus fight,
+shrink, slow, eliminate, reverse. The harm list gained common adverse
+effects: nausea, vomiting, diarrhoea, dizziness, headache, rash, itching,
+syndrome, hepatitis, jaundice, arrhythmia, palpitations, hypoglycaemia,
+hyperkalaemia, hypotension, hypertension, cancer, tumour, infection,
+sepsis, coma, paralysis, blindness, deafness, dependence, addiction,
+withdrawal, cramps, pain, swelling, ulcer, kidney stones, insomnia
+(depression left out on purpose). Known leak: "kills" is a harm word, so
+"It kills cancer cells in 9,000 patients" would stay as an uncited
+caution. Against the 97 saved answers the only warning-like sentence lost
+versus the old rule is "most infections are caused by viruses, not
+bacteria", accepted by the owner.
+
+## 2026-11-17: Corrections and removals go to one email address, as a link
+
+Owner's decision: hello@checkevident.com (a placeholder the owner will set
+up) on `/corrections` and `/about`, as a plain mailto link. There is no
+form and nothing is sent from the site, so non-negotiable 7 (no accounts,
+nothing that ties a check to a person) still holds. Both pages say that
+emailing shares the sender's address and the report button does not.
+`EVIDENT_EMAIL` overrides the address; empty hides the line.
+
+## 2026-11-17: /about names the owner, Dhruva, by default
+
+Owner's decision: the page says "Evident is run by Dhruva." with no
+surname, school or location, and without any environment variable.
+`EVIDENT_OWNER` still overrides it (an empty value hides the name). The
+country, funding and who-checks lines stay hidden until set.
+
+## 2026-11-17: A failing sentence is kept only as an unsoftened caution (fail-safe)
+
+Owner's decision, after an independent review found the old caution rule
+leaked both ways: it kept false reassurances ("It caused no birth defects
+in 9,000 pregnant women", "It may cause fewer side effects than placebo",
+"Bleeding was not increased") and dropped plain warnings ("Deaths occurred
+in 3 children"). Keeping a false reassurance is never acceptable; losing a
+few double-negative or hedged warnings is. This replaces the earlier
+strong/weak frame and reassurance-cancel logic in `breakdown.py`.
+
+Rule, for a sentence that fails its sources (one that passes is untouched):
+kept, uncited, only if it names a harm (broad whole-word list) or forbids a
+use ("do not take", "should avoid", "must be avoided", "is contraindicated"),
+AND has no softening or reassuring word (may, can, rare, safe, fewer, low,
+reduced, fell, prevent and the like) and no negation (no, not, never,
+without, zero and the like) anywhere. A prohibition's own "not" and "avoid"
+do not count against it, but anything else in the sentence does ("should
+not worry" is not a prohibition). On the "does not apply to" line a harm or
+hazard word is enough if nothing softens it, and negation is allowed there
+because it lists people. Words added beyond the owner's list: the reducers
+(reduce, fell, drop, prevent, avoid, protect, improve), only, hardly,
+barely, seldom, minimal, negligible, tiny, nobody, cannot, lack(s), and
+"outbreak" as a harm word; they stop "Deaths fell by half in 9,000 children"
+being kept as a caution.
+
+Accepted loss: ten warnings the old rule kept ("can cause", "no safe dose",
+"never safe", "not free of side effects", "did not reduce the risk of
+bleeding, which rose", "should not be used to prevent infections") are now
+dropped when they fail their sources. Against the 97 saved answers the only
+harm sentences lost versus the old rule are two: "alcohol is a teratogen
+that can cause variable effects" and "most infections are caused by
+viruses, not bacteria". No sentence is newly shown.
+
+## 2026-11-15: Audit fixes B6: one certainty, prose held to its sources, four trust pages
+
+From `research/report_evident_improvement.md`. All gates run on the way out
+in `_check_response`, so cached checks get them too. No prompt change.
+
+- **One certainty per page (F1).** The evidence line is never surer than the
+  lowest rating any relied-on review gives, nor than any certainty word the
+  prose states; prose surer than the line is rewritten down to it, never up.
+- **A review's CINeMA "confidence" counts as its rating (F2).** Consequence:
+  a check whose main review rates confidence low turns "Likely true" into
+  "It's complicated" by the existing cap when it is next re-checked. The
+  "about as well as therapy" comparison wording was not removed: a mechanical
+  rewrite of the takeaway is unsafe.
+- **Prose held to its sources (F3).** A cited sentence goes if it cites only
+  studies not relied on, or names a group, a figure or a "thousands" its
+  cited records do not give. Kept: sentences that say why studies were set
+  aside, safety warnings ("can injure"), stated absences ("children were not
+  in either trial"), uncited sentences, and everything when nothing was
+  relied on. "Still open" is never touched. Postpartum studies are labelled
+  "people after giving birth", never "pregnant women".
+- **The gate after review (fixes 1 to 11).** An independent review found the
+  first gate dropped safety warnings. Now: a sentence with a harm word
+  (injur, burn, toxic, poison, teratogen, unsafe, not safe, should not, do
+  not stop, contraindicat, outbreak, infection, bleed, death, interact,
+  overdose, abnormalit, side effect, adverse, harm, danger, warn, caution,
+  avoid) or a "not tested" statement is never dropped; at most it loses the
+  citation of a study not relied on. On "does not apply to" the group and
+  clause rules do not run; on "applies to" only the failing clause goes.
+  Numbers: space-grouped thousands, group-size totals ("n = 25", "n = 29"
+  give 54), counts rounded to two figures, the claim's own numbers and names
+  like "type 2" all pass. A cached or listed "true" gets the same
+  low-certainty cap as a fresh check. An emptied explanation stays empty.
+  Measured on a fresh copy of the local database (97 cached rows), 15
+  November 2026, with the review's own script (`f3_repro.py`, which runs
+  both "who" lines in the stricter mode and counts a removed citation as a
+  drop): 56 sentences changed or dropped in 25 rows, 33 rewrites, 23 fields
+  emptied; 14 of the 56 hold a harm word, and every one of them is still on
+  the page with only a citation removed or reformatted. With the real modes
+  and counting a removed citation as a rewrite: 36 sentences dropped in 19
+  rows (26 cite only studies not relied on, 4 "thousands"/"millions" with no
+  count that size, 3 groups, 2 numbers, 1 clause), 49 rewrites, 23 fields
+  emptied, 0 drops holding a harm word.
+- **The gate after the second review.** Harm words now match whole words
+  ("pharmacological" and "cytotoxic" are not warnings). Infection, outbreak,
+  interact, avoid and abnormality count only in a warning frame (risk,
+  cause, linked, can, may, should, carries, exposure and the like), except
+  on the "does not apply to" line. A warning is still held to the group and
+  figure rules: a failure takes its citation off, never the sentence. On a
+  fresh copy (97 rows) the review's `harm3.py` finds 70 cited harm or
+  "not tested" sentences and loses 0. The cached stamp cap is now exactly
+  verdict.py's strict `certainty_cap`: a line like "Low to moderate" is a
+  range, not a low rating, and capping on it had turned the measles and HPV
+  vaccine answers into "It's complicated, but the certainty is low". Both
+  are "Likely true" again; turmeric and exercise for depression stay capped
+  on the page, the lists and type-ahead (`cons.py`). A stamp set by health
+  guidance (takeaway starts "Major health guidelines say:") is never capped.
+- **Warnings after the third review.** A harm word under a negation ("no
+  harm", "no serious adverse events", "not harmful") is a reassurance, and
+  one under a reduction ("cut outbreaks", "reduces side effects", "the risk
+  of infections fell") is a benefit; "avoid" warns only as advice ("should
+  avoid", "Avoid ..."). None of these is a warning, so each is held to its
+  sources and dropped when it gives a figure or group they lack. A real
+  warning that names its study inline ("Study 1 found ...", "In Study 2,")
+  and whose naming clause fails the sources keeps the hazard with the
+  naming taken out, so no study is credited with the figure. The review's
+  probe4 sentences are all dropped; `harm3.py` on a fresh copy: 70 cited
+  harm or "not tested" sentences, 0 lost.
+- **Warnings after the fourth review: a principle, not word lists.** Every
+  cited sentence is held to its sources first (`breakdown._gate`). The
+  "never dropped" protection applies only to a sentence that fails, and
+  only if it is positively a caution (`is_warning`): a clause with a
+  strong caution frame ("can|may|could ... cause|injure|burn|be fatal",
+  "caused ... deaths", "should not", "must not", "do not take", "not
+  safe", "unsafe", "no safe dose", "never safe", "dangerous", "toxic" (not
+  cytotoxic, not "non-toxic"), "teratogen", "contraindicated", advice to
+  avoid, "not free of", "not harmless", "no evidence it is safe"), or a
+  weak frame that names a hazard as a risk ("linked to outbreaks",
+  "bleeding rose", "the risk of bleeding", "raised the risk of") with no
+  reassurance in the same clause. Reassurances count only un-negated:
+  "harmless", "safe", "well tolerated", "rare", "uncommon", "no higher",
+  "no more", "similar to placebo", "no|without|zero|free of" + harm, and a
+  reducer applied to the hazard ("fewer side effects", "infections
+  fell"). A negated reducer ("did not reduce", "does not prevent") and a
+  reducer applied to the treatment, with a modal or copula before the harm
+  ("reducing insulin can be fatal"), reassure no one. A strong frame beside
+  a reassurance is still a caution ("safe in adults but should not be
+  used in pregnancy"). Anything else that fails goes. A caution kept this
+  way names no study: bracketed citations off, inline naming out
+  (`unattributed`). Taking the naming out never leaves a clause without a
+  verb: "Study 1 found it harmless in ..." becomes "A study found it
+  harmless in ..." only if that clause passes its sources, and otherwise
+  the clause goes. One exception, required by the review: a study named
+  inline is credited only with its own clause, so if every naming clause
+  passes, the naming stays ("Neither tested whether diabetes went away, and
+  study 4 is a reminder that undiluted vinegar can injure the oesophagus").
+  The "does not apply to" line keeps its own rule: a harm or hazard word
+  there names who must not rely on the answer. /method says this. Known
+  cost: a single-clause caution that names its study as a small clause and
+  fails ("Study 1 found it unsafe in 9,000 pregnant women.") has no verb
+  once unnamed and is dropped, as the brief's grammar rule requires.
+- **/about, /method, /corrections (F7, F9, F8).** Copy says only what is true
+  in the code today. Owner name, country, funding and contact are shown on
+  /about only when set (`EVIDENT_OWNER`, `EVIDENT_WHO`, `EVIDENT_COUNTRY`,
+  `EVIDENT_FUNDING`, `EVIDENT_CONTACT`); suggested wording sits in a template
+  comment. /corrections makes no response-time promise and lists no
+  corrections, because no corrections log or "Corrected on" field exists.
+  /method carries `METHOD_VERSION` and `METHOD_CHANGED`: bump both when a rule
+  it states changes.
+- **Review dates (F10).** One line under the verdict: the check date and the
+  years of the studies relied on. No "next check" date: a saved answer is only
+  re-checked when someone asks after a day, so a date would be a promise.
+- **List numbers (F13).** "No." is the row's place in check order, not its
+  rowid, so the newest matches the "Claims checked" count.
+
 ## 2026-11-08: Saved answers, the check log and feedback live in Turso
 
 **Render's free plan wipes the local SQLite file on every deploy and every
@@ -2561,7 +3203,6 @@ what was actually true at the time and are left as they read. Only this
 document's own title line was brought current, on the same reasoning as
 `README.md`'s and `CLAUDE.md`'s.
 
-
 ## 2026-09-29: Second reversal within the same branch — real stock footage, not generated imagery
 
 **This reverses the 2026-09-28 entry above, on the same branch, before any
@@ -3563,8 +4204,10 @@ What was deliberately rejected:
   version below the form would still have been a scroll-scrubbed 23MB frame
   sequence. Taking the safer option: no intro on the home page. Its files
   (template, flight.css/js/decoder, the frames, test_flight.py) are in
-  `_old/`, kept rather than deleted; `static/flight/check.json` stays
-  because the trust section's real example reads it. The label ("Health
+  `_old/`, kept rather than deleted. (`static/flight/check.json`, a frozen
+  export the trust section's real example once read, left the repo on
+  2026-11-21: the example is now the saved answer for `app.EXAMPLE_CLAIM`,
+  read from the database through the Latest list's own path.) The label ("Health
   claim to check") is visible, the counters moved below the form, and
   `scripts/ui_measure.mjs --assert` fails if field, label, submit and three
   examples are not on the first screen at 1440x900, 768x1024, 390x844 and

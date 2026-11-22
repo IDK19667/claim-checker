@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Stats · Evident</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0f1211" />
+  <meta name="color-scheme" content="light" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon.svg') }}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="page-doc">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-quote" viewBox="100 120 320 260"><g fill="currentColor"><circle cx="176" cy="300" r="62"/><path d="M114 300 C114 222 150 168 232 140 L246 172 C198 192 176 224 176 264 Z"/><circle cx="346" cy="300" r="62"/><path d="M284 300 C284 222 320 168 402 140 L416 172 C368 192 346 224 346 264 Z"/></g></symbol>
+    </defs>
+  </svg>
+  <div class="band">
+    <header class="top">
+      <div class="nameplate"><a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span></div>
+    </header>
+  </div>
+  <main class="wrap doc">
+    <h1 class="hero">Stats</h1>
+    <p class="lede">Daily totals for the last {{ days }} days. Counts only: nothing here says who, or what they typed.</p>
+
+    <h2 class="section-label">By day</h2>
+    <table class="stats">
+      <thead><tr><th scope="col">Day</th>{% for c in columns %}<th scope="col" class="num">{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in table %}<tr><th scope="row">{{ row.day }}</th>{% for v in row.cells %}<td class="num">{{ v }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="meta">Views include crawlers and link previews. Errors are the ones the server saw: server errors, AI provider failures and PubMed failures.</p>
+
+    {% for g in groups %}
+    <h2 class="section-label">{{ g.title }}</h2>
+    <table class="stats">
+      <thead><tr><th scope="col">Counter</th><th scope="col" class="num">{{ days }} days</th><th scope="col" class="num">Today</th></tr></thead>
+      <tbody>
+        {% for r in g.rows %}<tr><th scope="row">{{ r.label }}</th><td class="num">{{ r.total }}</td><td class="num">{{ r.today }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+    <p class="meta">Days are UTC. Counts are saved every half minute, so the last few seconds may be missing.</p>
+
+    <p class="doc-back"><a class="tap" href="/">Back to Evident</a></p>
+  </main>
+
+  <footer class="foot">
+    <p><strong>Not medical advice.</strong> Evident summarizes published research and can be wrong. It does not replace a clinician.</p>
+    <p class="fine foot-links"><span class="foot-row"><a href="/about">About</a><a href="/method">Methodology</a><a href="/corrections">Corrections and contact</a><a href="/privacy">Privacy</a></span></p>
+  </footer>
+</body>
+</html>

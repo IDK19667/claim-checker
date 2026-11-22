@@ -9,6 +9,8 @@ the same records and compares them.
 """
 import re
 
+import evidence
+
 WHO_LABEL = "Who was studied: "
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9“\"(])")
@@ -83,6 +85,11 @@ def breakdown_view(result):
     }
 
 
+# verdict.GUIDANCE_LINE, the same words (a test holds them equal; display
+# does not import verdict and its provider plumbing).
+GUIDANCE_LINE = "Rests on health guidance, not on these studies"
+
+
 def confidence_line(result) -> str:
     """
     How much to lean on the answer, in one sentence, from fields already saved.
@@ -95,9 +102,13 @@ def confidence_line(result) -> str:
     cited = [s for s in studies if s.get("cited_in_verdict")]
     if not studies:
         return "No direct evidence either way: nothing on PubMed matched well enough to weigh."
+    line = str(result.get("evidence_line") or "").strip().rstrip(".")
+    # An answer set by health guidance says so even when no study listed is
+    # relied on (the one it cited was set aside).
+    if line == GUIDANCE_LINE:
+        return line + "."
     if not cited:
         return "No direct evidence either way: none of the studies tests this claim."
-    line = str(result.get("evidence_line") or "").strip().rstrip(".")
     if line:
         return line + "."
     tiers = {s.get("tier") or "moderate" for s in cited}
@@ -108,14 +119,15 @@ def confidence_line(result) -> str:
 # ---- Sources: why each study is on the page --------------------------------
 # What each study design does and where it stops. static/app.js carries the
 # same table (TYPES) for the study sheet; a test compares the two. The first
-# matching label wins, as in the script.
+# matching label wins, as in the script, so "Retracted Publication" is first:
+# a withdrawn trial is described as retracted, never as a trial.
 DESIGN_NOTES = (
+    ('Retracted Publication', 'retracted', 'Withdrawn by the journal after publication. Its findings should not be relied on.'),
     ('Meta-Analysis', 'strong', 'Combines the results of several studies into one estimate. It is only as sound as the studies it pools, and it can mix very different ones.'),
     ('Network Meta-Analysis', 'strong', 'Combines many studies to compare several treatments at once. Comparisons made only indirectly are less certain than head-to-head trials.'),
     ('Systematic Review', 'strong', 'Searches for every study on a question, using set rules for what counts. It is only as sound as the studies it found.'),
     ('Randomized Controlled Trial', 'strong', 'Randomly assigns people to a treatment or a comparison group. A small size, a short run or a narrow group limits what it shows.'),
     ('Practice Guideline', 'strong', "Recommendations a medical body wrote after reviewing the evidence. They reflect that body's judgment and can lag behind newer studies."),
-    ('Retracted Publication', 'retracted', 'Withdrawn by the journal after publication. Its findings should not be relied on.'),
     ('Case Reports', 'weak', 'Describes one patient or a few. It can raise a question, but it cannot show cause or how common something is.'),
     ('Editorial', 'weak', "An opinion piece by the journal's editors. It gives a view, not data."),
     ('Comment', 'weak', 'A published reply to another paper. It is not a study.'),
@@ -141,12 +153,49 @@ def design_note(publication_types) -> tuple:
     return (types[0] if types else DEFAULT_DESIGN[0]), "", DEFAULT_DESIGN[2]
 
 
+def relied_on(study) -> bool:
+    """True for a study the verdict relied on. A study classified off topic
+    never is, whatever an old saved record put in its cited list."""
+    return (bool(study.get("cited_in_verdict")) and not study.get("off_topic")
+            and not evidence.withdrawn(study))
+
+
+def relied_pmids(cited, studies) -> set:
+    """The cited PMIDs less any study classified off topic, retracted or a
+    journal notice (evidence.withdrawn): the set every count, mark and line
+    on the page is read from, a saved answer's included. A cited PMID that
+    names no listed study is not relied on either: nothing on the page can
+    show it, so an answer citing only such PMIDs rests on nothing."""
+    listed = {s.get("pmid") for s in studies or [] if isinstance(s, dict)}
+    off = {s.get("pmid") for s in studies or [] if isinstance(s, dict)
+           and (s.get("off_topic") or evidence.withdrawn(s))}
+    return (set(cited or []) & listed) - off
+
+
+def source_groups(studies) -> dict:
+    """
+    The study list's groups, as indexes into `studies`, in page order: what the
+    verdict relied on; background only; read and not relied on; and excluded
+    as off topic. Every study is in exactly one. static/app.js sourceGroups
+    does the same; a test runs both on the same records.
+    """
+    out = {"cited": [], "back": [], "others": [], "excluded": []}
+    for i, s in enumerate(studies or []):
+        key = ("excluded" if s.get("off_topic") else "cited" if relied_on(s)
+               else "back" if s.get("background") else "others")
+        out[key].append(i)
+    return out
+
+
 def study_why(study) -> str:
     """
     One line on why a study is listed: what the verdict did with it and, for a
     study it leaned on, what that kind of study does and where it stops. All of
-    it is read off fields the record already carries.
+    it is read off fields the record already carries. Off topic is checked
+    first: a study set aside is never described as relied on.
     """
+    if study.get("off_topic"):
+        return f"Read and set aside: {str(study['off_topic']).rstrip('.')}."
     if study.get("cited_in_verdict"):
         label, _cls, note = design_note(study.get("publication_types"))
         out = ["Relied on for the verdict."]
@@ -155,9 +204,266 @@ def study_why(study) -> str:
         if study.get("population"):
             out.append(f"Studied in: {study['population']}.")
         return " ".join(out)
-    if study.get("off_topic"):
-        return f"Read and set aside: {str(study['off_topic']).rstrip('.')}."
     if study.get("background"):
         why = str(study.get("background_why") or "").rstrip(".")
         return f"Background only, not counted: {why}." if why else "Background only, not counted."
     return "Read, not relied on."
+
+
+def sentence_case(text) -> str:
+    """
+    A listed claim as a list shows it: the first letter raised only when the
+    first word is all lower case letters (its parts joined by a hyphen or an
+    apostrophe, trailing punctuation aside). "mRNA", "pH", "DNA", "COVID-19",
+    a number or a quotation mark at the start are left exactly as stored.
+    The page only: stored text and links keep the wording as saved.
+    static/app.js sentenceCase is the same; a test runs both on the same inputs.
+    """
+    text = str(text or "")
+    word = text.split(None, 1)[0] if text.strip() else ""
+    if text[:1] != word[:1]:
+        return text
+    parts = re.split(r"[-'\u2019]", word.rstrip(".,;:!?"))
+    if all(p.isalpha() and p.islower() for p in parts):
+        return text[:1].upper() + text[1:]
+    return text
+
+
+def typed_note_parts(typed, reason=None):
+    """
+    The note in three parts: the words before the reader's text, the
+    reader's text, and the words after it, or None when there is nothing to
+    explain. The page sets the middle part in <bdi>, so right-to-left text
+    the reader typed cannot reorder the sentence around it.
+    static/app.js typedNoteParts is the same.
+    """
+    if not typed:
+        return None
+    if reason == "wording":
+        return ("Showing the saved check for this claim. You typed \u201c", str(typed), "\u201d.")
+    return ("Spelling fixed. You typed \u201c", str(typed), "\u201d.")
+
+
+def typed_note(typed, reason=None) -> str:
+    """
+    The line under the claim when the answer is to other words than the
+    reader's: their own words, and why they differ. A fixed spelling says so;
+    a saved check of the same claim in other words says that instead. Empty
+    when there is nothing to explain. static/app.js typedNote is the same; a
+    test runs both on the same inputs.
+    """
+    return "".join(typed_note_parts(typed, reason) or ())
+
+
+# ---- The page's own words for a link preview and a search result -------------
+
+TITLE_MAX = 50       # plus " · Evident" in the tab: about 60 in all
+DESCRIPTION_MAX = 155
+
+
+def _plain(text) -> str:
+    """One line, no dashes used as punctuation (the site never prints them)."""
+    t = " ".join(str(text or "").split())
+    t = re.sub(r"(?<=\d)\s*[—–]\s*(?=\d)", " to ", t)
+    t = re.sub(r"\s*[—–]\s*", ", ", t)
+    return t
+
+
+def clip(text: str, limit: int) -> str:
+    """At most `limit` characters, cut at a word and closed with an ellipsis."""
+    t = _plain(text)
+    if len(t) <= limit:
+        return t
+    cut = t[: limit - 1]
+    if " " in cut and len(cut.rsplit(" ", 1)[0]) >= limit * 0.5:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:.-") + "…"
+
+
+def result_meta(claim: str, label: str, short_answer: str) -> dict:
+    """
+    <title> and description for a saved result: the verdict's own label first,
+    so a clipped claim still sits under the right answer, then the claim in
+    quotes; the description is the label and the short answer, whole sentences
+    where they fit. Nothing here is stronger than the label it is given.
+    """
+    room = TITLE_MAX - len(label) - 4  # ": " and the two quotation marks
+    title = f"{label}: “{clip(claim.rstrip(' .?!'), max(room, 12))}”"
+    lead = f"{label}. "
+    answer = _plain(short_answer)
+    budget = DESCRIPTION_MAX - len(lead)
+    if len(answer) <= budget:
+        body = answer
+    else:
+        whole = ""
+        for sentence in _SENTENCE_END.split(answer):
+            nxt = (whole + " " + sentence).strip()
+            if len(nxt) > budget:
+                break
+            whole = nxt
+        body = whole if len(whole) >= budget * 0.5 else clip(answer, budget)
+    return {"title": title, "description": (lead + body).strip()}
+
+
+# ---- Is a saved answer sound enough to be indexed? ---------------------------
+
+SAVED_VERDICTS = ("true", "false", "complicated", "insufficient")
+
+# A claim is something a person typed. Anything in it that could point at, or
+# say something about, one person keeps it away from search engines. The screen
+# errs towards flagging: a false positive only costs an index entry, a false
+# negative puts a stranger's detail in a search result.
+_PERSONAL = re.compile(
+    # contact details
+    r"[\w.+-]+@[\w-]+\.[\w.]+"                       # an email address
+    r"|(?<![\w.])@\w{2,}"                             # an @handle
+    r"|\+?\d[\d\s().-]{7,}\d"                        # a phone-like run of digits
+    r"|https?://|\bwww\.|\b[\w-]+\.(?:com|org|net|io|co|me|uk|app|tv|ly)\b"   # a URL or domain
+    r"|\b\d{1,5}\s+(?:[a-z0-9.'-]+\s+){1,3}(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|boulevard|blvd"
+    r"|court|ct|way|place|close|crescent|terrace)\b"    # street-address-like text
+    r"|\bp\.?o\.? box\b|\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b"   # a PO box, a UK postcode
+    # first person and people close to the writer, and gendered pronouns
+    r"|\b(?:i|i'm|i've|i'd|i'll|my|me|mine|myself|we|we're|we've|our|ours|ourselves"
+    r"|he|she|his|her|hers|him|himself|herself|he's|she's)\b"
+    # ages
+    r"|\b\d{1,3}[\s-]*(?:years?|yrs?|y)[\s-]*olds?\b|\b\d{1,3}\s*y\.?/?o\b|\b\d{1,3}\s*yrs?\b"
+    r"|\b(?:aged?|age of)\s+\d{1,3}\b"
+    # personal medical details without a first-person word
+    r"|\b(?:diagnosed|tested positive|test results?|blood results?|lab results?|scan results?|biopsy"
+    r"|prescribed|prescription|(?:am|is|are|was|were|became|got|getting)\s+pregnant|expecting a baby)\b",
+    re.I)
+
+# Capitalised wording that gives a name: titles, a relation then a name.
+_NAMEISH = re.compile(
+    r"\b(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor|Nurse|Sir|Lady)\.?\s+[A-Z][a-z]+"
+    r"|\b(?:[Mm]y|[Oo]ur|[Hh]is|[Hh]er)\s+(?:\w+\s+)?(?:son|daughter|wife|husband|partner|mom|mum|mother|dad|father"
+    r"|friend|doctor|neighbou?r|colleague|boss|uncle|aunt|cousin|brother|sister|grandma|grandpa|boyfriend"
+    r"|girlfriend|child|baby|patient)\s+[A-Z][a-z]+")
+
+_CAPWORD = re.compile(r"\b[A-Z][a-z]+(?:['\u2019]s)?\b")
+_CAPRUN = re.compile(r"\b[A-Z][a-z]+(?:['\u2019]s)?(?:\s+[A-Z][a-z]+(?:['\u2019]s)?)+\b")
+
+# Capitalised health, food and brand terms that are not names. Anything else
+# capitalised in the middle of a claim is treated as a possible name.
+_TERMS = frozenset("""
+vitamin vitamins type omega covid coronavirus alzheimer alzheimers parkinson parkinsons crohn crohns lyme
+hashimoto hashimotos graves huntington huntingtons asperger aspergers down tourette tourettes raynaud
+lou gehrig bell bells palsy epstein barr west nile zika ebola
+tylenol advil motrin aleve benadryl zyrtec claritin lipitor xanax valium prozac zoloft adderall ritalin
+ozempic wegovy mounjaro zepbound metformin viagra botox gatorade pepsi coke coca cola red bull monster
+starbucks apple google bluetooth wifi wi fi gmo
+keto ketogenic paleo mediterranean atkins dash whole vegan vegetarian
+american british european asian african chinese japanese indian korean western eastern northern southern
+himalayan celtic epsom manuka greek french italian mexican swiss dutch
+north south east west america europe asia africa australia
+""".split())
+
+
+_OPENERS = frozenset("""does do did is are was were can could will would should may might must has have
+why how what when where which who whether""".split())
+
+
+def _only_terms(words) -> bool:
+    return all(w.lower().replace("\u2019s", "").replace("'s", "") in _TERMS for w in words)
+
+
+def _name_risk(text: str) -> bool:
+    """A name, or a capitalised word that is not a known term, not at a sentence start."""
+    if _NAMEISH.search(text):
+        return True
+    for run in _CAPRUN.finditer(text):               # two capitalised words in a row, even at the start
+        words = run.group().split()
+        if words[0].lower() in _OPENERS:              # "Does Tylenol ...": a question word, not a name
+            words = words[1:]
+        if words and not _only_terms(words):
+            return True
+    for sent in re.split(r"(?<=[.!?])\s+|\n+", text):
+        for m in _CAPWORD.finditer(sent):
+            if not sent[:m.start()].strip(" \"\u201c\u2018'([-"):
+                continue                              # the first word of a sentence
+            if not _only_terms([m.group()]):
+                return True
+    return False
+
+
+def looks_personal(claim_text) -> bool:
+    text = str(claim_text or "").replace("\u2019", "'").replace("\u2018", "'")
+    return bool(_PERSONAL.search(text)) or _name_risk(text)
+
+
+# The only claims whose result pages a search engine may index or the sitemap
+# may list: the site's own examples. Same list, same order as EXAMPLES in
+# static/app.js (a test compares them). A claim a person typed is never here.
+CURATED_CLAIMS = (
+    "Apple cider vinegar cures diabetes",
+    "Cracking your knuckles causes arthritis",
+    "Intermittent fasting improves brain function",
+    "Detox teas flush toxins out of your body",
+    "5G weakens your immune system",
+    "Vaccines cause autism",
+    "Ozempic cures alcoholism",
+)
+
+
+def _claim_form(claim_text) -> str:
+    return re.sub(r"[\s.!?,;:]+$", "", re.sub(r"\s+", " ", str(claim_text or "")).strip()).casefold()
+
+
+_CURATED_FORMS = frozenset(_claim_form(c) for c in CURATED_CLAIMS)
+
+
+def is_curated_claim(claim_text) -> bool:
+    return _claim_form(claim_text) in _CURATED_FORMS
+
+
+def indexable_claim(claim_text) -> bool:
+    """Curated and not personal. A search engine may see a result page only when this holds
+    and saved_record_problems is empty."""
+    return is_curated_claim(claim_text) and not looks_personal(claim_text)
+
+
+def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search_query, saved_at,
+                          now=None) -> list:
+    """
+    What is wrong with a saved answer, by name; an empty list means sound. The
+    same kinds scripts/saved_record_audit.py counts (all but the one that needs
+    the check log): a cited study that is not among the studies, a breakdown
+    whose "rests on" differs from the studies cited, a cited study classified
+    off topic, no search query, a missing,
+    unreadable or future save date. The page repairs most of these when it
+    renders, so a person never sees them; a crawler is told to leave such a
+    record out of the index and the sitemap all the same.
+    """
+    from datetime import datetime, timezone
+    out = []
+    if not str(claim_text or "").strip():
+        out.append("no_claim")
+    if looks_personal(claim_text):
+        out.append("looks_personal")
+    if verdict not in SAVED_VERDICTS:
+        out.append("unknown_verdict")
+    if not isinstance(cited, (list, tuple)) or not isinstance(studies, list):
+        return out + ["unreadable_json"]
+    pmids = {s.get("pmid") for s in studies if isinstance(s, dict)}
+    if set(cited) - pmids:
+        out.append("cited_not_in_studies")
+    # Only a listed study that is set aside: a PMID no listed study has is
+    # the flag above, not this one.
+    if (set(cited) & pmids) - relied_pmids(cited, studies):
+        out.append("cited_off_topic")
+    if isinstance(breakdown, dict) and breakdown.get("rests_on") is not None \
+            and breakdown["rests_on"] != len(set(cited) & pmids):
+        out.append("count_mismatch")
+    if not str(search_query or "").strip():
+        out.append("empty_query")
+    if not saved_at:
+        out.append("missing_date")
+    else:
+        try:
+            d = datetime.fromisoformat(str(saved_at))
+            d = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+            if d > (now or datetime.now(timezone.utc)):
+                out.append("future_date")
+        except ValueError:
+            out.append("unparseable_date")
+    return out

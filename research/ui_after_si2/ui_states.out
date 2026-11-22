@@ -1,0 +1,11 @@
+PASS loading at 390: no banner, and the claim does not move when the verdict arrives
+PASS loading at 1440: no banner, and the claim does not move when the verdict arrives
+PASS invalid input: its own title, the server's words, Edit claim and no Retry, draft kept
+PASS network failure: its own title, Retry offered, draft kept
+PASS rate limit: its own title, the server's words, a countdown, draft kept
+PASS provider failure and PubMed failure: the checker's own title, the server's words, draft kept
+PASS no relevant evidence: an answer, not an error, that says what to try
+PASS source dialog: Close stays at the top while the dialog scrolls, and is the only Close
+PASS share bar: not on first view, appears after the short answer, goes when scrolled back
+
+9/9 passed

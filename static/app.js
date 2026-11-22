@@ -34,6 +34,8 @@ const EXAMPLES = [
 
 // The first matching label wins, so the badge shows the most informative type.
 const TYPES = [
+  // retracted first: a withdrawn trial is retracted, never strong
+  ["Retracted Publication", "retracted", "Withdrawn by the journal after publication. Its findings should not be relied on."],
   // strong
   ["Meta-Analysis", "strong", "Combines the results of several studies into one estimate. It is only as sound as the studies it pools, and it can mix very different ones."],
   ["Network Meta-Analysis", "strong", "Combines many studies to compare several treatments at once. Comparisons made only indirectly are less certain than head-to-head trials."],
@@ -41,7 +43,6 @@ const TYPES = [
   ["Randomized Controlled Trial", "strong", "Randomly assigns people to a treatment or a comparison group. A small size, a short run or a narrow group limits what it shows."],
   ["Practice Guideline", "strong", "Recommendations a medical body wrote after reviewing the evidence. They reflect that body's judgment and can lag behind newer studies."],
   // weak
-  ["Retracted Publication", "retracted", "Withdrawn by the journal after publication. Its findings should not be relied on."],
   ["Case Reports", "weak", "Describes one patient or a few. It can raise a question, but it cannot show cause or how common something is."],
   ["Editorial", "weak", "An opinion piece by the journal's editors. It gives a view, not data."],
   ["Comment", "weak", "A published reply to another paper. It is not a study."],
@@ -70,7 +71,9 @@ function typeInfo(types) {
 // Why a study is listed, in one line: what the verdict did with it and, for a
 // study it leaned on, what that kind of study does and where it stops.
 // Mirrors display.study_why; a test runs both on the same records.
+// Off topic is checked first: a study set aside is never described as relied on.
 function studyWhy(s) {
+  if (s.off_topic) return `Read and set aside: ${String(s.off_topic).replace(/\.+$/, "")}.`;
   if (s.cited_in_verdict) {
     const ti = typeInfo(s.publication_types);
     const out = ["Relied on for the verdict."];
@@ -78,12 +81,30 @@ function studyWhy(s) {
     if (s.population) out.push(`Studied in: ${s.population}.`);
     return out.join(" ");
   }
-  if (s.off_topic) return `Read and set aside: ${String(s.off_topic).replace(/\.+$/, "")}.`;
   if (s.background) {
     const why = String(s.background_why || "").replace(/\.+$/, "");
     return why ? `Background only, not counted: ${why}.` : "Background only, not counted.";
   }
   return "Read, not relied on.";
+}
+
+// The study list's groups, as indexes into `studies`, in page order: relied
+// on, background only, read and not relied on, excluded as off topic. Every
+// study is in exactly one. Mirrors display.source_groups; a test runs both.
+function sourceGroups(studies) {
+  const out = { cited: [], back: [], others: [], excluded: [] };
+  (studies || []).forEach((s, i) => {
+    out[s.off_topic ? "excluded" : s.cited_in_verdict ? "cited" : s.background ? "back" : "others"].push(i);
+  });
+  return out;
+}
+
+// A study classified off topic is never relied on, even in a result saved on
+// this device before the server dropped such studies from the cited list.
+// Every count, mark and chart below reads cited_in_verdict, so it is set once.
+function dropOffTopicCites(data) {
+  (data.studies || []).forEach((s) => { if (s.off_topic) s.cited_in_verdict = false; });
+  return data;
 }
 
 function escapeHtml(str) {
@@ -234,11 +255,15 @@ function linkStudyRefs(text, count) {
 // How much to lean on the answer, in one sentence. The wording of a real check
 // is made on the server (evidence.evidence_line); mirrors display.confidence_line.
 function confidenceLine(data) {
+  // verdict.GUIDANCE_LINE, the same words (a test holds them equal).
+  const GUIDANCE_LINE = "Rests on health guidance, not on these studies";
   const studies = data.studies || [];
   const cited = studies.filter((s) => s.cited_in_verdict);
   if (!studies.length) return "No direct evidence either way: nothing on PubMed matched well enough to weigh.";
-  if (!cited.length) return "No direct evidence either way: none of the studies tests this claim.";
   const line = String(data.evidence_line || "").trim().replace(/\.+$/, "");
+  // An answer set by health guidance says so even when no study listed is relied on.
+  if (line === GUIDANCE_LINE) return line + ".";
+  if (!cited.length) return "No direct evidence either way: none of the studies tests this claim.";
   if (line) return line + ".";
   const tiers = new Set(cited.map((s) => s.tier || "moderate"));
   const word = tiers.has("strong") ? "Strong"
@@ -420,7 +445,7 @@ function renderNextSteps(ns, claim) {
     $("nosteps-related").innerHTML = rel.map((r) => `
       <li class="entry">
         <a class="entry-link" href="/?q=${encodeURIComponent(r.claim_text)}">
-          <span class="entry-claim">${escapeHtml(r.claim_text)}</span>
+          <span class="entry-claim">${escapeHtml(sentenceCase(r.claim_text))}</span>
           <span class="entry-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
         </a>
       </li>`).join("");
@@ -541,9 +566,10 @@ function fitSpines() {
 if (document.fonts) document.fonts.ready.then(() => fitSpines());
 
 function renderResult(data) {
+  dropOffTopicCites(data);
   currentResult = data;
   $("claim-echo").textContent = data.claim;
-  showTyped(data.typed);
+  showTyped(data.typed, data.typed_reason);
   $("case-line").textContent = (data.cached || data.restored) && !hasDate(data.cached_at) ? "PubMed" : `PubMed · ${fmtDate(data.cached_at)}`;
 
   const block = document.querySelector(".verdict-block");
@@ -551,6 +577,8 @@ function renderResult(data) {
 
   $("stamp").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
   $("doctor-line").hidden = false;
+  $("review-line").textContent = data.review_line || "";
+  $("review-line").hidden = !data.review_line;
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
 
   $("tldr").textContent = data.tldr || "";
@@ -605,16 +633,18 @@ function renderResult(data) {
     : "";
   // Animal and lab studies read for a claim about people are background
   // only: never counted as used, and grouped on their own so it shows. So
-  // are opinion pieces and buying guides; the server names the group.
-  const citedRows = [], backRows = [], otherRows = [];
-  data.studies.forEach((s, i) =>
-    (s.cited_in_verdict ? citedRows : s.background ? backRows : otherRows).push(studyRow(s, i)));
+  // are opinion pieces and buying guides; the server names the group. A
+  // study classified off topic goes in its own group, folded, last.
+  const g = sourceGroups(data.studies);
+  const rows = (idx) => idx.map((i) => studyRow(data.studies[i], i));
+  const citedRows = rows(g.cited), backRows = rows(g.back), otherRows = rows(g.others);
   $("sources").innerHTML = n
     ? group("Relied on for the verdict", citedRows, true) +
       group(escapeHtml((data.evidence && data.evidence.background_label)
                        || "Background only: animal and lab studies"),
             backRows, !citedRows.length && !otherRows.length) +
-      group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0)
+      group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0) +
+      group("Set aside: off topic", rows(g.excluded), false)
     : `<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>`;
 
   const list = $("sources");
@@ -663,6 +693,7 @@ function renderPending(claim) {
   if (who) who.hidden = true;
   document.querySelector(".verdict-block").dataset.verdict = "";
   $("doctor-line").hidden = true;
+  $("review-line").hidden = true;
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
   $("feedback").hidden = true;
@@ -684,12 +715,32 @@ function renderPending(claim) {
   logLine("Building the search", true);
 }
 
-// A misspelled claim is checked as it was meant. Say so, and show what was
-// typed, so the reader can tell the answer is to their question.
-function showTyped(typed) {
+// A misspelled claim is checked as it was meant, and the same claim in other
+// words gets its saved check. Say which, and show what was typed, so the
+// reader can tell the answer is to their question. Mirrors display.typed_note;
+// a test runs both on the same inputs.
+// The note in three parts: the words before the reader's text, their text,
+// and the words after it. display.typed_note_parts is the same.
+function typedNoteParts(typed, reason) {
+  if (!typed) return null;
+  if (reason === "wording") return ["Showing the saved check for this claim. You typed \u201c", String(typed), "\u201d."];
+  return ["Spelling fixed. You typed \u201c", String(typed), "\u201d."];
+}
+function typedNote(typed, reason) {
+  return (typedNoteParts(typed, reason) || []).join("");
+}
+
+// The reader's text goes in <bdi>, as text, so right-to-left words cannot
+// reorder the sentence around it and markup stays inert.
+function showTyped(typed, reason) {
   const note = $("typed-note");
-  note.hidden = !typed;
-  note.textContent = typed ? `Spelling fixed. You typed \u201c${typed}\u201d.` : "";
+  const parts = typedNoteParts(typed, reason);
+  note.hidden = !parts;
+  note.textContent = "";
+  if (!parts) return;
+  const bdi = document.createElement("bdi");
+  bdi.textContent = parts[1];
+  note.append(parts[0], bdi, parts[2]);
 }
 
 function logLine(text, live) {
@@ -733,16 +784,37 @@ const ERROR_KINDS = {
 };
 // 400: the server read the claim and refused it. 429: a limit, ours or the
 // provider's. Anything else the server sent (500, 502): the checker failed.
+// A per-day total, not a record of anyone (see /privacy): the request is a
+// name from a short fixed list and carries nothing else. A browser that sends
+// Global Privacy Control is not counted, as a courtesy.
+function countEvent(name) {
+  try {
+    if (navigator.globalPrivacyControl) return;
+    fetch("/api/count", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }), keepalive: true }).catch(() => {});
+  } catch { /* a count is never worth an error */ }
+}
 function errorKindOf(status) {
   if (status === 400) return "invalid";
   if (status === 429) return "limit";
   return "provider";
 }
+// The ways out beside the message. The kind sets them, and the server's
+// way_out can narrow them: "reword" when only other words can help (a reply
+// the model declined is declined again), so Edit claim and no Retry;
+// "either" when a retry may or may not help, so Retry and Edit claim.
+function errorActions(kind, wayOut) {
+  const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
+  if (wayOut === "reword") return { retry: false, back: "Edit claim" };
+  if (wayOut === "either") return { retry: true, back: "Edit claim" };
+  return { retry: k.retry, back: k.back };
+}
 // The draft stays in the field on every failure. Retry and Edit both start
 // from it, so nothing has to be typed again.
-function renderError(kind, message, retryAfter) {
+function renderError(kind, message, retryAfter, wayOut) {
   // Same night ground, same way out. Only what the screen says changes.
   const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
+  countEvent("client_error." + (ERROR_KINDS[kind] ? kind : "provider"));
   screenState.settle("error");
   $("error-title").textContent = k.title;
   $("error-msg").textContent = message;
@@ -752,10 +824,11 @@ function renderError(kind, message, retryAfter) {
   // here too: the reader sees what Retry will send.
   $("error-claim").textContent = lastClaim || input.value.trim();
   $("error-claim").hidden = !$("error-claim").textContent;
-  $("error-back").textContent = k.back;
+  const ways = errorActions(kind, wayOut);
+  $("error-back").textContent = ways.back;
   const cd = $("countdown");
   const back = $("error-retry");
-  back.hidden = !(k.retry && lastClaim);
+  back.hidden = !(ways.retry && lastClaim);
   clearInterval(countdownTimer);
   if (retryAfter && retryAfter > 0) {
     let left = retryAfter;
@@ -815,7 +888,7 @@ function handleStage(ev) {
   if (ev.stage === "query" && ev.claim) {
     const typed = $("claim-echo").textContent;
     $("claim-echo").textContent = ev.claim;
-    showTyped(typed);
+    showTyped(typed, ev.typed_reason);
   }
   if (ev.stage === "query") logLine(ev.query ? `Searching PubMed for “${ev.query}”` : "Searching PubMed", true);
   else if (ev.stage === "found") {
@@ -861,7 +934,7 @@ async function checkPlain(claim) {
   });
   let data = null;
   try { data = await resp.json(); } catch { /* non-JSON error page */ }
-  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after };
+  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after, way_out: data && data.way_out };
   return { stage: "done", result: data };
 }
 
@@ -943,7 +1016,7 @@ async function check(claim) {
 
     if (final.stage === "error") {
       endPending();
-      renderError(errorKindOf(final.status), final.error, final.retry_after);
+      renderError(errorKindOf(final.status), final.error, final.retry_after, final.way_out);
     } else {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays
@@ -1020,7 +1093,6 @@ function closeSuggest() {
   suggestList.innerHTML = "";
   suggestRows = [];
   suggestAt = -1;
-  input.setAttribute("aria-expanded", "false");
   input.removeAttribute("aria-activedescendant");
 }
 
@@ -1064,12 +1136,11 @@ function renderSuggest(rows) {
 
   suggestList.innerHTML = rows.map((r, i) => `
     <li class="suggest-row" id="suggest-${i}" role="option" aria-selected="false" data-i="${i}">
-      <span class="suggest-claim">${escapeHtml(r.claim_text)}${suggestAlso(r)}</span>
+      <span class="suggest-claim">${escapeHtml(sentenceCase(r.claim_text))}${suggestAlso(r)}</span>
       <span class="suggest-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
     </li>`).join("");
 
   suggestBox.hidden = false;
-  input.setAttribute("aria-expanded", "true");
   suggestLive.textContent = `${rows.length} previously checked ${rows.length === 1 ? "claim" : "claims"}. Use the arrow keys to choose one, and Enter to open its saved answer.`;
 }
 
@@ -1162,11 +1233,25 @@ $("chips").addEventListener("click", (e) => {
   check(chip.textContent);
 });
 
+// A listed claim as every list shows it: the first letter raised only when the
+// first word is all lower case letters (parts joined by a hyphen or an
+// apostrophe, trailing punctuation aside). "mRNA", "pH", "DNA", "COVID-19", a
+// number or a quotation mark first are left as stored. The page only: the
+// data and links keep the saved wording. display.sentence_case is the same.
+function sentenceCase(text) {
+  text = String(text || "");
+  const word = text.trim() ? text.trim().split(/\s+/)[0] : "";
+  if (text.slice(0, 1) !== word.slice(0, 1)) return text;
+  const parts = word.replace(/[.,;:!?]+$/, "").split(/[-'\u2019]/);
+  if (parts.every((p) => /^\p{Ll}+$/u.test(p))) return text.slice(0, 1).toUpperCase() + text.slice(1);
+  return text;
+}
+
 function claimListHtml(items) {
   return items.map((r) => `
     <li>
       <button type="button" class="recent-btn" data-claim="${escapeHtml(r.claim)}">
-        <span>${escapeHtml(r.claim)}</span>
+        <span>${escapeHtml(sentenceCase(r.claim))}</span>
         <span class="tag v-${escapeHtml(r.verdict)}">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict)}</span>
       </button>
     </li>`).join("");
@@ -1219,7 +1304,10 @@ $("recent-list").addEventListener("click", (e) => {
   const btn = e.target.closest(".recent-btn");
   if (!btn) return;
   const saved = loadRecent().find((r) => r.claim === btn.dataset.claim);
-  if (saved && saved.result) {
+  // A result saved by an older version can lack its short answer or its
+  // still-open line. It is not replayed as a finished verdict: it runs again.
+  const whole = (x) => typeof x === "string" && x.trim() !== "";
+  if (saved && saved.result && whole(saved.result.tldr) && whole(saved.result.still_open)) {
     renderResult({ ...saved.result, restored: true });
     history.replaceState(null, "", "/?q=" + encodeURIComponent(saved.claim));
   } else {
@@ -1406,6 +1494,7 @@ function shareText(r) {
 
 async function shareResult() {
   if (!currentResult) return;
+  countEvent("share.click");
   const r = currentResult;
   const url = r.share_url || (location.origin + "/?q=" + encodeURIComponent(r.claim));
   const text = shareText(r);
@@ -1438,6 +1527,7 @@ async function shareResult() {
 
 async function copyLink() {
   if (!currentResult) return;
+  countEvent("share.copy");
   const url = currentResult.share_url || location.href;
   $("toast").textContent = (await copyText(url)) ? "Link copied" : "Couldn't copy. The link is in your address bar.";
   setTimeout(() => { $("toast").textContent = ""; }, 2500);

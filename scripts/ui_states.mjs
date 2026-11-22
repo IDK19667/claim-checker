@@ -134,6 +134,27 @@ await test("share bar: not on first view, appears after the short answer, goes w
   must(!(await shown()), "the share bar stayed after scrolling back to the answer");
 });
 
+// Exactly one h1 is visible in every view, and it is the view's own heading.
+const visibleH1 = (page) => page.evaluate(() => [...document.querySelectorAll("h1")]
+  .filter((h) => h.getClientRects().length && getComputedStyle(h).visibility !== "hidden").map((h) => h.id || h.className));
+await test("headings: one visible h1 on home, on a loading and finished result, and on an error", async (page) => {
+  must(JSON.stringify(await visibleH1(page)) === JSON.stringify(["ask-heading"]), "home: " + JSON.stringify(await visibleH1(page)));
+  await send(page, "Gated claim for stage test");
+  await page.waitForSelector("#claim-echo", { state: "visible" });
+  must(JSON.stringify(await visibleH1(page)) === JSON.stringify(["claim-echo"]), "checking: " + JSON.stringify(await visibleH1(page)));
+  for (const g of ["query", "found", "done"]) { await get(`/__fixture/release/${g}`); await sleep(250); }
+  await page.waitForSelector("#stamp", { state: "visible" });
+  must(JSON.stringify(await visibleH1(page)) === JSON.stringify(["claim-echo"]), "result: " + JSON.stringify(await visibleH1(page)));
+  await page.goto(base + "/?q=" + encodeURIComponent("Antibiotics cure the common cold")); await page.waitForLoadState("load");
+  must(JSON.stringify(await visibleH1(page)) === JSON.stringify(["claim-echo"]), "server-rendered result: " + JSON.stringify(await visibleH1(page)));
+});
+await test("headings: the error view has one visible h1, its title", async (page) => {
+  await page.route("**/api/check**", (r) => r.abort());
+  await send(page, "Network failure claim");
+  await page.waitForSelector("#error:not([hidden])");
+  must(JSON.stringify(await visibleH1(page)) === JSON.stringify(["error-title"]), JSON.stringify(await visibleH1(page)));
+});
+
 await browser.close();
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

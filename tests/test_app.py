@@ -25,11 +25,45 @@ dotenv.load_dotenv = lambda *a, **k: None  # keep the developer's .env out of th
 import app as appmod  # noqa: E402
 import og  # noqa: E402
 import db  # noqa: E402
+db.COUNT_FLUSH_SECONDS = 0  # no background writer in tests; they call db.flush_counts()
 import pubmed  # noqa: E402
 import ratelimit  # noqa: E402
 import verdict  # noqa: E402
 from google.genai import errors  # noqa: E402
 import requests  # noqa: E402
+import socket  # noqa: E402
+
+# No test may use the network: the provider and PubMed are faked. Any test
+# that opens a real connection, or looks a host up, fails here loudly and is
+# counted at the end, whatever the code under test does with the error.
+NET_TRIES = []
+
+
+def _no_network(*a, **k):
+    NET_TRIES.append(repr(a[1:] if a and isinstance(a[0], socket.socket) else a)[:120])
+    raise OSError("tests/test_app.py: a test tried to use the network")
+
+
+import _socket  # noqa: E402
+
+for _name in ("connect", "connect_ex", "sendto", "sendmsg"):
+    setattr(socket.socket, _name, _no_network)
+
+
+class _GuardedRawSocket(_socket.socket):
+    """`_socket.socket` itself cannot be patched, so its name is pointed at
+    this subclass: code that builds a raw socket gets one that refuses."""
+    connect = connect_ex = sendto = sendmsg = _no_network
+
+
+_socket.socket = _GuardedRawSocket
+for _mod in (socket, _socket):
+    for _name in ("getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr"):
+        setattr(_mod, _name, _no_network)
+socket.create_connection = _no_network
+# Child processes (node for the parity checks, python for the schema race)
+# are separate interpreters: this guard is not in them. None of them is
+# given network work, and they are not covered.
 
 # Gemini calls are retried after a pause. No test waits for it: verdict's
 # clock is a recorder, and the retry tests below read what it was asked for.
@@ -40,10 +74,39 @@ appmod.app.logger.setLevel(logging.ERROR)
 c = appmod.app.test_client()
 results = []
 
+# Every study any response carries, from every route, is recorded here so
+# the last test can say none was ever both relied on and off topic.
+_PAYLOADS = []
+_real_study_payload = appmod._study_payload
+appmod._study_payload = lambda s_, cited_: _PAYLOADS.append(_real_study_payload(s_, cited_)) or _PAYLOADS[-1]
+
 
 def t(label, cond, extra=""):
     results.append(bool(cond))
     print(f"{'PASS' if cond else 'FAIL'} {label} {extra if not cond else ''}")
+
+
+try:
+    requests.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi", timeout=1)
+    _net_refused = False
+except Exception:  # noqa: BLE001 — any failure is the guard working
+    _net_refused = True
+t("network guard: a real request from a test is refused and recorded", _net_refused and NET_TRIES, NET_TRIES)
+_net_kinds = []
+for _lbl, _try in (("gethostbyname", lambda: socket.gethostbyname("localhost")),
+                   ("gethostbyname_ex", lambda: socket.gethostbyname_ex("localhost")),
+                   ("a raw lookup", lambda: _socket.gethostbyname("localhost")),
+                   ("a UDP sendto", lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b"x", ("127.0.0.1", 9))),
+                   ("a raw socket connect", lambda: _socket.socket().connect(("127.0.0.1", 9)))):
+    _before = len(NET_TRIES)
+    try:
+        _try(); _refused = False
+    except OSError:
+        _refused = True
+    _net_kinds.append((_lbl, _refused and len(NET_TRIES) == _before + 1))
+t("  and so are a host lookup, a UDP send and a raw socket's connect, each counted",
+  all(ok for _, ok in _net_kinds), _net_kinds)
+NET_TRIES.clear()
 
 
 def P(claim, ip="1.1.1.1", **hdr):
@@ -190,7 +253,7 @@ def DIR(answer):
     return Resp(json.dumps({"answer": answer}))
 
 
-def VJ(v, nums, tldr="Short take.", still_open="", **extra):
+def VJ(v, nums, tldr="Short take.", still_open="Longer trials are needed.", **extra):
     body = {"verdict": v, "tldr": tldr, "explanation": "Because.", "cited_study_numbers": nums}
     if still_open:
         body["still_open"] = still_open
@@ -287,15 +350,115 @@ r = P("err b"); t("gemini bad key -> 500, and the page says only that the checke
   and "aistudio" not in r.get_json()["error"] and ".env" not in r.get_json()["error"])
 fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})] * 3
 t("gemini 503 -> 502", P("err c").status_code == 502)
-fg.models.script = [Resp("q"), Resp("not json")]
-t("non-JSON -> complicated", P("err d").get_json()["verdict"] == "complicated")
-fg.models.script = [Resp("q"), Resp("", "FinishReason.MAX_TOKENS")]
-t("truncated -> complicated", "ran out of room" in P("err e").get_json()["explanation"])
+# A reply that could not be read at all is a failed check, not a verdict:
+# the app's 502 with what went wrong and a way out, on the plain check and
+# the streamed one, and nothing saved, logged or listed. One per kind.
+# The way out follows the kind of failure: a declined reply is declined again
+# at temperature 0, so only other words can help ("reword": Edit claim, no
+# Retry); a reply cut off may or may not come back whole ("either": both); a
+# reply that could not be read is cleared by trying again (no way_out field).
+_UNREAD_KINDS = (("not JSON", Resp("not json"), verdict.UNREADABLE,
+                  "The AI model sent back a reply that could not be read, so this check did not finish. Try again in a moment.", None),
+                 ("JSON that is not an object", Resp("[1, 2]"), verdict.UNREADABLE,
+                  "The AI model sent back a reply that could not be read, so this check did not finish. Try again in a moment.", None),
+                 ("cut off", Resp("", "FinishReason.MAX_TOKENS"), "ran out of room before finishing",
+                  "The AI model ran out of room before finishing, so this check did not finish. Try again, or try the claim in other words.", "either"),
+                 ("declined", Resp(""), "declined to answer this one",
+                  "The AI model declined to answer this one, so this check did not finish. Try the claim in other words.", "reword"))
+for _i, (_kind, _reply, _why, _want, _way) in enumerate(_UNREAD_KINDS):
+    t(f"a reply that is {_kind}: the message names its own way out",
+      verdict.unread_reply(_why) == _want and (verdict.way_out(_why) or None) == _way)
+    _body = {"error": _want, **({"way_out": _way} if _way else {})}
+    _logs0 = len(db.recent_checks(1000))
+    fg.models.script = [Resp("q"), _reply]
+    r = P(f"err d{_i}")
+    t(f"a reply that is {_kind} is a failed check: 502, naming the problem and the way out",
+      r.status_code == 502 and r.get_json() == _body, (r.status_code, r.get_json()))
+    fg.models.script = [Resp("q"), _reply]
+    _r, _evs = stream(f"err s{_i}", ip=f"8.8.6.{_i}")
+    t(f"  and the streamed check ends in the same error event",
+      _evs and _evs[-1] == {"stage": "error", "status": 502, **_body}, _evs[-1:])
+    t(f"  and neither is saved or logged as a verdict",
+      db.get_cached_by_key(db.normalize_claim(f"err d{_i}")) is None
+      and db.get_cached_by_key(db.normalize_claim(f"err s{_i}")) is None
+      and len(db.recent_checks(1000)) == _logs0)
+    t(f"  and the message has no dash a reader would see", not any(ch in _want for ch in "\u2013\u2014"))
+fg.models.script = [Resp("q"), Resp(VJ("complicated", [1]))]
+_good = P("err good reply", ip="8.8.6.9")
+t("a good reply is unaffected: 200, saved and logged as before",
+  _good.status_code == 200 and _good.get_json()["tldr"] == "Short take."
+  and db.get_cached_verdict("err good reply", 24) is not None
+  and db.recent_checks(1)[0]["claim_text"] == "err good reply", _good.get_json())
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': (_ for _ in ()).throw(requests.ConnectionError("down"))
 fg.models.script = [Resp("q")]
 r = P("err f"); t("PubMed down -> 502", r.status_code == 502 and "PubMed" in r.get_json()["error"])
 t("failed checks not cached", all(db.get_cached_verdict(x, 24) is None for x in ("err a", "err b", "err c", "err f")))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
+
+# A reply that leaves its still-open line empty is a failed reply: the app's
+# error response, with a way out, and nothing saved or logged as an answer.
+def _no_row(claim):
+    with db.get_conn() as _conn:
+        return _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
+                             (db.normalize_claim(claim),)).fetchone()["n"] == 0
+
+
+for _lbl, _so in (("empty", ""), ("blank", "   "), ("a zero-width space", "\u200b"),
+                  ("a lone full stop", "."), ("a lone dash", "\u2014"), ("only marks", " - ,. ")):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=_so))]
+    _n_logs = len(db.recent_checks(1000))
+    r = P(f"empty line claim {_lbl}", ip="7.7.9.1")
+    t(f"a reply whose still-open line is {_lbl} is a failed reply: 502 with the reason and a way out",
+      r.status_code == 502 and r.get_json()["error"] == verdict.INCOMPLETE_REPLY
+      and "Try again" in r.get_json()["error"], r.get_json())
+    t(f"  and it offers both ways out: try again, or try the claim in other words ({_lbl})",
+      r.get_json() == {"error": "The AI model sent back an answer with a line missing. "
+                                "Try again, or try the claim in other words.", "way_out": "either"}, r.get_json())
+    t(f"  and it is never saved, and not logged as a check ({_lbl})",
+      _no_row(f"empty line claim {_lbl}") and len(db.recent_checks(1000)) == _n_logs)
+fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=""))]
+_r, _evs = stream("empty line claim streamed", ip="7.7.9.2")
+t("  the streamed check ends on the same error, never on a done stage",
+  _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502 and _evs[-1]["error"] == verdict.INCOMPLETE_REPLY
+  and not any(e["stage"] == "done" for e in _evs) and _no_row("empty line claim streamed"), _evs[-1])
+t("  and the streamed error offers both ways out too", _evs[-1].get("way_out") == "either", _evs[-1])
+t("  and the message has no dash", not any(ch in verdict.INCOMPLETE_REPLY for ch in "\u2013\u2014"))
+for _lbl, _kw in (("still-open line is a lone full stop", {"still_open": "."}),
+                  ("still-open line is a zero-width space", {"still_open": "\u200b"}),
+                  ("short answer is a zero-width space", {"tldr": "\u200b"})):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _r, _evs = stream(f"wordless line claim streamed {_lbl}", ip="7.7.9.5")
+    t(f"  a streamed reply whose {_lbl} ends on the error, with nothing saved",
+      _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502
+      and not any(e["stage"] == "done" for e in _evs) and _no_row(f"wordless line claim streamed {_lbl}"), _evs[-1])
+t("  a line needs a letter or digit, in any script",
+  verdict.has_lines({"tldr": "Ja.", "still_open": "长期研究"}) and verdict.has_lines({"tldr": "No.", "still_open": "2"})
+  and not verdict.has_lines({"tldr": "No.", "still_open": "\u200b\u00a0"})
+  and not verdict.has_lines({"tldr": "\u2014", "still_open": "Open."}))
+for _lbl, _kw in (("a lone full stop", {"still_open": "."}), ("a zero-width space", {"tldr": "\u200b"}),
+                  ("a lone dash", {"still_open": "\u2014"})):
+    _c = f"Wordless saved row with {_lbl}"
+    db.put_cached_verdict(_c, "(q)", "complicated", "Mixed (Study 1).", ["P1"], STUDIES,
+                          **{"tldr": "Short.", "still_open": "Open.", **_kw})
+    t(f"  a saved row whose line is {_lbl} is no saved answer: not served, not on a link, never matched",
+      db.get_cached_verdict(_c, 24) is None and db.get_cached_by_key(db.normalize_claim(_c)) is None
+      and db.find_equivalent("Is it true that " + _c.lower() + "?") is None)
+fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("false", [], still_open=""))]
+d = P("empty line claim resting on nothing", ip="7.7.9.3").get_json()
+t("  a reply the code turns to 'Not enough evidence' gets its still-open line from code, and is an answer",
+  d.get("verdict") == "insufficient" and d.get("still_open") == "Whether any study has tested this claim directly."
+  and not _no_row("empty line claim resting on nothing"), d)
+fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open="Doses vary."))]
+d = P("empty line claim whole", ip="7.7.9.4").get_json()
+t("  a whole reply is unaffected: shown, with its line, and saved",
+  d.get("still_open") == "Doses vary." and db.get_cached_verdict("empty line claim whole", 24), d)
+fg.models.script = [Resp(VJ("complicated", [1], still_open=""))]
+try:
+    verdict.weigh_evidence("empty line unit", [dict(x) for x in STUDIES], "(x) AND (y)"); _raised = None
+except verdict.ProviderError as e:
+    _raised = e
+t("  weigh_evidence raises the provider's 'other' failure for it",
+  _raised is not None and _raised.kind == "other" and _raised.detail == verdict.INCOMPLETE_REPLY)
 
 # ---- gemini retries -----------------------------------------------------------
 def _scripted(*items):
@@ -329,8 +492,21 @@ t("gemini retry: 503, 503, then success returns the answer after 3 tries, pausin
   _v == "ok" and _e is None and _n == 3 and _p == [1.0, 3.0], (_v, _e, _n, _p))
 _v, _e, _n, _p = _run_wrap(_e503(), _e503(), _e503())
 t("  503 three times: the same 'unavailable' error and message as before, after 3 tries",
-  _e is not None and _e.kind == "unavailable" and _e.detail == "The AI service is having trouble (503)."
+  _e is not None and _e.kind == "unavailable" and _e.detail == "The AI service is having trouble." and _e.code == 503
   and _n == 3 and _p == [1.0, 3.0], (_e, _n, _p))
+# H9: no status number in a message a reader sees; the code stays on the error
+# for the log. Every ProviderError message built in verdict.py, then the page
+# and the stream for a provider 503.
+import re  # noqa: E402
+_h9_src = open(os.path.join(os.path.dirname(os.path.abspath(verdict.__file__)), "verdict.py")).read()
+_h9_built = re.findall(r'ProviderError\(\s*"\w+",\s*(f?"[^"]*")', _h9_src)
+t("H9: no ProviderError message built in verdict.py carries a status number or a {code}",
+  _h9_built and not any(re.search(r"\d{3}|\{", m_) for m_ in _h9_built), _h9_built)
+_h9_e = [_run_wrap(x(), x(), x())[1] for x in (_e503, _e500)] + [
+    _run_wrap(errors.ClientError(404, {"error": {"message": "no model", "status": "NOT_FOUND"}}))[1]]
+t("  and the errors a 5xx or a 4xx raises keep the code for the log, not in their words",
+  all(e_ is not None and e_.code in (503, 500, 404) and not re.search(r"\d", e_.detail) for e_ in _h9_e),
+  [(e_.code, e_.detail) for e_ in _h9_e if e_])
 _v, _e, _n, _p = _run_wrap(_e429(), "ok")
 t("  429 then success returns the answer, pausing 1s once", _v == "ok" and _n == 2 and _p == [1.0], (_v, _n, _p))
 _v, _e, _n, _p = _run_wrap(_e429(), _e429(), _e429())
@@ -434,7 +610,7 @@ t("gate applied to tldr and still_open in the API",
   d["tldr"] == "It works, mostly." and d["still_open"] == "Whether it lasts past 12 weeks, no trial ran longer.", d)
 d2 = P("gate claim", ip="8.8.8.8").get_json()
 t("  still_open survives the cache", d2["cached"] is True and d2["still_open"] == d["still_open"], d2)
-fg.models.script = [Resp("q"), Resp(VJ("false", []))]
+fg.models.script = [Resp("q"), Resp(VJ("false", [], still_open=""))]
 d = P("uncited again", ip="7.7.7.7").get_json()
 t("forced complicated names the open question", d["still_open"].startswith("Whether any study"), d)
 html = c.get("/?q=gate%20claim").data.decode()
@@ -470,6 +646,9 @@ t("  every study is a citation, relied-on ones flagged",
   and _flagged == ["PMID:P2"], (_flagged, ld.get("citation")))
 t("  no null values in the markup", "null" not in json.dumps(ld))
 t("canonical points at the shared url", 'rel="canonical" href="http://localhost/?q=streamed%20claim"' in html)
+_ci = _re.search(r'<textarea\s[^>]*id="claim-input"[^>]*>', c.get("/").get_data(as_text=True), _re.S).group(0)
+t("the claim field is a plain textbox: no role the textarea may not have, no aria-expanded",
+  _ci and "role=" not in _ci and "aria-expanded" not in _ci and 'aria-controls="suggest-list"' in _ci and 'aria-autocomplete="list"' in _ci, _ci)
 t("uncached claim renders the ask view", '<section id="result" hidden>' in c.get("/?q=never%20checked").data.decode())
 
 r = c.get("/robots.txt")
@@ -477,13 +656,12 @@ t("robots.txt allows crawlers and names the sitemap",
   r.status_code == 200 and "Disallow: /api/" in r.data.decode() and "Sitemap:" in r.data.decode()
   and "ClaudeBot" in r.data.decode())
 r = c.get("/sitemap.xml")
-t("sitemap lists the static pages only, never a claim somebody typed", r.status_code == 200
-  and r.mimetype == "application/xml" and "streamed%20claim" not in r.data.decode()
-  and "?q=" not in r.data.decode() and "/privacy" in r.data.decode())
+t("sitemap is XML and lists the static pages", r.status_code == 200
+  and r.mimetype == "application/xml" and "/privacy" in r.data.decode() and "/method" in r.data.decode())
 r = c.get("/llms.txt")
-t("llms.txt describes the rules and links recent claims",
+t("llms.txt describes the rules and no longer lists a typed, non-curated claim",
   r.status_code == 200 and "ClaimReview" in r.data.decode() and "not medical advice" in r.data.decode().lower()
-  and "streamed claim" in r.data.decode())
+  and "streamed claim" not in r.data.decode())
 
 # ---- privacy page ----------------------------------------------------------------
 r = c.get("/privacy")
@@ -638,10 +816,98 @@ pubmed.deep_dive = _real_dive
 
 # ---- the front page carries the work ---------------------------------------------
 _html = c.get("/").data.decode()
-t("the front page shows the ledger", "Studies read" in _html and "Pooled analyses" in _html)
+t("the front page shows no counts strip: the latest checks carry the work",
+  'class="ledger"' not in _html and "Studies read" not in _html and "Pooled analyses" not in _html
+  and "Claims checked" not in _html)
+import inspect as _insp_led  # noqa: E402
+_css_led = (ROOT / "static" / "style.css").read_text()
+t("  its CSS is gone and the home page stops computing it, while db.ledger() stays",
+  not re.search(r"^\.ledger[ ,{]", _css_led, re.M) and ".entry-no" not in _css_led
+  and "db.ledger()" not in _insp_led.getsource(appmod._render_home) and callable(db.ledger))
 t("the front page lists recent checks with their evidence",
-  "Latest checks" in _html and "entry-no" in _html and 'class="mini"' in _html)
+  "Latest checks" in _html and 'class="entry-claim"' in _html and 'class="mini"' in _html)
+_entry_css = re.search(r"^\.entry-link \{(.*?)\}", _css_led, re.M | re.S).group(1)
+t("  without the number line, a list row's link still has a 44px tap height, with the layout unmoved",
+  "padding: 10px 0" in _entry_css and "margin: -10px 0" in _entry_css, _entry_css)
+_404_led = c.get("/no-such-page-led").get_data(as_text=True)
+t("  with no issue numbers, on the home page or the 404 page",
+  "entry-no" not in _html and "entry-no" not in _404_led and not re.search(r">No\. \d+<", _html + _404_led)
+  and 'class="entry-claim"' in _404_led)
 t("the front page never says '1 studies'", "1 studies read" not in _html)
+# Sentence case is the template's: the stored text and the link keep the
+# wording as typed, only the first letter shown is raised.
+db.put_cached_verdict("green tea speeds up METABOLISM", "green tea AND metabolism", "complicated", "x",
+                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "a", "journal": "J", "year": "2020",
+                        "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Randomized Controlled Trial"]}],
+                      tldr="Maybe a little.", still_open="How much is unclear.")
+_sc_html = c.get("/").data.decode()
+_sc_row = db.get_cached_by_key(db.normalize_claim("green tea speeds up METABOLISM"))
+t("the Latest list shows a claim in sentence case, and only the first letter changes",
+  '<span class="entry-claim">Green tea speeds up METABOLISM</span>' in _sc_html
+  and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_html
+  and _sc_row["claim_text"] == "green tea speeds up METABOLISM",
+  [x for x in _sc_html.split('class="entry-claim">')[1:3]])
+
+# One rule for every list of claims: the first letter is raised only when the
+# first word is all lower case letters. Mixed or upper case words, numbers and
+# quotation marks at the start are left exactly as stored.
+import display as _dsc  # noqa: E402
+import shutil as _shutil, subprocess as _subprocess  # noqa: E402
+from markupsafe import escape as _msc_escape  # noqa: E402
+_SC_CASES = [("mRNA vaccines change DNA", "mRNA vaccines change DNA"),
+             ("pH balanced water is healthier", "pH balanced water is healthier"),
+             ("iPhone screens harm sleep", "iPhone screens harm sleep"),
+             ("DNA tests predict disease", "DNA tests predict disease"),
+             ("HIV can be cured", "HIV can be cured"),
+             ("COVID-19 vaccines cause infertility", "COVID-19 vaccines cause infertility"),
+             ("5G towers cause headaches", "5G towers cause headaches"),
+             ("10,000 steps a day is needed", "10,000 steps a day is needed"),
+             ("\u201cdetox\u201d teas work", "\u201cdetox\u201d teas work"),
+             ('"natural" sugar is better', '"natural" sugar is better'),
+             ("coffee causes cancer", "Coffee causes cancer"),
+             ("coffee, daily, causes cancer", "Coffee, daily, causes cancer"),
+             ("e-cigarettes help people quit", "E-cigarettes help people quit"),
+             ("vitamin D prevents colds", "Vitamin D prevents colds"),
+             ("Garlic lowers blood pressure", "Garlic lowers blood pressure"),
+             ("\u00e9pinards are rich in iron", "\u00c9pinards are rich in iron"),
+             (" leading space stays", " leading space stays"), ("", "")]
+t("sentence case: the first letter is raised only when the first word is all lower case letters",
+  [_dsc.sentence_case(x) for x, _ in _SC_CASES] == [w for _, w in _SC_CASES],
+  [(x, _dsc.sentence_case(x)) for x, w in _SC_CASES if _dsc.sentence_case(x) != w])
+_sc_js = (ROOT / "static" / "app.js").read_text()
+if _shutil.which("node"):
+    _sc_fn = _sc_js[_sc_js.index("function sentenceCase"):_sc_js.index("function claimListHtml")]
+    _sc_out = json.loads(_subprocess.run(["node", "-e", _sc_fn + "console.log(JSON.stringify("
+                                          + json.dumps([x for x, _ in _SC_CASES]) + ".map(sentenceCase)));"],
+                                         capture_output=True, text=True, check=True).stdout)
+    t("  and the script's sentenceCase gives the same on every case", _sc_out == [w for _, w in _SC_CASES], _sc_out)
+t("  every list the script builds uses it: recent and trending, related claims, type-ahead",
+  "${escapeHtml(sentenceCase(r.claim))}</span>" in _sc_js
+  and '<span class="entry-claim">${escapeHtml(sentenceCase(r.claim_text))}</span>' in _sc_js
+  and '<span class="suggest-claim">${escapeHtml(sentenceCase(r.claim_text))}' in _sc_js
+  and 'data-claim="${escapeHtml(r.claim)}"' in _sc_js and "href=\"/?q=${encodeURIComponent(r.claim_text)}\"" in _sc_js)
+_sc_tpls = {n: (ROOT / "templates" / n).read_text() for n in ("index.html", "404.html")}
+t("  and both templates' lists use the one filter, with no first-letter upper of their own",
+  all("{{ v.claim_text | sentence_case }}" in x and "[:1] | upper" not in x for x in _sc_tpls.values()))
+db.put_cached_verdict("mRNA vaccines change DNA", "mrna AND dna", "false", "x",
+                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "a", "journal": "J", "year": "2021",
+                        "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Review"]}],
+                      tldr="No.", still_open="Long-term data are still coming.")
+_sc_home = c.get("/").data.decode()
+_sc_404 = c.get("/no-such-page-sc").get_data(as_text=True)
+t("  the home page's Latest list shows 'mRNA vaccines change DNA' as stored, and the link is untouched",
+  '<span class="entry-claim">mRNA vaccines change DNA</span>' in _sc_home and "MRNA" not in _sc_home
+  and 'href="/?q=mRNA%20vaccines%20change%20DNA"' in _sc_home, _sc_home.count("entry-claim"))
+t("  and the 404 list raises a lower case first word and leaves a mixed case one",
+  '<span class="entry-claim">Green tea speeds up METABOLISM</span>' in _sc_404
+  and '<span class="entry-claim">mRNA vaccines change DNA</span>' in _sc_404
+  and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_404, _sc_404.count("entry-claim"))
+with appmod.app.test_request_context("/"):
+    _sc_r404 = appmod.render_template("404.html", labels=appmod.VERDICT_LABELS,
+                                      latest=[{"claim_text": x, "verdict": "false"} for x, _ in _SC_CASES if x.strip()])
+t("  and on each case the 404 list prints what the rule says",
+  all(f'<span class="entry-claim">{_msc_escape(w)}</span>' in _sc_r404 for x, w in _SC_CASES if x.strip()),
+  [w for x, w in _SC_CASES if x.strip() and f'<span class="entry-claim">{_msc_escape(w)}</span>' not in _sc_r404])
 
 _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
@@ -854,9 +1120,144 @@ t("  and a figure that is in them is quoted as it stands",
   "was 0.88, and 0.30 in the lowest (Study 1)." in _bd["effect_size"],
   _bd["effect_size"])
 
+# An effect line that says there was no clear difference is no effect, even
+# when no ratio can be read from it. Read as a missing size, a "cure" claim's
+# evidence line fell back to an unsized effect "not a cure".
+_NULL_ST = [{"pmid": "NL1", "title": "A mouthwash trial in mild infection", "journal": "J", "year": "2020",
+             "authors": ["A B"], "data_banks": None, "url": "https://pubmed.ncbi.nlm.nih.gov/NL1/",
+             "publication_types": ["Randomized Controlled Trial"],
+             "abstract": "METHODS: 49 patients used the mouthwash or placebo. RESULTS: The mouthwash did not "
+                         "reduce salivary viral titer at 10, 30, or 60 minutes compared to placebo, and the "
+                         "difference was not statistically significant."}]
+_null_bd = breakdown.ground(
+    {"parts": [], "evidence": ["The mouthwash did not reduce viral titer compared to placebo (Study 1)."],
+     "effect_size": "The trial found no drop in viral titer at 10, 30, or 60 minutes compared to placebo (Study 1). "
+                    "That difference was not statistically significant (Study 1).",
+     "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""},
+    _NULL_ST, verdict.tidy_prose)
+t("grounding: an effect line that says no clear difference is sized as none, with no ratio read from it",
+  (_null_bd["effect"] or {}).get("label") == "none"
+  and evidence.evidence_line("false", _NULL_ST, ["NL1"], "Gargling mouthwash cures the infection",
+                             _null_bd["effect"]["label"], breakdown.absolute_claim("Gargling mouthwash cures the infection"))
+  .endswith("evidence of no clear effect"), (_null_bd["effect"], _null_bd["effect_size"]))
+# But only when every sentence in the line that carries a figure is a null. A
+# real weight loss beside a waist result that was not significant is an effect
+# with one null beside it, in either order.
+_WT_ST = [{"pmid": "WT1", "title": "A diet and weight in 5000 adults: a cohort study", "journal": "J", "year": "2020",
+           "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Journal Article", "Observational Study"],
+           "abstract": "METHODS: 5000 adults were followed for 5 years. RESULTS: Adults on the diet lost 4.1 kg more over "
+                       "5 years (p < 0.001). Waist circumference changed by 0.4 cm and did not differ significantly "
+                       "between groups. "
+                       "CONCLUSIONS: The diet was linked to weight loss."}]
+_wt_lost = "Adults on the diet lost 4.1 kg more over 5 years (Study 1)."
+_wt_waist = "The change in waist size was not statistically significant (Study 1)."
+def _wt(effect):
+    return breakdown.ground({"parts": [], "evidence": ["Adults on the diet lost more weight (Study 1)."],
+                             "effect_size": effect, "strength": "", "applies_to": "", "not_applies_to": "",
+                             "unknowns": ""}, _WT_ST, verdict.tidy_prose)
+_wt_a, _wt_b = _wt(f"{_wt_lost} {_wt_waist}"), _wt(f"{_wt_waist} {_wt_lost}")
+t("grounding: a real effect beside a null that was not significant is never sized as none, in either order",
+  not ((_wt_a or {}).get("effect") or {}).get("null") and not ((_wt_b or {}).get("effect") or {}).get("null"),
+  ((_wt_a or {}).get("effect"), (_wt_b or {}).get("effect")))
+_wt_c = _wt("Waist size changed by 0.4 cm, which was not statistically significant (Study 1).")
+t("  and a line whose every figure is a null still is",
+  ((_wt_c or {}).get("effect") or {}).get("label") == "none", (_wt_c or {}).get("effect"))
+# A sentence that carries a significant figure, a p value under 0.05 or an
+# interval that excludes no effect, is not a null, whatever else it says, in
+# any order, joined by any word, or split in two.
+_wt_null = "there was no clear difference in waist size"
+_wt_sig = "adults on the diet lost 4.1 kg more over 5 years (p < 0.001)"
+_wt_one = [f"{_wt_null.capitalize()}, {j} {_wt_sig} (Study 1)." for j in ("but", "while", "whereas")] + [
+    f"{_wt_sig.capitalize()}, {j} {_wt_null} (Study 1)." for j in ("but", "while", "whereas")] + [
+    f"Although {_wt_null}, {_wt_sig} (Study 1).", f"Although {_wt_sig}, {_wt_null} (Study 1).",
+    f"{_wt_null.capitalize()} (Study 1). {_wt_sig.capitalize()} (Study 1).",
+    f"{_wt_sig.capitalize()} (Study 1). {_wt_null.capitalize()} (Study 1)."]
+_wt_got = [((_wt(e) or {}).get("effect") or {}).get("null") for e in _wt_one]
+t("grounding: a null and a significant figure in one sentence is not 'no clear effect', in both orders and with any join",
+  not any(_wt_got) and not any(breakdown.all_null(e, _WT_ST) for e in _wt_one), list(zip(_wt_got, _wt_one)))
+t("  an interval that excludes no effect is a significant figure too, and a p value of 0.05 or more is not",
+  not breakdown.all_null("No clear difference in waist size, but the odds ratio was 0.6 (95% CI 0.4 to 0.8) (Study 1).")
+  and breakdown.all_null("There was no clear difference in waist size (p = 0.40) (Study 1).")
+  and breakdown.all_null("The odds ratio was 0.9 (95% CI 0.7 to 1.2), no clear difference (Study 1)."))
+with appmod.app.test_request_context("/"):
+    _wt_r = verdict._read_verdict(json.dumps({
+        "verdict": "complicated", "tldr": "The diet is linked to weight loss, but only in an observational study.",
+        "explanation": "Adults on the diet lost 4.1 kg more (Study 1).", "still_open": "Whether it causes it.",
+        "cited_study_numbers": [1], "relevance": [{"study": 1, "subject": True, "outcome": True, "in_people": True,
+                                                   "finding": "for"}],
+        "parts": [], "evidence": ["Adults on the diet lost more weight (Study 1)."], "effect_size": _wt_one[0],
+        "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""}), None, [dict(x) for x in _WT_ST],
+        "This diet helps weight loss", subject="(diet)", outcome="(weight loss OR body weight)", surrogate="")
+    _wt_page = appmod._check_response("This diet helps weight loss", "(diet) AND (weight loss OR body weight)",
+                                      _wt_r["verdict"], _wt_r["tldr"], _wt_r["explanation"], _wt_r["cited_studies"],
+                                      [dict(x) for x in _WT_ST], "http://x", still_open="Whether it causes it.",
+                                      breakdown=_wt_r.get("breakdown"))
+t("  and on the page the evidence line never says 'no clear effect' for it",
+  "no clear effect" not in (_wt_page.get("evidence_line") or ""), _wt_page.get("evidence_line"))
+t("  on the way out too: a saved size is not turned to none by one null beside a real effect",
+  breakdown.settle_effect({"evidence": [], "parts": [], "effect_size": f"{_wt_lost} {_wt_waist}",
+                           "effect": {"label": "large", "plain": "x", "figure": "odds ratio 80"}})["effect"] is None)
+# A saved answer whose size was read from a misread ratio keeps no size on the
+# way out; one whose ratio the page prints keeps it.
+_mis = breakdown.settle_effect({"evidence": ["Trials enrolled 35 people or 80 adults (Studies 4, 6)."],
+                                "parts": [], "effect_size": "Scores dropped by 3.9 points (Study 7).",
+                                "effect": {"label": "large", "plain": "about 7900% higher odds", "figure": "odds ratio 80"}})
+_mis_null = breakdown.settle_effect({"evidence": [], "parts": [],
+                                     "effect_size": "No drop at 30, or 60 minutes (Study 5). That difference was not "
+                                                    "statistically significant (Study 5).",
+                                     "effect": {"label": "none", "plain": "x", "null": True, "figure": "odds ratio 60"}})
+_real = {"evidence": [], "parts": [], "effect_size": "The matched odds ratio (how much more likely an outcome was) "
+                                                    "was 41.3 (Study 1).",
+         "effect": {"label": "large", "plain": "about 4030% higher odds", "figure": "odds ratio 41.3"}}
+t("grounding: a saved size read from a ratio the page never prints is dropped on the way out",
+  _mis["effect"] is None and (_mis_null["effect"] or {}).get("label") == "none"
+  and breakdown.settle_effect(_real)["effect"] == _real["effect"], (_mis["effect"], _mis_null["effect"]))
+# A figure that was not significant, under an answer that there is an effect,
+# is said in words that do not contradict the answer. Under an answer of no
+# effect, "no clear difference" is the point and stays.
+_NS_ST = [dict(_NULL_ST[0], pmid="NS1", publication_types=["Meta-Analysis"],
+               abstract="METHODS: Twelve trials in 50,000 adults were pooled. RESULTS: Melanoma was less common "
+                        "with daily use (hazard ratio 0.50, 95% CI 0.24 to 1.02).")]
+_NS_EFF = ("The hazard ratio for melanoma was 0.50 with a likely range of 0.24 to 1.02 (Study 1). "
+           "That is no clear difference between the groups, because the result was not statistically significant (Study 1).")
+_NS_BD = {"parts": [], "evidence": ["Melanoma was less common with daily use (Study 1)."], "effect_size": _NS_EFF,
+          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+          "effect": dict(evidence.NULL_EFFECT, figure="hazard ratio 0.50")}
+with appmod.app.test_request_context("/"):
+    _ns_yes = appmod._check_response("Daily sunscreen lowers melanoma risk", "(sunscreen) AND (melanoma)", "true",
+                                     "Daily sunscreen lowers melanoma risk.", "Less melanoma (Study 1).", ["NS1"],
+                                     [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+    _ns_no = appmod._check_response("Daily sunscreen does not lower melanoma risk", "(sunscreen) AND (melanoma)", "true",
+                                    "It does not.", "No clear change (Study 1).", ["NS1"],
+                                    [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+t("wording: 'false' on a claim that denies an effect is an answer that there is one",
+  breakdown.answers_effect("false", "Vaccines do not cause autism")
+  and not breakdown.answers_effect("false", "Vaccines cause autism")
+  and breakdown.answers_effect("true", "Vaccines cause autism")
+  and not breakdown.answers_effect("complicated", "Vaccines do not cause autism"))
+t("wording: under 'Likely true' on a claim of an effect, a figure that was not significant is never 'no clear difference'",
+  _ns_yes["verdict"] == "true" and "no clear difference" not in " ".join(breakdown.prose_of(_ns_yes["breakdown"]))
+  and "On its own, that result could be chance, because it was not statistically significant (Study 1)."
+  in _ns_yes["breakdown"]["effect_size"], (_ns_yes["verdict"], _ns_yes["breakdown"]["effect_size"]))
+t("  and under an answer of no effect it still says no clear difference",
+  "That is no clear difference between the groups" in _ns_no["breakdown"]["effect_size"], _ns_no["breakdown"]["effect_size"])
+t("  and no field of the response carries the words the page replaced: the effect's plain words say the same",
+  "no clear difference" not in json.dumps({k: v for k, v in _ns_yes.items() if k != "studies"})
+  and _ns_yes["breakdown"]["effect"]["plain"] == breakdown.NULL_PLAIN_ALONE
+  == "a result that could be chance, because it was not statistically significant"
+  and _ns_yes["breakdown"]["effect"]["label"] == "none"
+  and _ns_yes["breakdown"]["effect"]["figure"] == "hazard ratio 0.50", _ns_yes["breakdown"]["effect"])
+t("  and under an answer of no effect the effect's plain words stay",
+  _ns_no["breakdown"]["effect"]["plain"] == evidence.NULL_EFFECT["plain"], _ns_no["breakdown"]["effect"])
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
+t("  and it leaves 'cure' the noun alone where nothing else would: before a bracket, 'for' or 'rates'",
+  breakdown.soften("Cure rates rose (Study 1).") == "Cure rates rose (Study 1)."
+  and breakdown.soften("The cure rate was 80% (Study 2).") == "The cure rate was 80% (Study 2)."
+  and breakdown.soften("A cure for colds was sought (Study 1).") == "A cure for colds was sought (Study 1)."
+  and breakdown.soften("Effect sizes for cold cures (Study 5) were small.")
+  == "Effect sizes for cold cures (Study 5) were small.")
 t("  and under a 'not' it leaves the verb alone, since weakening it there would strengthen the sentence",
   breakdown.soften("Vitamin C does not cure cancer.") == "Vitamin C does not cure cancer."
   and breakdown.soften("Garlic doesn't cure HIV.") == "Garlic doesn't cure HIV."
@@ -1085,6 +1486,54 @@ t("  a ratio with its outcome named in between is still read",
 t("  but a figure the sentence does not pin to that ratio is left alone",
   evidence.effect_size("The hazard ratio was not given, but mortality was 1.09.")
   is None)
+t("  the word 'or' before a number is not an odds ratio: no '7900% higher odds' from '35 people or 80 adults'",
+  evidence.effect_size("Trials enrolled small groups, such as 35 people or 80 adults (Studies 4, 6).") is None
+  and evidence.effect_size("exposure up to 10.4 UK units or 83 grams per week (Study 8).") is None
+  and evidence.significance("in 20 or 30 (10 to 40) people", "30") is None
+  and evidence.effect_size("OR 0.88 (95% CI 0.80 to 0.95)")["figure"] == "odds ratio 0.88"
+  and evidence.effect_size("aOR = 1.5")["figure"] == "odds ratio 1.5"
+  and evidence.effect_size("RRs of 1.2")["figure"] == "risk ratio 1.2",
+  (evidence.effect_size("such as 35 people or 80 adults"), evidence.effect_size("OR 0.88")))
+t("  the adjusted ratios read in capitals too: AOR, AHR and aIRR",
+  (evidence.effect_size("AOR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
+  and (evidence.effect_size("The AHR for death was 0.8") or {}).get("figure") == "hazard ratio 0.8"
+  and (evidence.effect_size("aIRR 1.3") or {}).get("figure") == "incidence rate ratio 1.3"
+  and evidence.ratio_kinds("AOR 1.45 and AHR 0.8") == {"odds ratio", "hazard ratio"},
+  (evidence.effect_size("AOR 1.45"), evidence.effect_size("The AHR for death was 0.8")))
+t("  but ARR (an absolute risk reduction) and mixed case 'Hr' are no ratio",
+  evidence.effect_size("ARR 0.05") is None and evidence.effect_size("Hr 0.8") is None
+  and evidence.ratio_kinds("ARR 0.05, Hr 0.8") == set())
+t("  capitals rule the ratio read across a gap too: 'patients or their carers were 80' is no odds ratio",
+  evidence.effect_size("Patients or their carers were 80 (Study 1).") is None
+  and (evidence.effect_size("The OR for patients was 1.4 (Study 1).") or {}).get("figure") == "odds ratio 1.4")
+t("  and a figure after the word 'or' still needs its unit, while one after OR needs none",
+  breakdown._unit_in("80", "Trials had 35 people or 80 in all.") is None
+  and breakdown._unit_in("0.88", "The OR 0.88 (95% CI 0.80 to 0.95) was small.") == "")
+t("  a number followed by a unit is a measure, not a ratio: no odds ratio of 45 from 'the OR was 45 minutes'",
+  evidence.effect_size("Time in the OR was 45 minutes (Study 2).") is None
+  and evidence.effect_size("OR 12 patients were excluded.") is None
+  and evidence.effect_size("The hazard ratio for those on 1.45 mg was 2 days shorter.") is None
+  and evidence.effect_size("OR 1.45 mg") is None
+  and (evidence.effect_size("OR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
+  and (evidence.effect_size("The hazard ratio for death was 0.8.") or {}).get("figure") == "hazard ratio 0.8",
+  (evidence.effect_size("Time in the OR was 45 minutes (Study 2)."), evidence.effect_size("OR 1.45 mg")))
+_es = lambda x_: (evidence.effect_size(x_) or {}).get("figure")
+t("  a heart rate is no hazard ratio: not per minute, not in beats, not after 'mean' or 'resting', not above the bound",
+  [_es(x_) for x_ in ("Mean HR was 72 per minute (Study 1).", "HR 72 bpm", "HR was 64 beats", "HR 88/min",
+                      "Resting HR was 0.9 above baseline", "Peak HR 1.4", "Maximum HR was 1.2", "heart rate (HR) 1.2",
+                      "HR 72 in the control group", "OR 60")] == [None] * 10,
+  [_es(x_) for x_ in ("Mean HR was 72 per minute", "HR 72 in the control group", "OR 60")])
+t("  and the same care for RR as a respiratory rate and OR as an operating room",
+  [_es(x_) for x_ in ("RR was 18 breaths per minute", "RR 18/min", "respiratory rate (RR) 1.5",
+                      "operating room (OR) 1.4", "mean RR 1.3")] == [None] * 5)
+t("  while real ratios still read: per a dose, per day of use, in a number of patients, as times, up to the bound",
+  [_es(x_) for x_ in ("OR 1.3 per 10 g", "HR 0.80 in 1,200 patients", "RR 2 times", "OR 1.3 per day of use",
+                      "HR 1.05 per year of age", "The matched odds ratio was 41.3", "OR 50",
+                      "Mean HR was 72 per minute, and the HR for death was 0.8")]
+  == ["odds ratio 1.3", "hazard ratio 0.80", "risk ratio 2", "odds ratio 1.3", "hazard ratio 1.05",
+      "odds ratio 41.3", "odds ratio 50", "hazard ratio 0.8"],
+  [_es(x_) for x_ in ("OR 1.3 per 10 g", "HR 0.80 in 1,200 patients", "RR 2 times",
+                      "Mean HR was 72 per minute, and the HR for death was 0.8")])
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))
@@ -1157,9 +1606,17 @@ _ranked = pubmed.prioritise([_study("OFF", "Topical lotion for alopecia",
                             "dihydrotestosterone OR DHT")
 t("  a paper that never mentions the claim's subject sinks under the ones that do",
   [s["pmid"] for s in _ranked] == ["I1", "I2", "OFF"], [s["pmid"] for s in _ranked])
+_sur_asked = []
+_real_search_pubmed = pubmed.search_pubmed
+pubmed.search_pubmed = lambda q, max_results=8: _sur_asked.append((q, max_results)) or ["S1"]
+try:
+    _sur = pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
+                                   max_results=2)
+finally:
+    pubmed.search_pubmed = _real_search_pubmed
 t("  the surrogate search asks for the subject plus the stand-in, never the outcome",
-  pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
-                          max_results=2) is not None)
+  _sur is not None and _sur == ["S1"]
+  and _sur_asked == [("(creatine) AND (DHT OR dihydrotestosterone)", 2)], _sur_asked)
 
 # ---- the answer must not contradict itself ----------------------------------------
 t("consistency: calling a reported condition untested is caught",
@@ -1599,7 +2056,10 @@ t("the result reads claim, answer, assessment, research, still open, breakdown, 
   < _at('id="chart-sec"') < _at("Studies checked") < _at('id="share-btn"') < _at('id="report-open"'))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
-  and "Vitamin D supplements in winter cut colds</h2>" in _ord)
+  and "Vitamin D supplements in winter cut colds</h1>" in _ord)
+t("  the claim is the result view's h1 and the error title the error view's; the home h1 sits in the hidden ask section",
+  '<h1 class="claim-echo" id="claim-echo">' in _ord and '<h1 class="error-title" id="error-title">' in _ord
+  and '<section id="ask" aria-labelledby="ask-heading" hidden>' in _ord and "<h2 class=\"claim-echo\"" not in _ord)
 t("  its quotation marks come from the stylesheet, so the text stays the text",
   ".claim-echo::before" in _css and "\\201C" in _css)
 # Sizes are compared rather than eyeballed.
@@ -1621,7 +2081,7 @@ t("  the assessment and its confidence are two labelled rows under the answer",
   and '<span class="assess-label">Confidence</span>' in _ord
   and _at('id="tldr"') < _at('id="assess"') < _at('id="doctor-line"') < _at("What the research says"))
 t("  the confidence is the sentence the check worded, once",
-  "<mark>Low certainty evidence, but no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
+  "<mark>Low certainty evidence, so no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
   or "<mark>" in _ord.split('id="assess"')[1].split("</p>")[1], _ord.split('id="assess"')[1][:500])
 
 # ---- no sentence is printed twice -----------------------------------------------
@@ -1723,7 +2183,7 @@ t("the service worker no longer precaches the still",
 # ---- the confidence line: the same sentence from the server and the script -------
 _CL = [{"studies": [], "evidence_line": "x"},
        {"studies": [{"cited_in_verdict": False, "tier": "strong"}], "evidence_line": "x"},
-       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a partial effect, not a cure"},
+       {"studies": [{"cited_in_verdict": True, "tier": "strong"}], "evidence_line": "Moderate evidence of a small effect, not a cure"},
        {"studies": [{"cited_in_verdict": True, "tier": "strong"}, {"cited_in_verdict": True, "tier": "weak"}]},
        {"studies": [{"cited_in_verdict": True, "tier": "moderate"}]},
        {"studies": [{"cited_in_verdict": True, "tier": "weak"}]}]
@@ -1731,7 +2191,7 @@ _cl = [_display.confidence_line(r) for r in _CL]
 t("the confidence line: nothing found, nothing used, the checked wording, or the designs of an old record",
   _cl == ["No direct evidence either way: nothing on PubMed matched well enough to weigh.",
           "No direct evidence either way: none of the studies tests this claim.",
-          "Moderate evidence of a partial effect, not a cure.",
+          "Moderate evidence of a small effect, not a cure.",
           "Strong study designs.", "Moderate study designs.", "Weak study designs."], _cl)
 if _shutil.which("node"):
     _csrc = "function confidenceLine" + (ROOT / "static" / "app.js").read_text().split("function confidenceLine")[1].split("\n}\n")[0] + "\n}"
@@ -1822,6 +2282,14 @@ t("  the figure and its plain words are picked as a pair",
   any(line.startswith(breakdown.TRANSLATION_LEAD) for line in _pair)
   and any("0.30" in line for line in _pair)
   and not any("0.88" in line for line in _pair), _pair)
+# L3b: with no figure named in the effect (a null read from a mean
+# difference), the translation is picked with the sentence it follows.
+_PAIR_NULL = {"effect_size": "The average difference in weight loss was 0.26 kg (Study 1). That is no clear difference "
+                             "between the groups, because the result was not statistically significant (Study 1).",
+              "effect": dict(evidence.NULL_EFFECT, figure="")}
+_pair_n = breakdown.says("", _PAIR_NULL, _BD_STUDIES)
+t("L3: a translation with no figure named is picked with its own figure sentence, never alone",
+  _pair_n[:2] == breakdown.sentences(_PAIR_NULL["effect_size"]), _pair_n)
 t("  a sentence the gate rejects never reaches it",
   breakdown.says("Colds fell by 47% (Study 1). This one cites nothing.",
                  _vd["breakdown"], _BD_STUDIES)[:1]
@@ -1908,7 +2376,7 @@ _S = lambda types, title="Vitamin D in adults", abstract="": evidence.spine(
 t("a spine is lettered with the design in a reader's words, and no year",
   _S(["Meta-Analysis"]) == "Meta-analysis" and _S(["Randomized Controlled Trial"]) == "Randomized trial"
   and _S(["Case Reports"]) == "One case" and _S(["Journal Article"]) == "Study"
-  and _S(["Retracted Publication", "Meta-Analysis"]) == "Meta-analysis")
+  and _S(["Retracted Publication", "Meta-Analysis"]) == "Retracted")
 t("  a lab study says what it was run on, unless it is a pooled design",
   _S(["Comparative Study"], "Vinegar lowers glucose in diabetic rats",
      "Male Wistar rats were fed vinegar for 8 weeks.") == "Animal or lab"
@@ -1994,8 +2462,8 @@ t("a result that rests on evidence carries no next_steps in its payload",
   or "next_steps" in _r.data.decode())
 
 # The fly-through is out of the home page (its files are in _old/, with its
-# test). /flight still redirects, and static/flight/check.json still feeds the
-# trust section's real example.
+# test). /flight still redirects; the trust section's real example is read
+# from the saved answers (see the trust tests below).
 
 # ---- the checker comes first (queue 7, step 2) -----------------------------
 _home = c.get("/").get_data(as_text=True)
@@ -2007,9 +2475,9 @@ t("home: the field has a visible label and a helper line, not just a placeholder
 t("  the nav is How it works, About, Privacy, and the page loads no footage",
   all(x in _home for x in ('id="how-btn"', 'id="about-link"', 'href="/privacy">Privacy</a>'))
   and "flight" not in _home.replace("inFlight", "") and 'id="flight"' not in _home)
-t("  the examples sit in the form, after the submit button; the counters come after the form",
+t("  the examples sit in the form, after the submit button; the latest checks come after the form",
   _home.index('id="submit-btn"') < _home.index('id="chips"') < _home.index("</form>")
-  < (_home.index('class="ledger"') if 'class="ledger"' in _home else 10**9))
+  < _home.index('class="latest"'))
 t("  the first three examples are the ones app.js renders",
   "EXAMPLES.slice(0, 3)" in _js)
 _pl = _re.search(r'<p class="privacy-line"[^>]*>(.*?)</p>', _home, _re.S)
@@ -2028,6 +2496,11 @@ t("  /flight still redirects and its frames are gone from static/",
   and not (ROOT / "static" / "flight.css").exists())
 t("  the service worker no longer precaches the intro's files",
   "flight" not in (ROOT / "static" / "sw.js").read_text().split("const SHELL")[1].split("];")[0])
+
+_sw_src = (ROOT / "static" / "sw.js").read_text()
+t("  the service worker never caches or serves /stats or /api/ (a tokened address must not become the offline shell)",
+  '"/stats"' in _sw_src and _sw_src.index('"/stats"') < _sw_src.index('req.mode === "navigate"')
+  and '"/api/"' in _sw_src.split('req.mode === "navigate"')[0])
 
 # ---- accuracy round 2 (the 20-claim audit) ------------------------------------
 # 1. The stamp and the words are one answer. These are the audit's own
@@ -2090,6 +2563,21 @@ t("  if the retry still contradicts, the stamp follows the takeaway's plain no",
   _v["verdict"] == "false" and _v["tldr"] == _NO_TLDR and fg.models.calls == 4, _v)
 t("  and a retry that writes the same sentence costs no second reading",
   fg.models.script == [] and fg.models.calls == 4)
+# The retry the code already has: one with an empty line is not an answer,
+# and one with both lines beats a first answer that left one empty.
+fg.models.calls = 0
+fg.models.script = [_SUGAR_NO, DIR("no"),
+                    Resp(VJ("false", [1, 2], tldr=_NO_TLDR, still_open="",
+                            evidence=["Sugar did not change behaviour (Study 1)."]))]
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("a retry that leaves its still-open line empty is not taken; the first answer, with its line, stands",
+  _v["still_open"] == "Longer trials are needed." and _v["verdict"] == "false", _v)
+fg.models.calls = 0
+fg.models.script = [Resp(VJ("complicated", [1, 2], tldr=_NO_TLDR, still_open="",
+                            evidence=["Sugar did not change behaviour (Study 1)."])), DIR("no"), _SUGAR_NO]
+_v = verdict.weigh_evidence("Sugar makes children hyperactive", _SUGAR, "(sugar) AND (hyperactivity)")
+t("  and a retry with both lines replaces a first answer that left one empty, even with as many faults",
+  _v["still_open"] == "Longer trials are needed.", _v)
 t("  and the words are kept, never swapped for a stock line",
   not breakdown.stamp_conflict(_v["verdict"], _v["tldr"], _v["explanation"],
                                "Sugar makes children hyperactive")
@@ -2247,6 +2735,61 @@ t("  a study that says nothing about its size or design is never the reason to c
 t("  a comparative claim is not capped for comparing two treatments",
   evidence.certainty_cap([_study("C", "c", abstract="We randomised 300 adults to diet A or diet B.")],
                          ["C"], comparative=True) is None)
+# A narrative review is never the strength, but its caveats count as any
+# paper's do: only one with no caveat is in neither list.
+_G3 = {
+    "trial, caveats": dict(title="Turmeric in 20 adults: a pilot study", types=["Clinical Trial"],
+                           abstract="A pilot study of 20 adults, uncontrolled. Pain fell."),
+    "trial, none": dict(title="Turmeric and joint pain: a randomized trial", types=["Randomized Controlled Trial"],
+                        abstract="We randomised 400 adults to turmeric or placebo. Pain fell more with turmeric."),
+    "narrative, caveats": dict(title="Turmeric for joint health: a narrative review", types=["Review"],
+                               abstract="This review summarises a pilot study of 12 patients without a control "
+                                        "group and industry-funded reports. Turmeric may ease joint pain."),
+    "narrative, none": dict(title="Turmeric and joints: a review", types=["Review"],
+                            abstract="We review what is known about turmeric and joint pain."),
+    "unlabelled": dict(title="Turmeric and joints", types=["Journal Article"], abstract="Turmeric and joints."),
+}
+
+
+def _g3(kind, n=0):
+    k = _G3[kind]
+    return _study(f"G{list(_G3).index(kind)}{n}", k["title"], types=k["types"], abstract=k["abstract"])
+
+
+def _cap_231c774(studies, cited):
+    """certainty_cap's trial loop as it stood at 231c774, the reference: no
+    narrative review rule (none of these papers is a pooled review)."""
+    pool = [s for s in studies if s["pmid"] in set(cited)]
+    solid, limited = [], []
+    for s in pool:
+        labelled = any(not t.startswith(evidence.IGNORE_PREFIXES) for t in s.get("publication_types") or [])
+        if evidence.trial_caveats(s):
+            limited.append(s)
+        elif evidence.sample_size(s) is not None or labelled:
+            solid.append(s)
+    return None if solid or not limited else "capped"
+
+
+t("G3: a 'true' resting only on a narrative review with caveats is capped again, and its line says low certainty",
+  evidence.trial_caveats(_g3("narrative, caveats")) and evidence.narrative_review(_g3("narrative, caveats"))
+  and evidence.certainty_cap([_g3("narrative, caveats")], ["G20"]) is not None
+  and evidence.line_certainty(evidence.evidence_line("true", [_g3("narrative, caveats")], ["G20"],
+                                                     "Turmeric eases joint pain")) == "low",
+  evidence.evidence_line("true", [_g3("narrative, caveats")], ["G20"], "Turmeric eases joint pain"))
+t("  and a trial with caveats beside narrative reviews with none is still capped (L2)",
+  evidence.certainty_cap([_g3("trial, caveats"), _g3("narrative, none", 1), _g3("narrative, none", 2)],
+                         ["G00", "G31", "G32"]) is not None
+  and evidence.certainty_cap([_g3("narrative, none")], ["G30"]) is None)
+import itertools as _it  # noqa: E402
+_g3_looser = []
+for _size in (1, 2, 3):
+    for _combo in _it.combinations_with_replacement(list(_G3), _size):
+        _ps = [_g3(k, i) for i, k in enumerate(_combo)]
+        _ids = [p_["pmid"] for p_ in _ps]
+        if _cap_231c774(_ps, _ids) and not evidence.certainty_cap(_ps, _ids):
+            _g3_looser.append(_combo)
+t("  property: for every set of up to three of these papers, the cap is never looser than at 231c774",
+  not _g3_looser, _g3_looser)
 fg.models.script = [Resp(VJ("true", [1, 2], tldr="Ashwagandha reduces stress.",
                             evidence=["Ashwagandha reduced stress (Study 1)."]))]
 _v = verdict.weigh_evidence("Ashwagandha reduces stress", _ASHWA, "(ashwagandha) AND (stress)")
@@ -2323,11 +2866,306 @@ t("the model's own 'wrong outcome' judgement removes the sports review from what
   and not any("sports" in p for p in (_v["breakdown"] or {}).get("evidence", [])), _v)
 t("  a judgement left out rules nothing out",
   verdict._relevance({"relevance": [{"study": 1}]}, _IF, "c") == {})
+# A study that never measured the claim's outcome is not evidence for it, even
+# when its background names that outcome. The case: a hair trial whose
+# background says creatine "enhances muscle strength", read as a test of
+# strength. Only a structured abstract can be told apart this way.
+_HAIR = json.loads((ROOT / "tests" / "off_outcome_hair_trial.json").read_text())
+_hair_out = _HAIR["outcome"]
+_hair = dict(_HAIR["study"])
+t("off outcome: a structured abstract that names the outcome only in its background did not measure it",
+  evidence.measured_outcome(_hair, _hair_out) is False)
+_RES_ONLY = _study("MO1", "Creatine supplementation in older adults: a randomised trial",
+                   abstract="BACKGROUND: Ageing brings frailty.\nMETHODS: Sixty adults took creatine or placebo.\n"
+                            "RESULTS: One repetition maximum rose by 8 kg with creatine.\nCONCLUSION: Creatine helped.")
+t("  one that names the outcome only in its results did measure it",
+  evidence.measured_outcome(_RES_ONLY, _hair_out) is True)
+t("  one that names only the declared stand-in in its results is left for the stand-in label",
+  evidence.measured_outcome(_study("MO2", "Creatine and hormones", abstract="BACKGROUND: Strength matters.\n"
+                                   "METHODS: Men took creatine.\nRESULTS: Lean mass rose.\nCONCLUSION: Fine."),
+                            _hair_out, "(lean mass)") is True)
+_UNSTRUCT = _study("MO3", "Creatine and hair", abstract="Creatine is known to raise muscle strength. "
+                   "We tested its effect on hair density in 40 men and found none.")
+t("  an abstract with no headings, or none at all, is left as it is",
+  evidence.measured_outcome(_UNSTRUCT, _hair_out) is None
+  and evidence.measured_outcome(_study("MO4", "Creatine and hair", abstract=""), _hair_out) is None
+  and evidence.measured_outcome(_study("MO5", "Creatine and hair", abstract="(No abstract available)"), _hair_out) is None
+  and evidence.measured_outcome(_hair, "") is None)
+# Three readings found by measuring the rule on saved answers, each a study
+# that did measure the outcome and must stay in.
+t("off outcome: an outcome named in general words too ('health', 'complications') is never ruled on",
+  evidence.measured_outcome(_study("MO6", "Acute effects of coffee", abstract="BACKGROUND: Effects are uncertain.\n"
+                                   "METHODS: 100 adults wore monitors.\nRESULTS: More ectopic beats.\nCONCLUSIONS: Some."),
+                            "(health OR disease risk OR mortality OR health effects)") is None
+  and evidence.measured_outcome(_hair, f"({_hair_out}) OR (complications)") is None)
+t("  headings that are only a label and a registration are no headings",
+  evidence.measured_outcome(_study("MO7", "A sit-stand desk trial", abstract="UNLABELLED: Desks reduced regional "
+                                   "musculoskeletal discomfort.\nTRIAL REGISTRATION: OSF."),
+                            "(back pain OR low back pain)") is None)
+t("  a background sentence that states the study's aim counts as what it set out to measure",
+  evidence.measured_outcome(_study("MO8", "Efficacy of a vaccine in males", abstract="BACKGROUND: Infection is common. "
+                                   "We report on the safety of the vaccine and its efficacy.\nMETHODS: 4000 men.\n"
+                                   "RESULTS: Fewer lesions; more injection-site pain.\nCONCLUSIONS: It prevents lesions."),
+                            "(safety OR adverse events OR side effects)") is True
+  and evidence.measured_outcome(_hair, _hair_out) is False)
+t("off outcome: hyperactivity rated as behaviour, and stress rated as tension, were measured",
+  evidence.measured_outcome(_study("MO9", "Diets high in sucrose and the behavior of children",
+                                   abstract="BACKGROUND: Sugar is said to cause hyperactivity.\nMETHODS: 48 children, three "
+                                            "diets.\nRESULTS: No differences in 39 behavioral measures.\nCONCLUSIONS: None."),
+                            "(hyperactivity OR hyperactive OR ADHD)") is True
+  and evidence.measured_outcome(_study("MO10", "Ashwagandha, cognition and mood",
+                                       abstract="BACKGROUND: It is said to reduce stress.\nMETHODS: 59 adults, POMS.\n"
+                                                "RESULTS: Less tension and fatigue.\nCONCLUSION: Some benefit."),
+                                "(stress OR psychological stress OR cortisol)") is True)
+# A missing word proves nothing: a study reports its outcome by an instrument
+# (1RM, A1C, PSQI), an abbreviation the background defined, or other words
+# ("died", "flu"). An independent grader wrote 54 such abstracts of studies
+# that did measure the outcome. The rule sets a study aside only on a positive
+# sign it is about another outcome. One case it still cannot read without the
+# claim's subject: "Sleep loss and word learning", for a claim about memory,
+# names sleep in its title and conclusions as the exposure.
+_ATTACKS = json.loads((ROOT / "tests" / "off_outcome_attacks.json").read_text())["cases"]
+_attacked = [a_["name"] for a_ in _ATTACKS if evidence.measured_outcome(a_["study"], a_["outcome"]) is False]
+t("off outcome: of 54 abstracts that did measure the outcome in other words, only one is set aside",
+  len(_ATTACKS) == 54 and _attacked == ["recall"], _attacked)
+_recall = next(a_ for a_ in _ATTACKS if a_["name"] == "recall")
+t("  and that one stays in once the claim's subject (sleep) is known, as it is in an answer",
+  evidence.measured_outcome(_recall["study"], _recall["outcome"], "", "(sleep deprivation OR sleep loss)") is None)
+t("  a background that never names the outcome sets nothing aside, whatever the title names",
+  evidence.measured_outcome(_study("MO11", "Creatine and hair density: a randomized trial",
+                                   abstract="BACKGROUND: Creatine is popular.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Hair density did not change.\nCONCLUSIONS: No hair loss."),
+                            _hair_out) is None)
+t("  a title naming another outcome is not enough when the findings never name it",
+  evidence.measured_outcome(_study("MO12", "Creatine and hair: a randomized trial",
+                                   abstract="BACKGROUND: Creatine raises muscle strength.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."),
+                            _hair_out) is None)
+t("  the hair trial is still set aside: its background names strength, its title and results name hair",
+  evidence.measured_outcome(_hair, _hair_out) is False)
+t("  text before the first heading is no structure to read, so nothing is set aside on it",
+  evidence.measured_outcome(_study("MO13", "Creatine and hair: a randomized trial",
+                                   abstract="Muscle strength was measured by 1RM in every participant. "
+                                            "BACKGROUND: Creatine raises muscle strength.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Hair density did not change.\nCONCLUSIONS: Hair was unchanged."),
+                            _hair_out) is None)
+# Setting a study aside removes its citation and nothing else. Two trials
+# disagree and the answer is "complicated"; code sets one aside; the page must
+# not then say "Randomized trials say yes". The mirror: the one set aside is
+# the one that agreed.
+def _flip_st(pmid, title, abstract, types):
+    return _study(pmid, title, abstract=abstract, types=types)
+_FL_FOR = _flip_st("FL1", "Creatine and muscle strength in 240 older adults: a randomized controlled trial",
+                   "BACKGROUND: Ageing lowers strength.\nMETHODS: 240 adults were randomized to creatine or placebo.\n"
+                   "RESULTS: Muscle strength rose more with creatine (mean difference 8 kg, p < 0.001).\n"
+                   "CONCLUSIONS: Creatine raised strength.", ["Randomized Controlled Trial"])
+_FL_AGAINST = _flip_st("FL2", "Creatine and muscle strength in 260 older women: a randomized controlled trial",
+                       "BACKGROUND: Creatine is said to help.\nMETHODS: 260 women were randomized to creatine or placebo.\n"
+                       "RESULTS: Leg press strength did not differ between groups (p = 0.6).\n"
+                       "CONCLUSIONS: Creatine gave no strength benefit.", ["Randomized Controlled Trial"])
+_FL_HAIR = _flip_st("FL3", "Creatine and hair in 250 older women: a randomized controlled trial",
+                    "BACKGROUND: Creatine is said to raise muscle strength in older adults.\n"
+                    "METHODS: 250 women were randomized to creatine or placebo.\n"
+                    "RESULTS: Hair density did not differ between groups (p = 0.6).\nCONCLUSIONS: Hair was unchanged.",
+                    ["Randomized Controlled Trial"])
+_FL_SURVEY = _flip_st("FL4", "Creatine use and muscle strength in 5,000 gym members: a cross-sectional study",
+                      "BACKGROUND: Many take creatine.\nMETHODS: A survey of 5,000 gym members.\n"
+                      "RESULTS: Creatine users were {} than non-users.\nCONCLUSIONS: {}.",
+                      ["Journal Article", "Observational Study"])
+def _flip(trials_findings, survey_finding, survey_words):
+    survey = dict(_FL_SURVEY, abstract=_FL_SURVEY["abstract"].format(*survey_words))
+    sts = [dict(s_) for s_, _ in trials_findings] + [survey]
+    finds = [f_ for _, f_ in trials_findings] + [survey_finding]
+    parsed = {"verdict": "complicated", "tldr": "Trials disagree on whether creatine raises strength in older adults.",
+              "explanation": "One trial found more strength with creatine (Study 1). Another found none (Study 2).",
+              "still_open": "Which doses help, and for whom.", "cited_study_numbers": list(range(1, len(sts) + 1)),
+              "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f_}
+                            for i, f_ in enumerate(finds)],
+              "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+              "not_applies_to": "", "unknowns": ""}
+    return sts, verdict._read_verdict(json.dumps(parsed), None, sts, "Creatine increases muscle strength in older adults",
+                                      subject="(creatine)", outcome="(muscle strength OR strength)", surrogate="")
+_fs, _fr = _flip([(_FL_FOR, "for"), (_FL_HAIR, "against")], "against", ("no stronger", "No association"))
+t("set aside: a trial code sets aside that disagreed still disagrees, so the trials settle nothing",
+  "FL3" not in _fr["cited_studies"] and _fr["off_topic"].get("FL3") == verdict.OFF_OUTCOME
+  and _fr["verdict"] == "complicated" and "Randomized trials say yes" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+_fs, _fr = _flip([(_FL_HAIR, "for"), (_FL_AGAINST, "against")], "for", ("stronger", "Users were stronger"))
+t("  and the mirror: the one set aside agreed, and the answer still does not become 'trials say no'",
+  "FL3" not in _fr["cited_studies"] and _fr["verdict"] == "complicated"
+  and "Randomized trials say no" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+# The harm guard with a study set aside: it is worked out on the studies as
+# they stand and with the set-aside ones put back, and the set-aside study
+# counts exactly as it would have in view, never more.
+def _hg_st(pmid, title, results, types, background="Flu vaccines are given to adults each winter."):
+    return _study(pmid, title, types=types,
+                  abstract=f"BACKGROUND: {background}\nMETHODS: Adults took part over two winters.\n"
+                           f"RESULTS: {results}\nCONCLUSIONS: See results.")
+_HG_FOR = _hg_st("HG1", "Flu vaccine and hospital admissions in 3,000 adults: a randomized controlled trial",
+                 "Hospital admissions fell with the vaccine (p < 0.01).", ["Randomized Controlled Trial"])
+_HG_HAIR_WEAK = _hg_st("HG2", "Flu vaccine and hair loss in 800 adults: a cohort study",
+                       "Hair loss did not differ between groups.", ["Observational Study"],
+                       background="Flu vaccines are said to reduce hospital admissions.")
+_HG_HAIR_RCT = _hg_st("HG3", "Flu vaccine and hair loss in 2,000 adults: a randomized controlled trial",
+                      "Hair loss did not differ between groups (p = 0.6).", ["Randomized Controlled Trial"],
+                      background="Flu vaccines are said to reduce hospital admissions.")
+def _hg(claim, outcome, model_verdict, studies_findings, cited, subject="(flu vaccine OR influenza vaccine)"):
+    sts = [dict(s_) for s_, _ in studies_findings]
+    parsed = {"verdict": model_verdict, "tldr": "The studies here lean one way.",
+              "explanation": "The trials were read (Study 1).", "still_open": "Who it helps most.",
+              "cited_study_numbers": cited,
+              "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f_}
+                            for i, (_, f_) in enumerate(studies_findings)],
+              "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+              "not_applies_to": "", "unknowns": ""}
+    return verdict._read_verdict(json.dumps(parsed), None, sts, claim, subject=subject,
+                                 outcome=outcome, surrogate="")
+_HG_C = "Flu vaccines reduce hospital admissions"
+_HG_O = "(hospital admissions)"
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_WEAK, "against")], [1, 2])
+t("harm guard, set aside: strong trials point the safe way and a weak set-aside study disagrees, so the safe answer stands",
+  _hr["off_topic"].get("HG2") == verdict.OFF_OUTCOME and _hr["verdict"] == "true" and "HG1" in _hr["cited_studies"],
+  (_hr["verdict"], _hr["tldr"], _hr["off_topic"]))
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_WEAK, "against")], [1])
+t("  and the same with the set-aside study never cited",
+  _hr["off_topic"].get("HG2") == verdict.OFF_OUTCOME and _hr["verdict"] == "true", (_hr["verdict"], _hr["tldr"]))
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_RCT, "against")], [1, 2])
+t("  a strong, cited set-aside trial that backs the risky answer stops it at 'complicated', with the risk said",
+  _hr["off_topic"].get("HG3") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
+  and "Going without vaccination" in _hr["tldr"] and "support this claim" not in _hr["tldr"],
+  (_hr["verdict"], _hr["tldr"]))
+_HG_SAFE_C = "Melatonin is safe for children"
+_HG_SAFE_O = "(adverse events OR side effects)"
+_HG_HARM = _hg_st("HG4", "Melatonin and adverse events in 400 children: a randomized controlled trial",
+                  "Adverse events were more common with melatonin (p < 0.01).", ["Randomized Controlled Trial"],
+                  background="Melatonin is given to children who sleep badly.")
+_HG_SAFE_HAIR = _hg_st("HG5", "Melatonin and hair growth in 300 children: a randomized controlled trial",
+                       "Hair growth did not differ between groups (p = 0.6).", ["Randomized Controlled Trial"],
+                       background="Melatonin is said to cause few adverse events in children.")
+_hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR, "for")], [1, 2], subject="(melatonin)")
+t("  and the mirror for a claim that something is safe: 'complicated', saying safety is not shown, never 'false' made firm",
+  _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
+  and _hr["tldr"] == verdict._UNSAFE_UNPROVEN, (_hr["verdict"], _hr["tldr"]))
+# Put back, a set-aside study counts as it would have in view: one the model
+# cited is cited again, one it never cited is back in view, uncited.
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_RCT, "against")], [1])
+t("  a strong set-aside trial the model never cited does not weaken the safe answer it would not have weakened in view",
+  _hr["off_topic"].get("HG3") == verdict.OFF_OUTCOME and _hr["verdict"] == "true"
+  and _hr["tldr"].startswith("The strongest studies here support this claim."), (_hr["verdict"], _hr["tldr"]))
+_hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR, "for")], [1], subject="(melatonin)")
+t("  and the mirror for a claim that something is safe: an uncited set-aside trial leaves 'false' as it stands",
+  _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "false", (_hr["verdict"], _hr["tldr"]))
+# Guards a change could remove unnoticed. An aim stated under its own heading,
+# or in a background sentence by any of the aim wordings, names what a study
+# set out to measure.
+def _aim_st(pmid, background, objective=""):
+    return _study(pmid, "Creatine in 250 older women: a randomized controlled trial", types=["Randomized Controlled Trial"],
+                  abstract=f"BACKGROUND: Creatine is said to raise muscle strength in older adults. {background}\n"
+                           + (f"OBJECTIVE: {objective}\n" if objective else "")
+                           + "METHODS: 250 women were randomized to creatine or placebo.\n"
+                             "RESULTS: Hair density did not differ between groups (p = 0.6).\nCONCLUSIONS: Hair was unchanged.")
+_STR_OUT = "(muscle strength OR strength)"
+t("set aside: an aim under its own heading names what the study set out to measure",
+  evidence.measured_outcome(_aim_st("AM1", "", "To test whether creatine changes hair density."), _STR_OUT, "", "(creatine)")
+  is False
+  and evidence.measured_outcome(_aim_st("AM2", ""), _STR_OUT, "", "(creatine)") is None)
+t("  and so does a background sentence in each of the aim wordings",
+  [evidence.measured_outcome(_aim_st(f"AM{i}", b_), _STR_OUT, "", "(creatine)") for i, b_ in enumerate((
+      "The trial was designed to measure hair density.", "Hair density was assessed in each woman.",
+      "Hair density and shedding were examined at 12 weeks.", "To determine whether creatine changes hair density."), 3)]
+  == [False] * 4)
+# all_null asks every figure line to be a null: one real effect among nulls is an effect.
+t("  'no clear effect' needs every line with a figure to be a null, not any one of them",
+  not breakdown.all_null("Adults on the diet lost 4.1 kg more over 5 years (Study 1). Waist size changed by 0.4 cm, "
+                         "which was not statistically significant (Study 1).", _WT_ST)
+  and breakdown.all_null("Waist size changed by 0.4 cm, which was not statistically significant (Study 1).", _WT_ST))
+# A set-aside trial still counts as read when the size is checked: one that
+# found the effect and calls it significant keeps "no clear effect" off.
+_NUL_STR = dict(_FL_AGAINST, abstract=_FL_AGAINST["abstract"].replace(
+    "Leg press strength did not differ between groups (p = 0.6).",
+    "Leg press strength rose by 1.2 kg more with creatine, which did not differ significantly between groups (p = 0.6)."))
+_SIG_HAIR = dict(_FL_HAIR, pmid="FL5", abstract=_FL_HAIR["abstract"].replace(
+    "Hair density did not differ between groups (p = 0.6)", "Hair density rose with creatine (p < 0.001)"))
+_sp = {"verdict": "complicated", "tldr": "Trials disagree on whether creatine raises strength in older adults.",
+       "explanation": "One trial found no strength gain (Study 1).", "still_open": "Which doses help.",
+       "cited_study_numbers": [1, 2],
+       "relevance": [{"study": 1, "subject": True, "outcome": True, "in_people": True, "finding": "against"},
+                     {"study": 2, "subject": True, "outcome": True, "in_people": True, "finding": "for"}],
+       "parts": [], "evidence": ["Leg press strength did not differ between groups (Study 1)."],
+       "effect_size": "Leg press strength rose by 1.2 kg more with creatine, which was not statistically significant (Study 1).",
+       "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""}
+_sr = verdict._read_verdict(json.dumps(_sp), None, [dict(_NUL_STR), dict(_SIG_HAIR)],
+                            "Creatine increases muscle strength in older adults",
+                            subject="(creatine)", outcome=_STR_OUT, surrogate="")
+t("  a significant trial for the claim that code set aside still keeps 'no clear effect' off the size",
+  _sr["off_topic"].get("FL5") == verdict.OFF_OUTCOME and not ((_sr["breakdown"] or {}).get("effect") or {}).get("null"),
+  ((_sr["breakdown"] or {}).get("effect"), _sr["off_topic"]))
+# A saved answer that relied on a study set aside without the claim's stand-in
+# is current when the stand-in it was saved with says the study measured it.
+db.put_cached_verdict("creatine raises strength via hair", "(creatine) AND " + _STR_OUT, "true",
+                      "Strength rose (Study 1).", ["FL3"], [dict(_FL_HAIR)], tldr="Creatine raises strength.",
+                      still_open="Doses vary.")
+db.put_cached_query("creatine raises strength via hair", verdict.QUERY_PROMPT_VERSION, "(creatine) AND " + _STR_OUT,
+                    "hair density", "creatine raises strength")
+db.put_cached_verdict("creatine raises strength no stand-in", "(creatine) AND " + _STR_OUT, "true",
+                      "Strength rose (Study 1).", ["FL3"], [dict(_FL_HAIR)], tldr="Creatine raises strength.",
+                      still_open="Doses vary.")
+t("  a saved answer whose set-aside study its saved stand-in covers is current, and without the stand-in it is not",
+  appmod._current(db.get_cached_verdict("creatine raises strength via hair", 24), "creatine raises strength via hair")
+  is not None
+  and appmod._current(db.get_cached_verdict("creatine raises strength no stand-in", 24),
+                      "creatine raises strength no stand-in") is None)
+t("  a cap either reading earns applies: the studies used, and those with the set-aside put back",
+  verdict._with_aside(["A"], ["B"]) == [["A"], ["A", "B"]] and verdict._with_aside(["A"], []) == [["A"]])
+_SA_TRIAL = _study("SA1", "Creatine and muscle strength in 900 older adults: a randomized controlled trial",
+                   abstract="BACKGROUND: Ageing lowers strength.\nMETHODS: 900 adults were randomized.\n"
+                            "RESULTS: Muscle strength rose more with creatine (p < 0.001).\nCONCLUSIONS: Creatine raised strength.",
+                   types=["Randomized Controlled Trial"])
+_SA_REVIEW = dict(_study("SA2", "Creatine and hair loss: a systematic review and meta-analysis",
+                         abstract="BACKGROUND: Creatine raises muscle strength.\nMETHODS: We pooled 12 trials.\n"
+                                  "RESULTS: Hair loss did not differ between groups.\nCONCLUSIONS: Hair was unchanged. "
+                                  "The certainty of the evidence was very low.",
+                         types=["Systematic Review", "Meta-Analysis"]), off_topic=verdict.OFF_OUTCOME)
+with appmod.app.test_request_context("/"):
+    _sa = appmod._check_response("Creatine increases muscle strength", "(creatine) AND (muscle strength OR strength)",
+                                 "true", "Creatine raises strength.", "Strength rose (Study 1).", ["SA1"],
+                                 [dict(_SA_TRIAL), dict(_SA_REVIEW)], "http://x", still_open="Doses.")
+t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
+  _sa["evidence_line"].startswith("Very low certainty") and _sa["verdict"] == "complicated",
+  (_sa["verdict"], _sa["evidence_line"]))
+# A saved answer that relied on a study the current code sets aside was written
+# with that study in view, and code cannot tell which of its sentences lean
+# on it. It is not patched and served: it is out of date, and checked fresh.
+db.put_cached_verdict("creatine raises strength in men", "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", "40265319"],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+db.put_cached_verdict("creatine raises strength in women", "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1).", ["MO1"], [dict(_RES_ONLY), dict(_hair)],
+                      tldr="Creatine raises strength.", still_open="Doses vary.")
+_calls0 = fg.models.calls
+fg.models.script = [Resp("(creatine) AND (strength)"), Resp(VJ("complicated", [1]))]
+_od = P("creatine raises strength in men", ip="7.7.7.71").get_json()
+t("a saved answer that relied on a study code now sets aside is out of date and checked fresh",
+  _od.get("cached") is False and fg.models.calls > _calls0, (_od.get("cached"), fg.models.calls - _calls0))
+_calls0 = fg.models.calls
+_ok = P("creatine raises strength in women", ip="7.7.7.72").get_json()
+t("  and one that only listed that study, without relying on it, is served as saved",
+  _ok.get("cached") is True and fg.models.calls == _calls0, (_ok.get("cached"), fg.models.calls - _calls0))
+_MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
+fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
+                            explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",
+                            relevance=[{"study": i, "subject": True, "outcome": True} for i in range(1, 4)]))]
+_v = verdict.weigh_evidence("Creatine increases muscle strength", _MO, f"(creatine) AND ({_hair_out})")
+t("  in an answer the code sets the hair trial aside as off outcome, whatever the model judged",
+  _MO[1].get("off_topic") == verdict.OFF_OUTCOME and "40265319" not in _v["cited_studies"], (_v["cited_studies"], _MO[1].get("off_topic")))
+t("  and keeps the trial that measured it and the unstructured abstract",
+  "MO1" in _v["cited_studies"] and not _MO[0].get("off_topic") and not _MO[2].get("off_topic"),
+  (_v["cited_studies"], [m_.get("off_topic") for m_ in _MO]))
 t("the prompt asks for subject and outcome for every study, and marks OFF TOPIC",
   '"relevance"' in verdict.weigh_prompt("c", "s") and "relevance" in verdict.VERDICT_SCHEMA["required"]
   and "OFF TOPIC" in verdict._format_study_for_prompt(2, _SMOKE[1], claim="Smoking causes lung cancer"))
 db.put_cached_verdict("off topic render", "q", "true", "Because (Study 1).", ["L1"], _SMOKE,
-                      tldr="Smoking causes lung cancer.")
+                      tldr="Smoking causes lung cancer.", still_open="Doses vary.")
 _html = c.get("/?q=off%20topic%20render").data.decode()
 t("the server-rendered chart says which bars are off topic",
   "read, off topic" in _html and "3 off topic" in _html)
@@ -2374,7 +3212,7 @@ t("the prompt defines all four, and says a harm report is not 'does not work'",
   '"insufficient" means not enough evidence' in verdict.weigh_prompt("c", "s")
   and "never evidence that\nthe thing does not work" in verdict.weigh_prompt("c", "s"))
 db.put_cached_verdict("not enough render", "q", "insufficient", "Nothing tests it.", [], _DETOX,
-                      tldr="No study has tested this.")
+                      tldr="No study has tested this.", still_open="Whether any study has tested it.")
 _html = c.get("/?q=not%20enough%20render").data.decode()
 t("the server-rendered page stamps 'Not enough evidence'",
   "Not enough evidence" in _html and '"alternateName": "Not enough evidence"' in _html
@@ -2441,6 +3279,612 @@ t("  a claim spelled right carries no typed note", d.get("typed") is None, d)
 _page = c.get("/").data.decode()
 t("  the page has the note, hidden until a check fills it",
   'id="typed-note" hidden' in _page)
+
+# ---- the same claim typed another way gets the same saved answer -------------
+# db.claim_fold is an ordered key: exact equality, no synonyms. The 140 pairs
+# in tests/equivalent_pairs.json are the approved rule, one test each.
+_EQ_PAIRS = json.loads((ROOT / "tests" / "equivalent_pairs.json").read_text())
+for _p in _EQ_PAIRS:
+    _same = db.claim_fold(_p["a"]) == db.claim_fold(_p["b"]) != ()
+    t(f"equivalent [{_p['cat']}] {_p['a']!r} vs {_p['b']!r}: {_p['expect']}",
+      _same == (_p["expect"] == "match"), (db.claim_fold(_p["a"]), db.claim_fold(_p["b"])))
+# Two claims match when they fold to the same key and that key is not empty
+# (find_equivalent never matches an empty key).
+_eqf = lambda a, b: db.claim_fold(a) == db.claim_fold(b) != ()
+t("equivalent: question form, plural, punctuation and articles fold together",
+  _eqf("Coffee causes cancer", "Does coffee cause cancer?")
+  and _eqf("Eggs raise cholesterol", "Egg raises cholesterol")
+  and _eqf("Omega-3 improves memory!", "omega 3 improves memory")
+  and _eqf("The HPV vaccine is safe", "Is HPV vaccine safe"))
+t("  negation, swapped order, dose, over and under, before and after, more and less never fold",
+  not any(_eqf(a, b) for a, b in [
+      ("Vaccines cause autism", "Vaccines don't cause autism"),
+      ("Vaccines cause autism", "Vaccines do not cause autism"),
+      ("Coffee causes cancer", "Cancer causes coffee"),
+      ("Taking 4000 IU of vitamin D is safe", "Taking 400 IU of vitamin D is safe"),
+      ("Taking 4000 IU of vitamin D is safe", "Taking 4,000 IU of vitamin D is safe"),
+      ("Testosterone is safe for men over 50", "Testosterone is safe for men under 50"),
+      ("Coffee before exercise helps", "Coffee after exercise helps"),
+      ("More sleep improves memory", "Less sleep improves memory")]))
+t("  a hedge is part of the claim: can, may, might, should and will never fold into each other or into none",
+  not any(_eqf(a, b) for a, b in [
+      ("Smoking causes lung cancer", "Smoking can cause lung cancer"),
+      ("Coffee may cause cancer", "Coffee might cause cancer"),
+      ("Coffee should be avoided", "Coffee will be avoided")])
+  and _eqf("Can vitamin D prevent colds?", "Vitamin D can prevent colds"))
+t("  cures, helps and causes are three claims",
+  not any(_eqf(a, b) for a, b in [
+      ("Apple cider vinegar cures diabetes", "Apple cider vinegar helps diabetes"),
+      ("Apple cider vinegar helps diabetes", "Apple cider vinegar causes diabetes"),
+      ("Apple cider vinegar cures diabetes", "Apple cider vinegar causes diabetes")]))
+t("equivalent: a short form is spelled out as its own word, never glued into another word",
+  not any(_eqf(a, b) for a, b in [
+      ("Shell fish causes allergies", "She'll fish causes allergies"),
+      ("Shell fish causes allergies", "She\u2019ll fish causes allergies"),
+      ("Were healthier on keto", "We're healthier on keto"),
+      ("Id causes anxiety", "I'd causes anxiety")])
+  and _eqf("She'll get sick from vaccines", "She will get sick from vaccines")
+  and _eqf("I'm tired after sugar", "I am tired after sugar"))
+# The grader's 84 hostile pairs (tests/hostile_pairs.json): every one stays
+# apart, except three the approved rule folds on purpose (each says why).
+for _p in json.loads((ROOT / "tests" / "hostile_pairs.json").read_text()):
+    t(f"hostile pair {_p['a'][:60]!r} vs {_p['b'][:60]!r}: {_p['expect']}",
+      _eqf(_p["a"], _p["b"]) == (_p["expect"] == "match"), (db.claim_fold(_p["a"])[:12], db.claim_fold(_p["b"])[:12]))
+t("equivalent: a number keeps its sign and its decimal point",
+  not any(_eqf(a, b) for a, b in [
+      ("Ice baths at -5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u22125 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u20135 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Take .5 mg melatonin for sleep", "Take 5 mg melatonin for sleep"),
+      ("Take.5 mg melatonin for sleep", "Take 5 mg melatonin for sleep"),
+      ("Take -.5 mg", "Take .5 mg"), ("Take -0.5 mg", "Take 0.5 mg"),
+      ("Salt -10% raises blood pressure", "Salt 10% raises blood pressure")])
+  and _eqf("Ice baths at -5 C help recovery", "Ice baths at \u22125 C help recovery")
+  and _eqf("Omega-3 improves memory", "Omega 3 improves memory")
+  and db.claim_fold("Take 2-5 mg") == ("take", "2-5", "mg"))
+t("  a dash standing free right before a number is kept, never dropped",
+  not any(_eqf(a, b) for a, b in [
+      ("Ice baths at - 5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u2212 5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Lose 5 - 10 kg on keto", "Lose 5 10 kg on keto"),
+      ("Take vitamin C - 500 mg", "Take vitamin C 500 mg"),
+      ("Ice baths at - .5 C help", "Ice baths at .5 C help")])
+  and _eqf("Ice baths at - 5 C help recovery", "Ice baths at \u2013 5 C help recovery")
+  and _eqf("Coffee - the drink - causes cancer", "Coffee the drink causes cancer"))
+db.put_cached_verdict("Ice baths at 5 C help recovery", "(ice) AND (recovery)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+db.put_cached_verdict("Take 5 mg melatonin for sleep", "(melatonin) AND (sleep)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+t("  and a saved claim with another sign or decimal point is never served for it",
+  db.find_equivalent("Do ice baths at -5 C help recovery?") is None
+  and db.find_equivalent("Take .5 mg melatonin for sleep") is None
+  and db.find_equivalent("Does taking 5 mg melatonin for sleep?") is None
+  and db.find_equivalent("Ice baths at 5 C helps recovery") == "Ice baths at 5 C help recovery")
+# No letter is silently dropped: a claim whose folding would lose any part of
+# a word (a combining mark, an invisible joiner) has no key and matches nothing.
+_nokey = lambda c: db.claim_fold(c) == ()
+t("equivalent: a vowel sign or other combining mark is never dropped, in any script",
+  all(_nokey(x) for x in (
+      "दाल से कैंसर होता है", "दिल से कैंसर होता है", "का", "की",    # Devanagari
+      "ডাল খেলে ক্যান্সার হয়", "ডিল খেলে ক্যান্সার হয়",              # Bengali
+      "กาแฟทำให้เป็นมะเร็ง",                                       # Thai
+      "القَهوة تسبب السرطان",                                       # Arabic with a vowel mark
+      "קָפֶה גורם לסרטן",                                           # Hebrew with points
+      "காபி புற்றுநோயை உண்டாக்கும்",                                 # Tamil
+      "Coq\u0301 au vin raises cholesterol"))                       # a Latin accent with no composed form
+  and not _eqf("दाल से कैंसर होता है", "दिल से कैंसर होता है") and not _eqf("का", "की")
+  and not _eqf("ডাল খেলে ক্যান্সার হয়", "ডিল খেলে ক্যান্সার হয়"))
+t("  an invisible character inside a word is part of the word too",
+  _nokey("Vaccines n\u200bot cause autism") and _nokey("Soft\u00adware causes stress")
+  and not _eqf("Vaccines n\u200bot cause autism", "Vaccines n ot cause autism"))
+t("equivalent: a raised or lowered digit or a fraction character never becomes a plain digit",
+  all(_nokey(x) for x in ("10\u2079 CFU probiotics work", "10\u00b2 mg zinc", "H\u2082O cures colds",
+                          "Take \u00bd tablet", "Take 1\u00bd tablets"))
+  and not _eqf("Take 1\u20442 tablet", "Take 12 tablet")
+  and not _eqf("10\u2079 CFU probiotics work", "109 CFU probiotics work")
+  and not _eqf("10\u00b2 mg zinc", "102 mg zinc") and not _eqf("H\u2082O cures colds", "H2O cures colds")
+  and not _eqf("Take \u00bd tablet", "Take 12 tablet")
+  and _eqf("\u2460 vitamin C works", "1 vitamin C works"))
+t("equivalent: no letter is folded into more than one letter",
+  all(_nokey(x) for x in ("Die Ma\u00dfe des Fetts", "\ufb01sh oil helps", "Take 5 \u338e zinc",
+                          "\u0130la\u00e7 yarar"))
+  and not _eqf("Die Ma\u00dfe des Fetts", "Die Masse des Fetts")
+  and not _eqf("\ufb01sh oil helps", "fish oil helps")
+  and _eqf("Coffee causes cancer\u2026", "Coffee causes cancer...")
+  and _eqf("\uff11\uff10 mg zinc helps", "10 mg zinc helps"))
+t("  scripts written without combining marks still fold as before",
+  _eqf("кофе вызывает рак", "Кофе вызывает рак?") and _eqf("咖啡致癌", "咖啡致癌？")
+  and _eqf("القهوة تسبب السرطان", "القهوة تسبب السرطان؟") and not _eqf("咖啡致癌", "茶致癌"))
+t("  café is never cafe; a composed and a decomposed é are the same letter",
+  not _eqf("Café au lait raises cholesterol", "Cafe au lait raises cholesterol")
+  and _eqf("Café au lait raises cholesterol", "Cafe\u0301 au lait raises cholesterol")
+  and db.claim_fold("Café au lait raises cholesterol") != ())
+db.put_cached_verdict("दाल से कैंसर होता है", "(lentils) AND (cancer)", "false", "No (Study 1).",
+                      ["P1"], STUDIES, tldr="No.", still_open="Open.")
+t("  and a claim with no key is never matched to a saved claim", db.find_equivalent("दिल से कैंसर होता है") is None
+  and db.find_equivalent("दाल से कैंसर होता है?") is None)
+t("  the small words dropped never include a negation, a preposition that sets direction or a hedge",
+  not (db._FOLD_DROP & {"not", "no", "never", "without", "over", "under", "before", "after", "more",
+                        "less", "to", "from", "and", "or", "can", "may", "might", "should", "will"}))
+
+_EQ_SAVED = "Creatine causes hair loss in men"
+db.put_cached_verdict(_EQ_SAVED, "(creatine) AND (hair loss)", "false", "No trial found it (Study 1).",
+                      ["P1"], STUDIES, tldr="No, the trials found no hair loss.", still_open="Longer trials.")
+fg.models.script = []; fg.models.calls = 0
+r = P("Does creatine cause hair loss in men?", ip="7.7.8.1"); d = r.get_json()
+t("equivalent: a reworded claim is answered from the saved check, with no model call",
+  r.status_code == 200 and d["cached"] and fg.models.calls == 0 and d["verdict"] == "false", d)
+t("  under the saved wording: the claim, the share link and the log",
+  d["claim"] == _EQ_SAVED and d["share_url"].endswith("/?q=" + urllib.parse.quote(_EQ_SAVED))
+  and db.recent_checks(1)[0]["claim_text"] == _EQ_SAVED, (d["claim"], d["share_url"]))
+t("  and it says what was typed, as a reworded match, not a spelling fix",
+  d["typed"] == "Does creatine cause hair loss in men?" and d["typed_reason"] == "wording", d)
+_r, _evs = stream("Is it true that creatine causes hair loss in men?", ip="7.7.8.2")
+t("  the streamed check gives the same saved answer and the same note",
+  _evs[-1]["stage"] == "done" and _evs[-1]["result"]["claim"] == _EQ_SAVED
+  and _evs[-1]["result"]["typed_reason"] == "wording" and fg.models.calls == 0, _evs[-1])
+_r, _evs = stream("Creatine cause hair loss in men", ip="7.7.8.3")
+t("  a dropped s is the same claim on the stream too",
+  _evs[-1]["result"]["claim"] == _EQ_SAVED and _evs[-1]["result"]["typed"] == "Creatine cause hair loss in men"
+  and _evs[-1]["result"]["typed_reason"] == "wording" and fg.models.calls == 0, _evs[-1])
+fg.models.script = [Resp("(creatine) AND (hair loss)"), Resp(VJ("complicated", [1]))]
+d = P("Creatine can cause hair loss in men", ip="7.7.8.4").get_json()
+t("  a hedged wording is another claim: it is checked fresh under its own words",
+  not d["cached"] and d["claim"] == "Creatine can cause hair loss in men" and d["typed"] is None, d)
+t("  a claim checked under its own words carries no note reason", d["typed_reason"] is None, d)
+
+# The second look for a reworded match, after the spelling switch: a
+# misspelled rewording of a saved claim gets the saved answer, with one model
+# call (the search) and none for the verdict.
+_EQ_SP = "Creatine causes hair loss in women"
+db.put_cached_verdict(_EQ_SP, "(creatine) AND (hair loss)", "false", "No trial found it (Study 1).",
+                      ["P1"], STUDIES, tldr="No, the trials found no hair loss in women.", still_open="Longer trials.")
+fg.models.script = [Resp("(creatine) AND (hair loss)\nClaim: Does creatine cause hair loss in women?")]
+fg.models.calls = 0
+d = P("Does creatin cause hair los in women?", ip="7.7.8.7").get_json()
+t("equivalent: after the spelling fix, a reworded match is looked for again and answered from the saved check",
+  d.get("cached") and d.get("claim") == _EQ_SP and d.get("typed") == "Does creatin cause hair los in women?"
+  and d.get("typed_reason") == "spelling" and fg.models.calls == 1 and not fg.models.script, (d, fg.models.calls))
+
+# Own key first: a stale row under the claim's own words is checked again
+# under those words, even when a newer row of the same claim in other words
+# is fresh. It is never swapped for the other wording.
+_OWN = "Turmeric eases joint pain in adults"
+db.put_cached_verdict(_OWN, "(turmeric) AND (joint pain)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Own old answer.", still_open="Own open line.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                  ("2020-01-01T00:00:00+00:00", db.normalize_claim(_OWN)))
+db.put_cached_verdict("Does turmeric ease joint pain in adults?", "(turmeric) AND (joint pain)", "complicated",
+                      "Mixed (Study 1).", ["P1"], STUDIES, tldr="Other wording answer.", still_open="Open.")
+t("equivalent: a row under the claim's own key comes before a newer row in other words",
+  db.find_equivalent(_OWN) == _OWN)
+fg.models.script = [Resp("(turmeric) AND (joint pain)"), Resp(VJ("complicated", [1], tldr="Own fresh answer."))]
+d = P(_OWN, ip="7.7.8.8").get_json()
+t("  so its stale row is checked again under its own words, with no note",
+  not d.get("cached") and d.get("claim") == _OWN and d.get("tldr") == "Own fresh answer."
+  and d.get("typed") is None, d)
+
+# A saved check older than the window is checked again under its saved
+# wording: its one row is refreshed, and no second row for it is made.
+_EQ_OLD = "Green tea lowers blood pressure in adults"
+db.put_cached_verdict(_EQ_OLD, "(green tea) AND (blood pressure)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Old short answer.", still_open="Old open line.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                  ("2020-01-01T00:00:00+00:00", db.normalize_claim(_EQ_OLD)))
+db.put_cached_query(_EQ_OLD, verdict.QUERY_PROMPT_VERSION, "(green tea) AND (blood pressure)", "", _EQ_OLD)
+fg.models.script = [Resp(VJ("complicated", [1], tldr="Fresh short answer.", still_open="Fresh open line."))]
+fg.models.calls = 0
+d = P("Does green tea lower blood pressure in adults?", ip="7.7.8.5").get_json()
+with db.get_conn() as _conn:
+    _eq_rows = [r["claim_text"] for r in _conn.execute("SELECT claim_text FROM verdict_cache").fetchall()
+                if db.claim_fold(r["claim_text"]) == db.claim_fold(_EQ_OLD)]
+t("equivalent: a stale match is checked fresh under the saved wording, reusing its saved search",
+  not d["cached"] and d["claim"] == _EQ_OLD and d["tldr"] == "Fresh short answer."
+  and d["typed"] == "Does green tea lower blood pressure in adults?" and d["typed_reason"] == "wording"
+  and d["search_query_used"] == "(green tea) AND (blood pressure)", d)
+t("  and refreshes that one row: no second row for the same claim", _eq_rows == [_EQ_OLD], _eq_rows)
+
+# An incomplete saved row (no still-open line) is never served through a match.
+_EQ_BAD = "Garlic lowers cholesterol in adults"
+db.put_cached_verdict(_EQ_BAD, "(garlic) AND (cholesterol)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Half a row.", still_open="")
+t("equivalent: an incomplete saved row is never returned", db.find_equivalent("Does garlic lower cholesterol in adults?") is None)
+fg.models.script = [Resp("(garlic) AND (cholesterol)"), Resp(VJ("complicated", [1], tldr="A whole answer."))]
+d = P("Does garlic lower cholesterol in adults?", ip="7.7.8.6").get_json()
+t("  and the check runs fresh under the reader's own words",
+  not d["cached"] and d["tldr"] == "A whole answer." and d["claim"] == "Does garlic lower cholesterol in adults?"
+  and d["typed"] is None, d)
+# A saved record the page cannot repair (here: a claim that looks personal) is not served either.
+_EQ_PERS = "My son Jake 7 gets sick from milk"
+db.put_cached_verdict(_EQ_PERS, "(milk) AND (illness)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Short.", still_open="Open.")
+t("  nor is a record with a problem the page cannot repair",
+  bool(appmod.display.saved_record_problems(_EQ_PERS, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
+  and db.find_equivalent("My son Jake 7 get sick from milk") is None)
+
+# The search for a reworded match reads at most the newest EQUIVALENT_SCAN
+# saved claims, newest first; the claim's own key is one lookup at any age.
+t("equivalent: the search for a reworded match reads at most the newest 2,000 saved claims",
+  db.EQUIVALENT_SCAN == 2000)
+_scan_db = os.path.join(tempfile.mkdtemp(), "scan.db")
+_real_db_path = db.DB_PATH
+_real_scan = db.EQUIVALENT_SCAN
+db.DB_PATH = _scan_db
+db.EQUIVALENT_SCAN = 5
+try:
+    db.init_db()
+
+    def _scan_put(claim, date):
+        db.put_cached_verdict(claim, "(q)", "complicated", "Mixed (Study 1).", ["P1"], STUDIES,
+                              tldr="Short.", still_open="Open.")
+        with db.get_conn() as _conn:
+            _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                          (date, db.normalize_claim(claim)))
+
+    _scan_put("Saffron lifts mood in adults", "2020-01-01T00:00:00+00:00")
+    _scan_put("Beetroot juice lowers blood pressure", "2020-01-02T00:00:00+00:00")
+    for _i in range(4):
+        _scan_put(f"Filler claim number {_i} about sleep", f"2021-01-0{_i + 1}T00:00:00+00:00")
+    t("  a match among the newest N is found", db.find_equivalent("Does beetroot juice lower blood pressure?")
+      == "Beetroot juice lowers blood pressure")
+    _folded = []
+    _real_fold = db.claim_fold
+    db.claim_fold = lambda c: _folded.append(c) or _real_fold(c)
+    try:
+        _beyond = db.find_equivalent("Does saffron lift mood in adults?")
+    finally:
+        db.claim_fold = _real_fold
+    t("  a row beyond the newest N is not read, so it is not matched",
+      _beyond is None and "Saffron lifts mood in adults" not in _folded
+      and len(_folded) <= db.EQUIVALENT_SCAN + 1, (_beyond, _folded))
+    with db.get_conn() as _conn:
+        _plan = " ".join(str(tuple(r)) for r in _conn.execute(
+            "EXPLAIN QUERY PLAN SELECT claim_key, claim_text, tldr, still_open FROM verdict_cache "
+            "ORDER BY created_at DESC, rowid DESC LIMIT 5").fetchall())
+    t("  the newest rows are read from an index on the date, not by sorting the whole table",
+      "verdict_cache_time" in _plan and "TEMP B-TREE" not in _plan, _plan)
+    t("  the claim's own saved row is found at any age, first",
+      db.find_equivalent("Saffron lifts mood in adults") == "Saffron lifts mood in adults")
+finally:
+    db.DB_PATH = _real_db_path
+    db.EQUIVALENT_SCAN = _real_scan
+
+# Both renderers say the same line, from the same two fields.
+_TN = [("x", None), ("Does coffee cause cancer?", "wording"), ("smokng causs cancr", "spelling"), (None, "wording"), ("", None)]
+_tn_py = [appmod.display.typed_note(a, b) for a, b in _TN]
+t("typed note: a spelling fix and a reworded match each say what happened",
+  _tn_py[1] == "Showing the saved check for this claim. You typed “Does coffee cause cancer?”."
+  and _tn_py[2] == "Spelling fixed. You typed “smokng causs cancr”." and _tn_py[3] == "" and _tn_py[4] == "", _tn_py)
+_tn_js_src = (ROOT / "static" / "app.js").read_text()
+t("  renderResult and the live stage both pass the reason to the note",
+  "showTyped(data.typed, data.typed_reason)" in _tn_js_src and "showTyped(typed, ev.typed_reason)" in _tn_js_src)
+_tn_tpl = (ROOT / "templates" / "index.html").read_text()
+t("  the page renders the same line through display.typed_note_parts, the reader's words in <bdi>",
+  "{% set tn = typed_note_parts(result.typed, result.typed_reason) %}{{ tn[0] }}<bdi>{{ tn[1] }}</bdi>{{ tn[2] }}" in _tn_tpl)
+_tn_mark = _tn_tpl[_tn_tpl.index('<p class="typed-note"'):]
+_tn_mark = _tn_mark[:_tn_mark.index("</p>") + 4]
+with appmod.app.test_request_context("/"):
+    _tn_env = appmod.app.jinja_env
+    _tn_on = _tn_env.from_string(_tn_mark).render(result={"typed": "Does coffee cause cancer?", "typed_reason": "wording"})
+    _tn_off = _tn_env.from_string(_tn_mark).render(result=None)
+t("  the template's own markup shows the line with a result that carries it, and stays hidden without",
+  _tn_on == '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>Does coffee cause cancer?</bdi>\u201d.</p>'
+  and _tn_off == '<p class="typed-note" id="typed-note" hidden></p>', (_tn_on, _tn_off))
+if _shutil.which("node"):
+    _tn_fn = _tn_js_src[_tn_js_src.index("function typedNote"):_tn_js_src.index("function showTyped")]
+    _tn_js = json.loads(_subprocess.run(
+        ["node", "-e", _tn_fn + "console.log(JSON.stringify(" + json.dumps(_TN) + ".map(([a, b]) => typedNote(a, b))));"],
+        capture_output=True, text=True, check=True).stdout)
+    t("  the script and the server write the same note, on five inputs", _tn_js == _tn_py, (_tn_js, _tn_py))
+t("  no note string carries a dash", not any(ch in s for s in _tn_py for ch in "\u2013\u2014"))
+
+# ---- steady answers: a stale saved answer is kept when nothing has changed ------
+# Past the cache window the search runs again. Same method stamp, same set of
+# PubMed ids, a whole and sound row: the saved answer is kept, re-dated, and no
+# model is asked. Anything else and the check runs as before.
+_OLD_DATE = "2020-01-01T00:00:00+00:00"
+
+
+def _steady_row(claim, studies=None, stamp="now", still="Longer trials."):
+    q = "(steady) AND (claim)"
+    db.put_cached_verdict(claim, q, "complicated", "Mixed (Study 1).", ["P1"], studies or STUDIES,
+                          tldr="Saved short answer.", still_open=still,
+                          method_stamp=verdict.METHOD_STAMP if stamp == "now" else stamp)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                      (_OLD_DATE, db.normalize_claim(claim)))
+    db.put_cached_query(claim, verdict.QUERY_PROMPT_VERSION, q, "", claim)
+
+
+def _saved_row(claim):
+    with db.get_conn() as _conn:
+        return _conn.execute("SELECT created_at, method_stamp, tldr FROM verdict_cache WHERE claim_key = ?",
+                             (db.normalize_claim(claim),)).fetchone()
+
+
+t("steady: the method stamp is a short hash worked out at start-up from the files that decide an answer",
+  len(verdict.METHOD_STAMP) == 12 and all(ch in "0123456789abcdef" for ch in verdict.METHOD_STAMP)
+  and set(verdict.ANSWER_FILES) >= {"verdict.py", "evidence.py", "pubmed.py", "display.py"})
+_real_files = verdict.ANSWER_FILES
+verdict.ANSWER_FILES = _real_files[:-1]
+_fewer = verdict._method_stamp()
+verdict.ANSWER_FILES = _real_files
+t("  and it changes when the files it is made from change", _fewer != verdict._method_stamp())
+# A stamp that cannot be worked out is empty: the app still starts, a warning
+# is logged, nothing is kept on an empty stamp and an empty stamp is not stored.
+import builtins as _bi  # noqa: E402
+import importlib.util as _ilu  # noqa: E402
+_real_open = _bi.open
+
+
+def _unreadable(path, *a, **k):
+    if os.path.basename(str(path)) in verdict.ANSWER_FILES:
+        raise PermissionError("unreadable")
+    return _real_open(path, *a, **k)
+
+
+class _Grab(logging.Handler):
+    def __init__(self): super().__init__(); self.lines = []
+    def emit(self, rec): self.lines.append(rec.getMessage())
+
+
+_grab = _Grab()
+logging.getLogger("evident.stamp").addHandler(_grab)
+_bi.open = _unreadable
+try:
+    try:
+        _empty = verdict._method_stamp()
+    except Exception as _e:  # noqa: BLE001
+        _empty = _e
+    _spec = _ilu.spec_from_file_location("verdict_nostamp", ROOT / "verdict.py")
+    _vcopy = _ilu.module_from_spec(_spec)
+    try:
+        _spec.loader.exec_module(_vcopy)
+        _copy_stamp = _vcopy.METHOD_STAMP
+    except Exception as _e:  # noqa: BLE001
+        _copy_stamp = _e
+finally:
+    _bi.open = _real_open
+    logging.getLogger("evident.stamp").removeHandler(_grab)
+t("steady: a stamp that cannot be worked out is empty and logged, never an exception",
+  _empty == "" and any("No method stamp" in x for x in _grab.lines), (_empty, _grab.lines))
+t("  and verdict.py still imports with an empty stamp when a source file cannot be read",
+  _copy_stamp == "", _copy_stamp)
+_real_stamp = verdict.METHOD_STAMP
+verdict.METHOD_STAMP = ""
+try:
+    for _lbl, _st in (("no stamp", None), ("an empty stamp", "")):
+        _c = "Steady claim with an empty current stamp and " + _lbl
+        _steady_row(_c, stamp=_st)
+        t(f"steady: an empty current stamp keeps nothing, against a row with {_lbl}",
+          appmod._steady(_c, STUDIES) is None and _saved_row(_c)["created_at"] == _OLD_DATE)
+    _c = "Steady claim stored with an empty stamp straight in the table"
+    _steady_row(_c)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET method_stamp = '' WHERE claim_key = ?", (db.normalize_claim(_c),))
+    _real_by_key = db.get_cached_by_key
+    _as_read = dict(_real_by_key(db.normalize_claim(_c)), method_stamp="")
+    db.get_cached_by_key = lambda key: dict(_as_read)
+    try:
+        _kept_empty = appmod._steady(_c, STUDIES)
+    finally:
+        db.get_cached_by_key = _real_by_key
+    t("  a row whose stored stamp is an empty string is not kept while the stamp in force is empty, even read as empty",
+      appmod._steady(_c, STUDIES) is None and _kept_empty is None and _saved_row(_c)["created_at"] == _OLD_DATE)
+    _c = "Steady claim saved while the stamp is empty"
+    fg.models.script = [Resp("(steady) AND (empty)"), Resp(VJ("complicated", [1], tldr="Made with no stamp."))]
+    d = P(_c, ip="7.7.10.8").get_json()
+    t("  and a check saved with an empty stamp stores no stamp",
+      d.get("tldr") == "Made with no stamp." and _saved_row(_c)["method_stamp"] is None, (d, _saved_row(_c) and dict(_saved_row(_c))))
+finally:
+    verdict.METHOD_STAMP = _real_stamp
+db.put_cached_verdict("Stamp stored as given", "(q)", "complicated", "E.", ["P1"], STUDIES,
+                      tldr="T.", still_open="O.", method_stamp="")
+t("  db stores an empty stamp as none", _saved_row("Stamp stored as given")["method_stamp"] is None)
+
+_SK = "Steady claim kept as saved"
+_steady_row(_SK)
+fg.models.script = []; fg.models.calls = 0
+d = P(_SK, ip="7.7.10.1").get_json()
+t("steady: same stamp, same study ids and a whole row: the saved answer is kept, with no model call",
+  d["cached"] and d["tldr"] == "Saved short answer." and fg.models.calls == 0, (d.get("tldr"), fg.models.calls))
+t("  and its date is moved to now", _saved_row(_SK)["created_at"] > _OLD_DATE
+  and d["cached_at"] == _saved_row(_SK)["created_at"], _saved_row(_SK)["created_at"])
+_steady_row(_SK)
+fg.models.calls = 0
+_r, _evs = stream(_SK, ip="7.7.10.2")
+t("  the streamed check keeps it the same way, after running the search",
+  _evs[-1]["stage"] == "done" and _evs[-1]["result"]["cached"] and fg.models.calls == 0
+  and any(e["stage"] == "found" for e in _evs), _evs[-1].get("stage"))
+
+for _lbl, _kw in (("the study ids differ by one", {"studies": STUDIES[:2] + [dict(STUDIES[2], pmid="P9")]}),
+                  ("the stamp differs", {"stamp": "0123456789ab"}),
+                  ("the stamp is missing", {"stamp": None}),
+                  ("the row is not whole", {"still": ""})):
+    _c = "Steady claim rerun when " + _lbl
+    _steady_row(_c, **_kw)
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made again.", still_open="New open line."))]
+    fg.models.calls = 0
+    d = P(_c, ip="7.7.10.3").get_json()
+    t(f"steady: checked again when {_lbl}",
+      not d["cached"] and d["tldr"] == "Made again." and fg.models.calls >= 1, (d.get("tldr"), fg.models.calls))
+    t(f"  and the row is replaced by one with the current stamp ({_lbl})",
+      _saved_row(_c)["method_stamp"] == verdict.METHOD_STAMP and _saved_row(_c)["tldr"] == "Made again.")
+
+# The same ids are not enough: each study must be the same record as the one
+# the saved answer read (id, title, abstract, publication types).
+import copy as _copy  # noqa: E402
+
+
+def _changed(field, value, i=0):
+    out = _copy.deepcopy(STUDIES)
+    if value is None:
+        out[i].pop(field)
+    else:
+        out[i][field] = value
+    return out
+
+
+for _lbl, _fresh, _saved in (
+        ("study 1 is now marked retracted", _changed("publication_types", ["Journal Article", "Retracted Publication"]), None),
+        ("study 1 now carries an expression of concern", _changed("publication_types", ["Journal Article", "Expression of Concern"]), None),
+        ("study 2 now has a correction", _changed("publication_types", ["Journal Article", "Published Erratum"], 1), None),
+        ("study 1's abstract changed", _changed("abstract", "A new abstract that reverses the finding."), None),
+        ("study 3's title changed", _changed("title", "A corrected title", 2), None),
+        ("a saved study lacks its abstract", STUDIES, _changed("abstract", None)),
+        ("a saved study lacks its publication types", STUDIES, _changed("publication_types", None, 1))):
+    _c = "Steady record check when " + _lbl
+    _steady_row(_c, studies=_saved)
+    _real_saf = pubmed.search_and_fetch
+    pubmed.search_and_fetch = lambda q, max_results=8, surrogate="", _f=_fresh: _copy.deepcopy(_f)
+    # Two studies cited: a retracted study 1 is background now, and the
+    # answer still rests on study 2.
+    fg.models.script = [Resp(VJ("complicated", [1, 2], tldr="Made again.", still_open="New open line."))]
+    fg.models.calls = 0
+    try:
+        d = P(_c, ip="7.7.10.6").get_json()
+    finally:
+        pubmed.search_and_fetch = _real_saf
+    t(f"steady: checked again when {_lbl}",
+      not d["cached"] and d["tldr"] == "Made again." and fg.models.calls >= 1, (d.get("tldr"), fg.models.calls))
+_RS = _copy.deepcopy(STUDIES)
+_RS[0]["publication_types"] = ["Review", "Journal Article"]
+t("steady: the same records in another order, repeated, or with their types listed in another order are the same",
+  appmod._same_records(STUDIES, list(reversed(_copy.deepcopy(STUDIES))) + [STUDIES[0]])
+  and appmod._same_records(_changed("publication_types", ["Journal Article", "Review"]), _RS)
+  and appmod._same_records(STUDIES + [STUDIES[1]], STUDIES)
+  and not appmod._same_records(STUDIES, STUDIES[:2])
+  and not appmod._same_records(STUDIES, _changed("abstract", None)))
+_lack = lambda pmid, title: {"pmid": pmid, "title": title, "publication_types": ["Journal Article"]}
+t("steady: two different studies that each lack a field are never the same record, nor two copies of one",
+  not appmod._same_records([_lack("A1", "One study")], [_lack("B2", "Another study")])
+  and not appmod._same_records([_lack("A1", "One study")], [_lack("A1", "One study")])
+  and not appmod._same_records(STUDIES[:1] + [_lack("A1", "One")], STUDIES[:1] + [_lack("B2", "Two")]))
+_steady_row("Steady record check unchanged")
+fg.models.script = []; fg.models.calls = 0
+d = P("Steady record check unchanged", ip="7.7.10.7").get_json()
+t("  and unchanged records keep the saved answer, with no model call",
+  d["cached"] and d["tldr"] == "Saved short answer." and fg.models.calls == 0, (d.get("tldr"), fg.models.calls))
+
+# _steady refuses a row with a problem the page cannot repair, even with the
+# current stamp and the same records, and keeps nothing while the cache is off.
+_SP = "My son Jake 7 gets sick from oat milk"
+_steady_row(_SP)
+t("steady: a row with a problem the page cannot repair is not kept, even with the same stamp and records",
+  bool(appmod.display.saved_record_problems(_SP, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
+  and appmod._steady(_SP, STUDIES) is None and _saved_row(_SP)["created_at"] == _OLD_DATE)
+_SH = "Steady claim while the cache is switched off"
+_steady_row(_SH)
+_real_hours = appmod.VERDICT_CACHE_HOURS
+appmod.VERDICT_CACHE_HOURS = 0
+try:
+    _off = appmod._steady(_SH, STUDIES)
+finally:
+    appmod.VERDICT_CACHE_HOURS = _real_hours
+t("  with the cache switched off nothing is kept and the saved date is left alone",
+  _off is None and _saved_row(_SH)["created_at"] == _OLD_DATE)
+t("  and with it on, the same row is kept", appmod._steady(_SH, STUDIES) is not None)
+
+_SR = "Steady claim saved in its own words"
+_steady_row(_SR)
+fg.models.script = []; fg.models.calls = 0
+d = P("Is it true that steady claim saved in its own words?", ip="7.7.10.4").get_json()
+t("steady: a reworded match on a stale row follows the same rule: kept under the saved wording, no model call",
+  d["cached"] and d["claim"] == _SR and d["typed_reason"] == "wording" and fg.models.calls == 0
+  and _saved_row(_SR)["created_at"] > _OLD_DATE, d)
+
+# A database from before the column opens, gains it, and still serves.
+import sqlite3 as _sq3  # noqa: E402
+_old_db = os.path.join(tempfile.mkdtemp(), "old.db")
+_oc = _sq3.connect(_old_db)
+_oc.executescript("""CREATE TABLE verdict_cache (claim_key TEXT PRIMARY KEY, claim_text TEXT NOT NULL,
+  search_query TEXT, verdict TEXT NOT NULL, tldr TEXT, explanation TEXT, still_open TEXT,
+  breakdown_json TEXT, cited_json TEXT, studies_json TEXT, created_at TEXT NOT NULL);""")
+_oc.execute("INSERT INTO verdict_cache VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("old database claim", "Old database claim", "(old) AND (db)", "complicated", "Old short.",
+             "Mixed (Study 1).", "Old open.", None, json.dumps(["P1"]), json.dumps(STUDIES),
+             appmod.datetime.now(appmod.timezone.utc).isoformat()))
+_oc.commit(); _oc.close()
+_real_db_path = db.DB_PATH
+db.DB_PATH = _old_db
+try:
+    db.init_db()
+    fg.models.calls = 0
+    d = P("Old database claim", ip="7.7.10.5").get_json()
+    _cols = {r[1] for r in _sq3.connect(_old_db).execute("PRAGMA table_info(verdict_cache)")}
+finally:
+    db.DB_PATH = _real_db_path
+t("steady: an old database without the column opens, gains it, and serves its saved answer",
+  "method_stamp" in _cols and d.get("cached") and d.get("tldr") == "Old short." and fg.models.calls == 0, d)
+t("  and a row read from it has no stamp, so past the window it would be made again",
+  db.get_cached_by_key("x") is None and appmod._steady("never saved claim", STUDIES) is None)
+
+# Two processes starting at once never crash on the schema change: each runs
+# init_db on the same 100 old scratch files at the same moments.
+_RACE_CHILD = r"""
+import os, sys, time
+sys.path.insert(0, sys.argv[1])
+import db
+paths, t0, gap = sys.argv[4].split("|"), float(sys.argv[2]), float(sys.argv[3])
+bad = 0
+for i, p in enumerate(paths):
+    while time.time() < t0 + i * gap:
+        pass
+    db.DB_PATH = p
+    try:
+        db.init_db()
+    except Exception as e:
+        bad += 1
+        print(type(e).__name__, e, file=sys.stderr)
+print(bad)
+"""
+_race_dir = tempfile.mkdtemp()
+_race_paths = []
+for _i in range(100):
+    _rp = os.path.join(_race_dir, f"old{_i}.db"); _race_paths.append(_rp)
+    _rc = _sq3.connect(_rp)
+    _rc.executescript("""CREATE TABLE verdict_cache (claim_key TEXT PRIMARY KEY, claim_text TEXT NOT NULL,
+      search_query TEXT, verdict TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE checks (id INTEGER PRIMARY KEY, claim_text TEXT, verdict TEXT, checked_at TEXT);""")
+    _rc.commit(); _rc.close()
+_race_env = {k: v for k, v in os.environ.items() if not k.startswith("TURSO_")}
+import time as _time  # noqa: E402
+_race_t0 = _time.time() + 3
+_race = [_subprocess.Popen([sys.executable, "-c", _RACE_CHILD, str(ROOT), str(_race_t0), "0.06", "|".join(_race_paths)],
+                           stdout=_subprocess.PIPE, stderr=_subprocess.PIPE, text=True, env=_race_env)
+         for _ in range(2)]
+_race_out = [p.communicate(timeout=120) for p in _race]
+_race_bad = sum(int(o[0].strip() or 99) for o in _race_out)
+t("schema: two processes starting at once on the same 100 old files never crash on adding a column",
+  _race_bad == 0 and all(p.returncode == 0 for p in _race), [o[1][:200] for o in _race_out])
+t("  and every file ends with every column",
+  all({"tldr", "still_open", "breakdown_json", "method_stamp"} <= {r[1] for r in _sq3.connect(_rp).execute(
+      "PRAGMA table_info(verdict_cache)")} for _rp in _race_paths))
+
+
+class _AlterConn:
+    """A connection whose ALTER is refused; the column is or is not there after."""
+    def __init__(self, err, there):
+        self.err, self.there = err, there
+
+    def execute(self, sql, params=()):
+        if sql.startswith("ALTER"):
+            raise self.err
+        return _Rows([{"name": "x"}] + ([{"name": "tldr"}] if self.there else []))
+
+
+_Rows = db._Rows
+_alter = []
+for _err in (_sq3.OperationalError("duplicate column name: tldr"), db.TursoError("statement rejected")):
+    db._add_column(_AlterConn(_err, True), "verdict_cache", "tldr")
+    try:
+        db._add_column(_AlterConn(_err, False), "verdict_cache", "tldr"); _alter.append(False)
+    except type(_err):
+        _alter.append(True)
+t("  either driver's refusal counts as done when the column is there, and is raised when it is not",
+  _alter == [True, True], _alter)
 
 # ---- prevention claims and comparisons said in other words -------------------
 _T2D = "Regular physical activity reduces the risk of type 2 diabetes"
@@ -2538,6 +3982,15 @@ t("  an unknown outcome phrase is dropped and the search asked again",
 import html as _html
 import inspect as _inspect
 import re as _re
+# The proof is the saved answer itself, read from the database by its key,
+# so it is seeded here the way a real check would have saved it.
+_EXS = [_study("EX1", "Vinegar and fasting glucose: a meta-analysis", types=["Meta-Analysis"]),
+        _study("EX2", "Vinegar with meals in type 2 diabetes", types=["Randomized Controlled Trial"]),
+        _study("EX3", "Vinegar and insulin in rats", types=["Journal Article"])]
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
 _home = c.get("/").get_data(as_text=True)
 _trust = _home.split('<section id="trust"')[1].split("</section>")[0] if '<section id="trust"' in _home else ""
 _rows = _trust.split('<div class="trust-row">')[1:]
@@ -2558,12 +4011,58 @@ t("  the study count it states is the one PubMed is asked for",
 t("  and it names the labels the code actually forces",
   f"“{appmod.VERDICT_LABELS['insufficient']}”" in _trust_text and f"“{appmod.VERDICT_LABELS['complicated']}”" in _trust_text)
 _ex = appmod._trust_example()
-t("  the real check is the exported one, linked as a result page",
-  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=Apple%20cider%20vinegar%20cures%20diabetes"
+t("  the real check is the saved one, linked as a result page",
+  _ex and f'href="{_ex["href"]}"' in _trust and _ex["href"] == "/?q=" + urllib.parse.quote(appmod.EXAMPLE_CLAIM)
   and "The footage at the top" not in _trust_text, _ex)
-_checks_page = c.get("/checks").get_data(as_text=True)
-t("  /checks carries it too, and neither page points at footage that is gone",
-  '<section id="trust"' in _checks_page and "The footage at the top" not in _checks_page)
+_ex_row = db.get_cached_by_key(db.normalize_claim(appmod.EXAMPLE_CLAIM))
+t("  its claim, verdict, short answer, date and count are the saved row's, not a frozen file's",
+  _ex and _ex["claim"] == _ex_row["claim_text"] and _ex["verdict"] == "complicated"
+  and _ex["tldr"] == _ex_row["tldr"] and _ex["read"] == 3
+  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(appmod.datetime.fromisoformat(_ex_row["cached_at"]))
+  and "check.json" not in _inspect.getsource(appmod._trust_example), _ex)
+t("  the frozen file and the script that wrote it are gone from the repo",
+  not (ROOT / "static" / "flight" / "check.json").exists() and not (ROOT / "scripts" / "export_flight_check.py").exists())
+# It goes through the Latest list's own path: a stored "true" whose only cited
+# study is off topic shows the same capped verdict in both places.
+_EXO = [dict(_EXS[0], off_topic=verdict.OFF_OUTCOME), _EXS[1]]
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "true",
+                      "Study 1 shows a cure.", ["EX1"], _EXO, tldr="It cures diabetes.", still_open="Doses vary.")
+_ex2 = appmod._trust_example()
+_ex2_home = c.get("/").get_data(as_text=True)
+_ex2_latest = [x for x in _ex2_home.split('<ol class="ledger-list">')[1].split("</ol>")[0].split('<li class="entry">')
+               if appmod.EXAMPLE_CLAIM.lower() in _html.unescape(x).lower()]
+_ex2_proof = _re.search(r'<p class="proof-verdict">([^<]*)</p>', _ex2_home)
+t("  the proof and the Latest list show the same verdict, through the same listing path",
+  _ex2 and _ex2["verdict"] == "insufficient" and _ex2_proof and _ex2_latest
+  and _ex2_proof.group(1) == appmod.VERDICT_LABELS["insufficient"]
+  and f'<span class="entry-verdict">{appmod.VERDICT_LABELS["insufficient"]}</span>' in _ex2_latest[0]
+  and _ex2["tldr"] == verdict.UNTESTED_TLDR, (_ex2, _ex2_proof and _ex2_proof.group(1), _ex2_latest))
+# Missing or incomplete, the section renders without it.
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "x", [], [], tldr="A short answer.", still_open="Open.")
+t("  a saved row with no studies is not offered as proof", appmod._trust_example() is None)
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "x", ["EX1"], _EXS, tldr="A short answer.", still_open="")
+_ex_open = c.get("/").get_data(as_text=True)
+t("  nor one with no still-open line", appmod._trust_example() is None
+  and "Can I see a real one?" not in _ex_open)
+t("  and the Latest list, on the same path, does not show that row as a finished answer either",
+  appmod.EXAMPLE_CLAIM[1:] not in _ex_open.split('<ol class="ledger-list">')[1].split("</ol>")[0]
+  if '<ol class="ledger-list">' in _ex_open else True)
+with db.get_conn() as _exc:
+    _exc.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(appmod.EXAMPLE_CLAIM),))
+t("  nor a missing one", appmod._trust_example() is None and "Can I see a real one?" not in c.get("/").get_data(as_text=True))
+_fx_src = (ROOT / "scripts" / "ui_fixture_server.py").read_text()
+t("  the local fixture page seeds the example claim, so its screenshots show the proof",
+  f'    "{appmod.EXAMPLE_CLAIM}",' in _fx_src.split("SEED = [")[1].split("]")[0])
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
+_checks_r = c.get("/checks")
+t("  /checks is gone: it sends the reader to the home page, which points at no footage that is gone",
+  _checks_r.status_code == 301 and _checks_r.headers["Location"].endswith("/")
+  and '<section id="trust"' in _home and "The footage at the top" not in _home, _checks_r.headers.get("Location"))
 _ex_res = c.get(_ex["href"] if _ex else "/").get_data(as_text=True)
 t("  and a result page renders it hidden, so the verdict owns that screen",
   ('<section id="trust" class="trust" aria-labelledby="trust-heading" hidden>' in _ex_res)
@@ -2918,13 +4417,23 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # false" read as strong evidence for the cure.
 _el = evidence.evidence_line
 t("the evidence line says what the evidence is evidence of",
-  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence of a partial effect, not a cure"
+  _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure") == "Strong evidence, and none of it shows a cure"
   and _el("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "small", "cure") == "Strong evidence of a small effect, not a cure"
   and _el("true", _ACV, ["A1", "A2"], "Vinegar lowers blood sugar", "moderate")
   == "Strong evidence for this claim, a moderate effect"
   and _el("false", _ACV, ["A1"], "Vinegar raises blood sugar") == "Strong evidence against this claim"
   and _el("complicated", _ACV, ["A1"], "Vinegar lowers blood sugar in diabetes", "small")
   == "Strong evidence of a small effect, but no plain yes or no")
+# A false answer to a promise with no size: the line asserts no effect
+# nobody measured, and keeps its level word.
+_el_ns = [evidence.evidence_line(verdict_v, _ACV, ["A1", "A2"], c, lab, "cure") for verdict_v, c, lab in
+          (("false", "Homeopathy cures cancer", None), ("false", "Garlic cures HIV", ""),
+           ("false", "Ivermectin cures COVID-19", "unclear"))]
+t("  a false answer to a promise with no size says none of the evidence shows the promise, never 'partial'",
+  _el_ns == ["Strong evidence, and none of it shows a cure"] * 3
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "moderate", "cure") == "Strong evidence of a moderate effect, not a cure"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, None, "cure", withheld=True) == "Strong evidence, and none of it shows a cure"
+  and evidence.evidence_line("false", _ACV, ["A1", "A2"], _ACV_CLAIM, "none", "cure") == "Strong evidence of no clear effect", _el_ns)
 t("  it names the one group, says low certainty, and is empty with nothing used",
   _el("complicated", _MEASLES, ["M1", "M2"], "Vitamin D stops colds") == "Strong evidence, but only in children"
   and _el("complicated", [_study("L1", "Pilot trial of vinegar", abstract="A pilot trial in 12 adults.")],
@@ -2940,7 +4449,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence of a partial effect, not a cure", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence, and none of it shows a cure", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -3140,9 +4649,19 @@ _LOWREV = _gin_review("L1", "Ten randomized trials were pooled. Low-certainty ev
 _VLREV = _gin_review("L2", "Ten randomized trials were pooled. Very low certainty evidence suggests ginger reduces vomiting.")
 _MODREV = _gin_review("L3", _SPLIT)
 _PLAIN = _gin_review("L4", "Ten randomized trials were pooled and ginger reduced vomiting.")
+t("  weak or low certainty evidence is the reason for no plain answer, so the line says 'so', never 'but'",
+  evidence.evidence_line("complicated", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Very low certainty evidence, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, "small", outcome="(vomiting)")
+  == "Low certainty evidence of a small effect, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_gin_review("L5", "Ten trials.", types=["Case Reports"])], ["L5"],
+                             _GIN_CLAIM) == "Weak evidence, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_PLAIN], ["L4"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Strong evidence, but no plain yes or no",
+  [evidence.evidence_line("complicated", [x_], [x_["pmid"]], _GIN_CLAIM, outcome="(vomiting)") for x_ in (_VLREV, _PLAIN)])
 t("  the evidence line never says Strong when the lead review says low or very low",
   evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, outcome="(vomiting)")
-  == "Low certainty evidence, but no plain yes or no"
+  == "Low certainty evidence, so no plain yes or no"
   and evidence.evidence_line("false", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
   == "Very low certainty evidence against this claim"
   and evidence.evidence_line("true", [_MODREV], ["L3"], _GIN_CLAIM, outcome="(vomiting OR emesis)")
@@ -3802,6 +5321,85 @@ t("a number in a name is not a result: no 'not significant' note after 'type 1 d
   and breakdown.say_nulls("Children and adults with type 1 diabetes (Study 1).",
                           [_study("1", "T1D diet", abstract="HbA1c fell 1 point, which was not significant (p = 0.4).")])
   == "Children and adults with type 1 diabetes (Study 1).")
+# L1: code never writes "not statistically significant" after a figure whose
+# own printed interval rules that out. Live: vitamin D and winter infections.
+_L1_AB = ("RESULTS: The main analysis showed no significant preventive effects (risk ratio [RR]: 0.99, 95% confidence "
+          "interval [CI]: 0.97 to 1.01). Winter-dominant seasons (RR: 0.79, 95% CI: 0.71 to 0.89) and daily dosing "
+          "(RR: 0.97, 95% CI: 0.90 to 1.04, not significant).")
+_L1_ST = [_study("L1", "Vitamin D and respiratory infections: a meta-analysis", types=["Meta-Analysis"], abstract=_L1_AB)]
+_L1_SIG = "The risk ratio for winter-dominant seasons was 0.79 (95 percent CI 0.71 to 0.89) (Study 1)."
+_L1_NUL = "The risk ratio for daily dosing was 0.97 (Study 1)."
+_L1_TWO = ("Winter risk fell with a risk ratio of 0.79 (95 percent CI 0.71 to 0.89), while the risk ratio for daily "
+           "dosing was 0.97 (Study 1).")
+t("L1: a figure whose own printed interval rules out no effect gets no 'not significant' sentence",
+  breakdown.say_nulls(_L1_SIG, _L1_ST) == _L1_SIG and breakdown.significant_figure(_L1_SIG) and "95" not in breakdown._figures(_L1_SIG),
+  (breakdown.say_nulls(_L1_SIG, _L1_ST), breakdown._figures(_L1_SIG)))
+t("  a figure its abstract reports as no clear difference still gets its sentence",
+  breakdown.say_nulls(_L1_NUL, _L1_ST) == _L1_NUL + " That difference was not statistically significant (Study 1).",
+  breakdown.say_nulls(_L1_NUL, _L1_ST))
+t("  a sentence with one significant and one null figure is not called a null: 'that difference' would read as the first",
+  breakdown.say_nulls(_L1_TWO, _L1_ST) == _L1_TWO, breakdown.say_nulls(_L1_TWO, _L1_ST))
+_L1_SAVED = _L1_SIG + " That difference was not statistically significant (Study 1). That is about 21% lower risk (Study 1)."
+with appmod.app.test_request_context("/"):
+    _l1 = appmod._check_response("Vitamin D prevents winter infections L1", "(vitamin d) AND (infection)", "complicated",
+                                 "It may help a little.", _L1_SIG, ["L1"], [dict(s) for s in _L1_ST], "http://x",
+                                 still_open="Which doses.", breakdown={"parts": [], "evidence": [_L1_SIG],
+                                 "effect_size": _L1_SAVED, "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
+t("  and a saved check that has the false sentence loses it on the page; one after a null figure stays",
+  "not statistically significant" not in _l1["breakdown"]["effect_size"]
+  and "21% lower risk" in _l1["breakdown"]["effect_size"]
+  and breakdown.unsaid_nulls(_L1_NUL + " That difference was not statistically significant (Study 1).")
+  == _L1_NUL + " That difference was not statistically significant (Study 1).",
+  _l1["breakdown"]["effect_size"])
+# K2: an interval in code's own plain words ("likely range", breakdown.JARGON)
+# is still an interval. Live: the saved vitamin D evidence paragraph.
+_K2_N = " That difference was not statistically significant (Study 1)."
+_K2_SIG = "The risk ratio for winter-dominant seasons was 0.79 with a likely range from 0.71 to 0.89 (Study 1)."
+_K2_CROSS = "The risk ratio for winter-dominant seasons was 0.92 with a likely range from 0.80 to 1.10 (Study 1)."
+_K2_DIFF = "The average difference was -0.40 points with a likely range from -0.90 to 0.10 (Study 1)."
+_K2_AB = [_study("K2", "Vitamin D: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="RESULTS: Overall RR 0.79 (95% CI 0.60 to 1.04). Winter RR 0.79 (95% CI 0.71 to 0.89).")]
+t("K2: a paragraph whose plain-words range rules out no effect loses the false null sentence",
+  breakdown.unsaid_nulls(_K2_SIG + _K2_N) == _K2_SIG and breakdown.significant_figure(_K2_SIG),
+  breakdown.unsaid_nulls(_K2_SIG + _K2_N))
+t("  a ratio whose plain-words range includes 1, or a difference whose range crosses 0, keeps it",
+  breakdown.unsaid_nulls(_K2_CROSS + _K2_N) == _K2_CROSS + _K2_N
+  and breakdown.unsaid_nulls(_K2_DIFF + _K2_N) == _K2_DIFF + _K2_N
+  and evidence.significance(_K2_CROSS, "0.92") == "null" and evidence.significance(_K2_DIFF, "-0.40") == "null")
+t("  and say_nulls writes no null after the plain-words form on fresh text, though the abstract's first 0.79 is a null",
+  breakdown.say_nulls(_K2_SIG, _K2_AB) == _K2_SIG
+  and breakdown.say_nulls("The risk ratio for winter-dominant seasons was 0.79 (Study 1).", _K2_AB).endswith(_K2_N),
+  breakdown.say_nulls(_K2_SIG, _K2_AB))
+# K3: a sentence's figure is matched to a result in its abstract, never to
+# the "0" of a decimal ("odds ratio 0.88") or to an interval's level ("95%
+# confidence interval"). Live: "ranged in age from 0 to 95 years".
+_K3_AGE = "People ranged in age from 0 to 95 years across multiple randomized controlled trials (Study 1)."
+_K3_DEC = [_study("K3a", "Vitamin D: individual participant data", types=["Meta-Analysis"],
+                  abstract="RESULTS: 25 trials (participants aged 0 to 95 years). Vitamin D did not significantly change "
+                           "the overall result (adjusted odds ratio 0.98, 95% CI 0.80 to 1.20).")]
+_K3_LVL = [_study("K3b", "Vitamin D: a meta-analysis", types=["Meta-Analysis"],
+                  abstract="RESULTS: No significant preventive effects (risk ratio [RR]: 0.99, 95% confidence interval "
+                           "[CI]: 0.97 to 1.01). Ages ranged from 0 to 95 years.")]
+_k3_st = lambda ab: [_study("K3c", "A trial", types=["Randomized Controlled Trial"], abstract=ab)]
+t("K3: an age range gets no 'not significant' sentence from a decimal's 0 or an interval's level in its abstract",
+  breakdown.say_nulls(_K3_AGE, _K3_DEC) == _K3_AGE and breakdown.say_nulls(_K3_AGE, _K3_LVL) == _K3_AGE
+  and breakdown.null_figure(_K3_AGE, _K3_DEC) is None and breakdown.null_figure(_K3_AGE, _K3_LVL) is None,
+  (breakdown.say_nulls(_K3_AGE, _K3_DEC), breakdown.say_nulls(_K3_AGE, _K3_LVL)))
+t("  a real null whose figure is 0.95 or 95% still gets its sentence",
+  breakdown.say_nulls("The risk ratio was 0.95 (Study 1).", _k3_st("RESULTS: RR 0.95 (95% CI 0.85 to 1.06)."))
+  .endswith(_K2_N)
+  and breakdown.say_nulls("The difference was 95% (Study 1).", _k3_st("RESULTS: The difference was 95% (p = 0.40)."))
+  .endswith(_K2_N)
+  and evidence.significance("odds ratio 4.0 (95% CI 0.9 to 9.0)", "4") is None
+  and evidence.significance("odds ratio 4 (95% CI 0.9 to 9.0)", "4") == "null")
+# K4: the explanation path has its own assertion: a saved explanation with
+# the false null after a significant figure loses it.
+with appmod.app.test_request_context("/"):
+    _k4 = appmod._check_response("Vitamin D prevents winter infections K4", "(vitamin d) AND (infection)", "complicated",
+                                 "It may help a little.", _L1_SIG + _K2_N, ["L1"], [dict(s) for s in _L1_ST], "http://x",
+                                 still_open="Which doses.")
+t("K4: L1 on the explanation path: a saved false null after a significant figure goes, the figure stays",
+  "not statistically significant" not in _k4["explanation"] and "0.79" in _k4["explanation"], _k4["explanation"])
 t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
   breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
   == "A pooled review estimated the global rate of alcohol use during pregnancy."
@@ -3957,6 +5555,403 @@ t("  with no dash anywhere in what the reader sees",
   not re.search("[–—]", json.dumps(_sun, ensure_ascii=False)))
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 verdict.guideline_view = lambda claim: None
+
+# ---- G1: the guidance lead is code's alone ----
+# A model takeaway that opens with "Major health guidelines say:" was read
+# as code's own, so check_faithful let it pass and the guidance line came
+# with it. verdict.without_lead takes it off in _read_verdict, which the
+# plain and the streamed check both reach.
+t("G1: without_lead takes the model's own lead off, in any spacing or case, and gives the capital back",
+  verdict.without_lead(verdict.GUIDELINE_LEAD + "stop your arthritis medicine.") == "Stop your arthritis medicine."
+  and verdict.without_lead("major  HEALTH guidelines say : that turmeric works.") == "Turmeric works."
+  and verdict.without_lead("  Guidelines say: it is not safe.") == "It is not safe."
+  and verdict.without_lead("Turmeric eases joint pain.") == "Turmeric eases joint pain.")
+_G1B_KEEP = ["Guidelines say that adults should get 150 minutes of exercise.",
+             "Guidelines say adults should get 150 minutes of exercise.",
+             "Major health guidelines say that adults should get 150 minutes of exercise.",
+             "health guidelines say adults need sleep."]
+t("G1b: only the lead with its colon is taken off; a takeaway that says what guidelines say stays byte for byte",
+  [verdict.without_lead(x) for x in _G1B_KEEP] == _G1B_KEEP, [verdict.without_lead(x) for x in _G1B_KEEP])
+# H2: a lead after quotes, dashes, bold or italic marks or a zero-width
+# character, or written with "state(s):", is taken off too, with no mark
+# of its opening left dangling.
+_H2_FORMS = ['"Major health guidelines say: stop your arthritis medicine."',
+             "\u201cMajor health guidelines say: stop your arthritis medicine.\u201d",
+             "- Major health guidelines say: stop your arthritis medicine.",
+             "\u2014 Guidelines say: stop your arthritis medicine.",
+             "**Major health guidelines say:** stop your arthritis medicine.",
+             "**Major health guidelines say: stop your arthritis medicine.**",
+             "*Guidelines say:* stop your arthritis medicine.",
+             "\u200bMajor health guidelines say: stop your arthritis medicine.",
+             "Major health guidelines state: stop your arthritis medicine.",
+             "Health guidelines states: stop your arthritis medicine."]
+t("H2: each of the reviewer's forms loses the lead and keeps the sentence, capital back",
+  [verdict.without_lead(x) for x in _H2_FORMS] == ["Stop your arthritis medicine."] * len(_H2_FORMS),
+  [verdict.without_lead(x) for x in _H2_FORMS])
+t("  and a takeaway that only reports what guidelines say, or quotes after the lead, keeps its own marks",
+  verdict.without_lead("Guidelines say that X helps.") == "Guidelines say that X helps."
+  and verdict.without_lead('Major health guidelines say: "the drug" works.') == '"the drug" works.')
+def _g1_run(claim, tldr, ip, v="true", way=P):
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
+        _conn.execute("DELETE FROM query_cache")
+    fg.models.script = [Resp("q"), Resp(VJ(v, [1], tldr=tldr))]
+    if way is P:
+        return P(claim, ip=ip).get_json()
+    _evs = stream(claim, ip=ip)[1]
+    return _evs[-1].get("result") or _evs[-1]
+def _g1_same(a, b):
+    return (a["verdict"], a["evidence_line"]) == (b["verdict"], b["evidence_line"])
+_G1_CHERRY = "Tart cherry juice speeds muscle recovery"
+_g1_lead = _g1_run(_G1_CHERRY, verdict.GUIDELINE_LEAD + "tart cherry juice speeds recovery.", "9.7.1.1")
+_g1_bare = _g1_run(_G1_CHERRY, "Tart cherry juice speeds recovery.", "9.7.1.2")
+t("G1: a model takeaway that opens with the lead, on a claim no guideline covers, loses the lead",
+  "guidelines say" not in _g1_lead["tldr"].lower() and _g1_lead["evidence_line"] != verdict.GUIDANCE_LINE,
+  _g1_lead)
+t("  and its stamp and evidence line are what the same reply gives without those words",
+  _g1_same(_g1_lead, _g1_bare), (_g1_lead["verdict"], _g1_lead["evidence_line"],
+                                 _g1_bare["verdict"], _g1_bare["evidence_line"]))
+_g1_slead = _g1_run(_G1_CHERRY, verdict.GUIDELINE_LEAD + "tart cherry juice speeds recovery.", "9.7.1.3", way=stream)
+t("  and the streamed check reads it the same way",
+  "guidelines say" not in _g1_slead["tldr"].lower() and _g1_same(_g1_slead, _g1_bare),
+  (_g1_slead["tldr"], _g1_slead["verdict"], _g1_slead["evidence_line"]))
+_G1_ARTH = "Stop your arthritis medicine and take turmeric"
+_g1_arth = _g1_run(_G1_ARTH, verdict.GUIDELINE_LEAD + "stop your arthritis medicine and take turmeric.", "9.7.1.4")
+_g1_arth_bare = _g1_run(_G1_ARTH, "Stop your arthritis medicine and take turmeric.", "9.7.1.5")
+t("G1: the reviewer's arthritis and turmeric reply no longer keeps 'true' and the guidance line because of the lead",
+  _g1_arth["evidence_line"] != verdict.GUIDANCE_LINE and "guidelines say" not in _g1_arth["tldr"].lower()
+  and _g1_same(_g1_arth, _g1_arth_bare),
+  (_g1_arth["verdict"], _g1_arth["evidence_line"], _g1_arth_bare["verdict"], _g1_arth_bare["evidence_line"]))
+verdict.guideline_view = _guide("false", "antibiotics do not work on colds, which are caused by viruses.")
+_g1_real = _g1_run("Antibiotics cure the common cold",
+                   verdict.GUIDELINE_LEAD + "antibiotics cure colds.", "9.7.1.6", v="complicated")
+verdict.guideline_view = lambda claim: None
+t("G1: a real guidance answer still carries the lead once, never twice",
+  _g1_real["verdict"] == "false" and _g1_real["tldr"].startswith(verdict.GUIDELINE_LEAD)
+  and _g1_real["tldr"].lower().count("guidelines say") == 1, _g1_real["tldr"])
+
+# ---- Under an answer the guidance rule set, nothing says the claim cannot be rated ----
+# The live safety run: "type 1 diabetes and insulin" and "antibiotics and the
+# cold" were False from guidance, with the model's "so there isn't enough
+# evidence to rate it" still under the stamp.
+_UNRATED = re.compile(r"enough evidence[^.]*\bto rate\b|\bcannot be rated\b|\bto rate (?:it|this claim)\b", re.I)
+_GU_STUDIES = [_study("GU1", "Antibiotic prescribing for colds", types=["Editorial"],
+                      abstract="Antibiotics should not be used for the common cold, which viruses cause."),
+               _study("GU2", "Respiratory infections in general practice", types=["Review"],
+                      abstract="Recovery from colds is usually spontaneous without antibiotics.")]
+_GU_TLDR = verdict.GUIDELINE_LEAD + "antibiotics do not cure colds. Check treatment decisions with a doctor."
+_GU_EXPL = ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually spontaneous "
+            "(Study 2). Nothing here tests this claim in people, only opinion pieces, so there isn't "
+            "enough evidence to rate it.")
+_GU_BD = {"parts": [], "evidence": ["Antibiotics should not be used for the common cold (Study 1).",
+                                    "No trial here tests the claim, so there isn't enough evidence to rate it (Study 2)."],
+          "says": ["Antibiotics should not be used for the common cold (Study 1)."],
+          "effect_size": "", "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "", "effect": None}
+def _gu_seen(r):
+    return " ".join([r["tldr"], r["explanation"], r["still_open"], r["evidence_line"] or ""]
+                    + breakdown.prose_of(r["breakdown"]))
+with appmod.app.test_request_context("/"):
+    _gu = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                 _GU_TLDR, _GU_EXPL, ["GU1", "GU2"], [dict(s) for s in _GU_STUDIES], "http://x",
+                                 still_open="Whether a trial would settle it, since there isn't enough evidence to rate it.",
+                                 breakdown=dict(_GU_BD))
+    _gu_none = appmod._check_response("People with type 1 diabetes can replace insulin with a strict diet",
+                                      "(diet) AND (type 1 diabetes)", "false",
+                                      verdict.GUIDELINE_LEAD + "people with type one diabetes need insulin. "
+                                      "Stopping a prescribed medicine without a doctor's advice can be risky.",
+                                      "None of the studies found directly test this claim, so there isn't "
+                                      "enough evidence to rate it.", [], [dict(s) for s in _GU_STUDIES], "http://x",
+                                      still_open="Whether diet changes insulin needs.", breakdown=None)
+    _gu_plain = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)",
+                                       "insufficient", verdict.UNTESTED_TLDR, _GU_EXPL, ["GU1", "GU2"],
+                                       [dict(s) for s in _GU_STUDIES], "http://x", still_open="Whether it works.",
+                                       breakdown=dict(_GU_BD))
+t("guidance prose: under an answer the guidance rule set, no line says the claim cannot be rated",
+  _gu["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu))
+  and _gu_none["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu_none)),
+  (_gu_seen(_gu), _gu_seen(_gu_none)))
+t("  what the studies did and did not test stays, and the fixed line says what the answer rests on",
+  _gu["explanation"] == ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually "
+                         "spontaneous (Study 2). Nothing here tests this claim in people, only opinion pieces. "
+                         + verdict.GUIDANCE_RESTS)
+  and _gu_none["explanation"] == "None of the studies found directly test this claim. " + verdict.GUIDANCE_RESTS
+  and verdict.GUIDANCE_RESTS == "This answer rests on what major health guidelines say, not on these studies."
+  and "No trial here tests the claim (Study 2)." in " ".join(_gu["breakdown"]["evidence"])
+  and _gu["still_open"] == "Whether a trial would settle it.", (_gu["explanation"], _gu["breakdown"], _gu["still_open"]))
+t("  and an answer the guidance rule did not set keeps its own words",
+  _gu_plain["verdict"] == "insufficient" and _gu_plain["explanation"].endswith("enough evidence to rate it.")
+  and verdict.GUIDANCE_RESTS not in _gu_seen(_gu_plain), _gu_plain["explanation"])
+db.put_cached_verdict("People with type 1 diabetes can replace insulin with a strict diet",
+                      "(diet) AND (type 1 diabetes)", "false",
+                      "None of the studies found directly test this claim, so there isn't enough evidence to rate it.",
+                      [], [dict(s) for s in _GU_STUDIES],
+                      tldr=verdict.GUIDELINE_LEAD + "people with type one diabetes need insulin.",
+                      still_open="Whether diet changes insulin needs.")
+_gu_page = c.get("/?q=" + urllib.parse.quote("People with type 1 diabetes can replace insulin with a strict diet")
+                 ).get_data(as_text=True)
+t("  and the saved answer's page, its markup and its short answer say the same",
+  'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
+  [m.group(0) for m in _UNRATED.finditer(_gu_page)])
+
+# H6: a guidance answer that relies on nothing cites no paper for a finding.
+# Live, "Antibiotics cure the common cold": "Studies show ... (Study 5)" sat
+# four sentences before "Nothing here tests this claim in people".
+_H6_ST = [_study("H6A", "Antibiotics for colds: a commentary", types=["Editorial"],
+                 abstract="Antibiotics should not be used for the common cold, which viruses cause."),
+          _study("H6B", "Why we should not prescribe antibiotics for colds", types=["Comment"],
+                 abstract="Recovery from colds is usually spontaneous without antibiotics.")]
+_H6_SAID = ("Studies show that antibiotics should not be used for the common cold (Study 1). "
+            "Recovery is usually spontaneous without antibiotics (Study 2).")
+_h6_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _H6_ST]
+verdict.guideline_view = _guide("false", "antibiotics do not work on colds, which are caused by viruses.")
+_h6_runs = []
+for _h6_n, _h6_way in enumerate((P, stream)):
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_GU_CLAIM_H6 := "Antibiotics cure the common cold"),))
+        _conn.execute("DELETE FROM query_cache")
+    fg.models.script = [Resp("(antibiotics) AND (common cold)"),
+                        Resp(VJ("false", [1, 2], tldr=_GU_TLDR, explanation=_H6_SAID))]
+    _h6_runs.append(P(_GU_CLAIM_H6, ip="9.7.6.1").get_json() if _h6_way is P
+                    else (stream(_GU_CLAIM_H6, ip="9.7.6.2")[1][-1].get("result") or {}))
+verdict.guideline_view = lambda claim: None
+pubmed.search_and_fetch = _h6_search
+t("H6: a guidance answer relying on no study, plain and streamed, keeps no sentence citing a paper",
+  all(r_.get("verdict") == "false" and r_.get("evidence_line") == verdict.GUIDANCE_LINE
+      and not any(s_["cited_in_verdict"] for s_ in r_["studies"])
+      and not breakdown.refs(r_["explanation"], 2) and r_["explanation"].endswith(verdict.GUIDANCE_RESTS)
+      for r_ in _h6_runs), [(r_.get("verdict"), r_.get("explanation")) for r_ in _h6_runs])
+# The live shapes, each as the page gets it.
+_H6_OFF = dict(_study("H6O", "Antibiotic resistance in farm animals", types=["Review"]),
+               off_topic="tests something other than what this claim is about.")
+_H6_LIVE = ("Studies show that antibiotics should not be used for the common cold since viruses cause these "
+            "infections (Study 2). Recovery from these viral infections is usually spontaneous without antibiotics "
+            "(Study 3). Nothing here tests this claim in people, only opinion pieces and papers that test nothing "
+            "in people. " + verdict.GUIDANCE_RESTS)
+_H6_MILK = ("Studies show pasteurization reduces certain vitamins like B1, B2, C, and folate, while raw milk retains "
+            "them (Study 1). Other studies show raw milk consumption poses significant risks of bacterial zoonoses "
+            "(Study 2).")
+_H6_OILS = ("No studies test this exact claim in people to see if a cure occurs. The available papers are reviews "
+            "or background tests that do not provide human clinical trial data (Studies 1, 2).")
+_H6_MS = [_study("H6M1", "Effect of pasteurization on milk vitamins: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="Pasteurization reduces vitamins B1, B2, C, and folate in milk, while raw milk retains them."),
+          _study("H6M2", "Raw milk and bacterial zoonoses: a systematic review", types=["Systematic Review"],
+                 abstract="Raw milk consumption poses significant risks of bacterial zoonoses.")]
+with appmod.app.test_request_context("/"):
+    _h6_cold = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                      _GU_TLDR, _H6_LIVE, [], [dict(_H6_OFF)] + [dict(s) for s in _H6_ST],
+                                      "http://x", still_open="Whether a better treatment exists.")
+    _h6_milk = appmod._check_response("Raw milk is healthier than pasteurized milk", "(raw milk) AND (health)", "false",
+                                      verdict.GUIDELINE_LEAD + "raw milk can carry harmful germs.", _H6_MILK,
+                                      ["H6M1", "H6M2"], [dict(s) for s in _H6_MS], "http://x",
+                                      still_open="Whether any benefit outweighs the risk.")
+    _h6_oils = appmod._check_response("Essential oils cure bacterial infections", "(essential oils) AND (infection)",
+                                      "insufficient", verdict.UNTESTED_TLDR, _H6_OILS, [],
+                                      [dict(s) for s in _H6_ST], "http://x", still_open="Whether oils help in people.")
+t("H6: the live antibiotics shape keeps only code's own sentences about the papers",
+  _h6_cold["explanation"] == ("Nothing here tests this claim in people, only opinion pieces and papers that test "
+                              "nothing in people. " + verdict.GUIDANCE_RESTS), _h6_cold["explanation"])
+t("  a guidance answer that relies on studies keeps every sentence",
+  _h6_milk["evidence_line"] == verdict.GUIDANCE_LINE and _h6_milk["explanation"] == _H6_MILK, _h6_milk["explanation"])
+t("  and a Not enough evidence answer keeps its sentence describing the background papers",
+  _h6_oils["verdict"] == "insufficient" and _h6_oils["explanation"] == _H6_OILS, _h6_oils["explanation"])
+# J2: the folded sections of that answer cite no study for a finding either.
+_J2_BD = {"parts": [{"part": "Antibiotics cure colds", "assessment": "Antibiotics should not be used (Study 2).",
+                     "studies": [2]},
+                    {"part": "Colds are viral", "assessment": "Colds are caused by viruses.", "studies": []}],
+          "evidence": ["Antibiotics should not be used (Study 2). Viruses cause colds (Study 2).",
+                       "Recovery is usually spontaneous (Study 3).", "Guidelines advise against antibiotics for colds."],
+          "effect_size": "", "strength": "Reviews agree antibiotics are ineffective (Study 2).",
+          "applies_to": "Patients with colds (Study 2).", "not_applies_to": "", "unknowns": "Timing varies (Study 3)."}
+_J2_MILK_BD = {"parts": [], "evidence": [_H6_MILK], "effect_size": "", "strength": "Two reviews (Studies 1, 2).",
+               "applies_to": "", "not_applies_to": "", "unknowns": ""}
+with appmod.app.test_request_context("/"):
+    _j2 = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                 _GU_TLDR, _H6_LIVE, [], [dict(_H6_OFF)] + [dict(s) for s in _H6_ST],
+                                 "http://x", still_open="Whether a better treatment exists.", breakdown=json.loads(json.dumps(_J2_BD)))
+    _j2_milk = appmod._check_response("Raw milk is healthier than pasteurized milk", "(raw milk) AND (health)", "false",
+                                      verdict.GUIDELINE_LEAD + "raw milk can carry harmful germs.", _H6_MILK,
+                                      ["H6M1", "H6M2"], [dict(s) for s in _H6_MS], "http://x",
+                                      still_open="Whether any benefit outweighs the risk.", breakdown=json.loads(json.dumps(_J2_MILK_BD)))
+_j2_b = _j2["breakdown"]
+t("J2: under a guidance answer relying on no study, no part, paragraph or field cites a study",
+  not any(breakdown.refs(x, 3) for x in breakdown.prose_of(_j2_b)), breakdown.prose_of(_j2_b))
+t("  a part whose answer went is dropped, not pointed at paragraphs below; uncited prose stays; empty fields are blank",
+  [p_["assessment"] for p_ in _j2_b["parts"]] == ["Colds are caused by viruses."]
+  and _j2_b["evidence"] == ["Guidelines advise against antibiotics for colds."]
+  and _j2_b["strength"] == "" and _j2_b["applies_to"] == "" and _j2_b["unknowns"] == "" and _j2_b["concluded"] == [],
+  _j2_b)
+t("  and a guidance answer that relies on studies keeps its folded sections citing them",
+  _j2_milk["breakdown"]["evidence"] == [_H6_MILK] and _j2_milk["breakdown"]["strength"] == "Two reviews (Studies 1, 2).",
+  _j2_milk["breakdown"])
+
+# ---- final fix F2: the evidence line sizes only a figure about the outcome ----
+# breakdown.line_label lends the line a size only when the figure's sentence
+# is about the claim's outcome, not one that merely contains the word.
+def _f2_bd(said, figure, plain, label="large"):
+    return {"effect_size": said, "evidence": [], "effect": {"figure": figure, "label": label, "plain": plain}}
+_F2_MP = ("Statins cause muscle pain", "(muscle pain OR myalgia)")
+t("F2a: a sentence that sets the outcome aside ('not muscle') lends the line no size",
+  breakdown.line_label(_f2_bd("Pain in the joints, not muscle, rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"),
+                       *_F2_MP) is None)
+t("F2a: nor one that puts it 'rather than' or 'instead of' the thing measured",
+  breakdown.line_label(_f2_bd("Joint pain rather than muscle pain rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"),
+                       *_F2_MP) is None
+  and breakdown.line_label(_f2_bd("Headache instead of myalgia rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"),
+                           *_F2_MP) is None)
+t("F2a: a sentence about the outcome itself still sizes it, a 'did not' before the verb included",
+  breakdown.line_label(_f2_bd("Muscle pain rose, RR 3.0.", "RR 3.0", "about 3 times higher risk"), *_F2_MP) == "large"
+  and breakdown.line_label(_f2_bd("Statins did not raise muscle pain, RR 1.02.", "RR 1.02", "", label="none"),
+                           *_F2_MP) == "none")
+
+_F2_TG = ("Fish oil lowers triglycerides", "(triglycerides)")
+t("F2b: a sentence where the outcome only describes another noun ('triglyceride-lowering drugs') lends no size",
+  breakdown.line_label(_f2_bd("Triglyceride-lowering drugs used 30% more.", "30%", "about 30% lower"), *_F2_TG) is None)
+t("F2b: a sentence that also names the outcome itself still sizes it",
+  breakdown.line_label(_f2_bd("Triglycerides fell by 30% more.", "30%", "about 30% lower"), *_F2_TG) == "large"
+  and breakdown.line_label(_f2_bd("Triglycerides fell 30% more than with triglyceride-lowering drugs.", "30%",
+                                  "about 30% lower"), *_F2_TG) == "large")
+
+_F2_ST = ("Ashwagandha reduces stress", "(stress)")
+_F2_SMD = ("SMD -1.75", "a difference of 1.75 standard deviations")
+t("F2c: a sentence where the outcome word sits inside a longer term ('oxidative stress markers') lends no size",
+  breakdown.line_label(_f2_bd("Oxidative stress markers fell, SMD -1.75.", *_F2_SMD), *_F2_ST) is None
+  and breakdown.line_label(_f2_bd("Metabolic syndrome fell, SMD -1.75.", *_F2_SMD),
+                           "Yoga reduces the risk of syndrome", "(syndrome)") is None)
+t("F2c: a word that says only how bad or how felt, or one the claim uses, still lets it size",
+  breakdown.line_label(_f2_bd("Perceived stress fell, SMD -1.75.", *_F2_SMD), *_F2_ST) == "large"
+  and breakdown.line_label(_f2_bd("Chronic stress fell, SMD -1.75.", *_F2_SMD), *_F2_ST) == "large"
+  and breakdown.line_label(_f2_bd("Oxidative stress fell, SMD -1.75.", *_F2_SMD),
+                           "Ashwagandha reduces oxidative stress", "(stress)") == "large")
+
+# ---- final fix F6: the plain-word swap leaves a quoted title as written -------
+_f6_s = breakdown.plain('The trial "Effects of creatine in male participants" enrolled 40 male participants.')
+_f6_c = breakdown.plain("The review \u201cMortality and hypertension in older subjects\u201d found it in subjects "
+                        "with hypertension.")
+t("F6: inside straight quotation marks the title keeps 'male participants', outside it becomes 'males'",
+  _f6_s == 'The trial "Effects of creatine in male participants" enrolled 40 males.', _f6_s)
+t("F6: inside curly quotation marks the title keeps its words, outside they are swapped",
+  _f6_c == "The review \u201cMortality and hypertension in older subjects\u201d found it in people "
+           "with high blood pressure (hypertension).", _f6_c)
+
+# ---- final fix F3: what "cannot be rated" means under a guidance stamp --------
+# verdict.unrated_said removes a sentence (or its closing clause) that says the
+# claim, the evidence, "this" or "it" cannot be rated or judged, in any of the
+# ways that is said; it keeps one about something else (an outcome, a symptom,
+# a scale) and one where a study's researchers or participants did the rating.
+_F3_GO = ["It can not be rated.", "We cannot rate this claim.", "This claim can't yet be judged.",
+          "There isn't enough evidence to rate it.", "There is too little evidence to judge either way.",
+          "It is not possible to rate the claim from these studies.", "It isn\u2019t possible to judge it.",
+          "We are unable to judge it.", "The evidence is too thin to rate.", "So it could not be graded.",
+          "We couldn\u2019t rate it.", "Without a direct trial, we were not able to rate this.",
+          "The claim itself cannot be judged.", "There is no evidence for us to rate this.",
+          "It's impossible to judge whether it works."]
+_F3_STAY = ["Researchers were unable to rate pain intensity.", "Participants could not rate their symptoms reliably.",
+            "Pain intensity could not be rated in two trials.", "The trial was unable to grade adverse events.",
+            "Patients couldn't rate it on the scale.", "Fatigue scores cannot be judged against a placebo here.",
+            "Clinicians were not able to judge the wound size.", "The studies used a scale to rate nausea.",
+            "There was not enough evidence to grade the side effects separately.", "Sleep quality was hard to rate."]
+for _g in _F3_GO:
+    t(f"F3: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
+for _k in _F3_STAY:
+    t(f"F3: stays, it is about something else: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
+# G6: the reviewer's leftovers. "from ..." after the verb names the
+# evidence; a passive rated "by" a study's raters is about the study; a
+# thing rated "as" something under "not enough evidence" is the claim.
+# "No conclusion can be drawn" and "We cannot say" are said about side
+# questions too, so they stay.
+_G6_GO = ["It is impossible to judge from these abstracts.",
+          "There is not enough evidence to rate raw milk as healthier.",
+          "The claim is unratable.", "It is unrateable on these studies.",
+          "The evidence does not allow us to rate it.", "The evidence doesn't let us judge this claim."]
+_G6_STAY = ["The certainty of the evidence could not be graded by the review authors (Study 2).",
+            "Pain could not be rated by the two independent assessors.",
+            "Researchers were unable to judge from the photographs.",
+            "No conclusion can be drawn about sleep.", "We cannot say how long it lasts."]
+for _g in _G6_GO:
+    t(f"G6: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
+for _k in _G6_STAY:
+    t(f"G6: stays: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
+# H4: what a study or its people judged stays, whatever it says about
+# rating; "no basis to rate it" and "Rating this claim is not possible" go.
+_H4_GO = ["There is no basis to rate it.", "There is no basis for rating.", "Rating this claim is not possible.",
+          "Rating this claim is impossible.", "Rating this claim cannot be done."]
+_H4_STAY = ["Investigators judged that there was not enough evidence to rate the drug as first-line (Study 4).",
+            "The review concluded that it could not be rated with confidence (Study 2).",
+            "No conclusion can be drawn.", "We cannot say."]
+for _g in _H4_GO:
+    t(f"H4: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
+for _k in _H4_STAY:
+    t(f"H4: stays: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
+t("F3: a closing 'meaning we can't rate it' goes and what came before it stays",
+  verdict.unrated_said("No trial tests this, meaning we can't rate it.") == "No trial tests this.")
+_f3_g = verdict.guidance_prose("No trial tests the claim. Researchers were unable to rate pain intensity.",
+                               "Researchers were unable to rate pain intensity.", None)
+t("F3: guidance_prose leaves prose about a rated outcome as written, with no rests-on line added",
+  _f3_g[0] == "No trial tests the claim. Researchers were unable to rate pain intensity."
+  and _f3_g[1] == "Researchers were unable to rate pain intensity.", _f3_g)
+
+# ---- Under an answer the guidance rule set, the effect box headlines no study figure ----
+# The live safety run: "alcohol in pregnancy" (False) headlined "found no
+# consistently significant effects"; "raw milk" (False, set by the guidance
+# rule) headlined the vitamin loss from pasteurising, sized large.
+_GE_ST = [_study("GE1", "Low to moderate prenatal alcohol exposure: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Exposure of up to 83 grams per week found no consistently significant effects. "
+                          "CONCLUSIONS: Weaknesses in the evidence preclude the conclusion that drinking at these "
+                          "levels is safe.")]
+_GE_EFF = "The review on exposure of up to 83 grams per week found no consistently significant effects (Study 1)."
+_GE_BD = {"parts": [], "evidence": ["The review found no consistently significant effects (Study 1)."],
+          "says": ["The review found no consistently significant effects (Study 1)."], "effect_size": _GE_EFF,
+          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+          "effect": {"figure": "standardised mean difference 1.77", "label": "large",
+                     "plain": "a difference of 1.77 standard deviations"}}
+_GE_CLAIM = "Drinking a little alcohol during pregnancy is safe"
+_GE_TLDR = verdict.GUIDELINE_LEAD + "no amount of alcohol is safe during pregnancy. Ask a doctor or midwife about this."
+with appmod.app.test_request_context("/"):
+    _ge = appmod._check_response(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false", _GE_TLDR,
+                                 "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
+                                 "http://x", still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
+    _ge_plain = appmod._check_response(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
+                                       "Drinking during pregnancy is not shown to be safe.",
+                                       "The review found no consistent effects (Study 1).", ["GE1"],
+                                       [dict(s) for s in _GE_ST], "http://x", still_open="Exact low dose limits.",
+                                       breakdown=json.loads(json.dumps(_GE_BD)))
+t("guidance effect: under an answer the guidance rule set, the effect box says it rests on guidance, not a figure",
+  _ge["breakdown"]["effect_size"] == verdict.GUIDANCE_EFFECT
+  == "This answer rests on what major health guidelines say, not on a measured effect size."
+  and not re.search(r"\d|\b(?:small|moderate|large)\b", _ge["breakdown"]["effect_size"]), _ge["breakdown"])
+t("  and the study and its finding stay exactly as they were",
+  _ge["studies"] == _ge_plain["studies"] and _ge["studies"][0]["abstract"] == _GE_ST[0]["abstract"]
+  and _ge["breakdown"]["evidence"] == _ge_plain["breakdown"]["evidence"], _ge["breakdown"]["evidence"])
+t("guidance line: under an answer the guidance rule set, the evidence line says what the answer rests on, "
+  "with no strength word",
+  _ge["evidence_line"] == verdict.GUIDANCE_LINE == "Rests on health guidance, not on these studies"
+  and not re.search(r"(?i)\b(?:strong|moderate|weak|low|high|certainty|small|large|against|for this claim)\b",
+                    _ge["evidence_line"])
+  and _ge_plain["evidence_line"].endswith("evidence against this claim"),
+  (_ge["evidence_line"], _ge_plain["evidence_line"]))
+t("  and an answer the guidance rule did not set keeps its own figure",
+  _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
+_ge_said = verdict.guidance_effect(dict(_GE_BD, says=["Experts advise avoiding it (Study 1).", _GE_EFF]))
+t("  and a line of 'What the research says' picked from the effect box goes with it; the others stay",
+  _ge_said["says"] == ["Experts advise avoiding it (Study 1)."], _ge_said["says"])
+_ge_none = verdict.guidance_effect(dict(_GE_BD, effect_size=""))
+t("  and a breakdown with no effect box is not given one",
+  _ge_none["effect_size"] == "" and verdict.guidance_effect(None) is None, _ge_none)
+db.put_cached_verdict(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
+                      "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
+                      tldr=_GE_TLDR, still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
+_ge_page = c.get("/?q=" + urllib.parse.quote(_GE_CLAIM)).get_data(as_text=True)
+_ge_box = re.search(r'<p class="effect"><b>How big the effect is</b><span>(.*?)</span></p>', _ge_page)
+_ge_conf = re.search(r'<span class="confidence" id="confidence"><mark>(.*?)</mark>', _ge_page)
+t("  and the server-rendered page shows that line as its confidence, and the script renders the same field",
+  _ge_conf and _ge_conf.group(1) == verdict.GUIDANCE_LINE + "."
+  and "Strong evidence against this claim" not in _ge_page
+  and 'String(data.evidence_line || "")' in (ROOT / "static" / "app.js").read_text(),
+  _ge_conf and _ge_conf.group(1))
+t("  and the server-rendered page prints the same words in its effect box",
+  _ge_box and _ge_box.group(1) == verdict.GUIDANCE_EFFECT and _GE_EFF not in _ge_page.split('id="server-result"')[0],
+  _ge_box and _ge_box.group(1))
 
 # ---- Guidance that rejects a forgo-treatment or medicine-cures claim is a False ----
 _FG_SAYS = "this is not safe, and the medicine is still advised."
@@ -4335,6 +6330,19 @@ t("  no response at all (offline, a dropped stream, a silent server) is the netw
   _jsrc.count('renderError("network"') == 3)
 t("  an invalid claim offers Edit claim and no Retry; every other kind offers Retry",
   'back: "Edit claim"' in _kinds and _kinds.count("retry: true") == 3)
+if _shutil.which("node"):
+    _ea_fn = "const ERROR_KINDS = {" + _kinds + "};\n" + _jsrc[_jsrc.index("function errorActions"):_jsrc.index("// The draft stays in the field on every failure")]
+    _ea_cases = [["provider", None], ["provider", "reword"], ["provider", "either"], ["invalid", None], ["limit", None], ["network", None]]
+    _ea = json.loads(_subprocess.run(["node", "-e", _ea_fn + "console.log(JSON.stringify(" + json.dumps(_ea_cases)
+                                      + ".map(([k, w]) => errorActions(k, w))));"], capture_output=True, text=True, check=True).stdout)
+    t("  the ways out follow the server's way_out: none Retry and Check another claim, reword Edit claim only, either Retry and Edit claim",
+      _ea == [{"retry": True, "back": "Check another claim"}, {"retry": False, "back": "Edit claim"},
+              {"retry": True, "back": "Edit claim"}, {"retry": False, "back": "Edit claim"},
+              {"retry": True, "back": "Check another claim"}, {"retry": True, "back": "Check another claim"}], _ea)
+t("  both checks hand the server's way_out to the error screen, and it sets Retry and the back label from it",
+  "way_out: data && data.way_out" in _jsrc and "final.retry_after, final.way_out)" in _jsrc
+  and "const ways = errorActions(kind, wayOut)" in _jsrc and "back.hidden = !(ways.retry && lastClaim)" in _jsrc
+  and '$("error-back").textContent = ways.back' in _jsrc)
 t("  every failure keeps the draft in the field",
   "if (lastClaim && !input.value.trim()) input.value = lastClaim" in _jsrc)
 t("  the error screen has a title and a line under it, and none of that copy has a dash",
@@ -4381,21 +6389,34 @@ t("the privacy page says a report's note is kept, anonymously", "report a wrong 
 
 # 5. The sitemap lists static pages only; a claim somebody typed never appears.
 _sm = c.get("/sitemap.xml").get_data(as_text=True)
-t("the sitemap has the three static pages, absolute, and no claim",
-  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/checks", "/privacy")) and "?q=" not in _sm)
+t("the sitemap has the static pages, absolute",
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/privacy")))
+t("  and /checks, now a redirect, is not in it", "/checks" not in _sm)
 _rb = c.get("/robots.txt").get_data(as_text=True)
 t("the sitemap and llms.txt list /about, /method and /corrections as absolute URLs",
   all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/about", "/method", "/corrections"))
   and all(f"](http://localhost{x})" in c.get("/llms.txt").get_data(as_text=True) for x in ("/about", "/method", "/corrections", "/privacy")))
 t("robots.txt points at the sitemap with an absolute URL", "Sitemap: http://localhost/sitemap.xml" in _rb)
 
-# 6. Page identity: /checks has its own title and canonical; every result has a card.
-_ck = c.get("/checks").get_data(as_text=True)
-_home_t = _re2.search("<title>(.*?)</title>", c.get("/").get_data(as_text=True)).group(1)
-_ck_t = _re2.search("<title>(.*?)</title>", _ck).group(1)
-t("/checks has its own title and canonical, and the same card tags as home",
-  _home_t != _ck_t and 'rel="canonical" href="http://localhost/checks"' in _ck
-  and 'name="twitter:card" content="summary_large_image"' in _ck and 'property="og:image" content="http://localhost/og/_.png"' in _ck)
+# 6. Page identity: /checks is a permanent redirect to /; every result has a card.
+_ck_r = c.get("/checks")
+_ckq_r = c.get("/checks?q=garlic%20shortens%20colds")
+_ck_home = c.get("/").get_data(as_text=True)
+t("/checks answers 301 to /, and keeps a query string an old shared link may carry",
+  _ck_r.status_code == 301 and urllib.parse.urlsplit(_ck_r.headers["Location"]).path == "/"
+  and not urllib.parse.urlsplit(_ck_r.headers["Location"]).query
+  and _ckq_r.status_code == 301 and _ckq_r.headers["Location"].endswith("/?q=garlic%20shortens%20colds"),
+  (_ck_r.headers.get("Location"), _ckq_r.headers.get("Location")))
+t("  the home page is the one canonical tool page, with the card tags",
+  'rel="canonical" href="http://localhost/"' in _ck_home and "/checks" not in _ck_home
+  and 'name="twitter:card" content="summary_large_image"' in _ck_home and 'property="og:image" content="http://localhost/og/_.png?v=2"' in _ck_home)
+_ck_sw = (ROOT / "static" / "sw.js").read_text()
+t("  /checks is out of the service worker's SHELL, llms.txt and the templates",
+  '"/checks"' not in _ck_sw.split("const SHELL")[1].split("];")[0]
+  and "/checks" not in c.get("/llms.txt").get_data(as_text=True)
+  and not any("checks_page" in (ROOT / "templates" / f).read_text() or "/checks" in (ROOT / "templates" / f).read_text()
+              for f in ("index.html", "info.html", "privacy.html", "404.html"))
+  and "checks_page" not in (ROOT / "app.py").read_text())
 _png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_dl["claim"]), safe="") + ".png")
 from PIL import Image as _Im2  # noqa: E402
 import io as _io2  # noqa: E402
@@ -4404,7 +6425,7 @@ t("a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twi
   and _png.status_code == 200 and _Im2.open(_io2.BytesIO(_png.data)).size == (1200, 630))
 
 # 7. Beta and the doctor line are on the first screen of the ask, the 404 and the error screen.
-_ask = c.get("/checks").get_data(as_text=True)
+_ask = c.get("/").get_data(as_text=True)
 t("the ask screen carries Not medical advice and the doctor sentence right under its introduction",
   'class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
 t("  so do the 404 page and the error screen",
@@ -4702,6 +6723,21 @@ t("  says Study, not Studies, when one is left",
   == "It rests on reviews (Study 1).")
 t("  and leaves text that cites nothing alone",
   breakdown.relied_only("Nothing here cites a study.", {1}, 8) == "Nothing here cites a study.")
+# L4: "E. coli" is one sentence. Live: raw milk, "Coli frequently contaminate".
+_L4 = "Bacteria such as E. coli frequently contaminate raw milk (Studies 7, 8). S. aureus and H. pylori were also found."
+t("L4: a stop after a single capital before a lowercase word does not end a sentence",
+  breakdown.sentences(_L4) == ["Bacteria such as E. coli frequently contaminate raw milk (Studies 7, 8).",
+                               "S. aureus and H. pylori were also found."]
+  and breakdown.sentences("It has vitamin C. It also has iron.") == ["It has vitamin C.", "It also has iron."]
+  and breakdown.drop_any_citing(_L4, {9}, 9) == _L4
+  and breakdown.first_sentence("E. coli grew in raw milk. Boiling killed it.") == "E. coli grew in raw milk"
+  and breakdown.first_sentence("It has vitamin C. It also has iron.") == "It has vitamin C",
+  breakdown.sentences(_L4))
+t("K4: the capital code gives a sentence's head is not given to 'coli' after 'E.' (soften, natural)",
+  breakdown.heads_up("like E. coli grew. then it fell.") == "Like E. coli grew. Then it fell."
+  and breakdown.soften("Like E. coli in a lab, it fell.") == "Like E. coli in a lab, it fell."
+  and breakdown.natural("Like E. coli, it links to colds.") == "Like E. coli, it is linked to colds.",
+  breakdown.soften("Like E. coli in a lab, it fell."))
 _RO = [dict(_BD_STUDIES[0]), dict(_BD_STUDIES[1])]
 _ro_raw = json.dumps({
     "verdict": "true", "tldr": "Vitamin D lowers infections a little.",
@@ -4711,6 +6747,14 @@ _ro_raw = json.dumps({
     "strength": "One pooled review found a small drop (Study 1). A trial found no change (Study 2).",
     "parts": [], "effect_size": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
 _ro = verdict._read_verdict(_ro_raw, None, _RO, "Vitamin D lowers infections")
+# K4: a takeaway the model left empty is the explanation's first sentence,
+# read past "E. coli" (breakdown.first_sentence), on a fresh check.
+_k4_tl = verdict._read_verdict(_ro_raw.replace('"tldr": "Vitamin D lowers infections a little."', '"tldr": ""').replace(
+    '"explanation": "Pooled trials found a small drop (Study 1)."',
+    '"explanation": "Like E. coli in a lab, infections fell a little in pooled trials (Study 1). More trials are needed."'),
+    None, _RO, "Vitamin D lowers infections")
+t("K4: L4 in the takeaway fallback: an empty takeaway is the whole first sentence, not cut at 'E.'",
+  _k4_tl["tldr"].startswith("Like E. coli in a lab, infections fell"), _k4_tl["tldr"])
 t("the verdict's 'why' paragraph never credits a study it did not rely on",
   _ro["cited_studies"] == ["D1"] and "Study 2" not in _ro["breakdown"]["strength"]
   and "Study 1" in _ro["breakdown"]["strength"], _ro["breakdown"]["strength"])
@@ -4735,7 +6779,7 @@ _RS = [_study(f"R{i}", f"Trial {i}", abstract="Vitamin D and colds.", types=["Ra
 _rs_bd = {"strength": "x", "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
           "not_applies_to": "", "unknowns": "", "rests_on": 5}
 db.put_cached_verdict("count mismatch saved", "q AND r", "true", "Because (Study 1).",
-                      ["R1", "R2", "R3"], _RS, tldr="Short.", breakdown=_rs_bd)
+                      ["R1", "R2", "R3"], _RS, tldr="Short.", still_open="Open.", breakdown=_rs_bd)
 _rsh = c.get("/?q=count+mismatch+saved").data.decode()
 t("a saved result's 'Rests on' count equals the studies marked used (server render)",
   "Rests on" in _rsh and '<span class="group-count">3 studies</span>' in _rsh
@@ -4758,7 +6802,7 @@ t("renderBreakdown counts the used studies itself, not the stored number",
 # A saved record with no search query on file hides the "Searched PubMed for"
 # line in the server render and in renderResult, and invents no query.
 db.put_cached_verdict("empty query saved", "  ", "true", "Because (Study 1).",
-                      ["R1"], _RS, tldr="Short.")
+                      ["R1"], _RS, tldr="Short.", still_open="Open.")
 _eq = c.get("/?q=empty+query+saved").data.decode()
 t("a saved result with an empty search query hides the 'Searched PubMed for' line",
   '<span id="query-what" hidden>' in _eq and "More on PubMed" in _eq, re.findall(r'id="query-what".{0,40}', _eq))
@@ -4775,7 +6819,7 @@ t("  and renderResult hides it the same way",
 # first real check comes from the check log, shown only when it is on an
 # earlier day, and never invented.
 for _cl in ("two dates saved", "one date saved", "log after saved"):
-    db.put_cached_verdict(_cl, "q", "true", "Because (Study 1).", ["R1"], _RS, tldr="Short.")
+    db.put_cached_verdict(_cl, "q", "true", "Because (Study 1).", ["R1"], _RS, tldr="Short.", still_open="Open.")
 with db.get_conn() as _cn:
     _cn.execute("INSERT INTO checks (claim_key, claim_text, cached, checked_at) VALUES (?,?,0,?)",
                 ("two dates saved", "two dates saved", "2026-09-01T10:00:00+00:00"))
@@ -4826,6 +6870,7 @@ t("suggest: near-duplicate wordings fold into one row that names the other wordi
   [r["claim_text"] for r in _g][0] == "Creatine builds strength" and len(_g) == 2
   and _g[0]["similar"] == ["Creatine improves strength.", "Creatine increases strength"], _g)
 t("  a different claim is its own row and has no 'similar'", "similar" not in _g[1])
+import sqlite3 as _sqlite_b  # noqa: E402
 _sq = suggest_mod.same_question
 _c = lambda text, v="true": {"claim_text": text, "verdict": v}
 t("  the same words in another case, order or punctuation are one question",
@@ -4907,6 +6952,11 @@ t("touch: qa.mjs fails any tap target under 44px, and the footer links are 44px 
   "h < 43.5 || w < 43.5" in _qa_src and "tap target < 44px" in _qa_src
   and re.search(r"\.foot-links a \{[^}]*min-height: 44px", _css9) is not None
   and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/", "/about", "/privacy")))
+_fl = [re.search(r'<p class="fine foot-links">(.*?)</p>', c.get(u).get_data(as_text=True), re.S).group(1) for u in ("/", "/about", "/privacy")]
+t("footer: the separators are CSS on the links, not dots in the text, so none can end or start a wrapped line",
+  all("\u00b7" not in x and x.count("<a ") == 4 and x.startswith('<span class="foot-row">') for x in _fl)
+  and re.search(r"\.foot-links a::before \{[^}]*content: \"\\00b7\"", _css9) is not None
+  and re.search(r"\.foot-links \{[^}]*overflow: hidden", _css9) is not None, _fl[0])
 _design9 = (ROOT / "DESIGN.md").read_text()
 t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
   "Palette roles" in _design9 and "Green never signals" in _design9
@@ -4916,5 +6966,3316 @@ t("who: with only a 'does not apply' sentence, the heading says so and no empty 
   "Who this does not apply to" in _tpl_who and "{%- if who_yes %}<p class=\"section-label label-2\">" in _tpl_who
   and "Who this does not apply to" in _js and "(yes ? `<p class=\"section-label label-2\">" in (ROOT / "static" / "app.js").read_text())
 
+# ---- B6 F1: one certainty per page --------------------------------------------
+# The apple cider vinegar page said "low certainty" in the short answer,
+# "Strong evidence of a small effect" in the evidence line and "moderate
+# evidence" in the breakdown. Built from that page's shape.
+_ACV = [
+    {"pmid": "V1", "title": "Apple cider vinegar and body composition: a meta-analysis",
+     "abstract": "Ten trials with 789 adults. Body weight fell (SMD -0.39).",
+     "journal": "J", "year": "2025", "publication_types": ["Meta-Analysis"],
+     "authors": ["A"], "data_banks": None, "url": "uV1"},
+    {"pmid": "V2", "title": "Vinegar and glycaemic control in type 2 diabetes",
+     "abstract": "Seven studies. Fasting blood sugar fell by 21.9 mg/dL.",
+     "journal": "J", "year": "2024", "publication_types": ["Systematic Review", "Meta-Analysis"],
+     "authors": ["B"], "data_banks": None, "url": "uV2"},
+]
+_ACV_BD = {"strength": "The reviews and trials provide moderate evidence for blood sugar "
+                       "improvements (Studies 1, 2).",
+           "says": ["Strong evidence shows fasting blood sugar fell by 21.9 mg/dL (Study 2)."],
+           "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
+           "not_applies_to": "", "unknowns": "", "effect": {"label": "small"}}
+_acv = appmod._check_response(
+    "apple cider vinegar helps diabetes", "vinegar AND diabetes", "complicated",
+    "It may lower blood sugar a little, but the studies are mixed and low certainty.",
+    "Two reviews found small drops (Studies 1, 2).", ["V1", "V2"], _ACV, "http://x",
+    breakdown=_ACV_BD)
+_acv_words = " ".join([_acv["tldr"], _acv["evidence_line"], _acv["breakdown"]["strength"],
+                       *_acv["breakdown"]["says"]]).lower()
+t("F1: the evidence line is never surer than the short answer's stated certainty, in its own design word",
+  _acv["evidence_line"].startswith("Weak evidence")
+  and evidence.line_certainty(_acv["evidence_line"]) == "low", _acv["evidence_line"])
+t("F1: the short answer, the evidence line and the breakdown state one certainty level",
+  evidence.stated_certainty(_acv["tldr"]) == evidence.line_certainty(_acv["evidence_line"])
+  == evidence.stated_certainty(_acv["breakdown"]["strength"])
+  == evidence.stated_certainty(*_acv["breakdown"]["says"]) == "low"
+  and "moderate evidence" not in _acv_words and "strong evidence" not in _acv_words,
+  (_acv["evidence_line"], _acv["breakdown"]["strength"], _acv["breakdown"]["says"]))
+t("F1: a capped phrase keeps its sentence and its capital letter",
+  _acv["breakdown"]["says"][0].startswith("Weak evidence shows fasting blood sugar"),
+  _acv["breakdown"]["says"])
+t("F1: a negated certainty phrase is neither counted nor rewritten",
+  evidence.stated_certainty("There is no high-quality evidence for this.") is None
+  and evidence.cap_certainty("There is no strong evidence for this.", "low")
+  == "There is no strong evidence for this.")
+t("F1: nothing is ever rewritten upwards",
+  evidence.cap_certainty("The studies are low certainty.", "high") == "The studies are low certainty.")
+t("F1: a review's own lower rating caps the line even when it is not the first review",
+  evidence.evidence_line("complicated", _ACV + [
+      {"pmid": "V3", "title": "Vinegar review", "publication_types": ["Meta-Analysis"],
+       "abstract": "The certainty of evidence was very low."}], ["V1", "V2", "V3"])
+  .startswith("Very low certainty"))
+db.put_cached_verdict("apple cider vinegar helps diabetes", "vinegar AND diabetes", "complicated",
+                      "Two reviews found small drops (Studies 1, 2).", ["V1", "V2"], _ACV,
+                      tldr="It may lower blood sugar a little, but the studies are mixed and low certainty.",
+                      still_open="Doses vary.", breakdown=_ACV_BD)
+_acv_html = c.get("/?q=apple%20cider%20vinegar%20helps%20diabetes").data.decode()
+t("F1: the server-rendered page carries no surer certainty phrase than the short answer",
+  "moderate evidence" not in _acv_html.lower() and "Strong evidence shows" not in _acv_html
+  and "weak evidence for blood sugar" in _acv_html.lower())
+
+# ---- B6 F2: the label never exceeds the main review's own rating ---------------
+# "exercise helps depression" said "Moderate certainty evidence" while its main
+# review (a network meta-analysis) rated confidence low to very low in CINeMA's
+# words, which the certainty reader did not know; a smaller review's "moderate
+# certainty" stood in for it.
+_EXD = [
+    {"pmid": "E1", "title": "Effect of exercise for depression: systematic review and network meta-analysis",
+     "abstract": "218 unique studies with 14170 participants. Walking or jogging reduced depression "
+                 "(g -0.62). Only one study met the Cochrane criteria for low risk of bias. As a "
+                 "result, confidence in accordance with CINeMA was low for walking or jogging and "
+                 "very low for other treatments.",
+     "journal": "BMJ", "year": "2024", "publication_types": ["Systematic Review", "Network Meta-Analysis"],
+     "authors": ["N"], "data_banks": None, "url": "uE1"},
+    {"pmid": "E6", "title": "Impact of postpartum physical activity on maternal depression",
+     "abstract": "35 studies. Moderate certainty evidence from RCTs showed that exercise reduced "
+                 "the severity of postpartum depressive symptoms (SMD -0.52).",
+     "journal": "BJSM", "year": "2025", "publication_types": ["Systematic Review", "Meta-Analysis"],
+     "authors": ["D"], "data_banks": None, "url": "uE6"},
+]
+t("F2: CINeMA's 'confidence ... was low for X and very low for Y' is read as the review's own rating",
+  evidence.review_certainty(_EXD[0]) == "very low"
+  and evidence.certainty_range(_EXD[0]) == "very low to low", evidence.certainty_range(_EXD[0]))
+t("F2: a confidence interval is never read as a rating",
+  evidence.review_certainty({"publication_types": ["Meta-Analysis"],
+                             "abstract": "The 95% confidence interval was 0.8 to 1.2 with high heterogeneity."})
+  is None)
+_exl = evidence.evidence_line("true", _EXD, ["E1", "E6"], "exercise helps depression")
+t("F2: a main review rated low or very low never yields a Moderate or Strong label",
+  not _exl.startswith(("Moderate", "Strong", "High")) and _exl.startswith("Very low"), _exl)
+_exr = appmod._check_response("exercise helps depression", "exercise AND depression", "true",
+                              "Exercise helps depression.", "Reviews found less depression (Studies 1, 2).",
+                              ["E1", "E6"], _EXD, "http://x",
+                              breakdown={"strength": "Moderate certainty evidence supports it (Studies 1, 2).",
+                                         "says": [], "evidence": [], "parts": []})
+t("F2: the breakdown's 'moderate certainty' is brought down to the main review's rating",
+  "Moderate certainty" not in _exr["breakdown"]["strength"]
+  and _exr["breakdown"]["strength"].startswith("Very low certainty"), _exr["breakdown"]["strength"])
+_exv = verdict._read_verdict(json.dumps({
+    "verdict": "true", "tldr": "Exercise helps depression.",
+    "explanation": "Pooled studies found less depression (Studies 1, 2).", "still_open": "Best dose.",
+    "cited_study_numbers": [1, 2], "evidence": [], "parts": [], "strength": "", "effect_size": "",
+    "applies_to": "", "not_applies_to": "", "unknowns": ""}), None, _EXD, "exercise helps depression")
+t("F2: the existing rule then holds: a main review rated low cannot carry 'Likely true'",
+  _exv["verdict"] == "complicated", _exv["verdict"])
+
+# ---- B6 F3: prose is held to the studies it cites ------------------------------
+# D3: a postpartum-only study was rendered "pregnant women". D4: a who-line
+# cited a study not relied on. D5: prose linked studies listed as read, not
+# relied on. D6: "15 to 30 mL" credited to studies giving 20 and 30, and
+# "thousands of people" of a review of 1,937.
+t("F3: a postpartum-only study is labelled people after giving birth, never 'pregnant'",
+  "pregnan" not in (evidence.population(_EXD[1]) or "").lower()
+  and "birth" in (evidence.population(_EXD[1]) or ""), evidence.population(_EXD[1]))
+_f3s = [
+    {"pmid": "P1", "title": "Apple cider vinegar and glucose: a randomised trial",
+     "abstract": "120 adults took 20 mL or 30 mL of vinegar daily for 12 weeks. Fasting glucose fell.",
+     "journal": "J", "year": "2021", "publication_types": ["Randomized Controlled Trial"],
+     "authors": ["A"], "data_banks": None, "url": "u1"},
+    {"pmid": "P2", "title": "Vinegar intake and weight in adults",
+     "abstract": "A review of 9 trials with 1,937 adults. Vinegar lowered weight slightly.",
+     "journal": "J", "year": "2023", "publication_types": ["Systematic Review"],
+     "authors": ["B"], "data_banks": None, "url": "u2"},
+    {"pmid": "P3", "title": "Vinegar in a mouse model of obesity",
+     "abstract": "Mice fed 15 mL/kg vinegar gained less fat. Postpartum mice were studied.",
+     "journal": "J", "year": "2019", "publication_types": ["Journal Article"],
+     "authors": ["C"], "data_banks": None, "url": "u3"},
+]
+_f3r = appmod._check_response(
+    "apple cider vinegar helps weight loss", "vinegar AND weight", "complicated",
+    "Small trials found small changes.",
+    "A trial gave 20 mL or 30 mL a day (Study 1). People took 15 to 30 mL a day (Studies 1, 2). "
+    "A review pooled thousands of people (Study 2). Mice gained less fat (Study 3). "
+    "Pregnant women gained less weight (Study 1).",
+    ["P1", "P2"], _f3s, "http://x", still_open="Whether it lasts (Study 3).",
+    breakdown={"says": [], "evidence": [], "parts": [], "strength": "", "effect_size": "",
+               "applies_to": "Adults (Study 1).",
+               "not_applies_to": "Adults with untreated kidney failure (Study 3). Children were not in either trial (Study 1)."})
+_f3e = _f3r["explanation"]
+t("F3: a sentence whose figures are in the study it cites is kept",
+  "20 mL or 30 mL a day (Study 1)" in _f3e, _f3e)
+t("F3: '15 to 30 mL' credited to studies that give 20 and 30 is dropped",
+  "15 to 30" not in _f3e, _f3e)
+t("F3: 'thousands of people' of a review of 1,937 is dropped",
+  "thousands" not in _f3e, _f3e)
+t("F3: prose links only studies the verdict relied on",
+  "Study 3" not in _f3e and "Mice" not in _f3e, _f3e)
+t("F3: a group the cited study never names ('pregnant women') is dropped",
+  "Pregnant" not in _f3e, _f3e)
+t("F3: a who-line citing a study not relied on is removed, an honest absence is kept",
+  "kidney" not in _f3r["breakdown"]["not_applies_to"]
+  and "Children were not in either trial" in _f3r["breakdown"]["not_applies_to"],
+  _f3r["breakdown"]["not_applies_to"])
+t("F3: 'still open' is never touched",
+  _f3r["still_open"] == "Whether it lasts (Study 3).", _f3r["still_open"])
+t("F3: a warning no cited study supports is removed, like any other sentence",
+  "injure" not in breakdown.held_to_sources(
+      "Undiluted vinegar can injure the throat (Study 3).", _f3s, {1, 2}))
+t("F3: with nothing relied on, the reasons studies were set aside stay",
+  breakdown.held_to_sources("Mice gained less fat (Study 3).", _f3s, set())
+  == "Mice gained less fat (Study 3).")
+
+# ---- B6 F7: who runs Evident -----------------------------------------------------
+# "Is it biased? Who made it?" was answered only "an independent project". The
+# page says what is true now and shows owner details only once they are set.
+import re as _re7
+_ab = c.get("/about")
+_abt = _ab.get_data(as_text=True)
+_abv = _re7.sub(r"\{#.*?#\}|<!--.*?-->|<[^>]+>", " ", _abt, flags=_re7.S)
+t("F7: /about exists, says who checks a result, how it is paid for, and carries the disclaimer",
+  _ab.status_code == 200 and "No doctor or scientist reviews each result" in _abt
+  and "shows no ads" in _abt and "Not medical advice" in _abt)
+t("F7: /about ships no visible placeholder and no dashes",
+  "[" not in _abv and "\u2014" not in _abv and "\u2013" not in _abv)
+t("F7: home, a result and the privacy page all link to /about",
+  'href="/about"' in c.get("/").get_data(as_text=True)
+  and 'href="/about"' in c.get("/privacy").get_data(as_text=True)
+  and 'href="/about"' in c.get("/?q=conclusions+render").get_data(as_text=True))
+# main's rebuilt /about is a fixed page (no env-configured owner block): it
+# names Dhruva as the person who runs Evident, and says so before the contact line.
+t("F7: /about names Dhruva as the owner, and no owner-config block is promised",
+  "made and run by Dhruva" in _abt and "It is based in" not in _abt)
+
+t("contact: /about and /corrections give hello@checkevident.com as a plain mailto link, with no form",
+  'href="mailto:hello@checkevident.com"' in _abt and 'href="mailto:hello@checkevident.com"' in c.get("/corrections").get_data(as_text=True)
+  and "<form" not in c.get("/corrections").get_data(as_text=True) and "<form" not in _abt
+  and "\u2014" not in c.get("/corrections").get_data(as_text=True))
+_old_ce = appmod.CONTACT_EMAIL
+appmod.CONTACT_EMAIL = None
+_noce = c.get("/corrections").get_data(as_text=True)
+appmod.CONTACT_EMAIL = _old_ce
+t("contact: with no address set, no mailto is shown", "mailto:" not in _noce)
+
+# ---- B6 F9: a linkable method page -----------------------------------------------
+_me = c.get("/method")
+_met = _me.get_data(as_text=True)
+_mev = _re7.sub(r"\{#.*?#\}|<!--.*?-->|<[^>]+>", " ", _met, flags=_re7.S)
+t("F9: /method exists with a version and a last-changed date",
+  _me.status_code == 200 and f"Method version {appmod.METHOD_VERSION}, last changed {appmod.METHOD_CHANGED}" in _met)
+t("F9: /method states the number of abstracts the code actually reads",
+  f"up to {appmod.MAX_STUDIES} abstracts" in _met and appmod.MAX_STUDIES == 8)
+t("F9: /method names the code's own rules: no citation means Not enough evidence; label capped by the review",
+  "becomes \u201cNot enough evidence\u201d" in _met and "never higher than the lowest rating" in _met
+  and "Not medical advice" in _met)
+t("F9: /method has no placeholder and no dashes",
+  "[" not in _mev and "\u2014" not in _mev and "\u2013" not in _mev)
+t("F9: the How it works sheet and every result link to /method",
+  'href="/method"' in c.get("/").get_data(as_text=True)
+  and 'href="/method"' in c.get("/?q=conclusions+render").get_data(as_text=True))
+
+# ---- B6 F10: review dates on results ---------------------------------------------
+_rl = appmod._review_line("2026-11-14T09:00:00+00:00",
+                          [{"pmid": "a", "year": "2019"}, {"pmid": "b", "year": "2025"},
+                           {"pmid": "c", "year": "2001"}], {"a", "b"})
+t("F10: the line gives the check date and the years of the studies relied on, not those read",
+  _rl == "Checked 14 November 2026, from studies published 2019 to 2025.", _rl)
+t("F10: one study, one year, and none are each worded plainly",
+  appmod._review_line("2026-11-14T09:00:00+00:00", [{"pmid": "a", "year": "2024"}], {"a"})
+  == "Checked 14 November 2026, from a study published in 2024."
+  and appmod._review_line("2026-11-14T09:00:00+00:00", [{"pmid": "a", "year": "2024"}], set())
+  == "Checked 14 November 2026.")
+db.put_cached_verdict("review dates render", "q", "complicated", "Because (Study 1).",
+                      ["C1", "C2"], _CON_STUDIES, tldr="Short take.", still_open="Open.")
+_rlp = P("review dates render", ip="4.4.4.5").get_json()
+_rlh = c.get("/?q=review+dates+render").get_data(as_text=True)
+t("F10: a result carries the line, and the server-rendered page shows it before any script",
+  str(_rlp.get("review_line")).startswith("Checked ") and str(_rlp.get("review_line")) in _rlh
+  and 'id="review-line"' in _rlh, (_rlp.get("error"), sorted(_rlp)[:6]))
+t("F10: renderResult fills the same line",
+  'data.review_line' in pathlib.Path("static/app.js").read_text())
+
+# ---- B6 F8: a corrections route --------------------------------------------------
+_co = c.get("/corrections")
+_cot = _co.get_data(as_text=True)
+_cov = _re7.sub(r"\{#.*?#\}|<!--.*?-->|<[^>]+>", " ", _cot, flags=_re7.S)
+t("F8: /corrections exists, points to the existing report button, and carries the disclaimer",
+  _co.status_code == 200 and "Report a wrong answer" in _cot and "Not medical advice" in _cot)
+t("F8: it promises no response time and no placeholder shows",
+  not _re7.search(r"\bwithin\b|\bdays?\b(?! later)|\bhours?\b|\bweeks?\b", _cov)
+  and "[" not in _cov and "\u2014" not in _cov and "\u2013" not in _cov, _cov[:200])
+t("F8: the report form, /about and /method link to it",
+  'href="/corrections"' in c.get("/").get_data(as_text=True).split('id="report-form"')[1].split("</form>")[0]
+  and 'href="/corrections"' in _abt and 'href="/corrections"' in _met)
+_fbr = c.post("/api/feedback", json={"claim": "review dates render", "report": True, "note": "wrong"},
+              environ_base={"REMOTE_ADDR": "9.9.9.1"})
+t("F8: reports still go through the one anonymous feedback route, and set no cookie",
+  _fbr.status_code == 200 and _fbr.get_json() == {"ok": True} and "Set-Cookie" not in _fbr.headers
+  and "Set-Cookie" not in _co.headers)
+
+# ---- B6 F13: the count and the list numbers agree --------------------------------
+_lg = db.ledger()["claims"]
+_rv = db.recent_verdicts(500)
+t("F13: the newest entry's number equals the Claims checked count, with no gaps",
+  _rv and _rv[0]["issue"] == _lg and sorted(r["issue"] for r in _rv) == list(range(1, _lg + 1)),
+  (_lg, [r["issue"] for r in _rv[:3]]))
+
+# ---- Review fix 1: harm warnings are never dropped -------------------------------
+# The first gate removed safety warnings (the review's f3_drops.json). Each of
+# these is verbatim from that list, or from the review's brief.
+_h8 = _f3s + [{"pmid": f"H{i}", "title": "Background paper", "abstract": "A narrative review.",
+               "journal": "J", "year": "2020", "publication_types": ["Review"], "authors": ["x"],
+               "data_banks": None, "url": "u"} for i in range(4, 9)]
+_HARMS = {
+    "Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.":
+        "Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.",
+    "Antibiotics should not be used for the common cold or influenza (Study 3).":
+        "Antibiotics should not be used for the common cold or influenza.",
+    "Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).":
+        "Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus.",
+    "Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).":
+        "Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis.",
+    "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure (Study 3).":
+        "Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure.",
+    # Study 1 never mentions pregnancy or diabetes, nor 99 mL or 12,000: the
+    # warning stays, without crediting a study with it (second review fix 3).
+    "It is unsafe in pregnancy (Study 1).": "It is unsafe in pregnancy.",
+    "People with diabetes should not stop their medicine (Study 1).":
+        "People with diabetes should not stop their medicine.",
+    "Doses of 99 mL a day burned the throat in 12,000 people (Studies 1, 3).":
+        "Doses of 99 mL a day burned the throat in 12,000 people.",
+}
+for _hin, _hout in _HARMS.items():
+    _hgot = breakdown.held_to_sources(_hin, _h8, {1, 2})
+    # Q8: an unsupported warning is removed too. The old expected text stays in
+    # the table as the record of what the retired caution rule kept.
+    _hok = "injure" not in _hgot and "Antibiotics" not in _hgot and "Alcohol" not in _hgot and "milk" not in _hgot and "abnormal" not in _hgot and "unsafe" not in _hgot and "stop their" not in _hgot and "burned" not in _hgot
+    t(f"fix 1: a warning no cited study supports is removed: {_hin[:48]}", _hok, _hgot)
+for _hin in ["Most acute nose and throat infections are caused by viruses, not bacteria (Study 3)."]:
+    t(f"fix 1 (fifth review: softened or negated, so now dropped): {_hin[:48]}",
+      breakdown.held_to_sources(_hin, _h8, {1, 2}) == "")
+t("fix 1: the harm rule also holds inside the breakdown",
+  breakdown.hold_breakdown({"says": ["Antibiotics should not be used for the common cold or influenza (Study 3)."],
+                            "evidence": [], "parts": [], "strength": "", "effect_size": "",
+                            "applies_to": "", "not_applies_to": "", "unknowns": ""},
+                           _h8, {1, 2})["says"] == [])
+
+# ---- Review fix 2: the two "who" lines, and untested claims ----------------------
+_na = ("Heavy drinkers, people with contraindications to alcohol, and those outside the "
+       "studied age ranges (Study 1).")
+t("fix 2: a 'does not apply to' line naming groups its record never mentions is kept",
+  breakdown.held_to_sources(_na, _h8, {1, 2}, who="not") == _na
+  and breakdown.held_to_sources("Pregnant women (Study 1).", _h8, {1, 2}, who="not") == "Pregnant women (Study 1).")
+t("fix 2: a 'does not apply to' line citing only a study not relied on still goes",
+  breakdown.held_to_sources("Adults with untreated kidney failure (Study 3).", _h8, {1, 2}, who="not") == "")
+_ap = breakdown.held_to_sources("Adults and smokers (Study 1).", _h8, {1, 2}, who="applies")
+t("fix 2: an 'applies to' line loses only the clause its record does not support",
+  _ap == "Adults (Study 1).", _ap)
+t("fix 2: an absence stated as 'does not apply to' or 'not in' is never held to naming the group",
+  breakdown.held_to_sources("The results do not apply to pregnant women (Study 1).", _h8, {1, 2})
+  == "The results do not apply to pregnant women (Study 1)."
+  and breakdown.held_to_sources("The trial does not cover smokers (Study 1).", _h8, {1, 2})
+  == "The trial does not cover smokers (Study 1).")
+t("fix 2: a statement that the claim was not tested is never dropped",
+  breakdown.held_to_sources("Neither tested whether diabetes went away (Study 3).", _h8, {1, 2})
+  == "Neither tested whether diabetes went away."
+  and breakdown.held_to_sources("No trial tested whether smokers lost weight (Study 1).", _h8, {1, 2})
+  == "No trial tested whether smokers lost weight (Study 1).")
+
+# ---- Review fix 3: prose may only lower the line, in design words -------------
+_ma = {"pmid": "M", "title": "X for pain: a meta-analysis",
+       "abstract": "Meta-analysis of 30 randomised placebo-controlled trials with 9000 adults. Pain fell.",
+       "journal": "J", "year": "2022", "publication_types": ["Meta-Analysis", "Systematic Review"],
+       "authors": ["a"], "data_banks": None, "url": "u"}
+t("fix 3: prose stating the same level keeps the design word",
+  evidence.evidence_line("true", [_ma], ["M"], "x helps pain", stated="high") == "Strong evidence for this claim")
+t("fix 3: prose stating a lower level lowers the line in a design word, never 'certainty'",
+  evidence.evidence_line("true", [_ma], ["M"], "x helps pain", stated="low") == "Weak evidence for this claim")
+t("fix 3: prose can never raise the line",
+  evidence.evidence_line("true", [dict(_ma, publication_types=["Case Reports"])], ["M"], "x helps pain",
+                         stated="high").startswith("Weak"))
+_mar = dict(_ma, abstract="Meta-analysis of 30 RCTs. Pain fell (low certainty evidence).")
+t("fix 3: 'certainty' wording comes only from a review's own rating",
+  evidence.evidence_line("true", [_mar], ["M"], "x helps pain").startswith("Low certainty"))
+
+# ---- Review fix 4: cap_certainty rewrites only the prose's own word on the body --
+t("fix 4: 'More high-quality evidence is needed' is left alone, and states no level",
+  evidence.cap_certainty("More high-quality evidence is needed.", "low") == "More high-quality evidence is needed."
+  and evidence.stated_certainty("More high-quality evidence is needed.") is None)
+t("fix 4: 'would' and 'larger ... needed' sentences are never rewritten",
+  evidence.cap_certainty("A larger trial would give strong evidence.", "low") == "A larger trial would give strong evidence."
+  and evidence.cap_certainty("Larger trials with moderate certainty are needed.", "low")
+  == "Larger trials with moderate certainty are needed.")
+t("fix 4: a phrase credited to a study or review is never rewritten",
+  evidence.cap_certainty("Study 2 found moderate certainty evidence.", "low") == "Study 2 found moderate certainty evidence."
+  and evidence.cap_certainty("The review rated the evidence high certainty.", "low")
+  == "The review rated the evidence high certainty.")
+t("fix 4: the prose's own statement about the evidence is still brought down, in a design word",
+  evidence.cap_certainty("There is strong evidence it helps (Study 1).", "low") == "There is weak evidence it helps (Study 1).")
+
+# ---- Review fix 5: a CINeMA "confidence" needs CINeMA, GRADE or the evidence -----
+_cA = dict(_ma, pmid="A", abstract="Meta-analysis of 20 RCTs. Participants' confidence was high after treatment. Pain fell.")
+_cB = dict(_ma, pmid="B", abstract="Meta-analysis of 12 RCTs. Pain fell (low certainty evidence).")
+t("fix 5: an earlier review's 'confidence was high' cannot displace a later low-rated lead review",
+  evidence.lead_certainty([_cA, _cB], ["A", "B"], "", strict=True) == "low"
+  and evidence.certainty_cap([_cA, _cB], ["A", "B"]) is not None)
+t("fix 5: self-confidence and someone's confidence are not ratings",
+  all(evidence.review_certainty(dict(_ma, abstract=a)) is None for a in (
+      "Meta-analysis. Self-confidence was high in the exercise group.",
+      "Meta-analysis. Patient confidence in the results was high.",
+      "Meta-analysis. Confidence was high after training.")))
+t("fix 5: confidence in the evidence, or with CINeMA named, still counts",
+  evidence.review_certainty(dict(_ma, abstract="Meta-analysis. Confidence in the evidence was low.")) == "low"
+  and evidence.review_certainty(dict(_ma, abstract="Meta-analysis. Confidence according to CINeMA was moderate.")) == "moderate")
+
+# ---- Review fix 6: the method and about pages say only what is true -------------
+_met6 = c.get("/method").get_data(as_text=True)
+_abt6 = c.get("/about").get_data(as_text=True)
+t("fix 6: /method says the prose check covers the explanation and breakdown, not the short answer",
+  "In the explanation and the breakdown, though not in the short answer" in _met6)
+t("fix 6: /method says guidance can decide some claims with no study cited, and never says 'safe' alone",
+  "even when no study is cited" in _met6 and "never on its own that something is safe" in _met6)
+t("fix 6: the removal sentence on /method is backed by the gate",
+  "even a warning" in _met6
+  and breakdown.held_to_sources("It is unsafe in pregnancy (Study 3).", _h8, {1, 2}) == "")
+t("fix 6: /about names the guidance exception instead of 'whatever the model wrote'",
+  "whatever the model wrote" not in _abt6 and "without a study" in _abt6)
+t("fix 6: guidance really can stamp a forgo-treatment claim with nothing cited (the exception /method states)",
+  "Applies even with nothing cited" in pathlib.Path("verdict.py").read_text())
+
+# ---- Review fix 7: the Money sentence on /about stays true -----------------------
+_abt7 = c.get("/about").get_data(as_text=True)
+t("fix 7: /about no longer promises a free tier it cannot know", "free tier" not in _abt7)
+t("fix 7: the 'sells' promise is limited to this site, ads, accounts and data",
+  "sells nothing" not in _abt7 and "This site shows no ads, has no accounts and sells no data." in _abt7
+  and "sells nothing" not in c.get("/").get_data(as_text=True))
+
+# ---- Review fix 8: list numbers cost one count, not one per row ------------------
+import contextlib as _cl8
+def _work8(n):
+    """VM steps and statements for recent_verdicts(n) and all_claims() on a fresh n-row table."""
+    _old_path, _old_conn = db.DB_PATH, db.get_conn
+    db.DB_PATH = os.path.join(tempfile.mkdtemp(), "f8.db")
+    _con = _sqlite_b.connect(db.DB_PATH); _con.executescript(db.SCHEMA)
+    # Whole rows (a short answer and a still-open line), since a list shows only those.
+    _con.executemany("INSERT INTO verdict_cache (claim_key, claim_text, verdict, explanation, tldr, still_open, created_at) "
+                     "VALUES (?, ?, 'complicated', 'x', 'Mixed evidence.', 'Longer trials.', ?)",
+                     [(f"k{i}", f"Claim {i}", f"2026-01-01T00:00:{i % 7:02d}") for i in range(n)])
+    _con.commit(); _con.close()
+    tally = {"steps": 0, "sql": []}
+    @_cl8.contextmanager
+    def _counting():
+        conn = _sqlite_b.connect(db.DB_PATH); conn.row_factory = _sqlite_b.Row
+        conn.set_trace_callback(tally["sql"].append)
+        def _tick():
+            tally["steps"] += 1
+            return 0
+        conn.set_progress_handler(_tick, 100)
+        try:
+            yield conn
+        finally:
+            conn.close()
+    db.get_conn = _counting
+    try:
+        rv = db.recent_verdicts(n)
+        rv_steps, rv_sql = tally["steps"], len(tally["sql"])
+        tally["steps"], tally["sql"] = 0, []
+        ac = db.all_claims(n)
+        return rv, rv_steps, rv_sql, ac, tally["steps"], len(tally["sql"])
+    finally:
+        db.DB_PATH, db.get_conn = _old_path, _old_conn
+_s8 = _work8(60)
+_b8 = _work8(480)
+t("fix 8: numbers still run newest = count down to 1 with ties broken by insertion",
+  [r["issue"] for r in _b8[0]] == list(range(480, 0, -1)), [r["issue"] for r in _b8[0][:3]])
+t("fix 8: recent_verdicts issues two statements whatever the table size",
+  _s8[2] == 2 and _b8[2] == 2, (_s8[2], _b8[2]))
+t("fix 8: work grows about linearly with rows (8x rows, well under 20x steps), not quadratically",
+  _b8[1] < 20 * max(_s8[1], 1), (_s8[1], _b8[1]))
+t("fix 8: all_claims (type-ahead) does no numbering at all: one statement, no issue field",
+  _b8[5] == 1 and "issue" not in _b8[3][0] and _b8[4] < 20 * max(_s8[4], 1), (_b8[5], _b8[3][0]))
+
+# ---- Review fix 9: a shared link scopes certainty to the outcome, like a check ---
+_f9c = "Ginger reduces vomiting in adults"
+db.put_cached_verdict(_f9c, _GIN_Q, "complicated", "Ginger may reduce vomiting (Study 1).",
+                      ["L3"], [_MODREV], tldr="Ginger may reduce vomiting.", still_open="Doses vary.")
+_f9k = db.get_cached_by_key(db.normalize_claim(_f9c))
+_f9a = P(_f9c, "9.9.9.9")
+_f9line = (_f9a.get_json() or {}).get("evidence_line", "")
+_f9h = c.get("/", query_string={"q": _f9c}).get_data(as_text=True)
+t("fix 9: get_cached_by_key returns the stored search query", _f9k and _f9k["search_query"] == _GIN_Q)
+t("fix 9: the streamed check reads the review on the claim's outcome (moderate, not the lowest)",
+  _f9line.startswith("Moderate"), _f9line)
+t("fix 9: the shared link prints the same evidence line as the streamed check",
+  _f9line and _f9line in _f9h and "Low certainty evidence" not in _f9h)
+
+# ---- Review fix 10: a card never 500s when the gate fails -------------------------
+_f10k = db.normalize_claim(_f9c)
+_f10orig, _f10seen = appmod._check_response, {}
+def _f10boom(*a, **k):
+    raise ValueError("gate broke")
+_f10card = appmod.og.render_card
+def _f10spy(claim, verdict_value, tldr, *a, **k):
+    _f10seen["tldr"] = tldr
+    return _f10card(claim, verdict_value, tldr, *a, **k)
+appmod._check_response, appmod.og.render_card = _f10boom, _f10spy
+try:
+    _f10r = c.get(f"/og/{_f10k}.png")
+finally:
+    appmod._check_response, appmod.og.render_card = _f10orig, _f10card
+t("fix 10: a card whose gate raises still renders a PNG with the stored short answer",
+  _f10r.status_code == 200 and _f10r.mimetype == "image/png" and _f10seen.get("tldr") == "Ginger may reduce vomiting.",
+  (_f10r.status_code, _f10seen))
+
+# ---- Review fix 11: number matching reads counts as the records give them --------
+_n11 = [{"pmid": "N1", "title": "Coffee and cardiovascular disease: a dose-response meta-analysis",
+         "abstract": "Thirty-six studies were included with 1 279 804 participants and 36 352 CVD cases. "
+                     "In a trial, usual care (n = 25) was compared with an app (n = 29).",
+         "journal": "J", "year": "2020", "publication_types": ["Meta-Analysis"], "authors": ["x"],
+         "data_banks": None, "url": "u"},
+        {"pmid": "N2", "title": "Walking in adults with diabetes",
+         "abstract": "Adults with diabetes walked daily for a year; HbA1c fell.",
+         "journal": "J", "year": "2021", "publication_types": ["Randomized Controlled Trial"],
+         "authors": ["x"], "data_banks": None, "url": "u"}]
+_H11 = lambda x, claim="": breakdown.held_to_sources(x, _n11, {1, 2}, claim=claim)
+t("fix 11: space-grouped thousands in a record match the comma form",
+  _H11("The review pooled 1,279,804 participants (Study 1).") != ""
+  and _H11("There were 36,352 cases (Study 1).") != "")
+t("fix 11: a rounded count the record supports is kept (1.3 million, 36,000)",
+  _H11("The review pooled about 1.3 million people (Study 1).") != ""
+  and _H11("About 36,000 cases were seen (Study 1).") != "")
+t("fix 11: a trial's total from its group sizes is kept (25 + 29 = 54)",
+  _H11("A trial of 54 adults tested the app (Study 1).") != "")
+t("fix 11: 'type 2' is a name, not a figure the record must give",
+  _H11("Adults with type 2 diabetes walked daily (Study 2).") != "")
+t("fix 11: a number the claim itself gives is not held against the record",
+  _H11("Drinking 8 glasses a day was not tested (Study 2).", "You need to drink 8 glasses of water a day") != ""
+  and _H11("Walking 8 hours a day lowered HbA1c (Study 2).", "You need to drink 8 glasses of water a day") != "")
+t("fix 11: a figure in no record still goes, and so does a wrong rounding",
+  _H11("Risk fell 55% (Study 1).") == "" and _H11("The review pooled 2.5 million people (Study 1).") == ""
+  and _H11("A trial of 60 adults tested the app (Study 1).") == "")
+t("fix 11: the verbatim dropped sentence from the review now stays",
+  breakdown.held_to_sources("Study 2 found a 13-week mobile intervention reduced HbA1c and blood pressure in 54 adults with type 2 diabetes.",
+      [_n11[1], {**_n11[0], "abstract": "A randomized controlled trial compared usual care (n = 25) with a 13-week mHealth intervention (n = 29). HbA1c and blood pressure fell in adults with type 2 diabetes."}],
+      {2}) != "")
+
+# ---- Review extra: a cached "true" follows the same certainty cap as a fresh check
+_xc = "Ginger stops vomiting for good in adults"
+db.put_cached_verdict(_xc, _GIN_Q, "true", "Ginger reduces vomiting (Study 1).",
+                      ["L1"], [_LOWREV], tldr="Ginger reduces vomiting.", still_open="Doses vary.")
+_xa = P(_xc, "9.9.9.8").get_json() or {}
+_xh = c.get("/", query_string={"q": _xc}).get_data(as_text=True)
+_xseen = {}
+_xcard = appmod.og.render_card
+def _xspy(claim, verdict_value, *a, **k):
+    _xseen["stamp"] = verdict_value
+    return _xcard(claim, verdict_value, *a, **k)
+appmod.og.render_card = _xspy
+try:
+    c.get(f"/og/{db.normalize_claim(_xc)}.png")
+finally:
+    appmod.og.render_card = _xcard
+t("extra: a cached 'true' over a low-rated lead review is shown as complicated, with the low line",
+  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").startswith("Low certainty")
+  and "certainty of that evidence is low" in (_xa.get("tldr") or ""), (_xa.get("verdict"), _xa.get("evidence_line"), _xa.get("tldr")))
+t("extra: the shared page, its markup and its card never say Likely true over that line",
+  not _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">" + appmod.VERDICT_LABELS["true"], _xh)
+  and _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">", _xh)
+  and f"<title>{appmod.VERDICT_LABELS['true']}" not in _xh
+  and f"{appmod.VERDICT_LABELS['true']}: \u201c{_xc}" not in _xh
+  and "<title>" + str(__import__('markupsafe').escape(appmod.display.result_meta(_xc, appmod.VERDICT_LABELS['complicated'], "")["title"])) in _xh
+  and f'"alternateName": "{appmod.VERDICT_LABELS["true"]}"' not in _xh and _xseen.get("stamp") == "complicated",
+  [_xh[max(0, m.start() - 120):m.end() + 40] for m in _re7.finditer(appmod.VERDICT_LABELS["true"], _xh)][:4])
+
+_xs = c.get("/api/suggest", query_string={"q": "Ginger stops vomiting"}).get_json() or {}
+t("extra: type-ahead shows the capped stamp too, not the stored 'true'",
+  any(r["claim_text"] == _xc and r["verdict"] == "complicated" for r in _xs.get("suggestions", [])), _xs)
+
+# ---- Review extra: an emptied explanation does not repeat the short answer --------
+_ec = "Ginger cures every kind of vomiting in adults"
+db.put_cached_verdict(_ec, _GIN_Q, "complicated", "Ginger helped 99% of people (Study 1).",
+                      ["L3"], [_MODREV], tldr="Ginger may reduce vomiting a little.", still_open="Doses vary.")
+_ea = P(_ec, "9.9.9.7").get_json() or {}
+_eh = c.get("/", query_string={"q": _ec}).get_data(as_text=True)
+_esays = _eh.split('id="says-sec"')[1].split("</section>")[0]
+t("extra: an explanation the gate empties is empty, not the short answer again",
+  _ea.get("explanation") == "" and _ea.get("tldr") == "Ginger may reduce vomiting a little.", _ea.get("explanation"))
+t("extra: the server-rendered page then hides the research block instead of printing the short answer twice",
+  _esays.lstrip().startswith("hidden") and "Ginger may reduce vomiting a little." not in _esays, _esays[:120])
+
+# ---- Review extra: /corrections lists everything a report stores ----------------
+_cor = c.get("/corrections").get_data(as_text=True)
+_fbcols = {r[1] for r in _sqlite_b.connect(os.environ["DB_PATH"]).execute("pragma table_info(feedback)")}
+t("extra: /corrections says the time of a report is stored, as the feedback table does",
+  "created_at" in _fbcols and "the date and time of the report" in _cor
+  and _fbcols <= {"id", "claim_key", "verdict", "helpful", "note", "created_at"}, _fbcols)
+
+# ---- Second review fix 1: the stamp cap is verdict.py's strict cap, not the line --
+_VAX_Q = "(vaccine OR vaccination) AND (severe measles OR measles complications)"
+_vaxrev = _study("V1", "Vaccines for measles, mumps, rubella, and varicella in children", types=["Systematic Review", "Meta-Analysis"],
+                 abstract="Certainty of evidence was rated using GRADE. We included 138 studies (23,480,668 participants). "
+                          "One dose prevented measles (moderate certainty evidence) and hospital admission for measles "
+                          "complications fell (low certainty evidence).")
+_hpvrev = _study("V2", "HPV vaccines: a network meta-analysis", types=["Systematic Review", "Network Meta-Analysis"],
+                 abstract="We assessed the certainty of evidence using the GRADE approach. We included 60 studies. "
+                          "Serious adverse events were similar (high-certainty evidence); CIN2+ fell (moderate-certainty); "
+                          "rare outcomes were uncertain (low-certainty evidence).")
+_r1 = []
+for _cl1, _q1, _rv1, _tl1 in [
+        ("Vaccines reduce the risk of severe measles", _VAX_Q, _vaxrev, "Vaccines help reduce the risk of severe measles in children."),
+        ("The HPV vaccine is safe", "(HPV vaccine) AND (safety OR toxicity)", _hpvrev,
+         "The HPV vaccine is safe and provides strong protection against HPV related diseases.")]:
+    _p1 = appmod._check_response(_cl1, _q1, "true", _tl1, "It works (Study 1).", [_rv1["pmid"]], [_rv1], "http://x",
+                                 cached_at="2026-11-01T00:00:00+00:00")
+    _r1.append((_cl1, _tl1, _p1, appmod._listed({"claim_text": _cl1, "verdict": "true", "search_query": _q1,
+                                                 "studies": [_rv1], "cited": [_rv1["pmid"]]})))
+t("second fix 1: vaccine-shaped rows rated over a range stay Likely true with the short answer unchanged",
+  all(p["verdict"] == "true" and p["tldr"] == tl and lst["verdict"] == "true" for _cl, tl, p, lst in _r1),
+  [(p["verdict"], p["evidence_line"], p["tldr"]) for _c, _t, p, _l in _r1])
+t("second fix 1: their lines still read as ranges that start low, which is not a low rating",
+  all(evidence.line_certainty(p["evidence_line"]) == "low" and " to " in p["evidence_line"] for _c, _t, p, _l in _r1),
+  [p["evidence_line"] for _c, _t, p, _l in _r1])
+_tur1 = appmod._check_response("Turmeric eases joint pain", "(turmeric) AND (joint pain)", "true", "Turmeric eases joint pain.",
+                               "It helps (Study 1).", ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+# H3: a saved takeaway is read as guidance only on a claim guidance is read
+# for (verdict.guideline_topic, the gate follow_guidelines opens with).
+_h3 = {}
+for _h3_c in ("Turmeric eases joint pain", "Antibiotics cure joint infections"):
+    for _h3_t in (verdict.GUIDELINE_LEAD + "turmeric eases joint pain.", "Turmeric eases joint pain."):
+        _h3[_h3_c, _h3_t[:5]] = appmod._check_response(
+            _h3_c, "(turmeric) AND (joint pain)", "true", _h3_t, "It helps (Study 1).", ["L1"], [_LOWREV], "http://x",
+            cached_at="2026-11-01T00:00:00+00:00")
+_h3_f, _h3_b = _h3["Turmeric eases joint pain", "Major"], _h3["Turmeric eases joint pain", "Turme"]
+t("H3: a row with the lead on a claim no guideline covers shows no guidance line and is capped like the same answer without it",
+  not verdict.guideline_topic("Turmeric eases joint pain") and _h3_f["evidence_line"] != verdict.GUIDANCE_LINE
+  and (_h3_f["verdict"], _h3_f["evidence_line"]) == (_h3_b["verdict"], _h3_b["evidence_line"]) == ("complicated", _h3_b["evidence_line"])
+  and not verdict.from_guidance(verdict.GUIDELINE_LEAD + "x.", "Turmeric eases joint pain"),
+  (_h3_f["verdict"], _h3_f["evidence_line"], _h3_b["verdict"], _h3_b["evidence_line"]))
+t("  and on a guideline topic the same lead still reads as guidance: the line, and no cap",
+  verdict.guideline_topic("Antibiotics cure joint infections")
+  and _h3["Antibiotics cure joint infections", "Major"]["evidence_line"] == verdict.GUIDANCE_LINE
+  and _h3["Antibiotics cure joint infections", "Major"]["verdict"] == "true",
+  _h3["Antibiotics cure joint infections", "Major"]["evidence_line"])
+_exd1 = _gin_review("E1", "Network meta-analysis of 200 trials. Walking reduced depression. Confidence in accordance with CINeMA was low.")
+_exp1 = appmod._check_response("Exercise reduces depression", "(exercise) AND (depression)", "true", "Exercise reduces depression.",
+                               "It helps (Study 1).", ["E1"], [_exd1], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+t("second fix 1: a lead review rated low (turmeric shape) or CINeMA low (exercise shape) is still capped",
+  _tur1["verdict"] == "complicated" and _exp1["verdict"] == "complicated"
+  and "certainty of that evidence is low" in _tur1["tldr"], (_tur1["verdict"], _exp1["verdict"], _exp1["evidence_line"]))
+
+# ---- Second review fix 2: a stamp set by health guidance is never capped ----------
+_g2c = "Measles vaccine protects children from measles"
+_g2t = verdict.GUIDELINE_LEAD + "The measles vaccine protects children from measles."
+_g2p = appmod._check_response(_g2c, "(measles vaccine) AND (measles)", "true", _g2t, "It helps (Study 1).",
+                              ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+_g2l = appmod._listed({"claim_text": _g2c, "verdict": "true", "search_query": "(measles vaccine) AND (measles)",
+                       "tldr": _g2t, "studies": [_LOWREV], "cited": ["L1"]})
+db.put_cached_verdict(_g2c, "(measles vaccine) AND (measles)", "true", "It helps (Study 1).", ["L1"], [_LOWREV],
+                      tldr=_g2t, still_open="Doses vary.")
+_g2s = c.get("/api/suggest", query_string={"q": "Measles vaccine protects"}).get_json() or {}
+t("second fix 2: a guidance 'true' over a low-rated review keeps its stamp and its guidance takeaway",
+  _g2p["verdict"] == "true" and _g2p["tldr"] == _g2t and _g2l["verdict"] == "true"
+  and any(r["claim_text"] == _g2c and r["verdict"] == "true" for r in _g2s.get("suggestions", [])),
+  (_g2p["verdict"], _g2p["tldr"], _g2l["verdict"]))
+t("second fix 2: the same rows without the guidance lead are still capped",
+  appmod._check_response(_g2c, "(measles vaccine) AND (measles)", "true", "It protects.", "It helps (Study 1).",
+                         ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")["verdict"] == "complicated")
+t("second fix 2: /method says the verdict follows the guidance, and the code lets it",
+  "the verdict follows it" in c.get("/method").get_data(as_text=True))
+
+# ---- Second review fix 3: harm words are whole words in a warning, and warnings are still checked
+_p3st = [_study("A", "Vinegar in adults", abstract="We randomised 1,937 adults aged 30 to 50 years to 15 mL vinegar or placebo "
+                "for twelve weeks. Weight fell by 20% in 2019."),
+         _study("C", "Oesophageal injury from vinegar", types=["Case Reports"],
+                abstract="A 54-year-old woman had oesophageal injury after drinking undiluted vinegar.")]
+_k3 = lambda x, who="": breakdown.held_to_sources(x, _p3st, {1}, who=who)
+for _b3 in ["Pregnant women lost 12 kg on pharmacological doses (Study 1).",
+            "Children with infections lost 99 kg (Study 1).",
+            "It avoids weight gain in 40,000 children (Study 1)."]:
+    t(f"second fix 3: not a warning, so held to its source and dropped: {_b3[:40]}",
+      _k3(_b3) == "", _k3(_b3))
+t("second fix 3: substrings are not harm words, and a hazard word needs a warning frame",
+  not breakdown.is_warning("Pharmacological doses were used.") and not breakdown.is_warning("It is cytotoxic in cells.")
+  and not breakdown.is_warning("Children with infections lost weight.")
+  and breakdown.is_warning("Raw milk is linked to outbreaks.") and breakdown.is_warning("St John's wort can interact with warfarin.")
+  and breakdown.is_warning("Bacterial infections such as sinusitis.", who="not"))
+for _w3 in ["It is unsafe in pregnancy (Study 1).", "People with diabetes should not stop their medicine (Study 1)."]:
+    t(f"second fix 3 (Q8: now removed): an unsupported warning goes: {_w3[:44]}", _k3(_w3) == "", _k3(_w3))
+for _w3 in ["Undiluted vinegar can injure the throat in children (Study 2).",
+            "Undiluted vinegar can injure the oesophagus (Study 2).",
+            "Neither tested whether diabetes went away, and Study 2 is a reminder that undiluted vinegar can injure the oesophagus."]:
+    _o3 = _k3(_w3)
+    t(f"second fix 3 (Q8): cited to a study not relied on, so removed: {_w3[:44]}", _o3 == "", _o3)
+t("second fix 3 (Q8): a warning its relied-on study supports is untouched",
+  _k3("A woman had oesophageal injury after drinking undiluted vinegar (Study 1).")
+  == "A woman had oesophageal injury after drinking undiluted vinegar (Study 1).",
+  _k3("A woman had oesophageal injury after drinking undiluted vinegar (Study 1)."))
+t("second fix 3: a warning with a figure its study lacks is removed (Q8)",
+  _k3("Vinegar burned the throat of 300 adults (Study 1).") == "")
+_ORIG17 = [
+    ("Heavy drinkers, people with contraindications to alcohol, and those outside the studied age ranges (Study 1).", "not"),
+    ("Raw milk consumption is linked to outbreaks of campylobacteriosis and brucellosis (Study 6, Study 8).", ""),
+    ("Antibiotics should not be used for the common cold or influenza (Study 3).", ""),
+    ("Evidence states that antibiotics should not be used for the common cold (Study 3).", ""),
+    ("Bacterial infections such as acute bacterial sinusitis or group A streptococcal pharyngitis (Studies 2, 3).", "not"),
+    ("Viruses cause most nose and throat infections and antibiotics should not be used for them (Study 3).", ""),
+    ("Alcohol is a well-established teratogen that can cause variable physical and behavioral effects on the fetus (Study 7).", ""),
+    ("Indirect evidence shows various functional and structural abnormalities in children with prenatal alcohol exposure (Study 3).", ""),
+    ("Patients with other viral infections or those taking ivermectin strictly for parasitic conditions (Study 8).", "not"),
+    ("People with chronic illnesses or those seeking a guaranteed way to avoid infections (Study 1).", "not"),
+    ("Men, people without desk jobs, and people with severe spinal injuries (Studies 1, 2, 7).", "not"),
+    ("Neither tested whether diabetes went away, and study 4 is a reminder that undiluted vinegar can injure the oesophagus.", ""),
+]
+_bare3 = lambda x: _re7.sub(r"\s*\((?:Study|Studies)[^)]*\)", "", x).replace("Study 6, Study 8", "").rstrip(". ")
+_lost3 = [x for x, w in _ORIG17 if _bare3(breakdown.held_to_sources(x, _h8, {1, 2}, who=w)) != _bare3(x)]
+t("second fix 3 (Q8): every warning from the review that no study supports is now removed",
+  all(_bare3(breakdown.held_to_sources(x, _h8, {1, 2}, who=w)) == "" for x, w in _ORIG17
+      if not x.startswith(("Heavy drinkers", "People with chronic", "Men, people", "Bacterial infections"))
+      and "Patients with other" not in x), _lost3)
+
+# ---- Second review, optional: free-tier wording only on Gemini; /about says what is sent
+_og_prov = verdict.provider
+try:
+    verdict.provider = lambda: "anthropic"
+    _hA, _pA = c.get("/").get_data(as_text=True), c.get("/privacy").get_data(as_text=True)
+    verdict.provider = lambda: "gemini"
+    _hG, _pG = c.get("/").get_data(as_text=True), c.get("/privacy").get_data(as_text=True)
+finally:
+    verdict.provider = _og_prov
+t("optional: the free tier and Google's terms are mentioned only when checks go to Gemini",
+  "free tier" not in _hA and "Google" not in _pA.split("Don't paste")[0][-200:]
+  and "free tier" in _hG and "Google's free tier" in _pG and "usage limit" in _hA)
+
+t("optional: /about says the claim and the studies' published details are sent",
+  "the published details of the studies, such as their titles and abstracts" in c.get("/about").get_data(as_text=True))
+
+# ---- Third review: reassurances and benefits are not warnings; inline naming comes out
+_P4 = ["Study 1 found vinegar may avoid infections in 5000 pregnant women.",
+       "In Study 1, the risk of infections fell by 75% in 9,000 children.",
+       "Studies 1 and 2 show it could cut outbreaks by 90% in children.",
+       "Study 1 shows it reduces side effects by 90% in 5000 children.",
+       "Study 1 found no harm in 9,000 pregnant women.",
+       "There were no adverse events in 12,000 children in Study 1."]
+for _p4 in _P4:
+    _o4 = breakdown.held_to_sources(_p4, _p3st, {1, 2})
+    t(f"third review: a reassurance or benefit with figures its study lacks is dropped: {_p4[:44]}", _o4 == "", _o4)
+t("third review: negated or reduced harm is not a warning; advice to avoid and plain hazards are",
+  not breakdown.is_warning("There were no serious adverse events.") and not breakdown.is_warning("It was not harmful.")
+  and not breakdown.is_warning("It reduces side effects.") and not breakdown.is_warning("The risk of infections fell.")
+  and not breakdown.is_warning("It avoids weight gain.")
+  and breakdown.is_warning("Pregnant women should avoid raw milk.") and breakdown.is_warning("Antibiotics should not be used.")
+  and not breakdown.is_warning("It is not safe in pregnancy.") and breakdown.is_warning("It can cause side effects such as nausea.")
+  and breakdown.is_warning("It caused side effects such as nausea."))
+_w4 = {"Study 1 found vinegar can burn the throat in 5000 children.": "Vinegar can burn the throat in 5000 children.",
+       "In Study 2, undiluted vinegar injured the oesophagus in 300 children.": "Undiluted vinegar injured the oesophagus in 300 children.",
+       "Studies 1 and 2 warn that vinegar can injure the throat of 9,000 pregnant women.":
+           "Vinegar can injure the throat of 9,000 pregnant women.",
+       "Raw milk can carry harmful bacteria and caused 40 outbreaks in Study 1.":
+           "Raw milk can carry harmful bacteria and caused 40 outbreaks."}
+for _wi, _wo in _w4.items():
+    _go = breakdown.held_to_sources(_wi, _p3st, {1, 2})
+    t(f"third review (Q8): an inline warning its study does not carry is removed: {_wi[:40]}", _go == "", _go)
+t("third review: a supported inline warning is left exactly as written",
+  breakdown.held_to_sources("Study 2 is a reminder that undiluted vinegar can injure the oesophagus.", _p3st, {1, 2})
+  == "Study 2 is a reminder that undiluted vinegar can injure the oesophagus.")
+
+_ogp = verdict.provider
+try:
+    def _nokey():
+        raise RuntimeError("no key")
+    verdict.provider = _nokey
+    _hN = c.get("/").get_data(as_text=True)
+    verdict.provider = lambda: "gemini"
+    _hG2 = c.get("/").get_data(as_text=True)
+finally:
+    verdict.provider = _ogp
+t("third review: with no key the home page does not read 'An AI model (an AI model API)'",
+  "An AI model (an AI model API)" not in _hN and "An AI model reads those abstracts" in _hN
+  and "An AI model (Google&#39;s Gemini API) reads" in _hG2)
+
+# ---- Fourth review: a failing sentence stays only if it is positively a caution
+_p4st = _p3st + [_study("L", "Supplement and the liver",
+                        abstract="In 200 adults taking the supplement, 12 developed liver injury and bleeding rose.")]
+_k4 = lambda x: breakdown.held_to_sources(x, _p4st, {1, 2, 3})
+# Fifth review: these ten were kept by the old rule; each is a double negative or softened
+# ("can", "not free of", "no safe dose"), so the fail-safe drops them. The accepted trade.
+for _c4 in ["It does not prevent bleeding and can cause it in pregnant women (Study 3).",
+            "It did not reduce the risk of bleeding in older adults, which rose (Study 3).",
+            "It is not free of side effects in children (Study 3).",
+            "Stopping or reducing insulin can be fatal in children (Study 1).",
+            "Cutting insulin can cause dangerous high blood sugar in children (Study 1).",
+            "There is no safe dose for 700 pregnant women (Study 1).",
+            "Stopping insulin is never safe for 700 children (Study 1).",
+            "Not harmless: it can cause liver injury in older adults (Study 3).",
+            "It should not be used to prevent infections in children (Study 1).",
+            "No evidence it is safe in pregnancy (Study 1)."]:
+    _o5 = _k4(_c4)
+    t(f"fourth review (fifth review: accepted trade, now dropped): {_c4[:46]}", _o5 == "" and not breakdown.is_warning(_c4), _o5)
+for _d4 in ["It was harmless in 9,000 pregnant women.", "Side effects were rare in 6,000 children.",
+            "Serious harm was uncommon among 9,000 pregnant women.", "Deaths were no higher among 9,000 pregnant women.",
+            "Adverse events were similar to placebo in 9,000 children.",
+            "The risk of bleeding was no higher in 4,000 pregnant women."]:
+    _o6 = _k4(_d4[:-1] + " (Study 1).")
+    t(f"fourth review: a reassurance its study does not carry is dropped: {_d4[:46]}",
+      _o6 == "" and not breakdown.is_warning(_d4), _o6)
+_o7 = _k4("Study 1 found it harmless in 9,000 pregnant women.")
+t("fourth review: an inline reassurance its study does not carry is dropped, never 'It harmless in'",
+  _o7 == "", _o7)
+_lost4 = [p for p in _P4 if _k4(p) != ""]
+t("fourth review: the six probes of the third review are still dropped", not _lost4, _lost4)
+t("fourth review (fifth review: a reassurance anywhere in the sentence drops it, even beside a caution)",
+  _k4("It was safe in adults but should not be used in 9,000 pregnant women (Study 1).") == "")
+t("fourth review: a negated caution word is not a caution",
+  not any(breakdown.is_warning(x) for x in [
+      "It is not dangerous.", "It is non-toxic.", "There is no evidence it can cause harm.",
+      "It did not cause bleeding.", "Deaths fell.", "It lowered the risk of bleeding.",
+      "It is linked to fewer infections.", "It cannot cause harm."]))
+t("fourth review: a risk named with nothing to cancel it is a caution",
+  all(breakdown.is_warning(x) for x in [
+      "Bleeding rose.", "It is linked to outbreaks.", "It raised the risk of bleeding.",
+      "It caused bleeding in 300 children.", "Tobacco smoking causes 30 to 40 percent of deaths from cancer."]))
+t("fourth review: taking out the naming never leaves a clause without a verb",
+  breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women.") == ""
+  and breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women.", passes=lambda cl: True)
+  == "A study found it harmless in 9,000 pregnant women."
+  and breakdown.unattributed("Study 1 found it harmless in 9,000 pregnant women, but it can cause liver injury.")
+  == "It can cause liver injury."
+  and breakdown.unattributed("Study 1 found vinegar can burn the throat in 5000 children.")
+  == "Vinegar can burn the throat in 5000 children.")
+t("fourth review (Q8): /method says an unsupported sentence is removed, even a warning",
+  "even a warning" in c.get("/method").get_data(as_text=True))
+
+# ---- Fifth review: a failing sentence stays only if it names a harm (or forbids a use) and nothing softens it
+# Every sentence below cites Study 1 and fails it (a group or figure the record lacks), so it is
+# dropped unless the fail-safe keeps it, uncited.
+_K5 = lambda x: breakdown.held_to_sources(x, _p4st, {1, 2, 3})
+_KEEP5 = ["Deaths occurred in 3 children (Study 1).",
+          "Liver injury was reported in children (Study 1).",
+          "Side effects are common in children (Study 1).",
+          "High doses harmed the liver in children (Study 1).",
+          "Seizures followed the injection in 40 infants (Study 1).",
+          "Poisoning was reported in 700 toddlers (Study 1).",
+          "Women in 17 trials had miscarriages (Study 1).",
+          "Overdose killed 15 teenagers (Study 1).",
+          "Anaphylaxis occurred after the first dose in 20 adults over 80 (Study 1).",
+          "It is unsafe in pregnancy (Study 1).",
+          "Pregnant women must not take it with warfarin (Study 1).",
+          "Children must not take it (Study 1).",
+          "Pregnant women should avoid raw milk (Study 1).",
+          "Never combine it with alcohol in 40 people (Study 1).",
+          "It must be avoided in 9,000 pregnant women (Study 1).",
+          "Children should stop taking it if they bleed (Study 1).",
+          "Raw milk was linked to outbreaks in 40 farms (Study 1).",
+          "It is contraindicated in infants (Study 1).",
+          "Hospitalisation was needed for 90 children (Study 1)."]
+for _x5 in _KEEP5:
+    _o = _K5(_x5)
+    t(f"fifth review (Q8: no longer kept): an unsupported warning is removed: {_x5[:50]}",
+      _o == "" and breakdown.is_warning(_x5), _o)
+_DROP5 = ["It caused no birth defects in 9,000 pregnant women (Study 1).",
+          "It may cause fewer side effects in 9,000 children than placebo (Study 1).",
+          "Bleeding was not increased in 9,000 pregnant women (Study 1).",
+          "The risk of side effects is low in 9,000 children (Study 1).",
+          "Claims it can harm 9,000 children were not supported (Study 1).",
+          "It should not worry 9,000 pregnant women (Study 1).",
+          "Deaths fell by half in 9,000 children (Study 1).",
+          "It could cause bleeding in 40 children (Study 1).",
+          "Some children had seizures (Study 1).",
+          "Deaths were rare among 800 children (Study 1).",
+          "Nobody died in 600 toddlers (Study 1).",
+          "It was well tolerated, with no overdose in 90 teenagers (Study 1).",
+          "Liver damage was mild in 20 children (Study 1).",
+          "It is safe in pregnancy and caused no harm (Study 1).",
+          "Women can take it without concern in 500 pregnancies (Study 1).",
+          "There was no increase in miscarriage among 3,000 women (Study 1).",
+          "Harm was unlikely in 9,000 children (Study 1).",
+          "Do not take it, as it never caused harm in 90 children (Study 1).",
+          "Adverse events were comparable to placebo in 700 infants (Study 1).",
+          "It avoids bleeding in 9,000 pregnant women (Study 1).",
+          "Overdoses were reversible in 30 children (Study 1).",
+          "Poisoning is only a small risk in 400 children (Study 1)."]
+for _x5 in _DROP5:
+    _o = _K5(_x5)
+    t(f"fifth review: dropped, a reassurance or softened or negated: {_x5[:50]}",
+      _o == "" and not breakdown.is_warning(_x5), _o)
+# Sixth round: "can" states a harm, benefit verbs soften, and the harm list covers common adverse effects.
+for _x6 in ["It can cause liver injury in 9,000 children (Study 1).",
+            "Undiluted vinegar can injure the throat in children (Study 2).",
+            "It can burn the throat of 9,000 children (Study 1).",
+            "Nausea and vomiting occurred in 40 children (Study 1).",
+            "Diarrhoea was common in 90 infants (Study 1).",
+            "Dizziness and headaches affected 77 adults (Study 1).",
+            "A rash and itching appeared in 88 toddlers (Study 1).",
+            "Hepatitis and jaundice occurred in 66 older adults on it (Study 1).",
+            "Arrhythmia occurred in 60 children (Study 1).",
+            "Kidney stones formed in 25 men aged 80 (Study 1).",
+            "Addiction and cramps were seen in 500 teenagers (Study 1).",
+            "The overdose killed two children (Study 1)."]:
+    t(f"sixth round (Q8: no longer kept): an unsupported warning is removed: {_x6[:50]}", _K5(_x6) == "", _K5(_x6))
+for _x6 in ["It can stop bleeding in 9,000 children (Study 1).",
+            "It can help prevent heart attacks in 9,000 people (Study 1).",
+            "It can be taken without harm by 9,000 children (Study 1).",
+            "It can cure cancer in 9,000 people (Study 1).",
+            "It can treat infections in 9,000 children (Study 1).",
+            "It can relieve pain in 400 adults (Study 1).",
+            "It can shrink tumours in 9,000 patients (Study 1).",
+            "It can control hypertension in 9,000 adults (Study 1).",
+            "It may cause nausea in 40 children (Study 1).",
+            "It boosts the body against infection in 9,000 children (Study 1).",
+            "It kills cancer cells in 9,000 patients (Study 1).",
+            "It destroys bacteria in 4,000 children (Study 1).",
+            "It attacks harmful germs in 4,000 children (Study 1).",
+            "It clears infections in 4,000 children (Study 1).",
+            "Children with infections lost 99 kg (Study 1)."]:
+    t(f"sixth round: dropped, a benefit or hedge: {_x6[:50]}", _K5(_x6) == "", _K5(_x6))
+t("fifth review: a prohibition is kept only if nothing else in it softens or reassures",
+  breakdown.is_warning("Do not take it with warfarin.") and not breakdown.is_warning("It should not worry anyone.")
+  and not breakdown.is_warning("You can take it without concern.")
+  and not breakdown.is_warning("Do not worry, it is fine."))
+t("fifth review: a sentence that passes its sources is untouched, even if softened",
+  _K5("Vinegar may cause no harm in adults (Study 1).") == "Vinegar may cause no harm in adults (Study 1).")
+t("fifth review: the 'does not apply to' line keeps a harm word but not a softened one",
+  breakdown.is_warning("People who may have bleeding disorders.", who="not") is False
+  and breakdown.is_warning("People with bleeding disorders.", who="not"))
+t("fifth review (Q8): /method says a failing sentence is removed, even a warning, bar an untested statement",
+  "even a warning of harm" in c.get("/method").get_data(as_text=True)
+  and "nothing softens it" not in c.get("/method").get_data(as_text=True))
+
+# Reassurances by absence, denial or dismissal: all dropped.
+for _x7 in ["Kidney harm was absent in all 200 participants.", "Birth defects were ruled out.",
+            "Seizures were absent.", "Deaths were absent from the trial.", "Poisoning is a myth.",
+            "Fears of liver damage are exaggerated.", "Harm was excluded in the trial of 800 adults.",
+            "There were no signs of toxicity.", "The danger of overdose is overblown.",
+            "Reports of miscarriage were debunked.", "Claims of heart attacks were refuted.",
+            "Bleeding is a misconception.", "Stroke risk was overstated.", "The harm is unproven.",
+            "Side effects were undetected in 900 children.", "Allergic reactions were unobserved.",
+            "Liver injury was nonexistent.", "Kidney function was unaffected, with no injury.",
+            "Blood counts were normal and there was no bleeding.", "It is a false alarm that it causes seizures.",
+            "The drug is clear of poison.", "Hospitalisation can be ruled out."]:
+    t(f"reassurance by absence or denial is dropped: {_x7[:50]}", not breakdown.is_warning(_x7), _x7)
+
+# Minimisers and rarity figures: all dropped.
+for _x8 in ["Miscarriages were scarcely reported.", "Deaths were practically nonexistent in the trial.",
+            "Seizures occurred in under 2% of children.", "Strokes were virtually nil.",
+            "Liver damage was trivial.", "Bleeding episodes were isolated.", "Overdoses were sporadic.",
+            "Allergic reactions were essentially unknown in 500 adults.", "Heart attacks were insignificant.",
+            "Only a handful of seizures occurred.", "Poisoning was merely theoretical.",
+            "Kidney injury occurred in 3 in 10,000 users.", "Fewer than 5 deaths occurred in 9,000 people.",
+            "Birth defects were seen in at most 1 in 1,000 pregnancies.", "Adverse events were limited.",
+            "Serious harm was modest.", "Fatalities were unheard of.", "Side effects were just nausea in a few people.",
+            "Hospitalisation occurred in below 1% of patients.", "Toxic effects were minimal in 700 adults.",
+            "Burns happened in up to 4 children."]:
+    t(f"minimiser or rarity figure is dropped: {_x8[:50]}", not breakdown.is_warning(_x8), _x8)
+
+# Blind sentences (round 8): 60 written by someone who never saw the rule, 30 warnings and
+# 30 reassurances. The word-list rule kept 1 reassurance, so it no longer decides what stays:
+# an unsupported sentence is removed, a warning included. Held to sources with no support,
+# none of the 60 may stay, and in particular no reassurance.
+_blind8 = json.loads((pathlib.Path(__file__).parent / "warning_blind_q8.json").read_text())
+_b8_st = [{"pmid": "1", "title": "Background", "abstract": "A narrative review.", "journal": "J", "year": "2020",
+           "publication_types": ["Review"], "authors": ["x"], "data_banks": None, "url": "u"}]
+_b8_kept = [x for x in _blind8 if breakdown.held_to_sources(x["text"].rstrip(".") + " (Study 1).", _b8_st, {2}) != ""]
+_b8_kept_r = [x["text"] for x in _b8_kept if x["kind"] == "reassurance"]
+t("blind q8: 0 of 30 reassurances kept", not _b8_kept_r and sum(x["kind"] == "reassurance" for x in _blind8) == 30, _b8_kept_r)
+t("blind q8: 0 of 60 unsupported sentences kept, warnings included", not _b8_kept, [x["text"] for x in _b8_kept])
+t("blind q8: never_dropped keeps none of the 60", not any(breakdown.never_dropped(x["text"]) for x in _blind8))
+print(f"blind sentences (q8): {len(_b8_kept)} of {len(_blind8)} kept, {len(_b8_kept_r)} reassurances kept")
+
+# ---- Polish: each result page has its own title, description and card tags ---------
+import display as _dsp  # noqa: E402
+_mq = 'Taking 5\u201310 mg of "melatonin" & magnesium nightly for years cures chronic insomnia in every adult over fifty'
+db.put_cached_verdict(_mq, _GIN_Q, "complicated", "Ginger reduces vomiting (Study 1).",
+                      ["L1"], [_LOWREV], tldr="Studies point both ways on melatonin. Small trials found a short gain in sleep, and none ran longer than a few weeks, so what happens over years is unknown.", still_open="Doses vary.")
+_mh = c.get("/", query_string={"q": _mq}).get_data(as_text=True)
+_mt = _re.search(r"<title>(.*?)</title>", _mh, _re.S).group(1)
+_md = _re.search(r'<meta name="description" content="(.*?)" />', _mh, _re.S).group(1)
+import html as _html  # noqa: E402
+_mt_raw, _md_raw = _html.unescape(_mt), _html.unescape(_md)
+t("result meta: title is about 60 characters, starts with the verdict's label, and ends with the site name",
+  len(_mt_raw) <= 62 and _mt_raw.startswith("It's complicated: \u201c") and _mt_raw.endswith("\u201d \u00b7 Evident") and "\u2026" in _mt_raw, _mt_raw)
+t("result meta: description is the label and the short answer, 155 characters or fewer",
+  len(_md_raw) <= 155 and _md_raw.startswith("It's complicated. Studies point both ways") and "years is unknown" not in _md_raw, _md_raw)
+t("result meta: no em or en dash, and the page escapes what the claim carried",
+  not _DASH.search(_mt_raw + _md_raw) and "&amp;" in _mh and "<title>" in _mh and '"melatonin"' not in _mt, _mt)
+t("result meta: og and twitter tags carry the same title, description and card",
+  f'property="og:title" content="{_mt.rsplit(" \u00b7 Evident", 1)[0]}"' in _mh
+  and f'name="twitter:title" content="{_mt.rsplit(" \u00b7 Evident", 1)[0]}"' in _mh
+  and f'property="og:description" content="{_md}"' in _mh and f'name="twitter:description" content="{_md}"' in _mh
+  and 'name="twitter:image" content="http://localhost/og/' in _mh and 'property="og:image" content="http://localhost/og/' in _mh)
+t("result meta: the home page keeps its own title, and no two saved results share one",
+  "Evident: check a health claim" in c.get("/").get_data(as_text=True)
+  and _mt != _re.search(r"<title>(.*?)</title>", c.get("/", query_string={"q": _xc}).get_data(as_text=True), _re.S).group(1))
+_short = _dsp.result_meta("Garlic cures colds", "Likely false", "No.")
+t("result meta: a short claim and answer are not padded or cut",
+  _short == {"title": "Likely false: \u201cGarlic cures colds\u201d", "description": "Likely false. No."}, _short)
+t("result meta: it never says more than the label: the label leads both lines",
+  all(_dsp.result_meta("A claim " * 20, lb, "An answer. " * 30)[k].startswith(lb) for lb in appmod.VERDICT_LABELS.values() for k in ("title", "description")))
+
+# ---- Polish: the share card is 1200x630 whatever it is given, and nothing runs off it ---
+from PIL import Image as _CI, ImageDraw as _CD  # noqa: E402
+import io as _cio  # noqa: E402
+_cd = _CD.Draw(_CI.new("RGB", (10, 10)))
+_cf = og._body(34)
+_cases = {"long": ("word " * 200).strip(), "nospace": "x" * 500, "url": "see https://example.com/" + "a" * 120 + " for proof",
+          "short": "Garlic cures colds"}
+_okw, _okl, _ell = True, True, {}
+for _n, _txt in _cases.items():
+    _ls = og._wrap(_cd, _txt, _cf, 1000, 2)
+    _okl &= 1 <= len(_ls) <= 2
+    _okw &= all(_cd.textlength(x, font=_cf) <= 1000 for x in _ls)
+    _ell[_n] = _ls[-1].endswith("\u2026")
+t("card text: wrapped lines fit the width and the line limit, even for one unbroken word", _okw and _okl, _ell)
+t("card text: text that does not fit ends in an ellipsis inside the width; text that fits is untouched",
+  _ell["long"] and _ell["nospace"] and _ell["url"] and not _ell["short"]
+  and og._wrap(_cd, "Garlic cures colds", _cf, 1000, 2) == ["Garlic cures colds"])
+_shots = []
+for _cl, _vd, _tl, _so in [("A very long claim " * 40, "complicated", "An answer that goes on and on. " * 12, "Something still open. " * 20),
+                           ("x" * 500, "insufficient", "y" * 400, "z" * 300),
+                           ("Short", "true", "Short answer.", ""), ("Medium length claim about sleep", "false", "", "Doses vary.")]:
+    _im = _CI.open(_cio.BytesIO(og.render_card(_cl, _vd, _tl, 5, ("Meta-Analysis", "2020", "T " * 200), _so))).convert("RGB")
+    _shots.append(_im)
+def _runs_off(im):
+    # The strip at the right edge, below the masthead, is only ever the night or the paper.
+    return any(im.getpixel((x, y)) not in {(15, 18, 17), (241, 242, 238)}
+               for y in range(100, 630, 2) for x in range(1150, 1200, 2))
+t("share card: exactly 1200x630 for a very long claim, a run of letters, a long answer and a short one",
+  all(i.size == (1200, 630) for i in _shots), [i.size for i in _shots])
+t("share card: no text reaches the right edge, and the footer line is clear of the answer",
+  not any(_runs_off(i) for i in _shots))
+_sc = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "How long the effect lasts.")
+_sc_none = og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "")
+t("share card: a check's still-open line is on the card, and a card without one is a different image", _sc != _sc_none)
+
+_so3 = "The long-term effect beyond twelve weeks is unknown. " * 5
+_i3 = _CI.open(_cio.BytesIO(og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, _so3))).convert("RGB")
+_i1 = _CI.open(_cio.BytesIO(og.render_card("Sleep helps memory", "true", "It is mixed.", 3, None, "Short."))).convert("RGB")
+_dark = lambda im, y0, y1: sum(1 for y in range(y0, y1) for x in range(100, 1150, 2) if sum(im.getpixel((x, y))) < 300)
+_o3 = og._wrap(_cd, _so3, og._body(21), 1000, 3)
+t("share card: a long still-open line wraps to up to three lines before it truncates",
+  len(_o3) == 3 and og._wrap(_cd, _so3 * 3, og._body(21), 1000, 3)[-1].endswith("\u2026") and not _o3[-1].endswith("\u2026")
+  and _i3.size == (1200, 630) and _dark(_i3, 330, 560) > _dark(_i1, 330, 560), _o3)
+t("share card: three still-open lines leave the footer row clear",
+  not any(_i3.getpixel((x, y)) != (241, 242, 238) for y in range(560, 590) for x in range(64, 1136, 3)))
+
+# The card a link to the site itself unfurls with is a brand card: the
+# tagline is never drawn as if it were a claim someone checked.
+from PIL import ImageDraw as _OGDraw  # noqa: E402
+_og_text = _OGDraw.ImageDraw.text
+_og_drawn = []
+
+
+def _og_spy(self, xy, text, *a, **k):
+    _og_drawn.append(str(text))
+    return _og_text(self, xy, text, *a, **k)
+
+
+_OGDraw.ImageDraw.text = _og_spy
+try:
+    og.render_brand.cache_clear()
+    _brand_png = c.get("/og/_.png")
+    _brand_words = list(_og_drawn)
+    _og_drawn.clear()
+    og._render.cache_clear()
+    og.render_card("Garlic shortens colds", "complicated", "It is mixed.", 4)
+    _claim_words = list(_og_drawn)
+finally:
+    _OGDraw.ImageDraw.text = _og_text
+_bw = " ".join(_brand_words)
+t("og brand card: /og/_.png draws the wordmark, the line and the host, as a 1200x630 png",
+  _brand_png.status_code == 200 and _brand_png.mimetype == "image/png"
+  and _CI.open(_cio.BytesIO(_brand_png.data)).size == (1200, 630)
+  and "Evident" in _brand_words and "checkevident.com" in _brand_words
+  and "See what the research says about a health claim" in _bw, _brand_words)
+t("  and draws no claim label, no verdict and no study count",
+  not any(x in _bw for x in ("claim you checked", "Verdict", "No matching studies", "complicated")), _brand_words)
+t("  a key with nothing saved gets the same brand card", c.get("/og/no-such-claim-saved.png").data == _brand_png.data)
+_cw = " ".join(_claim_words)
+t("og per-claim card: still draws its claim, its claim label and its verdict",
+  "Garlic shortens colds" in _cw and "The claim you checked" in _cw and "Verdict" in _cw
+  and "It's complicated" in _claim_words and "4 PubMed studies read" in _claim_words, _claim_words)
+# The brand card's address carries a version, so a link service that cached
+# the old card (the tagline drawn as a claim) fetches the new one.
+_ogv = {p: _re2.findall(r'property="og:image" content="([^"]*)"', c.get(p).get_data(as_text=True))
+        for p in ("/", "/privacy", "/about", "/method")}
+t("og brand card: every page that is not a result points og:image at /og/_.png?v=2",
+  all(v == ["http://localhost/og/_.png?v=2"] for v in _ogv.values()), _ogv)
+t("  and no template still names the unversioned address",
+  not any('/og/_.png"' in (ROOT / "templates" / f).read_text() for f in ("index.html", "info.html", "privacy.html")))
+
+# ---- Polish: sitemap, robots, canonical, noindex ---------------------------------------
+_gs = {"pmid": "S1", "title": "Garlic and colds", "abstract": "A randomized trial.", "journal": "J", "year": "2020",
+       "publication_types": ["Randomized Controlled Trial"], "authors": ["x"], "data_banks": None, "url": "u"}
+_good_c, _bad_c = "Garlic shortens a cold in adults", "Onion juice cures a sore throat in adults"
+db.put_cached_verdict(_good_c, "garlic AND cold", "complicated", "Garlic may shorten colds (Study 1).",
+                      ["S1"], [_gs], tldr="Studies are mixed.", still_open="Doses vary.")
+db.put_cached_verdict(_bad_c, "onion AND throat", "complicated", "Onion juice may help (Study 1).",
+                      ["GONE"], [_gs], tldr="Studies are mixed.", still_open="Doses vary.")
+_sm = c.get("/sitemap.xml").get_data(as_text=True)
+_loc_good = "<loc>http://localhost/?q=" + urllib.parse.quote(_good_c) + "</loc>"
+_loc_bad = urllib.parse.quote(_bad_c)
+_cur_c, _cur_bad = "Vaccines cause autism", "Cracking your knuckles causes arthritis"
+db.put_cached_verdict(_cur_c, "vaccines AND autism", "false", "Large studies find no link (Study 1).",
+                      ["S1"], [_gs], tldr="No link found.", still_open="Rare events are hard to study.")
+db.put_cached_verdict(_cur_bad, "knuckles AND arthritis", "false", "No link (Study 1).",
+                      ["GONE"], [_gs], tldr="No link found.", still_open="Few trials.")
+_sm = c.get("/sitemap.xml").get_data(as_text=True)
+_loc_cur = "<loc>http://localhost/?q=" + urllib.parse.quote(_cur_c) + "</loc>"
+t("sitemap: a curated example claim whose saved result is sound is listed, absolute and with its save date",
+  _loc_cur in _sm and "<lastmod>" in _sm, _sm[:300])
+t("sitemap: a sound, non-personal saved result that is not a curated example is absent", _loc_good not in _sm)
+t("sitemap: a curated example whose saved record is unsound (cited study missing) is absent",
+  urllib.parse.quote(_cur_bad) not in _sm)
+t("sitemap: a saved result that fails the check (a cited study that is not among the studies) is left out", _loc_bad not in _sm)
+_sm_locs = _re.findall(r"<loc>([^<]*)</loc>", _sm)
+t("sitemap: only the five static pages (/checks is a redirect now) and curated results, nothing else",
+  all(u.startswith("http://localhost/?q=") is False or urllib.parse.unquote(u.split("?q=", 1)[1]) in _dsp.CURATED_CLAIMS
+      for u in _sm_locs) and len(_sm_locs) == 6
+  and [u for u in _sm_locs if "?q=" not in u] == ["http://localhost" + x for x in ("/", "/about", "/method", "/corrections", "/privacy")],
+  _sm_locs)
+t("sitemap: the five pages the brief names are all there, absolute",
+  all(f"<loc>http://localhost{x}</loc>" in _sm for x in ("/", "/method", "/about", "/privacy", "/corrections")))
+_gh = c.get("/", query_string={"q": _good_c}).get_data(as_text=True)
+_bh = c.get("/", query_string={"q": _bad_c}).get_data(as_text=True)
+_ch = c.get("/", query_string={"q": _cur_c}).get_data(as_text=True)
+_cbh = c.get("/", query_string={"q": _cur_bad}).get_data(as_text=True)
+t("noindex: a result that fails the record check says noindex and still renders its answer",
+  '<meta name="robots" content="noindex" />' in _bh and 'id="server-result"' in _bh
+  and '<meta name="robots" content="noindex" />' in _cbh and 'id="server-result"' in _cbh)
+t("noindex: a sound, non-personal saved result that is not a curated example is noindex and still renders",
+  '<meta name="robots" content="noindex" />' in _gh and 'id="server-result"' in _gh and 'content="index, follow' not in _gh)
+t("noindex: a curated example with a sound record is indexable", 'content="noindex"' not in _ch and 'content="index, follow' in _ch)
+t("noindex: a curated claim typed with other case, spacing and a trailing mark is still the same indexable page",
+  'content="noindex"' not in c.get("/", query_string={"q": "  vaccines  CAUSE autism?? "}).get_data(as_text=True))
+_js_cur = re.findall(r'"([^"]+)"', re.search(r"const EXAMPLES = \[(.*?)\n\];", (ROOT / "static" / "app.js").read_text(), re.S).group(1))
+t("CURATED_CLAIMS in display.py is the EXAMPLES array in app.js, same claims in the same order",
+  list(_dsp.CURATED_CLAIMS) == _js_cur, (_dsp.CURATED_CLAIMS, _js_cur))
+t("curated match ignores case, whitespace and trailing punctuation, and nothing else",
+  _dsp.is_curated_claim("  5g weakens   your IMMUNE system. ") and not _dsp.is_curated_claim("5G weakens your immune system in kids")
+  and not _dsp.is_curated_claim("") and not _dsp.is_curated_claim(None))
+t("the claim the trust section offers is a curated example", _dsp.is_curated_claim(appmod.EXAMPLE_CLAIM))
+t("noindex: the home page and the info pages stay indexable", 'content="noindex"' not in c.get("/").get_data(as_text=True)
+  and 'content="noindex"' not in c.get("/method").get_data(as_text=True))
+_canon = lambda h: _re.search(r'<link rel="canonical" href="([^"]*)"', h).group(1)
+_variants = [_good_c, _good_c.upper(), _good_c + "?", "  " + _good_c + "  "]
+_cs = {_canon(c.get("/", query_string={"q": v}).get_data(as_text=True)) for v in _variants}
+t("canonical: every phrasing of one claim has one stable canonical, the saved claim's own address",
+  _cs == {"http://localhost/?q=" + urllib.parse.quote(_good_c)}, _cs)
+t("canonical: every page that can be indexed has one, absolute",
+  all(_re.search(r'<link rel="canonical" href="http://localhost[^"]*"', c.get(u).get_data(as_text=True))
+      for u in ("/", "/about", "/method", "/corrections", "/privacy"))
+  and _canon(c.get("/", query_string={"q": "never checked at all"}).get_data(as_text=True)) == "http://localhost/")
+_rb = c.get("/robots.txt").get_data(as_text=True)
+_groups = [g for g in _rb.split("\n\n") if g.startswith("User-agent")]
+t("robots.txt: allows all, keeps /api/ and /stats out for every crawler group, and names the sitemap",
+  _rb.count("User-agent:") == 5 and all("Disallow: /api/" in g and "Disallow: /stats" in g and "Allow: /" in g for g in _groups)
+  and _rb.rstrip().endswith("Sitemap: http://localhost/sitemap.xml"), _rb)
+_pr = _dsp.saved_record_problems
+t("record check: names each kind of problem, and a sound record has none",
+  _pr(_good_c, "true", ["S1"], [_gs], {"rests_on": 1}, "q", "2020-01-01T00:00:00+00:00") == []
+  and "cited_not_in_studies" in _pr("c", "true", ["X"], [_gs], None, "q", "2020-01-01T00:00:00")
+  and "count_mismatch" in _pr("c", "true", ["S1"], [_gs], {"rests_on": 3}, "q", "2020-01-01T00:00:00")
+  and "empty_query" in _pr("c", "true", [], [], None, "  ", "2020-01-01T00:00:00")
+  and "future_date" in _pr("c", "true", [], [], None, "q", "2999-01-01T00:00:00")
+  and "unparseable_date" in _pr("c", "true", [], [], None, "q", "soon")
+  and "missing_date" in _pr("c", "true", [], [], None, "q", "")
+  and "unknown_verdict" in _pr("c", "maybe", [], [], None, "q", "2020-01-01T00:00:00")
+  and _pr("c", "true", "oops", [], None, "q", "2020-01-01T00:00:00") == ["unreadable_json"])
+import display as _disp_p
+t("sitemap: a claim with an email, a phone number or first-person wording is never offered for indexing",
+  all(_disp_p.looks_personal(x) for x in ("my mum's diabetes is cured by cinnamon", "Can I take ibuprofen with warfarin",
+                                         "email jo@example.com about zinc", "call 020 7946 0958 for the cure"))
+  and not any(_disp_p.looks_personal(x) for x in ("Vitamin D prevents colds", "Iron supplements cure fatigue",
+                                                 "Omega 3 helps memory in adults over 65"))
+  and "looks_personal" in _disp_p.saved_record_problems("my back pain is cured by yoga", "false", [], [], {}, "q", "2026-01-01"))
+
+_PERSONAL_CLAIMS = {
+    "contact": ["email jo@example.com about zinc", "call 020 7946 0958 for the cure", "text +1 (415) 555-0132 if zinc works",
+                "I live at 12 Baker Street and garlic helps", "does it work, ask at www.cureblog.com", "follow @drjane for the cure",
+                "instagram.com/jane_doe says honey cures acne", "garlic cures colds, PO Box 55", "turmeric cures pain, SW1A 1AA"],
+    "age": ["I'm 34 and zinc shortens colds", "34 years old and low iron", "a 34yo with gout and cherries", "my 6-year-old and fish oil",
+            "does a statin help someone aged 70", "age 45 and creatine", "a 6-year-old with eczema and oats"],
+    "name": ["Dr. Smith says garlic cures colds", "Mrs Jones cured a cough with honey", "Ms Patel and turmeric",
+             "my son Tom needs iron", "my friend Priya says keto cured her", "John Smith cured cancer with turmeric",
+             "Does Sarah's diet work", "Is it true that Mark lost weight on fasting"],
+    "medical": ["I have diabetes, is cinnamon good", "my blood pressure is high, does garlic help", "I take metformin with vitamin B12",
+                "my diagnosis was lupus, does fish oil help", "I was diagnosed with lupus", "my test results show low iron",
+                "my pregnancy and caffeine", "my child has eczema, does oatmeal help", "my doctor said to quit gluten",
+                "I am pregnant and eat sushi", "She was diagnosed with cancer", "he tested positive, does zinc help"],
+}
+_ORDINARY_CLAIMS = ["Vitamin D prevents colds", "Intermittent fasting helps weight loss", "Creatine improves strength in older adults",
+                    "Type 2 diabetes can be reversed with diet", "Omega 3 helps memory in adults over 65",
+                    "Does Tylenol cause autism in children", "Can Vitamin C shorten a cold", "Cracking your knuckles causes arthritis",
+                    "5G weakens your immune system", "Is the Mediterranean diet good for the heart",
+                    "Caffeine during pregnancy raises miscarriage risk", "Statins cause memory loss",
+                    "Coffee lowers the risk of Parkinson's disease", "Does HIV spread through kissing?",
+                    "Walking 10,000 steps a day extends life", "Ozempic cures alcoholism"]
+for _cat, _xs in _PERSONAL_CLAIMS.items():
+    _miss = [x for x in _xs if not _disp_p.looks_personal(x)]
+    t(f"personal screen: every {_cat} example is flagged ({len(_xs)})", not _miss, _miss)
+_fp = [x for x in _ORDINARY_CLAIMS if _disp_p.looks_personal(x)]
+t(f"personal screen: {len(_ORDINARY_CLAIMS)} ordinary health claims all pass", not _fp, _fp)
+for _x in [x for xs in _PERSONAL_CLAIMS.values() for x in xs]:
+    t(f"personal screen flags: {_x}", _disp_p.looks_personal(_x))
+for _x in _ORDINARY_CLAIMS:
+    t(f"personal screen passes: {_x}", not _disp_p.looks_personal(_x))
+_ex_js = re.search(r"const EXAMPLES = \[(.*?)\n\];", (ROOT / "static" / "app.js").read_text(), re.S).group(1)
+_examples = re.findall(r'"([^"]+)"', _ex_js)
+t("personal screen: every EXAMPLES claim in app.js passes", len(_examples) >= 7 and not any(_disp_p.looks_personal(x) for x in _examples),
+  [x for x in _examples if _disp_p.looks_personal(x)])
+t("personal screen: curly apostrophes and case do not hide a first-person word",
+  _disp_p.looks_personal("I\u2019M 34") and _disp_p.looks_personal("MY BLOOD PRESSURE") and not _disp_p.looks_personal(""))
+
+_pv = c.get("/privacy").get_data(as_text=True)
+_pv_txt = _re.sub(r"\s+", " ", _re.sub(r"<[^>]+>", " ", _pv))
+t("privacy: it says typed-claim pages are not indexed, are kept out of the sitemap, and only example claims can be indexed",
+  "not indexed by search engines" in _pv_txt and "out of the sitemap" in _pv_txt and "Only the site's own example claims can be indexed" in _pv_txt)
+t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt and "\u2013" not in _pv_txt)
+
+_pers, _ordc = "My son Tom has asthma, does honey help", "Honey soothes a cough in adults"
+for _cl, _q in ((_pers, "honey AND asthma"), (_ordc, "honey AND cough")):
+    db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], [_gs], tldr="Mixed.", still_open="Doses vary.")
+_pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/no-such-page-xyz")}
+_pages["/llms.txt"] = c.get("/llms.txt").get_data(as_text=True)
+t("lists: a personal saved claim is on no public list (/, 404, /llms.txt)",
+  all("Tom" not in v and "asthma" not in v for v in _pages.values()), [u for u, v in _pages.items() if "Tom" in v])
+t("lists: an ordinary saved claim still shows on / and the 404 page",
+  all(_ordc in _pages[u] for u in ("/", "/no-such-page-xyz")))
+t("lists: /llms.txt lists only curated claims, so an ordinary typed one is left out", _ordc not in _pages["/llms.txt"]
+  and "Vaccines cause autism" in _pages["/llms.txt"])
+for _ in range(2):
+    for _cl in (_pers, _ordc):
+        db.log_check(_cl, "complicated", "x", [])
+_tr = c.get("/api/trending").get_json()
+_tp = appmod._public_claims([{"claim": _pers}, {"claim": _ordc}], 8, key="claim")
+t("lists: the trending filter drops a personal claim and keeps an ordinary one", _tp == [{"claim": _ordc}])
+t("lists: /api/trending carries the ordinary claim checked twice and not the personal one",
+  any(x["claim"] == _ordc for x in _tr) and not any("Tom" in x["claim"] for x in _tr), _tr)
+t("privacy: it says lists of recent checks leave out a claim that looks personal",
+  "Lists of recent checks on the site leave out any claim that looks like it holds a name, an age, contact details or a personal medical detail"
+  in _re.sub(r"\s+", " ", c.get("/privacy").get_data(as_text=True)))
+
+
+# ---- Day counts: per-day totals, no identifiers ------------------------------------------
+def _tot():
+    db.flush_counts()
+    out = {}
+    for r in db.counts_since(30):
+        out[r["name"]] = out.get(r["name"], 0) + r["count"]
+    return out
+def _delta(before, after):
+    return {k: after.get(k, 0) - before.get(k, 0) for k in set(before) | set(after) if after.get(k, 0) != before.get(k, 0)}
+
+_b = _tot()
+c.get("/"); c.get("/checks"); c.get("/", query_string={"q": _good_c}); c.get("/about"); c.get("/method"); c.get("/corrections"); c.get("/privacy")
+c.get("/", query_string={"q": "a claim nobody has checked yet"}); c.get("/no-such-page"); c.get("/healthz"); c.get("/sitemap.xml")
+_d = _delta(_b, _tot())
+t("counts: page views by kind: home (and an unchecked ?q=) 2, a saved result 1, info pages 4; the /checks redirect, 404s, the sitemap and healthz are not views",
+  _d == {"view.home": 2, "view.result": 1, "view.info": 4}, _d)
+_b = _tot()
+P(_good_c, ip="9.9.9.1"); P("", ip="9.9.9.1"); P("x" * 600, ip="9.9.9.1")
+_d = _delta(_b, _tot())
+t("counts: a claim sent counts once as submitted and once as completed; an empty or too long one counts as neither",
+  _d == {"check.submitted": 1, "check.completed": 1}, _d)
+_b = _tot()
+_r = c.post("/api/count", json={"name": "share.click"}); c.post("/api/count", json={"name": "client_error.network"})
+_d = _delta(_b, _tot())
+t("counts: POST /api/count with an allowed name adds one and answers 204", _r.status_code == 204 and _d == {"share.click": 1, "client_error.network": 1}, _d)
+_b = _tot()
+_bad = [c.post("/api/count", json={"name": "view.home"}), c.post("/api/count", json={"name": "x" * 50}), c.post("/api/count", json={"name": "share.click", "claim": "my back pain"}),
+        c.post("/api/count", json={}), c.post("/api/count", data="share.click"), c.post("/api/count", json=["share.click"]),
+        c.post("/api/count", json={"name": "share.click", "pad": "y" * 400}), c.get("/api/count")]
+t("counts: any other name, extra fields, a big body, a non-JSON body or a GET is refused and counts nothing",
+  [x.status_code for x in _bad] == [400, 400, 400, 400, 400, 400, 400, 405] and not _delta(_b, _tot()), [x.status_code for x in _bad])
+_b = _tot()
+_g = c.post("/api/count", json={"name": "share.click"}, headers={"Sec-GPC": "1"})
+t("counts: a beacon from a browser sending Global Privacy Control is answered and not counted", _g.status_code == 204 and not _delta(_b, _tot()))
+_ips = [c.post("/api/count", json={"name": "share.copy"}, environ_base={"REMOTE_ADDR": "9.9.9.77"}).status_code for _ in range(70)]
+t("counts: /api/count is rate-limited per address like the other endpoints", _ips[:60] == [204] * 60 and 429 in _ips[60:], set(_ips))
+with db.get_conn() as _cn:
+    _cols = [r[1] for r in _cn.execute("PRAGMA table_info(counters)").fetchall()]
+    _rows = _cn.execute("SELECT day, name, count FROM counters").fetchall()
+_dump = json.dumps([list(r) for r in _rows])
+t("counts: the table holds only day, name and count; every name is on the fixed list; no claim text or address is in it",
+  _cols == ["day", "name", "count"] and all(r[1] in db.COUNTER_NAMES for r in _rows)
+  and _good_c not in _dump and "9.9.9" not in _dump and "my back pain" not in _dump, _cols)
+db.count_event("view.nonsense"); db.count_event(_good_c)
+_nb = _tot()
+t("counts: a name not on the list is ignored by the writer too", not _delta(_nb, _tot()) and "view.nonsense" not in _tot())
+_jsapp = (ROOT / "static" / "app.js").read_text()
+t("counts: the page skips its beacon when the browser sends Global Privacy Control, and sends only a name",
+  "navigator.globalPrivacyControl" in _jsapp and "JSON.stringify({ name })" in _jsapp
+  and all(n in _jsapp for n in ('countEvent("share.click")', 'countEvent("share.copy")', '"client_error."')))
+_cfg = {n for n in db.CLIENT_COUNTERS}
+t("counts: every error kind the page classifies has a client counter", {"client_error." + k for k in ("invalid", "network", "limit", "provider")} <= _cfg)
+
+# The same counts go to Turso when it is configured.
+_ftc = FakeTurso()
+os.environ["TURSO_DATABASE_URL"] = _URL; os.environ["TURSO_AUTH_TOKEN"] = _SECRET
+db._http_post = _ftc; db._reset_turso_state()
+db.count_event("share.click"); db.count_event("share.click"); db.count_event("view.home"); db.flush_counts()
+_tc = dict((n, k) for n, k in _ftc.con.execute("select name, count from counters").fetchall())
+db.count_event("share.click"); db.flush_counts()
+_tc2 = dict((n, k) for n, k in _ftc.con.execute("select name, count from counters").fetchall())
+t("counts: with Turso configured the counters table lives there, and a second flush adds to the same row",
+  _tc == {"share.click": 2, "view.home": 1} and _tc2["share.click"] == 3, (_tc, _tc2))
+_ftc.fail = OSError("down")
+db.count_event("share.click"); db.flush_counts()
+t("counts: Turso failing never raises from a count", True)
+os.environ.pop("TURSO_DATABASE_URL", None); os.environ.pop("TURSO_AUTH_TOKEN", None)
+db._http_post = _real_post; db._reset_turso_state()
+
+
+# ---- Error counts: server errors and provider failures, as per-day totals ----------------------
+_b = _tot()
+fg.models.script = [errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})] * 3
+P("count err 429", ip="9.9.8.1")
+fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})] * 3
+P("count err 503", ip="9.9.8.2")
+fg.models.script = [errors.ClientError(418, {"error": {"message": "teapot", "status": "TEAPOT"}})] * 3
+P("count err other", ip="9.9.8.3")
+fg.models.script = [errors.ClientError(400, {"error": {"message": "API key not valid.", "status": "INVALID_ARGUMENT"}})]
+P("count err auth", ip="9.9.8.4")
+_d = _delta(_b, _tot())
+t("error counts: a provider 429, a 503, another provider error and a rejected key each add one to their own counter, and each is a submitted claim that did not complete",
+  _d == {"provider.rate_limit": 1, "provider.unavailable": 1, "provider.other": 1, "provider.auth": 1, "check.submitted": 4}, _d)
+_b = _tot()
+_real_swf2 = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError("down"))
+fg.models.script = [Resp("q")]
+P("count err pubmed", ip="9.9.8.5")
+pubmed.search_with_fallback = lambda *a, **k: (_ for _ in ()).throw(ValueError("0xFEED"))
+fg.models.script = [Resp("q")]
+appmod.app.logger.setLevel(logging.CRITICAL)
+P("count err crash", ip="9.9.8.6")
+fg.models.script = [Resp("q")]
+stream("count err crash two", ip="9.9.8.7")
+pubmed.search_with_fallback = _real_swf2
+_d = _delta(_b, _tot())
+t("error counts: PubMed unreachable adds one pubmed.failure, an unhandled crash in a check adds one error.server (JSON and streamed alike)",
+  _d == {"pubmed.failure": 1, "error.server": 2, "check.submitted": 3}, _d)
+_b = _tot()
+ratelimit.PER_USER = ratelimit.SlidingWindow(1, 600)
+fg.models.script = [Resp("q"), Resp(VJ("true", [1]))]; P("count limit one", ip="9.9.8.8"); P("count limit two", ip="9.9.8.8")
+ratelimit.PER_USER = ratelimit.SlidingWindow(100, 600)
+_d = _delta(_b, _tot())
+t("error counts: a limit we set ourselves is not a provider failure or a server error",
+  _d == {"check.submitted": 2, "check.completed": 1}, _d)
+_b = _tot()
+_real_ss = db.store_status
+db.store_status = lambda: (_ for _ in ()).throw(RuntimeError("0xBEEF"))
+_r5 = c.get("/healthz"); _r6 = c.get("/api/trending") if False else None
+db.store_status = _real_ss
+appmod.app.logger.setLevel(logging.ERROR)
+_d = _delta(_b, _tot())
+t("error counts: an unhandled exception on a route is a 500 and adds one error.server", _r5.status_code == 500 and _d == {"error.server": 1}, _d)
+_rawcounts = json.dumps([[r["day"], r["name"]] for r in db.counts_since(30)])
+t("error counts: no claim text, exception text or address reaches the table",
+  all(x not in _rawcounts for x in ("count err", "0xFEED", "0xBEEF", "9.9.8", "quota", "teapot")))
+
+
+# ---- /stats: the day counts behind a token ------------------------------------------------
+os.environ.pop("STATS_TOKEN", None)
+_s0 = [c.get("/stats"), c.get("/stats", query_string={"token": "anything"})]
+t("stats: with STATS_TOKEN unset the page does not exist (404, even with a token)", [x.status_code for x in _s0] == [404, 404])
+os.environ["STATS_TOKEN"] = "s3cret-tok-7"
+_s1 = [c.get("/stats"), c.get("/stats", query_string={"token": ""}), c.get("/stats", query_string={"token": "wrong"}),
+       c.get("/stats", query_string={"token": "s3cret-tok-"}), c.get("/stats", query_string={"token": "caf\u00e9"})]
+t("stats: no token, an empty one, a wrong one, a prefix of the right one and a non-ASCII one are all a 404",
+  [x.status_code for x in _s1] == [404] * 5 and all(b"s3cret" not in x.data for x in _s1), [x.status_code for x in _s1])
+_b = _tot()
+db.count_event("share.click"); db.count_event("provider.rate_limit"); db.count_event("view.home")
+_s2 = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.1"})
+_sb = _s2.get_data(as_text=True)
+t("stats: the right token is a 200 that is not cached, not indexed, and says so", _s2.status_code == 200
+  and _s2.headers["Cache-Control"] == "no-store" and "noindex" in _s2.headers["X-Robots-Tag"]
+  and '<meta name="robots" content="noindex, nofollow" />' in _sb, _s2.status_code)
+t("stats: it is a plain table in the doc-page style: 30 day rows, the counters grouped, totals and today",
+  'class="wrap doc"' in _sb and _sb.count('<th scope="row">20') == 30 and "Page views" in _sb and "Errors the server saw" in _sb
+  and "AI provider: rate limited (429)" in _sb and "PubMed failures" in _sb and "Not medical advice" in _sb)
+_totals = {r["name"]: r["count"] for r in map(lambda n: {"name": n[0], "count": n[1]}, [(k, v) for k, v in _tot().items()])}
+import re as _re_s
+_m = _re_s.search(r"Share button</th><td class=\"num\">(\d+)</td><td class=\"num\">(\d+)</td>", _sb)
+t("stats: the numbers on the page are the saved totals", _m and int(_m.group(1)) == _totals["share.click"] == int(_m.group(2)), (_m and _m.groups(), _totals.get("share.click")))
+t("stats: no claim text, address or token on the page; no dash in what it says",
+  all(x not in _sb for x in (_good_c, "9.9.7.1", "s3cret-tok-7", "count err")) and not _DASH.search(_re_s.sub(r"<[^>]+>", " ", _sb)))
+t("stats: it is not in the sitemap and robots disallows it, in every group",
+  "/stats" not in c.get("/sitemap.xml").get_data(as_text=True) and c.get("/robots.txt").get_data(as_text=True).count("Disallow: /stats") >= 5)
+import logging as _lg_s
+_rec = _lg_s.LogRecord("werkzeug", 20, __file__, 1, '127.0.0.1 - - "GET /stats?token=s3cret-tok-7&x=1 HTTP/1.1" 200 -', (), None)
+_flt = [f for f in _lg_s.getLogger("werkzeug").filters if type(f).__name__ == "_RedactToken"]
+_ok = bool(_flt) and _flt[0].filter(_rec)
+t("stats: the web server's request log does not carry the token", _ok and "s3cret" not in _rec.getMessage() and "token=REDACTED&x=1" in _rec.getMessage(), _rec.getMessage())
+for _u in ('GET /stats?token%3Ds3cret-tok-7&x=1 HTTP', 'GET /stats?a=1&TOKEN=s3cret-tok-7 HTTP', 'GET /stats?x=1&token%3Ds3cret-tok-7 HTTP'):
+    _r2 = _lg_s.LogRecord("werkzeug", 20, __file__, 1, _u, (), None)
+    _flt[0].filter(_r2)
+    t("stats: the log redaction also catches an encoded or upper-case token: " + _u, "s3cret" not in _r2.getMessage() and "REDACTED" in _r2.getMessage(), _r2.getMessage())
+_bh = [c.get("/stats", headers={"Authorization": "Bearer s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.20"}),
+       c.get("/stats", headers={"Authorization": "bearer s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.20"}),
+       c.get("/stats", headers={"Authorization": "Bearer wrong"}, environ_base={"REMOTE_ADDR": "9.9.7.20"}),
+       c.get("/stats", headers={"Authorization": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.20"})]
+t("stats: the token may come in an Authorization: Bearer header (right is 200, wrong or malformed is 404)",
+  [x.status_code for x in _bh] == [200, 200, 404, 404] and _bh[0].headers["Cache-Control"] == "no-store", [x.status_code for x in _bh])
+_fl = [c.get("/stats", query_string={"token": "nope"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code for _ in range(25)]
+_after = c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.9"}).status_code
+t("stats: wrong guesses are all a 404 and never lock out the right token (only failures count toward the limit)",
+  set(_fl) == {404} and _after == 200, (set(_fl), _after))
+_ok_many = [c.get("/stats", query_string={"token": "s3cret-tok-7"}, environ_base={"REMOTE_ADDR": "9.9.7.10"}).status_code for _ in range(30)]
+t("stats: the right token is never limited, however often it is used", set(_ok_many) == {200}, set(_ok_many))
+os.environ.pop("STATS_TOKEN", None)
+
+
+# ---- A study classified off topic is never relied on ---------------------------------------
+# The audit saw "Does creatine cause hair loss?" under "Relied on for the
+# verdict" beside "3 off topic". A fresh check drops off-topic studies from
+# its cited list; a saved record may still carry one in both, and the page
+# must not trust it.
+_OT = [_study("OT1", "Creatine and strength: a meta-analysis", types=["Meta-Analysis"]),
+       _study("OT2", "Creatine loading and bench press", types=["Randomized Controlled Trial"]),
+       _study("OT3", "Does creatine cause hair loss? A review", types=["Review"]),
+       _study("OT4", "Creatine and kidney function", types=["Journal Article"])]
+_OT[2]["off_topic"] = verdict.OFF_OUTCOME
+_OT[3]["off_topic"] = verdict.OFF_OUTCOME
+_ot_bd = {"strength": "x", "evidence": [], "parts": [], "effect_size": "", "applies_to": "",
+          "not_applies_to": "", "unknowns": "", "rests_on": 3}
+db.put_cached_verdict("creatine strength off topic saved", "creatine AND strength", "true",
+                      "Studies 1 and 2 show a gain. Study 3 shows hair loss.", ["OT1", "OT2", "OT3"], _OT,
+                      tldr="Creatine increases strength.", still_open="Doses vary.", breakdown=_ot_bd)
+_oth = c.get("/?q=creatine+strength+off+topic+saved").data.decode()
+_ot_src = _oth[_oth.index('id="sources"'):_oth.index('class="nosteps"')]
+_ot_groups = [(m.group(2), m.group(1) is not None, int(m.group(3)), _re_s.findall(r">PMID (\w+)</a>", m.group(4)))
+              for m in _re_s.finditer(r'<details class="source-group"( open)?>\s*<summary class="group-head">'
+                                      r'<span class="group-name">([^<]*)</span><span class="group-count">(\d+)</span>'
+                                      r'</summary>(.*?)</details>', _ot_src, _re_s.S)]
+_otg = {name: (opened, n, pm) for name, opened, n, pm in _ot_groups}
+t("off topic: a study both cited and off topic is never under 'Relied on' on the server-rendered page",
+  "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
+  and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
+t("  it sits in a 'Set aside: off topic' group, folded, with the other off-topic study",
+  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
+t("  and its line says it was set aside, not relied on",
+  "Read and set aside: measures a different outcome" in _ot_src.split("PMID OT3")[1].split("</li>")[0])
+_otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
+_ot_used = [s_["pmid"] for s_ in _otj["studies"] if s_["cited_in_verdict"]]
+t("  the counts agree: Rests on 2, '2 used', a relied-on group of 2, and 2 marked used in the JSON",
+  '<span class="group-count">2 studies</span>' in _oth and '3 studies</span>' not in _oth
+  and "2 used for this verdict" in _oth and "3 used for this verdict" not in _oth
+  and _otg["Relied on for the verdict"][1] == 2 and _ot_used == ["OT1", "OT2"]
+  and _otj["breakdown"]["rests_on"] == 2 and _otj["evidence"]["relied_on"] == 2, (_ot_used, re.findall(r"Rests on.{0,60}", _oth)))
+t("  the sentence resting only on the off-topic study is not printed, and the stamp stands on the two left",
+  "hair loss" not in _otj["explanation"] and _otj["verdict"] in ("true", "complicated"), _otj["explanation"])
+t("  the ClaimReview markup does not mark it as a source the verdict was based on",
+  '"identifier": "PMID:OT3", "isBasedOn": false' in _oth or
+  all(not x["isBasedOn"] for x in json.loads(_oth.split('type="application/ld+json"')[1].split(">", 1)[1].split("</script>")[0])["citation"]
+      if x["identifier"] == "PMID:OT3"))
+t("  the saved-record check names it, so a crawler is told to skip the record",
+  "cited_off_topic" in _dsp.saved_record_problems("c", "true", ["OT1", "OT3"], _OT, None, "q", "2020-01-01T00:00:00")
+  and "cited_off_topic" not in _dsp.saved_record_problems("c", "true", ["OT1"], _OT, None, "q", "2020-01-01T00:00:00"))
+_k5_flags = _dsp.saved_record_problems("c", "true", ["OT1", "NOPE9"], _OT, None, "q", "2020-01-01T00:00:00")
+t("  a cited PMID no listed study has is 'cited_not_in_studies' only, not 'cited_off_topic'; a listed off-topic one still is",
+  "cited_not_in_studies" in _k5_flags and "cited_off_topic" not in _k5_flags
+  and "cited_off_topic" in _dsp.saved_record_problems("c", "true", ["OT3", "NOPE9"], _OT, None, "q", "2020-01-01T00:00:00"),
+  _k5_flags)
+# A saved verdict whose only cited study is off topic rests on nothing, so the
+# rule a fresh check obeys applies: "Not enough evidence".
+db.put_cached_verdict("creatine only off topic saved", "creatine AND strength", "true",
+                      "Study 3 shows it.", ["OT3"], _OT, tldr="Creatine increases strength.", still_open="Doses vary.")
+_oto = P("creatine only off topic saved", ip="4.4.4.7").get_json()
+t("off topic: a saved verdict whose only cited study is off topic is 'Not enough evidence', with none marked used",
+  _oto["verdict"] == "insufficient" and _oto["tldr"] == verdict.UNTESTED_TLDR
+  and not any(s_["cited_in_verdict"] for s_ in _oto["studies"]), (_oto["verdict"], _oto["tldr"]))
+_otoh = c.get("/?q=creatine+only+off+topic+saved").data.decode()
+t("  on the page too, with no relied-on group",
+  "Not enough evidence" in _otoh.split('id="server-result"')[0] and "Relied on for the verdict</span>" not in _otoh)
+# The front page's list shows the stamp the page would.
+t("  and the latest-checks list does not stamp it 'Likely true'",
+  appmod._listed({"claim_text": "creatine only off topic saved", "verdict": "true", "search_query": "q",
+                  "tldr": "x", "studies": _OT, "cited": ["OT3"]})["verdict"] == "insufficient"
+  and appmod._listed({"claim_text": "c", "verdict": "complicated", "search_query": "q",
+                      "tldr": "x", "studies": _OT, "cited": ["OT1", "OT3"]})["cited"] == ["OT1"])
+# A fresh check never cites an off-topic study in the first place.
+# The model cites study 3 and, in the same answer, judges it off its subject.
+fg.models.script = [Resp("creatine AND strength"), Resp(VJ("true", [1, 3], relevance=[
+    {"study": 1, "subject": True, "outcome": True}, {"study": 2, "subject": True, "outcome": True},
+    {"study": 3, "subject": False, "outcome": False}]))]
+_FAKE_OT = [_study("FO1", "Creatine and strength trial", abstract="Creatine increased strength.",
+                   types=["Randomized Controlled Trial"]),
+            _study("FO2", "Creatine trial two", abstract="Creatine increased strength.", types=["Randomized Controlled Trial"]),
+            _study("FO3", "Paracetamol and headache", abstract="Paracetamol eased headache.",
+                   types=["Randomized Controlled Trial"])]
+_ot_saved_search = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": (_FAKE_OT, q, False)
+try:
+    _otf = P("creatine fresh off topic check", ip="4.4.4.8").get_json()
+finally:
+    pubmed.search_with_fallback = _ot_saved_search
+t("off topic: in a fresh check the model's citation of an off-topic study is dropped, so none is both marked used and off topic",
+  _otf.get("studies") and any(s_["pmid"] == "FO3" and s_["off_topic"] and not s_["cited_in_verdict"] for s_ in _otf["studies"])
+  and not any(s_["cited_in_verdict"] and s_["off_topic"] for s_ in _otf["studies"]),
+  [(s_["pmid"], s_["cited_in_verdict"], s_["off_topic"]) for s_ in _otf.get("studies") or []])
+# Both renderers group and describe the same way, on raw records that still
+# carry both flags (a result saved on the device) and on the server payload.
+_ot_raw = [dict(_study("J1", "a"), cited_in_verdict=True), dict(_study("J2", "b"), cited_in_verdict=True, off_topic="x."),
+           dict(_study("J3", "c"), background="lab", background_why="animal or lab"), _study("J4", "d"),
+           dict(_study("J5", "e"), off_topic="y")]
+_ot_recs = [_ot_raw, _otj["studies"], _oto["studies"], []]
+_py_groups = [_dsp.source_groups(r_) for r_ in _ot_recs]
+t("off topic: the server groups a both-flag study as excluded, and every study lands in exactly one group",
+  _py_groups[0] == {"cited": [0], "back": [2], "others": [3], "excluded": [1, 4]}
+  and all(sorted(sum(g_.values(), [])) == list(range(len(r_))) for g_, r_ in zip(_py_groups, _ot_recs)), _py_groups)
+t("  and never describes it as relied on", _dsp.study_why(_ot_raw[1]) == "Read and set aside: x.")
+if _shutil.which("node"):
+    _ot_js = (ROOT / "static" / "app.js").read_text()
+    _ot_fn = "const TYPES = [" + _ot_js.split("const TYPES = [")[1].split("function escapeHtml")[0]
+    _ot_out = json.loads(_subprocess.run(
+        ["node", "-e", _ot_fn + "const R = " + json.dumps(_ot_recs) + ";"
+         "console.log(JSON.stringify({g: R.map(sourceGroups), w: R.map((r) => r.map(studyWhy)),"
+         " d: R.map((r) => dropOffTopicCites({studies: JSON.parse(JSON.stringify(r))}).studies.map((s) => !!s.cited_in_verdict))}));"],
+        capture_output=True, text=True, check=True).stdout)
+    t("  the script and the server put every study in the same group, on four records",
+      _ot_out["g"] == _py_groups, (_ot_out["g"], _py_groups))
+    t("  and write the same line for each", _ot_out["w"] == [[_dsp.study_why(s_) for s_ in r_] for r_ in _ot_recs])
+    t("  and a result saved on the device stops marking an off-topic study used before anything reads it",
+      _ot_out["d"][0] == [True, False, False, False, False]
+      and _ot_out["d"][1] == [s_["cited_in_verdict"] for s_ in _otj["studies"]])
+_ot_rr = _ot_js[_ot_js.index("function renderResult"):] if _shutil.which("node") else (ROOT / "static" / "app.js").read_text()
+t("  renderResult clears the stale flags first and builds the list from sourceGroups, with the excluded group folded",
+  _ot_rr.index("dropOffTopicCites(data)") < _ot_rr.index("currentResult = data")
+  and "sourceGroups(data.studies)" in _ot_rr and 'group("Set aside: off topic", rows(g.excluded), false)' in _ot_rr)
+_ot_tpl = (ROOT / "templates" / "index.html").read_text()
+t("  both renderers name the off-topic group in the same words, and the old label is gone from both",
+  '<span class="group-name">Set aside: off topic</span>' in _ot_tpl and 'group("Set aside: off topic",' in _ot_rr
+  and not any("Excluded (off-topic)" in x for x in (_ot_tpl, (ROOT / "static" / "app.js").read_text())))
+
+# ---- /privacy says exactly what is counted -------------------------------------------------
+_pv = c.get("/privacy").get_data(as_text=True)
+_pt = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv).split())
+t("privacy: it names every kind of count (page views, claims submitted, results completed, shares, errors by kind)",
+  all(x in _pt for x in ("What we count", "page views", "claims submitted", "results completed", "shares", "errors",
+                         "server errors", "PubMed not answering", "the kind of error screen")), _pt[:200])
+t("privacy: it says a count is per day with no IP address, user agent, cookie, visitor ID or claim text, where it is kept, and the GPC courtesy",
+  all(x in _pt for x in ("daily totals", "IP address, a user agent, a cookie, a visitor ID or any claim text", "same database as the saved answers",
+                         "Global Privacy Control")) and "No tracking" in _pt and "no cookies" in _pt)
+t("privacy: it has no dash", not _DASH.search(_pt))
+# The footer's privacy sentence is the one at the top of /privacy, from one
+# source, and it says the claim text is kept: no stronger than the page.
+_ft_home = c.get("/").get_data(as_text=True)
+_ft_foot = " ".join(_re_s.sub(r"<[^>]+>", " ", _ft_home.split('<footer class="foot')[1].split("</footer>")[0]).split())
+_ft_lede = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv.split('<p class="lede">')[1].split("</p>")[0]).split())
+import html as _ft_html  # noqa: E402
+_ft_foot = _ft_html.unescape(_ft_foot)
+_ft_lede = _ft_html.unescape(_ft_lede)
+_ft_prov = verdict.provider_label()
+_ft_line = appmod.privacy_line(_ft_prov)
+t("footer privacy: the sentence is the owner's, naming the provider the claim is sent to",
+  _ft_line == f"Claim text is stored without anything that identifies you and is sent to {_ft_prov} to check it.", _ft_line)
+t("  the footer and the /privacy short version print the same sentence",
+  _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line[0].lower() + _ft_line[1:], (_ft_foot, _ft_lede))
+t("  the lede runs on after its colon in lower case, with no stray capital",
+  _ft_lede.startswith("The short version: claim text is stored"), _ft_lede)
+_ft_p = _ft_home.split('<footer class="foot')[1].split("</footer>")[0]
+_ft_p = [x for x in _ft_p.split("<p") if "identifies you" in x][0].split("</p>")[0]
+t("  in the footer the sentence is followed by a link to /privacy",
+  _re_s.search(r'identifies you and is sent to [^<]* to check it\.\s*<a href="/privacy">[^<]+</a>\s*$', _ft_p), _ft_p)
+_ft_css = (ROOT / "static" / "style.css").read_text()
+t("  the footer's Privacy details link has a tap area of 44px or more, grown around it, so the sentence does not move",
+  re.search(r"\.foot \.fine:not\(\.foot-links\) a \{[^}]*position: relative", _ft_css)
+  and re.search(r"\.foot \.fine:not\(\.foot-links\) a::after \{[^}]*inset: -26px -6px -2px", _ft_css))
+t("  and it stays true: /privacy keeps the claim text with nothing that identifies the person, and sends it to the same provider",
+  all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check",
+                         "it does not get your IP address or anything else that identifies you"))
+  and f"and {_ft_prov} to turn the claim into a search" in _ft_html.unescape(_pt))
+t("  the stronger line is gone from both, and neither template hard-codes the sentence",
+  "tied to you" not in _ft_foot and "tied to you" not in _ft_lede
+  and all("identifies you and is sent" not in (ROOT / "templates" / f_).read_text()
+          and "privacy_line(provider" in (ROOT / "templates" / f_).read_text()
+          for f_ in ("index.html", "privacy.html"))
+  and not _DASH.search(_ft_line))
+_pc = (ROOT / "CLAUDE.md").read_text()
+t("CLAUDE.md non-negotiable 7 allows only per-day aggregate counts with no identifiers", "no\n   third-party analytics and no per-person tracking" in _pc
+  and "no analytics; no cookies" not in _pc and "per-day aggregate totals" in _pc)
+
+# ---- Old saved answers with missing text ------------------------------------------
+# A row saved before `tldr` and `still_open` existed (the migration adds them
+# as NULL), or one damaged since, can have either one empty, blank or null.
+# No reader-facing path may show it as a finished verdict: the check runs
+# again, or the page has no verdict on it and runs the check itself.
+ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
+ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+_OR_STUDIES = [_study("OR1", "Honey and cough in children: a randomised trial")]
+# (label, tldr as stored, still_open as stored); None is SQL NULL, the value a
+# row from before the columns existed has after the migration.
+_OR_CASES = [
+    ("an empty short answer", "", "Doses vary."),
+    ("an empty still-open line", "Mixed.", ""),
+    ("both empty", "", ""),
+    ("a null short answer", None, "Doses vary."),
+    ("a null still-open line", "Mixed.", None),
+    ("both null, as a row from before the columns", None, None),
+    ("a blank short answer", "   ", "Doses vary."),
+    ("a blank still-open line", "Mixed.", "  \n "),
+]
+
+
+def _or_put(claim, tldr, still):
+    db.put_cached_verdict(claim, "honey AND cough", "complicated", "Honey may help (Study 1).",
+                          ["OR1"], _OR_STUDIES, tldr="x", still_open="x")
+    con = _sqlite_b.connect(os.environ["DB_PATH"])
+    con.execute("UPDATE verdict_cache SET tldr = ?, still_open = ? WHERE claim_key = ?",
+                (tldr, still, db.normalize_claim(claim)))
+    con.commit(); con.close()
+
+
+def _or_row(claim):
+    con = _sqlite_b.connect(os.environ["DB_PATH"])
+    r = con.execute("SELECT tldr, still_open FROM verdict_cache WHERE claim_key = ?",
+                    (db.normalize_claim(claim),)).fetchone()
+    con.close()
+    return r
+
+
+def _or_fresh():
+    fg.models.script = [Resp("honey AND cough"),
+                        Resp(VJ("complicated", [1], tldr="Fresh short answer.", still_open="Fresh open line."))]
+    fg.models.calls = 0
+
+
+# A whole row is still served from the cache, at no cost: the fix must not
+# turn every saved answer into a re-check.
+_cl = "old row honey cough whole"
+_or_put(_cl, "Mixed.", "Doses vary.")
+fg.models.calls = 0; fg.models.script = []
+_d = P(_cl, ip="9.9.9.1").get_json()
+t("old rows: a row with both lines is still a cache hit, with no model call",
+  _d.get("cached") is True and fg.models.calls == 0 and _d["tldr"] == "Mixed." and _d["still_open"] == "Doses vary.", _d)
+_pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
+t("  and its shared link still renders the verdict with both lines",
+  'id="server-result"' in _pg and "Mixed." in _pg and "Doses vary." in _pg)
+
+
+_or_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _OR_STUDIES]
+for _i, (_lbl, _tl, _so) in enumerate(_OR_CASES):
+    # The check endpoint: a hit on such a row is a miss, so it runs again and
+    # replaces the row with a whole one.
+    _cl = f"old row honey cough check {_i}"
+    _or_put(_cl, _tl, _so)
+    _or_fresh()
+    _d = P(_cl, ip=f"9.7.{_i}.1").get_json()
+    t(f"old rows: /api/check with {_lbl} runs the check again, never serving the row",
+      _d.get("cached") is False and fg.models.calls >= 2
+      and _d.get("tldr") == "Fresh short answer." and _d.get("still_open") == "Fresh open line.", _d)
+    t("  and the saved row is replaced by the whole answer",
+      _or_row(_cl) == ("Fresh short answer.", "Fresh open line."), _or_row(_cl))
+    # The streaming check, the path the page itself uses.
+    _cl = f"old row honey cough stream {_i}"
+    _or_put(_cl, _tl, _so)
+    _or_fresh()
+    _r, _evs = stream(_cl, ip=f"9.8.{_i}.1")
+    _done = [e for e in _evs if e.get("stage") == "done"]
+    t(f"old rows: the streaming check with {_lbl} runs again (it searches) and ends with both lines",
+      _done and any(e.get("stage") == "search" for e in _evs) and _done[0]["result"]["cached"] is False
+      and _done[0]["result"]["tldr"] == "Fresh short answer."
+      and _done[0]["result"]["still_open"] == "Fresh open line.", _evs[-1:])
+    # The shared link, GET /?q=: no verdict is rendered from the row; the page
+    # arrives without one and the browser runs the check (app.js, deep links).
+    _cl = f"old row honey cough page {_i}"
+    _or_put(_cl, _tl, _so)
+    _pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
+    t(f"old rows: GET /?q= with {_lbl} renders no verdict from the row, so the page runs the check",
+      'id="server-result"' not in _pg and "data-verdict=" not in _pg and "ClaimReview" not in _pg,
+      [x for x in ('id="server-result"', "data-verdict=", "ClaimReview") if x in _pg])
+    # The share card: the brand card, never a stamp over an empty answer.
+    _png = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_cl), safe="") + ".png")
+    t(f"old rows: the share card for {_lbl} is the brand card, with no verdict on it",
+      _png.status_code == 200 and _png.data == og.render_brand())
+pubmed.search_and_fetch = _or_search
+
+# The device's own list of recent checks (localStorage) keeps whole results
+# so it works offline. One saved by an older version, without either line, is
+# not replayed as a finished verdict: tapping it runs the check instead.
+_rjs = (ROOT / "static" / "app.js").read_text()
+_rclick = _rjs.split('$("recent-list").addEventListener("click"')[1].split("\n});")[0]
+t("old rows: a recent check on this device is replayed only when it has its short answer and still-open line",
+  re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
+  and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
+
+# ---- where the slices meet: the reworded-match note --------------------------
+# Sentence case is for list rows in the template only. The note under a reworded
+# match shows the reader's own words exactly as typed, in both renderers, and the
+# stored claim keeps its saved wording.
+_RW_SAVED, _RW_TYPED = "Zinc lozenges shorten colds", "do zinc lozenges shorten colds?"
+db.put_cached_verdict(_RW_SAVED, "(zinc) AND (cold)", "complicated", "Study 1 found a shorter cold.", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Zinc may shorten a cold a little.",
+                      still_open="Which dose works.")
+fg.models.script = []
+_rw = P(_RW_TYPED, ip="9.6.1.1").get_json()
+_rw_note = _dsp.typed_note(_rw.get("typed"), _rw.get("typed_reason"))
+t("meet: a reworded match carries the reader's words unchanged, not sentence-cased",
+  _rw.get("claim") == _RW_SAVED and _rw.get("typed") == _RW_TYPED and _rw.get("typed_reason") == "wording"
+  and _rw_note == f"Showing the saved check for this claim. You typed \u201c{_RW_TYPED}\u201d.", (_rw.get("typed"), _rw_note))
+_rw_tpl = (ROOT / "templates" / "index.html").read_text()
+_rw_mark = _rw_tpl[_rw_tpl.index('<p class="typed-note"'):]
+_rw_mark = _rw_mark[:_rw_mark.index("</p>") + 4]
+with appmod.app.test_request_context("/"):
+    _rw_on = appmod.app.jinja_env.from_string(_rw_mark).render(result=_rw)
+t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>' + _RW_TYPED + "</bdi>\u201d.</p>"
+  and re.sub(r"</?bdi>", "", _rw_on) == '<p class="typed-note" id="typed-note">' + _rw_note + "</p>", _rw_on)
+if _shutil.which("node"):
+    _rw_js = (ROOT / "static" / "app.js").read_text()
+    _rw_fn = _rw_js[_rw_js.index("function typedNote"):_rw_js.index("function showTyped")]
+    _rw_out = json.loads(_subprocess.run(["node", "-e", _rw_fn + "console.log(JSON.stringify(typedNote("
+                                          + json.dumps(_rw["typed"]) + ", " + json.dumps(_rw["typed_reason"]) + ")));"],
+                                         capture_output=True, text=True, check=True).stdout)
+    t("  and so does the script's", _rw_out == _rw_note, _rw_out)
+with db.get_conn() as _conn:
+    _rw_rows = [r_["claim_text"] for r_ in _conn.execute(
+        "SELECT claim_text FROM verdict_cache WHERE claim_key IN (?, ?)",
+        (db.normalize_claim(_RW_SAVED), db.normalize_claim(_RW_TYPED))).fetchall()]
+    _rw_log = _conn.execute("SELECT claim_text FROM checks ORDER BY id DESC LIMIT 1").fetchone()["claim_text"]
+t("  and the stored text is the saved wording, with no row for the typed one",
+  _rw_rows == [_RW_SAVED] and _rw_log == _RW_SAVED, (_rw_rows, _rw_log))
+
+# The reader's words in the note are bidi-isolated and still escaped, in both
+# renderers: right-to-left text, markup, quotes and very long text.
+_BD = [("\u0627\u0644\u0642\u0647\u0648\u0629 \u062a\u0633\u0628\u0628 \u0627\u0644\u0633\u0631\u0637\u0627\u0646", "wording"),
+       ("\u05e7\u05e4\u05d4 \u05d2\u05d5\u05e8\u05de\u05ea \u05dc\u05e1\u05e8\u05d8\u05df", "spelling"),
+       ("abc \u202e reversed", "wording"), ('<script>alert(1)</script> & "quoted" \'too\'', "wording"),
+       ("very long claim " * 31, "spelling")]
+with appmod.app.test_request_context("/"):
+    for _bt, _br in _BD:
+        _bd_on = appmod.app.jinja_env.from_string(_rw_mark).render(result={"typed": _bt, "typed_reason": _br})
+        _bd_p = _dsp.typed_note_parts(_bt, _br)
+        t(f"bidi: the template sets the typed text in <bdi>, escaped ({_bt[:12]!r})",
+          _bd_on == '<p class="typed-note" id="typed-note">' + str(_msc_escape(_bd_p[0])) + "<bdi>" + str(_msc_escape(_bt))
+          + "</bdi>" + str(_msc_escape(_bd_p[2])) + "</p>" and "<script>" not in _bd_on, _bd_on)
+if _shutil.which("node"):
+    _bd_fn = _rw_js[_rw_js.index("function typedNoteParts"):_rw_js.index("function showTyped")]
+    _bd_js = json.loads(_subprocess.run(["node", "-e", _bd_fn + "console.log(JSON.stringify(" + json.dumps(_BD)
+                                         + ".map(([a, b]) => typedNoteParts(a, b))));"], capture_output=True, text=True, check=True).stdout)
+    t("  and the script splits the note into the same three parts", _bd_js == [list(_dsp.typed_note_parts(a, b)) for a, b in _BD], _bd_js)
+_bd_show = _rw_js[_rw_js.index("function showTyped"):_rw_js.index("function logLine")]
+t("  and the script puts the typed part in a <bdi> as text, never as markup",
+  'document.createElement("bdi")' in _bd_show and "bdi.textContent = parts[1]" in _bd_show
+  and "note.append(parts[0], bdi, parts[2])" in _bd_show and "innerHTML" not in _bd_show)
+
+# A reworded match reached by a link (a shared or typed address) is complete
+# in the HTML before any script runs: the saved answer, its verdict, and the
+# note naming the reader's words.
+_ln = c.get("/?q=" + urllib.parse.quote(_RW_TYPED)).get_data(as_text=True)
+_ln_res = json.loads(_ln.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+t("link: a reworded match by address is server-rendered with its verdict and the note",
+  '<h1 class="claim-echo" id="claim-echo">' + _RW_SAVED + "</h1>" in _ln
+  and '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>'
+      + str(_msc_escape(_RW_TYPED)) + "</bdi>\u201d.</p>" in _ln
+  and "Zinc may shorten a cold a little." in _ln and _ln_res.get("typed") == _RW_TYPED
+  and _ln_res.get("typed_reason") == "wording" and _ln_res.get("claim") == _RW_SAVED, _ln[:0])
+t("  its link preview and canonical name the saved wording, and its card is the saved row's",
+  '<link rel="canonical" href="http://localhost/?q=Zinc%20lozenges%20shorten%20colds" />' in _ln
+  and "/og/" + urllib.parse.quote(db.normalize_claim(_RW_SAVED), safe="") + ".png" in _ln,
+  re.findall(r'<link rel="canonical"[^>]*>', _ln))
+_ln_exact = c.get("/?q=" + urllib.parse.quote(_RW_SAVED)).get_data(as_text=True)
+_ln_exact_res = json.loads(_ln_exact.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+t("  and the saved wording's own address carries no note",
+  'id="typed-note" hidden></p>' in _ln_exact and _ln_exact_res.get("typed") is None
+  and _ln_exact_res.get("claim") == _RW_SAVED, _ln_exact_res.get("typed"))
+_ln_none = c.get("/?q=" + urllib.parse.quote("a claim nobody has saved in any words")).get_data(as_text=True)
+t("  and a claim with no saved answer in any words still renders the checker, for the script to run",
+  'id="server-result"' not in _ln_none and 'id="typed-note" hidden></p>' in _ln_none)
+
+# ---- where the slices meet: a study set aside as off outcome -------------------
+# rc-reading's rule sets aside a structured abstract that names the claim's
+# outcome only in its background. What a reader sees for it is the same in the
+# Jinja page and in renderResult: the off-topic group, and the reason line.
+_MO_CLAIM = "Creatine supplements increase muscle strength in adults"
+_MO_STUDIES = [dict(_HAIR["study"]),
+               _study("MOK", "Creatine and strength in adults: a randomised trial",
+                      abstract="BACKGROUND: Ageing brings frailty.\nMETHODS: Sixty adults took creatine.\n"
+                               "RESULTS: Muscle strength rose by 8 kg.\nCONCLUSION: Creatine helped.",
+                      types=["Randomized Controlled Trial"])]
+_mo_search = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(s_) for s_ in _MO_STUDIES], q, False)
+fg.models.script = [Resp("(creatine) AND (" + _hair_out + ")"),
+                    Resp(VJ("true", [1, 2], tldr="Creatine raises strength a little.",
+                            explanation="A trial found more strength (Study 2)."))]
+try:
+    _mo = P(_MO_CLAIM, ip="9.6.2.1").get_json()
+finally:
+    pubmed.search_with_fallback = _mo_search
+_mo_hair = [s_ for s_ in _mo.get("studies") or [] if s_["pmid"] == _HAIR["study"]["pmid"]]
+_MO_WHY = "Read and set aside: " + verdict.OFF_OUTCOME + "."
+t("meet: a study whose abstract names the outcome only in its background is set aside as off outcome",
+  _mo_hair and _mo_hair[0]["off_topic"] == verdict.OFF_OUTCOME and not _mo_hair[0]["cited_in_verdict"],
+  [(s_["pmid"], s_.get("off_topic")) for s_ in _mo.get("studies") or []])
+_mo_pg = c.get("/?q=" + urllib.parse.quote(_MO_CLAIM)).get_data(as_text=True)
+_mo_grp = _mo_pg.split('<span class="group-name">Set aside: off topic</span>')
+t("  the page puts it in 'Set aside: off topic' with the line: " + _MO_WHY,
+  len(_mo_grp) == 2 and _HAIR["study"]["title"][:30] in _mo_grp[1].split("</details>")[0]
+  and f'<p class="why">{_MO_WHY}</p>' in _mo_grp[1].split("</details>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
+t("  and that line is true of the rule: the study measured something else, and no dash",
+  "different outcome" in _MO_WHY and not any(ch in _MO_WHY for ch in "\u2013\u2014"))
+if _shutil.which("node"):
+    _mo_js = (ROOT / "static" / "app.js").read_text()
+    _mo_fn = "const TYPES = [" + _mo_js.split("const TYPES = [")[1].split("function escapeHtml")[0]
+    _mo_out = json.loads(_subprocess.run(
+        ["node", "-e", _mo_fn + "const S = " + json.dumps(_mo["studies"]) + ";"
+         "const g = sourceGroups(S); console.log(JSON.stringify({g, w: g.excluded.map((i) => studyWhy(S[i]))}));"],
+        capture_output=True, text=True, check=True).stdout)
+    t("  and renderResult groups it the same and writes the same line",
+      _mo_out["g"] == _dsp.source_groups(_mo["studies"]) and _mo_out["w"] == [_MO_WHY], _mo_out)
+
+# ---- where the slices meet: the method stamp covers the reading rules ----------
+# rc-reading changed evidence.py, verdict.py and breakdown.py (and, in app.py,
+# only _check_response, which runs again on every render). A change to any of
+# those three files must change the stamp, so a saved answer is made again.
+import shutil as _sh_ms  # noqa: E402
+_ms_dir = pathlib.Path(tempfile.mkdtemp())
+for _f in verdict.ANSWER_FILES:
+    _sh_ms.copy(ROOT / _f, _ms_dir / _f)
+_ms_file = verdict.__file__
+verdict.__file__ = str(_ms_dir / "verdict.py")
+try:
+    _ms_same = verdict._method_stamp()
+    _ms_changed = {}
+    for _f in ("evidence.py", "verdict.py", "breakdown.py"):
+        _orig = (_ms_dir / _f).read_bytes()
+        (_ms_dir / _f).write_bytes(_orig + b"\n# changed\n")
+        _ms_changed[_f] = verdict._method_stamp() != _ms_same
+        (_ms_dir / _f).write_bytes(_orig)
+finally:
+    verdict.__file__ = _ms_file
+t("meet: the method stamp is made from every answer file the reading rules changed",
+  {"evidence.py", "verdict.py", "breakdown.py"} <= set(verdict.ANSWER_FILES))
+t("  and a change to any one of them changes the stamp",
+  _ms_same == verdict._method_stamp() and all(_ms_changed.values()), _ms_changed)
+
+# ---- the Latest list shows each question once ---------------------------------
+# Rows whose db.claim_fold keys are equal are one question; the list shows the
+# newest whole row for each, under its own saved wording. A row whose key is
+# empty is never merged. The wordings are the real saved pairs find_equivalent
+# merges, and the three vinegar claims that are three questions.
+_OQ = ["Does creatine cause hair loss", "Creatine causes hair loss",
+       "Red wine is good for your heart", "Apple cider vinegar cures diabetes",
+       "Red wine is good for the heart", "Apple cider vinegar cure diabetes",
+       "Apple cider vinegar helps diabetes", "Apple cider vinegar causes diabetes",
+       "Is it?", "Does it?"]          # oldest first; the last two fold to an empty key
+with db.get_conn() as _conn:
+    _oq_had = {r_["claim_key"]: dict(r_) for r_ in _conn.execute(
+        "SELECT * FROM verdict_cache WHERE claim_key IN (%s)" % ",".join("?" * len(_OQ)),
+        [db.normalize_claim(x) for x in _OQ]).fetchall()}
+for _x in _OQ:
+    db.put_cached_verdict(_x, "(x) AND (y)", "complicated", "Study 1 found a little.", ["P1"],
+                          [dict(s_) for s_ in STUDIES], tldr="A little, maybe.", still_open="For how long.")
+_oq_list = [r_["claim_text"] for r_ in appmod._latest(500) if r_["claim_text"] in _OQ]
+t("one per question: each pair find_equivalent merges shows once, as its newest row under its own wording",
+  _oq_list == ["Does it?", "Is it?", "Apple cider vinegar causes diabetes", "Apple cider vinegar helps diabetes",
+               "Apple cider vinegar cure diabetes", "Red wine is good for the heart", "Creatine causes hair loss"],
+  _oq_list)
+t("  the three vinegar claims (cures, helps, causes) stay three",
+  sum(x.startswith("Apple cider vinegar") for x in _oq_list) == 3, _oq_list)
+t("  and a row whose key is empty is never merged with another",
+  "Is it?" in _oq_list and "Does it?" in _oq_list and db.claim_fold("Is it?") == db.claim_fold("Does it?") == (), _oq_list)
+_oq_home = c.get("/").get_data(as_text=True)
+_oq_items = _oq_home.split('<ol class="ledger-list">')[1].split("</ol>")[0]
+t("  the home page's list shows each once too",
+  _oq_items.count("pple cider vinegar cure diabetes") == 1 and _oq_items.count("pple cider vinegar causes diabetes") == 1,
+  _oq_items[:300])
+t("  and suggest.group_similar is not what folds it", "group_similar" not in _inspect.getsource(appmod._latest)
+  + _inspect.getsource(appmod._one_per_question))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (%s)" % ",".join("?" * len(_OQ)),
+                  [db.normalize_claim(x) for x in _OQ])
+    for _r in _oq_had.values():
+        _conn.execute("INSERT INTO verdict_cache (%s) VALUES (%s)" % (",".join(_r), ",".join("?" * len(_r))),
+                      list(_r.values()))
+
+# ---- rows saved from a reply that could not be read ---------------------------
+# Before a failed reply was refused, its fallback was saved as a row. Such rows
+# stay in the database, recognised by the fallback's own short answer, and are
+# never served as an answer, whatever else the row holds.
+import inspect as _insp_fr  # noqa: E402
+t("failed rows: the marker is the fallback's own short answer",
+  db.FAILED_REPLY_TLDR == _insp_fr.signature(verdict._fallback).parameters["tldr"].default)
+
+
+def _fr_put(claim, still_open=""):
+    db.put_cached_verdict(claim, "(honey) AND (cough)", "complicated",
+                          "The evidence-weighing step returned an unexpected format. "
+                          "Raw studies are still available below for manual review.",
+                          [], [dict(s_) for s_ in STUDIES], tldr=db.FAILED_REPLY_TLDR, still_open=still_open)
+
+
+_fr_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s_) for s_ in STUDIES]
+for _i, (_lbl, _so) in enumerate((("no still-open line", ""), ("a still-open line", "Whether it lasts."))):
+    _cl = f"failed row honey cough {_i}"
+    _fr_put(_cl, _so)
+    t(f"failed rows: one with {_lbl} is not served from the saved table",
+      db.get_cached_verdict(_cl, 24) is None and db.get_cached_by_key(db.normalize_claim(_cl)) is None
+      and db.find_equivalent(_cl) is None)
+    _pg = c.get("/?q=" + urllib.parse.quote(_cl)).get_data(as_text=True)
+    t(f"  its shared link renders no verdict from it", 'id="server-result"' not in _pg and "ClaimReview" not in _pg)
+    fg.models.script = [Resp("(honey) AND (cough)"), Resp(VJ("complicated", [1], tldr="Fresh short answer."))]
+    _fr = P(_cl, ip=f"9.7.{_i}.1")
+    t(f"  and a check of the claim runs again and replaces it",
+      _fr.status_code == 200 and _fr.get_json()["cached"] is False and _fr.get_json()["tldr"] == "Fresh short answer."
+      and db.get_cached_verdict(_cl, 24)["tldr"] == "Fresh short answer.", _fr.get_json())
+pubmed.search_and_fetch = _fr_search
+
+# Nor is such a row in any public list, count, suggestion, feed or sitemap. An
+# ordinary answer is. An old real answer that lacks a newer field (its
+# still-open line) is in no public list either, since no page serves it, but
+# it still counts as a claim checked.
+import nextsteps as _ns_fr  # noqa: E402
+_FR_BAD, _FR_GOOD, _FR_OLD = ("Zanzibar clove oil heals warts", "Zanzibar honey soothes sore throats",
+                              "Zanzibar ginger eases nausea")
+_FR_CUR = "Ozempic cures alcoholism"   # a curated claim, so the sitemap and llms.txt would list it
+_ledger0 = db.ledger()["claims"]
+db.put_cached_verdict(_FR_GOOD, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+db.put_cached_verdict(_FR_OLD, "(ginger) AND (nausea)", "complicated", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Maybe, a little.", still_open=None)
+_fr_put(_FR_BAD)
+with db.get_conn() as _conn:
+    _fr_cur_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
+                                (db.normalize_claim(_FR_CUR),)).fetchone()["n"]
+_fr_put(_FR_CUR)
+for _x in (_FR_BAD, _FR_GOOD, _FR_OLD, _FR_BAD, _FR_GOOD, _FR_OLD):
+    db.log_check(_x, "complicated", "x", [])
+_fr_home = c.get("/").get_data(as_text=True)
+_fr_404 = c.get("/no-such-page-zanzibar").get_data(as_text=True)
+_fr_trend = [r_["claim"] for r_ in c.get("/api/trending").get_json()]
+_fr_sugg = [r_["claim_text"] for r_ in c.get("/api/suggest?q=zanzibar").get_json()["suggestions"]]
+_fr_rel = [r_["claim"] if "claim" in r_ else r_.get("claim_text") for r_ in
+           _ns_fr.related_checks("Zanzibar remedies", db.all_claims())]
+appmod._sitemap_memo["stamp"] = None
+_fr_map = c.get("/sitemap.xml").get_data(as_text=True)
+_fr_llms = c.get("/llms.txt").get_data(as_text=True)
+_fr_q = urllib.parse.quote(_FR_CUR)
+t("failed rows: one is not on the home page's Latest list, and an ordinary answer is",
+  _FR_BAD[1:] not in _fr_home and _FR_GOOD[1:] in _fr_home)
+t("failed rows: nor on the 404 page's list", _FR_BAD[1:] not in _fr_404 and _FR_GOOD[1:] in _fr_404)
+t("failed rows: nor in /api/trending, where the ordinary answer stays and an old one without its still-open line does not",
+  _FR_BAD not in _fr_trend and _FR_GOOD in _fr_trend and _FR_OLD not in _fr_trend, _fr_trend)
+t("failed rows: nor in type-ahead (/api/suggest), where the ordinary answer stays and an old one without its still-open line does not",
+  _FR_BAD not in _fr_sugg and _FR_GOOD in _fr_sugg and _FR_OLD not in _fr_sugg, _fr_sugg)
+t("failed rows: nor among the related claims a dead end offers (they read the same saved claims)",
+  _FR_BAD not in [r_["claim_text"] for r_ in db.all_claims()]
+  and _FR_GOOD in [r_["claim_text"] for r_ in db.all_claims()] and _FR_BAD not in str(_fr_rel), _fr_rel)
+t("failed rows: nor in the sitemap or llms.txt, even under a curated claim",
+  _fr_q not in _fr_map and f"?q={_fr_q})" not in _fr_llms
+  and all(r_["claim_text"] != _FR_CUR for r_ in db.saved_records(5000))
+  and all(r_["claim_text"] != _FR_CUR for r_ in db.recent_cached(5000)))
+t("failed rows: nor in the count of claims checked, which counts the two answers",
+  db.ledger()["claims"] == _ledger0 + 2 - _fr_cur_had, (db.ledger()["claims"], _ledger0, _fr_cur_had))
+with db.get_conn() as _conn:
+    _fr_kept = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE tldr = ?",
+                             (db.FAILED_REPLY_TLDR,)).fetchone()["n"]
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in (_FR_BAD, _FR_GOOD, _FR_OLD, _FR_CUR)))
+t("failed rows: the rows themselves stay in the database", _fr_kept >= 2, _fr_kept)
+appmod._sitemap_memo["stamp"] = None
+
+# ---- where the fixes meet: a wordless line is no line, in every list ----------
+# rc-saved-fix: a line needs a letter or digit (db._whole), so a saved row whose
+# short answer or still-open line is only a dash, a full stop or an invisible
+# character is no answer. The release branch's lists filter failed replies in
+# SQL; a wordless row is one too, so it is listed nowhere. So is an old real
+# answer that lacks the newer still-open field (above, and the test below).
+_WL_ROWS = (("Quokka oil heals warts", "\u2014", "Doses vary."),
+            ("Quokka tea soothes throats", "It helps a little.", "\u200b"),
+            ("Quokka honey eases coughs", "It may help.", "."),
+            ("Ozempic cures alcoholism", "\u2014", "Doses vary."))   # curated, for the sitemap and llms.txt
+_WL_GOOD = "Quokka ginger eases nausea"
+with db.get_conn() as _conn:
+    _wl_cur_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
+                                (db.normalize_claim(_WL_ROWS[3][0]),)).fetchone()["n"]
+for _wc, _wt, _wo in _WL_ROWS:
+    db.put_cached_verdict(_wc, "(quokka) AND (warts)", "true", "Because (Study 1).", ["P1"],
+                          [dict(s_) for s_ in STUDIES], tldr=_wt, still_open=_wo)
+db.put_cached_verdict(_WL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+for _x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]:
+    db.log_check(_x, "true", "x", [])
+    db.log_check(_x, "true", "x", [])
+_WL_BAD = [r_[0] for r_ in _WL_ROWS[:3]]
+t("wordless rows: none is a whole saved answer (db.whole), and the ordinary one is",
+  not any(db.whole({"tldr": _wt, "still_open": _wo}) for _wc, _wt, _wo in _WL_ROWS)
+  and db.whole({"tldr": "It helps a little.", "still_open": "For how long."}))
+_wl_home = c.get("/").get_data(as_text=True)
+_wl_404 = c.get("/no-such-page-quokka").get_data(as_text=True)
+_wl_trend = [r_["claim"] for r_ in c.get("/api/trending").get_json()]
+_wl_sugg = [r_["claim_text"] for r_ in c.get("/api/suggest?q=quokka").get_json()["suggestions"]]
+_wl_all = [r_["claim_text"] for r_ in db.all_claims()]
+_wl_rel = str(_ns_fr.related_checks("Quokka remedies", db.all_claims()))
+appmod._sitemap_memo["stamp"] = None
+_wl_map = c.get("/sitemap.xml").get_data(as_text=True)
+_wl_llms = c.get("/llms.txt").get_data(as_text=True)
+_wl_q = urllib.parse.quote(_WL_ROWS[3][0])
+t("wordless rows: none is on the home page's Latest list, and the ordinary answer is",
+  not any(b_[1:] in _wl_home for b_ in _WL_BAD) and _WL_GOOD[1:] in _wl_home)
+t("wordless rows: nor on the 404 page's list", not any(b_[1:] in _wl_404 for b_ in _WL_BAD) and _WL_GOOD[1:] in _wl_404)
+t("wordless rows: nor in /api/trending", not set(_WL_BAD) & set(_wl_trend) and _WL_GOOD in _wl_trend, _wl_trend)
+t("wordless rows: nor in type-ahead (/api/suggest)", not set(_WL_BAD) & set(_wl_sugg) and _WL_GOOD in _wl_sugg, _wl_sugg)
+t("wordless rows: nor among the claims related claims are drawn from",
+  not set(_WL_BAD) & set(_wl_all) and _WL_GOOD in _wl_all and not any(b_ in _wl_rel for b_ in _WL_BAD), _wl_rel)
+t("wordless rows: nor in the sitemap or llms.txt, even under a curated claim",
+  _wl_q not in _wl_map and f"?q={_wl_q})" not in _wl_llms
+  and all(r_["claim_text"] != _WL_ROWS[3][0] for r_ in db.saved_records(5000))
+  and all(r_["claim_text"] != _WL_ROWS[3][0] for r_ in db.recent_cached(5000)))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]))
+appmod._sitemap_memo["stamp"] = None
+
+# ---- final fix F1a: public lists show whole rows only -------------------------
+# No page serves a row without its short answer or its still-open line (every
+# saved-answer lookup needs db._whole), so no public list offers one: not
+# type-ahead, trending, related claims, the sitemap or llms.txt. An old row
+# saved before those columns existed, NULL or blank, is left out everywhere.
+_OL_ROWS = (("Wombat tea soothes throats", None, "Doses vary."),
+            ("Wombat honey eases coughs", "It may help.", None),
+            ("Wombat oil heals warts", "  ", "Doses vary."),
+            ("Ozempic cures alcoholism", None, None))   # curated, for the sitemap and llms.txt
+_OL_GOOD = "Wombat ginger eases nausea"
+for _oc, _ot, _oo in _OL_ROWS:
+    db.put_cached_verdict(_oc, "(wombat) AND (throat)", "true", "Because (Study 1).", ["P1"],
+                          [dict(s_) for s_ in STUDIES], tldr=_ot, still_open=_oo)
+db.put_cached_verdict(_OL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+for _x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]:
+    db.log_check(_x, "true", "x", [])
+    db.log_check(_x, "true", "x", [])
+_OL_BAD = [r_[0] for r_ in _OL_ROWS[:3]]
+t("F1a: _listable is the same test as _whole on old, wordless, failed and whole rows",
+  all(db._listable(r_) == db._whole(r_) for r_ in (
+      {"tldr": None, "still_open": "x"}, {"tldr": "x", "still_open": None}, {"tldr": " ", "still_open": "x"},
+      {"tldr": "\u2014", "still_open": "x"}, {"tldr": db.FAILED_REPLY_TLDR, "still_open": "x"},
+      {"tldr": "It helps.", "still_open": "For how long."})))
+_ol_trend = [r_["claim"] for r_ in c.get("/api/trending").get_json()]
+_ol_sugg = [r_["claim_text"] for r_ in c.get("/api/suggest?q=wombat").get_json()["suggestions"]]
+_ol_all = [r_["claim_text"] for r_ in db.all_claims()]
+_ol_rel = str(_ns_fr.related_checks("Wombat remedies", db.all_claims()))
+appmod._sitemap_memo["stamp"] = None
+_ol_map = c.get("/sitemap.xml").get_data(as_text=True)
+_ol_llms = c.get("/llms.txt").get_data(as_text=True)
+_ol_q = urllib.parse.quote(_OL_ROWS[3][0])
+t("F1a: an old row without a short answer or a still-open line is not in type-ahead, and a whole one is",
+  not set(_OL_BAD) & set(_ol_sugg) and _OL_GOOD in _ol_sugg, _ol_sugg)
+t("F1a: nor in /api/trending", not set(_OL_BAD) & set(_ol_trend) and _OL_GOOD in _ol_trend, _ol_trend)
+t("F1a: nor among the claims related claims are drawn from",
+  not set(_OL_BAD) & set(_ol_all) and _OL_GOOD in _ol_all and not any(b_ in _ol_rel for b_ in _OL_BAD), _ol_rel)
+t("F1a: nor in the sitemap or llms.txt, even under a curated claim",
+  _ol_q not in _ol_map and f"?q={_ol_q})" not in _ol_llms
+  and all(r_["claim_text"] != _OL_ROWS[3][0] for r_ in db.saved_records(5000))
+  and all(r_["claim_text"] != _OL_ROWS[3][0] for r_ in db.recent_cached(5000)))
+t("F1a: and no page serves any of them, which is why no list offers them",
+  all(db.get_cached_by_key(db.normalize_claim(b_)) is None for b_ in _OL_BAD))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]))
+appmod._sitemap_memo["stamp"] = None
+
+# ---- final fix F1b: a "true" suggestion that cannot be capped is left out --------
+# app._suggested reads the row behind a "true" for the low-certainty cap. When
+# that read gives nothing (a race with a replace, or a key that no longer
+# matches), the suggestion is left out of /api/suggest, never shown uncapped.
+_SB_TRUE, _SB_MIX = "Numbat honey soothes throats", "Numbat tea eases coughs"
+db.put_cached_verdict(_SB_TRUE, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+db.put_cached_verdict(_SB_MIX, "(tea) AND (cough)", "complicated", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Maybe.", still_open="For how long.")
+_sb_seen = [r_["claim_text"] for r_ in c.get("/api/suggest?q=numbat").get_json()["suggestions"]]
+_sb_get = db.get_cached_by_key
+db.get_cached_by_key = lambda key, *a, **k: None
+try:
+    _sb_race = c.get("/api/suggest?q=numbat").get_json()["suggestions"]
+    _sb_one = appmod._suggested({"claim_text": _SB_TRUE, "verdict": "true"})
+finally:
+    db.get_cached_by_key = _sb_get
+t("F1b: both suggestions show while the rows can be read", _SB_TRUE in _sb_seen and _SB_MIX in _sb_seen, _sb_seen)
+t("F1b: a 'true' whose row cannot be read for the cap is left out of /api/suggest, and the others stay",
+  [r_["claim_text"] for r_ in _sb_race] == [_SB_MIX] and _sb_race[0]["verdict"] == "complicated", _sb_race)
+t("F1b: _suggested gives None for it, never the raw 'true'", _sb_one is None, _sb_one)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                  (db.normalize_claim(_SB_TRUE), db.normalize_claim(_SB_MIX)))
+
+# ---- where the fixes meet: a reworded link reads the bounded lookup -----------
+# rc-site-fix renders a reworded link as the saved answer (app._equivalent);
+# rc-saved-fix bounds that lookup (db.find_equivalent, db.EQUIVALENT_SCAN). A
+# reworded link still renders the saved answer with its note; one whose row is
+# past the newest EQUIVALENT_SCAN is an unknown claim; and a claim folding
+# gives no key renders as an unknown claim, with no error.
+_BL_SAVED, _BL_TYPED = "Kelp lozenges shorten colds", "Do kelp lozenges shorten colds?"
+db.put_cached_verdict(_BL_SAVED, "(kelp) AND (cold)", "complicated", "Mixed (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Kelp may shorten a cold a little.", still_open="Doses vary.")
+_bl = c.get("/?q=" + urllib.parse.quote(_BL_TYPED))
+_bl_pg = _bl.get_data(as_text=True)
+t("meet: a reworded link, through the bounded lookup, renders the saved answer with its note",
+  _bl.status_code == 200 and "Kelp may shorten a cold a little." in _bl_pg
+  and "Showing the saved check for this claim. You typed \u201c<bdi>" in _bl_pg
+  and '<h1 class="claim-echo" id="claim-echo">' + _BL_SAVED + "</h1>" in _bl_pg)
+_bl_scan = db.EQUIVALENT_SCAN
+db.EQUIVALENT_SCAN = 1
+db.put_cached_verdict("Kelp newer row pushes the scan", "(kelp) AND (x)", "complicated", "Mixed (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Something.", still_open="Doses vary.")
+try:
+    _bl_far = c.get("/?q=" + urllib.parse.quote(_BL_TYPED)).get_data(as_text=True)
+finally:
+    db.EQUIVALENT_SCAN = _bl_scan
+t("  and a link whose saved row is past the newest EQUIVALENT_SCAN claims is an unknown claim, as the check finds",
+  'id="server-result"' not in _bl_far and 'id="typed-note" hidden></p>' in _bl_far)
+_NK_SAVED, _NK_TYPED = "H2O cures colds", "H\u2082O cures colds"
+db.put_cached_verdict(_NK_SAVED, "(water) AND (cold)", "insufficient", "None (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Not tested.", still_open="Everything.")
+_nk = c.get("/?q=" + urllib.parse.quote(_NK_TYPED))
+_nk_pg = _nk.get_data(as_text=True)
+t("meet: a link whose claim has no fold key renders as an unknown claim, with no error",
+  db.claim_fold(_NK_TYPED) == () and _nk.status_code == 200 and 'id="server-result"' not in _nk_pg
+  and "Not tested." not in _nk_pg and 'id="typed-note" hidden></p>' in _nk_pg, _nk.status_code)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?, ?)",
+                  tuple(db.normalize_claim(x) for x in (_BL_SAVED, "Kelp newer row pushes the scan", _NK_SAVED)))
+
+# ---- where the fixes meet: a wordless line ends on the "either" way out --------
+# rc-saved-fix: a line with no letter or digit is an empty line. rc-site-fix: a
+# reply with a line missing names both ways out. A wordless short answer or
+# still-open line reaches the reader with that exact message and both actions,
+# on the plain check and the streamed check.
+_EW_BODY = {"error": "The AI model sent back an answer with a line missing. "
+                     "Try again, or try the claim in other words.", "way_out": "either"}
+for _i, (_lbl, _kw) in enumerate((("short answer is a lone dash", {"tldr": "\u2014"}),
+                                  ("still-open line is a zero-width space", {"still_open": "\u200b"}))):
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _ew = P(f"either way out claim {_i}", ip=f"7.7.8.{_i + 1}")
+    t(f"meet: a reply whose {_lbl} gets the exact 'line missing' message and both ways out",
+      _ew.status_code == 502 and _ew.get_json() == _EW_BODY and _no_row(f"either way out claim {_i}"), _ew.get_json())
+    fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], **_kw)), Resp(VJ("complicated", [1], **_kw))]
+    _ew_r, _ew_evs = stream(f"either way out streamed {_i}", ip=f"7.7.8.{_i + 11}")
+    t(f"  and on the streamed check ({_lbl})",
+      _ew_evs[-1]["stage"] == "error" and _ew_evs[-1]["status"] == 502
+      and _ew_evs[-1]["error"] == _EW_BODY["error"] and _ew_evs[-1].get("way_out") == "either"
+      and _no_row(f"either way out streamed {_i}"), _ew_evs[-1])
+_ew_js = (ROOT / "static" / "app.js").read_text()
+t("  and the page turns 'either' into both actions, Retry this claim and Edit claim",
+  re.search(r'id="error-retry"[^>]*>\s*Retry this claim', (ROOT / "templates" / "index.html").read_text())
+  and 'if (wayOut === "either") return { retry: true, back: "Edit claim" };' in _ew_js)
+
+# ---- where the fixes meet: an out-of-date saved answer, reworded and on its page ----
+# rc-reading: a saved answer that relied on a study code now sets aside is out
+# of date. rc-site-fix and the equivalence lookup: the same claim in other
+# words reaches that saved row. Out of date is out of date whichever wording
+# reaches it; and the row's own page shows the saved answer as it stands.
+_OD_SAVED = "Creatine raises strength in boys"
+_OD_WORDED = "Does creatine raise strength in boys?"
+_od_rows = (_OD_SAVED, _OD_WORDED)
+db.put_cached_verdict(_OD_SAVED, "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", _hair["pmid"]],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+t("meet: the reworded claim reaches the saved row", appmod._equivalent(_OD_WORDED) == _OD_SAVED,
+  appmod._equivalent(_OD_WORDED))
+_od_pg = c.get("/?q=" + urllib.parse.quote(_OD_SAVED)).get_data(as_text=True)
+_od_sr = json.loads(_od_pg.split('<script id="server-result" type="application/json"')[1].split(">", 1)[1]
+                    .split("</script>")[0])
+_od_h = [s_ for s_ in _od_sr["studies"] if s_["pmid"] == _hair["pmid"]]
+t("meet: the out-of-date row's own page shows the saved answer, as any row past its window does",
+  _od_pg.count('id="server-result"') == 1 and _od_sr["claim"] == _OD_SAVED
+  and _od_sr["tldr"].startswith("Creatine raises strength and hormones"), (_od_sr.get("claim"), _od_sr.get("tldr")))
+t("  and it never both relies on a study and sets it aside: the study is cited, with no 'Set aside' group",
+  _od_h and _od_h[0]["cited_in_verdict"] and not _od_h[0].get("off_topic")
+  and "Set aside: off topic" not in _od_pg, _od_h)
+_calls0 = fg.models.calls
+fg.models.script = [Resp("(creatine) AND (strength)"), Resp(VJ("complicated", [1]))]
+_od_p = P(_OD_WORDED, ip="7.7.7.81").get_json()
+t("meet: the same claim in other words does not get that out-of-date answer: it is checked fresh",
+  _od_p.get("cached") is False and fg.models.calls > _calls0 and _od_p.get("claim") == _OD_SAVED,
+  (_od_p.get("cached"), fg.models.calls - _calls0, _od_p.get("claim")))
+db.put_cached_verdict(_OD_SAVED, "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", _hair["pmid"]],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+_calls0 = fg.models.calls
+fg.models.script = [Resp(VJ("complicated", [1]))]
+_od_r, _od_evs = stream(_OD_WORDED, ip="7.7.7.82")
+_od_done = [e_ for e_ in _od_evs if e_.get("stage") == "done"]
+t("  nor on the streamed check",
+  _od_done and _od_done[0]["result"].get("cached") is False and fg.models.calls > _calls0,
+  ([e_.get("stage") for e_ in _od_evs], fg.models.calls - _calls0))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                  tuple(db.normalize_claim(x) for x in _od_rows))
+
+# ---- where the fixes meet: an out-of-date answer whose fresh check fails -----
+# A saved answer in its window that _current calls out of date is checked
+# fresh. When that fresh check cannot finish, for any defined reason, the
+# reader gets the saved answer exactly as before this release, never an
+# error, and the failure overwrites nothing. Exact, misspelled and reworded
+# lookups, on the plain and the streamed check.
+import requests as _rq_sf  # noqa: E402
+import ratelimit as _rl_sf  # noqa: E402
+_SF = "Creatine raises strength in swimmers"
+_SF_TLDR = "Creatine raises strength and hormones in swimmers."
+
+
+def _sf_row():
+    db.put_cached_verdict(_SF, "(creatine) AND (" + _hair_out + ")", "true",
+                          "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", _hair["pmid"]],
+                          [dict(_RES_ONLY), dict(_hair)], tldr=_SF_TLDR, still_open="Doses vary.")
+    with db.get_conn() as _conn:
+        return dict(_conn.execute("SELECT * FROM verdict_cache WHERE claim_key = ?",
+                                  (db.normalize_claim(_SF),)).fetchone())
+
+
+def _sf_raise(exc):
+    def go(*a, **k):
+        raise exc
+    return go
+
+
+_SF_FAILS = (
+    ("the provider is busy", "weigh", verdict.ProviderError("unavailable", "busy")),
+    ("the provider is out of quota", "weigh", verdict.ProviderError("rate_limit", "quota")),
+    ("the reply is declined", "weigh", verdict.ProviderError("other", verdict.unread_reply(verdict.DECLINED), "reword")),
+    ("the reply is cut off", "weigh", verdict.ProviderError("other", verdict.unread_reply(verdict.CUT_OFF), "either")),
+    ("the reply cannot be read", "weigh", verdict.ProviderError("other", verdict.unread_reply(verdict.UNREADABLE))),
+    ("the reply has a line missing", "weigh", verdict.ProviderError("other", verdict.INCOMPLETE_REPLY, "either")),
+    ("the provider key is missing", "weigh", RuntimeError("No AI provider key is set.")),
+    ("PubMed cannot be reached", "search", _rq_sf.ConnectionError("down")),
+    ("something unforeseen breaks", "weigh", ValueError("boom")),
+    ("the reader's rate limit is reached", "limit", None),
+)
+_sf_row0 = _sf_row()
+# Many checks run here: fresh global windows, before and after, as elsewhere.
+ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
+ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+_sf_weigh, _sf_search, _sf_limit = verdict.weigh_evidence, pubmed.search_with_fallback, _rl_sf.check
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(_RES_ONLY), dict(_hair)], q, False)
+try:
+    for _i, (_lbl, _where, _exc) in enumerate(_SF_FAILS):
+        if _where == "weigh":
+            verdict.weigh_evidence = _sf_raise(_exc)
+        elif _where == "search":
+            pubmed.search_with_fallback = _sf_raise(_exc)
+        else:
+            _rl_sf.check = lambda key: (False, "Slow down a little.", 30)
+        for _how, _typed, _script in (
+                ("exact", _SF, []),
+                ("misspelled", "Creatin raises strenght in swimmers",
+                 [Resp("(creatine) AND (" + _hair_out + ")\nClaim: " + _SF)]),
+                ("reworded", "Does creatine raise strength in swimmers?", []),
+                ("misspelled and reworded", "Does creatin raise strenght in swimmers?",
+                 [Resp("(creatine) AND (" + _hair_out + ")\nClaim: Does creatine raise strength in swimmers?")])):
+            if _where == "limit" and _how.startswith("misspelled"):
+                continue    # the limit is met before the spelling is known: nothing saved is found yet
+            fg.models.script = list(_script)
+            _sf = P(_typed, ip=f"7.6.{_i}.1")
+            _sfj = _sf.get_json() or {}
+            t(f"stale on failure: when {_lbl}, a {_how} check gets the saved answer, not an error",
+              _sf.status_code == 200 and _sfj.get("cached") is True and _sfj.get("claim") == _SF
+              and (_sfj.get("tldr") or "").startswith(_SF_TLDR[:-1])
+              and (_sfj.get("typed") is None) == (_how == "exact"), (_sf.status_code, _sfj.get("error"), _sfj.get("typed")))
+            fg.models.script = list(_script)
+            _sf_r, _sf_evs = stream(_typed, ip=f"7.6.{_i}.2")
+            t(f"  and the streamed {_how} check too ({_lbl})",
+              _sf_evs and _sf_evs[-1]["stage"] == "done" and _sf_evs[-1]["result"]["cached"] is True
+              and _sf_evs[-1]["result"]["claim"] == _SF and not any(e_["stage"] == "error" for e_ in _sf_evs),
+              _sf_evs[-1] if _sf_evs else None)
+        with db.get_conn() as _conn:
+            _sf_now = dict(_conn.execute("SELECT * FROM verdict_cache WHERE claim_key = ?",
+                                         (db.normalize_claim(_SF),)).fetchone())
+        t(f"  and the failure overwrites nothing ({_lbl})",
+          {k: _sf_now[k] for k in _sf_now if k != "created_at"} == {k: _sf_row0[k] for k in _sf_row0 if k != "created_at"}
+          and _sf_now["created_at"] == _sf_row0["created_at"])
+        verdict.weigh_evidence, pubmed.search_with_fallback, _rl_sf.check = (
+            _sf_weigh, lambda q, max_results=8, surrogate="": ([dict(_RES_ONLY), dict(_hair)], q, False), _sf_limit)
+    # The misspelling call site: with the model at hand, the saved wording an
+    # out-of-date answer stands under is checked fresh, as on the other paths.
+    _calls0 = fg.models.calls
+    # (Its search was saved by the checks above, so only the verdict is asked for.)
+    fg.models.script = [Resp(VJ("complicated", [1]))]
+    _sf_ok = P("Creatin raises strenght in swimmers", ip="7.6.99.1").get_json()
+    t("meet: a misspelled claim whose saved wording is out of date is checked fresh",
+      _sf_ok.get("cached") is False and _sf_ok.get("claim") == _SF and _sf_ok.get("typed_reason") == "spelling"
+      and fg.models.calls - _calls0 == 1, (_sf_ok.get("cached"), _sf_ok.get("claim"), fg.models.calls - _calls0))
+    # And the second look after the spelling switch, for a reworded match.
+    _sf_row()
+    _calls0 = fg.models.calls
+    fg.models.script = [Resp(VJ("complicated", [1]))]
+    _sf_ok = P("Does creatin raise strenght in swimmers?", ip="7.6.99.2").get_json()
+    t("meet: a misspelled rewording of an out-of-date saved answer is checked fresh",
+      _sf_ok.get("cached") is False and _sf_ok.get("claim") == _SF and fg.models.calls - _calls0 == 1,
+      (_sf_ok.get("cached"), _sf_ok.get("claim"), fg.models.calls - _calls0))
+finally:
+    verdict.weigh_evidence, pubmed.search_with_fallback, _rl_sf.check = _sf_weigh, _sf_search, _sf_limit
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF),))
+    ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(100, 60)
+    ratelimit.GLOBAL_DAY = ratelimit.SlidingWindow(1000, 86400)
+# H9: a provider 503 with no saved answer: the page and the stream say the
+# service is having trouble, with the Retry, and no status number.
+_h9_503 = _run_wrap(_e503(), _e503(), _e503())[1]
+verdict.weigh_evidence = _sf_raise(_h9_503)
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(_RES_ONLY), dict(_hair)], q, False)
+try:
+    fg.models.script = [Resp("(creatine) AND (rowing)")]
+    _h9_p = P("Creatine helps rowers H9 never saved", ip="7.6.99.1")
+    fg.models.script = [Resp("(creatine) AND (rowing)")]
+    _h9_ev = stream("Creatine helps rowers H9 never saved", ip="7.6.99.2")[1][-1]
+finally:
+    verdict.weigh_evidence, pubmed.search_with_fallback = _sf_weigh, _sf_search
+_h9_pj = _h9_p.get_json() or {}
+t("H9: a provider 503 shows the trouble sentence and no status number, on the page and in the stream",
+  _h9_503.code == 503
+  and all("The AI service is having trouble." in str(x_.get("error")) and not re.search(r"\b[45]\d\d\b", str(x_.get("error")))
+          for x_ in (_h9_pj, _h9_ev)) and _h9_ev.get("stage") == "error", (_h9_pj, _h9_ev))
+# A GET never calls the model: the page, the card and the lists show the saved
+# row as stored until a fresh check replaces it.
+_sf_row()
+_calls0 = fg.models.calls
+_sf_pg = c.get("/?q=" + urllib.parse.quote(_SF))
+_sf_og = c.get("/og/" + urllib.parse.quote(db.normalize_claim(_SF), safe="") + ".png")
+c.get("/"); c.get("/api/suggest?q=creatine+swimmers"); c.get("/api/trending")
+t("stale on GET: the page and the card show the saved row, and no GET calls the model",
+  _sf_pg.status_code == 200 and _SF_TLDR[:-1] in _sf_pg.get_data(as_text=True) and _sf_og.status_code == 200
+  and _sf_og.mimetype == "image/png" and fg.models.calls == _calls0, (_sf_pg.status_code, _sf_og.status_code))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF),))
+
+# ---- where the fixes meet: a kept answer is never an out-of-date one ----------
+# rc-saved-fix keeps a saved answer past its window when the stamp and every
+# record are the same; rc-reading calls one that relied on a study code now
+# sets aside out of date. Both hold: same records and stamp, but relied on a
+# set-aside study, and it is checked fresh; listed only, and it is kept.
+_KS_Q = "(creatine) AND (" + _hair_out + ")"
+_KS_STUDIES = [dict(_RES_ONLY), dict(_hair)]
+
+
+def _ks_row(claim, cited):
+    db.put_cached_verdict(claim, _KS_Q, "true", "Strength rose (Study 1).", cited, [dict(s_) for s_ in _KS_STUDIES],
+                          tldr="Kept short answer.", still_open="Doses vary.", method_stamp=verdict.METHOD_STAMP)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                      (_OLD_DATE, db.normalize_claim(claim)))
+    db.put_cached_query(claim, verdict.QUERY_PROMPT_VERSION, _KS_Q, "", claim)
+
+
+_ks_search = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(s_) for s_ in _KS_STUDIES], q, False)
+try:
+    _KS_BAD, _KS_OK = "Creatine raises strength in rowers", "Creatine raises strength in cyclists"
+    _ks_row(_KS_BAD, ["MO1", _hair["pmid"]])
+    _ks_row(_KS_OK, ["MO1"])
+    t("meet: both rows have the same records and stamp the search finds now",
+      appmod._same_records(db.get_cached_by_key(db.normalize_claim(_KS_BAD))["studies"], _KS_STUDIES))
+    _calls0 = fg.models.calls
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made fresh.", still_open="Open."))]
+    _ks_b = P(_KS_BAD, ip="7.7.7.91").get_json()
+    t("meet: a saved answer that relied on a study code now sets aside is never kept, same records and stamp or not",
+      _ks_b.get("cached") is False and fg.models.calls > _calls0 and not (_ks_b.get("tldr") or "").startswith("Kept short answer"),
+      (_ks_b.get("cached"), fg.models.calls - _calls0, _ks_b.get("tldr")))
+    _ks_row(_KS_BAD, ["MO1", _hair["pmid"]])
+    _calls0 = fg.models.calls
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made fresh.", still_open="Open."))]
+    _ks_r, _ks_evs = stream(_KS_BAD, ip="7.7.7.92")
+    t("  nor on the streamed check",
+      _ks_evs[-1]["stage"] == "done" and _ks_evs[-1]["result"]["cached"] is False and fg.models.calls > _calls0,
+      (_ks_evs[-1].get("stage"), fg.models.calls - _calls0))
+    _calls0 = fg.models.calls
+    fg.models.script = []
+    _ks_o = P(_KS_OK, ip="7.7.7.93").get_json()
+    t("  while one that only listed that study is kept, with no model call",
+      _ks_o.get("cached") is True and (_ks_o.get("tldr") or "").startswith("Kept short answer") and fg.models.calls == _calls0,
+      (_ks_o.get("cached"), _ks_o.get("tldr"), fg.models.calls - _calls0))
+finally:
+    pubmed.search_with_fallback = _ks_search
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                      tuple(db.normalize_claim(x) for x in (_KS_BAD, _KS_OK)))
+
+# ---- The evidence line sizes only an effect on the claim's own outcome ----
+# Live run: "Cold showers boost immunity" read "Strong evidence of a large
+# effect", where the large effect was a rise in inflammation.
+_EL_ST = [_study("EL1", "Cold water immersion and health: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Inflammation increased with an effect size of 1.03. Immune function rose with an "
+                          "effect size of 1.03. There was no drop in salivary viral titer. The autism hazard ratio "
+                          "was 0.93 (95% CI 0.85 to 1.02). Deaths were lower with a relative risk of 0.83. "
+                          "CONCLUSIONS: Effects on immunity, autism and health were mixed.")]
+
+
+def _el_bd(effect_size, effect, evidence_=()):
+    return {"parts": [], "evidence": list(evidence_) or ["The review pooled 11 trials (Study 1)."],
+            "effect_size": effect_size, "strength": "", "applies_to": "", "not_applies_to": "",
+            "unknowns": "", "effect": effect}
+
+
+def _el(claim, query, verdict_, bd, tldr="The studies point both ways."):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, tldr, "The review pooled 11 trials (Study 1).",
+                                      ["EL1"], [dict(s) for s in _EL_ST], "http://x", still_open="Whether it lasts.",
+                                      breakdown=json.loads(json.dumps(bd)))["evidence_line"]
+
+
+_EL_LARGE = {"figure": "standardised mean difference 1.03", "label": "large",
+             "plain": "a difference of 1.03 standard deviations"}
+_EL_Q = "(cold shower OR cold water immersion) AND (immune system OR immunity OR immune function)"
+_el_off = _el("Cold showers boost immunity", _EL_Q, "complicated",
+              _el_bd("Inflammation increased with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+                     "standard deviations, a large effect (Study 1).", _EL_LARGE))
+_el_on = _el("Cold showers boost immunity", _EL_Q, "complicated",
+             _el_bd("Immune function rose with an effect size of 1.03 (Study 1).", _EL_LARGE))
+t("effect line: a figure whose sentence names another outcome gives the evidence line no size",
+  _el_off == "Strong evidence, but no plain yes or no", _el_off)
+t("  and a figure whose sentence names the claim's outcome keeps it",
+  _el_on == "Strong evidence of a large effect, but no plain yes or no", _el_on)
+# ---- final fix F8: the effect box follows the line's size gate ---------------
+# Live: cold showers showed "a large effect" for a figure about inflammation.
+# When line_label withholds the size from the line, code writes no size word
+# anywhere in the answer; the figure stays with its own sentence.
+def _f8(claim, query, verdict_, bd):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, "The studies point both ways.",
+                                      "The review pooled 11 trials (Study 1).", ["EL1"], [dict(s) for s in _EL_ST],
+                                      "http://x", still_open="Whether it lasts.", breakdown=json.loads(json.dumps(bd)))
+_F8_SAID = ("Inflammation increased with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+            "standard deviations, a large effect (Study 1).")
+_f8_bd = dict(_el_bd(_F8_SAID, _EL_LARGE), says=["Inflammation increased with an effect size of 1.03 (Study 1).",
+                                                  "That is a difference of 1.03 standard deviations, a large effect (Study 1)."])
+_f8_off = _f8("Cold showers boost immunity", _EL_Q, "complicated", _f8_bd)
+_f8_text = json.dumps(_f8_off["breakdown"]).lower()
+t("F8: a withheld size leaves the effect label blank in the response",
+  _f8_off["breakdown"]["effect"]["label"] == "" and _f8_off["breakdown"]["effect"]["figure"], _f8_off["breakdown"]["effect"])
+t("F8: and the code-written size ('a large effect') is in neither the box nor the research lines",
+  "large effect" not in _f8_text and "a large" not in _f8_text, _f8_off["breakdown"])
+t("F8: the figure stays, with the outcome its own sentence names and code's plain arithmetic, and the box does not "
+  "say no size is reported",
+  _f8_off["breakdown"]["effect_size"] == "Inflammation increased with an effect size of 1.03 (Study 1). "
+                                         "That is a difference of 1.03 standard deviations (Study 1)."
+  and breakdown.NO_EFFECT_SIZE not in json.dumps(_f8_off), _f8_off["breakdown"]["effect_size"])
+_f8_on = _f8("Cold showers boost immunity", _EL_Q, "complicated",
+             _el_bd("Immune function rose with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+                    "standard deviations, a large effect (Study 1).", _EL_LARGE))
+t("F8: a size the line carries keeps its label and its sentence",
+  _f8_on["breakdown"]["effect"]["label"] == "large" and "a large effect" in _f8_on["breakdown"]["effect_size"])
+# H8: a "That is ..." sentence travels with the figure it explains, and with
+# the size withheld one that only repeats the figure goes.
+_H8_REP = ("Inflammation increased with an effect size of 1.03 (Study 1). Immune function rose with an effect size "
+           "of 1.03 (Study 1). That is an effect size of 1.03, a large effect (Study 1).")
+_h8_rep = _f8("Cold showers boost immunity", _EL_Q, "complicated",
+              dict(_el_bd(_H8_REP, _EL_LARGE), says=["Inflammation increased with an effect size of 1.03 (Study 1).",
+                                                     "That is an effect size of 1.03, a large effect (Study 1)."]))
+t("H8: with the size withheld, a 'That is' sentence that only repeats the figure goes, box and research lines",
+  _h8_rep["breakdown"]["effect"]["label"] == ""
+  and _h8_rep["breakdown"]["effect_size"] == ("Inflammation increased with an effect size of 1.03 (Study 1). "
+                                              "Immune function rose with an effect size of 1.03 (Study 1).")
+  and _h8_rep["breakdown"]["says"] == ["Inflammation increased with an effect size of 1.03 (Study 1)."],
+  (_h8_rep["breakdown"]["effect_size"], _h8_rep["breakdown"]["says"]))
+t("  one that converts the figure stays (the F8 case, and arithmetic in percent)",
+  "That is a difference of 1.03 standard deviations (Study 1)." in _f8_off["breakdown"]["effect_size"]
+  and breakdown.translations_follow({"says": ["Risk fell with a hazard ratio of 0.46 (Study 1).",
+                                              "That is about 54% lower risk over time (Study 1)."],
+                                     "effect_size": "The odds ratio was 0.88 (Study 2). That is, about 12% lower odds (Study 2)."},
+                                    True)["says"][1] == "That is about 54% lower risk over time (Study 1).")
+_H8_NULL = "That is no clear difference between the groups, because the result was not statistically significant (Study 1)."
+_h8_iv = _f8("Cold showers boost immunity", _EL_Q, "complicated",
+             dict(_el_bd("Hospital stays did not fall with a relative risk of 0.81 (Study 1). " + _H8_NULL, None),
+                  says=["Later trials showed no significant improvement (Study 1).", _H8_NULL,
+                        "Who was studied: adults (Study 1)."]))
+t("H8: a 'That is' sentence whose figure sentence is not shown before it in the same block goes",
+  _H8_NULL not in _h8_iv["breakdown"]["says"] and "Who was studied: adults (Study 1)." in _h8_iv["breakdown"]["says"],
+  _h8_iv["breakdown"]["says"])
+_h8_side = breakdown.translations_follow({"says": ["Hospital stays did not fall, relative risk 0.81 (Study 1).", _H8_NULL],
+                                          "effect_size": "The relative risk was 0.81 (Study 1). " + _H8_NULL})
+t("  and beside its figure it stays",
+  _h8_side["says"][1] == _H8_NULL and _h8_side["effect_size"].endswith(_H8_NULL), _h8_side)
+# J3: only the "That is ..." sentences code writes are held to their figure.
+_J3_MODEL = ["That is because trials used different doses (Study 2).", "That is why the evidence is mixed (Study 1).",
+             "That is not what the trials found (Study 1)."]
+_j3 = [breakdown.translations_follow({"says": ["Studies disagree on dose (Study 1).", x],
+                                      "effect_size": "Trials disagreed (Study 1). " + x}, w)
+       for x in _J3_MODEL for w in (False, True)]
+# K4: read without indexing past the end, so holding every "That is" again
+# fails here instead of stopping the suite.
+t("J3: a model sentence that only starts 'That is' stays after a sentence with no figure",
+  all(len(r_["says"]) == 2 and r_["says"][1] in _J3_MODEL and r_["effect_size"].endswith(r_["says"][1]) for r_ in _j3), _j3)
+t("K4: J3 in full: each model 'That is' sentence comes back where it was, in 'What the research says' and in the field",
+  [r_["says"] for r_ in _j3] == [["Studies disagree on dose (Study 1).", x] for x in _J3_MODEL for w in (False, True)]
+  and [r_["effect_size"] for r_ in _j3] == ["Trials disagreed (Study 1). " + x for x in _J3_MODEL for w in (False, True)], _j3)
+_J3_CODE = [_H8_NULL, "That is about 54% lower risk over time (Study 1).", "That is, about 12% lower odds (Study 1).",
+            "That is a difference of 0.4 standard deviations (Study 1).", "That is an effect size of 1.03 (Study 1).",
+            "That is a large effect (Study 1).", "That is a risk drop of 26% (Study 1)."]
+t("  and every form code writes (or the faithfulness rewrite leaves) still goes after a sentence with no figure",
+  all(breakdown.code_translation(x) for x in _J3_CODE) and not any(breakdown.code_translation(x) for x in _J3_MODEL)
+  and all(breakdown.translations_follow({"says": ["Studies disagree on dose (Study 1).", x]})["says"]
+          == ["Studies disagree on dose (Study 1)."] for x in _J3_CODE))
+# L2: one that only repeats goes whether or not the size is withheld.
+_L2_FIG = "The risk drop was 26% among those who achieved about 11 MET h/week (Study 1)."
+_l2 = [breakdown.translations_follow({"says": [_L2_FIG, "That is a risk drop of 26% (Study 1)."],
+                                      "effect_size": _L2_FIG + " That is a risk drop of 26% (Study 1)."}, w) for w in (False, True)]
+t("L2: a 'That is' sentence that only repeats its figure goes, size withheld or not",
+  all(r_["says"] == [_L2_FIG] and r_["effect_size"] == _L2_FIG for r_ in _l2), _l2)
+_L2_HR = "Mortality was lower (HR = 0.46, 95% CI 0.30 to 0.70) (Study 6)."
+_L2_KEEP = ["That is a hazard ratio of 0.46, meaning a lower risk over time (Study 6).",
+            "That is about 54% lower risk (Study 6)."]
+# L3: it follows a figure sentence about the same study. Live: intermittent
+# fasting, Study 4's null translation under Study 1's weight-loss range.
+_L3_ONE = "Trials showed weight loss ranging from 0.8 percent to 13.0 percent of baseline weight (Study 1)."
+_L3_FOUR = "The average difference in weight loss was 0.26 kg (Study 4)."
+_l3 = breakdown.translations_follow({"says": ["Reviews found equal weight loss (Studies 1, 3, 4).", _L3_ONE, _H8_NULL.replace("Study 1", "Study 4"),
+                                              "Who was studied: adults (Study 1)."],
+                                     "effect_size": _L3_FOUR + " " + _H8_NULL.replace("Study 1", "Study 4")})
+t("L3: a 'That is' sentence under another study's figure goes; under its own study's figure it stays",
+  _l3["says"] == ["Reviews found equal weight loss (Studies 1, 3, 4).", _L3_ONE, "Who was studied: adults (Study 1)."]
+  and _l3["effect_size"].endswith(_H8_NULL.replace("Study 1", "Study 4")), _l3)
+t("  one that spells out or converts the figure stays",
+  all(breakdown.translations_follow({"says": [_L2_HR, x]}, w)["says"] == [_L2_HR, x]
+      for x in _L2_KEEP for w in (False, True)))
+_f8_db = "Cold showers boost immunity F8"
+db.put_cached_verdict(_f8_db, _EL_Q, "complicated", "The review pooled 11 trials (Study 1).", ["EL1"],
+                      [dict(s) for s in _EL_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",
+                      breakdown=_f8_bd)
+_f8_pg = c.get("/?q=" + urllib.parse.quote(_f8_db)).get_data(as_text=True)
+t("F8: the server-rendered page shows the figure and no code-written size word",
+  "Inflammation increased with an effect size of 1.03" in _f8_pg and "large effect" not in _f8_pg)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_f8_db),))
+
+# ---- G5: unsized handles every shape its writers give a size ----
+# Live: "Smoking causes lung cancer" kept "That is a large effect (Study 3)."
+# in the box with the size withheld: a faithfulness rewrite had left only
+# the size in code's sentence. The shapes come from the writers: ground's
+# arithmetic with ", a {label} effect", ground's arithmetic alone (the model
+# had said the size), and the lead with only the size.
+_G5_ST = [_study("G5A", "Cold water immersion and health: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Inflammation was higher with a relative risk of 2.5. Inflammation was higher "
+                          "with a relative risk of 1.3 in one subgroup. Inflammation was higher with a relative "
+                          "risk of 1.05 in another. Immune function was not measured.")]
+_g5_bds = []
+for _g5_x in ("2.5", "1.3", "1.05"):
+    _g5_eff = "Inflammation was higher with a relative risk of %s (Study 1)" % _g5_x
+    _g5_lab = evidence.effect_size(_g5_eff)["label"]
+    for _g5_tail in ("", ", a %s effect" % _g5_lab):
+        _g5_g = breakdown.ground({"evidence": ["Inflammation was higher after cold water immersion in the review (Study 1)."],
+                                  "says": [], "effect_size": _g5_eff + _g5_tail + ".", "parts": []},
+                                 _G5_ST, verdict.tidy_prose, "Cold showers boost immunity")
+        _g5_bds.append(dict(_g5_g, says=breakdown.sentences(_g5_g["effect_size"])))
+    _g5_only = (_g5_eff + ". " + breakdown.TRANSLATION_LEAD + "a %s effect (Study 1)." % _g5_lab)
+    _g5_bds.append(dict(_g5_bds[-2], effect_size=_g5_only, says=breakdown.sentences(_g5_only)))
+_G5_SIZE = re.compile(r"\b(?:small|moderate|large)\b", re.I)
+def _g5_code_sized(r):
+    bd = r["breakdown"] or {}
+    said = breakdown.sentences(bd.get("effect_size") or "") + list(bd.get("says") or [])
+    return [x for x in said if x.startswith(breakdown.TRANSLATION_LEAD) and _G5_SIZE.search(x)]
+def _g5_check(bd):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response("Cold showers boost immunity", _EL_Q, "complicated", "The studies point both ways.",
+                                      "Inflammation was higher (Study 1).", ["G5A"], [dict(s) for s in _G5_ST], "http://x",
+                                      still_open="Whether it lasts.", breakdown=json.loads(json.dumps(bd)))
+_g5_out = [_g5_check(b_) for b_ in _g5_bds]
+t("G5: the shapes come from the writers, each with a code size word before the gate",
+  len(_g5_bds) == 9 and all(any(x.startswith(breakdown.TRANSLATION_LEAD) and _G5_SIZE.search(x)
+                                for x in b_["says"]) or _G5_SIZE.search(b_["effect_size"]) for b_ in _g5_bds),
+  [b_["effect_size"] for b_ in _g5_bds])
+t("G5: with the size withheld, no code-written size word is left in the box or the research lines, in any shape",
+  all(o["breakdown"]["effect"]["label"] == "" and not _g5_code_sized(o) for o in _g5_out),
+  [_g5_code_sized(o) for o in _g5_out])
+t("  nor in the line, the short answer or what is still open",
+  not any(_G5_SIZE.search(" ".join([o["evidence_line"] or "", o["tldr"], o["still_open"]])) for o in _g5_out),
+  [o["evidence_line"] for o in _g5_out])
+t("  where the size was the whole statement the sentence goes, with its citation, and the figure's own sentence stays",
+  all(o["breakdown"]["effect_size"].startswith("Inflammation was higher with a relative risk")
+      and breakdown.TRANSLATION_LEAD not in o["breakdown"]["effect_size"] for o in _g5_out[2::3]),
+  [o["breakdown"]["effect_size"] for o in _g5_out[2::3]])
+t("  and the arithmetic stays where code wrote it beside the size",
+  all("That is about " in o["breakdown"]["effect_size"] for o in _g5_out[0::3]),
+  [o["breakdown"]["effect_size"] for o in _g5_out[0::3]])
+# G5b: the size comes out of a "That is" sentence only where what is left is
+# still whole; where words that depend on it follow, the sentence goes.
+_G5B_BROKEN = "That is a large increase in risk, about 3 times the odds (Study 3)."
+_g5b = lambda x: breakdown.unsized({"says": [x], "effect_size": x, "effect": {"label": "large"}})
+_g5b_all = [breakdown.unsized(dict(b_, says=list(b_["says"]) + [_G5B_BROKEN])) for b_ in _g5_bds]
+_g5b_said = [x for o in _g5b_all for x in breakdown.sentences(o["effect_size"] or "") + list(o["says"])]
+t("G5b: a size phrase that words depend on takes its whole sentence with it, citation and all",
+  _g5b(_G5B_BROKEN)["says"] == [] and _g5b(_G5B_BROKEN)["effect_size"] == "", _g5b(_G5B_BROKEN))
+t("  one that ends its clause comes out and the arithmetic stays; one that is the whole statement goes",
+  _g5b("That is about 12% lower odds, a small effect (Study 2).")["says"] == ["That is about 12% lower odds (Study 2)."]
+  and _g5b("That is a large effect (Study 3).")["says"] == [])
+t("  and no output over the writers' shapes is broken or holds a size word",
+  not any(x.startswith(("That is in", "That is of", "That is ,")) for x in _g5b_said)
+  and not any(x.startswith(breakdown.TRANSLATION_LEAD) and _G5_SIZE.search(x) for x in _g5b_said), _g5b_said)
+_g5_db = "Cold showers boost immunity G5"
+db.put_cached_verdict(_g5_db, _EL_Q, "complicated", "Inflammation was higher (Study 1).", ["G5A"],
+                      [dict(s) for s in _G5_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",
+                      breakdown=_g5_bds[2])
+_g5_pg = c.get("/?q=" + urllib.parse.quote(_g5_db)).get_data(as_text=True)
+_g5_ev = stream(_g5_db, ip="9.7.5.1")[1][-1].get("result") or {}
+t("G5: the server page and the stream agree: the figure, and no code-written size",
+  "Inflammation was higher with a relative risk" in _g5_pg
+  and not re.search(r"(?:That is|,) an? (?:small|moderate|large) effect", _g5_pg)
+  and _g5_ev.get("breakdown", {}).get("effect_size") == _g5_out[2]["breakdown"]["effect_size"]
+  and not _g5_code_sized(_g5_ev), (_g5_ev.get("breakdown") or {}).get("effect_size"))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_g5_db),))
+
+# ---- final fix F9: a guidance answer shows its line whenever a study is listed --
+# Live: antibiotics for a cold was a guidance answer whose only cited study was
+# set aside as an opinion piece, so the line was blank.
+_F9_ST = [{"pmid": "OP9", "title": "Antibiotics and the common cold: a view", "url": "https://pubmed.ncbi.nlm.nih.gov/OP9/",
+           "abstract": "Antibiotics do not help colds caused by viruses.", "publication_types": ["Editorial"],
+           "background": True, "background_why": "opinion piece", "year": "2020", "authors": [], "journal": "J"}]
+_F9_TLDR = verdict.GUIDELINE_LEAD + "antibiotics do not treat colds. Ask a doctor about this."
+with appmod.app.test_request_context("/"):
+    _f9_one = appmod._check_response("Antibiotics cure a cold", "(antibiotics) AND (common cold)", "false", _F9_TLDR,
+                                     "Guidance says no.", [], [dict(s) for s in _F9_ST], "http://x",
+                                     still_open="Whether new drugs help.")
+    _f9_none = appmod._check_response("Antibiotics cure a cold", "(antibiotics) AND (common cold)", "false", _F9_TLDR,
+                                      "Guidance says no.", [], [], "http://x", still_open="Whether new drugs help.")
+t("F9: a guidance answer with a study listed but none relied on shows the guidance line, not a blank",
+  _f9_one["evidence_line"] == verdict.GUIDANCE_LINE, _f9_one["evidence_line"])
+t("F9: with no study listed at all, the line stays blank for the page's own wording",
+  _f9_none["evidence_line"] == "", _f9_none["evidence_line"])
+t("F9: the guidance line has the same words in verdict, display and the script",
+  verdict.GUIDANCE_LINE == _display.GUIDANCE_LINE
+  and '  const GUIDANCE_LINE = "' + verdict.GUIDANCE_LINE + '";' in (ROOT / "static" / "app.js").read_text())
+t("F9: the server's confidence line shows it, not 'none of the studies tests this claim'",
+  _display.confidence_line(_f9_one) == verdict.GUIDANCE_LINE + ".", _display.confidence_line(_f9_one))
+if _shutil.which("node"):
+    _f9src = (ROOT / "static" / "app.js").read_text()
+    _f9fn = ("function confidenceLine(data) {"
+             + _f9src.split("function confidenceLine(data) {")[1].split("\n}\n")[0] + "\n}\n")
+    _f9js = _subprocess.run(["node", "-e", _f9fn + "console.log(confidenceLine(" + json.dumps(_f9_one) + "));"],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    t("F9: and the script's confidence line says the same", _f9js == verdict.GUIDANCE_LINE + ".", _f9js)
+
+_EL_NONE = {"figure": "", "label": "none", "null": True, "plain": "no clear difference between the groups"}
+_el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)", "false",
+               _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
+               tldr="No, it does not cure it.")
+t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
+  _el_cure == "Strong evidence, and none of it shows a cure", _el_cure)
+_el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
+              _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
+                     dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
+t("  and a short name in the outcome group (ASD) does not make the outcome unreadable",
+  _el_asd == "Strong evidence of no clear effect", _el_asd)
+_el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
+              _el_bd("Deaths were lower with a relative risk of 0.83 (Study 1).",
+                     {"figure": "relative risk 0.83", "label": "small", "plain": "about 17% lower risk"}),
+              tldr="Yes, coffee drinkers lived longer.")
+t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
+  _el_gen == "Strong evidence for this claim", _el_gen)
+
+# ---- The evidence line sizes only a figure that moves the way the claim says ----
+# Live run: "Smoking causes lung cancer" (True) read "a moderate effect", from
+# a relative risk of 0.72 for heavy smokers who cut down.
+_ED_ST = [_study("EL1", "Smoking and lung cancer: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Heavy smokers who cut down had a relative risk of 0.72 for lung cancer. "
+                          "Current smokers had a relative risk of 4.21 for lung cancer. Depression odds ratio "
+                          "was 0.83. CONCLUSIONS: Smoking raises lung cancer risk.")]
+
+
+def _ed(claim, query, effect_size, effect, verdict_="true"):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, "Yes.", "The review found it (Study 1).",
+                                      ["EL1"], [dict(s) for s in _ED_ST], "http://x", still_open="Dose.",
+                                      breakdown=json.loads(json.dumps(_el_bd(effect_size, effect))))["evidence_line"]
+
+
+_ED_Q = "(smoking) AND (lung cancer)"
+_ed_down = _ed("Smoking causes lung cancer", _ED_Q,
+               "Heavy smokers who cut down had a relative risk of 0.72 for lung cancer (Study 1).",
+               {"figure": "relative risk 0.72", "label": "moderate", "plain": "about 28% lower risk"})
+_ed_up = _ed("Smoking causes lung cancer", _ED_Q,
+             "Current smokers had a relative risk of 4.21 for lung cancer (Study 1).",
+             {"figure": "relative risk 4.21", "label": "large", "plain": "about 321% higher risk"})
+t("effect direction: a claim that something raises a risk, answered True, is not sized by a figure of lower risk",
+  _ed_down == "Strong evidence for this claim", _ed_down)
+t("  and a figure of higher risk under it keeps its size",
+  _ed_up == "Strong evidence for this claim, a large effect", _ed_up)
+_ed_mirror = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
+                 "The depression odds ratio was 0.83 (Study 1).",
+                 {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% lower odds"})
+_ed_mirror_up = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
+                    "The depression odds ratio was 0.83 (Study 1).",
+                    {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% higher odds"})
+t("  and the mirror case: a lowers claim keeps a figure of lower odds and loses one of higher odds",
+  _ed_mirror == "Strong evidence for this claim, a small effect"
+  and _ed_mirror_up == "Strong evidence for this claim", (_ed_mirror, _ed_mirror_up))
+t("  and a claim that says no direction ('improves'), or a figure that says none, gives no size",
+  breakdown.claim_direction("Creatine improves memory") is None
+  and breakdown.claim_direction("Smoking does not cause lung cancer") is None
+  and breakdown.figure_direction({"plain": "a difference of 0.3 standard deviations"},
+                                     "The effect size for memory was 0.3 (Study 1).") is None
+  and breakdown.figure_direction({"plain": "a difference of 1.03 standard deviations"},
+                                     "Inflammation increased with an effect size of 1.03 (Study 1).") == "up")
+
+# ---- A review that calls its own evidence thin lowers the evidence line ----
+# Live run: the cold water review concluded "the current evidence base is
+# constrained by few RCTs, small sample sizes", and the line said "Strong".
+_TH_ABS = ("RESULTS: Eleven studies were included. CONCLUSIONS: Cold water has time-dependent effects. "
+           "However, the current evidence base is constrained by few RCTs, small sample sizes, and a lack "
+           "of diversity in study populations.")
+_TH = _study("TH1", "Cold water immersion: a systematic review", types=["Systematic Review"], abstract=_TH_ABS)
+_TH_OK = _study("TH2", "Cold water immersion: a systematic review", types=["Systematic Review"],
+                abstract="RESULTS: Forty large trials were included. CONCLUSIONS: The evidence is consistent.")
+t("thin evidence: a relied-on review that says its evidence is held back by few or small studies lowers the line",
+  evidence.evidence_line("complicated", [_TH], ["TH1"]) == "Low certainty evidence, so no plain yes or no"
+  and evidence.evidence_line("true", [_TH_OK], ["TH2"]) == "Strong evidence for this claim",
+  (evidence.evidence_line("complicated", [_TH], ["TH1"]), evidence.evidence_line("true", [_TH_OK], ["TH2"])))
+t("  and the family is general: 'limited by the small number of included trials' and 'small sample sizes limit'",
+  evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: The findings are limited by the small number of included trials."))
+  and evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: Small sample sizes limit these results."))
+  and not evidence.says_thin(dict(_TH, abstract="METHODS: Searches were limited to English. Studies were small."))
+  and not evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: The evidence is limited by few trials.",
+                                  publication_types=["Randomized Controlled Trial"])))
+t("  and it never raises a line already at very low",
+  evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")],
+                         ["TH1"]).startswith("Very low certainty"),
+  evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")], ["TH1"]))
+
+# ---- Plain words: "including" is swapped only where it brings in examples ----
+# Live run: "with likely ranges like zero" (sugar and hyperactivity).
+t("plain including: the verb of a range or interval stays 'including'",
+  breakdown.plain("The effect size ranged from -0.14 to 0.30, with confidence intervals including zero (Study 4).")
+  .endswith("including zero (Study 4).")
+  and "including 1" in breakdown.plain("The 95% CI including 1 (Study 2).")
+  and "including the null" in breakdown.plain("The likely ranges all including the null (Study 2).")
+  and "including no effect" in breakdown.plain("The range was wide, including no effect (Study 2)."),
+  breakdown.plain("with confidence intervals including zero (Study 4)."))
+t("  and where it brings in examples it still reads 'like'",
+  breakdown.plain("Trials including adults and children (Study 1).") == "Trials like adults and children (Study 1).",
+  breakdown.plain("Trials including adults and children (Study 1)."))
+
+# ---- Plain words: "efficacy" becomes a clause only where a clause can stand ----
+# Live log: "The pooled how well it works is about 69 percent".
+t("plain efficacy: after a modifier the word stays, so no sentence reads 'the pooled how well it works'",
+  breakdown.plain("The pooled efficacy is about 69 percent (Study 4).") == "The pooled efficacy is about 69 percent (Study 4).",
+  breakdown.plain("The pooled efficacy is about 69 percent (Study 4)."))
+t("  and after a verb that asks what was measured, or at the head of a sentence, the clause still reads",
+  breakdown.plain("The trial tested efficacy in adults (Study 1).") == "The trial tested how well it works in adults (Study 1)."
+  and breakdown.plain("Efficacy was 69 percent (Study 1).") == "How well it works was 69 percent (Study 1)."
+  and breakdown.plain("It lacked efficacy (Study 1).") == "It lacked an effect (Study 1).",
+  breakdown.plain("The trial tested efficacy in adults (Study 1)."))
+
+# ---- Plain words keep the verb's number, and name men and women ----
+# Live run: "these short term immune changes lowers the risk of", "72 male people".
+t("plain agreement: a plural subject keeps a plural verb after 'protect against' and 'ward off' are swapped",
+  breakdown.soften("It is unknown if these changes protect against illness (Study 1).")
+  == "It is unknown if these changes lower the risk of illness (Study 1)."
+  and breakdown.soften("These foods ward off colds (Study 1).") == "These foods lower the risk of colds (Study 1)."
+  and breakdown.soften("Vitamin C protects against colds (Study 1).") == "Vitamin C lowers the risk of colds (Study 1).",
+  breakdown.soften("It is unknown if these changes protect against illness (Study 1)."))
+_sx = [breakdown.plain(x) for x in (
+    "A trial of 72 male participants (Study 3).",
+    "72 female subjects lost weight (Study 1).",
+    "Male and female participants took part (Study 1).",
+    "Male or female individuals were eligible (Study 1).",
+    "Male, female participants were enrolled (Study 1).",
+    "It enrolled female participants of childbearing age (Study 2).",
+    "It followed female participants and their babies (Study 2).",
+    "It enrolled female participants (university students) (Study 2).",
+    "The trial had 40 male participants aged 8 (Study 2).")]
+t("  and 'male participants' reads 'males', 'female subjects' 'females', with no age the sentence did not state",
+  _sx == ["A trial of 72 males (Study 3).", "72 females lost weight (Study 1).",
+          "Males and females took part (Study 1).", "Males or females were eligible (Study 1).",
+          "Males and females were enrolled (Study 1).",
+          "It enrolled females of childbearing age (Study 2).",
+          "It followed females and their babies (Study 2).",
+          "It enrolled females (university students) (Study 2).",
+          "The trial had 40 males aged 8 (Study 2)."]
+  and not any(re.search(r"\b(?:men|women|boys|girls)\b", x, re.I) for x in _sx)
+  and not hasattr(breakdown, "_YOUNG"), _sx)
+
+# ---- where the fixes meet: the evidence line over two readings, made the new way ----
+# rc-reading builds the line over the studies used and with the set-aside ones
+# put back, and shows the less sure. rc-guidance gives the line only a size
+# about the claim itself (line_label, withheld), lowers it for a thin review
+# (evidence.says_thin), and under a guidance-set answer shows GUIDANCE_LINE.
+# Joined: each reading is built the new way, the less sure one shows, and the
+# guidance line replaces it last.
+_TR_REV = _study("TR1", "Creatine supplementation and muscle strength: a systematic review and meta-analysis",
+                 types=["Systematic Review", "Meta-Analysis"],
+                 abstract="BACKGROUND: Strength matters.\nMETHODS: We pooled 40 randomized trials with 3,000 adults.\n"
+                          "RESULTS: Muscle strength rose with creatine (moderate certainty evidence).\n"
+                          "CONCLUSIONS: Creatine raises muscle strength.")
+_TR_THIN = _study("TR2", "Creatine and hair loss: a systematic review", types=["Systematic Review"],
+                  abstract="BACKGROUND: Creatine is taken to raise muscle strength.\nMETHODS: We pooled trials of "
+                           "creatine and hair.\nRESULTS: Hair density did not change. The evidence is limited by the "
+                           "small number of included trials.\nCONCLUSIONS: No hair loss was seen.")
+_TR_THIN["off_topic"] = verdict.OFF_OUTCOME
+_TR_Q, _TR_C = "(creatine) AND (" + _hair_out + ")", "Creatine raises muscle strength"
+
+
+def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd=None, claim=_TR_C):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, _TR_Q, verdict_value, tldr, "Strength rose (Study 1).", ["TR1"],
+                                      [dict(s_) for s_ in studies], "http://localhost",
+                                      still_open="Doses vary.", breakdown=bd)["evidence_line"]
+
+
+t("meet: the thin review is one code sets aside, and it says its evidence is thin",
+  evidence.measured_outcome(_TR_THIN, _hair_out, "", "(creatine)") is False and evidence.says_thin(_TR_THIN))
+t("meet: a thin review among the put-back studies lowers the line shown",
+  _tr_line([_TR_REV]).startswith("Moderate certainty") and _tr_line([_TR_REV, _TR_THIN]).startswith("Low certainty"),
+  (_tr_line([_TR_REV]), _tr_line([_TR_REV, _TR_THIN])))
+_TR_BD = {"effect": {"label": "large", "effect_size": "Inflammation rose with an effect size of 1.03 (Study 1)."}}
+t("meet: a size about another outcome is withheld in both readings, and the less sure line still shows",
+  "large" not in _tr_line([_TR_REV], bd=_TR_BD) and "large" not in _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)
+  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).startswith("Low certainty"),
+  (_tr_line([_TR_REV], bd=_TR_BD), _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)))
+_TR_G = verdict.GUIDELINE_LEAD + "creatine is fine for most adults."
+# A guidance-set answer is one on a claim guidance is read for (H3): the
+# lead on "Creatine raises muscle strength" is no guidance answer.
+_TR_GC = "Creatine supplements are safe in pregnancy"
+t("meet: a guidance-set answer shows the fixed line whatever either reading says",
+  _tr_line([_TR_REV], tldr=_TR_G, verdict_value="false", claim=_TR_GC) == verdict.GUIDANCE_LINE
+  and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false", claim=_TR_GC) == verdict.GUIDANCE_LINE
+  and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false") != verdict.GUIDANCE_LINE,
+  (_tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false", claim=_TR_GC),))
+
+# ---- where the fixes meet: 'no clear effect' needs both rules ---------------
+# rc-reading round 3: a sentence with a significant figure is never a null
+# (breakdown.all_null). rc-guidance: the line carries a label, "none" included,
+# only when the figure's own sentence names the claim's outcome (line_label).
+# Each case below gets past one rule alone; the page says "no clear effect"
+# only for the one that passes both.
+def _nc_line(effect):
+    with appmod.app.test_request_context("/"):
+        r_ = verdict._read_verdict(json.dumps({
+            "verdict": "complicated", "tldr": "The diet is linked to weight change, but only in an observational study.",
+            "explanation": "Adults on the diet were followed (Study 1).", "still_open": "Whether it causes it.",
+            "cited_study_numbers": [1], "relevance": [{"study": 1, "subject": True, "outcome": True, "in_people": True,
+                                                       "finding": "for"}],
+            "parts": [], "evidence": ["Adults on the diet were followed for 5 years (Study 1)."], "effect_size": effect,
+            "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""}), None, [dict(x) for x in _WT_ST],
+            "This diet helps weight loss", subject="(diet)", outcome="(weight loss OR body weight)", surrogate="")
+        return appmod._check_response("This diet helps weight loss", "(diet) AND (weight loss OR body weight)",
+                                      r_["verdict"], r_["tldr"], r_["explanation"], r_["cited_studies"],
+                                      [dict(x) for x in _WT_ST], "http://x", still_open="Whether it causes it.",
+                                      breakdown=r_.get("breakdown")).get("evidence_line") or ""
+
+
+_NC_SIG = "Body weight showed no clear difference, while adults lost 4.1 kg more (p < 0.001) (Study 1)."
+_NC_OFF = "Waist size changed by 0.4 cm, which was not statistically significant (Study 1)."
+_NC_BOTH = "Body weight changed by 0.4 kg, which was not statistically significant (Study 1)."
+t("meet: a null beside a significant figure names the outcome (line_label alone would pass it), all_null refuses it",
+  breakdown.names_outcome(_NC_SIG, "(weight loss OR body weight)") and not breakdown.all_null(_NC_SIG, _WT_ST))
+t("  a null about another outcome is all null (all_null alone would pass it), line_label refuses it",
+  breakdown.all_null(_NC_OFF, _WT_ST) and not breakdown.names_outcome(_NC_OFF, "(weight loss OR body weight)"))
+t("  and on the page neither says 'no clear effect', while a null on the claim's own outcome does",
+  "no clear effect" not in _nc_line(_NC_SIG) and "no clear effect" not in _nc_line(_NC_OFF)
+  and "no clear effect" in _nc_line(_NC_BOTH), (_nc_line(_NC_SIG), _nc_line(_NC_OFF), _nc_line(_NC_BOTH)))
+# Round 3 skips a number that cannot be a ratio when it reads a figure; the
+# evidence line finds the figure's sentence through the same reader. They
+# agree on which sentence the figure came from, a heart rate beside it or not.
+_FS = {"effect_size": "Mean HR was 72 per minute (Study 1). The hazard ratio for death was 0.80 (Study 1).",
+       "evidence": [], "parts": [], "effect": {"label": "small", "figure": "hazard ratio 0.80"}}
+_fs_sent = breakdown.figure_sentence(_FS)
+t("meet: figure_sentence and effect_size agree on the sentence a figure came from, past a number that is no ratio",
+  evidence.effect_size("Mean HR was 72 per minute (Study 1).") is None
+  and _fs_sent.startswith("The hazard ratio for death was 0.80")
+  and (evidence.effect_size(_fs_sent) or {}).get("figure") == (evidence.effect_size(_FS["effect_size"]) or {}).get("figure"),
+  (_fs_sent, evidence.effect_size(_FS["effect_size"])))
+
+# ---- L1: a retracted paper, or a journal notice, is never relied on ----------
+_RT_ST = [_study("RT1", "Vinegar and blood sugar in adults with diabetes: a randomized trial",
+                 types=["Journal Article", "Randomized Controlled Trial", "Retracted Publication"],
+                 abstract="Adults with type 2 diabetes were randomized to vinegar or placebo for 12 weeks."),
+          _study("RT2", "Vinegar and fasting glucose: a randomized trial",
+                 abstract="Adults with type 2 diabetes were randomized to vinegar or placebo for 8 weeks."),
+          _study("RT3", "Retraction notice: vinegar and blood sugar", types=["Retraction of Publication"],
+                 abstract="This article has been retracted at the request of the authors.")]
+_rt_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]
+t("L1: a retracted paper and a retraction notice are background for any claim, with the reason in plain words",
+  evidence.background_reasons(_RT_ST, "Vinegar lowers blood sugar")
+  == {"RT1": evidence.BG_RETRACTED, "RT3": evidence.BG_NOTICE}
+  and evidence.background_reasons(_RT_ST, "Vinegar lowers blood sugar in rats")["RT1"] == evidence.BG_RETRACTED)
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2, 3]))]
+_rt = P("Retracted vinegar lowers blood sugar", ip="7.7.31.1").get_json()
+_rt_by = {s["pmid"]: s for s in _rt.get("studies") or []}
+t("  a fresh check never counts the retracted paper or the notice as used, whatever the model cites",
+  [p for p, s in _rt_by.items() if s["cited_in_verdict"]] == ["RT2"]
+  and _rt_by["RT1"]["background"] and _rt_by["RT1"]["background_why"] == "retracted by the journal"
+  and _rt_by["RT3"]["background"], _rt_by)
+t("  and the study list says so in plain words",
+  _display.study_why(_rt_by["RT1"]) == "Background only, not counted: retracted by the journal.")
+t("  and the list of what each study concluded leaves it out",
+  "RT1" not in json.dumps(((_rt.get("breakdown") or {}).get("concluded")) or []), _rt.get("breakdown"))
+fg.models.script = [Resp("(vinegar) AND (blood sugar)"), Resp(VJ("true", [1, 2]))]
+_r, _evs = stream("Retracted vinegar lowers blood sugar streamed", ip="7.7.31.2")
+_rts = [s for s in _evs[-1].get("result", {}).get("studies", []) if s["cited_in_verdict"]]
+_rtb = {s["pmid"]: s for s in _evs[-1].get("result", {}).get("studies", [])}
+t("  and a streamed check the same: its final event sets the cited retracted paper aside, with the reason",
+  _evs[-1]["stage"] == "done" and [s["pmid"] for s in _rts] == ["RT2"]
+  and _rtb["RT1"]["background"] and _rtb["RT1"]["background_why"] == "retracted by the journal"
+  and not _rtb["RT1"]["cited_in_verdict"], _evs[-1])
+# A saved row from before the rule, citing the retracted paper.
+_rt_old = [dict(x) for x in _RT_ST]
+db.put_cached_verdict("Retracted vinegar saved row", "(vinegar) AND (blood sugar)", "true",
+                      "Both trials found it (Study 1) (Study 2).", ["RT1", "RT2"], _rt_old,
+                      tldr="It lowers blood sugar.", still_open="Longer trials.")
+_rt_row = db.get_cached_verdict("Retracted vinegar saved row", 24)
+t("  a saved answer that cites it is out of date, as one citing any study now set aside",
+  _rt_row and appmod._current(_rt_row, "Retracted vinegar saved row") is None)
+_rt_pg = appmod._check_response("Retracted vinegar saved row", _rt_row["search_query"], _rt_row["verdict"],
+                                _rt_row["tldr"], _rt_row["explanation"], _rt_row["cited_studies"],
+                                _rt_row["studies"], "http://x", still_open="Longer trials.")
+t("  and if it is ever served as saved, the page still sets the paper aside and no sentence leans on it alone",
+  [s["pmid"] for s in _rt_pg["studies"] if s["cited_in_verdict"]] == ["RT2"]
+  and next(s for s in _rt_pg["studies"] if s["pmid"] == "RT1")["background"]
+  and "(Study 1)" not in _rt_pg["explanation"], _rt_pg["explanation"])
+t("  the recent list and the card read the same set",
+  appmod._listed({"claim_text": "x", "verdict": "true", "cited": ["RT1"], "studies": _rt_old,
+                  "search_query": "(vinegar) AND (blood sugar)"})["verdict"] == "insufficient"
+  and (og.strongest_cited(_rt_old, _display.relied_pmids(["RT1", "RT2"], _rt_old)) or ("",))[0] != ""
+  and _display.relied_pmids(["RT1", "RT2"], _rt_old) == {"RT2"})
+_rt_html = c.get("/?q=" + urllib.parse.quote("Retracted vinegar lowers blood sugar")).data.decode()
+t("  the server-rendered page shows it set aside with the reason",
+  "Background only, not counted: retracted by the journal." in _rt_html)
+_rt_v = verdict._format_study_for_prompt(1, dict(_RT_ST[0]), claim="Vinegar lowers blood sugar")
+t("  the model is told the journal retracted it and not to cite it",
+  "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
+# H1: no sentence a reader sees as reasoning cites a study the page shows as
+# set aside (withdrawn, a journal notice, or off topic), on any path.
+_H1_A = {"retracted": _study("HA1", "Turmeric for knee pain: a randomized trial",
+                             types=["Journal Article", "Randomized Controlled Trial", "Retracted Publication"],
+                             abstract="Knee pain fell with turmeric over 8 weeks."),
+         "notice": _study("HA1", "Retraction notice: turmeric for knee pain", types=["Retraction of Publication"],
+                          abstract="Knee pain fell with turmeric over 8 weeks. This article has been retracted."),
+         "off topic": _study("HA1", "Turmeric and knee pain in a trial", types=["Randomized Controlled Trial"],
+                             abstract="Knee pain fell with turmeric over 8 weeks.")}
+_H1_B = _study("HB2", "Turmeric and knee pain: a second randomized trial", types=["Randomized Controlled Trial"],
+               abstract="Pain scores fell with turmeric in a second trial of adults with knee pain.")
+_H1_SAID_A = "Knee pain fell with turmeric (Study 1)."
+_H1_SAID_B = "Pain scores fell with turmeric in a second trial (Study 2)."
+# J1: in every cell, a sentence citing the set-aside study and the other one
+# goes whole: its words were written about both, so none is re-credited.
+_H1_MIX = "Both trials enrolled adults with knee pain (Studies 1, 2)."
+_H1_OFF = [{"study": 1, "subject": False, "outcome": True, "in_people": True, "finding": "unclear"},
+           {"study": 2, "subject": True, "outcome": True, "in_people": True, "finding": "for"}]
+def _h1_seen(r):
+    return [r["explanation"] or "", r["tldr"] or ""] + breakdown.prose_of(r.get("breakdown"))
+_h1_bad, _h1_lost, _h1_n = [], [], 0
+for _h1_kind, _h1_a in _H1_A.items():
+    for _h1_listed in (True, False):
+        for _h1_cites in (True, False):
+            for _h1_other in (True, False):
+                _nums = ([1] if _h1_listed else []) + ([2] if _h1_other else [])
+                _expl = " ".join(([_H1_SAID_A] if _h1_cites else []) + ([_H1_SAID_B] if _h1_other else []) + [_H1_MIX])
+                _extra = {"relevance": _H1_OFF} if _h1_kind == "off topic" else {}
+                for _h1_way in ("plain", "streamed", "saved"):
+                    _h1_n += 1
+                    _cl = "Turmeric eases knee pain H1 %d" % _h1_n
+                    pubmed.search_and_fetch = lambda q, max_results=8, surrogate='', _a=_h1_a: [dict(_a), dict(_H1_B)]
+                    if _h1_way == "saved":
+                        _st = [dict(_h1_a, **({"off_topic": verdict.OFF_SUBJECT + "."} if _h1_kind == "off topic" else {})),
+                               dict(_H1_B)]
+                        with appmod.app.test_request_context("/"):
+                            _h1_r = appmod._check_response(_cl, "(turmeric) AND (knee pain)", "true", "Turmeric eases knee pain.",
+                                                           _expl, [x["pmid"] for x, n_ in zip(_st, (1, 2)) if n_ in _nums],
+                                                           _st, "http://x", still_open="Longer trials.",
+                                                           breakdown=dict(_el_bd(_expl, None, [_expl]), says=breakdown.sentences(_expl)))
+                    else:
+                        fg.models.script = [Resp("(turmeric) AND (knee pain)"),
+                                            Resp(VJ("true", _nums, tldr="Turmeric eases knee pain.", explanation=_expl, **_extra))]
+                        if _h1_way == "plain":
+                            _h1_r = P(_cl, ip="7.9.%d.%d" % (_h1_n // 200, _h1_n % 200 + 1)).get_json()
+                        else:
+                            _h1_r = stream(_cl, ip="7.8.%d.%d" % (_h1_n // 200, _h1_n % 200 + 1))[1][-1].get("result") or {}
+                    _cell = (_h1_kind, _h1_listed, _h1_cites, _h1_other, _h1_way)
+                    if not _h1_r.get("studies"):
+                        _h1_bad.append((_cell, "no result", _h1_r)); continue
+                    _sa = next(s for s in _h1_r["studies"] if s["pmid"] == "HA1")
+                    _num = [s["pmid"] for s in _h1_r["studies"]].index("HA1") + 1
+                    if _sa["cited_in_verdict"] or any(_num in breakdown.refs(x, len(_h1_r["studies"])) for x in _h1_seen(_h1_r)):
+                        _h1_bad.append((_cell, [x for x in _h1_seen(_h1_r) if _num in breakdown.refs(x, len(_h1_r["studies"]))]))
+                    if any("Both trials enrolled adults" in x for x in _h1_seen(_h1_r)):
+                        _h1_bad.append((_cell, "mixed sentence kept", [x for x in _h1_seen(_h1_r) if "Both trials" in x]))
+                    if _h1_other and "Pain scores fell with turmeric in a second trial" not in _h1_r["explanation"]:
+                        _h1_lost.append((_cell, _h1_r["explanation"]))
+                    if not _h1_other and _h1_r["verdict"] != "insufficient":
+                        _h1_bad.append((_cell, "stamp", _h1_r["verdict"]))
+t("H1: in every cell no prose field cites the set-aside study, a sentence citing it with another goes whole, "
+  "and with nothing else relied on the stamp is insufficient",
+  _h1_n == 72 and not _h1_bad, _h1_bad[:6])
+t("  and a sentence that cites only a relied-on study is still there", not _h1_lost, _h1_lost[:6])
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_H1_A["retracted"])]
+fg.models.script = [Resp("(turmeric) AND (knee pain)"), Resp(VJ("true", [1], tldr="Turmeric eases knee pain.",
+                                                                explanation=_H1_SAID_A))]
+_h1_rx = P("Turmeric eases knee pain, the reviewer's case", ip="7.9.9.1").get_json()
+fg.models.script = [Resp("(turmeric) AND (knee pain)"), Resp(VJ("true", [1], tldr="Turmeric eases knee pain.",
+                                                                explanation=_H1_SAID_A))]
+_h1_rxs = stream("Turmeric eases knee pain, the reviewer's case streamed", ip="7.9.9.2")[1][-1].get("result") or {}
+t("H1: the reviewer's case, plain and streamed: the sentence is gone, the paper set aside, the stamp insufficient",
+  all(r_["verdict"] == "insufficient" and _H1_SAID_A[:-10] not in json.dumps(r_.get("explanation"))
+      and r_["studies"][0]["background"] and not r_["studies"][0]["cited_in_verdict"] for r_ in (_h1_rx, _h1_rxs)),
+  [(r_.get("verdict"), r_.get("explanation")) for r_ in (_h1_rx, _h1_rxs)])
+# J1, the reviewer's case: a mixed citation in "Who was studied" under a
+# saved answer. Off-topic Study 1's volunteers are not credited to Study 2.
+_J1_WHO = "Who was studied: lab models and 48 volunteers with knee pain (Studies 1, 2)."
+with appmod.app.test_request_context("/"):
+    _j1 = appmod._check_response("Turmeric eases knee pain J1", "(turmeric) AND (knee pain)", "complicated",
+                                 "The studies point both ways.", _H1_SAID_B + " Both were small (Studies 1, 2).",
+                                 ["HB2"], [dict(_H1_A["off topic"], off_topic=verdict.OFF_SUBJECT + "."), dict(_H1_B)],
+                                 "http://x", still_open="Longer trials.",
+                                 breakdown=dict(_el_bd("", None, [_H1_SAID_B]), says=[_H1_SAID_B, _J1_WHO]))
+t("J1: the reviewer's case: a sentence citing an off-topic and a relied-on study goes whole, not re-credited",
+  _H1_SAID_B in _j1["breakdown"]["says"] and not any("48 volunteers" in x for x in breakdown.prose_of(_j1["breakdown"]))
+  and "Both were small" not in _j1["explanation"] and _j1["explanation"].startswith("Pain scores fell"),
+  (_j1["breakdown"]["says"], _j1["explanation"]))
+t("J1: drop_any_citing returns text with no such sentence byte for byte, and drops a mixed one whole",
+  breakdown.drop_any_citing("One.  Two\n(Study 2).", {1}, 3) == "One.  Two\n(Study 2)."
+  and breakdown.drop_any_citing("Kept (Study 2). Gone (Studies 1, 2).", {1}, 3) == "Kept (Study 2)."
+  and breakdown.drop_any_citing("Gone (Study 1).", {1}, 3) == "")
+_H1_PLAIN = "Nothing here tests the claim in people. A second trial is under way."
+with appmod.app.test_request_context("/"):
+    _h1_same = appmod._check_response("Turmeric eases knee pain H1 same", "(turmeric) AND (knee pain)", "insufficient",
+                                      "Unproven either way.", _H1_PLAIN, [], [dict(_H1_A["retracted"]), dict(_H1_B)],
+                                      "http://x", still_open="Longer trials.")
+t("H1: with nothing relied on and no set-aside study cited, the explanation comes back unchanged",
+  _h1_same["explanation"] == _H1_PLAIN, _h1_same["explanation"])
+# J5: the breakdown is cleaned too, where nothing later would do it: a
+# saved "Not enough evidence" answer relies on nothing, so no gate holds its
+# prose to sources, yet its fields cite the retracted Study 1.
+with appmod.app.test_request_context("/"):
+    _j5 = appmod._check_response("Turmeric eases knee pain J5", "(turmeric) AND (knee pain)", "insufficient",
+                                 "Unproven either way.", _H1_PLAIN, [], [dict(_H1_A["retracted"]), dict(_H1_B)],
+                                 "http://x", still_open="Longer trials.",
+                                 breakdown={"parts": [], "evidence": [_H1_SAID_A + " A second trial is under way."],
+                                            "effect_size": "", "strength": "Trials disagree (Studies 1, 2).",
+                                            "applies_to": "Adults with knee pain (Study 1).", "not_applies_to": "",
+                                            "unknowns": "", "says": [_H1_SAID_A, "A second trial is under way."]})
+t("J5: a breakdown prose field that cites a set-aside study loses that sentence, the rest stays",
+  not any(1 in breakdown.refs(x, 2) for x in breakdown.prose_of(_j5["breakdown"]))
+  and _j5["breakdown"]["evidence"] == ["A second trial is under way."]
+  and _j5["breakdown"]["says"] == ["A second trial is under way."], _j5["breakdown"])
+# H7: a withdrawn paper also read as off topic is shown, and counted once,
+# as withdrawn. Live: a "Retracted Publication" shown as "tests something
+# other than what this claim is about".
+def _h7_ok(r):
+    s_ = next((x for x in r.get("studies") or [] if x["pmid"] == "HA1"), None)
+    return (s_ is not None and not s_["off_topic"] and s_["background"] and not s_["cited_in_verdict"]
+            and s_["background_why"] == evidence.BG_RETRACTED
+            and _display.study_why(s_) == "Background only, not counted: retracted by the journal."
+            and r["evidence"]["off_topic"] == 0 and r["evidence"]["background"] == 1
+            and evidence.BG_RETRACTED in r["evidence"]["background_kinds"])
+_h7 = []
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_H1_A["retracted"]), dict(_H1_B)]
+for _h7_i, _h7_way in enumerate(("plain", "streamed")):
+    fg.models.script = [Resp("(turmeric) AND (knee pain)"),
+                        Resp(VJ("true", [2], tldr="Turmeric eases knee pain.", explanation=_H1_SAID_B, relevance=_H1_OFF))]
+    _cl = "Turmeric eases knee pain H7 %s" % _h7_way
+    _h7.append(P(_cl, ip="7.9.8.%d" % (_h7_i + 1)).get_json() if _h7_way == "plain"
+               else stream(_cl, ip="7.9.8.%d" % (_h7_i + 3))[1][-1].get("result") or {})
+with appmod.app.test_request_context("/"):
+    _h7.append(appmod._check_response("Turmeric eases knee pain H7 saved", "(turmeric) AND (knee pain)", "true",
+                                      "Turmeric eases knee pain.", _H1_SAID_B, ["HB2"],
+                                      [dict(_H1_A["retracted"], off_topic=verdict.OFF_SUBJECT + "."), dict(_H1_B)],
+                                      "http://x", still_open="Longer trials."))
+_h7_html = c.get("/?q=" + urllib.parse.quote("Turmeric eases knee pain H7 plain")).get_data(as_text=True)
+pubmed.search_and_fetch = _rt_search
+t("H7: a paper both off topic and retracted shows the retracted reason, plain, streamed and saved, counted once",
+  len(_h7) == 3 and all(_h7_ok(r_) for r_ in _h7),
+  [next((x for x in r_.get("studies") or [] if x["pmid"] == "HA1"), None) and
+   (next(x for x in r_["studies"] if x["pmid"] == "HA1")["off_topic"], r_["evidence"]["off_topic"]) for r_ in _h7])
+t("  and the server page says retracted, not off topic, for it",
+  "Background only, not counted: retracted by the journal." in _h7_html
+  and "Read and set aside: " + verdict.OFF_SUBJECT.rstrip(".") not in _h7_html)
+pubmed.search_and_fetch = _rt_search
+
+# ---- where the rounds meet: final fixes and rc-live-fix --------------------------
+# F8 (a withheld size is said nowhere by code) meets L4 (a false answer to a
+# cure claim with no size says the evidence does not show the promise).
+_mc = _f8("Cold showers cure the common cold", "(cold shower) AND (common cold)", "false", _f8_bd)
+_mc_text = json.dumps(_mc).lower()
+t("meet F8 and L4: a false answer to a cure claim whose size is withheld shows the cure line and no code size word",
+  "none of it shows a cure" in _mc["evidence_line"] and _mc["breakdown"]["effect"]["label"] == ""
+  and not re.search(r"\b(?:small|moderate|large) effect", _mc_text), (_mc["evidence_line"], _mc["breakdown"]))
+# F9 (the guidance line whenever a study is listed) meets L1 (a retracted
+# paper is background): the only cited study is retracted.
+with appmod.app.test_request_context("/"):
+    _mg = appmod._check_response("Stop taking insulin and treat diabetes with vinegar", "(vinegar) AND (diabetes)",
+                                 "false", _F9_TLDR,
+                                 "Guidance says no (Study 1).", ["RT1"], [dict(_RT_ST[0])], "http://x",
+                                 still_open="Whether it helps at all.")
+_mg_s = _mg["studies"][0]
+t("meet F9 and L1: a guidance answer whose only cited study is retracted shows the guidance line",
+  _mg["evidence_line"] == verdict.GUIDANCE_LINE and _display.confidence_line(_mg) == verdict.GUIDANCE_LINE + ".",
+  _mg["evidence_line"])
+t("  and the paper is shown as retracted, not used",
+  not _mg_s["cited_in_verdict"] and _mg_s["background"] and _mg_s["tier"] == "retracted"
+  and _display.study_why(_mg_s) == "Background only, not counted: retracted by the journal.", _mg_s)
+# G2: with every citation set aside, the saved answer follows the fresh
+# check's rule (verdict.guidance_may_rate): guidance alone sets False on a
+# forgo-treatment claim, and never "safe" for a pregnancy; a general
+# guideline-topic claim stays "Not enough evidence" with the guidance
+# sentence after the untested takeaway.
+_G2_OT = dict(_study("OT1", "Sun exposure habits in office workers", types=["Observational Study"]),
+              off_topic="tests something other than what this claim is about.")
+_G2_CASES = [("Stop taking insulin and treat diabetes with vinegar", "false",
+              "people with type one diabetes need insulin.", verdict.FORGO_DOCTOR, dict(_RT_ST[0])),
+             ("Ibuprofen is safe during pregnancy", "true",
+              "ibuprofen is safe to take in pregnancy.", verdict.PREGNANCY_DOCTOR, dict(_RT_ST[0])),
+             ("Sunscreen prevents skin cancer", "true",
+              "daily sunscreen use lowers the risk of skin cancer.", "", _G2_OT)]
+_g2 = {}
+for _g2_i, (_g2_c, _g2_v, _g2_says, _g2_doc, _g2_st) in enumerate(_G2_CASES):
+    with appmod.app.test_request_context("/"):
+        _g2_saved = appmod._check_response(
+            _g2_c, "(x) AND (y)", _g2_v, (verdict.GUIDELINE_LEAD + _g2_says + " " + _g2_doc).strip(),
+            "Guidance says so (Study 1).", [_g2_st["pmid"]], [dict(_g2_st)], "http://x",
+            still_open="Whether a trial would settle it.")
+    verdict.guideline_view = _guide(_g2_v, _g2_says)
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_g2_c),))
+        _conn.execute("DELETE FROM query_cache")
+    fg.models.script = [Resp("q"), Resp(VJ(_g2_v, [], tldr="It works."))]
+    _g2_fresh = P(_g2_c, ip="9.7.2.%d" % (_g2_i + 1)).get_json()
+    verdict.guideline_view = lambda claim: None
+    _g2[_g2_c] = (_g2_saved, _g2_fresh)
+_g2_f = _g2[_G2_CASES[0][0]][0]
+t("G2: a guidance False on a forgo-treatment claim whose only citation is retracted keeps False and the guidance line",
+  _g2_f["verdict"] == "false" and _g2_f["evidence_line"] == verdict.GUIDANCE_LINE, (_g2_f["verdict"], _g2_f["evidence_line"]))
+for _g2_c, _g2_label in ((_G2_CASES[1][0], "a pregnancy claim that says safe, set True by guidance, its only citation retracted"),
+                         (_G2_CASES[2][0], "a protective-practice claim set True by guidance, its only citation set aside")):
+    _g2_s = _g2[_g2_c][0]
+    _g2_says = [x[2] for x in _G2_CASES if x[0] == _g2_c][0]
+    t("G2: " + _g2_label + ": Not enough evidence, the guidance sentence after the untested takeaway, no guidance line",
+      _g2_s["verdict"] == "insufficient" and _g2_s["evidence_line"] != verdict.GUIDANCE_LINE
+      and _g2_s["tldr"] == verdict.UNTESTED_TLDR + " " + verdict.GUIDELINE_LEAD + _g2_says
+      and not verdict.from_guidance(_g2_s["tldr"], _g2_c), (_g2_s["verdict"], _g2_s["tldr"], _g2_s["evidence_line"]))
+t("G2: for each case a fresh check with nothing cited and the saved answer with everything set aside give the same stamp",
+  all(_s["verdict"] == _f["verdict"] for _s, _f in _g2.values())
+  and [_f["verdict"] for _s, _f in _g2.values()] == ["false", "insufficient", "insufficient"],
+  {k: (v[0]["verdict"], v[1]["verdict"], v[1]["tldr"]) for k, v in _g2.items()})
+t("  and the same takeaway where the stamp is Not enough evidence",
+  all(_s["tldr"] == _f["tldr"] for _s, _f in list(_g2.values())[1:]),
+  {k: (v[0]["tldr"], v[1]["tldr"]) for k, v in _g2.items()})
+t("  and one rule says when guidance alone may rate, for both paths",
+  "guidance_may_rate" in _inspect.getsource(verdict.follow_guidelines)
+  and "guidance_may_rate" in _inspect.getsource(appmod._nothing_relied)
+  and "_nothing_relied" in _inspect.getsource(appmod._check_response))
+# G2b: every list shows the stamp the page shows, by the same decision
+# (app._nothing_relied over verdict.guidance_may_rate).
+_g2b = {}
+for _g2_c, _g2_v, _g2_says, _g2_doc, _g2_st in _G2_CASES:
+    _g2_t = (verdict.GUIDELINE_LEAD + _g2_says + " " + _g2_doc).strip()
+    db.put_cached_verdict(_g2_c, "(x) AND (y)", _g2_v, "Guidance says so (Study 1).", [_g2_st["pmid"]],
+                          [dict(_g2_st)], tldr=_g2_t, still_open="Whether a trial would settle it.")
+    _g2_row = db.get_cached_by_key(db.normalize_claim(_g2_c))
+    _g2_l = appmod._listed({"claim_text": _g2_row["claim_text"], "verdict": _g2_row["verdict"],
+                            "search_query": _g2_row.get("search_query") or "", "tldr": _g2_row.get("tldr") or "",
+                            "studies": _g2_row["studies"], "cited": _g2_row["cited_studies"]})
+    _g2_s = appmod._suggested({"claim_text": _g2_c, "verdict": _g2_v})
+    with appmod.app.test_request_context("/"):
+        _g2_p = appmod._check_response(_g2_c, _g2_row.get("search_query") or "", _g2_row["verdict"], _g2_row["tldr"],
+                                       _g2_row["explanation"], _g2_row["cited_studies"], _g2_row["studies"], "http://x",
+                                       still_open=_g2_row.get("still_open") or "")
+    _g2b[_g2_c] = (_g2_l["verdict"], _g2_s["verdict"], _g2_p["verdict"], _g2_l["tldr"] == _g2_p["tldr"])
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_g2_c),))
+t("G2b: for each case the stamp in the lists (recent, type-ahead) equals the stamp on the page",
+  all(l_ == s_ == p_ and same for l_, s_, p_, same in _g2b.values())
+  and [x[2] for x in _g2b.values()] == ["false", "insufficient", "insufficient"], _g2b)
+t("  and the lists reach it through the page's own decision",
+  "_nothing_relied" in _inspect.getsource(appmod._listed))
+# J4: a saved rated answer that lists no study at all gets the takeaway a
+# fresh check writes when the search finds nothing.
+_J4_C = "Humming at noon cures hiccups J4"
+db.put_cached_verdict(_J4_C, "(humming) AND (hiccups)", "complicated", "Some say so.", [], [],
+                      tldr="Humming may help hiccups.", still_open="Whether anyone has tested it.")
+_j4_row = db.get_cached_by_key(db.normalize_claim(_J4_C))
+with appmod.app.test_request_context("/"):
+    _j4_p = appmod._check_response(_J4_C, _j4_row["search_query"], _j4_row["verdict"], _j4_row["tldr"],
+                                   _j4_row["explanation"], _j4_row["cited_studies"], _j4_row["studies"], "http://x",
+                                   still_open=_j4_row["still_open"])
+    _j4_s = appmod._check_response("Humming at noon cures hiccups J4 s", "(humming) AND (hiccups)", "complicated",
+                                   "Humming may help hiccups.", "Some say so (Study 1).", ["J4A"],
+                                   [dict(_study("J4A", "Humming and hiccups", types=["Editorial"]),
+                                         off_topic=verdict.OFF_SUBJECT + ".")], "http://x", still_open="Whether.")
+_j4_l = appmod._listed({"claim_text": _J4_C, "verdict": _j4_row["verdict"], "tldr": _j4_row["tldr"],
+                        "search_query": _j4_row["search_query"], "studies": _j4_row["studies"],
+                        "cited": _j4_row["cited_studies"]})
+_j4_html = c.get("/?q=" + urllib.parse.quote(_J4_C)).get_data(as_text=True)
+t("J4: a saved rated answer listing no study shows the no-studies takeaway, on the page, the server page and a list entry",
+  _j4_p["verdict"] == _j4_l["verdict"] == "insufficient" and _j4_p["tldr"] == _j4_l["tldr"] == verdict.NO_STUDIES_TLDR
+  and verdict.NO_STUDIES_TLDR in _j4_html and verdict.UNTESTED_TLDR not in _j4_html,
+  (_j4_p["verdict"], _j4_p["tldr"], _j4_l))
+t("  with a study listed and none relied on, the untested takeaway as before; one string for fresh and saved",
+  _j4_s["verdict"] == "insufficient" and _j4_s["tldr"] == verdict.UNTESTED_TLDR
+  and "NO_STUDIES_TLDR" in _inspect.getsource(verdict.weigh_evidence), _j4_s["tldr"])
+# K5: a saved rated answer whose cited PMIDs name no listed study relies on
+# nothing, on the page and in the lists, whatever the row lists.
+_k5 = {}
+for _k5_st in ([], [dict(_H1_B)]):
+    with appmod.app.test_request_context("/"):
+        _k5_p = appmod._check_response("Turmeric eases knee pain K5", "q", "true", "Turmeric eases pain.", "Pain fell (Study 1).",
+                                       ["99"], [dict(x) for x in _k5_st], "http://x", still_open="o")
+    _k5_l = appmod._listed({"claim_text": "Turmeric eases knee pain K5", "verdict": "true", "tldr": "Turmeric eases pain.",
+                            "search_query": "q", "studies": [dict(x) for x in _k5_st], "cited": ["99"]})
+    _k5[len(_k5_st)] = (_k5_p["verdict"], _k5_p["tldr"], _k5_l["verdict"], _k5_l["tldr"])
+t("K5: a rated answer citing only PMIDs no listed study has is 'Not enough evidence', page and list alike",
+  _k5[0] == ("insufficient", verdict.NO_STUDIES_TLDR, "insufficient", verdict.NO_STUDIES_TLDR)
+  and _k5[1] == ("insufficient", verdict.UNTESTED_TLDR, "insufficient", verdict.UNTESTED_TLDR)
+  and _display.relied_pmids(["99", "HB2"], [dict(_H1_B)]) == {"HB2"}, _k5)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_J4_C),))
+# F1a and F1b (type-ahead shows only whole rows, at the stamp its page would
+# show) meet L1: a saved "true" that cites a retracted paper is out of date.
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]
+for _mt_c, _mt_cited in (("Retracted kelp lowers blood sugar", ["RT1"]),
+                         ("Retracted dulse lowers blood sugar", ["RT1", "RT2"])):
+    db.put_cached_verdict(_mt_c, "(vinegar) AND (blood sugar)", "true", "Trials found it (Study 1).", _mt_cited,
+                          [dict(x) for x in _RT_ST], tldr="It lowers blood sugar.", still_open="Longer trials.")
+_mt_rows = {k: db.get_cached_verdict(k, 24) for k in ("Retracted kelp lowers blood sugar",
+                                                      "Retracted dulse lowers blood sugar")}
+_mt_sugg = {r_["claim_text"]: r_["verdict"] for r_ in c.get("/api/suggest?q=retracted").get_json()["suggestions"]}
+def _mt_page(k):
+    r_ = _mt_rows[k]
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(k, r_["search_query"], r_["verdict"], r_["tldr"], r_["explanation"],
+                                      r_["cited_studies"], r_["studies"], "http://x", still_open=r_["still_open"])["verdict"]
+t("meet F1 and L1: a saved 'true' citing a retracted paper is out of date",
+  all(appmod._current(r_, k) is None for k, r_ in _mt_rows.items()))
+t("  and type-ahead never shows it as 'true' when its page would not: it shows the page's stamp or nothing",
+  _mt_sugg.get("Retracted kelp lowers blood sugar") in (None, _mt_page("Retracted kelp lowers blood sugar"))
+  and _mt_sugg.get("Retracted kelp lowers blood sugar") != "true"
+  and _mt_sugg.get("Retracted dulse lowers blood sugar") in (None, _mt_page("Retracted dulse lowers blood sugar")),
+  (_mt_sugg, [_mt_page(k) for k in _mt_rows]))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                  tuple(db.normalize_claim(k) for k in _mt_rows))
+pubmed.search_and_fetch = _rt_search
+
+# ---- final fix F12: a withdrawn paper is never a strong design -----------------
+_F12_T = ["Journal Article", "Randomized Controlled Trial", "Retracted Publication"]
+_f12_s = _study("F12", "A trial later withdrawn", types=_F12_T, abstract="Adults were randomized to it or placebo.")
+t("F12: a paper typed both a randomized trial and retracted is retracted in classify, kind and its label",
+  evidence.classify(_F12_T) == "retracted" and evidence.kind(_f12_s) == "retracted"
+  and evidence.strongest_label(_F12_T) == "Retracted Publication",
+  (evidence.classify(_F12_T), evidence.kind(_f12_s), evidence.strongest_label(_F12_T)))
+t("F12: it is never counted as a strong design, a trial or a strong bar",
+  evidence.snapshot([_f12_s], ["F12"])["strong"] == 0 and evidence.snapshot([_f12_s], ["F12"])["trials"] == 0
+  and not any(b_.get("tier") == "strong" and b_.get("count") for b_ in (evidence.mix([_f12_s]) or [])
+              if isinstance(b_, dict)))
+t("F12: the study's own description and the card say retracted, not trial",
+  _display.design_note(_F12_T)[1] == "retracted"
+  and og.strongest_cited([_f12_s, _study("F13", "A plain observational study", types=["Observational Study"])],
+                         ["F12", "F13"])[2] == "A plain observational study"
+  and og.strongest_cited([_f12_s], ["F12"])[0] == "Retracted Publication")
+if _shutil.which("node"):
+    _f12src = (ROOT / "static" / "app.js").read_text()
+    _f12fn = "const TYPES = [" + _f12src.split("const TYPES = [")[1].split("function escapeHtml")[0]
+    _f12js = _subprocess.run(["node", "-e", _f12fn + "console.log(typeInfo(" + json.dumps(_F12_T) + ").cls);"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+    t("F12: and the script's badge for it is retracted too", _f12js == "retracted", _f12js)
+
+# ---- L2: narrative reviews do not lift small trials ---------------------------
+_NR_TRIAL = _study("NR1", "Creatine and scalp hair in young men: a randomized trial",
+                   abstract="In this 12-week randomized, placebo-controlled trial, 38 healthy men took creatine "
+                            "or placebo. Scalp hair counts did not differ between groups.")
+_NR_REV = [_study("NR2", "Creatine and hair: a narrative review", types=["Journal Article", "Review"],
+                  abstract="We review what is known about creatine and hair."),
+           _study("NR3", "Creatine safety: an overview", types=["Review"],
+                  abstract="This review summarises creatine safety reports.")]
+_NR_GL = _study("NR4", "Clinical practice guideline on creatine", types=["Practice Guideline"],
+                abstract="The panel recommends creatine for strength.")
+_NR_ALL = [_NR_TRIAL] + _NR_REV + [_NR_GL]
+t("L2: a narrative review is neither solid nor limited, so two of them do not lift one small trial",
+  evidence.trial_caveats(_NR_TRIAL) and evidence.narrative_review(_NR_REV[0]) and evidence.narrative_review(_NR_REV[1])
+  and evidence.certainty_cap(_NR_ALL, ["NR1", "NR2", "NR3"])
+  == evidence.certainty_cap(_NR_ALL, ["NR1"]) == "it rests on small, pilot or uncontrolled studies",
+  (evidence.trial_caveats(_NR_TRIAL), evidence.certainty_cap(_NR_ALL, ["NR1", "NR2", "NR3"])))
+t("  a guideline still counts, and a pooled review or a guideline is never a narrative review",
+  evidence.certainty_cap(_NR_ALL, ["NR1", "NR4"]) is None and not evidence.narrative_review(_NR_GL)
+  and not evidence.narrative_review(_study("NR5", "x", types=["Systematic Review", "Review"])))
+t("  so the line over the trial and the reviews is no surer than over the trial alone",
+  evidence.line_certainty(evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"))
+  == evidence.line_certainty(evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")),
+  (evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"),
+   evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")))
+
+# ---- L3: no empty reference ---------------------------------------------------
+_ER = ("A review found no consistent harm (Study 5), but other reviews note that alcohol is linked "
+       "to fetal harm (Study 6). The evidence is mixed (Study 5).")
+t("L3: a citation whose every number is taken out disappears whole, with the space before it",
+  breakdown.relied_only(_ER, {5}, 8) == "A review found no consistent harm (Study 5), but other reviews note "
+  "that alcohol is linked to fetal harm. The evidence is mixed (Study 5).", breakdown.relied_only(_ER, {5}, 8))
+t("  and no separator is left dangling in the same brackets, nor an empty pair of brackets anywhere",
+  breakdown.relied_only("Harm (Study 6; Study 5).", {5}, 8) == "Harm (Study 5)."
+  and breakdown.relied_only("Harm (Studies 6, 7) and help (Study 5).", {5}, 8) == "Harm and help (Study 5)."
+  and breakdown.relied_only("Harm (Studies ). Plain ( ) words (Study 5).", {5}, 8) == "Harm. Plain words (Study 5).")
+t("  a citation that was part of the sentence itself takes the sentence with it, and plain words stay",
+  breakdown.relied_only("Studies 6 and 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5)."
+  and breakdown.relied_only("As in other trials (see earlier studies).", {5}, 8)
+  == "As in other trials (see earlier studies).")
+_G4_PLAIN = ["The effect was significant (p = .03).", "Vitamin D (and calcium) improved bone density.",
+             "A mean difference of .5 points was seen (Study 2).", "The ratio was 1 : 2 in both arms."]
+t("G4: a sentence in which no reference was emptied comes back byte for byte",
+  all(breakdown.without_empty_refs(x) == x and breakdown.relied_only(x, {2, 5}, 8) == x for x in _G4_PLAIN),
+  [breakdown.relied_only(x, {2, 5}, 8) for x in _G4_PLAIN])
+t("  an empty reference goes with the space before it, and only that bracket changes",
+  [breakdown.without_empty_refs(x) for x in ("Harm (Studies ), (p = .03).", "Harm (Study ) here.", "Harm ( ) here.")]
+  == ["Harm, (p = .03).", "Harm here.", "Harm here."])
+t("  a dangling separator or an odd reference is rebuilt from the numbers it still has",
+  breakdown.relied_only("Harm (Study 5; Study 6).", {5}, 8) == "Harm (Study 5)."
+  and [breakdown.without_empty_refs(x) for x in ("Harm (Studies , 4).", "Harm (Study and 4).", "Harm (Studies 2, ).")]
+  == ["Harm (Study 4).", "Harm (Study 4).", "Harm (Study 2)."])
+t("  a sentence whose subject was the reference still goes whole",
+  breakdown.relied_only("Study 6 and Study 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5).")
+_H5_GONE = [("Harm (see Studies ) here (Study 5).", "Harm here (Study 5)."),
+            ("Harm (see also Studies 6, 7) and help (Study 5).", "Harm and help (Study 5)."),
+            ("Harm (e.g. Study 6), then (cf. Study 7) help (Study 5).", "Harm, then help (Study 5)."),
+            ("Harm (as in Studies 6 and 7) and help (Study 5).", "Harm and help (Study 5).")]
+_H5_LEFT = [("Harm (see Studies , 4).", "Harm (see Study 4)."), ("Harm (cf. Studies 6, 5).", "Harm (cf. Study 5)."),
+            ("Harm (e.g. Studies 2, ).", "Harm (e.g. Study 2).")]
+t("H5: an emptied reference with a lead-in goes whole, with the space before it",
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_GONE] == [y for _, y in _H5_GONE],
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_GONE])
+t("  with numbers left it keeps its lead-in and the numbers it has",
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_LEFT] == [y for _, y in _H5_LEFT],
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_LEFT])
+_H5_SAME = ["Harm (see Study 4).", "Harm (see below).", "Harm (e.g. pain or swelling).", "As in other trials (see earlier studies).",
+            "That is, about 12% lower odds (Study 4).", "Harm (cf. Studies 2, 4, 5)."]
+t("  and a lead-in bracket that lost nothing comes back byte for byte",
+  all(breakdown.without_empty_refs(x) == x and breakdown.relied_only(x, {2, 4, 5}, 8) == x for x in _H5_SAME),
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x in _H5_SAME])
+_er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", "complicated", "Mixed.", _ER,
+                                ["P5"], [_study(f"P{i}", f"Study of alcohol {i}") for i in range(1, 9)],
+                                "http://x", still_open="Whether small amounts harm.")
+t("  and no prose field on a page carries an empty reference",
+  not any(re.search(r"\(\s*(?:Stud(?:y|ies)\s*)?\)", str(v)) for v in
+          (_er_pg.get("tldr"), _er_pg.get("explanation"), json.dumps(_er_pg.get("breakdown")))), _er_pg.get("explanation"))
+
+# ---- L4: a promise's line claims no strength against what nobody tested -------
+_L4_ST = [_study("Q1", "Vinegar and blood sugar: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="We pooled 12 randomized trials in 800 adults.")]
+_l4 = {noun: (evidence.evidence_line("false", _L4_ST, ["Q1"], "x", None, word),
+              evidence.evidence_line("false", _L4_ST, ["Q1"], "x", "small", word))
+       for word, noun in (("cure", "a cure"), ("reverse", "a reversal"), ("prevent", "complete prevention"),
+                          ("stop", "a complete stop"), ("eliminate", "complete removal"), ("heal", "a full fix"))}
+t("L4: a false answer to a promise with no size says none of the evidence shows it, for every promise",
+  all(a == f"Strong evidence, and none of it shows {n}" and b == f"Strong evidence of a small effect, not {n}"
+      for n, (a, b) in _l4.items()), _l4)
+t("  and line_certainty still reads the level off the new line, so the prose caps keep working",
+  evidence.line_certainty("Strong evidence, and none of it shows a cure") == evidence.line_certainty("Strong evidence")
+  and evidence.line_certainty("Very low to moderate certainty evidence, and none of it shows complete prevention")
+  == "very low")
+t("  a false answer to a claim with no promise still says 'against this claim'",
+  evidence.evidence_line("false", _L4_ST, ["Q1"], "Vinegar raises blood sugar") == "Strong evidence against this claim")
+
+# ---- L5: "cure" the noun is not softened as a verb ----------------------------
+t("L5: the softening swap leaves 'cure' the noun alone and still softens the verb",
+  breakdown.soften("The abstracts do not report numerical effect sizes for cold cures (Study 5).")
+  == "The abstracts do not report numerical effect sizes for cold cures (Study 5)."
+  and breakdown.soften("There is no cure for the common cold (Study 2).") == "There is no cure for the common cold (Study 2)."
+  and breakdown.soften("Garlic cures colds (Study 1).") == "Garlic helps with colds (Study 1)."
+  and breakdown.soften("Garlic cures and prevents colds.") == "Garlic helps with and lowers the risk of colds.")
+
+t("no response in this run ever carried a study both cited in the answer and off topic",
+  _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
+  (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
+
+t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

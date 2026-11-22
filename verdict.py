@@ -48,12 +48,19 @@ class ProviderError(Exception):
     Normalized failure from whichever provider is in use, so app.py can
     map it to a sensible HTTP response without knowing the provider.
     kind: "auth" | "rate_limit" | "unavailable" | "other"
+    way_out: "" when trying again is the way out; "reword" when only other
+    words can help (a retry would be declined again); "either" when a retry
+    may or may not help, so trying other words is offered beside it.
     """
 
-    def __init__(self, kind: str, detail: str = ""):
+    def __init__(self, kind: str, detail: str = "", way_out: str = "", code=None):
         super().__init__(detail or kind)
         self.kind = kind
         self.detail = detail
+        self.way_out = way_out
+        # The provider's status code, for the log only: `detail` is shown to
+        # readers and never carries a number they cannot act on.
+        self.code = code
 
 
 def _key(name: str) -> str | None:
@@ -81,6 +88,46 @@ def provider() -> str:
 
 def model_name() -> str:
     return GEMINI_MODEL if provider() == "gemini" else ANTHROPIC_MODEL
+
+
+# The source files that decide an answer: the search (pubmed.py), the screens
+# and certainty rules (evidence.py), the weighing, gates and wording
+# (verdict.py, breakdown.py) and what counts as a sound saved record
+# (display.py). Not app.py: what it does to an answer it does again on every
+# render, so a saved answer gets its changes without being made again.
+ANSWER_FILES = ("verdict.py", "evidence.py", "pubmed.py", "breakdown.py", "display.py")
+
+
+def _method_stamp() -> str:
+    """
+    A short hash of the code that decides an answer, and of the model that
+    reads it, worked out once at start-up. Any deploy that changes one of
+    those files, or the provider or model in force, changes the stamp, so a
+    saved answer made by other code is never kept as if this code had made it.
+    When a file cannot be read (a deploy that ships no source, say) the stamp
+    is empty and a warning is logged: the app still starts, and an empty
+    stamp keeps nothing (app._steady) and is never stored (db).
+    """
+    h = hashlib.sha256()
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        for name in ANSWER_FILES:
+            with open(os.path.join(here, name), "rb") as f:
+                h.update(name.encode() + b"\0" + f.read() + b"\0")
+    except Exception as e:  # noqa: BLE001 — start-up must never fail on this
+        logging.getLogger("evident.stamp").warning(
+            "No method stamp: could not read the answer files (%s); saved answers will not be kept",
+            type(e).__name__)
+        return ""
+    try:
+        mode = f"{provider()}/{model_name()}"
+    except RuntimeError:
+        mode = "none"
+    h.update(mode.encode())
+    return h.hexdigest()[:12]
+
+
+METHOD_STAMP = _method_stamp()
 
 
 def provider_label() -> str:
@@ -132,7 +179,7 @@ def _anthropic_wrap(fn):
     except anthropic.APIConnectionError:
         raise ProviderError("unavailable", "Couldn't reach the AI service.")
     except anthropic.APIStatusError as e:
-        raise ProviderError("other", f"The AI service returned an error ({e.status_code}).")
+        raise ProviderError("other", "The AI service returned an error.", code=e.status_code)
 
 
 def _anthropic_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:
@@ -169,9 +216,9 @@ def _anthropic_json(prompt: str, schema: dict, max_tokens: int, temperature: flo
             output_config={"format": {"type": "json_schema", "schema": schema}},
         )
         if m.stop_reason == "refusal":
-            return "", "declined to answer this one"
+            return "", DECLINED
         if m.stop_reason == "max_tokens":
-            return "", "ran out of room before finishing"
+            return "", CUT_OFF
         return _anthropic_text_of(m), None
 
     return _anthropic_wrap(go)
@@ -228,11 +275,11 @@ def _gemini_wrap(fn):
                                         "Check it at aistudio.google.com.")
         if code == 429:
             raise ProviderError("rate_limit", "The free Gemini tier is rate-limited right now.")
-        raise ProviderError("other", f"The AI service returned an error ({code}).")
+        raise ProviderError("other", "The AI service returned an error.", code=code)
     except errors.ServerError as e:
-        raise ProviderError("unavailable", f"The AI service is having trouble ({getattr(e, 'code', '?')}).")
+        raise ProviderError("unavailable", "The AI service is having trouble.", code=getattr(e, "code", None))
     except errors.APIError as e:
-        raise ProviderError("other", f"The AI service returned an error ({getattr(e, 'code', '?')}).")
+        raise ProviderError("other", "The AI service returned an error.", code=getattr(e, "code", None))
     except (ConnectionError, TimeoutError, OSError):
         raise ProviderError("unavailable", "Couldn't reach the AI service.")
 
@@ -288,9 +335,9 @@ def _gemini_json(prompt: str, schema: dict, max_tokens: int, temperature: float 
         except (AttributeError, IndexError, TypeError):
             pass
         if finish and "MAX_TOKENS" in finish:
-            return text, "ran out of room before finishing"
+            return text, CUT_OFF
         if not text:
-            return "", "declined to answer this one"
+            return "", DECLINED
         return text, None
 
     return _gemini_wrap(go)
@@ -392,7 +439,7 @@ Return JSON: {{"lines": [{{"line": 0, "verdict": "ok", "problem": "none",
 # The takeaways code writes for itself are not the model's reading of a
 # study, so there is nothing in an abstract to hold them to.
 def _code_takeaway(tldr: str) -> bool:
-    fixed = {UNTESTED_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
+    fixed = {UNTESTED_TLDR, NO_STUDIES_TLDR, LOW_CERTAINTY_TLDR, CONFOUNDED_TLDR, _UNSAFE_UNPROVEN,
              *RANKED_TLDR.values()}
     return (tldr in fixed or tldr.startswith((
         "The strongest studies here", "No randomized trial or major review here",
@@ -845,6 +892,36 @@ def guideline_view(claim: str) -> dict | None:
             "says": says, "bodies": bodies}
 
 
+def guidance_may_rate(claim: str, stamp: str) -> bool:
+    """Whether guidance alone, with no study relied on, may rate this claim
+    with this stamp. Two exceptions to "no citations, no rating": guidance
+    that plainly rejects stopping a treatment, or a medicine curing
+    something, sets False (it must not read as "maybe it's fine"); and
+    guidance may say "not safe" (or that a vaccine protects) for a pregnancy
+    or a child, never "safe", which still needs a study. Used by
+    follow_guidelines on a fresh check and by app._check_response on a saved
+    one, so the two paths cannot drift. Applies even with nothing cited."""
+    if forgoes_treatment(claim) and stamp == "false":
+        return True
+    return bool(vulnerable_group(claim)) and not (says_safe(claim) and stamp == "true")
+
+
+_GUIDE_DOCTORS = (FORGO_DOCTOR, CURE_DOCTOR, PREGNANCY_DOCTOR, CHILD_DOCTOR)
+
+
+def unrated_guidance_tldr(tldr: str, lead: str = "") -> str:
+    """The takeaway a fresh check writes when guidance may not rate a claim
+    no study was relied on for: the untested takeaway (or `lead`, the
+    no-studies one when none was found), then the guidance sentence
+    (without the doctor line _restamp adds to a rated answer)."""
+    line = str(tldr or "").strip()
+    for doctor in _GUIDE_DOCTORS:
+        if line.endswith(doctor) and line != doctor:
+            line = line[: -len(doctor)].rstrip()
+            break
+    return f"{lead or UNTESTED_TLDR} {line}".strip()
+
+
 def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     """
     The last word on a high-stakes claim. When the major health bodies give
@@ -874,20 +951,14 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
                            line, view["verdict"])
         return result
     kind = forgoes_treatment(claim)
-    if kind and view["verdict"] == "false" and verdict in ("insufficient", "complicated"):
-        # The one exception to "no citations, no rating": guidance that plainly
-        # rejects stopping a treatment, or a medicine curing something, must
-        # not read as "maybe it's fine". Applies even with nothing cited.
-        _guide_log.warning("health guidance (%s) rejects a forgo-treatment claim, so the %r "
-                           "becomes false: %r", ", ".join(view["bodies"]), verdict, line)
-        doctor = FORGO_DOCTOR if kind == "forgo" else CURE_DOCTOR
-        return _restamp(result, "false", line, doctor, claim)
     group = vulnerable_group(claim)
     group_doctor = PREGNANCY_DOCTOR if group == "pregnancy" else CHILD_DOCTOR
-    if (group and verdict in ("insufficient", "complicated")
-            and not (says_safe(claim) and view["verdict"] == "true")):
-        # Guidance alone may say "not safe" (or that a vaccine protects) for a
-        # pregnancy or a child, never "safe": that still needs a study.
+    if verdict in ("insufficient", "complicated") and guidance_may_rate(claim, view["verdict"]):
+        if kind and view["verdict"] == "false":
+            _guide_log.warning("health guidance (%s) rejects a forgo-treatment claim, so the %r "
+                               "becomes false: %r", ", ".join(view["bodies"]), verdict, line)
+            doctor = FORGO_DOCTOR if kind == "forgo" else CURE_DOCTOR
+            return _restamp(result, "false", line, doctor, claim)
         _guide_log.warning("health guidance (%s) is plain on a %s claim, so the %r becomes %s: %r",
                            ", ".join(view["bodies"]), group, verdict, view["verdict"], line)
         return _restamp(result, view["verdict"], line, group_doctor, claim)
@@ -928,6 +999,217 @@ def _restamp(result: dict, stamp: str, line: str, doctor: str, claim: str,
             still = "Whether any study has tested this claim directly."
         out["still_open"] = still
     return out
+
+
+# ---------------------------------------------------------------------
+# The words under an answer the guidance rule set
+#
+# The stamp follows the guidance, but the prose under it was written about
+# the studies before the guidance was asked. "None of the studies found
+# directly test this claim, so there isn't enough evidence to rate it" under
+# a False contradicts the stamp a reader sees above it. What the studies did
+# and did not test stays, said as it was; the part that says the claim
+# cannot be rated goes, and a fixed sentence says what the answer rests on.
+# Read on the way out (app._check_response), so a saved answer gets it too.
+# ---------------------------------------------------------------------
+
+GUIDANCE_RESTS = "This answer rests on what major health guidelines say, not on these studies."
+# The verbs of rating, and the modal phrases that say it cannot be done,
+# contractions and "can not" included.
+_RATE_V = r"(?:rate|judge|grade)"
+_RATED_V = r"(?:rated|judged|graded)"
+_CANNOT = (r"(?:can\s*not|can[’']t|could\s+not|couldn[’']t|(?:is|are|was|were|am)\s+(?:not\s+)?unable\s+to"
+           r"|(?:is|are|was|were)\s+not\s+able\s+to|(?:is|are|was|were)n[’']t\s+able\s+to)")
+# What is rated must be the claim, the evidence, "this" or "it", or nothing
+# at all (the clause ends): "unable to rate pain intensity" is about an
+# outcome, not the claim.
+# "from ..." names the evidence the rating would rest on, not an outcome:
+# "impossible to judge from these abstracts".
+_RATE_OBJ = (r"(?=\s*(?:[.,;:!?)]|$|(?:it|this|that|either\s+way|one\s+way\s+or\s+the\s+other|whether|yet|here|now"
+             r"|for\s+now|at\s+all|from|(?:the|this)\s+(?:claim|evidence|question|idea|statement))\b))")
+# Under "not enough evidence to rate ...", a thing rated "as" something is
+# the claim's own judgement ("to rate raw milk as healthier"), whatever the
+# thing is; one rated without "as" may be an outcome ("to grade the side
+# effects separately") and is held to the object test.
+_RATE_AS = r"(?=\s+(?:[\w’'-]+\s+){1,4}?as\s+\w)"
+_CANNOT_RATE = re.compile(
+    # "not enough evidence (for us) to rate it", "too little evidence to judge"
+    r"(?:\bnot|n[’']t|\bno|\btoo\s+little|\binsufficient)\s+(?:\w+\s+){0,2}?(?:enough\s+)?evidence\b"
+    rf"[^.!?]*?\bto\s+{_RATE_V}\b(?:{_RATE_OBJ}|{_RATE_AS})"
+    # "the evidence is too thin to rate"
+    rf"|\btoo\s+(?:thin|weak|limited|sparse|few|scant)\s+to\s+{_RATE_V}\b{_RATE_OBJ}"
+    # "it can not be rated", "this claim can't yet be judged"
+    rf"|(?:\b(?:it|this|that)|\b(?:claim|evidence|question|idea|statement)(?:\s+(?!(?:on|of|about|for)\b)\w+){{0,2}}?)"
+    rf"\s+(?:{_CANNOT}|could\s+not|cannot)\s+(?:yet\s+|really\s+|reliably\s+)?be\s+{_RATED_V}\b"
+    # "we can't rate it", "unable to judge this", "not possible to rate the claim"
+    rf"|\b(?:{_CANNOT}|unable\s+to|(?:not\s+|(?:is|was)n[’']t\s+|im)possible\s+to|no\s+way\s+to)\s+(?:yet\s+|really\s+|reliably\s+)?{_RATE_V}\b{_RATE_OBJ}"
+    # "the evidence does not allow us to rate it"
+    rf"|\b(?:does|do|did)(?:\s+not|n[’']t)\s+(?:allow|let|permit)\s+(?:us\s+|one\s+|anyone\s+|readers?\s+)?(?:to\s+)?{_RATE_V}\b{_RATE_OBJ}"
+    # "unratable", "unrateable"
+    r"|\bunrat(?:e)?able\b"
+    # "no basis to rate it", "no basis for rating"
+    rf"|\bno\s+(?:real\s+|clear\s+|sound\s+)?basis\s+(?:to\s+{_RATE_V}|for\s+(?:rating|judging|grading))\b{_RATE_OBJ}"
+    # "Rating this claim is not possible", "... impossible", "... cannot be done"
+    r"|\b(?:rating|judging|grading)\s+(?:it|this|this\s+claim|the\s+claim|this\s+question)\s+"
+    r"(?:is\s+(?:not\s+possible|impossible)|isn[’']t\s+possible|can\s*not\s+be\s+done|can[’']t\s+be\s+done)\b",
+    re.IGNORECASE)
+# A sentence that reports what a study or its people judged ("Investigators
+# judged that ...") is about the study, whatever it says about rating.
+_REPORTED = re.compile(
+    r"\b(?:investigators?|authors?|researchers?|reviewers?|raters?|panel|committee|the\s+(?:trial|study|review|analysis"
+    r"|meta-analysis))\s+(?:\w+\s+){0,2}?(?:judged|concluded|found|reported|stated|said|noted|felt|decided"
+    r"|determined|argued|considered|wrote|suggested|thought|believed|agreed)\s+that\b", re.IGNORECASE)
+# The people a study asks to rate something: when one of them is who could
+# not rate, the sentence is about the study, not about this answer.
+_RATERS = re.compile(
+    r"\b(?:researchers?|investigators?|participants?|patients?|subjects?|authors?|raters?|reviewers?|clinicians?"
+    r"|assessors?|doctors?|nurses?|volunteers?|respondents?|children|parents?|observers?|they|people)\b", re.I)
+# Where a clause begins: what lies before it has another subject.
+_CLAUSE = re.compile(r"[,;:]|\b(?:so|since|because|meaning|which|and|but)\b", re.I)
+
+
+def _says_unrated(s: str):
+    """The match where `s` says the claim, the evidence, this or it cannot be
+    rated or judged, or None. Not when a study's raters are who could not
+    (a sentence on how much evidence there is names no rater)."""
+    for m in _CANNOT_RATE.finditer(s or ""):
+        if _REPORTED.search(s, 0, m.start()):
+            continue
+        # "could not be graded by the review authors": a study's raters,
+        # named after a passive, did the rating. That is about the study.
+        by = re.match(r"\s+by\s+((?:[\w-]+\s*){1,4})", s[m.end():])
+        if by and _RATERS.search(by.group(1)):
+            continue
+        if re.search(r"\bevidence\b|^too\b", m.group(0), re.I):
+            return m
+        cuts = list(_CLAUSE.finditer(s, 0, m.start()))
+        clause = s[cuts[-1].end() if cuts else 0:m.start()]
+        if not _RATERS.search(clause):
+            return m
+    return None
+
+
+# The joint before a closing "so it can't be rated": what comes before it is
+# a statement about the studies and stays.
+_SO_JOINT = re.compile(r",?\s+(?:and\s+)?(?:so|since)\b|,\s+(?:which means|meaning)\b", re.IGNORECASE)
+_END_REF = re.compile(r"\s*(\((?:Study|Studies)\b[^)]*\))\s*[.!?]?\s*$")
+
+
+# The lead as a model might write it: any case, any spacing, with or
+# without "major" and "health", "say(s)" or "state(s)", always with its
+# colon. Read after any run of marks at the very start (quotes, dashes,
+# bold or italic marks, spaces, zero-width characters).
+_LEAD_SAID = re.compile(r"(?:major\s+)?(?:health\s+)?guidelines\s+(?:says?|states?)\s*:\s*", re.IGNORECASE)
+_MARK_PAIR = {"\u201c": "\u201d", "\u2018": "\u2019", "\u00ab": "\u00bb"}
+
+
+def _lead_marks(text: str) -> int:
+    """How many characters at the start of `text` are not letters or digits."""
+    i = 0
+    while i < len(text) and not text[i].isalnum():
+        i += 1
+    return i
+
+
+def without_lead(tldr: str) -> str:
+    """The model's takeaway without a guidance lead it wrote itself. The
+    lead is code's alone (follow_guidelines and _restamp write it), so a
+    reply that opens with it is read as any other: the words after it stay,
+    with their capital back. A quote or mark that opened the lead is not
+    left dangling: its closing partner, when it is the last such mark in
+    what is left, goes too."""
+    text = str(tldr or "")
+    start = _lead_marks(text)
+    m = _LEAD_SAID.match(text, start)
+    if not m:
+        return text
+    opened = [ch for ch in text[:start] if not ch.isspace() and ch not in "-\u2010\u2011\u2012\u2013\u2014\u2015"
+              and ch not in "\u200b\u200c\u200d\u2060\ufeff"]
+    closers = [_MARK_PAIR.get(ch, ch) for ch in opened]
+    rest = text[m.end():].lstrip()
+    # A mark that closes the opening right after the colon ("**...say:**").
+    while rest[:1] and rest[:1] in closers:
+        closers.remove(rest[:1])
+        rest = rest[1:].lstrip()
+    rest = _LEAD_REPEAT.sub("", rest, count=1).strip()
+    # One that closes it at the end ("\"...say: stop it.\"").
+    for close in closers:
+        if close in "\"'*_`" and rest.count(close) % 2 == 0 and not rest.endswith(close):
+            continue
+        at = rest.rfind(close)
+        if at >= 0:
+            rest = (rest[:at] + rest[at + 1:]).strip()
+    return rest[:1].upper() + rest[1:]
+
+
+def from_guidance(tldr, claim) -> bool:
+    """An answer the guidance rule set: its takeaway opens with the lead,
+    on a claim the rule reads at all (guideline_topic: follow_guidelines
+    writes the lead on no other claim). A lead on any other claim (a row
+    saved before the model's own lead was taken off) is an ordinary answer.
+    Guidance only added to a "Not enough evidence" takeaway does not count."""
+    return str(tldr or "").startswith(GUIDELINE_LEAD) and guideline_topic(claim)
+
+
+def unrated_said(text: str) -> str:
+    """`text` without any saying that the claim cannot be rated. A sentence
+    that ends "..., so there isn't enough evidence to rate it" keeps what
+    it says before the "so" (and its closing citation); one that says
+    nothing else goes."""
+    out = []
+    for s in breakdown.sentences(text or ""):
+        m = _says_unrated(s)
+        if not m:
+            out.append(s)
+            continue
+        joints = list(_SO_JOINT.finditer(s, 0, m.start()))
+        head = s[:joints[-1].start()].rstrip(" ,;:") if joints else ""
+        ref = _END_REF.search(s)
+        if ref and ref.group(1) not in head:
+            head = f"{head} {ref.group(1)}"
+        if len(head.split()) >= 3:
+            out.append(head + ".")
+    return " ".join(out)
+
+
+def guidance_prose(explanation: str, still_open: str, bd: dict | None):
+    """(explanation, still_open, breakdown) for an answer the guidance rule
+    set, with nothing in them saying the claim cannot be rated. When the
+    explanation said so, it now ends on GUIDANCE_RESTS instead."""
+    if _says_unrated(explanation or ""):
+        explanation = f"{unrated_said(explanation)} {GUIDANCE_RESTS}".strip()
+    if _says_unrated(still_open or ""):
+        still_open = unrated_said(still_open) or "Whether any study has tested this claim directly."
+    if bd and any(_says_unrated(t) for t in breakdown.prose_of(bd)):
+        bd = breakdown.map_prose(bd, unrated_said)
+    return explanation, still_open, bd
+
+
+# The effect box under an answer the guidance rule set. The stamp did not
+# come from a study's figure, so the box does not headline one, or a size
+# word: under "False" on alcohol in pregnancy it read "found no consistently
+# significant effects", which a reader skimming could take as permission.
+# Each study and its own finding stay in the study list as they are.
+GUIDANCE_EFFECT = ("This answer rests on what major health guidelines say, "
+                   "not on a measured effect size.")
+# The evidence line under an answer the guidance rule set. The studies did
+# not decide that answer, so the line rates none of them: it says, with no
+# strength word, what the answer rests on.
+GUIDANCE_LINE = "Rests on health guidance, not on these studies"
+
+
+def guidance_effect(bd: dict | None) -> dict | None:
+    """The breakdown of an answer the guidance rule set, its effect box
+    saying GUIDANCE_EFFECT in place of a study's figure. A breakdown with no
+    effect box gets none. A line of "What the research says" that was picked
+    from the effect box (breakdown.says takes its figure) goes with it, so
+    the figure is not headlined there instead."""
+    if not bd or not str(bd.get("effect_size") or "").strip():
+        return bd
+    key = lambda t: re.sub(r"[^a-z0-9]+", "", t.lower())
+    boxed = {key(t) for t in breakdown.sentences(bd["effect_size"])}
+    says = [t for t in bd.get("says") or [] if key(t) not in boxed]
+    return {**bd, "effect_size": GUIDANCE_EFFECT, "says": says}
 
 
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
@@ -1220,8 +1502,12 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
         lines.append(f"OFF TOPIC: {why_off}. Do not cite it")
     elif evidence.background_reasons([study], claim):
         why_back = evidence.background_reasons([study], claim)[study["pmid"]]
-        lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
-                     f"this claim in people and never counts as evidence for or against it")
+        if why_back in _WITHDRAWN_SAID:
+            lines.append(f"BACKGROUND ONLY: {_WITHDRAWN_SAID[why_back]}. It never counts as "
+                         f"evidence for or against this claim. Do not cite it")
+        else:
+            lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
+                         f"this claim in people and never counts as evidence for or against it")
     rated = evidence.review_certainty(study, outcome, strict=True)
     if rated in ("low", "very low"):
         where = " on this outcome" if evidence.certainty_on_outcome(study, outcome) else ""
@@ -1236,6 +1522,11 @@ _BACKGROUND_SAID = {
     evidence.BG_LAB: "an animal or lab study",
     evidence.BG_OPINION: "an opinion piece or commentary, which measured nothing",
     evidence.BG_GUIDE: "a product or buying guide, which measured nothing",
+}
+# The same marker for a paper the journal withdrew, or a journal notice.
+_WITHDRAWN_SAID = {
+    evidence.BG_RETRACTED: "the journal retracted this paper, so its findings must not be relied on",
+    evidence.BG_NOTICE: "a journal notice of a retraction, correction or concern, which measured nothing",
 }
 
 
@@ -1435,7 +1726,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             "No relevant studies were found on PubMed for this claim. "
             "That doesn't mean the claim is false, it may just not be "
             "well studied yet, or the search terms need refining.",
-            tldr="No published studies on this yet. Unproven, not disproven.",
+            tldr=NO_STUDIES_TLDR,
             still_open="Whether anyone has tested this claim directly. PubMed found nothing that does.",
             verdict="insufficient",
         ), studies, claim)
@@ -1472,11 +1763,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         # A retry that failed outright has no breakdown and is not an answer.
         # One that says nothing here tests the claim may have none either,
         # and is one.
-        answered = again.get("breakdown") or (again.get("verdict") == "insufficient"
-                                              and again.get("tldr"))
+        # A retry missing its short answer or its still-open line is not an
+        # answer either; one that has both beats a first answer that does not.
+        answered = (again.get("breakdown") or (again.get("verdict") == "insufficient"
+                                               and again.get("tldr"))) and has_lines(again)
         if answered:
             said_again = _stamp_disagrees(again, claim, read)
-            if len(_faults(again, claim, reported, studies, said_again)) < len(faults):
+            if (not has_lines(result)
+                    or len(_faults(again, claim, reported, studies, said_again)) < len(faults)):
                 result, said = again, said_again
                 kept = raw, stop_note
     # The stamp and the takeaway are one answer. Asked once to agree and
@@ -1490,9 +1784,19 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                            result.get("tldr"))
         result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said],
                                subject=subject, outcome=outcome, surrogate=surrogate)
+    # A reply that could not be read at all (cut off, declined, not JSON) is
+    # not an answer about the evidence. It ends in the app's error response,
+    # with what went wrong and a way out, and is never saved, logged or
+    # listed as a verdict.
+    if result.get("unread"):
+        _stamp_log.warning("the reply could not be read: %s", result["unread"])
+        raise ProviderError("other", unread_reply(result["unread"]), way_out(result["unread"]))
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
+    # Only an answer read from the model's reply carries this key; the
+    # fallbacks for a reply that could not be read at all do not.
+    replied = "off_topic" in result
     off = result.pop("off_topic", None) or {}
     back = result.pop("background", None) or {}
     result.pop("ranked", None)
@@ -1505,7 +1809,56 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    return follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    result = follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    # Every finished answer has a short answer and a line on what is still
+    # open. A reply that leaves either empty, after every gate and the retry
+    # above, is a failed reply: it ends in the app's error response, with a
+    # way out, and is never saved or shown as an answer.
+    if replied and not has_lines(result):
+        _stamp_log.warning("the reply left its short answer or its still-open line empty: %r",
+                           {k: result.get(k) for k in ("verdict", "tldr", "still_open")})
+        raise ProviderError("other", INCOMPLETE_REPLY, "either")
+    return result
+
+
+# The way out a failure names follows the kind of failure. The weighing call
+# runs at temperature 0 and nothing is saved, so a reply the model declined
+# will almost always be declined again: only other words can help. A reply
+# cut off, or one with a line missing, may or may not come back whole, so
+# both ways are named. A reply that could not be read at all is a fault a
+# second try can clear.
+DECLINED = "declined to answer this one"
+CUT_OFF = "ran out of room before finishing"
+UNREADABLE = "sent back a reply that could not be read"
+REWORD = "Try the claim in other words."
+EITHER = "Try again, or try the claim in other words."
+INCOMPLETE_REPLY = f"The AI model sent back an answer with a line missing. {EITHER}"
+_WAY_OUT = {DECLINED: "reword", CUT_OFF: "either"}
+
+
+def way_out(why: str) -> str:
+    """Which way out a reply that could not be read leaves the reader:
+    "reword", "either", or "" when trying again is the way out."""
+    return _WAY_OUT.get(why, "")
+
+
+def unread_reply(why: str) -> str:
+    """What the reader is told when the model's reply could not be read:
+    what went wrong, that the check did not finish, and the way out."""
+    then = {"reword": REWORD, "either": EITHER}.get(way_out(why), "Try again in a moment.")
+    return f"The AI model {why}, so this check did not finish. {then}"
+
+
+def has_words(text) -> bool:
+    """A line with at least one letter or digit, in any script. A zero-width
+    space, a lone full stop or a lone dash is an empty line."""
+    return any(ch.isalnum() for ch in str(text or ""))
+
+
+def has_lines(result: dict) -> bool:
+    """Both lines every finished answer carries: the short answer and what is
+    still open, each with at least one word in it (`has_words`)."""
+    return all(has_words((result or {}).get(k)) for k in ("tldr", "still_open"))
 
 
 def _confounded_numbers(result: dict, studies: list[dict]) -> list[int]:
@@ -1657,6 +2010,9 @@ def _faults(result: dict, claim: str, reported: list[str],
 LOW_CERTAINTY_TLDR = ("The studies found point towards yes, but the certainty of "
                       "that evidence is low.")
 UNTESTED_TLDR = "The studies found don't actually test this claim, so it's unproven either way."
+# The takeaway when the search found no study at all: a fresh check writes it
+# (weigh_evidence), and so does a saved answer that lists none (app._nothing_relied).
+NO_STUDIES_TLDR = "No published studies on this yet. Unproven, not disproven."
 NO_REASON_LEFT = "There isn't enough evidence in the studies found to rate this claim."
 CONFOUNDED_TLDR = ("The main review says lifestyle and other factors likely explain much of "
                    "the link these studies found.")
@@ -1950,11 +2306,13 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     OR-group, for the relevance gate; `outcome` its second, for the
     certainty a review gives that outcome.
     """
+    # A reply that could not be read at all is marked "unread", with what
+    # went wrong; weigh_evidence turns it into the app's failure response.
     if stop_note:
-        return _fallback(
+        return dict(_fallback(
             f"The evidence-weighing step {stop_note}. "
             "Raw studies are still available below for manual review."
-        )
+        ), unread=stop_note)
 
     # The schema constraint should make this unnecessary, but models have
     # historically wrapped JSON in ```json fences despite instructions.
@@ -1966,10 +2324,14 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         parsed = None
 
     if not isinstance(parsed, dict):
-        return _fallback(
+        return dict(_fallback(
             "The evidence-weighing step returned an unexpected format. "
             "Raw studies are still available below for manual review."
-        )
+        ), unread=UNREADABLE)
+
+    # The guidance lead is code's alone. A reply that writes it is read as
+    # any other, before any gate or rule reads the takeaway.
+    parsed["tldr"] = without_lead(parsed.get("tldr") or "")
 
     verdict = str(parsed.get("verdict", "")).strip().lower()
     if verdict not in VALID_VERDICTS:
@@ -1996,8 +2358,15 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # or that the model itself judged to miss its subject or its outcome, is
     # not used, whatever the model put in its cited list, and no sentence
     # that leans on it alone reaches the reader.
-    off = _relevance(parsed, studies, claim, subject)
+    off = _relevance(parsed, studies, claim, subject, outcome, surrogate)
     off_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in off}
+    # The studies code itself set aside as measuring another outcome, against
+    # the model's reading. Setting one aside removes its citation and nothing
+    # else: wherever code below decides whether the studies agree, how sure
+    # the evidence is or which sentence leads, it still counts as a study that
+    # was read and may disagree, so the answer never grows surer for it.
+    aside = set_aside(studies, off, outcome, surrogate, subject)
+    aside_cited = [p for p in cited_pmids if p in aside]
     cited_pmids = [p for p in cited_pmids if p not in off]
 
     # Animal and lab studies are background for a claim about people. They
@@ -2010,6 +2379,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # "not tested in people", which says more than "nothing cited".
     reasons = {**_not_tested(parsed, studies, claim),
                **evidence.background_reasons(studies, claim)}
+    aside_reasons = {p: why for p, why in reasons.items() if p in aside}
     reasons = {p: why for p, why in reasons.items() if p not in off}
     background = [s["pmid"] for s in studies if s["pmid"] in reasons]
     leaned_on = cited_pmids
@@ -2039,7 +2409,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # "No clear effect" is never the answer when a randomized trial used
     # here found the effect and calls it significant: the size is left
     # unsaid rather than said wrong.
-    if sized.get("null") and _significant_trial(parsed, studies, cited_pmids):
+    if sized.get("null") and _significant_trial(parsed, studies, cited_pmids + aside):
         deeper["effect"] = sized = {}
     if sized.get("label"):
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
@@ -2050,7 +2420,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # way and observational studies, surveys or animal work the other, the
     # verdict follows the trials and the answer says the rest disagree: a
     # trial that says yes against a survey that says no is not a tie.
-    ranked = _trials_outweigh(parsed, studies, off, reasons)
+    ranked = _trials_outweigh(parsed, studies, off, reasons, aside)
     # It settles a tie, and it may turn a yes into a no when trials found
     # nothing. It never turns the model's no into a yes: a "for" finding is
     # about what a trial measured (blood sugar), and a no that reads the
@@ -2081,7 +2451,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # call something safe, has to rest on a randomized trial or a major
     # review that says so. Otherwise it follows the strongest evidence and
     # states the risk plainly.
-    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids)
+    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids, aside, aside_reasons,
+                          aside_cited)
     if guarded:
         for n in guarded["follows"]:
             pmid = studies[n - 1]["pmid"]
@@ -2147,7 +2518,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         deeper = None
 
     if (not forced and verdict in ("true", "false")
-            and evidence.narrow_only(studies, cited_pmids, claim)):
+            and any(evidence.narrow_only(studies, c, claim) for c in _with_aside(cited_pmids, aside))):
         verdict = "complicated"
         forced_narrow = ", ".join(narrow)
         explanation = (explanation.rstrip() + f" Every study behind this was run in "
@@ -2159,9 +2530,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # pilot trials, makes an answer lean; it does not make it likely true.
     forced_low = ""
     if not forced and verdict == "true":
-        forced_low = evidence.certainty_cap(
-            studies, cited_pmids, bool(breakdown._COMPARATIVE_CLAIM.search(claim)),
-            outcome) or ""
+        forced_low = next((cap for c in _with_aside(cited_pmids, aside) if (cap := evidence.certainty_cap(
+            studies, c, bool(breakdown._COMPARATIVE_CLAIM.search(claim)), outcome))), "")
         if forced_low:
             verdict = "complicated"
             explanation = (explanation.rstrip() + f" The certainty of this evidence is "
@@ -2179,7 +2549,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     if (absolute and verdict == "complicated" and cited_pmids
             and not (forced or thin or forced_narrow or forced_low)
             and breakdown.denies_absolute(tldr, claim)
-            and not evidence.narrow_only(studies, cited_pmids, claim)):
+            and not any(evidence.narrow_only(studies, c, claim) for c in _with_aside(cited_pmids, aside))):
         verdict = "false"
         explanation = (explanation.rstrip() + f' The claim says "{absolute}", and these '
                        f"studies found a smaller effect than that, so as written it is "
@@ -2204,7 +2574,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
             still_open = "Whether any study has tested this claim directly."
     if not tldr:
         # First sentence of the explanation is a serviceable one-liner.
-        tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
+        tldr = _cap(breakdown.first_sentence(explanation).strip(), TLDR_MAX)
 
     # Who the evidence was actually collected in, read off the records
     # rather than taken from the prose. The breakdown prints it under
@@ -2242,7 +2612,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         # stamp means, or repeats the short answer.
         explanation = (NO_REASON_LEFT if verdict == "insufficient" else tldr) or left_out
     if not tldr:
-        tldr = _cap(explanation.split(". ")[0].strip(), TLDR_MAX)
+        tldr = _cap(breakdown.first_sentence(explanation).strip(), TLDR_MAX)
     if deeper is not None:
         for key in ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns"):
             if deeper.get(key):
@@ -2273,7 +2643,24 @@ OFF_SUBJECT = "tests something other than what this claim is about"
 OFF_OUTCOME = "measures a different outcome from the one this claim names"
 
 
-def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "") -> dict:
+def set_aside(studies: list[dict], off: dict, outcome: str, surrogate: str = "",
+              subject: str = "") -> list[str]:
+    """The PMIDs code itself ruled off outcome (evidence.measured_outcome),
+    as opposed to the ones the model judged so. Those still count as read."""
+    return [s["pmid"] for s in studies if off.get(s["pmid"]) == OFF_OUTCOME
+            and evidence.measured_outcome(s, outcome, surrogate, subject) is False]
+
+
+def _with_aside(cited: list[str], aside: list[str]) -> list[list[str]]:
+    """The studies used, and the same with the ones code set aside put back:
+    a cap or a downgrade that either reading earns applies, so setting a
+    study aside never lifts one."""
+    back = [p for p in aside if p not in cited]
+    return [list(cited), list(cited) + back] if back else [list(cited)]
+
+
+def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "",
+               outcome: str = "", surrogate: str = "") -> dict:
     """
     {pmid: why} for every study that is not evidence for this claim: the
     ones code can rule out on sight, then the ones the model judged to miss
@@ -2284,6 +2671,12 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "")
     in any of its words, is not a test of the thing the claim is about,
     whatever the model judged: the model read a trial of one seed extract
     as a test of seed cycling.
+
+    `outcome` is its second OR-group and `surrogate` the stand-in the query
+    step named. A structured abstract whose title and sections past the
+    background never name the outcome, its kin or the stand-in did not
+    measure it, whatever the model judged: the model read a hair trial
+    whose background mentions strength as a test of strength.
     """
     off = {}
     for s in studies:
@@ -2292,6 +2685,8 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "")
             off[s["pmid"]] = why
         elif subject and not evidence.names_subject(s, subject):
             off[s["pmid"]] = OFF_SUBJECT
+        elif evidence.measured_outcome(s, outcome, surrogate, subject) is False:
+            off[s["pmid"]] = OFF_OUTCOME
     for item in parsed.get("relevance") or []:
         if not isinstance(item, dict):
             continue
@@ -2347,7 +2742,8 @@ def _findings(parsed: dict, studies: list[dict]) -> dict:
     return found
 
 
-def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict) -> dict | None:
+def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict,
+                     aside: list[str] = ()) -> dict | None:
     """
     When the randomized evidence used points one way and weaker studies
     the other: {"verdict", "trials", "weaker", "kinds"}, else None. The
@@ -2356,6 +2752,9 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
     each other, and at least one has to be able to bear it: a review of
     trials, or a randomized trial that is not small, a pilot, uncontrolled
     or paid for by the maker. One small pilot does not outrank a field.
+    A study code set aside (`aside`) is no trial here, but one whose finding
+    points another way is still a disagreement, and a disagreement means
+    the trials settle nothing.
     """
     found = {n: f for n, f in _findings(parsed, studies).items() if f in ("for", "against")}
     trials, weaker = [], []
@@ -2373,6 +2772,9 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
     if len(directions) != 1:
         return None
     direction = directions.pop()
+    if any(f != direction for n, f in _findings(parsed, studies).items()
+           if studies[n - 1]["pmid"] in aside and f in ("for", "against", "mixed")):
+        return None
     against = [n for n, f in weaker if f != direction]
     if not against or not any(evidence.is_review(studies[n - 1])
                               or not evidence.trial_caveats(studies[n - 1])
@@ -2412,7 +2814,34 @@ def _strong(study: dict) -> bool:
 
 
 def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
-                reasons: dict, cited_pmids: list[str]) -> dict | None:
+                reasons: dict, cited_pmids: list[str], aside: list[str] = (),
+                aside_reasons: dict | None = None, aside_cited: list[str] = ()) -> dict | None:
+    """
+    The guard below, worked out twice when code set studies aside: on the
+    studies as they stand, and with the set-aside ones put back as they
+    were (not off, cited again only if the model cited them, with the
+    background reason they would have had). A study set
+    aside counts exactly as it would have in view, never more: when both
+    readings act, the answer is the one the studies as they stand give;
+    when only the standing one acts, because a set-aside study would have
+    backed the model's verdict, the answer stops at "complicated" with the
+    risk said, never the safe way made firm by removing that study.
+    """
+    stand = _guard_reading(claim, verdict, parsed, studies, off, reasons, cited_pmids)
+    back = [p for p in aside if p in off]
+    if not stand or not back:
+        return stand
+    put_back = _guard_reading(
+        claim, verdict, parsed, studies, {p: why for p, why in off.items() if p not in back},
+        {**reasons, **{p: why for p, why in (aside_reasons or {}).items() if p in back}},
+        list(cited_pmids) + [p for p in back if p in aside_cited and p not in cited_pmids])
+    if put_back:
+        return stand
+    return {**stand, "verdict": "complicated", "follows": []}
+
+
+def _guard_reading(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
+                   reasons: dict, cited_pmids: list[str]) -> dict | None:
     """
     When this verdict would steer a reader away from a protective practice
     (sunscreen, vaccination, pasteurization, a prescribed medicine), or

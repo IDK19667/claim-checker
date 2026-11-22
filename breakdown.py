@@ -146,6 +146,12 @@ _ARTICLE_AFTER = {"lacked", "lack", "lacks", "showed", "show", "shows", "demonst
                   "confirmed", "confirm", "confirms", "without", "with"}
 
 
+_CLAUSE_SLOT = {"measured", "measure", "measures", "measuring", "estimated", "estimate", "assessed",
+                "assess", "assesses", "examined", "examine", "examines", "studied", "tested", "test",
+                "tests", "compared", "compare", "compares", "evaluated", "evaluate", "evaluates",
+                "about", "on", "for", "in", "regarding", "whether", "to", "into"}
+
+
 def _how_well(m: re.Match) -> str:
     before = re.search(r"([\w-]+)\s+$", m.string[:m.start()])
     word = before.group(1).lower() if before else ""
@@ -158,7 +164,14 @@ def _how_well(m: re.Match) -> str:
     # "Safety and efficacy of X" needs a noun too: "safety and effect of X".
     if re.match(r"\s+of\b", m.string[m.end():]):
         return "effect"
-    return "how well it works"
+    # A clause reads only where a clause can stand: at the head of the
+    # sentence, or after a verb or preposition asking what was measured
+    # ("tested how well it works"). After any other word, a modifier, the
+    # word stays: "the pooled efficacy" is English, "the pooled how well it
+    # works" is not.
+    if not before or word in _CLAUSE_SLOT or re.search(r"[.;:,(]\s*$", m.string[:m.start()]):
+        return "how well it works"
+    return m.group(0)
 
 
 # "Prevalence" and "incidence" are nouns in nearly every slot they fill:
@@ -181,6 +194,23 @@ def _rate(clause: str):
             return clause
         return "rate"
     return swap
+
+
+def _sexed(m: re.Match) -> str:
+    """The plain nouns for "male participants", "male and female subjects":
+    "males", "males and females". No age: "men" or "girls" would state one
+    the sentence did not."""
+    names = {"male": "males", "female": "females"}
+    if m.group(3):
+        return names[m.group(3).lower()]
+    joint = re.search(r" or | and |, ", m.group(0)).group(0)
+    return f"{names[m.group(1).lower()]}{' and ' if joint == ', ' else joint}{names[m.group(2).lower()]}"
+
+
+# A range or interval just before "including": "intervals including",
+# "a likely range including". There "including" is a verb, not "like".
+_RANGE_BEFORE = re.compile(r"\b(?:intervals?|ranges?|CIs?|C\.I\.)\s*(?:\([^)]*\)\s*)?(?:all\s+)?$",
+                           re.IGNORECASE)
 
 
 # Each row is (pattern, replacement, term-to-keep-in-brackets-or-None).
@@ -298,6 +328,10 @@ PLAIN = [
     (r"\bhowever,\s+", "but ", None),
     (r"\bhowever\b", "but", None),
     (r"\btherefore\b", "so", None),
+    # "72 male participants" is "72 males", never "72 male people", and
+    # never "72 men": the sentence may not say how old they were.
+    (r"\b(?:(male|female)(?: or | and |, )(male|female) |(male|female) )(?:participants|subjects|individuals|people)\b",
+     lambda m: _sexed(m), None),
     (r"\bparticipants\b|\bsubjects\b|\bindividuals\b", "people", None),
     (r"\belevated\b", "raised", None),
     (r"\bglycaemic control\b|\bglycemic control\b", "blood sugar control", None),
@@ -333,7 +367,13 @@ PLAIN = [
     (r"\bdetrimental\b", "harmful", None),
     (r"\bexhibited\b", "showed", None),
     (r"\bnevertheless\b", "even so", None),
-    (r"\bincluding\b", "like", None),
+    # "Including" introduces examples ("studies including adults") and is
+    # also the verb of a range: "confidence intervals including zero" is not
+    # "likely ranges like zero". Before a number, zero, one, the null or no
+    # effect, or after a range or interval, it stays.
+    (r"\bincluding\b(?!\s+(?:[-\u2212+]?\d|zero\b|one\b|unity\b|the null\b|null\b|no\s+"
+     r"(?:effect|difference|change)\b))", lambda m: m.group(0) if _RANGE_BEFORE.search(
+        m.string[max(0, m.start() - 40):m.start()]) else "like", None),
 ]
 
 _PLAIN = [(re.compile(p, re.IGNORECASE), r, keep) for p, r, keep in PLAIN]
@@ -484,9 +524,13 @@ PROMPT_SHAPE = """  "parts": [{"part": "a piece of the claim, in the reader's wo
 # ---------------------------------------------------------------------
 
 SOFTEN = [
-    (r"\bwards?\s+off\b", "lowers the risk of"),
+    # The verb keeps its own number: "these changes protect against" is
+    # "these changes lower the risk of", never "lowers".
+    (r"\bwards\s+off\b", "lowers the risk of"),
+    (r"\bward\s+off\b", "lower the risk of"),
     (r"\bwarded\s+off\b", "lowered the risk of"),
-    (r"\bprotects?\s+against\b", "lowers the risk of"),
+    (r"\bprotects\s+against\b", "lowers the risk of"),
+    (r"\bprotect\s+against\b", "lower the risk of"),
     (r"\bprotected\s+against\b", "lowered the risk of"),
     (r"\bimmune\s+to\b", "at lower risk of"),
     (r"\bimmunity\s+to\b", "lower risk of"),
@@ -494,8 +538,12 @@ SOFTEN = [
     (r"\bprevents\b", "lowers the risk of"),
     (r"\bprevent\b", "lower the risk of"),
     (r"\bprevented\b", "lowered the risk of"),
-    (r"\bcures\b", "helps with"),
-    (r"\bcure\b", "help with"),
+    # Not "cure" the noun: "effect sizes for cold cures (Study 5)" became
+    # "effect sizes for cold helps with". A verb has its object after it; a
+    # noun is followed by a bracket, a stop, or "for", "of", "is" and kin,
+    # or "rate" ("cure rates rose").
+    (r"\bcures\b(?!\s*(?:[(.,;:!?]|$|(?:for|of|is|are|was|were|exist|exists|rates?)\b))", "helps with"),
+    (r"\bcure\b(?!\s*(?:[(.,;:!?]|$|(?:for|of|is|are|was|were|exist|exists|rates?)\b))", "help with"),
     (r"\bcured\b", "helped with"),
     (r"\beliminates\b", "reduces"),
     (r"\beliminate\b", "reduce"),
@@ -1163,8 +1211,7 @@ def soften(text: str) -> str:
     for pattern, weaker in _SOFTEN:
         t = pattern.sub(_soften_unless_negated(weaker), t)
     # A substitution at the head of a sentence must not leave it lowercase.
-    return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
-                  lambda m: m.group(1) + m.group(2).upper(), t)
+    return heads_up(t)
 
 
 # Research-paper grammar that nobody says out loud. Each pair fixes the
@@ -1222,8 +1269,7 @@ def natural(text: str) -> str:
     for pattern, fixed in _NATURAL:
         t = pattern.sub(fixed, t)
     # "Vitamin D is linked to" needs its capital back if it opened the line.
-    return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
-                  lambda m: m.group(1) + m.group(2).upper(), t)
+    return heads_up(t)
 
 
 # "a" before a vowel sound, "an" before a consonant one. Swapping a word
@@ -1261,6 +1307,10 @@ def _no_repeats(text: str) -> str:
     return _REPEATED.sub(lambda m: m.group(1), text)
 
 
+# Text between straight or curly double quotation marks: a quoted title.
+_QUOTED = re.compile(r'"[^"\n]{1,300}"|\u201c[^\u201d\n]{1,300}\u201d')
+
+
 def plain(text: str, kept: set | None = None) -> str:
     """
     Swap medical vocabulary for the everyday words that mean the same.
@@ -1288,6 +1338,15 @@ def plain(text: str, kept: set | None = None) -> str:
         parked.append(term)
         return f" (\x00{len(parked) - 1}\x00)"
 
+    # A quoted title is the paper's own words: what sits between straight or
+    # curly double quotation marks is held out, as written, until the end.
+    quoted: list[str] = []
+
+    def hold(m) -> str:
+        quoted.append(m.group(0))
+        return f"\x01{len(quoted) - 1}\x01"
+
+    out = _QUOTED.sub(hold, out)
     for pattern, replacement, keep_term in _PLAIN:
 
         def swap(m, replacement=replacement, keep_term=keep_term):
@@ -1301,7 +1360,8 @@ def plain(text: str, kept: set | None = None) -> str:
         out = pattern.sub(swap, out)
 
     out = re.sub(r"\x00(\d+)\x00", lambda m: parked[int(m.group(1))], out)
-    return _fix_articles(_no_repeats(out))
+    out = _fix_articles(_no_repeats(out))
+    return re.sub(r"\x01(\d+)\x01", lambda m: quoted[int(m.group(1))], out)
 
 
 # ---------------------------------------------------------------------
@@ -1407,19 +1467,53 @@ _ABBREV = re.compile(r"\b(?:e\.g|i\.e|vs|approx|no|fig|cf|et al|dr|mr|ms|prof)\.
                      re.IGNORECASE)
 
 
+# A single capital letter and a stop: a genus abbreviation when a lowercase
+# word follows ("E. coli", "S. aureus", "H. pylori"), never a sentence's end.
+# "vitamin C. It ..." still splits, because a capital follows.
+_INITIAL = re.compile(r"(?:^|(?<=[\s(\[\"\u201c]))[A-Z]\.$")
+
+
+def _joins(before: str, after: str) -> bool:
+    """Whether a split between these two pieces fell inside "E. coli"."""
+    return bool(_INITIAL.search(before)) and after[:1].islower()
+
+
 def sentences(text: str) -> list[str]:
-    """Split prose into sentences without splitting "e.g." or "12.5%"."""
+    """Split prose into sentences without splitting "e.g.", "12.5%" or
+    "E. coli"."""
     out, buf = [], ""
-    for piece in re.split(r"(?<=[.!?])(\s+)", text or ""):
+    pieces = re.split(r"(?<=[.!?])(\s+)", text or "")
+    for i, piece in enumerate(pieces):
         if piece.strip() == "" and piece != "":
             buf += piece
             continue
         buf += piece
-        if buf.strip() and not _ABBREV.search(buf.strip()):
+        after = pieces[i + 2] if i + 2 < len(pieces) else ""
+        if buf.strip() and not _ABBREV.search(buf.strip()) and not _joins(buf.rstrip(), after):
             out.append(buf.strip())
             buf = ""
     if buf.strip():
         out.append(buf.strip())
+    return out
+
+
+def heads_up(text: str) -> str:
+    """Each sentence of text starting with a capital. "coli" after "E." is
+    not a sentence's head ("E. coli", the rule sentences() reads by)."""
+    t = text or ""
+    return re.sub(r"(?:^|(?<=[.!?]\s))[a-z]",
+                  lambda m: m.group(0) if m.start() and _joins(t[:m.start()].rstrip(), t[m.start():])
+                  else m.group(0).upper(), t)
+
+
+def first_sentence(text: str) -> str:
+    """The text up to its first ". ", read past "E. coli" (sentences)."""
+    parts = str(text or "").split(". ")
+    out = parts[0]
+    for nxt in parts[1:]:
+        if not _joins(out + ".", nxt):
+            break
+        out += ". " + nxt
     return out
 
 
@@ -1615,6 +1709,176 @@ def label(text: str, limit: int = 120) -> str:
 NOT_SIGNIFICANT_SAID = "That difference was not statistically significant ({ref})."
 NULL_SAID = ("no clear difference between the groups, because the result was "
              "not statistically significant")
+# The same translation under an answer that there is an effect ("Likely
+# true" on "sunscreen lowers skin cancer"). "No clear difference between the
+# groups" under it reads as a contradiction; what the figure shows is that
+# this one result could be chance.
+NULL_SAID_ALONE = ("On its own, that result could be chance, because it was not "
+                   "statistically significant")
+
+
+def null_alone(text: str) -> str:
+    """The null translation code wrote under a figure, reworded for a page
+    whose answer is that there is an effect. Model prose is not touched."""
+    return re.sub(re.escape(TRANSLATION_LEAD + NULL_SAID), NULL_SAID_ALONE, text or "")
+
+
+# The effect's own plain words, under the same answer. The page no longer
+# prints "no clear difference between the groups" there, so the response's
+# effect field does not carry it either.
+NULL_PLAIN_ALONE = "a result that could be chance, because it was not statistically significant"
+
+
+def effect_alone(bd: dict | None) -> dict | None:
+    """The breakdown with a null effect's plain words reworded as null_alone
+    rewords the sentence, for a page whose answer is that there is an
+    effect. Its label and figure stay."""
+    effect = (bd or {}).get("effect") or {}
+    if effect.get("null") and effect.get("plain") == evidence.NULL_EFFECT["plain"]:
+        return {**bd, "effect": {**effect, "plain": NULL_PLAIN_ALONE}}
+    return bd
+
+
+# The size code appends to its translation of a figure: ", a large effect".
+# A size said in a "That is ..." sentence, in every shape its writers give
+# it: ground's ", a large effect" after the arithmetic, and a faithfulness
+# rewrite (verdict.check_faithful swaps a line the model rewrote) that left
+# only the size, "That is a large effect (Study 3)".
+_SIZE_TAIL = re.compile(
+    r"(?:,\s*|\s+)(?:which\s+is\s+)?(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)"
+    r"\s+(?:effect|benefit|reduction|increase|improvement|difference)\b", re.IGNORECASE)
+
+
+def unsized(bd: dict | None) -> dict | None:
+    """The breakdown with no size word code wrote, for an answer whose
+    evidence line may not carry its figure's size (line_label refused it).
+    The figure stays, in its own sentence naming its own outcome; the label
+    is blank, and the "That is ..." sentence code wrote beside the figure
+    keeps its plain arithmetic ("about 12% lower odds") without the size
+    ("a small effect"), in the effect box and in "What the research says".
+    One that only said no clear difference, or only the size, goes."""
+    if not bd:
+        return bd
+
+    def bare(t: str) -> str:
+        if not str(t).startswith(TRANSLATION_LEAD):
+            return t
+        if NULL_SAID in t:
+            return ""
+        # The size comes out only where what is left is still a whole
+        # statement: the phrase ends its clause (a comma, a citation, a stop
+        # or the end follows). Where words that depend on it follow ("a
+        # large increase in risk"), the whole sentence goes, with its
+        # citation: saying less is fine, a broken sentence is not.
+        if any(not re.match(r"\s*(?:[,.;:!?(]|$)", t[m.end():]) for m in _SIZE_TAIL.finditer(t)):
+            return ""
+        left = _SIZE_TAIL.sub("", t)
+        # Where the size was the whole statement, the sentence goes, with
+        # its citation; the figure's own sentence stays.
+        if not re.search(r"\w", _REF.sub(" ", left[len(TRANSLATION_LEAD):]).replace("(", "").replace(")", "")):
+            return ""
+        return left
+
+    out = {**bd, "says": [x for x in (bare(t) for t in bd.get("says") or []) if x]}
+    if bd.get("effect_size"):
+        out["effect_size"] = " ".join(x for x in (bare(t) for t in sentences(bd["effect_size"])) if x)
+    if bd.get("effect"):
+        out["effect"] = {**bd["effect"], "label": ""}
+    return out
+
+
+# What a "That is ..." sentence code wrote can say, built from its writers:
+# ground() writes TRANSLATION_LEAD + evidence.effect_size's plain words
+# ("about 12% lower odds", "a difference of 0.4 standard deviations") or
+# NULL_SAID, and the faithfulness rewrite keeps the lead but rewords the
+# figure ("That is an effect size of 1.03", "That is, about 12% lower
+# odds") or leaves only the size ("That is a large effect"). A sentence
+# that merely starts "That is" ("That is because ...", "That is why ...")
+# is the model's and is not one of these.
+_CODE_TRANSLATION = re.compile(
+    r"That is,?\s+(?:"
+    + re.escape(evidence.NULL_EFFECT["plain"]) + "|" + re.escape(NULL_SAID)
+    + r"|about\s+[-−]?\d[\d.,]*\s?(?:%|per ?cent)"
+    + r"|a\s+difference\s+of\s+[-−]?\d"
+    + r"|(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)"
+      r"\s+(?:effect|benefit|reduction|increase|improvement|difference)\b"
+    + r"|an?\s+(?:[A-Za-z-]+\s+){0,3}?of\s+(?:about\s+)?[-−]?\d"
+    + r")", re.IGNORECASE)
+
+
+def code_translation(t: str) -> bool:
+    """Whether t is a "That is ..." sentence code wrote beside a figure."""
+    return bool(_CODE_TRANSLATION.match(str(t or "")))
+
+
+# Words a restatement can add without saying anything new.
+_FILLER = frozenset("a an the of is was were that".split())
+
+
+def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
+    """
+    The breakdown with each "That is ..." sentence code wrote shown only
+    beside the figure it explains. In each block ("What the research says",
+    each list item, each field), one whose sentence before it is missing or
+    gives no figure goes: "That is no clear difference ... (Study 2)." under
+    a sentence with no number explains nothing, and so does one under
+    another study's figure: when it cites a study, the sentence before it
+    has to cite that study too. One that only repeats what
+    the block already says, short words aside ("That is a risk drop of 26%
+    (Study 1)." after "The risk drop was 26% ... (Study 1)."), goes too,
+    whether or not the size is withheld; one that converts the figure
+    ("That is about 54% lower risk") or adds to it ("..., meaning a lower
+    risk over time") stays. Everything else comes back as it was.
+    """
+    if not bd:
+        return bd
+
+    def figure(t: str) -> bool:
+        return bool(_FIGURE.search(_REF.sub(" ", t)))
+
+    def words(t: str) -> list[str]:
+        return [w for w in re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", _REF.sub(" ", t).lower())
+                if w not in _FILLER]
+
+    def cited(t: str) -> set:
+        return {n for m in _REF.finditer(t) for n in re.findall(r"\d+", m.group(1))}
+
+    def block(units: list[str]) -> list[str]:
+        kept = []
+        for i, t in enumerate(units):
+            if code_translation(t):
+                if not kept or not figure(kept[-1]):
+                    continue
+                if cited(t) and not cited(t) & cited(kept[-1]):
+                    continue
+                if figure(t):
+                    said = {w for u in units[:i] + units[i + 1:] for w in words(u)}
+                    if set(words(re.sub(r"^That is,?\s+", "", t))) <= said:
+                        continue
+            kept.append(t)
+        return kept
+
+    def field(t: str) -> str:
+        parts = sentences(t or "")
+        kept = block(parts)
+        return t if len(kept) == len(parts) else " ".join(kept)
+
+    out = dict(bd)
+    out["says"] = block(list(bd.get("says") or []))
+    if bd.get("evidence"):
+        out["evidence"] = [x for x in (field(t) for t in bd["evidence"]) if x]
+    for k in PROSE_FIELDS:
+        if bd.get(k):
+            out[k] = field(bd[k])
+    return out if out != bd else bd
+
+
+def answers_effect(verdict: str, claim: str) -> bool:
+    """True when the answer says there is an effect: "true" on a claim of
+    one, or "false" on a claim of none ("vaccines do not cause autism")."""
+    return verdict in ("true", "false") and (verdict == "true") != claim_denies(claim)
+
+
 _SIZE_SAID = re.compile(
     r"\b(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)\s+"
     r"(?:effect|benefit|reduction|increase|improvement|difference)\b", re.IGNORECASE)
@@ -1640,11 +1904,19 @@ _NAME_NUMBER = re.compile(r"(?:\b(?:type|phase|stage|grade|class|step|wave|tier)
                           re.IGNORECASE)
 
 
+# An interval's confidence level is not a result: "95" in "(95 percent CI
+# 0.71 to 0.89)" was read against the abstract's first "95% confidence
+# interval", a null subgroup, and a significant risk ratio was called not
+# significant.
+_LEVEL_AFTER = re.compile(r"\s?(?:%|per ?cent\b)\s*(?:C\.?I\.?\b|confidence|credible)", re.IGNORECASE)
+
+
 def _figures(sentence: str) -> list[str]:
     bare = _REF.sub(" ", sentence)
     return [m.group(0) for m in _FIGURE.finditer(bare)
             if not re.fullmatch(r"(?:19|20)\d\d", m.group(0).lstrip("-"))
-            and not _NAME_NUMBER.search(bare[:m.start()])]
+            and not _NAME_NUMBER.search(bare[:m.start()])
+            and not _LEVEL_AFTER.match(bare, m.end())]
 
 
 def null_figure(sentence: str, studies: list[dict]) -> str | None:
@@ -1663,17 +1935,55 @@ def null_figure(sentence: str, studies: list[dict]) -> str | None:
     return None
 
 
+# A sentence that reports a finding as none: "no drop in viral titer",
+# "did not differ", "was not statistically significant".
+_NULL_FINDING = re.compile(
+    r"\bno (?:clear |significant |real )?(?:drop|fall|change|difference|effect|benefit|reduction|rise"
+    r"|increase|improvement|association|link)\b|\b(?:did|does|do|was|were) not (?:differ|change|reduce"
+    r"|improve|lower|raise|increase|affect)\b|\bnot (?:statistically )?significant|\bno clear difference\b",
+    re.IGNORECASE)
+
+
+def all_null(text: str, studies: list[dict] = ()) -> bool:
+    """
+    Whether an effect line reports nothing but nulls: every sentence in it
+    that carries a figure is a null, by its own words or by its abstract.
+    With no figure at all, every sentence has to be one. "Lost 4.1 kg
+    (p < 0.001)" beside a waist result that was not significant is a real
+    effect with one null beside it, not "no clear effect".
+    """
+    said = sentences(text or "")
+    pool = [t for t in said if _figures(t)] or said
+    return bool(pool) and all((_NULL_FINDING.search(t) or null_figure(t, list(studies)) is not None)
+                              and not significant_figure(t) for t in pool)
+
+
+def significant_figure(sentence: str) -> bool:
+    """
+    Whether this sentence carries a significant figure: a p value under
+    0.05, or a figure whose interval or p value rules out no effect. Such a
+    sentence is not a null, whatever else it says ("no clear difference in
+    waist size, while adults lost 4.1 kg (p < 0.001)").
+    """
+    if evidence._P_SIGNIFICANT.search(sentence or ""):
+        return True
+    return any(evidence.significance(sentence, fig) == "clear" for fig in _figures(sentence))
+
+
 def say_nulls(text: str, studies: list[dict]) -> str:
     """
     Every sentence whose figure its abstract calls no clear difference says
     so: a size word for it ("a small effect") becomes "no clear difference",
     and a sentence that does not already say it is followed by one that
-    does, carrying the same citation.
+    does, carrying the same citation. A sentence that carries a significant
+    figure (its own p value or interval rules out no effect) is never called
+    a null: "That difference was not statistically significant" after it
+    would be read as about that figure.
     """
     out = []
     for sentence in sentences(text or ""):
         ref = null_figure(sentence, studies)
-        if ref is None or _SAID_NULL.search(sentence):
+        if ref is None or _SAID_NULL.search(sentence) or significant_figure(sentence):
             out.append(sentence)
             continue
         if _SIZE_SAID.search(sentence):
@@ -1733,6 +2043,31 @@ def keep_comparison(text: str, studies: list[dict]) -> str:
     return " ".join(out)
 
 
+_NULL_SAID_BY_CODE = re.compile(
+    "^(?:" + re.escape(NOT_SIGNIFICANT_SAID.split("({ref})")[0]) + "|"
+    + re.escape(TRANSLATION_LEAD + NULL_SAID) + r" )\((?P<ref>[^()]*)\)\.$")
+
+
+def unsaid_nulls(text: str) -> str:
+    """
+    `text` without a null sentence code wrote ("That difference was not
+    statistically significant (Study 1).") straight after a sentence of the
+    same study that carries a significant figure: a check saved before
+    say_nulls asked has it, under "0.79 (95 percent CI 0.71 to 0.89)".
+    Text with no such pair comes back byte for byte.
+    """
+    parts = sentences(text or "")
+    kept = []
+    for s in parts:
+        m = _NULL_SAID_BY_CODE.match(s)
+        if (m and kept and significant_figure(kept[-1])
+                and set(re.findall(r"\d+", m.group("ref"))) <= set(re.findall(r"\d+", " ".join(
+                    x.group(1) for x in _REF.finditer(kept[-1]))) or [None])):
+            continue
+        kept.append(s)
+    return (text or "") if len(kept) == len(parts) else " ".join(kept)
+
+
 def tell_straight(text: str, studies: list[dict]) -> str:
     """Rule 9, both halves, for any gated prose."""
     return say_nulls(keep_comparison(text, studies), studies)
@@ -1744,6 +2079,20 @@ def drop_citing(text: str, skip, count: int) -> str:
         return text or ""
     return " ".join(sentence for sentence in sentences(text or "")
                     if not (refs(sentence, count) and set(refs(sentence, count)) <= set(skip)))
+
+
+def drop_any_citing(text: str, skip, count: int) -> str:
+    """
+    Every sentence of text except those citing any study in skip, whatever
+    else they cite. For studies the page shows as set aside (withdrawn, a
+    journal notice, off topic): taking only their number out of "(Studies
+    1, 2)" would credit words written about Study 1 to Study 2, so the
+    sentence goes whole. Text with no such sentence comes back byte for byte.
+    """
+    skip = set(skip or ())
+    parts = sentences(text or "")
+    kept = [s for s in parts if not skip & set(refs(s, count))]
+    return (text or "") if len(kept) == len(parts) else " ".join(kept)
 
 
 def relied_only(text: str, relied, count: int) -> str:
@@ -1764,11 +2113,634 @@ def relied_only(text: str, relied, count: int) -> str:
         def fix(m: re.Match) -> str:
             nums = [int(n) for n in re.findall(r"\d+", m.group(1))
                     if int(n) not in drop or int(n) > count]
+            if not nums:
+                return _GONE
             return (f"Study {nums[0]}" if len(nums) == 1
                     else "Studies " + ", ".join(str(n) for n in nums))
 
-        kept.append(_REF.sub(fix, sentence) if cited else sentence)
+        sentence = without_empty_refs(_REF.sub(fix, sentence) if cited else sentence)
+        if sentence:
+            kept.append(sentence)
     return " ".join(kept)
+
+
+# Where a citation whose every number was taken out stood.
+_GONE = "\x00"
+
+
+def without_empty_refs(sentence: str) -> str:
+    """
+    `sentence` with every citation left with no number taken out whole:
+    "(Studies )", "(Study )", "( )" and the space before it. A citation
+    that still has numbers but lost some, or whose list begins or ends
+    with a separator ("(Study 5; )", "(Studies , 4)"), is rebuilt from the
+    numbers it has: "(Study 5)", "(Study 4)". A short lead-in in the
+    bracket ("see", "see also", "e.g.", "cf.", "as in") is part of the
+    citation: "(see Studies )" goes whole, "(see Studies , 4)" reads
+    "(see Study 4)". A citation that was part of
+    the sentence itself ("Studies and show") cannot be taken out without
+    rewriting it, so the sentence goes: "" is returned. Everything else in
+    the sentence, a sentence with no such citation included, comes back
+    byte for byte.
+    """
+    def fix(m: re.Match) -> str:
+        body = m.group("body")
+        if not body.strip():
+            return ""
+        lead = _REF_LEAD.match(body)
+        lead = lead.group(0) if lead and _REF_BODY.fullmatch(body[lead.end():]) else ""
+        body = body[len(lead):]
+        if not _REF_BODY.fullmatch(body) or not (_GONE in body or re.search(r"\bStud", body)):
+            return m.group(0)
+        nums = re.findall(r"\d+", body)
+        if not nums:
+            return ""
+        if _GONE not in body and not _ODD_REF.search(body):
+            return m.group(0)
+        open_, close = m.group("open"), m.group("close")
+        said = f"Study {nums[0]}" if len(nums) == 1 else "Studies " + ", ".join(nums)
+        return f"{m.group('space')}{open_}{lead}{said}{close}"
+
+    out = _BRACKET_REF.sub(fix, sentence)
+    return "" if _GONE in out else out
+
+
+# A bracket and the space before it; its body is judged in without_empty_refs.
+_BRACKET_REF = re.compile(r"(?P<space>\s*)(?P<open>[(\[])(?P<body>[^()\[\]]*)(?P<close>[)\]])")
+# A short lead-in a citation can carry inside its bracket: "(see Study 4)",
+# "(e.g. Studies 2, 3)". Judged with the rest of the body after it.
+_REF_LEAD = re.compile(r"\s*(?:see(?:\s+also)?|e\.g\.,?|cf\.|as\s+in)\s+", re.IGNORECASE)
+# A body made only of the words, numbers and separators of a citation.
+_REF_BODY = re.compile(r"(?:\s|Stud(?:y|ies)\b|\d+|[,;&]|\band\b|\x00)*")
+# A list that begins or ends with a separator, or a "Study" with no number
+# after it.
+_ODD_REF = re.compile(r"^\s*(?:Stud(?:y|ies)\s*)?(?:[,;&]|and\b)|(?:[,;&]|\band)\s*$|"
+                      r"Stud(?:y|ies)\s*(?:[,;&]|\band\b|$)")
+
+
+# ---------------------------------------------------------------------
+# Held to its sources
+#
+# A sentence that cites a study has to be a sentence that study can carry.
+# The audit found four that were not: "pregnant women" for a study of people
+# after birth, a "who it does not apply to" line its study never mentions,
+# a study cited in the prose but listed as "Read, not relied on", and "15 to
+# 30 mL" credited to studies that give 20 and 30. Each rule below looks only
+# at the studies a sentence cites, not at every abstract fetched, and when a
+# sentence fails, it goes: a sentence the reader never sees cannot mislead
+# them, and the rest of the page still answers the question. Runs on the way
+# out, so cached checks are held to it too. Never touches "still open".
+# ---------------------------------------------------------------------
+
+# A sentence that names studies in order to say they were set aside, or count
+# for less, is honest about them, and keeps its citation.
+_SETS_ASIDE = re.compile(
+    r"\b(?:count(?:s|ed)? for less|point(?:s|ed)? the other way|set aside|not relied on|"
+    r"(?:did|does|do) not (?:test|measure|study|look at)|don[\u2019']t (?:test|measure)|"
+    r"off topic|not (?:a )?tests? of|retracted|"
+    r"(?:animal|lab|laboratory|preclinical|in vitro|cell|rat|mouse|mice) (?:studies|study|work|"
+    r"research|models?|experiments?))\b", re.IGNORECASE)
+
+# A sentence that fails its sources is dropped, except a caution about harm
+# and a statement that the claim went untested. The caution rule is a
+# fail-safe: keeping a false reassurance is never acceptable, and losing a
+# few awkwardly worded warnings is. A failing sentence stays only if it names
+# a harm (or is an instruction not to use something) AND has no softening
+# word, no reassuring word and no negation in it. A kept caution names no
+# study, bracketed or inline, so none is credited with what its record does
+# not give.
+#
+# The "does not apply to" line is a list of people, not a claim: a harm or
+# hazard word there ("bacterial infections", "contraindications to alcohol")
+# says who must not rely on the answer. It meets the same softening test but
+# not the negation test ("people without desk jobs, and people with severe
+# spinal injuries").
+HARM = re.compile(
+    r"\b(?:injur\w*|burn(?:s|ed|t|ing)?|toxic\w*|poison\w*|teratogen\w*|unsafe|not safe|"
+    r"should not|shouldn[’']t|must not|do not stop|don[’']t stop|contraindicat\w*|"
+    r"bleed\w*|deaths?|died|fatal\w*|overdos\w*|side[- ]effects?|adverse|harm\w*|dangers?|"
+    r"dangerous\w*|warn\w*|caution\w*)\b", re.IGNORECASE)
+_HAZARD = re.compile(r"\b(?:infections?|infectious|outbreaks?|interact\w*|abnormalit\w*)\b",
+                     re.IGNORECASE)
+
+# Words naming a harm, whole words with their inflections.
+_HARM_WORDS = re.compile(
+    r"\b(?:death\w*|die|dies|died|dying|dead|deadly|fatal\w*|kill\w*|lethal|mortality|"
+    r"injur\w*|damag\w*|failures?|bleed\w*|ha?emorrhag\w*|birth defects?|malformation\w*|"
+    r"miscarriages?|stillbirths?|overdos\w*|poison\w*|toxic\w*|seizures?|anaphyla\w*|"
+    r"allergic reactions?|interact\w*|hospitali[sz]\w*|side[- ]effects?|adverse|"
+    r"harm\w*|danger\w*|hazardous|unsafe|teratogen\w*|outbreaks?|burn(?:s|ed|t|ing)?|strokes?|heart attacks?|"
+    r"complications?|abnormalit\w*|contraindicat\w*|"
+    r"nausea\w*|vomit\w*|diarrh\w*|dizz\w*|headaches?|rash\w*|itch\w*|syndromes?|hepatitis|jaundice|"
+    r"arrhythmi\w*|palpitations?|hypoglyc\w*|hyperkal\w*|hypotension|"
+    r"coma|paralysis|blindness|deafness|addiction|cramps?|pain\w*|"
+    r"swelling|ulcers?|kidney stones?)\b", re.IGNORECASE)
+
+# Words that soften or reassure. Any one anywhere in the sentence drops it.
+_SOFTENERS = re.compile(
+    r"\b(?:may|might|could|possibl\w+|perhaps|sometimes|occasional\w*|rare|rarely|rarer|seldom|"
+    r"uncommon|infrequent\w*|usually|generally|typically|mostly|mild\w*|minor|minimal|negligible|tiny|"
+    r"slight\w*|some|few|fewer|less|lower\w*|low|little|small\w*|only|hardly|barely|unlikely|"
+    r"safe|safely|safer|safety|harmless|gentle|gently|tolerat\w+|fine|ok|okay|relax\w*|worr\w+|concern\w*|"
+    r"unfounded|unsupported|unchanged|similar|comparable|resolv\w+|reversible|transient|"
+    r"benign|reassur\w+|placebo-like|"
+    # a cut in the harm is good news, whatever the harm is
+    r"reduc\w+|fell|fall\w*|fallen|drop\w*|declin\w+|decreas\w+|cut|cuts|cutting|prevent\w*|"
+    r"halv\w+|lessen\w*|curb\w*|avoid\w*|protect\w*|improv\w*|"
+    # a benefit claim is not a harm, and "can" must not carry one through
+    r"treat\w*|cur(?:e|es|ed|ing)|heal\w*|reliev\w*|relief|eas(?:e|es|ed|ing)|stop|stops|stopped|stopping|"
+    r"control\w*|manag\w*|restor\w*|boost\w*|support\w*|help\w*|benefit\w*|fight\w*|shrink\w*|"
+    r"slow\w*|eliminat\w*|revers\w*|destroy\w*|clear\w*|eradicat\w*|target\w*|"
+    # minimisers: the harm is said to be tiny, however it is worded
+    r"scarc\w+|practically|virtually|essentially|insignificant|trivial|isolated|sporadic|nil|"
+    r"unheard of|handful|modest|limited|just|merely)\b", re.IGNORECASE)
+# A rarity figure: "under 1%", "fewer than 5 in 1,000", "3 in 10,000", "up to 2".
+_RARITY = re.compile(
+    r"\b(?:under|below|less than|fewer than|at most|up to)\s+[\d.,]+|\b\d[\d,.]*\s+in\s+[\d,]{3,}\b|"
+    r"\b\d[\d,.]*\s+(?:per|out of)\s+[\d,]{3,}\b", re.IGNORECASE)
+# Killing germs or cells is a benefit claim, not a harm.
+_KILLS_GERMS = re.compile(
+    r"\b(?:kill|destroy|attack)\w*\s+(?:\w+\s+){0,3}?(?:cells?|bacteri\w*|germs?|microbes?|viruses|virus|"
+    r"parasites?|fungi|fungus|pathogens?|tumou?rs?|cancer\w*)\b", re.IGNORECASE)
+
+# Negation turns a harm into a reassurance ("caused no birth defects").
+_NEGATION = re.compile(
+    r"\b(?:no|not|never|none|nothing|nobody|without|zero|neither|nor|cannot|non-?|"
+    r"free of|clear of|lack of|lacks?|lacking|absen(?:t|ce)|rul(?:e|es|ed|ing) out|exclud\w*|myths?|"
+    r"misconception\w*|exaggerat\w*|overblown|overstat\w*|unproven|disprov\w*|debunk\w*|refut\w*|"
+    r"false alarms?|nonexistent|unaffected|normal\w*|undetect\w*|unobserved)\b|n[’']t\b", re.IGNORECASE)
+
+# An instruction not to use something. It is a caution without a harm word,
+# and its own "not" and "avoid" are not counted as negation or softening.
+_PROHIBITION = re.compile(
+    r"\b(?:(?:do not|don[’']t|must not|mustn[’']t|should not|shouldn[’']t|should never|never|"
+    r"no one should|nobody should)\s+(?:(?:ever|simply|just)\s+)?"
+    r"(?:take|give|use|combine|exceed|start|stop|mix|drink|eat|inject|apply|swallow|skip|delay|rely|replace)\b|"
+    r"not be (?:used|given|taken)|"
+    r"must be avoided|(?:is|are) (?:best )?avoided|(?:should|must|need to|needs to|advised to|best to|"
+    r"told to|ought to)\s+(?:\w+\s+){0,2}?avoid\w*|^\W*avoid\b|"
+    r"stop(?:s|ped)? taking|(?:is|are) contraindicated)", re.IGNORECASE)
+
+
+def is_warning(sentence: str, who: str = "") -> bool:
+    """A caution about harm that nothing in the sentence softens: it names a
+    harm ("deaths occurred in 3 children") or tells people not to use
+    something ("do not take it with warfarin"), and has no softening or
+    reassuring word ("may", "rare", "safe", "fewer", "reduced") and no
+    negation ("no", "not", "without"). A prohibition's own "not" does not
+    count against it. On the "does not apply to" line a harm or hazard word
+    is enough, if nothing softens it."""
+    body = _REF.sub(" ", sentence or "")
+    rest = _PROHIBITION.sub(" ", body)
+    if _SOFTENERS.search(rest) or _KILLS_GERMS.search(rest) or _RARITY.search(rest):
+        return False
+    if who == "not":
+        return bool(HARM.search(body) or _HAZARD.search(body))
+    if _NEGATION.search(rest):
+        return False
+    return bool(_HARM_WORDS.search(rest) or _PROHIBITION.search(body))
+
+
+# A sentence saying the studies did not test the claim is the honest answer to
+# it, and is never dropped either: "Neither tested whether diabetes went away".
+_UNTESTED = re.compile(
+    r"\b(?:neither|none|no (?:study|trial|review)s?|nothing)\b[^.]{0,60}?\btest|"
+    r"\b(?:not|never|n[’']t)\s+(?:\w+\s+){0,2}?test(?:ed|s)?\b", re.IGNORECASE)
+
+
+def never_dropped(sentence: str, who: str = "") -> bool:
+    """Whether a sentence that fails its sources is kept anyway. Only a
+    statement that the claim went untested, with no harm named in it, is: it asserts an absence no study
+    could support. A warning of harm is not. Five rounds of word lists could
+    not tell every warning from every reassurance, so a sentence no cited
+    study supports is removed, even a warning. is_warning stays as the old
+    classifier, used by tests and no longer by the page."""
+    body = _REF.sub(" ", sentence or "")
+    return bool(_UNTESTED.search(body)
+                and not (_HARM_WORDS.search(body) or HARM.search(body) or _PROHIBITION.search(body)))
+
+
+def uncited(sentence: str) -> str:
+    """`sentence` with its bracketed citations taken off."""
+    out = _PAREN_REF.sub("", sentence)
+    return re.sub(r"\s+([.,;:!?])", r"\1", out).strip()
+
+
+_NUMS = r"\d+(?:\s*(?:,|,?\s*and\b|&)\s*\d+)*"
+# A study named in the sentence itself, as the one saying it: "Study 1
+# found that", "Studies 1 and 2 show", "In Study 1,", "in Study 1", "study 4
+# is a reminder that". Taken out, the caution says the same and credits no
+# study with what its record does not give.
+_INLINE_ATTRIBUTION = [
+    re.compile(rf"^\s*(?:in|according to|from)\s+stud(?:y|ies)\s+{_NUMS}\s*,\s*", re.IGNORECASE),
+    re.compile(rf"\bstud(?:y|ies)\s+{_NUMS}\s+(?:\w+\s+){{0,2}}?(?:found|finds|find|shows?|showed|shown|"
+               rf"reported|reports?|suggests?|suggested|notes?|noted|says|said|is a reminder|was a reminder|"
+               rf"are a reminder|warns?|warned|saw|sees|observed|judged|considered|rated)\s+(?:that\s+)?",
+               re.IGNORECASE),
+    re.compile(rf"\s*,?\s*\b(?:in|from|by|according to)\s+stud(?:y|ies)\s+{_NUMS}\b", re.IGNORECASE),
+]
+# A finite verb, roughly: an auxiliary or modal, a past form, or a verb this
+# prose uses. "It harmless in 9,000 pregnant women" has none.
+_FINITE = re.compile(
+    r"\b(?:is|are|was|were|be|been|being|am|has|have|had|do|does|did|can|cannot|may|might|could|would|will|"
+    r"shall|should|must|\w+ed|rose|fell|led|saw|took|gave|made|grew|ran|came|went|found|told|left|kept|"
+    r"shows?|causes?|injures?|burns?|damages?|harms?|raises?|lowers?|reduces?|increases?|worsens?|kills?|"
+    r"interacts?|carr(?:y|ies)|spreads?|leads?|helps?|works?|needs?|remains?|stays?|seems?|appears?|"
+    r"puts?|gets?|makes?|takes?|gives?|lasts?|says?|means?|tests?|protects?|prevents?|affects?)\b",
+    re.IGNORECASE)
+_CLAUSE_SPLIT = re.compile(r"(,\s*(?:and|but)\s+|;\s*|\s+but\s+)", re.IGNORECASE)
+
+
+def _tidy(text: str) -> str:
+    out = re.sub(r"\s{2,}", " ", re.sub(r"\s+([.,;:!?])", r"\1", text)).strip()
+    return out[:1].upper() + out[1:]
+
+
+def unattributed(sentence: str, passes=None) -> str:
+    """`sentence` with no study named in it: bracketed citations off, inline
+    naming taken out, and any study still named reworded to "a study". It
+    never leaves a clause without a verb: where taking the naming out would
+    ("Study 1 found it harmless in ..."), the clause reads "A study found
+    ..." if `passes(clause)` says its sources carry it, and otherwise the
+    clause goes. With nothing left, the result is empty."""
+    parts = _CLAUSE_SPLIT.split(uncited(sentence))
+    clauses, seps = parts[0::2], parts[1::2]
+    out: list[str | None] = []
+    for clause in clauses:
+        if not _REF.search(clause):
+            out.append(clause)
+            continue
+        bare = clause
+        for pattern in _INLINE_ATTRIBUTION:
+            bare = pattern.sub("", bare)
+        if _FINITE.search(_REF.sub(" ", bare)):
+            out.append(_REF.sub(lambda m: "studies" if re.search(r"\d\D+\d", m.group(1)) else "a study", bare))
+        elif passes is not None and passes(clause):
+            out.append(_REF.sub(lambda m: "studies" if re.search(r"\d\D+\d", m.group(1)) else "a study", clause))
+        else:
+            out.append(None)
+    text = ""
+    for i, clause in enumerate(out):
+        if clause is None:
+            continue
+        if text:
+            text += seps[i - 1]
+        text += clause
+    if not text.strip(" .,;:"):
+        return ""
+    if not re.search(r"[.!?]$", text.strip()):
+        text = text.rstrip(" ,;:") + "."
+    return _tidy(text)
+
+
+_PAREN_REF = re.compile(
+    r"\s*\(\s*((?:stud(?:y|ies)\s+\d+(?:\s*(?:,|,?\s*and\b|&)\s*\d+)*\s*[,;]?\s*)+)\)",
+    re.IGNORECASE)
+
+
+def strip_unrelied(sentence: str, relied, count: int) -> str:
+    """`sentence` with the bracketed citations of studies not relied on taken
+    off, keeping any relied-on study in the same brackets. A citation that is
+    part of the sentence itself ("study 4 is a reminder") cannot be taken off
+    without rewriting it, so the sentence is then left exactly as it was."""
+    relied = set(relied or ())
+
+    def fix(m: re.Match) -> str:
+        nums = [int(n) for n in re.findall(r"\d+", m.group(1))]
+        keep = [n for n in nums if n in relied or n > count]
+        if not keep:
+            return ""
+        return " (Study %d)" % keep[0] if len(keep) == 1 else \
+            " (Studies " + ", ".join(str(n) for n in keep) + ")"
+
+    out = _PAREN_REF.sub(fix, sentence)
+    out = re.sub(r"\s+([.,;:!?])", r"\1", out).strip()
+    if any(n not in relied for n in refs(out, count)):
+        return sentence
+    return out
+
+
+# Who a study was run in. A sentence that names one of these groups must cite
+# a study whose own record names it: the exercise page said "pregnant women"
+# of a study of people after birth.
+_GROUP_TERMS = [(re.compile(said, re.IGNORECASE), re.compile(source, re.IGNORECASE)) for said, source in (
+    (r"\bpregnan\w*|\bexpectant mothers?\b|\bprenatal\b|\bantenatal\b",
+     r"\bpregnan\w*|\bprenatal\b|\bantenatal\b|\bgestation\w*|\bexpectant\b"),
+    (r"\bpostpartum\b|\bpostnatal\b|\bafter (?:giving )?birth\b|\bnew mothers?\b",
+     r"\bpostpartum\b|\bpostnatal\b|\bafter (?:giving )?birth\b|\bnew mothers?\b|\bpuerper\w*"),
+    (r"\bolder (?:adults?|people|women|men|groups?)\b|\belderly\b|\bseniors?\b",
+     r"\bolder\b|\belderly\b|\bseniors?\b|\bag(?:e|ed|ing)\b|\bgeriatric\b|\b(?:6[0-9]|[7-9][0-9]) years\b"),
+    (r"\bchildren\b|\bchild\b|\bkids?\b|\badolescen\w*|\bteenagers?\b|\binfants?\b|\bbabies\b",
+     r"\bchild\w*|\bkids?\b|\badolescen\w*|\bteen\w*|\binfan\w*|\bbab(?:y|ies)\b|\bpa?ediatric\b|"
+     r"\byouth\b|\bschool\w*|\bnewborns?\b|\bneonat\w*|\baged 0\b"),
+    (r"\bcancers?\b|\boncolog\w*|\bchemotherapy\b|\btumou?rs?\b",
+     r"\bcancers?\b|\boncolog\w*|\bchemotherapy\b|\btumou?r\w*|\bcarcino\w*|\bmalignan\w*|\bneoplas\w*"),
+    (r"\bdiabet\w*", r"\bdiabet\w*|\bT2DM?\b|\bT1DM?\b"),
+    (r"\bathletes?\b", r"\bathlet\w*|\bsports?\w*|\bplayers?\b|\btrained\b|\brunners?\b|\bmarathon\w*|"
+     r"\bphysical stress\b|\bsoldiers?\b|\bexercis\w*"),
+    (r"\bfo?etus(?:es)?\b|\bfo?etal\b|\bunborn\b",
+     r"\bfo?etus(?:es)?\b|\bfo?etal\b|\bunborn\b|\bprenatal\b|\bpregnan\w*"),
+    (r"\bpostmenopausal\b|\bafter menopause\b", r"\bmenopaus\w*|\bpostmenopaus\w*"),
+    (r"\bobes\w*|\boverweight\b", r"\bobes\w*|\boverweight\b|\bBMI\b|\bbody mass\b"),
+    (r"\bsmokers?\b", r"\bsmok\w*|\btobacco\b|\bcigarette\w*"),
+    (r"\bstudents?\b", r"\bstudents?\b|\bundergraduates?\b|\buniversity\b|\bcollege\b"),
+    (r"\bnursing homes?\b|\bcare homes?\b", r"\bnursing homes?\b|\bcare homes?\b|\blong.term care\b|\bresidential\b"),
+    (r"\bheart (?:disease|failure)\b", r"\bheart\b|\bcardi\w*|\bcoronary\b"),
+    (r"\bkidney\b|\brenal\b|\bdialysis\b", r"\bkidney\w*|\brenal\b|\bdialysis\b|\bnephr\w*"),
+    (r"\bdementia\b|\balzheimer\w*", r"\bdementia\b|\balzheimer\w*|\bcognitive (?:decline|impairment)\b"),
+)]
+# A sentence that says a group was left out of the studies ("children were
+# not in either trial") is true because the records do not name them, so it
+# is not held to naming them.
+_LEFT_OUT = re.compile(
+    r"\b(?:not|never|no)\b(?:\s+[\w-]+){0,3}?\s+(?:included|include|includes|studied|study|"
+    r"enrolled|enrol|enroll|tested|test|covered|cover|targeted|target|focus|represented|"
+    r"part of|among|appear|apply|applies|in)\b|\bdoes(?:n[\u2019']t| not) cover\b|"
+    r"\b(?:did|do|does|were|was|are|is)n[\u2019']t\b(?:\s+[\w-]+){0,3}?\s+(?:included|include|"
+    r"studied|study|enrolled|tested|test|covered|cover|target|in|among)\b|\bexcluded\b",
+    re.IGNORECASE)
+# "Thousands of people" needs a count that size in a study it cites: the
+# creatine page said "thousands" of a review of 1,937.
+_VAGUE_COUNTS = [(re.compile(r"\btens of thousands\b", re.I), 20000),
+                 (re.compile(r"\b(?<!tens of )thousands\b", re.I), 2000),
+                 (re.compile(r"\bhundreds\b", re.I), 200),
+                 (re.compile(r"\bmillions\b", re.I), 2000000)]
+_PEOPLE_AFTER = re.compile(r"\s*(?:[A-Za-z-]+\s+){0,3}?(?:participants|adults|patients|subjects|"
+                           r"individuals|people|persons|men|women|children|cases|volunteers)\b",
+                           re.IGNORECASE)
+# Words any "who it applies to" clause can use without the study saying them.
+_GENERIC_WHO = frozenset("""
+people person persons adult adults those these them they their individual individuals
+group groups participant participants patient patients anyone everyone someone with
+without who whom whose that which have having from under over more less than specific
+certain other others some many most such also only especially mainly generally usually
+likely may might studied study studies evidence research trial trials data apply
+applies applied claim this being been were what when where while into onto about
+general healthy population populations type types kind kinds form forms find found
+taking take takes using used use doing does done among across between within based
+finding findings result results like such including include includes generally broadly
+""".split())
+
+
+# "1 279 804" or "11 321" (a space, thin space or no-break space between
+# groups of three) is one number, written 1,279,804.
+_SPACED_THOUSANDS = re.compile(r"(?<=\d)[\u2009\u202f\xa0 ](?=\d{3}(?!\d))")
+
+
+def _ungroup(text: str) -> str:
+    return _SPACED_THOUSANDS.sub(",", text or "")
+
+
+def _studies_text(studies, numbers) -> str:
+    return _ungroup(" ".join(f"{studies[n - 1].get('title') or ''} {studies[n - 1].get('abstract') or ''}"
+                             for n in numbers if 0 < n <= len(studies)))
+
+
+def _counts_in(text: str) -> list[int]:
+    """The whole numbers a record gives that can be counts of people: a bare
+    year (1900 to 2099 with no people word after it) is not one."""
+    out = []
+    for m in re.finditer(r"(?<![\d.])(\d{1,3}(?:,\d{3})+|\d+)(?![\d.])", text or ""):
+        n = int(m.group(1).replace(",", ""))
+        if 1900 <= n <= 2099 and "," not in m.group(1) and not _PEOPLE_AFTER.match(text, m.end()):
+            continue
+        out.append(n)
+    return out + [int(x) for x in evidence.written_numbers(text) if str(x).isdigit()]
+
+
+def _known_in(studies, numbers) -> set:
+    """Every number the cited records give, and each as the page rounds it
+    (for_reading): "21.929" is printed as "about 22", "7.44" can be "7"."""
+    # "11 321" with a thin space is 11,321, in the title as in the abstract.
+    picked = [studies[n - 1] for n in numbers if 0 < n <= len(studies)]
+    bag = corpus([{**st, "title": _ungroup(str(st.get("title") or "")),
+                   "abstract": _ungroup(str(st.get("abstract") or ""))} for st in picked])
+    source = " ".join(f"{st.get('title') or ''} {st.get('abstract') or ''}" for st in picked)
+    bag |= _supported_counts(_ungroup(source))
+    for num in list(bag):
+        if "." in num:
+            try:
+                bag.add(_canon(str(Decimal(num).quantize(Decimal(1), ROUND_HALF_UP))))
+            except (ArithmeticError, ValueError):
+                continue
+            r = _rounded(num)
+            if r:
+                bag.add(_canon(r[0].lstrip("-−")))
+    return bag
+
+
+# Group sizes a record gives as "n = 25" or "(n=29)": their sum is the
+# trial's total, which a sentence may give ("54 adults") though the record
+# never prints it.
+_GROUP_N = re.compile(r"\bn\s*=\s*(\d{1,3}(?:,\d{3})+|\d+)", re.IGNORECASE)
+
+
+def _supported_counts(source: str) -> set:
+    """Counts a record supports without printing them: the sum of its group
+    sizes, and each large count as a reader rounds it, to two significant
+    figures ("1,279,804" is "1,300,000", and "1.3 million" is read as that
+    before it is looked up; "36,352" is "36,000")."""
+    out = set()
+    groups = [int(g.replace(",", "")) for g in _GROUP_N.findall(source)]
+    if 2 <= len(groups) <= 6:
+        out.add(str(sum(groups)))
+    for m in re.finditer(r"(?<![\d.])(\d{1,3}(?:,\d{3})+|\d{4,})(?![\d.])", source):
+        n = int(m.group(1).replace(",", ""))
+        if n < 1000:
+            continue
+        digits = len(str(n))
+        r = round(n, -(digits - 2))
+        out.add(str(r))
+    return out
+
+
+_SCALED = re.compile(r"(?<![\d.,])(\d+(?:\.\d+)?)\s+(thousand|million|billion)\b", re.IGNORECASE)
+_SCALE = {"thousand": 1000, "million": 1000000, "billion": 1000000000}
+
+
+def _unscaled(sentence: str) -> str:
+    """ "1.3 million people" read as "1300000 people", so a count written in
+    words is checked as the number it is, not as a bare 1.3."""
+    def whole(m):
+        v = Decimal(m.group(1)) * _SCALE[m.group(2).lower()]
+        return str(int(v)) if v == v.to_integral_value() else m.group(0)
+    return _SCALED.sub(whole, sentence)
+
+
+def _unsupported_who(sentence: str, source: str) -> bool:
+    """True when some clause of a "who it applies to" sentence shares no
+    word with the records it cites: "those with specific untreated medical
+    conditions (Study 7)", from a study that never mentions a condition."""
+    body = re.sub(r"\([^)]*\)", " ", _REF.sub(" ", sentence))
+    have = {_stem(w) for w in re.findall(r"[A-Za-z]{3,}", source)}
+    for clause in re.split(r",|;|:|\bor\b|\band\b|\bbut\b|\bnor\b", body, flags=re.IGNORECASE):
+        words = [w for w in re.findall(r"[A-Za-z]{4,}", clause) if w.lower() not in _GENERIC_WHO]
+        if words and not any(_stem(w) in have for w in words):
+            return True
+    return False
+
+
+def _clause_fails(clause: str, source: str, have: set) -> bool:
+    """A "who it applies to" clause its cited records do not support. A clause
+    that names a known group is judged by the group alone ("pregnant women"
+    for a study of alcohol use during pregnancy is fine); any other clause
+    needs one word that starts the same as a word in the records."""
+    named = [(said, src) for said, src in _GROUP_TERMS if said.search(clause)]
+    if named:
+        return not all(src.search(source) for _said, src in named)
+    words = [w.lower() for w in re.findall(r"[A-Za-z]{4,}", clause) if w.lower() not in _GENERIC_WHO]
+    return bool(words) and not any(w[:5] in have for w in words)
+
+
+def _who_clauses(sentence: str, studies, numbers) -> str:
+    """An "applies to" sentence with only its unsupported clauses taken out:
+    "Adults, older women and smokers (Study 1)" keeps what Study 1 names.
+    "" when no clause is left."""
+    source = _studies_text(studies, numbers)
+    m = re.search(r"\s*\([^)]*\)\s*\.?\s*$", sentence)
+    body, tail = (sentence[:m.start()], sentence[m.start():]) if m else (sentence.rstrip(". "), ".")
+    parts = [p.strip() for p in re.split(r",\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+", body) if p.strip()]
+    have = {w.lower()[:5] for w in re.findall(r"[A-Za-z]{4,}", source)}
+    keep = [p for p in parts if not _clause_fails(p, source, have)]
+    if len(keep) == len(parts):
+        return sentence
+    if not keep:
+        return ""
+    joined = keep[0] if len(keep) == 1 else ", ".join(keep[:-1]) + " and " + keep[-1]
+    return joined[:1].upper() + joined[1:] + (tail if tail.strip() else ".")
+
+
+def _from_claim_or_name(sentence: str, figure_at: int, figure: str, claim: str) -> bool:
+    """A number the gate does not ask a record for: one the claim itself
+    gives ("8 glasses of water"), or one that is part of a name ("type 2
+    diabetes", "COVID-19", "phase 3")."""
+    if _NAME_NUMBER.search(sentence[:figure_at]):
+        return True
+    return _canon(figure) in {_canon(m.group(0)) for m in _NUMERAL.finditer(claim or "")}
+
+
+def _fails_sources(sentence: str, studies, numbers, who: str = "", claim: str = "") -> bool:
+    """Whether a sentence says something the studies it cites do not. `who`
+    is "applies" or "not" for the two "who it applies to" lines: the groups
+    a "does not apply to" line names are, as expected, groups its records do
+    not mention, so neither the group rule nor the clause rule runs there,
+    and an "applies to" line has its clauses checked one by one elsewhere."""
+    source = _studies_text(studies, numbers)
+    left_out = bool(_LEFT_OUT.search(sentence))
+    if not who:
+        for said, named in _GROUP_TERMS:
+            if not left_out and said.search(sentence) and not named.search(source):
+                return True
+    if not sentence.startswith(TRANSLATION_LEAD):
+        known = _known_in(studies, numbers)
+        bare = _unscaled(_REF.sub(" ", sentence))
+        if any(_canon(m.group(0)) not in known
+               and not _from_claim_or_name(bare, m.start(), m.group(0), claim)
+               for m in _NUMERAL.finditer(bare)):
+            return True
+    counts = _counts_in(source)
+    for pattern, least in _VAGUE_COUNTS:
+        if pattern.search(sentence) and not any(n >= least for n in counts):
+            return True
+    return False
+
+
+def _gate(sentence: str, cited, studies, relied, who: str, claim: str) -> str:
+    """The checks every cited sentence meets: `sentence` as it may be
+    shown, or "" if it fails them."""
+    count = len(studies or [])
+    if not _SETS_ASIDE.search(sentence):
+        using = [n for n in cited if n in relied]
+        if not using:
+            return ""
+        if len(using) < len(cited):
+            sentence = relied_only(sentence, relied, count)
+            cited = using
+    if _fails_sources(sentence, studies, cited, who, claim):
+        return ""
+    if who == "applies" and not _LEFT_OUT.search(sentence):
+        sentence = _who_clauses(sentence, studies, cited)
+    return sentence or ""
+
+
+def held_to_sources(text: str, studies: list[dict], relied, who=False, claim: str = "") -> str:
+    """
+    `text` with every cited sentence held to the studies it cites:
+
+    - a sentence citing only studies the verdict did not rely on goes;
+    - one citing a mix keeps only the studies relied on, and then has to
+      pass the checks below on those alone, or it goes;
+    - a group of people it names ("pregnant women", "older adults with
+      cancer") must be named in a cited record;
+    - every figure must be in a cited record (rounded as the page rounds,
+      or as a total or a rounded count the record supports), unless the
+      claim itself gives it or it is part of a name ("type 2");
+    - "thousands", "hundreds" of people need a count that size in one;
+    - on the "applies to" line (`who="applies"`), a clause its records give
+      no word for is taken out, not the whole line; on the "does not apply
+      to" line (`who="not"`), the group and clause rules do not run.
+
+    A sentence that fails these checks goes, even a warning of harm, unless it
+    says the claim was not tested. That one stays, naming no study, bracketed or
+    inline (unattributed), so none is credited with it. The one exception
+    is a study not relied on that the sentence names inline, when what it
+    is credited with passes: that cannot come off without a rewrite, so the
+    sentence is left as written.
+
+    `relied` is the set of study numbers the verdict relied on. With none
+    relied on (not enough evidence), the text names what was read and why
+    none of it counted, so it is left as it was. A sentence that cites
+    nothing is left exactly as it was.
+    """
+    if who is True:
+        who = "applies"
+    count = len(studies or [])
+    relied = set(relied or ())
+    if not relied:
+        return text or ""
+    kept = []
+    for sentence in sentences(text or ""):
+        cited = refs(sentence, count)
+        if not cited:
+            kept.append(sentence)
+            continue
+        held = _gate(sentence, cited, studies, relied, who or "", claim)
+        if held:
+            kept.append(held)
+            continue
+        # It failed. Only a statement that the claim went untested stays,
+        # and then it names no study.
+        if not never_dropped(sentence, who or ""):
+            continue
+        def passes(clause: str) -> bool:
+            return not _fails_sources(clause, studies, refs(clause, count), who or "", claim)
+
+        sentence = uncited(sentence)
+        # A study named in the sentence itself is credited only with its own
+        # clause. If every such clause passes, the naming stays: "Neither
+        # tested whether diabetes went away, and study 4 is a reminder that
+        # undiluted vinegar can injure the oesophagus" credits study 4 with
+        # the injury, which it gives, and not with diabetes.
+        named = [cl for cl in _CLAUSE_SPLIT.split(sentence)[0::2] if refs(cl, count)]
+        if not (named and all(passes(cl) for cl in named)):
+            sentence = unattributed(sentence, passes=passes)
+        if sentence:
+            kept.append(sentence)
+    return " ".join(kept)
+
+
+def hold_breakdown(bd: dict | None, studies: list[dict], relied, claim: str = "") -> dict | None:
+    """held_to_sources over every string of prose the breakdown prints, with
+    the two "who it applies to" lines held to their own rules."""
+    if not bd:
+        return bd
+    who = {k: bd.get(k) for k in ("applies_to", "not_applies_to")}
+    out = map_prose(bd, lambda t: held_to_sources(t, studies, relied, claim=claim))
+    for k, v in who.items():
+        if v:
+            out[k] = held_to_sources(v, studies, relied,
+                                     who="applies" if k == "applies_to" else "not", claim=claim)
+    return settle_effect(out)
 
 
 def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "") -> bool:
@@ -1789,6 +2761,177 @@ def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "
         evidence.never_mentions(studies[n - 1], stems)
         and (not stand_in or evidence.never_mentions(studies[n - 1], stand_in))
         for n in numbers)
+
+
+def figure_sentence(bd: dict | None) -> str:
+    """
+    The sentence the breakdown's sized figure (`effect`) was read from: the
+    first sentence of the effect box, then of the evidence paragraphs, that
+    gives the same figure, or failing that names its number. A figureless
+    "no clear difference" is the effect box's own first sentence. The
+    "That is ..." translation is code's arithmetic, never the source. ""
+    when it cannot be found.
+    """
+    bd = bd or {}
+    figure = str((bd.get("effect") or {}).get("figure") or "")
+    pool = [t for text in [bd.get("effect_size")] + list(bd.get("evidence") or [])
+            for t in sentences(str(text or "")) if not t.startswith(TRANSLATION_LEAD)]
+    if not figure:
+        return pool[0] if pool and bd.get("effect_size") else ""
+    for t in pool:
+        if (evidence.effect_size(t) or {}).get("figure") == figure:
+            return t
+    number = figure.split()[-1].rstrip("%")
+    exact = re.compile(r"(?<![\d.])" + re.escape(number) + r"(?![\d])")
+    return next((t for t in pool if exact.search(t)), "")
+
+
+def _general_term(term: str) -> bool:
+    """An outcome term made only of words that name no outcome ("health",
+    "disease risk"). A short name such as "ASD" is not general: it is just
+    too short to read a stem from."""
+    words = re.findall(r"[a-z]+", term.lower())
+    return bool(words) and all(w in evidence._NOT_AN_OUTCOME for w in words)
+
+
+def names_outcome(text: str, outcome: str) -> bool:
+    """True when `text` names the query's outcome group, or its kin, by the
+    words evidence.measured_outcome reads a study by. False when that cannot
+    be told: no outcome group, or one also named in general words ("health"),
+    which any sentence would meet."""
+    stems = evidence.outcome_stems(outcome)
+    if not stems or any(_general_term(term)
+                        for term in re.split(r"\s+OR\s+", outcome.strip("() "))):
+        return False
+    return evidence.names_any(text, evidence.outcome_kin(stems))
+
+
+# Words that set what follows aside: "pain in the joints, not muscle, rose"
+# is about the joints. Read on the text just before a mention of the outcome.
+_SET_ASIDE = re.compile(r"\b(?:not|rather\s+than|instead\s+of|other\s+than|except(?:\s+for)?|excluding"
+                        r"|apart\s+from|unlike|but\s+not)\s+(?:(?:the|in|of|on|for)\s+){0,2}$", re.IGNORECASE)
+
+
+def _outcome_mentions(text: str, outcome: str):
+    """(text, match) for each word in `text` that names the query's outcome
+    group or its kin, read as names_outcome reads it."""
+    t = evidence._us(text or "")
+    for stem in evidence.outcome_kin(evidence.outcome_stems(outcome)):
+        for m in re.finditer(r"\b" + re.escape(stem) + r"\w*", t, re.IGNORECASE):
+            yield t, m
+
+
+def sets_outcome_aside(text: str, outcome: str) -> bool:
+    """True when the sentence names the outcome only to set it aside ("not
+    muscle", "rather than pain"): its figure is about something else."""
+    return any(_SET_ASIDE.search(t[:m.start()]) for t, m in _outcome_mentions(text, outcome))
+
+
+def _modifies_another(t: str, m) -> bool:
+    """The mention is the first half of a hyphened word that describes
+    another noun: "triglyceride-lowering drugs" are drugs."""
+    return bool(re.match(r"-[a-z]", t[m.end():], re.IGNORECASE))
+
+
+# A classifying adjective right before the outcome word makes a longer term
+# that names something else: "oxidative stress" is not stress, "metabolic
+# syndrome" is not a syndrome in general. Read by its ending. The words that
+# only say how bad, how long or how much are not such terms.
+_CLASSIFIER = re.compile(r"\b([a-z]+(?:ive|ic|al|ar|ary|ous|ory))\s+$", re.IGNORECASE)
+_DEGREE = frozenset("""chronic acute clinical total overall general usual normal actual initial final
+    additional typical potential physical mental emotional psychological substantial several serious
+    similar particular regular natural daily various previous""".split())
+
+
+def _inside_longer_term(t: str, m, words: set) -> bool:
+    """The mention follows a classifying adjective the claim does not use."""
+    before = _CLASSIFIER.search(t[:m.start()])
+    if not before:
+        return False
+    adj = before.group(1).lower()
+    return adj not in _DEGREE and adj not in words
+
+
+def names_outcome_itself(text: str, outcome: str, claim: str = "") -> bool:
+    """True when at least one mention of the outcome in `text` is the
+    outcome itself, not a word that only describes something else nor part
+    of a longer term the claim does not use."""
+    words = set(re.findall(r"[a-z]+", f"{claim} {outcome}".lower()))
+    return any(not _modifies_another(t, m) and not _inside_longer_term(t, m, words)
+               for t, m in _outcome_mentions(text, outcome))
+
+
+def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | None:
+    """
+    The effect label the evidence line may carry, or None. The line puts a
+    size ("a large effect", "no clear effect") next to the claim, so it
+    takes one only when the sentence the figure came from names the claim's
+    own outcome. A large rise in inflammation is not a large effect on
+    immunity, nor is one in a sentence that names the outcome only to set it
+    aside ("not muscle") or only as a word describing another noun
+    ("triglyceride-lowering drugs") or inside a longer term ("oxidative
+    stress"). The effect box keeps its figure and its own
+    sentence either way.
+    """
+    effect = (bd or {}).get("effect") or {}
+    label = effect.get("label")
+    if not label:
+        return None
+    said = figure_sentence(bd)
+    if (not names_outcome(said, outcome) or sets_outcome_aside(said, outcome)
+            or not names_outcome_itself(said, outcome, claim)):
+        return None
+    if label in ("small", "moderate", "large") and not agrees_direction(effect, said, claim):
+        return None
+    return label
+
+
+# Which way a claim says its outcome moves. The verbs are the ones the code
+# already reads a cause claim and a prevent claim by (evidence.CAUSE_CLAIM,
+# evidence.PREVENT_CLAIM and the protective verbs). "Improves" and "is good
+# for" say no direction in numbers: a better score can be a higher or a
+# lower one.
+_CLAIM_UP = re.compile(r"\b(?:causes?|caused|causing|leads? to|gives? you|triggers?|raises?|"
+                       r"increases?|boosts?)\b", re.IGNORECASE)
+# Which way a figure's own sentence says it moved, for a figure (a
+# standardised difference) whose number alone does not say.
+_MOVED_UP = re.compile(r"\b(?:increas\w*|rose|rise[sn]?|rising|higher|raised|elevat\w*|gain\w*)\b",
+                       re.IGNORECASE)
+_MOVED_DOWN = re.compile(r"\b(?:reduc\w*|decreas\w*|lower\w*|fell|fall\w*|drop\w*|declin\w*|"
+                         r"less|fewer)\b", re.IGNORECASE)
+
+
+def claim_direction(claim: str) -> str | None:
+    """'up' for a claim that something raises its outcome ("smoking causes
+    lung cancer"), 'down' for one that lowers it ("exercise lowers the risk
+    of depression"), None when it says neither, both, or is itself a no."""
+    claim = str(claim or "")
+    if claim_denies(claim):
+        return None
+    up = bool(evidence.caused_outcome(claim) or _CLAIM_UP.search(claim))
+    down = bool(evidence.prevented_outcome(claim) or evidence._PROTECTIVE_VERB.search(claim))
+    return "up" if up and not down else "down" if down and not up else None
+
+
+def figure_direction(effect: dict, said: str) -> str | None:
+    """'up' or 'down' for the figure the line would size: a ratio or a
+    percentage by the words code wrote beside it ("about 28% lower risk"),
+    a standardised difference by its own sentence's change word. None when
+    that cannot be told."""
+    plain = str((effect or {}).get("plain") or "")
+    if re.search(r"\blower\b", plain):
+        return "down"
+    if re.search(r"\bhigher\b", plain):
+        return "up"
+    up, down = bool(_MOVED_UP.search(said or "")), bool(_MOVED_DOWN.search(said or ""))
+    return "up" if up and not down else "down" if down and not up else None
+
+
+def agrees_direction(effect: dict, said: str, claim: str) -> bool:
+    """True when the figure moves the way the claim says. A claim that
+    something raises a risk is not sized by a figure of lower risk."""
+    want = claim_direction(claim)
+    return want is not None and figure_direction(effect, said) == want
 
 
 def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: str = "",
@@ -1910,10 +3053,13 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
     sized = evidence.effect_size(effect)
     # A figure its own abstract reports as no clear difference is sized as
     # none, whatever its distance from 1. The sentence say_nulls added under
-    # it becomes the translation, so it is picked as one by says().
+    # it becomes the translation, so it is picked as one by says(). So is an
+    # effect line that itself says there was no clear difference, whether or
+    # not a ratio could be read from it: "no drop in viral titer at 30 or 60
+    # minutes" is no effect, not a missing size for the line to guess at.
     null_ref = next((r for r in (null_figure(t, studies) for t in sentences(effect))
                      if r is not None), None)
-    if null_ref is not None or (sized and _SAID_NULL.search(effect)):
+    if (null_ref is not None or _SAID_NULL.search(effect)) and all_null(effect, studies):
         sized = dict(evidence.NULL_EFFECT, figure=(sized or {}).get("figure", ""))
         if null_ref:
             effect = effect.replace(NOT_SIGNIFICANT_SAID.format(ref=null_ref),
@@ -2016,7 +3162,7 @@ _CHANGE_BEFORE = re.compile(
     re.IGNORECASE)
 # Ratios and standardized differences have no unit, and need none.
 _UNITLESS_BEFORE = re.compile(
-    r"\b(?:a?ORs?|a?RRs?|a?HRs?|IRRs?|SMDs?|ratio|relative risk|standardi[sz]ed|"
+    r"\b(?:(?-i:[aA]?ORs?|a?RRs?|[aA]?HRs?|a?IRRs?|SMDs?)|ratio|relative risk|standardi[sz]ed|"
     r"Hedges|Cohen|effect size|g)\b[^.\d]{0,12}$", re.IGNORECASE)
 _P_BEFORE = re.compile(r"\bp\s*(?:-?value)?\s*(?:=|<|>|\u2264|\u2265|of)\s*$", re.IGNORECASE)
 _CI_BEFORE = re.compile(r"\bC\.?I\.?\b|confidence interval|credible interval|\b95%",
@@ -2615,15 +3761,67 @@ def shows_effect(text: str) -> bool:
     return False
 
 
+PROSE_FIELDS = ("effect_size", "strength", "applies_to", "not_applies_to", "unknowns")
+
+
+def prose_of(bd: dict | None) -> list[str]:
+    """Every string of prose the breakdown prints, the quoted conclusions
+    excepted (those are the authors' own words)."""
+    if not bd:
+        return []
+    out = list(bd.get("says") or []) + list(bd.get("evidence") or [])
+    out += [bd.get(k) or "" for k in PROSE_FIELDS]
+    out += [p.get("assessment") or "" for p in bd.get("parts") or []]
+    return [t for t in out if t]
+
+
+def map_prose(bd: dict | None, fn) -> dict | None:
+    """
+    The breakdown with `fn` applied to every string of prose it prints
+    (prose_of). A list item or part that `fn` empties goes; a part whose
+    answer went points at the paragraphs below when there are any, as the
+    gate does; an effect row left pointing at nothing goes (settle_effect).
+    """
+    if not bd:
+        return bd
+    out = dict(bd)
+    out["says"] = [x for x in (fn(t) for t in bd.get("says") or []) if x]
+    out["evidence"] = [x for x in (fn(t) for t in bd.get("evidence") or []) if x]
+    for k in PROSE_FIELDS:
+        if bd.get(k):
+            out[k] = fn(bd[k])
+    parts = []
+    for p in bd.get("parts") or []:
+        p = {**p, "assessment": fn(p.get("assessment") or "")}
+        if not p["assessment"] and out["evidence"]:
+            p["assessment"] = PART_BELOW
+        if p["assessment"]:
+            parts.append(p)
+    out["parts"] = parts
+    return settle_effect(out)
+
+
 def settle_effect(bd: dict | None) -> dict | None:
     """
     Take the effect line out when it points at figures that are no longer
     above it: rounding, the faithfulness check or the unit rule can remove
-    the last one after the line was written.
+    the last one after the line was written. The effect's size goes too
+    when the ratio it was read from is printed nowhere.
     """
-    if not bd or bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+    if not bd:
         return bd
     said = list(bd.get("evidence") or []) + [p.get("assessment") or "" for p in bd.get("parts") or []]
+    # The size the evidence line words ("a large effect") stands on a ratio
+    # only when the page prints a ratio of that kind. One saved from a misread
+    # ("35 people or 80 adults" read as an odds ratio of 80) is no finding.
+    # An effect line that says no clear difference still means none.
+    kind = evidence.ratio_kind((bd.get("effect") or {}).get("figure") or "")
+    if kind and not any(kind in evidence.ratio_kinds(t) for t in [bd.get("effect_size") or ""] + said):
+        bd = {**bd, "effect": (dict(evidence.NULL_EFFECT, figure="")
+                               if _SAID_NULL.search(bd.get("effect_size") or "")
+                               and all_null(bd.get("effect_size") or "") else None)}
+    if bd.get("effect_size") != EFFECT_SIZE_ABOVE:
+        return bd
     return bd if any(shows_effect(t) for t in said) else {**bd, "effect_size": ""}
 
 
@@ -2758,7 +3956,13 @@ def says(explanation: str, bd: dict, studies: list[dict], skip=()) -> list[str]:
     figure = re.search(r"\d+(?:\.\d+)?",
                        ((bd.get("effect") or {}).get("figure") or ""))
     pair = [line for line in said if figure and figure.group(0) in line][:1]
-    pair += [line for line in said if line.startswith(TRANSLATION_LEAD)][:1]
+    plain_at = next((i for i, line in enumerate(said) if line.startswith(TRANSLATION_LEAD)), None)
+    # With no figure named (a null read from a mean difference), the
+    # translation is taken with the sentence it follows, never alone: alone
+    # it lands under another study's figure.
+    if not pair and plain_at:
+        pair = [said[plain_at - 1]]
+    pair += [said[plain_at]] if plain_at is not None else []
     take(" ".join(pair) if pair else bd.get("effect_size"), 2)
     # Who was studied is often written as a bare noun phrase ("Adults with
     # type 2 diabetes (Study 1)."), which under a heading about what the

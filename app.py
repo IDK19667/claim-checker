@@ -1,10 +1,13 @@
 import gzip
 import hashlib
+import hmac
+import logging
 import json
 import os
+import re
 import secrets
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
 from urllib.parse import quote
@@ -14,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()  # must run before verdict.py reads the provider keys
 
 import requests
-from flask import (Flask, Response, g, jsonify, redirect, render_template, request,
+from flask import (Flask, abort, Response, g, make_response, jsonify, redirect, render_template, request,
                    send_from_directory)
 
 import breakdown as breakdown_mod
@@ -33,6 +36,8 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 
 # How long a verdict for a given claim is reused before re-checking.
 # 0 disables caching.
+# How many PubMed records a check reads. /method states it.
+MAX_STUDIES = 8
 VERDICT_CACHE_HOURS = float(os.environ.get("VERDICT_CACHE_HOURS", "24"))
 
 # Set TRUST_PROXY=1 when running behind a reverse proxy / hosting platform
@@ -89,6 +94,25 @@ app.jinja_env.globals["breakdown_view"] = display.breakdown_view
 app.jinja_env.globals["confidence_line"] = display.confidence_line
 app.jinja_env.globals["design_note"] = display.design_note
 app.jinja_env.globals["study_why"] = display.study_why
+app.jinja_env.globals["source_groups"] = display.source_groups
+app.jinja_env.globals["typed_note"] = display.typed_note
+app.jinja_env.globals["typed_note_parts"] = display.typed_note_parts
+app.jinja_env.filters["sentence_case"] = display.sentence_case
+# The one sentence on privacy that the footer and the top of /privacy both
+# print, from here, so the two cannot drift. It says what /privacy says in
+# full: the claim text is kept, nothing that identifies the person is, and
+# the text goes to the AI provider the page names.
+PRIVACY_LINE = "Claim text is stored without anything that identifies you and is sent to {provider} to check it."
+
+
+def privacy_line(provider: str, after_colon: bool = False) -> str:
+    """The privacy sentence for this provider. after_colon lowers its first
+    letter, for the /privacy lede, where it runs on after "The short version:"."""
+    line = PRIVACY_LINE.format(provider=provider)
+    return line[0].lower() + line[1:] if after_colon else line
+
+
+app.jinja_env.globals["privacy_line"] = privacy_line
 
 
 @app.before_request
@@ -185,7 +209,7 @@ def _claim_review_jsonld(cached: dict, url: str) -> dict:
     written by a model, and the markup says so.
     """
     studies = cached.get("studies") or []
-    cited = set(cached.get("cited_studies") or [])
+    cited = display.relied_pmids(cached.get("cited_studies"), studies)
     return {
         "@context": "https://schema.org",
         "@type": "ClaimReview",
@@ -227,80 +251,183 @@ def _citation(s: dict, relied_on: bool) -> dict:
     return c
 
 
+def _public_claims(rows, n, key="claim_text", indexable=False):
+    """
+    The first n rows whose claim may be shown in a public list. A claim that looks
+    like it holds a name, an age, contact details or a medical detail is left out
+    (indexable=True also needs it to be a curated example, for the machine index).
+    Callers fetch about three times n so a filtered list stays near its old size.
+    """
+    keep = display.indexable_claim if indexable else (lambda c: not display.looks_personal(c))
+    return [r for r in rows if keep(r[key])][:n]
+
+
+LIST_OVERFETCH = 3
+
+
+# The real check the trust section offers as proof. It is read from the
+# saved answers by its key, so the proof is always the answer the site serves.
+EXAMPLE_CLAIM = "Apple cider vinegar cures diabetes"
+
+
+def _as_shown(studies) -> list:
+    """`studies` as a reader is shown them: a withdrawn paper (retracted, or
+    a journal notice) is set aside for that reason, whatever else is true of
+    it, so its off-topic reason is not shown or counted beside it. Each
+    paper is counted once, as background. Copies; the records themselves,
+    and every reading made from them, are left as they are."""
+    return [dict(s, off_topic=None, background=evidence.withdrawn(s))
+            if isinstance(s, dict) and evidence.withdrawn(s) and s.get("off_topic") else s
+            for s in studies or []]
+
+
+def _list_entries(rows) -> list[dict]:
+    """
+    Saved answers as a public list shows them: the stamp the result page
+    would show (_listed) and the evidence behind it. The Latest list and the
+    trust section's example both go through here, so the two cannot disagree.
+    """
+    return [dict(v, evidence=evidence.snapshot(_as_shown(v["studies"]), v["cited"]),
+                 shelf=evidence.shelf(_as_shown(v["studies"]), v["cited"]))
+            for v in map(_listed, rows)]
+
+
+def _latest(n: int) -> list[dict]:
+    """
+    The newest n saved answers a public list may show, as recent_verdicts
+    reads them. Only a whole row (db.whole: its short answer and its
+    still-open line, the same test the example and a result page use) is a
+    finished answer; one that is not is never shown as one. Rows are fetched
+    in growing pages until the list is full or the table runs out.
+    """
+    limit = n * LIST_OVERFETCH
+    while True:
+        rows = db.recent_verdicts(limit)
+        whole = [r for r in rows if db.whole(r)]
+        out = _one_per_question(_public_claims(whole, len(whole)))[:n]
+        if len(out) >= n or len(rows) < limit:
+            return out
+        limit *= 2
+
+
+def _one_per_question(rows: list[dict]) -> list[dict]:
+    """
+    Each question once, newest first. Rows whose db.claim_fold keys are equal
+    are one question asked in other words ("Does creatine cause hair loss" and
+    "Creatine causes hair loss"); the newest row stands, under its own saved
+    wording. A row whose key is empty is never merged with another.
+    """
+    seen, out = set(), []
+    for r in rows:
+        key = db.claim_fold(r["claim_text"])
+        if key and key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
 def _trust_example():
     """
-    The real check the trust section offers as proof, read from the exported
-    check.json so it is never invented. None if
-    it is not built, and the section renders without it rather than with an
-    invented example.
+    The trust section's real example, {claim, verdict, tldr, checked, read,
+    href}, from the saved answer for EXAMPLE_CLAIM. None when that answer is
+    missing or incomplete (no studies, no short answer, no still-open line, an
+    unknown verdict or an unreadable date): the section then renders without
+    it rather than with an invented example.
     """
     try:
-        with open(os.path.join(app.static_folder, "flight", "check.json")) as f:
-            check = json.load(f)
-        d = datetime.fromisoformat(check["checkedAt"])
-        return {"claim": check["claim"], "verdict": check["verdict"], "tldr": check["tldr"],
-                "checked": f"{d.day} {d.strftime('%B %Y')}",
-                "read": len(check.get("studies") or []),
-                "href": "/?q=" + quote(check["claim"])}
-    except (OSError, ValueError, KeyError, TypeError):
+        row = db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM))
+        if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
+                or not row["tldr"].strip() or not row["still_open"].strip():
+            return None
+        d = datetime.fromisoformat(str(row["cached_at"]))
+        v = _list_entries([{"claim_text": row["claim_text"], "search_query": row["search_query"],
+                            "verdict": row["verdict"], "tldr": row["tldr"], "still_open": row["still_open"],
+                            "created_at": row["cached_at"], "studies": row["studies"],
+                            "cited": row["cited_studies"]}])[0]
+    except (sqlite3.Error, ValueError, KeyError, TypeError, AttributeError) as e:
+        app.logger.warning("Could not build the trust example: %s", e)
         return None
+    return {"claim": v["claim_text"], "verdict": v["verdict"], "tldr": v["tldr"],
+            "checked": f"{d.day} {d.strftime('%B %Y')}", "read": v["evidence"]["read"],
+            "href": "/?q=" + quote(v["claim_text"])}
 
 
-def _render_home(checks_page: bool = False):
+def _render_home():
     claim = _claim_from_query_args()
     preview = None
     cached = None
     jsonld = None
+    noindex = False
+    typed = None
     if claim:
         cached = db.get_cached_by_key(db.normalize_claim(claim))
+        # A link in other words than a saved claim's (a shared or typed
+        # address) reaches the same saved answer the check would give, so
+        # the page is complete before any script runs: the saved answer,
+        # under its saved wording, with the note naming the reader's words.
+        if not cached:
+            same = _equivalent(claim)
+            cached = db.get_cached_by_key(db.normalize_claim(same)) if same else None
+            typed = claim if cached else None
         if cached:
             label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
             share_url = f"{_base_url()}/?q={quote(cached['claim_text'])}"
             preview = {
                 "title": f"{label}: “{cached['claim_text']}”",
                 "description": cached["tldr"] or cached["explanation"],
-                "image": f"{_base_url()}/og/{quote(db.normalize_claim(claim), safe='')}.png",
+                "image": f"{_base_url()}/og/{quote(db.normalize_claim(cached['claim_text'] if typed else claim), safe='')}.png",
                 "url": share_url,
             }
             jsonld = _claim_review_jsonld(cached, share_url)
+            # Indexable only when the claim is one of the site's own examples, has no
+            # personal details and the saved record is sound. Anything else is noindex.
+            noindex = not display.indexable_claim(cached["claim_text"]) or bool(display.saved_record_problems(
+                cached["claim_text"], cached["verdict"], cached["cited_studies"], cached["studies"],
+                cached.get("breakdown"), cached.get("search_query"), cached.get("cached_at")))
             cached = _check_response(
                 cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
-                breakdown=cached.get("breakdown"))
-    # The front page carries the work instead of describing it: real counts
-    # and the most recent verdicts with the evidence behind each. Both are
-    # best-effort; an empty database must still render a usable page.
+                breakdown=cached.get("breakdown"), typed=typed, typed_reason="wording" if typed else None)
+            # The link preview and the markup say what the page says, with
+            # the page's one certainty and stamp (both can be capped above).
+            label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
+            preview.update(display.result_meta(cached["claim"], label, cached["tldr"] or cached["explanation"]))
+            jsonld["reviewRating"]["ratingValue"] = RATING.get(cached["verdict"], 3)
+            jsonld["reviewRating"]["alternateName"] = label
+            jsonld["reviewRating"]["ratingExplanation"] = cached["tldr"] or cached["explanation"]
+    # The front page carries the work instead of describing it: the most
+    # recent verdicts with the evidence behind each. Best-effort; an empty
+    # database must still render a usable page.
     try:
-        ledger = db.ledger()
-        latest = [dict(v, evidence=evidence.snapshot(v["studies"], v["cited"]),
-                       shelf=evidence.shelf(v["studies"], v["cited"]))
-                  for v in db.recent_verdicts(10)]
+        latest = _list_entries(_latest(10))
     except sqlite3.Error as e:
-        app.logger.warning("Could not build the front page ledger: %s", e)
-        ledger, latest = None, []
+        app.logger.warning("Could not build the front page's latest checks: %s", e)
+        latest = []
+    db.count_event("view.result" if cached else "view.home")
     return render_template("index.html", preview=preview, base_url=_base_url(),
-                           result=cached, jsonld=jsonld, labels=VERDICT_LABELS,
-                           ledger=ledger, latest=latest,
+                           result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
+                           latest=latest,
                            example=None if cached else _trust_example(),
-                           provider=verdict.provider_label(), checks_page=checks_page,
+                           provider=verdict.provider_label(), on_gemini=_on_gemini(),
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
 
 
 @app.route("/")
 def index():
-    """The checker first, then the ledger and recent checks."""
+    """The checker first, then the recent checks."""
     return _render_home()
 
 
 @app.route("/checks")
 def checks():
     """
-    The checker on its own, with no footage above it: the page the home
-    page used to be. Same ledger, same recent checks, same everything, for
-    anyone who wants the tool and not the film.
+    The checker on its own once had this address. The home page is that page
+    now, so old links land there, with any ?q= they carry.
     """
-    return _render_home(checks_page=True)
+    qs = request.query_string.decode("utf-8", "replace")
+    return redirect("/" + ("?" + qs if qs else ""), code=301)
 
 
 @app.route("/flight")
@@ -309,40 +436,74 @@ def flight_redirect():
     return redirect("/", code=301)
 
 
+# Paths no crawler needs. Repeated in every group below: a crawler that has a
+# group of its own reads only that group and ignores the one for "*".
+_ROBOTS_DISALLOW = ["Disallow: /api/", "Disallow: /stats"]
+
+
 @app.route("/robots.txt")
 def robots():
-    lines = [
-        "User-agent: *",
-        "Allow: /",
-        "Disallow: /api/",
-        "",
-        # The verdicts are meant to be quotable. Say so rather than leaving
-        # the AI crawlers to guess from silence.
-        "User-agent: GPTBot",
-        "Allow: /",
-        "User-agent: ClaudeBot",
-        "Allow: /",
-        "User-agent: PerplexityBot",
-        "Allow: /",
-        "User-agent: Google-Extended",
-        "Allow: /",
-        "",
-        f"Sitemap: {_base_url()}/sitemap.xml",
-    ]
+    lines = ["User-agent: *", "Allow: /", *_ROBOTS_DISALLOW, ""]
+    # The verdicts are meant to be quotable. Say so rather than leaving
+    # the AI crawlers to guess from silence.
+    for bot in ("GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended"):
+        lines += [f"User-agent: {bot}", "Allow: /", *_ROBOTS_DISALLOW]
+    lines += ["", f"Sitemap: {_base_url()}/sitemap.xml"]
     return Response("\n".join(lines) + "\n", mimetype="text/plain")
+
+
+SITEMAP_RESULTS_MAX = 500
+SITEMAP_SCAN_MAX = 50000
+_sitemap_memo = {"stamp": None, "paths": []}
+
+
+def _sitemap_result_paths() -> list:
+    """
+    /?q= paths of the saved answers whose claim is one of the curated examples,
+    has no personal details and passes the saved-record check, newest first.
+    Built from every row, so it is remembered until the table changes (its row
+    count or newest save date), not rebuilt on each crawl.
+    """
+    try:
+        stamp = db.saved_stamp()
+        if stamp == _sitemap_memo["stamp"]:
+            return _sitemap_memo["paths"]
+        paths = []
+        # Scan far more rows than the sitemap can hold: only the few curated claims
+        # qualify, and they must be found however many typed claims were saved after them.
+        for r in db.saved_records(SITEMAP_SCAN_MAX):
+            if not display.indexable_claim(r["claim_text"]):
+                continue
+            if len(paths) >= SITEMAP_RESULTS_MAX:
+                break
+            try:
+                cited, studies = json.loads(r["cited_json"] or "[]"), json.loads(r["studies_json"] or "[]")
+                bd = json.loads(r["breakdown_json"]) if r["breakdown_json"] else None
+            except (ValueError, TypeError):
+                continue
+            if display.saved_record_problems(r["claim_text"], r["verdict"], cited, studies, bd,
+                                             r["search_query"], r["created_at"]):
+                continue
+            paths.append((f"/?q={quote(r['claim_text'])}", (r["created_at"] or "")[:10]))
+        _sitemap_memo.update(stamp=stamp, paths=paths)
+        return paths
+    except Exception as e:  # noqa: BLE001 - the sitemap must never be a 500
+        app.logger.warning("Sitemap results left out: %s", type(e).__name__)
+        return []
 
 
 @app.route("/sitemap.xml")
 def sitemap():
     base = _base_url()
-    # Static pages only. A typed claim is something a person wrote; listing
-    # it here would publish it to every crawler, which the privacy page
-    # does not say and the product does not want.
-    urls = [(f"{base}/", "1.0"), (f"{base}/checks", "0.8"), (f"{base}/about", "0.5"),
-            (f"{base}/method", "0.5"), (f"{base}/corrections", "0.4"),
-            (f"{base}/privacy", "0.3")]
+    # The pages, then the curated example claims whose saved answer is sound. Any
+    # other result page is left out and is marked noindex on its own page.
+    urls = [(f"{base}/", "1.0", ""), (f"{base}/about", "0.5", ""),
+            (f"{base}/method", "0.5", ""), (f"{base}/corrections", "0.4", ""),
+            (f"{base}/privacy", "0.3", "")]
+    urls += [(base + path, "0.6", day) for path, day in _sitemap_result_paths()]
     body = "".join(
-        f"<url><loc>{escape(u)}</loc><priority>{p}</priority></url>" for u, p in urls
+        f"<url><loc>{escape(u)}</loc>{f'<lastmod>{d}</lastmod>' if d else ''}<priority>{p}</priority></url>"
+        for u, p, d in urls
     )
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</urlset>")
@@ -353,7 +514,7 @@ def sitemap():
 def llms_txt():
     """A plain description of this site for language models that read one."""
     base = _base_url()
-    recent = db.recent_cached(25)
+    recent = _public_claims(db.recent_cached(25 * LIST_OVERFETCH), 25, indexable=True)
     lines = [
         "# Evident",
         "",
@@ -379,7 +540,6 @@ def llms_txt():
         "## Pages",
         "",
         f"- [Check a claim]({base}/): the checker, with how a check works below it",
-        f"- [Check a claim, tool only]({base}/checks): the checker on its own",
         f"- [About]({base}/about): who makes Evident, what it does and what it does not do",
         f"- [Method]({base}/method): how a check works and the rules every verdict must pass",
         f"- [Corrections]({base}/corrections): report a wrong answer or get in touch",
@@ -402,7 +562,7 @@ def not_found(_e):
     render the page rather than turning a 404 into a 500.
     """
     try:
-        latest = db.recent_verdicts(5)
+        latest = [_listed(v) for v in _latest(5)]
     except sqlite3.Error:
         latest = []
     return render_template("404.html", latest=latest, labels=VERDICT_LABELS), 404
@@ -422,8 +582,9 @@ def server_error(_e):
     The last line of defence for any page route: a plain page with a way
     out, never the framework's error page. The cause goes to the log (Flask
     has already logged it); nothing about it is shown. The API routes answer
-    in JSON the front end can read.
+    in JSON the front end can read. It is counted for the day, as a total.
     """
+    db.count_event("error.server")
     if request.path.startswith("/api/"):
         return jsonify({"error": "Something went wrong on our side. Try again in a moment."}), 500
     body = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -446,9 +607,96 @@ def favicon():
     return resp
 
 
+# The method page's own version. Bump both when a rule it describes changes.
+METHOD_VERSION = "2"
+METHOD_CHANGED = "17 November 2026"
+
+# Where removal and correction requests go. A plain mailto link, no form.
+CONTACT_EMAIL = os.environ.get("EVIDENT_EMAIL", "hello@checkevident.com").strip() or None
+
+
 @app.route("/privacy")
 def privacy():
-    return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label())
+    db.count_event("view.info")
+    return render_template("privacy.html", base_url=_base_url(), provider=verdict.provider_label(),
+                           on_gemini=_on_gemini())
+
+
+# ---- /stats: the day counts, behind a token --------------------------------------------
+
+class _RedactToken(logging.Filter):
+    """The token rides in the address, and some servers log the address. Whatever
+    is logged by the web server says REDACTED where it was."""
+    _pat = re.compile(r"([?&]token(?:=|%3[dD]))[^&\s\"']*", re.IGNORECASE)
+
+    def filter(self, record):
+        try:
+            record.msg = self._pat.sub(r"\1REDACTED", str(record.getMessage()))
+            record.args = ()
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+
+
+for _name in ("werkzeug", "gunicorn.access"):
+    logging.getLogger(_name).addFilter(_RedactToken())
+
+STATS_DAYS = 30
+STATS_LABELS = [
+    ("Page views", [("view.home", "Home"), ("view.result", "A saved result"), ("view.info", "About, method, corrections, privacy")]),
+    ("Checks", [("check.submitted", "Claims submitted"), ("check.completed", "Results completed")]),
+    ("Shares", [("share.click", "Share button"), ("share.copy", "Copy link button")]),
+    ("Errors the server saw", [("error.server", "Server errors"), ("provider.rate_limit", "AI provider: rate limited (429)"),
+                               ("provider.unavailable", "AI provider: unavailable (503 or unreachable)"),
+                               ("provider.auth", "AI provider: key rejected or missing"), ("provider.other", "AI provider: other error"),
+                               ("pubmed.failure", "PubMed failures")]),
+    ("Errors the page showed", [("client_error.invalid", "Claim could not be checked"), ("client_error.network", "Could not reach the server"),
+                                ("client_error.limit", "Too many checks"), ("client_error.provider", "The checker could not finish")]),
+]
+_STATS_COLUMNS = [("Views", ("view.home", "view.result", "view.info")), ("Claims", ("check.submitted",)),
+                  ("Results", ("check.completed",)), ("Shares", ("share.click", "share.copy")),
+                  ("Errors", ("error.server", "provider.rate_limit", "provider.unavailable", "provider.auth",
+                              "provider.other", "pubmed.failure"))]
+
+
+@app.route("/stats")
+def stats():
+    """
+    Per-day totals for the last 30 days, for the person who runs the site. It
+    exists only when STATS_TOKEN is set; without it the page is a 404 like any
+    other path. The token is compared in constant time, never logged, and a
+    wrong one gets the same 404. Send it as `?token=...` or, to keep it out of
+    proxy logs, as an `Authorization: Bearer <token>` header.
+    """
+    token = (os.environ.get("STATS_TOKEN") or "").strip()
+    if not token:
+        abort(404)
+    given = request.args.get("token", "")
+    _auth = request.headers.get("Authorization", "")
+    if not given and _auth[:7].lower() == "bearer ":
+        given = _auth[7:].strip()
+    if not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
+        # Only a failed attempt spends the limit, so behind a shared proxy
+        # address bad guesses can never lock the owner out. Either way: 404.
+        ratelimit.STATS.check(f"ip:{_client_ip()}")
+        abort(404)
+    db.flush_counts()
+    rows = db.counts_since(STATS_DAYS)
+    by_day: dict = {}
+    totals: dict = {}
+    for r in rows:
+        by_day.setdefault(r["day"], {})[r["name"]] = r["count"]
+        totals[r["name"]] = totals.get(r["name"], 0) + r["count"]
+    today = datetime.now(timezone.utc).date()
+    days = [(today - timedelta(days=i)).isoformat() for i in range(STATS_DAYS)]
+    table = [{"day": d, "cells": [sum(by_day.get(d, {}).get(n, 0) for n in names) for _, names in _STATS_COLUMNS]} for d in days]
+    groups = [{"title": title, "rows": [{"label": label, "total": totals.get(name, 0), "today": by_day.get(days[0], {}).get(name, 0)}
+                                        for name, label in items]} for title, items in STATS_LABELS]
+    resp = make_response(render_template("stats.html", base_url=_base_url(), columns=[c for c, _ in _STATS_COLUMNS],
+                                         table=table, groups=groups, days=STATS_DAYS))
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return resp
 
 
 _INFO_PAGES = {
@@ -460,8 +708,12 @@ _INFO_PAGES = {
 
 def _info(slug):
     title, desc = _INFO_PAGES[slug]
+    db.count_event("view.info")
     return render_template("info.html", slug=slug, title=title, desc=desc,
-                           base_url=_base_url(), provider=verdict.provider_label())
+                           base_url=_base_url(), provider=verdict.provider_label(),
+                           labels=VERDICT_LABELS, max_studies=MAX_STUDIES,
+                           version=METHOD_VERSION, changed=METHOD_CHANGED,
+                           contact_email=CONTACT_EMAIL)
 
 
 @app.route("/about")
@@ -483,10 +735,29 @@ def corrections():
 def og_image(key):
     cached = db.get_cached_by_key(key)
     if cached:
-        receipt = og.strongest_cited(cached["studies"], cached["cited_studies"])
-        png = og.render_card(cached["claim_text"], cached["verdict"], cached["tldr"], len(cached["studies"]), receipt)
+        receipt = og.strongest_cited(cached["studies"],
+                                     display.relied_pmids(cached["cited_studies"], cached["studies"]))
+        # The card's short answer is the page's, with the page's certainty.
+        # If the gate cannot run on an old or odd row, the card still renders,
+        # with the stored short answer: a link preview must never be a 500.
+        try:
+            page = _check_response(
+                cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
+                cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
+                _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
+                breakdown=cached.get("breakdown"))
+            short, stamp, still = page["tldr"], page["verdict"], page.get("still_open") or ""
+        except Exception as e:  # noqa: BLE001
+            app.logger.warning("Card for %s fell back to the stored short answer: %s", key, type(e).__name__)
+            short = cached.get("tldr") or ""
+            # The stored stamp, but never "true" without the cap having run.
+            stamp = "complicated" if cached["verdict"] == "true" else cached["verdict"]
+            still = cached.get("still_open") or ""
+        png = og.render_card(cached["claim_text"], stamp, short, len(cached["studies"]), receipt, still)
     else:
-        png = og.render_card("Saw a health claim? Check it against the research.", "complicated", "", 0)
+        # No claim (the home page, an info page, or a key with nothing saved):
+        # the brand card, never a made-up claim with a verdict on it.
+        png = og.render_brand()
     return Response(png, mimetype="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
 
@@ -583,8 +854,10 @@ def _study_payload(s: dict, cited: set) -> dict:
         # an animal or lab study read for a claim about people, an opinion
         # piece, a buying guide. Set in verdict.py. `background_why` says
         # which, in the words the study list uses.
-        "background": bool(s.get("background")),
-        "background_why": evidence.background_why(s),
+        # A retracted paper or a journal notice is background for any claim,
+        # a saved record from before that rule included.
+        "background": bool(s.get("background")) or bool(evidence.withdrawn(s)),
+        "background_why": evidence.withdrawn(s) or evidence.background_why(s),
     }
 
 
@@ -615,10 +888,233 @@ def _original_check_date(claim, cached_at):
     return first
 
 
+def _from_guidance(tldr, claim) -> bool:
+    """A stamp set by verdict.follow_guidelines (verdict.from_guidance: the
+    lead, on a claim guidance is read for). /method says the verdict follows
+    that guidance, so no output-time cap may overrule it."""
+    return verdict.from_guidance(tldr, claim)
+
+
+def _on_gemini() -> bool:
+    """Whether checks go to Gemini, whose free tier terms the home page and
+    the privacy page warn about. With no key set the warning stays: it is
+    the cautious reading, and the site cannot run checks then anyway."""
+    try:
+        return verdict.provider() == "gemini"
+    except RuntimeError:
+        return True
+
+
+def _readings(studies, cited, search_query) -> list[set]:
+    """The studies used, and, when code set any aside as measuring another
+    outcome, the same with those put back (verdict.set_aside). A cap or a
+    lower certainty either reading earns applies to the page."""
+    groups = pubmed.split_and(search_query or "")
+    aside = set(verdict.set_aside(
+        studies or [], {s.get("pmid"): s.get("off_topic") for s in studies or [] if isinstance(s, dict)},
+        groups[1] if len(groups) > 1 else "", "", groups[0] if groups else "")) - set(cited)
+    return [set(cited), set(cited) | aside] if cited and aside else [set(cited)]
+
+
+def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool:
+    """Whether a "true" has to be shown as "complicated": exactly the cap a
+    fresh check gets in verdict.py (the lead review, read strictly, rates
+    itself low or very low, or only small and pilot trials), and nothing
+    looser. A line whose range starts low ("Low to moderate", "Low to high")
+    is not a low rating: a review that rates several outcomes differently
+    gives that range, and capping on it turned well-supported vaccine
+    answers into "It's complicated, but the certainty is low"."""
+    if verdict_value != "true" or not cited or _from_guidance(tldr, claim):
+        return False
+    comparative = bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or ""))
+    return bool(evidence.certainty_cap(studies, cited, comparative, outcome))
+
+
+def _nothing_relied(claim, verdict_value, tldr, studies=None):
+    """(stamp, takeaway, unseated) for an answer none of whose citations is
+    relied on, the one decision a result page and every list share. An
+    answer the guidance rule set keeps its stamp only where a fresh check
+    would let guidance alone rate the claim with nothing cited
+    (verdict.guidance_may_rate): a citation set aside (a retracted paper)
+    does not unseat it there. Anywhere else a rated answer becomes "Not
+    enough evidence", a guidance answer with the guidance sentence after
+    the untested takeaway, the shape a fresh check writes. An answer that
+    lists no study at all gets the takeaway a fresh check writes when the
+    search finds nothing, not one about studies that "don't test" it."""
+    if verdict_value == "insufficient":
+        return verdict_value, tldr, False
+    guided = verdict.from_guidance(tldr, claim)
+    if guided and verdict.guidance_may_rate(claim, verdict_value):
+        return verdict_value, tldr, False
+    lead = verdict.UNTESTED_TLDR if studies else verdict.NO_STUDIES_TLDR
+    return "insufficient", (verdict.unrated_guidance_tldr(tldr, lead) if guided else lead), True
+
+
+def _listed(v: dict) -> dict:
+    """A recent-checks entry with the stamp the page itself would show."""
+    # Off-topic studies are not relied on here either (see _check_response),
+    # so the shelf marks and the stamp match the result page.
+    cited = display.relied_pmids(v.get("cited"), v.get("studies"))
+    if not cited or set(v.get("cited") or []) - cited:
+        v = dict(v, cited=[p for p in v.get("cited") or [] if p in cited])
+        if not cited:
+            stamp, tldr, unseated = _nothing_relied(v.get("claim_text"), v.get("verdict"), v.get("tldr"),
+                                                    v.get("studies"))
+            if unseated:
+                return dict(v, verdict=stamp, **({"tldr": tldr} if "tldr" in v else {}))
+    outcome = _outcome_group(v.get("search_query"))
+    try:
+        if any(_capped_true(v["verdict"], v["claim_text"], v["studies"], used, outcome, v.get("tldr"))
+               for used in _readings(v["studies"], cited, v.get("search_query"))):
+            return dict(v, verdict="complicated")
+    except Exception:  # noqa: BLE001
+        if v.get("verdict") == "true" and not _from_guidance(v.get("tldr"), v.get("claim_text")):
+            return dict(v, verdict="complicated")
+    return v
+
+
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
-                    typed=None):
-    cited = set(cited_studies or [])
+                    typed=None, typed_reason=None):
+    # A study classified off topic is never relied on. A fresh check already
+    # leaves such studies out of its cited list (verdict.py, the relevance
+    # gate); an old or odd saved record may not, so the page drops them here
+    # and every count, mark and line below reads the same set. If that leaves
+    # a rated verdict resting on nothing, the rule a fresh check obeys
+    # applies: it becomes "Not enough evidence".
+    cited = display.relied_pmids(cited_studies, studies)
+    # No sentence a reader sees as reasoning cites a study the page shows as
+    # set aside (withdrawn, a journal notice, or off topic), whether or not
+    # the answer listed it: a fresh check has already taken it out of the
+    # cited list, so nothing below would hold its sentences to anything.
+    # A sentence citing any such study goes whole, even one that also cites
+    # a study relied on: taking only the set-aside number out would credit
+    # its words to the other study. Text that cites none of them is left
+    # exactly as it was.
+    count = len(studies or [])
+    aside = {i + 1 for i, s in enumerate(studies or []) if s.get("off_topic") or evidence.withdrawn(s)}
+    if aside:
+        unaside = lambda t: breakdown_mod.drop_any_citing(t, aside, count)
+        explanation = unaside(explanation or "")
+        if breakdown and any(unaside(t) != t for t in breakdown_mod.prose_of(breakdown)):
+            breakdown = breakdown_mod.map_prose(breakdown, unaside)
+    # Code never calls a figure not significant when its own interval or p
+    # value rules that out (breakdown.say_nulls); a check saved before that
+    # rule loses such a sentence here.
+    explanation = breakdown_mod.unsaid_nulls(explanation or "")
+    if breakdown and any(breakdown_mod.unsaid_nulls(t) != t for t in breakdown_mod.prose_of(breakdown)):
+        breakdown = breakdown_mod.map_prose(breakdown, breakdown_mod.unsaid_nulls)
+    # A rated verdict resting on nothing is "Not enough evidence", as on a
+    # fresh check, save where guidance alone may rate it (_nothing_relied).
+    if not cited or set(cited_studies or []) - cited:
+        unseated = False
+        if not cited:
+            verdict_value, tldr, unseated = _nothing_relied(claim, verdict_value, tldr, studies)
+        if unseated:
+            explanation = (explanation.rstrip() + " None of the studies found directly "
+                           "test this claim, so there isn't enough evidence to rate it.").strip()
+            breakdown = None
+    outcome = _outcome_group(search_query)
+    # Every sentence that cites a study is held to the studies it cites, on
+    # the way out, so a cached check is held to it too: none may lean on a
+    # study the verdict did not rely on, name a group, a figure or a count
+    # its studies do not give. "Still open" is never touched.
+    relied = {i + 1 for i, s in enumerate(studies or []) if s.get("pmid") in cited}
+    if relied:
+        # An explanation the gate empties stays empty: the short answer is
+        # already on the page, and repeating it would pass it off as reasoning.
+        explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim)
+        breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
+    # An answer the guidance rule set is never followed by words saying the
+    # claim cannot be rated: the page says it rests on that guidance instead.
+    if verdict.from_guidance(tldr, claim):
+        explanation, still_open, breakdown = verdict.guidance_prose(explanation, still_open, breakdown)
+        breakdown = verdict.guidance_effect(breakdown)
+        # A guidance answer that relies on no study cites none for a finding:
+        # "Studies show ... (Study 5)" four sentences before code says nothing
+        # here tests the claim is a contradiction. Code's own sentences say
+        # what the papers are; a sentence that cites no study stays.
+        if not cited and verdict_value != "insufficient":
+            kept = [s for s in breakdown_mod.sentences(explanation or "") if not breakdown_mod.refs(s, count)]
+            if len(kept) != len(breakdown_mod.sentences(explanation or "")):
+                explanation = " ".join(kept)
+                if verdict.GUIDANCE_RESTS not in explanation:
+                    explanation = f"{explanation} {verdict.GUIDANCE_RESTS}".strip()
+            # The folded sections too: no part, paragraph or field cites a
+            # study for a finding. A part whose answer goes is dropped, not
+            # pointed at paragraphs of studies the answer does not rest on;
+            # a section left with nothing is not rendered.
+            if breakdown and any(breakdown_mod.refs(t, count) for t in breakdown_mod.prose_of(breakdown)):
+                uncited = lambda t: breakdown_mod.drop_any_citing(t, range(1, count + 1), count)
+                breakdown = breakdown_mod.map_prose(
+                    {**breakdown, "parts": [p for p in breakdown.get("parts") or []
+                                            if uncited(p.get("assessment") or "")]}, uncited)
+    # One certainty for the whole page, settled on the way out so a check
+    # cached before the rule existed gets it too. The evidence line is never
+    # surer than the least sure thing the page says, and a certainty phrase
+    # in the prose that is surer than the line is rewritten down to it.
+    stated = evidence.stated_certainty(tldr, explanation, *breakdown_mod.prose_of(breakdown))
+    # A study code set aside as measuring another outcome loses its citation,
+    # never its say: the line is the less sure of the one over the studies
+    # used and the one with those put back, so setting one aside never lifts
+    # a certainty word, and a cap either reading earns applies. Every reading
+    # sizes only a figure about the claim itself (line_label).
+    readings = _readings(studies, cited, search_query)
+    sized = breakdown_mod.line_label(breakdown, claim, outcome)
+    withheld = bool(((breakdown or {}).get("effect") or {}).get("label")) and not sized
+    # The effect box follows the same gate: a size the line may not carry is
+    # said nowhere by code, neither as a label nor as "That is ... a large
+    # effect" under the figure. The figure and its own sentence stay.
+    if withheld:
+        breakdown = breakdown_mod.unsized(breakdown)
+
+    def line_for(stamp):
+        lines = [evidence.evidence_line(
+            stamp, studies, used, claim, sized,
+            breakdown_mod.absolute_claim(claim),
+            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
+            outcome, stated=stated, withheld=withheld) for used in readings]
+        sure = lambda line: (evidence._rank(evidence.line_certainty(line))
+                             if evidence.line_certainty(line) else len(evidence.CERTAINTY_LEVELS))
+        return min(lines, key=sure)
+
+    evidence_line = line_for(verdict_value)
+    # The stamp follows the same cap a fresh check gets in verdict.py: a
+    # "true" the evidence cannot carry (the lead review rates itself low, or
+    # only small and pilot trials) is not shown as likely true, and nor is a
+    # "true" over a line that says low certainty. A check cached before the
+    # cap existed, or before its line was scoped, gets it here.
+    if any(_capped_true(verdict_value, claim, studies, used, outcome, tldr) for used in readings):
+        verdict_value = "complicated"
+        if not re.search(r"\bcertainty\b[^.]*\blow\b", tldr or "", re.IGNORECASE):
+            leaned = f"{(tldr or '').rstrip().rstrip('.')}, but the certainty of that evidence is low."
+            tldr = (leaned if tldr and len(leaned) <= verdict.TLDR_MAX
+                    and not breakdown_mod.stamp_conflict(verdict_value, leaned, "", claim)
+                    else verdict.LOW_CERTAINTY_TLDR)
+        evidence_line = line_for(verdict_value)
+    # A figure that was not significant is said as one, in words that do not
+    # contradict an answer that there is an effect.
+    if breakdown and breakdown_mod.answers_effect(verdict_value, claim):
+        breakdown = breakdown_mod.map_prose(breakdown, breakdown_mod.null_alone)
+    level = evidence.line_certainty(evidence_line)
+    if level:
+        tldr = evidence.cap_certainty(tldr, level)
+        explanation = evidence.cap_certainty(explanation, level)
+        breakdown = breakdown_mod.map_prose(breakdown, lambda t: evidence.cap_certainty(t, level))
+    # An answer the guidance rule set did not come from these studies, so the
+    # line shown makes no claim about how strong they are for or against the
+    # claim. The studies' own line still set the cap on the prose above.
+    # It shows whenever any study is listed, even when none is relied on (the
+    # one cited was set aside), so the line is never blank under such an
+    # answer; with no study listed at all the page keeps its own wording.
+    if verdict.from_guidance(tldr, claim) and (evidence_line or studies):
+        evidence_line = verdict.GUIDANCE_LINE
+    # The response's effect field says what the page says (after every
+    # rewrite above, since settling the effect can set it afresh).
+    if breakdown and breakdown_mod.answers_effect(verdict_value, claim):
+        breakdown = breakdown_mod.effect_alone(breakdown)
+    # A "That is ..." sentence travels with the figure it explains.
+    breakdown = breakdown_mod.translations_follow(breakdown, withheld)
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in
@@ -633,9 +1129,12 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         breakdown["contents"] = breakdown_mod.contents(breakdown)
     return {
         "claim": claim,
-        # What the reader typed, present only when its spelling was fixed
-        # and the check ran on the corrected claim, so the page can say so.
+        # What the reader typed, present only when the answer is to other
+        # words than theirs, so the page can say so: "spelling" when the
+        # spelling was fixed, "wording" when a saved check of the same claim
+        # in other words was used. Both null otherwise.
         "typed": typed,
+        "typed_reason": (typed_reason or "spelling") if typed else None,
         "search_query_used": search_query,
         "search_broadened": broadened,
         "verdict": verdict_value,
@@ -650,25 +1149,42 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # The first real check of this claim, only when it was on an earlier
         # day than cached_at (the last re-check). Otherwise null.
         "first_checked_at": _original_check_date(claim, cached_at) if cached_at else None,
+        "review_line": _review_line(cached_at, studies, cited),
         "share_url": f"{base_url}/?q={quote(claim)}",
         "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(search_query or claim)}",
         # Counts the reader can check us on, computed from PubMed's own
         # metadata rather than from anything the model said.
-        "evidence": evidence.snapshot(studies, cited),
+        "evidence": evidence.snapshot(_as_shown(studies), cited),
         # What that evidence shows about the claim, for the line under the
-        # chart: "Strong evidence of a partial effect, not a cure". The level
+        # chart: "Strong evidence of a small effect, not a cure". The level
         # word alone described the designs, not the claim.
-        "evidence_line": evidence.evidence_line(
-            verdict_value, studies, cited, claim,
-            ((breakdown or {}).get("effect") or {}).get("label"),
-            breakdown_mod.absolute_claim(claim),
-            bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-            _outcome_group(search_query)),
+        "evidence_line": evidence_line,
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
-        "studies": [_study_payload(s, cited) for s in studies],
+        "studies": [_study_payload(s, cited) for s in _as_shown(studies)],
     }
+
+
+def _review_line(cached_at, studies, cited) -> str:
+    """The dated line under the verdict: when the check ran, and the years of
+    the studies it relied on. "Checked 14 November 2026, from studies
+    published 2019 to 2025." Built here once, so the page a shared link
+    renders and a streamed check say the same thing."""
+    try:
+        when = datetime.fromisoformat(cached_at) if cached_at else datetime.now(timezone.utc)
+    except (TypeError, ValueError):
+        when = datetime.now(timezone.utc)
+    line = f"Checked {when.day} {when.strftime('%B %Y')}"
+    used = [s for s in studies or [] if s.get("pmid") in cited]
+    years = sorted({int(y) for y in (str(s.get("year") or "")[:4] for s in used) if y.isdigit()})
+    if not years:
+        return line + "."
+    if len(used) == 1:
+        return f"{line}, from a study published in {years[0]}."
+    if len(years) == 1:
+        return f"{line}, from studies published in {years[0]}."
+    return f"{line}, from studies published {years[0]} to {years[-1]}."
 
 
 def _outcome_group(search_query) -> str:
@@ -687,8 +1203,55 @@ def _log_check_safe(claim, verdict_value, explanation, studies, cached=False):
 
 def _run_check(claim: str, client_ip: str, base_url: str):
     """
+    The pipeline, with the day counts around it: a claim that reaches it is
+    "submitted", one that ends in a result is "completed". Only the totals are
+    kept; see db.COUNTER_NAMES.
+    """
+    if claim and len(claim) <= MAX_CLAIM_CHARS:
+        db.count_event("check.submitted")
+    for ev in _run_check_stages(claim, client_ip, base_url):
+        if ev.get("stage") == "done":
+            db.count_event("check.completed")
+        yield ev
+
+
+def _current(cached, claim):
+    """
+    A saved answer, or None when it is out of date because it relied on a
+    study the current code sets aside as measuring another outcome. Its short
+    answer and reasons were written with that study in view, and code cannot
+    tell which of its sentences lean on it, so it is not patched and served:
+    the check runs fresh, as it does for any answer past its window.
+    """
+    if not cached:
+        return cached
+    # One that relied on a retracted paper or a journal notice is out of
+    # date the same way: the paper is background now, for any claim.
+    if any(isinstance(s, dict) and s.get("pmid") in set(cached.get("cited_studies") or [])
+           and evidence.withdrawn(s) for s in cached.get("studies") or []):
+        return None
+    groups = pubmed.split_and(cached.get("search_query") or "")
+    if len(groups) < 2:
+        return cached
+    cited = set(cached.get("cited_studies") or [])
+    hit = [s for s in cached.get("studies") or [] if isinstance(s, dict) and s.get("pmid") in cited
+           and evidence.measured_outcome(s, groups[1], "", groups[0]) is False]
+    if not hit:
+        return cached
+    try:
+        saved = db.get_cached_query(claim, verdict.QUERY_PROMPT_VERSION)
+    except sqlite3.Error:
+        saved = None
+    surrogate = saved[1] if saved else ""
+    if any(evidence.measured_outcome(s, groups[1], surrogate or "", groups[0]) is False for s in hit):
+        return None
+    return cached
+
+
+def _run_check_stages(claim: str, client_ip: str, base_url: str):
+    """
     Yields stage dicts. Terminal stages are "done" (with "result") and
-    "error" (with "error", "status", optional "retry_after").
+    "error" (with "error", "status", optional "retry_after" and "way_out").
 
     Everything request-bound (ip, base_url) is passed in: when streamed,
     this generator runs after the request context has ended.
@@ -701,24 +1264,60 @@ def _run_check(claim: str, client_ip: str, base_url: str):
                "error": f"That's a long one. Trim the claim to under {MAX_CLAIM_CHARS} characters."}
         return
 
-    def from_cache(cached, typed=None):
-        _log_check_safe(claim, cached["verdict"], cached["explanation"], cached["studies"], cached=True)
+    def from_cache(cached, typed=None, reason=None, saved_as=None):
+        # A saved answer found under another wording is shown, shared and
+        # logged under the wording it was saved with, never the typed one.
+        shown = saved_as or claim
+        _log_check_safe(shown, cached["verdict"], cached["explanation"], cached["studies"], cached=True)
         return {"stage": "done", "result": _check_response(
-            claim, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
+            shown, cached["search_query"], cached["verdict"], cached["tldr"], cached["explanation"],
             cached["cited_studies"], cached["studies"], base_url, cached_at=cached["cached_at"],
-            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"), typed=typed)}
+            still_open=cached.get("still_open", ""), breakdown=cached.get("breakdown"), typed=typed,
+            typed_reason=reason)}
+
+    # A saved answer in its window that _current calls out of date is checked
+    # fresh. Until a fresh answer replaces it, it is still the answer this
+    # site gave: when the fresh check cannot finish, for any defined reason,
+    # the reader gets it, exactly as before, and nothing is overwritten.
+    stale = []
+
+    def current(found, key, typed=None, reason=None):
+        now = _current(found, key)
+        if found and now is None and not stale:
+            stale.append((found, typed, reason, key))
+        return now
+
+    def or_saved(ev):
+        """The error stage, or the out-of-date saved answer when there is one."""
+        if stale:
+            app.logger.warning("A fresh check of an out-of-date saved answer did not finish "
+                               "(%s); the saved answer is shown", ev.get("status"))
+            return from_cache(*stale[0])
+        return ev
 
     # 1. Cache first: a repeat of a recent claim costs nothing and is
     #    never rate-limited. Viral claims get checked by many people.
-    cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
+    cached = current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim)
     if cached:
         yield from_cache(cached)
         return
+    # The same claim in other words ("Does coffee cause cancer?" for "Coffee
+    # causes cancer") gets the same saved answer, as free as a repeat. One
+    # older than the cache window is checked again under its saved wording,
+    # so its one row is refreshed and no second row for it is made.
+    typed, reason = None, None
+    same = _equivalent(claim)
+    if same:
+        cached = current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same, claim, "wording")
+        if cached:
+            yield from_cache(cached, claim, "wording", same)
+            return
+        typed, reason, claim = claim, "wording", same
 
     # 2. Rate limit only the checks that will actually hit the AI provider.
     allowed, message, retry_after = ratelimit.check(f"ip:{client_ip}")
     if not allowed:
-        yield {"stage": "error", "status": 429, "error": message, "retry_after": retry_after}
+        yield or_saved({"stage": "error", "status": 429, "error": message, "retry_after": retry_after})
         return
 
     # 3. The real thing, stage by stage.
@@ -739,20 +1338,35 @@ def _run_check(claim: str, client_ip: str, base_url: str):
                 if understood != claim:
                     db.put_cached_query(understood, verdict.QUERY_PROMPT_VERSION,
                                         search_query, surrogate, understood)
-        typed = None
         if understood != claim:
             # Misspelled. Everything from here runs on the claim as meant:
             # the verdict, the code's own checks, the cache and the share
             # link. A correctly spelled check of it may already be cached.
-            typed, claim = claim, understood
-            cached = db.get_cached_verdict(claim, VERDICT_CACHE_HOURS)
+            # The note says what the reader typed, and that it was spelling.
+            typed, reason, claim = typed or claim, "spelling", understood
+            cached = current(db.get_cached_verdict(claim, VERDICT_CACHE_HOURS), claim, typed, reason)
             if cached:
-                yield from_cache(cached, typed)
+                yield from_cache(cached, typed, reason)
                 return
-        yield {"stage": "query", "query": search_query, "claim": claim if typed else None}
+            same = _equivalent(claim)
+            if same:
+                cached = current(db.get_cached_verdict(same, VERDICT_CACHE_HOURS), same, typed, reason)
+                if cached:
+                    yield from_cache(cached, typed, reason, same)
+                    return
+                claim = same
+                again = db.get_cached_query(claim, verdict.QUERY_PROMPT_VERSION)
+                if again:
+                    search_query, surrogate, _ = again
+        yield {"stage": "query", "query": search_query, "claim": claim if typed else None,
+               "typed_reason": reason}
         studies, query_used, broadened = pubmed.search_with_fallback(
-            search_query, max_results=8, surrogate=surrogate)
+            search_query, max_results=MAX_STUDIES, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
+        kept = _steady(claim, studies)
+        if kept:
+            yield from_cache(kept, typed, reason, claim if typed else None)
+            return
         if studies:
             yield {"stage": "weigh"}
         result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
@@ -760,41 +1374,129 @@ def _run_check(claim: str, client_ip: str, base_url: str):
         # Missing/misconfigured API key: the operator's problem, not the
         # reader's. The detail goes to the log; the page says what to do.
         app.logger.error("Check could not run: %s", e)
-        yield {"stage": "error", "status": 500, "error": UNAVAILABLE_MESSAGE}
+        db.count_event("provider.auth")
+        yield or_saved({"stage": "error", "status": 500, "error": UNAVAILABLE_MESSAGE})
         return
     except verdict.ProviderError as e:
         status = {"auth": 500, "rate_limit": 429, "unavailable": 502}.get(e.kind, 502)
+        db.count_event("provider." + (e.kind if e.kind in ("auth", "rate_limit", "unavailable") else "other"))
         suffix = " Wait a few seconds and try again." if e.kind == "rate_limit" else ""
         # A rejected key names .env and the provider's console: for the
         # operator's log, never for the page.
         shown = UNAVAILABLE_MESSAGE if e.kind == "auth" else e.detail + suffix
         if e.kind == "auth":
             app.logger.error("The AI provider rejected its key: %s", e.detail)
+        elif getattr(e, "code", None) is not None:
+            # The provider's status code is for the log, never the page.
+            app.logger.warning("AI provider error %s (%s): %s", e.code, e.kind, e.detail)
         ev = {"stage": "error", "status": status, "error": shown}
+        # Which way out the page offers beside the message: other words only,
+        # or other words beside trying again. Absent, trying again is the way.
+        if getattr(e, "way_out", ""):
+            ev["way_out"] = e.way_out
         if e.kind == "rate_limit":
             ev["retry_after"] = 20
-        yield ev
+        yield or_saved(ev)
         return
     except requests.RequestException:
-        yield {"stage": "error", "status": 502,
-               "error": "Couldn't reach PubMed right now. Try again in a minute."}
+        db.count_event("pubmed.failure")
+        yield or_saved({"stage": "error", "status": 502,
+                        "error": "Couldn't reach PubMed right now. Try again in a minute."})
         return
     except Exception:  # noqa: BLE001 — last line of defence; never crash a check
         # The exception text is for the log. A reader gets the problem and a way out.
         app.logger.exception("Check failed")
-        yield {"stage": "error", "status": 500,
-               "error": "Something went wrong while checking this claim. Try again in a moment."}
+        db.count_event("error.server")
+        yield or_saved({"stage": "error", "status": 500,
+                        "error": "Something went wrong while checking this claim. Try again in a moment."})
         return
 
     db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
                           result["cited_studies"], studies, tldr=result["tldr"],
                           still_open=result.get("still_open", ""),
-                          breakdown=result.get("breakdown"))
+                          breakdown=result.get("breakdown"), method_stamp=verdict.METHOD_STAMP)
     _log_check_safe(claim, result["verdict"], result["explanation"], studies)
     yield {"stage": "done", "result": _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
-        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed)}
+        still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed,
+        typed_reason=reason)}
+
+
+def _steady(claim: str, studies: list) -> dict | None:
+    """
+    A saved answer past the cache window, kept rather than made again: when
+    it is whole, has no problem the page cannot repair, was made by the code
+    and model in force now (its method stamp), and the search just run found
+    exactly the records it read (`_same_records`). Its date is refreshed
+    and it is returned as get_cached_verdict reads it. Otherwise None, and the
+    check runs as before: a row with no stamp or an old one is always made
+    again once, so every fix reaches every saved claim.
+    """
+    if VERDICT_CACHE_HOURS <= 0:      # the cache is switched off: always check again
+        return None
+    try:
+        saved = db.get_cached_by_key(db.normalize_claim(claim))
+        # An empty stamp (one that could not be worked out) equals nothing,
+        # a missing stamp included.
+        if not (verdict.METHOD_STAMP and db.servable(saved)
+                and saved.get("method_stamp") == verdict.METHOD_STAMP):
+            return None
+        if not _same_records(saved["studies"], studies or []):
+            return None
+        # One that relied on a study code now sets aside is out of date
+        # (_current), whatever else is the same, and is made again.
+        if _current(saved, saved["claim_text"]) is None:
+            return None
+        db.refresh_saved(saved["claim_text"])
+        return db.get_cached_verdict(saved["claim_text"], VERDICT_CACHE_HOURS)
+    except sqlite3.Error as e:
+        app.logger.warning("Could not read a saved answer to keep: %s", e)
+        return None
+
+
+# What makes a study the same record as the one a saved answer read: its id,
+# its title, its abstract and its publication types, which is where PubMed
+# marks a retraction, a correction or an expression of concern.
+_RECORD_FIELDS = ("pmid", "title", "abstract", "publication_types")
+
+
+def _record(study) -> tuple | None:
+    """A study's identity as a record, or None when it lacks a field above."""
+    if not isinstance(study, dict) or any(k not in study for k in _RECORD_FIELDS):
+        return None
+    types = study["publication_types"]
+    if not isinstance(types, (list, tuple)):
+        return None
+    return (str(study["pmid"]), study["title"], study["abstract"], tuple(sorted(map(str, types))))
+
+
+def _same_records(saved: list, fresh: list) -> bool:
+    """
+    True when the search found the same records the saved answer read: the
+    same set of studies, each with the same id, title, abstract and
+    publication types. Order and repeats do not matter. A study on either
+    side that lacks one of those fields is never the same.
+    """
+    a = [_record(s) for s in saved or []]
+    b = [_record(s) for s in fresh or []]
+    if None in a or None in b:
+        return False
+    return set(a) == set(b)
+
+
+def _equivalent(claim: str) -> str | None:
+    """
+    The saved wording of this same claim when it differs from the claim's
+    own key (a lookup by that key has already been made), or None. Looking
+    is a convenience: a storage error never sinks the check.
+    """
+    try:
+        same = db.find_equivalent(claim)
+    except sqlite3.Error as e:
+        app.logger.warning("Could not look for an equivalent claim: %s", e)
+        return None
+    return same if same and db.normalize_claim(same) != db.normalize_claim(claim) else None
 
 
 def _claim_from_body() -> str:
@@ -811,6 +1513,8 @@ def api_check():
         body = {"error": final["error"]}
         if "retry_after" in final:
             body["retry_after"] = final["retry_after"]
+        if "way_out" in final:
+            body["way_out"] = final["way_out"]
         resp = jsonify(body)
         if "retry_after" in final:
             resp.headers["Retry-After"] = str(final["retry_after"])
@@ -835,9 +1539,35 @@ def api_check_stream():
     })
 
 
+COUNT_BODY_MAX = 200  # bytes: a name and nothing else
+
+
+@app.route("/api/count", methods=["POST"])
+def api_count():
+    """
+    One more to a per-day total, for the few things only the page can see:
+    a share click, and the kind of error the page showed. The body is a name
+    from a fixed list (db.CLIENT_COUNTERS) and nothing else; anything else is
+    refused. Nothing about the sender is read or kept, and a browser that
+    sends Global Privacy Control is not counted.
+    """
+    if (request.content_length or 0) > COUNT_BODY_MAX:
+        return jsonify({"error": "Not a count."}), 400
+    payload = request.get_json(force=True, silent=True)
+    name = payload.get("name") if isinstance(payload, dict) and len(payload) == 1 else None
+    if name not in db.CLIENT_COUNTERS:
+        return jsonify({"error": "Not a count."}), 400
+    allowed, _ = ratelimit.COUNT.check(f"ip:{_client_ip()}")
+    if not allowed:
+        return jsonify({"error": "Too many."}), 429
+    if request.headers.get("Sec-GPC") != "1":
+        db.count_event(name)
+    return "", 204
+
+
 @app.route("/api/trending")
 def api_trending():
-    return jsonify(db.trending())
+    return jsonify(_public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8, key="claim"))
 
 
 @app.route("/api/study/<pmid>")
@@ -860,6 +1590,7 @@ def api_study(pmid):
         dive = pubmed.deep_dive(pmid)
     except Exception as e:  # noqa: BLE001 - a deep dive must never 500 the sheet
         app.logger.warning("Deep dive failed for %s: %s", pmid, e)
+        db.count_event("pubmed.failure")
         return jsonify({"pmid": pmid, "cited_by": None, "full_text_url": None,
                         "related": [], "partial": True,
                         "note": "Could not reach PubMed for the extra detail."})
@@ -882,7 +1613,27 @@ def api_suggest():
     except sqlite3.Error as e:
         app.logger.warning("Could not read claims for suggestions: %s", e)
         return jsonify({"suggestions": []})
-    return jsonify({"suggestions": suggest_mod.suggest(q, claims)})
+    shown = (_suggested(r) for r in suggest_mod.suggest(q, claims))
+    return jsonify({"suggestions": [r for r in shown if r is not None]})
+
+
+def _suggested(r: dict) -> dict | None:
+    """A suggestion with the stamp its page would show. Only a "true" can be
+    capped, and at most a handful are offered, so only those few rows are read.
+    A "true" whose row cannot be read for the cap (a race, or a key that no
+    longer matches) is None, and left out: never shown uncapped."""
+    if r.get("verdict") != "true":
+        return r
+    try:
+        row = db.get_cached_by_key(db.normalize_claim(r["claim_text"]))
+        if not row:
+            return None
+        shown = _listed({"claim_text": row["claim_text"], "verdict": row["verdict"],
+                         "search_query": row.get("search_query") or "", "tldr": row.get("tldr") or "",
+                         "studies": row["studies"], "cited": row["cited_studies"]})
+        return dict(r, verdict=shown["verdict"])
+    except Exception:  # noqa: BLE001
+        return dict(r, verdict="complicated")
 
 
 # What a "Report a wrong answer" note starts with in the feedback table. The

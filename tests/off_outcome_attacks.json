@@ -1,0 +1,491 @@
+{
+ "note": "Structured abstracts of studies that did measure the claim's outcome, named another way after the background (an independent grader's attack set). None may be set aside as off outcome.",
+ "cases": [
+  {
+   "name": "1RM, simple group",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine supplementation in older adults: a randomized controlled trial",
+    "abstract": "BACKGROUND: Creatine is thought to raise muscle strength in older adults.\nMETHODS: Sixty adults aged 65 to 80 took creatine or placebo for 12 weeks.\nRESULTS: The one-repetition maximum for leg press rose by 12 kg with creatine and 4 kg with placebo (p = 0.01).\nCONCLUSIONS: Creatine improved leg press performance."
+   }
+  },
+  {
+   "name": "1RM, rich group",
+   "outcome": "(muscle strength) OR (muscle performance) OR (muscular strength) OR (physical performance) OR (strength) OR (one repetition maximum) OR (isokinetic dynamometry) OR (grip strength) OR (peak torque)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine supplementation in older adults: a randomized controlled trial",
+    "abstract": "BACKGROUND: Creatine is thought to raise muscle strength.\nMETHODS: Sixty adults took creatine or placebo.\nRESULTS: 1RM bench press rose by 6 kg (p = 0.02).\nCONCLUSIONS: Creatine helped."
+   }
+  },
+  {
+   "name": "grip force",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Protein timing in frail adults: a randomised trial",
+    "abstract": "BACKGROUND: Muscle strength declines with age.\nMETHODS: 80 frail adults were randomised.\nRESULTS: Handgrip force rose by 2.1 kg versus placebo.\nCONCLUSIONS: Protein timing helped."
+   }
+  },
+  {
+   "name": "peak torque",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Vitamin D and knee extensors in older women",
+    "abstract": "BACKGROUND: Vitamin D may support strength.\nMETHODS: Isokinetic dynamometry at 60 deg/s.\nRESULTS: Knee extensor peak torque did not differ.\nCONCLUSIONS: No benefit."
+   }
+  },
+  {
+   "name": "HbA1c",
+   "outcome": "(blood sugar OR blood glucose)",
+   "study": {
+    "pmid": "X",
+    "title": "Cinnamon in type 2 diabetes: a randomized trial",
+    "abstract": "BACKGROUND: Cinnamon is said to lower blood sugar.\nMETHODS: 100 adults.\nRESULTS: HbA1c fell by 0.2 percentage points.\nCONCLUSIONS: Small effect."
+   }
+  },
+  {
+   "name": "A1C abbreviation",
+   "outcome": "(blood sugar OR blood glucose)",
+   "study": {
+    "pmid": "X",
+    "title": "Vinegar in adults with type 2 disease: a randomized trial",
+    "abstract": "BACKGROUND: Vinegar is said to lower blood sugar.\nMETHODS: 60 adults took vinegar or water.\nRESULTS: A1C fell by 0.3% with vinegar and by 0.1% with water.\nCONCLUSIONS: Small effect."
+   }
+  },
+  {
+   "name": "FPG defined in background",
+   "outcome": "(blood sugar OR blood glucose)",
+   "study": {
+    "pmid": "X",
+    "title": "Berberine in adults with prediabetes",
+    "abstract": "BACKGROUND: Fasting plasma glucose (FPG) and blood sugar are raised in prediabetes.\nMETHODS: 90 adults took berberine or placebo.\nRESULTS: FPG fell by 0.4 mmol/L.\nCONCLUSIONS: Berberine lowered FPG."
+   }
+  },
+  {
+   "name": "HOMA-IR only",
+   "outcome": "(blood sugar OR blood glucose)",
+   "study": {
+    "pmid": "X",
+    "title": "Ginger and metabolic markers: a randomized trial",
+    "abstract": "BACKGROUND: Ginger is said to lower blood sugar.\nMETHODS: 70 adults.\nRESULTS: HOMA-IR fell by 0.8.\nCONCLUSIONS: Ginger improved HOMA-IR."
+   }
+  },
+  {
+   "name": "lipoprotein, spelled out",
+   "outcome": "(cholesterol OR LDL cholesterol)",
+   "study": {
+    "pmid": "X",
+    "title": "Oat beta-glucan in adults: a randomized trial",
+    "abstract": "BACKGROUND: Oats are said to lower cholesterol.\nMETHODS: 120 adults.\nRESULTS: Low-density lipoprotein concentration fell by 0.25 mmol/L.\nCONCLUSIONS: Oats helped."
+   }
+  },
+  {
+   "name": "apoB only",
+   "outcome": "(cholesterol OR LDL cholesterol)",
+   "study": {
+    "pmid": "X",
+    "title": "Plant sterols and atherogenic particles",
+    "abstract": "BACKGROUND: Plant sterols lower cholesterol.\nMETHODS: 80 adults.\nRESULTS: Apolipoprotein B fell by 6%.\nCONCLUSIONS: Fewer atherogenic particles."
+   }
+  },
+  {
+   "name": "PSQI defined in background",
+   "outcome": "(sleep quality OR insomnia)",
+   "study": {
+    "pmid": "X",
+    "title": "Magnesium in older adults: a randomized trial",
+    "abstract": "BACKGROUND: Poor sleep quality, measured with the Pittsburgh Sleep Quality Index (PSQI), is common in older adults.\nMETHODS: 46 adults took magnesium or placebo.\nRESULTS: PSQI global score fell by 2 points.\nCONCLUSIONS: Magnesium helped."
+   }
+  },
+  {
+   "name": "fell asleep",
+   "outcome": "(sleep quality OR insomnia)",
+   "study": {
+    "pmid": "X",
+    "title": "Melatonin in adults with delayed phase",
+    "abstract": "BACKGROUND: Melatonin is used for insomnia.\nMETHODS: 40 adults.\nRESULTS: Participants fell asleep 9 minutes earlier and woke less often.\nCONCLUSIONS: Melatonin helped."
+   }
+  },
+  {
+   "name": "ISI only",
+   "outcome": "(sleep quality OR insomnia)",
+   "study": {
+    "pmid": "X",
+    "title": "Online CBT in adults: a randomized trial",
+    "abstract": "BACKGROUND: Insomnia is common.\nMETHODS: 300 adults.\nRESULTS: ISI scores fell by 6 points.\nCONCLUSIONS: CBT helped."
+   }
+  },
+  {
+   "name": "VAS, back pain",
+   "outcome": "(back pain OR low back pain OR backache)",
+   "study": {
+    "pmid": "X",
+    "title": "Sit-stand desks in office workers: a cluster randomised trial",
+    "abstract": "BACKGROUND: Low back pain is common in office workers.\nMETHODS: 150 workers.\nRESULTS: Visual analogue scale scores fell by 12 mm.\nCONCLUSIONS: Desks helped."
+   }
+  },
+  {
+   "name": "Oswestry, back pain",
+   "outcome": "(back pain OR low back pain OR backache)",
+   "study": {
+    "pmid": "X",
+    "title": "Yoga for office workers: a randomised trial",
+    "abstract": "BACKGROUND: Low back pain is common.\nMETHODS: 200 adults.\nRESULTS: The Oswestry Disability Index fell by 5 points.\nCONCLUSIONS: Yoga helped."
+   }
+  },
+  {
+   "name": "NRS, pain",
+   "outcome": "(pain OR chronic pain)",
+   "study": {
+    "pmid": "X",
+    "title": "Turmeric in knee osteoarthritis: a randomized trial",
+    "abstract": "BACKGROUND: Pain is the main symptom of osteoarthritis.\nMETHODS: 120 adults.\nRESULTS: NRS scores fell by 1.2 points; WOMAC scores also fell.\nCONCLUSIONS: Turmeric helped."
+   }
+  },
+  {
+   "name": "waist only",
+   "outcome": "(weight loss OR body weight)",
+   "study": {
+    "pmid": "X",
+    "title": "Green tea extract in adults: a randomized trial",
+    "abstract": "BACKGROUND: Green tea is said to help weight loss.\nMETHODS: 100 adults.\nRESULTS: Waist circumference fell by 2 cm; participants lost 1.1 kg.\nCONCLUSIONS: Small effect."
+   }
+  },
+  {
+   "name": "kg lost",
+   "outcome": "(weight loss OR body weight)",
+   "study": {
+    "pmid": "X",
+    "title": "Intermittent fasting versus daily restriction: a randomized trial",
+    "abstract": "BACKGROUND: Weight loss is the main aim of dieting.\nMETHODS: 140 adults.\nRESULTS: Participants lost 4.2 kg with fasting and 4.0 kg with restriction.\nCONCLUSIONS: No difference."
+   }
+  },
+  {
+   "name": "died",
+   "outcome": "(mortality OR death)",
+   "study": {
+    "pmid": "X",
+    "title": "Vitamin D in critically ill adults: a randomized trial",
+    "abstract": "BACKGROUND: Mortality in intensive care is high.\nMETHODS: 475 adults.\nRESULTS: 118 patients in the vitamin D group and 125 in the placebo group died within 90 days.\nCONCLUSIONS: No benefit."
+   }
+  },
+  {
+   "name": "fatal events",
+   "outcome": "(mortality OR death)",
+   "study": {
+    "pmid": "X",
+    "title": "Aspirin in older adults: a randomized trial",
+    "abstract": "BACKGROUND: Death is the key outcome.\nMETHODS: 19000 adults.\nRESULTS: Fatal events were more common with aspirin (HR 1.14).\nCONCLUSIONS: Harm."
+   }
+  },
+  {
+   "name": "MACE abbreviation",
+   "outcome": "(cardiovascular disease OR heart disease OR myocardial infarction OR coronary heart disease)",
+   "study": {
+    "pmid": "X",
+    "title": "Fish oil after a coronary event: a randomized trial",
+    "abstract": "BACKGROUND: Major adverse cardiovascular events (MACE) are the usual endpoint.\nMETHODS: 8000 adults.\nRESULTS: MACE occurred in 17% and 22% (HR 0.75).\nCONCLUSIONS: Fewer MACE."
+   }
+  },
+  {
+   "name": "heart attack words",
+   "outcome": "(cardiovascular disease OR heart disease OR myocardial infarction OR coronary heart disease)",
+   "study": {
+    "pmid": "X",
+    "title": "Red wine and vascular events: a cohort study",
+    "abstract": "BACKGROUND: Moderate drinking is said to protect the heart.\nMETHODS: 50000 adults.\nRESULTS: Heart attacks were less common in moderate drinkers (HR 0.85).\nCONCLUSIONS: An association."
+   }
+  },
+  {
+   "name": "flu, not influenza",
+   "outcome": "influenza",
+   "study": {
+    "pmid": "X",
+    "title": "Elderberry in travellers: a randomized trial",
+    "abstract": "BACKGROUND: Elderberry is said to prevent influenza.\nMETHODS: 300 travellers.\nRESULTS: Fewer travellers had flu-like illness (12% vs 18%).\nCONCLUSIONS: Possible benefit."
+   }
+  },
+  {
+   "name": "ILI abbreviation",
+   "outcome": "influenza",
+   "study": {
+    "pmid": "X",
+    "title": "Vitamin D in schoolchildren: a randomized trial",
+    "abstract": "BACKGROUND: Influenza-like illness (ILI) is common in winter.\nMETHODS: 400 children.\nRESULTS: ILI occurred in 10% and 14%.\nCONCLUSIONS: Possible benefit."
+   }
+  },
+  {
+   "name": "coryza",
+   "outcome": "(common cold OR upper respiratory tract infection)",
+   "study": {
+    "pmid": "X",
+    "title": "Zinc lozenges in adults: a randomized trial",
+    "abstract": "BACKGROUND: Zinc is said to shorten the common cold.\nMETHODS: 100 adults.\nRESULTS: Coryza lasted 4.0 days with zinc and 7.1 with placebo.\nCONCLUSIONS: Shorter."
+   }
+  },
+  {
+   "name": "PHQ-9",
+   "outcome": "(depression OR depressive symptoms)",
+   "study": {
+    "pmid": "X",
+    "title": "Exercise in adults: a randomized trial",
+    "abstract": "BACKGROUND: Depression is common.\nMETHODS: 200 adults.\nRESULTS: PHQ-9 scores fell by 3 points.\nCONCLUSIONS: Exercise helped."
+   }
+  },
+  {
+   "name": "recall",
+   "outcome": "memory",
+   "study": {
+    "pmid": "X",
+    "title": "Sleep loss and word learning: a randomized crossover trial",
+    "abstract": "BACKGROUND: Sleep is thought to help memory.\nMETHODS: 40 adults.\nRESULTS: Word recall fell by 20% after a night awake.\nCONCLUSIONS: Sleep loss impaired recall."
+   }
+  },
+  {
+   "name": "SBP DBP",
+   "outcome": "blood pressure",
+   "study": {
+    "pmid": "X",
+    "title": "Green tea catechins and cardiometabolic risk: a randomized trial",
+    "abstract": "BACKGROUND: Green tea may lower blood pressure.\nMETHODS: 100 adults.\nRESULTS: SBP fell by 3 mmHg and DBP by 2 mmHg.\nCONCLUSIONS: Small effect."
+   }
+  },
+  {
+   "name": "systolic words",
+   "outcome": "blood pressure",
+   "study": {
+    "pmid": "X",
+    "title": "Beetroot juice in older adults: a randomized trial",
+    "abstract": "BACKGROUND: Nitrate may lower blood pressure.\nMETHODS: 60 adults.\nRESULTS: Systolic and diastolic readings fell by 4 and 2 mmHg.\nCONCLUSIONS: Small effect."
+   }
+  },
+  {
+   "name": "retina",
+   "outcome": "eye damage",
+   "study": {
+    "pmid": "X",
+    "title": "Blue-light exposure from screens in young adults",
+    "abstract": "BACKGROUND: Blue light from screens is said to cause eye damage.\nMETHODS: 120 adults, 6 months.\nRESULTS: Retinal thickness and macular pigment did not change.\nCONCLUSIONS: No harm seen."
+   }
+  },
+  {
+   "name": "anaemia, British",
+   "outcome": "(anemia OR iron deficiency anemia)",
+   "study": {
+    "pmid": "X",
+    "title": "Iron supplements in pregnant women: a randomised trial",
+    "abstract": "BACKGROUND: Iron deficiency anemia is common in pregnancy.\nMETHODS: 400 women.\nRESULTS: Anaemia at term was less common with iron (RR 0.6).\nCONCLUSIONS: Iron prevents anaemia."
+   }
+  },
+  {
+   "name": "diarrhoea, British",
+   "outcome": "(diarrhea OR acute diarrhea)",
+   "study": {
+    "pmid": "X",
+    "title": "Zinc in children: a randomised trial",
+    "abstract": "BACKGROUND: Acute diarrhea kills many children.\nMETHODS: 600 children.\nRESULTS: Diarrhoea lasted 12 hours less with zinc.\nCONCLUSIONS: Zinc helped."
+   }
+  },
+  {
+   "name": "allergic",
+   "outcome": "(peanut allergy OR food allergy)",
+   "study": {
+    "pmid": "X",
+    "title": "Early peanut introduction in infants: a randomized trial",
+    "abstract": "BACKGROUND: Peanut allergy is rising.\nMETHODS: 640 infants.\nRESULTS: Fewer children were allergic to peanut at 60 months (3% vs 17%).\nCONCLUSIONS: Early introduction helped."
+   }
+  },
+  {
+   "name": "constipated",
+   "outcome": "constipation",
+   "study": {
+    "pmid": "X",
+    "title": "Prunes in adults: a randomized trial",
+    "abstract": "BACKGROUND: Constipation is common.\nMETHODS: 40 constipated adults.\nRESULTS: Stool frequency rose by 1.2 a week.\nCONCLUSIONS: Prunes helped."
+   }
+  },
+  {
+   "name": "nauseated",
+   "outcome": "(nausea OR morning sickness)",
+   "study": {
+    "pmid": "X",
+    "title": "Ginger in early pregnancy: a randomized trial",
+    "abstract": "BACKGROUND: Nausea is common in early pregnancy.\nMETHODS: 120 women.\nRESULTS: Fewer women felt nauseated (30% vs 50%), and vomiting fell.\nCONCLUSIONS: Ginger helped."
+   }
+  },
+  {
+   "name": "CKD and eGFR",
+   "outcome": "(chronic kidney disease OR kidney function)",
+   "study": {
+    "pmid": "X",
+    "title": "Sodium bicarbonate in older adults: a randomized trial",
+    "abstract": "BACKGROUND: Chronic kidney disease (CKD) is common.\nMETHODS: 300 adults with CKD.\nRESULTS: eGFR fell less with bicarbonate.\nCONCLUSIONS: Slower decline."
+   }
+  },
+  {
+   "name": "atopic dermatitis and SCORAD",
+   "outcome": "(eczema OR atopic eczema)",
+   "study": {
+    "pmid": "X",
+    "title": "Probiotics in infants: a randomized trial",
+    "abstract": "BACKGROUND: Atopic eczema is common.\nMETHODS: 200 infants.\nRESULTS: Atopic dermatitis occurred in 15% and 25%; SCORAD fell.\nCONCLUSIONS: Fewer cases."
+   }
+  },
+  {
+   "name": "IBS abbreviation",
+   "outcome": "(irritable bowel syndrome)",
+   "study": {
+    "pmid": "X",
+    "title": "Peppermint oil in adults: a randomized trial",
+    "abstract": "BACKGROUND: Irritable bowel syndrome (IBS) affects 1 in 10.\nMETHODS: 180 adults with IBS.\nRESULTS: IBS-SSS scores fell by 50 points.\nCONCLUSIONS: Peppermint helped."
+   }
+  },
+  {
+   "name": "UTI abbreviation",
+   "outcome": "(urinary tract infection)",
+   "study": {
+    "pmid": "X",
+    "title": "Cranberry in women: a randomized trial",
+    "abstract": "BACKGROUND: Urinary tract infection (UTI) recurs often.\nMETHODS: 300 women.\nRESULTS: UTI recurred in 20% and 30%.\nCONCLUSIONS: Fewer UTIs."
+   }
+  },
+  {
+   "name": "headache days",
+   "outcome": "(migraine)",
+   "study": {
+    "pmid": "X",
+    "title": "Magnesium in adults: a randomized trial",
+    "abstract": "BACKGROUND: Migraine is disabling.\nMETHODS: 80 adults.\nRESULTS: Headache days fell by 2 a month.\nCONCLUSIONS: Magnesium helped."
+   }
+  },
+  {
+   "name": "live birth",
+   "outcome": "(fertility OR pregnancy rate)",
+   "study": {
+    "pmid": "X",
+    "title": "Folate in couples: a randomized trial",
+    "abstract": "BACKGROUND: Fertility may depend on folate.\nMETHODS: 2000 couples.\nRESULTS: Live births did not differ (34% vs 35%).\nCONCLUSIONS: No benefit."
+   }
+  },
+  {
+   "name": "acneiform lesion count",
+   "outcome": "(acne OR acne vulgaris)",
+   "study": {
+    "pmid": "X",
+    "title": "Low glycemic diet in young men: a randomized trial",
+    "abstract": "BACKGROUND: Acne is common.\nMETHODS: 43 young men.\nRESULTS: Lesion counts fell by 23 with the diet.\nCONCLUSIONS: Diet helped."
+   }
+  },
+  {
+   "name": "inflamed / IL-6",
+   "outcome": "(inflammation)",
+   "study": {
+    "pmid": "X",
+    "title": "Turmeric in adults: a randomized trial",
+    "abstract": "BACKGROUND: Inflammation is linked to disease.\nMETHODS: 100 adults.\nRESULTS: IL-6 and TNF-alpha fell.\nCONCLUSIONS: Turmeric lowered markers."
+   }
+  },
+  {
+   "name": "oedema, British",
+   "outcome": "(edema OR swelling)",
+   "study": {
+    "pmid": "X",
+    "title": "Compression stockings after surgery: a randomised trial",
+    "abstract": "BACKGROUND: Edema after surgery delays recovery.\nMETHODS: 100 patients.\nRESULTS: Leg oedema was less with stockings.\nCONCLUSIONS: Stockings helped."
+   }
+  },
+  {
+   "name": "caries via DMFT",
+   "outcome": "(dental caries OR tooth decay)",
+   "study": {
+    "pmid": "X",
+    "title": "Fluoride varnish in children: a randomized trial",
+    "abstract": "BACKGROUND: Dental caries is common.\nMETHODS: 500 children.\nRESULTS: DMFT increments were 0.8 and 1.4.\nCONCLUSIONS: Varnish helped."
+   }
+  },
+  {
+   "name": "aim: To determine whether, in background",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND: Sarcopenia is common. To determine whether creatine improves muscle strength, we ran a trial.\nMETHODS: Sixty adults.\nRESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "aim: passive, in background",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND: Sarcopenia is common. Whether creatine improves muscle strength was tested in a randomized trial.\nMETHODS: Sixty adults.\nRESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "aim: 'The study was designed to'",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "INTRODUCTION: Sarcopenia is common. The study was designed to test whether creatine raises muscle strength.\nMETHODS: Sixty adults.\nRESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "aim: 'We hypothesized'",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND: We hypothesized that creatine raises muscle strength.\nMETHODS: Sixty adults.\nRESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "combined heading BACKGROUND AND METHODS",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND AND METHODS: Sixty adults took creatine to test muscle strength.\nRESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "heading run into text",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND: Creatine may raise muscle strength.METHODS: Sixty adults.RESULTS: Leg press load rose.CONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "study described in background, no aim verb",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND: In this randomised trial, 60 adults took creatine and muscle strength was measured at 12 weeks.\nRESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."
+   }
+  },
+  {
+   "name": "BMJ style no colon in later heads",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "BACKGROUND: Creatine may raise muscle strength.\nMETHODS: Sixty adults. Results Leg press load rose by 12 kg. Conclusions It helped."
+   }
+  },
+  {
+   "name": "outcome in a Measures heading lowercase",
+   "outcome": "(muscle strength OR strength)",
+   "study": {
+    "pmid": "X",
+    "title": "Creatine in older adults",
+    "abstract": "Background: Creatine may raise muscle strength.\nMethods: Sixty adults; main outcome was leg press 1RM.\nResults: It rose.\nConclusions: It helped."
+   }
+  }
+ ]
+}

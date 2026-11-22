@@ -5,10 +5,9 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v88";
+const CACHE = "evident-v114";
 const SHELL = [
   "/",
-  "/checks",
   "/static/style.css",
   "/static/app.js",
   "/privacy",
@@ -60,6 +59,9 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (req.method !== "GET" || url.pathname.startsWith("/api/") || url.pathname.startsWith("/og/")) return;
+  // The owner's counts page carries a token in its address: straight to the
+  // network, never stored and never served from a cache.
+  if (url.pathname === "/stats" || url.pathname.startsWith("/stats/")) return;
 
   if (req.mode === "navigate") {
     // Any deep link falls back to the cached shell; the page reads the URL.

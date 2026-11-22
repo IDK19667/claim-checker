@@ -13,7 +13,7 @@
   <link rel="canonical" href="{{ base_url }}/privacy" />
   <meta property="og:title" content="Privacy · Evident" />
   <meta property="og:description" content="What Evident keeps, what it sends where, and what it never collects." />
-  <meta property="og:image" content="{{ base_url }}/og/_.png" />
+  <meta property="og:image" content="{{ base_url }}/og/_.png?v=2" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
@@ -30,31 +30,40 @@
   </div>
   <main class="wrap doc">
     <h1 class="hero">Privacy</h1>
-    <p class="lede">The short version: nothing you type is tied to you, and there is no account to tie it to.</p>
+    <p class="lede">The short version: {{ privacy_line(provider, after_colon=True) }}</p>
 
     <h2 class="section-label">What we keep</h2>
     <p>The text of each claim, the verdict, and the studies that were read, stored anonymously. That is what makes the trending list and the 24-hour cache work. There is no user record: no name, no email, no account, no IP address stored with a check.</p>
     <p>An anonymous thumbs up or down when you give one, and the short note if you report a wrong answer, tied to the claim, not to you. Leave anything personal out of a note.</p>
     <p>The anonymous check log, the saved answers and the feedback reports are stored in a hosted database (Turso) so they survive restarts. It holds the same anonymous records as above and nothing that identifies you.</p>
 
+    <h2 class="section-label">Search engines</h2>
+    <p>The page for a claim you type is not indexed by search engines and is kept out of the sitemap, so a claim with a name or a personal detail in it does not turn up in a search. Only the site's own example claims can be indexed. Anyone you send your link to can still open it. Lists of recent checks on the site leave out any claim that looks like it holds a name, an age, contact details or a personal medical detail.</p>
+
     <h2 class="section-label">What stays on your phone</h2>
     <p>Your recent checks live only in your browser's storage so they open offline. Clearing them on the home screen, or clearing site data, removes them. We never see that list.</p>
 
     <h2 class="section-label">Where a claim goes</h2>
-    <p>To check a claim we send its text to two services: PubMed (the U.S. National Library of Medicine) to find studies, and {{ provider }} to turn the claim into a search and to weigh the studies. On Google's free tier, Google's terms say submitted text may be used to improve their products. Don't paste anything you would not want read.</p>
+    <p>To check a claim we send its text to two services: PubMed (the U.S. National Library of Medicine) to find studies, and {{ provider }} to turn the claim into a search and to weigh the studies.{% if on_gemini %} On Google's free tier, Google's terms say submitted text may be used to improve their products.{% endif %} Don't paste anything you would not want read.</p>
     <p>The AI provider is sent the claim and the abstracts of the studies found, from our server, never from your device: it does not get your IP address or anything else that identifies you. The verdict is written by that AI, checked by code against the studies, and can still be wrong. If we change AI providers, this page will name the new one.</p>
 
     <h2 class="section-label">Rate limits</h2>
     <p>To keep the free AI quota fair, the server counts checks, lookups and reports per IP address in memory, for a minute to an hour. Nothing is written to disk, and the count disappears when the server restarts.</p>
 
+    <h2 class="section-label">What we count</h2>
+    <p>To see whether the site is working and being used, we keep daily totals of a short, fixed list of things: page views (the home page, a saved result, and the about, method, corrections and privacy pages), claims submitted, results completed, shares (the share and copy link buttons), and errors. Errors are counted two ways: the ones the server saw (server errors, the AI provider being busy, unavailable or refusing our key, and PubMed not answering), and the kind of error screen your browser showed.</p>
+    <p>A count is a date, a name from that list and a number, for example the number of results completed on one day. It is not tied to an IP address, a user agent, a cookie, a visitor ID or any claim text, and nothing about you goes into it, so it cannot be traced back to you or told apart from anyone else's. Page views include search engines and link previews, because nothing tells them apart from people.</p>
+    <p>The totals are kept in the same database as the saved answers (Turso, or a file on the server when Turso is not set up), and only the person who runs the site can read them.</p>
+    <p>Most counts are made on our server as the page is served. Share clicks and the error kind are sent by the page itself, as one request that carries only the name of the count. If your browser sends the Global Privacy Control signal, the page does not send those, and the server does not count them if it receives one anyway.</p>
+
     <h2 class="section-label">No tracking</h2>
-    <p>No analytics scripts, no advertising, no cookies. Fonts and images are served from this site, not from a third party.</p>
+    <p>No analytics scripts, no third-party services, no advertising, no cookies. The daily totals above are the only thing counted, and they identify no one. Fonts and images are served from this site, not from a third party.</p>
 
     <p class="doc-back"><a class="tap" href="/">Back to Evident</a></p>
   </main>
   <footer class="foot">
     <p><strong>Not medical advice.</strong> Evident summarizes published research and can be wrong. It does not replace a clinician.</p>
-    <p class="fine foot-links"><a href="/about">About</a> · <a href="/method">Methodology</a> · <a href="/corrections">Corrections and contact</a> · <a href="/privacy">Privacy</a></p>
+    <p class="fine foot-links"><span class="foot-row"><a href="/about">About</a><a href="/method">Methodology</a><a href="/corrections">Corrections and contact</a><a href="/privacy">Privacy</a></span></p>
   </footer>
 </body>
 </html>

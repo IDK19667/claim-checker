@@ -20,6 +20,8 @@ Claims with a special path:
   BUSY   "Provider busy claim"          the provider answers rate limited (429, retry_after 20)
   PUBMED "PubMed down claim"            PubMed cannot be reached (502)
   NONE   "No evidence claim"            PubMed returns no studies (an insufficient verdict)
+  DECLINED "Declined claim"             the model declines the reply (502, way_out "reword")
+  CUT    "Cut off claim"                the model's reply is cut off (502, way_out "either")
   LIVE   "Vitamin D supplements prevent colds"  streams with a short pause per stage
 Gates: query, found, done. /__fixture/reset closes them and forgets the replayed claims.
 """
@@ -53,6 +55,8 @@ DOWN = "Provider down claim"
 BUSY = "Provider busy claim"
 PUBMED = "PubMed down claim"
 NONE = "No evidence claim"
+DECLINED = "Declined claim"
+CUT = "Cut off claim"
 LIVE = "Vitamin D supplements prevent colds"
 PAUSE = float(os.environ.get("UI_FIXTURE_PAUSE", "0.9"))
 
@@ -69,6 +73,8 @@ SEED = [
     "Creatine builds strength",
     "Creatine improves strength",
     "Creatine is not safe for the kidneys",
+    # app.EXAMPLE_CLAIM: the home page's real example is read from the saved answers.
+    "Apple cider vinegar cures diabetes",
 ]
 REPLAY_FROM = "Taking vitamin D supplements in winter cuts your risk of catching a cold or flu, but only if you're deficient to begin with"
 
@@ -141,6 +147,10 @@ def _search(query, max_results=8, surrogate=""):
 
 def _weigh(claim, studies, query="", surrogate=""):
     _wait("done", claim)
+    # The two replies weigh_evidence cannot read, raised as it raises them.
+    for which, why in ((DECLINED, verdict.DECLINED), (CUT, verdict.CUT_OFF)):
+        if claim == which:
+            raise verdict.ProviderError("other", verdict.unread_reply(why), verdict.way_out(why))
     if not studies:
         return {"verdict": "insufficient", "tldr": "No published studies on this yet. Unproven, not disproven.",
                 "explanation": "No relevant studies were found on PubMed for this claim. That doesn't mean the claim is false, it may just not be well studied yet, or the search terms need refining.",
@@ -171,7 +181,7 @@ def _reset():
     # The replayed claims are cached once they finish; forget them so the
     # next run streams again. The seeded claims stay.
     with db.get_conn() as conn:
-        for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE):
+        for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE, DECLINED, CUT):
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
     return "ok"
 

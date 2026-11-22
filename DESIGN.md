@@ -382,7 +382,7 @@ purpose, never the browser's dark mode.
 
 - **Bricolage Grotesque**, 300 to 500, pinned at its 96pt optical size
   because it is only ever set large: the wordmark, headlines, the
-  verdict, the ledger's figures, section titles. Weight 350 with tight
+  verdict, section titles. Weight 350 with tight
   tracking (`-0.03em` to `-0.04em`); it is rounded and modern without
   being soft.
 - **Instrument Sans**, 400 to 600: everything you read. The claim, the
@@ -544,11 +544,10 @@ the shape of the evidence before opening a check.
   screen, the button, and three examples as quiet outlines. The first
   screen is exactly that, at 375px and at 1440px, and a measured test
   (`scripts/ui_measure.mjs --assert`) fails if the field and button are
-  not both on it. Then by day the ledger of real counts in light 30px
-  figures under a `--rule`, the latest checks and "Before you trust a
-  verdict".
-- **Latest checks:** a 32px title, then rows on 1px rules: the issue
-  number in mono, the claim, the verdict at the right in plain ink, and
+  not both on it. Then by day the latest checks and "Before you trust a
+  verdict". There is no strip of site counts.
+- **Latest checks:** a 32px title, then rows on 1px rules: the claim
+  (no issue number), the verdict at the right in plain ink, and
   under it the mini shelf and its counts. On a wide screen the title sits
   in a left column and the rows in a right one.
 - **Before you trust a verdict:** the same grammar, one question per row,
@@ -601,7 +600,9 @@ the shape of the evidence before opening a check.
   first view, and goes again when the reader scrolls back up to it.
 - **Failures:** an error is a title naming the problem (invalid claim, no
   connection, a limit, the checker) and a line saying what to do. The
-  kind follows the status the server sent. No studies is an answer, not
+  kind follows the status the server sent; the way out follows what
+  failed: a reply the model declined offers Edit claim and no Retry, one
+  cut off offers Retry and Edit claim. No studies is an answer, not
   an error: the result says nothing on PubMed matched and what to try.
 - **Documents** (privacy, the 404): the masthead, a 52 to 56px title, the lede,
   then the text by day under 24px heads. The 404 offers the claim box
@@ -671,5 +672,5 @@ Never reintroduce: a glowing or neon accent, cyan light cues, a navy or
 pure black night, a cream ground, a colour coded verdict, a second accent,
 gradient washes, glass or backdrop blur, pill buttons, shadows used for
 depth on ordinary content (the study sheet is the one that floats), emoji icons, stat-card rows, gauges, generated
-hero imagery or video, animated backgrounds, cursor effects, or analytics
-of any kind.
+hero imagery or video, animated backgrounds, cursor effects, per-person analytics, cookies
+or any third-party tracking.
