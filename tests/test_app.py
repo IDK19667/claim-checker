@@ -4176,6 +4176,53 @@ t("  and the saved answer's page, its markup and its short answer say the same",
   'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
   [m.group(0) for m in _UNRATED.finditer(_gu_page)])
 
+# ---- Under an answer the guidance rule set, the effect box headlines no study figure ----
+# The live safety run: "alcohol in pregnancy" (False) headlined "found no
+# consistently significant effects"; "raw milk" (False, set by the guidance
+# rule) headlined the vitamin loss from pasteurising, sized large.
+_GE_ST = [_study("GE1", "Low to moderate prenatal alcohol exposure: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Exposure of up to 83 grams per week found no consistently significant effects. "
+                          "CONCLUSIONS: Weaknesses in the evidence preclude the conclusion that drinking at these "
+                          "levels is safe.")]
+_GE_EFF = "The review on exposure of up to 83 grams per week found no consistently significant effects (Study 1)."
+_GE_BD = {"parts": [], "evidence": ["The review found no consistently significant effects (Study 1)."],
+          "says": ["The review found no consistently significant effects (Study 1)."], "effect_size": _GE_EFF,
+          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+          "effect": {"figure": "standardised mean difference 1.77", "label": "large",
+                     "plain": "a difference of 1.77 standard deviations"}}
+_GE_CLAIM = "Drinking a little alcohol during pregnancy is safe"
+_GE_TLDR = verdict.GUIDELINE_LEAD + "no amount of alcohol is safe during pregnancy. Ask a doctor or midwife about this."
+with appmod.app.test_request_context("/"):
+    _ge = appmod._check_response(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false", _GE_TLDR,
+                                 "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
+                                 "http://x", still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
+    _ge_plain = appmod._check_response(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
+                                       "Drinking during pregnancy is not shown to be safe.",
+                                       "The review found no consistent effects (Study 1).", ["GE1"],
+                                       [dict(s) for s in _GE_ST], "http://x", still_open="Exact low dose limits.",
+                                       breakdown=json.loads(json.dumps(_GE_BD)))
+t("guidance effect: under an answer the guidance rule set, the effect box says it rests on guidance, not a figure",
+  _ge["breakdown"]["effect_size"] == verdict.GUIDANCE_EFFECT
+  == "This answer rests on what major health guidelines say, not on a measured effect size."
+  and not re.search(r"\d|\b(?:small|moderate|large)\b", _ge["breakdown"]["effect_size"]), _ge["breakdown"])
+t("  and the study, its finding and the evidence line stay exactly as they were",
+  _ge["studies"] == _ge_plain["studies"] and _ge["studies"][0]["abstract"] == _GE_ST[0]["abstract"]
+  and _ge["breakdown"]["evidence"] == _ge_plain["breakdown"]["evidence"]
+  and _ge["evidence_line"] == _ge_plain["evidence_line"], (_ge["evidence_line"], _ge_plain["evidence_line"]))
+t("  and an answer the guidance rule did not set keeps its own figure",
+  _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
+_ge_none = verdict.guidance_effect(dict(_GE_BD, effect_size=""))
+t("  and a breakdown with no effect box is not given one",
+  _ge_none["effect_size"] == "" and verdict.guidance_effect(None) is None, _ge_none)
+db.put_cached_verdict(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
+                      "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
+                      tldr=_GE_TLDR, still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
+_ge_page = c.get("/?q=" + urllib.parse.quote(_GE_CLAIM)).get_data(as_text=True)
+_ge_box = re.search(r'<p class="effect"><b>How big the effect is</b><span>(.*?)</span></p>', _ge_page)
+t("  and the server-rendered page prints the same words in its effect box",
+  _ge_box and _ge_box.group(1) == verdict.GUIDANCE_EFFECT and _GE_EFF not in _ge_page.split('id="server-result"')[0],
+  _ge_box and _ge_box.group(1))
+
 # ---- Guidance that rejects a forgo-treatment or medicine-cures claim is a False ----
 _FG_SAYS = "this is not safe, and the medicine is still advised."
 _FG_LINE = "Major health guidelines say: " + _FG_SAYS

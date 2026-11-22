@@ -994,6 +994,24 @@ def guidance_prose(explanation: str, still_open: str, bd: dict | None):
     return explanation, still_open, bd
 
 
+# The effect box under an answer the guidance rule set. The stamp did not
+# come from a study's figure, so the box does not headline one, or a size
+# word: under "False" on alcohol in pregnancy it read "found no consistently
+# significant effects", which a reader skimming could take as permission.
+# Each study and its own finding stay in the study list as they are.
+GUIDANCE_EFFECT = ("This answer rests on what major health guidelines say, "
+                   "not on a measured effect size.")
+
+
+def guidance_effect(bd: dict | None) -> dict | None:
+    """The breakdown of an answer the guidance rule set, its effect box
+    saying GUIDANCE_EFFECT in place of a study's figure. A breakdown with no
+    effect box gets none."""
+    if bd and str(bd.get("effect_size") or "").strip():
+        return {**bd, "effect_size": GUIDANCE_EFFECT}
+    return bd
+
+
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
     return (_gemini_json if provider() == "gemini" else _anthropic_json)(
         prompt, schema, max_tokens, temperature)
