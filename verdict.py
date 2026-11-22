@@ -1524,6 +1524,13 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                            result.get("tldr"))
         result = _read_verdict(*kept, studies, claim, follow=breakdown.STAMP_FOR[said],
                                subject=subject, outcome=outcome, surrogate=surrogate)
+    # A reply that could not be read at all (cut off, declined, not JSON) is
+    # not an answer about the evidence. It ends in the app's error response,
+    # with what went wrong and a way out, and is never saved, logged or
+    # listed as a verdict.
+    if result.get("unread"):
+        _stamp_log.warning("the reply could not be read: %s", result["unread"])
+        raise ProviderError("other", unread_reply(result["unread"]))
     # Which studies were off topic is a fact about this answer, so it is
     # written onto the records the answer is shown and cached with: the
     # chart leaves them out of its strong count, and says why.
@@ -1555,6 +1562,13 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
 
 
 INCOMPLETE_REPLY = "The AI model sent back an answer with a line missing. Try again in a moment."
+UNREADABLE = "sent back a reply that could not be read"
+
+
+def unread_reply(why: str) -> str:
+    """What the reader is told when the model's reply could not be read:
+    what went wrong, that the check did not finish, and the way out."""
+    return f"The AI model {why}, so this check did not finish. Try again in a moment."
 
 
 def has_lines(result: dict) -> bool:
@@ -2004,11 +2018,13 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     OR-group, for the relevance gate; `outcome` its second, for the
     certainty a review gives that outcome.
     """
+    # A reply that could not be read at all is marked "unread", with what
+    # went wrong; weigh_evidence turns it into the app's failure response.
     if stop_note:
-        return _fallback(
+        return dict(_fallback(
             f"The evidence-weighing step {stop_note}. "
             "Raw studies are still available below for manual review."
-        )
+        ), unread=stop_note)
 
     # The schema constraint should make this unnecessary, but models have
     # historically wrapped JSON in ```json fences despite instructions.
@@ -2020,10 +2036,10 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         parsed = None
 
     if not isinstance(parsed, dict):
-        return _fallback(
+        return dict(_fallback(
             "The evidence-weighing step returned an unexpected format. "
             "Raw studies are still available below for manual review."
-        )
+        ), unread=UNREADABLE)
 
     verdict = str(parsed.get("verdict", "")).strip().lower()
     if verdict not in VALID_VERDICTS:

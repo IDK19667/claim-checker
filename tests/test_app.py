@@ -294,10 +294,35 @@ r = P("err b"); t("gemini bad key -> 500, and the page says only that the checke
   and "aistudio" not in r.get_json()["error"] and ".env" not in r.get_json()["error"])
 fg.models.script = [errors.ServerError(503, {"error": {"message": "x", "status": "UNAVAILABLE"}})] * 3
 t("gemini 503 -> 502", P("err c").status_code == 502)
-fg.models.script = [Resp("q"), Resp("not json")]
-t("non-JSON -> complicated", P("err d").get_json()["verdict"] == "complicated")
-fg.models.script = [Resp("q"), Resp("", "FinishReason.MAX_TOKENS")]
-t("truncated -> complicated", "ran out of room" in P("err e").get_json()["explanation"])
+# A reply that could not be read at all is a failed check, not a verdict:
+# the app's 502 with what went wrong and a way out, on the plain check and
+# the streamed one, and nothing saved, logged or listed. One per kind.
+_UNREAD_KINDS = (("not JSON", Resp("not json"), verdict.UNREADABLE),
+                 ("JSON that is not an object", Resp("[1, 2]"), verdict.UNREADABLE),
+                 ("cut off", Resp("", "FinishReason.MAX_TOKENS"), "ran out of room before finishing"),
+                 ("declined", Resp(""), "declined to answer this one"))
+for _i, (_kind, _reply, _why) in enumerate(_UNREAD_KINDS):
+    _want = f"The AI model {_why}, so this check did not finish. Try again in a moment."
+    _logs0 = len(db.recent_checks(1000))
+    fg.models.script = [Resp("q"), _reply]
+    r = P(f"err d{_i}")
+    t(f"a reply that is {_kind} is a failed check: 502, naming the problem and the way out",
+      r.status_code == 502 and r.get_json() == {"error": _want}, (r.status_code, r.get_json()))
+    fg.models.script = [Resp("q"), _reply]
+    _r, _evs = stream(f"err s{_i}", ip=f"8.8.6.{_i}")
+    t(f"  and the streamed check ends in the same error event",
+      _evs and _evs[-1] == {"stage": "error", "status": 502, "error": _want}, _evs[-1:])
+    t(f"  and neither is saved or logged as a verdict",
+      db.get_cached_by_key(db.normalize_claim(f"err d{_i}")) is None
+      and db.get_cached_by_key(db.normalize_claim(f"err s{_i}")) is None
+      and len(db.recent_checks(1000)) == _logs0)
+    t(f"  and the message has no dash a reader would see", not any(ch in _want for ch in "\u2013\u2014"))
+fg.models.script = [Resp("q"), Resp(VJ("complicated", [1]))]
+_good = P("err good reply", ip="8.8.6.9")
+t("a good reply is unaffected: 200, saved and logged as before",
+  _good.status_code == 200 and _good.get_json()["tldr"] == "Short take."
+  and db.get_cached_verdict("err good reply", 24) is not None
+  and db.recent_checks(1)[0]["claim_text"] == "err good reply", _good.get_json())
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': (_ for _ in ()).throw(requests.ConnectionError("down"))
 fg.models.script = [Resp("q")]
 r = P("err f"); t("PubMed down -> 502", r.status_code == 502 and "PubMed" in r.get_json()["error"])
