@@ -5583,6 +5583,23 @@ for _g in _F3_GO:
     t(f"F3: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
 for _k in _F3_STAY:
     t(f"F3: stays, it is about something else: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
+# G6: the reviewer's leftovers. "from ..." after the verb names the
+# evidence; a passive rated "by" a study's raters is about the study; a
+# thing rated "as" something under "not enough evidence" is the claim.
+# "No conclusion can be drawn" and "We cannot say" are said about side
+# questions too, so they stay.
+_G6_GO = ["It is impossible to judge from these abstracts.",
+          "There is not enough evidence to rate raw milk as healthier.",
+          "The claim is unratable.", "It is unrateable on these studies.",
+          "The evidence does not allow us to rate it.", "The evidence doesn't let us judge this claim."]
+_G6_STAY = ["The certainty of the evidence could not be graded by the review authors (Study 2).",
+            "Pain could not be rated by the two independent assessors.",
+            "Researchers were unable to judge from the photographs.",
+            "No conclusion can be drawn about sleep.", "We cannot say how long it lasts."]
+for _g in _G6_GO:
+    t(f"G6: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
+for _k in _G6_STAY:
+    t(f"G6: stays: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
 t("F3: a closing 'meaning we can't rate it' goes and what came before it stays",
   verdict.unrated_said("No trial tests this, meaning we can't rate it.") == "No trial tests this.")
 _f3_g = verdict.guidance_prose("No trial tests the claim. Researchers were unable to rate pain intensity.",

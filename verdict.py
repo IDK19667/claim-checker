@@ -1019,24 +1019,35 @@ _CANNOT = (r"(?:can\s*not|can[’']t|could\s+not|couldn[’']t|(?:is|are|was|wer
 # What is rated must be the claim, the evidence, "this" or "it", or nothing
 # at all (the clause ends): "unable to rate pain intensity" is about an
 # outcome, not the claim.
+# "from ..." names the evidence the rating would rest on, not an outcome:
+# "impossible to judge from these abstracts".
 _RATE_OBJ = (r"(?=\s*(?:[.,;:!?)]|$|(?:it|this|that|either\s+way|one\s+way\s+or\s+the\s+other|whether|yet|here|now"
-             r"|for\s+now|at\s+all|(?:the|this)\s+(?:claim|evidence|question|idea|statement))\b))")
+             r"|for\s+now|at\s+all|from|(?:the|this)\s+(?:claim|evidence|question|idea|statement))\b))")
+# Under "not enough evidence to rate ...", a thing rated "as" something is
+# the claim's own judgement ("to rate raw milk as healthier"), whatever the
+# thing is; one rated without "as" may be an outcome ("to grade the side
+# effects separately") and is held to the object test.
+_RATE_AS = r"(?=\s+(?:[\w’'-]+\s+){1,4}?as\s+\w)"
 _CANNOT_RATE = re.compile(
     # "not enough evidence (for us) to rate it", "too little evidence to judge"
     r"(?:\bnot|n[’']t|\bno|\btoo\s+little|\binsufficient)\s+(?:\w+\s+){0,2}?(?:enough\s+)?evidence\b"
-    rf"[^.!?]*?\bto\s+{_RATE_V}\b{_RATE_OBJ}"
+    rf"[^.!?]*?\bto\s+{_RATE_V}\b(?:{_RATE_OBJ}|{_RATE_AS})"
     # "the evidence is too thin to rate"
     rf"|\btoo\s+(?:thin|weak|limited|sparse|few|scant)\s+to\s+{_RATE_V}\b{_RATE_OBJ}"
     # "it can not be rated", "this claim can't yet be judged"
     rf"|(?:\b(?:it|this|that)|\b(?:claim|evidence|question|idea|statement)(?:\s+(?!(?:on|of|about|for)\b)\w+){{0,2}}?)"
     rf"\s+(?:{_CANNOT}|could\s+not|cannot)\s+(?:yet\s+|really\s+|reliably\s+)?be\s+{_RATED_V}\b"
     # "we can't rate it", "unable to judge this", "not possible to rate the claim"
-    rf"|\b(?:{_CANNOT}|unable\s+to|(?:not\s+|(?:is|was)n[’']t\s+|im)possible\s+to|no\s+way\s+to)\s+(?:yet\s+|really\s+|reliably\s+)?{_RATE_V}\b{_RATE_OBJ}",
+    rf"|\b(?:{_CANNOT}|unable\s+to|(?:not\s+|(?:is|was)n[’']t\s+|im)possible\s+to|no\s+way\s+to)\s+(?:yet\s+|really\s+|reliably\s+)?{_RATE_V}\b{_RATE_OBJ}"
+    # "the evidence does not allow us to rate it"
+    rf"|\b(?:does|do|did)(?:\s+not|n[’']t)\s+(?:allow|let|permit)\s+(?:us\s+|one\s+|anyone\s+|readers?\s+)?(?:to\s+)?{_RATE_V}\b{_RATE_OBJ}"
+    # "unratable", "unrateable"
+    r"|\bunrat(?:e)?able\b",
     re.IGNORECASE)
 # The people a study asks to rate something: when one of them is who could
 # not rate, the sentence is about the study, not about this answer.
 _RATERS = re.compile(
-    r"\b(?:researchers?|investigators?|participants?|patients?|subjects?|authors?|raters?|clinicians?"
+    r"\b(?:researchers?|investigators?|participants?|patients?|subjects?|authors?|raters?|reviewers?|clinicians?"
     r"|assessors?|doctors?|nurses?|volunteers?|respondents?|children|parents?|observers?|they|people)\b", re.I)
 # Where a clause begins: what lies before it has another subject.
 _CLAUSE = re.compile(r"[,;:]|\b(?:so|since|because|meaning|which|and|but)\b", re.I)
@@ -1047,6 +1058,11 @@ def _says_unrated(s: str):
     rated or judged, or None. Not when a study's raters are who could not
     (a sentence on how much evidence there is names no rater)."""
     for m in _CANNOT_RATE.finditer(s or ""):
+        # "could not be graded by the review authors": a study's raters,
+        # named after a passive, did the rating. That is about the study.
+        by = re.match(r"\s+by\s+((?:[\w-]+\s*){1,4})", s[m.end():])
+        if by and _RATERS.search(by.group(1)):
+            continue
         if re.search(r"\bevidence\b|^too\b", m.group(0), re.I):
             return m
         cuts = list(_CLAUSE.finditer(s, 0, m.start()))
@@ -1063,7 +1079,7 @@ _END_REF = re.compile(r"\s*(\((?:Study|Studies)\b[^)]*\))\s*[.!?]?\s*$")
 
 
 # The lead as a model might write it: any case, any spacing, with or
-# without "major" and "health", with or without the colon.
+# without "major" and "health", always with its colon.
 _LEAD_SAID = re.compile(r"^\s*(?:major\s+)?(?:health\s+)?guidelines\s+say\s*:\s*", re.IGNORECASE)
 
 
