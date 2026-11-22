@@ -8174,6 +8174,57 @@ with db.get_conn() as _conn:
     _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
                   tuple(db.normalize_claim(x) for x in _od_rows))
 
+# ---- where the fixes meet: a kept answer is never an out-of-date one ----------
+# rc-saved-fix keeps a saved answer past its window when the stamp and every
+# record are the same; rc-reading calls one that relied on a study code now
+# sets aside out of date. Both hold: same records and stamp, but relied on a
+# set-aside study, and it is checked fresh; listed only, and it is kept.
+_KS_Q = "(creatine) AND (" + _hair_out + ")"
+_KS_STUDIES = [dict(_RES_ONLY), dict(_hair)]
+
+
+def _ks_row(claim, cited):
+    db.put_cached_verdict(claim, _KS_Q, "true", "Strength rose (Study 1).", cited, [dict(s_) for s_ in _KS_STUDIES],
+                          tldr="Kept short answer.", still_open="Doses vary.", method_stamp=verdict.METHOD_STAMP)
+    with db.get_conn() as _conn:
+        _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                      (_OLD_DATE, db.normalize_claim(claim)))
+    db.put_cached_query(claim, verdict.QUERY_PROMPT_VERSION, _KS_Q, "", claim)
+
+
+_ks_search = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(s_) for s_ in _KS_STUDIES], q, False)
+try:
+    _KS_BAD, _KS_OK = "Creatine raises strength in rowers", "Creatine raises strength in cyclists"
+    _ks_row(_KS_BAD, ["MO1", _hair["pmid"]])
+    _ks_row(_KS_OK, ["MO1"])
+    t("meet: both rows have the same records and stamp the search finds now",
+      appmod._same_records(db.get_cached_by_key(db.normalize_claim(_KS_BAD))["studies"], _KS_STUDIES))
+    _calls0 = fg.models.calls
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made fresh.", still_open="Open."))]
+    _ks_b = P(_KS_BAD, ip="7.7.7.91").get_json()
+    t("meet: a saved answer that relied on a study code now sets aside is never kept, same records and stamp or not",
+      _ks_b.get("cached") is False and fg.models.calls > _calls0 and not (_ks_b.get("tldr") or "").startswith("Kept short answer"),
+      (_ks_b.get("cached"), fg.models.calls - _calls0, _ks_b.get("tldr")))
+    _ks_row(_KS_BAD, ["MO1", _hair["pmid"]])
+    _calls0 = fg.models.calls
+    fg.models.script = [Resp(VJ("complicated", [1], tldr="Made fresh.", still_open="Open."))]
+    _ks_r, _ks_evs = stream(_KS_BAD, ip="7.7.7.92")
+    t("  nor on the streamed check",
+      _ks_evs[-1]["stage"] == "done" and _ks_evs[-1]["result"]["cached"] is False and fg.models.calls > _calls0,
+      (_ks_evs[-1].get("stage"), fg.models.calls - _calls0))
+    _calls0 = fg.models.calls
+    fg.models.script = []
+    _ks_o = P(_KS_OK, ip="7.7.7.93").get_json()
+    t("  while one that only listed that study is kept, with no model call",
+      _ks_o.get("cached") is True and (_ks_o.get("tldr") or "").startswith("Kept short answer") and fg.models.calls == _calls0,
+      (_ks_o.get("cached"), _ks_o.get("tldr"), fg.models.calls - _calls0))
+finally:
+    pubmed.search_with_fallback = _ks_search
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                      tuple(db.normalize_claim(x) for x in (_KS_BAD, _KS_OK)))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

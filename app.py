@@ -1313,6 +1313,10 @@ def _steady(claim: str, studies: list) -> dict | None:
             return None
         if not _same_records(saved["studies"], studies or []):
             return None
+        # One that relied on a study code now sets aside is out of date
+        # (_current), whatever else is the same, and is made again.
+        if _current(saved, saved["claim_text"]) is None:
+            return None
         db.refresh_saved(saved["claim_text"])
         return db.get_cached_verdict(saved["claim_text"], VERDICT_CACHE_HOURS)
     except sqlite3.Error as e:
