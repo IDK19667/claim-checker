@@ -987,11 +987,52 @@ def _restamp(result: dict, stamp: str, line: str, doctor: str, claim: str,
 # ---------------------------------------------------------------------
 
 GUIDANCE_RESTS = "This answer rests on what major health guidelines say, not on these studies."
+# The verbs of rating, and the modal phrases that say it cannot be done,
+# contractions and "can not" included.
+_RATE_V = r"(?:rate|judge|grade)"
+_RATED_V = r"(?:rated|judged|graded)"
+_CANNOT = (r"(?:can\s*not|can[’']t|could\s+not|couldn[’']t|(?:is|are|was|were|am)\s+(?:not\s+)?unable\s+to"
+           r"|(?:is|are|was|were)\s+not\s+able\s+to|(?:is|are|was|were)n[’']t\s+able\s+to)")
+# What is rated must be the claim, the evidence, "this" or "it", or nothing
+# at all (the clause ends): "unable to rate pain intensity" is about an
+# outcome, not the claim.
+_RATE_OBJ = (r"(?=\s*(?:[.,;:!?)]|$|(?:it|this|that|either\s+way|one\s+way\s+or\s+the\s+other|whether|yet|here|now"
+             r"|for\s+now|at\s+all|(?:the|this)\s+(?:claim|evidence|question|idea|statement))\b))")
 _CANNOT_RATE = re.compile(
-    r"(?:\bnot|n[’']t|\btoo little|\binsufficient)\s+(?:\w+\s+){0,2}?(?:enough\s+)?evidence\b"
-    r"[^.!?]*?\bto\s+(?:rate|judge|grade)\b"
-    r"|\bcan(?:not|[’']t)\s+(?:yet\s+)?be\s+(?:rated|judged|graded)\b"
-    r"|\b(?:unable|impossible)\s+to\s+(?:rate|judge|grade)\b", re.IGNORECASE)
+    # "not enough evidence (for us) to rate it", "too little evidence to judge"
+    r"(?:\bnot|n[’']t|\bno|\btoo\s+little|\binsufficient)\s+(?:\w+\s+){0,2}?(?:enough\s+)?evidence\b"
+    rf"[^.!?]*?\bto\s+{_RATE_V}\b{_RATE_OBJ}"
+    # "the evidence is too thin to rate"
+    rf"|\btoo\s+(?:thin|weak|limited|sparse|few|scant)\s+to\s+{_RATE_V}\b{_RATE_OBJ}"
+    # "it can not be rated", "this claim can't yet be judged"
+    rf"|(?:\b(?:it|this|that)|\b(?:claim|evidence|question|idea|statement)(?:\s+(?!(?:on|of|about|for)\b)\w+){{0,2}}?)"
+    rf"\s+(?:{_CANNOT}|could\s+not|cannot)\s+(?:yet\s+|really\s+|reliably\s+)?be\s+{_RATED_V}\b"
+    # "we can't rate it", "unable to judge this", "not possible to rate the claim"
+    rf"|\b(?:{_CANNOT}|unable\s+to|(?:not\s+|(?:is|was)n[’']t\s+|im)possible\s+to|no\s+way\s+to)\s+(?:yet\s+|really\s+|reliably\s+)?{_RATE_V}\b{_RATE_OBJ}",
+    re.IGNORECASE)
+# The people a study asks to rate something: when one of them is who could
+# not rate, the sentence is about the study, not about this answer.
+_RATERS = re.compile(
+    r"\b(?:researchers?|investigators?|participants?|patients?|subjects?|authors?|raters?|clinicians?"
+    r"|assessors?|doctors?|nurses?|volunteers?|respondents?|children|parents?|observers?|they|people)\b", re.I)
+# Where a clause begins: what lies before it has another subject.
+_CLAUSE = re.compile(r"[,;:]|\b(?:so|since|because|meaning|which|and|but)\b", re.I)
+
+
+def _says_unrated(s: str):
+    """The match where `s` says the claim, the evidence, this or it cannot be
+    rated or judged, or None. Not when a study's raters are who could not
+    (a sentence on how much evidence there is names no rater)."""
+    for m in _CANNOT_RATE.finditer(s or ""):
+        if re.search(r"\bevidence\b|^too\b", m.group(0), re.I):
+            return m
+        cuts = list(_CLAUSE.finditer(s, 0, m.start()))
+        clause = s[cuts[-1].end() if cuts else 0:m.start()]
+        if not _RATERS.search(clause):
+            return m
+    return None
+
+
 # The joint before a closing "so it can't be rated": what comes before it is
 # a statement about the studies and stays.
 _SO_JOINT = re.compile(r",?\s+(?:and\s+)?(?:so|since)\b|,\s+(?:which means|meaning)\b", re.IGNORECASE)
@@ -1011,7 +1052,7 @@ def unrated_said(text: str) -> str:
     nothing else goes."""
     out = []
     for s in breakdown.sentences(text or ""):
-        m = _CANNOT_RATE.search(s)
+        m = _says_unrated(s)
         if not m:
             out.append(s)
             continue
@@ -1029,11 +1070,11 @@ def guidance_prose(explanation: str, still_open: str, bd: dict | None):
     """(explanation, still_open, breakdown) for an answer the guidance rule
     set, with nothing in them saying the claim cannot be rated. When the
     explanation said so, it now ends on GUIDANCE_RESTS instead."""
-    if _CANNOT_RATE.search(explanation or ""):
+    if _says_unrated(explanation or ""):
         explanation = f"{unrated_said(explanation)} {GUIDANCE_RESTS}".strip()
-    if _CANNOT_RATE.search(still_open or ""):
+    if _says_unrated(still_open or ""):
         still_open = unrated_said(still_open) or "Whether any study has tested this claim directly."
-    if bd and any(_CANNOT_RATE.search(t) for t in breakdown.prose_of(bd)):
+    if bd and any(_says_unrated(t) for t in breakdown.prose_of(bd)):
         bd = breakdown.map_prose(bd, unrated_said)
     return explanation, still_open, bd
 

@@ -5456,6 +5456,35 @@ t("  and the saved answer's page, its markup and its short answer say the same",
   'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
   [m.group(0) for m in _UNRATED.finditer(_gu_page)])
 
+# ---- final fix F3: what "cannot be rated" means under a guidance stamp --------
+# verdict.unrated_said removes a sentence (or its closing clause) that says the
+# claim, the evidence, "this" or "it" cannot be rated or judged, in any of the
+# ways that is said; it keeps one about something else (an outcome, a symptom,
+# a scale) and one where a study's researchers or participants did the rating.
+_F3_GO = ["It can not be rated.", "We cannot rate this claim.", "This claim can't yet be judged.",
+          "There isn't enough evidence to rate it.", "There is too little evidence to judge either way.",
+          "It is not possible to rate the claim from these studies.", "It isn\u2019t possible to judge it.",
+          "We are unable to judge it.", "The evidence is too thin to rate.", "So it could not be graded.",
+          "We couldn\u2019t rate it.", "Without a direct trial, we were not able to rate this.",
+          "The claim itself cannot be judged.", "There is no evidence for us to rate this.",
+          "It's impossible to judge whether it works."]
+_F3_STAY = ["Researchers were unable to rate pain intensity.", "Participants could not rate their symptoms reliably.",
+            "Pain intensity could not be rated in two trials.", "The trial was unable to grade adverse events.",
+            "Patients couldn't rate it on the scale.", "Fatigue scores cannot be judged against a placebo here.",
+            "Clinicians were not able to judge the wound size.", "The studies used a scale to rate nausea.",
+            "There was not enough evidence to grade the side effects separately.", "Sleep quality was hard to rate."]
+for _g in _F3_GO:
+    t(f"F3: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
+for _k in _F3_STAY:
+    t(f"F3: stays, it is about something else: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
+t("F3: a closing 'meaning we can't rate it' goes and what came before it stays",
+  verdict.unrated_said("No trial tests this, meaning we can't rate it.") == "No trial tests this.")
+_f3_g = verdict.guidance_prose("No trial tests the claim. Researchers were unable to rate pain intensity.",
+                               "Researchers were unable to rate pain intensity.", None)
+t("F3: guidance_prose leaves prose about a rated outcome as written, with no rests-on line added",
+  _f3_g[0] == "No trial tests the claim. Researchers were unable to rate pain intensity."
+  and _f3_g[1] == "Researchers were unable to rate pain intensity.", _f3_g)
+
 # ---- Under an answer the guidance rule set, the effect box headlines no study figure ----
 # The live safety run: "alcohol in pregnancy" (False) headlined "found no
 # consistently significant effects"; "raw milk" (False, set by the guidance
