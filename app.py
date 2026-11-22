@@ -983,14 +983,14 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # set aside (withdrawn, a journal notice, or off topic), whether or not
     # the answer listed it: a fresh check has already taken it out of the
     # cited list, so nothing below would hold its sentences to anything.
-    # A sentence resting only on such studies goes; one citing a mix keeps
-    # the others. Text that cites none of them is left exactly as it was.
+    # A sentence citing any such study goes whole, even one that also cites
+    # a study relied on: taking only the set-aside number out would credit
+    # its words to the other study. Text that cites none of them is left
+    # exactly as it was.
     count = len(studies or [])
     aside = {i + 1 for i, s in enumerate(studies or []) if s.get("off_topic") or evidence.withdrawn(s)}
     if aside:
-        others = set(range(1, count + 1)) - aside
-        unaside = lambda t: (breakdown_mod.relied_only(t, others, count)
-                             if aside & set(breakdown_mod.refs(t, count)) else t)
+        unaside = lambda t: breakdown_mod.drop_any_citing(t, aside, count)
         explanation = unaside(explanation or "")
         if breakdown and any(unaside(t) != t for t in breakdown_mod.prose_of(breakdown)):
             breakdown = breakdown_mod.map_prose(breakdown, unaside)

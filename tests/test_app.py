@@ -9662,6 +9662,9 @@ _H1_B = _study("HB2", "Turmeric and knee pain: a second randomized trial", types
                abstract="Pain scores fell with turmeric in a second trial of adults with knee pain.")
 _H1_SAID_A = "Knee pain fell with turmeric (Study 1)."
 _H1_SAID_B = "Pain scores fell with turmeric in a second trial (Study 2)."
+# J1: in every cell, a sentence citing the set-aside study and the other one
+# goes whole: its words were written about both, so none is re-credited.
+_H1_MIX = "Both trials enrolled adults with knee pain (Studies 1, 2)."
 _H1_OFF = [{"study": 1, "subject": False, "outcome": True, "in_people": True, "finding": "unclear"},
            {"study": 2, "subject": True, "outcome": True, "in_people": True, "finding": "for"}]
 def _h1_seen(r):
@@ -9672,7 +9675,7 @@ for _h1_kind, _h1_a in _H1_A.items():
         for _h1_cites in (True, False):
             for _h1_other in (True, False):
                 _nums = ([1] if _h1_listed else []) + ([2] if _h1_other else [])
-                _expl = " ".join(([_H1_SAID_A] if _h1_cites else []) + ([_H1_SAID_B] if _h1_other else [])) or "Because."
+                _expl = " ".join(([_H1_SAID_A] if _h1_cites else []) + ([_H1_SAID_B] if _h1_other else []) + [_H1_MIX])
                 _extra = {"relevance": _H1_OFF} if _h1_kind == "off topic" else {}
                 for _h1_way in ("plain", "streamed", "saved"):
                     _h1_n += 1
@@ -9700,11 +9703,14 @@ for _h1_kind, _h1_a in _H1_A.items():
                     _num = [s["pmid"] for s in _h1_r["studies"]].index("HA1") + 1
                     if _sa["cited_in_verdict"] or any(_num in breakdown.refs(x, len(_h1_r["studies"])) for x in _h1_seen(_h1_r)):
                         _h1_bad.append((_cell, [x for x in _h1_seen(_h1_r) if _num in breakdown.refs(x, len(_h1_r["studies"]))]))
+                    if any("Both trials enrolled adults" in x for x in _h1_seen(_h1_r)):
+                        _h1_bad.append((_cell, "mixed sentence kept", [x for x in _h1_seen(_h1_r) if "Both trials" in x]))
                     if _h1_other and "Pain scores fell with turmeric in a second trial" not in _h1_r["explanation"]:
                         _h1_lost.append((_cell, _h1_r["explanation"]))
                     if not _h1_other and _h1_r["verdict"] != "insufficient":
                         _h1_bad.append((_cell, "stamp", _h1_r["verdict"]))
-t("H1: in every cell no prose field cites the set-aside study, and with nothing else relied on the stamp is insufficient",
+t("H1: in every cell no prose field cites the set-aside study, a sentence citing it with another goes whole, "
+  "and with nothing else relied on the stamp is insufficient",
   _h1_n == 72 and not _h1_bad, _h1_bad[:6])
 t("  and a sentence that cites only a relied-on study is still there", not _h1_lost, _h1_lost[:6])
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_H1_A["retracted"])]
@@ -9718,6 +9724,23 @@ t("H1: the reviewer's case, plain and streamed: the sentence is gone, the paper 
   all(r_["verdict"] == "insufficient" and _H1_SAID_A[:-10] not in json.dumps(r_.get("explanation"))
       and r_["studies"][0]["background"] and not r_["studies"][0]["cited_in_verdict"] for r_ in (_h1_rx, _h1_rxs)),
   [(r_.get("verdict"), r_.get("explanation")) for r_ in (_h1_rx, _h1_rxs)])
+# J1, the reviewer's case: a mixed citation in "Who was studied" under a
+# saved answer. Off-topic Study 1's volunteers are not credited to Study 2.
+_J1_WHO = "Who was studied: lab models and 48 volunteers with knee pain (Studies 1, 2)."
+with appmod.app.test_request_context("/"):
+    _j1 = appmod._check_response("Turmeric eases knee pain J1", "(turmeric) AND (knee pain)", "complicated",
+                                 "The studies point both ways.", _H1_SAID_B + " Both were small (Studies 1, 2).",
+                                 ["HB2"], [dict(_H1_A["off topic"], off_topic=verdict.OFF_SUBJECT + "."), dict(_H1_B)],
+                                 "http://x", still_open="Longer trials.",
+                                 breakdown=dict(_el_bd("", None, [_H1_SAID_B]), says=[_H1_SAID_B, _J1_WHO]))
+t("J1: the reviewer's case: a sentence citing an off-topic and a relied-on study goes whole, not re-credited",
+  _H1_SAID_B in _j1["breakdown"]["says"] and not any("48 volunteers" in x for x in breakdown.prose_of(_j1["breakdown"]))
+  and "Both were small" not in _j1["explanation"] and _j1["explanation"].startswith("Pain scores fell"),
+  (_j1["breakdown"]["says"], _j1["explanation"]))
+t("J1: drop_any_citing returns text with no such sentence byte for byte, and drops a mixed one whole",
+  breakdown.drop_any_citing("One.  Two\n(Study 2).", {1}, 3) == "One.  Two\n(Study 2)."
+  and breakdown.drop_any_citing("Kept (Study 2). Gone (Studies 1, 2).", {1}, 3) == "Kept (Study 2)."
+  and breakdown.drop_any_citing("Gone (Study 1).", {1}, 3) == "")
 _H1_PLAIN = "Nothing here tests the claim in people. A second trial is under way."
 with appmod.app.test_request_context("/"):
     _h1_same = appmod._check_response("Turmeric eases knee pain H1 same", "(turmeric) AND (knee pain)", "insufficient",

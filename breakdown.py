@@ -1976,6 +1976,20 @@ def drop_citing(text: str, skip, count: int) -> str:
                     if not (refs(sentence, count) and set(refs(sentence, count)) <= set(skip)))
 
 
+def drop_any_citing(text: str, skip, count: int) -> str:
+    """
+    Every sentence of text except those citing any study in skip, whatever
+    else they cite. For studies the page shows as set aside (withdrawn, a
+    journal notice, off topic): taking only their number out of "(Studies
+    1, 2)" would credit words written about Study 1 to Study 2, so the
+    sentence goes whole. Text with no such sentence comes back byte for byte.
+    """
+    skip = set(skip or ())
+    parts = sentences(text or "")
+    kept = [s for s in parts if not skip & set(refs(s, count))]
+    return (text or "") if len(kept) == len(parts) else " ".join(kept)
+
+
 def relied_only(text: str, relied, count: int) -> str:
     """
     `text` with every citation of a study the verdict did not rely on taken
