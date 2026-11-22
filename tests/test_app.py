@@ -297,21 +297,31 @@ t("gemini 503 -> 502", P("err c").status_code == 502)
 # A reply that could not be read at all is a failed check, not a verdict:
 # the app's 502 with what went wrong and a way out, on the plain check and
 # the streamed one, and nothing saved, logged or listed. One per kind.
-_UNREAD_KINDS = (("not JSON", Resp("not json"), verdict.UNREADABLE),
-                 ("JSON that is not an object", Resp("[1, 2]"), verdict.UNREADABLE),
-                 ("cut off", Resp("", "FinishReason.MAX_TOKENS"), "ran out of room before finishing"),
-                 ("declined", Resp(""), "declined to answer this one"))
-for _i, (_kind, _reply, _why) in enumerate(_UNREAD_KINDS):
-    _want = f"The AI model {_why}, so this check did not finish. Try again in a moment."
+# The way out follows the kind of failure: a declined reply is declined again
+# at temperature 0, so only other words can help ("reword": Edit claim, no
+# Retry); a reply cut off may or may not come back whole ("either": both); a
+# reply that could not be read is cleared by trying again (no way_out field).
+_UNREAD_KINDS = (("not JSON", Resp("not json"), verdict.UNREADABLE,
+                  "The AI model sent back a reply that could not be read, so this check did not finish. Try again in a moment.", None),
+                 ("JSON that is not an object", Resp("[1, 2]"), verdict.UNREADABLE,
+                  "The AI model sent back a reply that could not be read, so this check did not finish. Try again in a moment.", None),
+                 ("cut off", Resp("", "FinishReason.MAX_TOKENS"), "ran out of room before finishing",
+                  "The AI model ran out of room before finishing, so this check did not finish. Try again, or try the claim in other words.", "either"),
+                 ("declined", Resp(""), "declined to answer this one",
+                  "The AI model declined to answer this one, so this check did not finish. Try the claim in other words.", "reword"))
+for _i, (_kind, _reply, _why, _want, _way) in enumerate(_UNREAD_KINDS):
+    t(f"a reply that is {_kind}: the message names its own way out",
+      verdict.unread_reply(_why) == _want and (verdict.way_out(_why) or None) == _way)
+    _body = {"error": _want, **({"way_out": _way} if _way else {})}
     _logs0 = len(db.recent_checks(1000))
     fg.models.script = [Resp("q"), _reply]
     r = P(f"err d{_i}")
     t(f"a reply that is {_kind} is a failed check: 502, naming the problem and the way out",
-      r.status_code == 502 and r.get_json() == {"error": _want}, (r.status_code, r.get_json()))
+      r.status_code == 502 and r.get_json() == _body, (r.status_code, r.get_json()))
     fg.models.script = [Resp("q"), _reply]
     _r, _evs = stream(f"err s{_i}", ip=f"8.8.6.{_i}")
     t(f"  and the streamed check ends in the same error event",
-      _evs and _evs[-1] == {"stage": "error", "status": 502, "error": _want}, _evs[-1:])
+      _evs and _evs[-1] == {"stage": "error", "status": 502, **_body}, _evs[-1:])
     t(f"  and neither is saved or logged as a verdict",
       db.get_cached_by_key(db.normalize_claim(f"err d{_i}")) is None
       and db.get_cached_by_key(db.normalize_claim(f"err s{_i}")) is None
@@ -344,6 +354,9 @@ for _lbl, _so in (("empty", ""), ("blank", "   ")):
     t(f"a reply whose still-open line is {_lbl} is a failed reply: 502 with the reason and a way out",
       r.status_code == 502 and r.get_json()["error"] == verdict.INCOMPLETE_REPLY
       and "Try again" in r.get_json()["error"], r.get_json())
+    t(f"  and it offers both ways out: try again, or try the claim in other words ({_lbl})",
+      r.get_json() == {"error": "The AI model sent back an answer with a line missing. "
+                                "Try again, or try the claim in other words.", "way_out": "either"}, r.get_json())
     t(f"  and it is never saved, and not logged as a check ({_lbl})",
       _no_row(f"empty line claim {_lbl}") and len(db.recent_checks(1000)) == _n_logs)
 fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("complicated", [1], still_open=""))]
@@ -351,6 +364,7 @@ _r, _evs = stream("empty line claim streamed", ip="7.7.9.2")
 t("  the streamed check ends on the same error, never on a done stage",
   _evs[-1]["stage"] == "error" and _evs[-1]["status"] == 502 and _evs[-1]["error"] == verdict.INCOMPLETE_REPLY
   and not any(e["stage"] == "done" for e in _evs) and _no_row("empty line claim streamed"), _evs[-1])
+t("  and the streamed error offers both ways out too", _evs[-1].get("way_out") == "either", _evs[-1])
 t("  and the message has no dash", not any(ch in verdict.INCOMPLETE_REPLY for ch in "\u2013\u2014"))
 fg.models.script = [Resp("(x) AND (y)"), Resp(VJ("false", [], still_open=""))]
 d = P("empty line claim resting on nothing", ip="7.7.9.3").get_json()
@@ -743,6 +757,67 @@ t("the Latest list shows a claim in sentence case, and only the first letter cha
   and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_html
   and _sc_row["claim_text"] == "green tea speeds up METABOLISM",
   [x for x in _sc_html.split('class="entry-claim">')[1:3]])
+
+# One rule for every list of claims: the first letter is raised only when the
+# first word is all lower case letters. Mixed or upper case words, numbers and
+# quotation marks at the start are left exactly as stored.
+import display as _dsc  # noqa: E402
+import shutil as _shutil, subprocess as _subprocess  # noqa: E402
+from markupsafe import escape as _msc_escape  # noqa: E402
+_SC_CASES = [("mRNA vaccines change DNA", "mRNA vaccines change DNA"),
+             ("pH balanced water is healthier", "pH balanced water is healthier"),
+             ("iPhone screens harm sleep", "iPhone screens harm sleep"),
+             ("DNA tests predict disease", "DNA tests predict disease"),
+             ("HIV can be cured", "HIV can be cured"),
+             ("COVID-19 vaccines cause infertility", "COVID-19 vaccines cause infertility"),
+             ("5G towers cause headaches", "5G towers cause headaches"),
+             ("10,000 steps a day is needed", "10,000 steps a day is needed"),
+             ("\u201cdetox\u201d teas work", "\u201cdetox\u201d teas work"),
+             ('"natural" sugar is better', '"natural" sugar is better'),
+             ("coffee causes cancer", "Coffee causes cancer"),
+             ("coffee, daily, causes cancer", "Coffee, daily, causes cancer"),
+             ("e-cigarettes help people quit", "E-cigarettes help people quit"),
+             ("vitamin D prevents colds", "Vitamin D prevents colds"),
+             ("Garlic lowers blood pressure", "Garlic lowers blood pressure"),
+             ("\u00e9pinards are rich in iron", "\u00c9pinards are rich in iron"),
+             (" leading space stays", " leading space stays"), ("", "")]
+t("sentence case: the first letter is raised only when the first word is all lower case letters",
+  [_dsc.sentence_case(x) for x, _ in _SC_CASES] == [w for _, w in _SC_CASES],
+  [(x, _dsc.sentence_case(x)) for x, w in _SC_CASES if _dsc.sentence_case(x) != w])
+_sc_js = (ROOT / "static" / "app.js").read_text()
+if _shutil.which("node"):
+    _sc_fn = _sc_js[_sc_js.index("function sentenceCase"):_sc_js.index("function claimListHtml")]
+    _sc_out = json.loads(_subprocess.run(["node", "-e", _sc_fn + "console.log(JSON.stringify("
+                                          + json.dumps([x for x, _ in _SC_CASES]) + ".map(sentenceCase)));"],
+                                         capture_output=True, text=True, check=True).stdout)
+    t("  and the script's sentenceCase gives the same on every case", _sc_out == [w for _, w in _SC_CASES], _sc_out)
+t("  every list the script builds uses it: recent and trending, related claims, type-ahead",
+  "${escapeHtml(sentenceCase(r.claim))}</span>" in _sc_js
+  and '<span class="entry-claim">${escapeHtml(sentenceCase(r.claim_text))}</span>' in _sc_js
+  and '<span class="suggest-claim">${escapeHtml(sentenceCase(r.claim_text))}' in _sc_js
+  and 'data-claim="${escapeHtml(r.claim)}"' in _sc_js and "href=\"/?q=${encodeURIComponent(r.claim_text)}\"" in _sc_js)
+_sc_tpls = {n: (ROOT / "templates" / n).read_text() for n in ("index.html", "404.html")}
+t("  and both templates' lists use the one filter, with no first-letter upper of their own",
+  all("{{ v.claim_text | sentence_case }}" in x and "[:1] | upper" not in x for x in _sc_tpls.values()))
+db.put_cached_verdict("mRNA vaccines change DNA", "mrna AND dna", "false", "x",
+                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "a", "journal": "J", "year": "2021",
+                        "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Review"]}],
+                      tldr="No.", still_open="Long-term data are still coming.")
+_sc_home = c.get("/").data.decode()
+_sc_404 = c.get("/no-such-page-sc").get_data(as_text=True)
+t("  the home page's Latest list shows 'mRNA vaccines change DNA' as stored, and the link is untouched",
+  '<span class="entry-claim">mRNA vaccines change DNA</span>' in _sc_home and "MRNA" not in _sc_home
+  and 'href="/?q=mRNA%20vaccines%20change%20DNA"' in _sc_home, _sc_home.count("entry-claim"))
+t("  and the 404 list raises a lower case first word and leaves a mixed case one",
+  '<span class="entry-claim">Green tea speeds up METABOLISM</span>' in _sc_404
+  and '<span class="entry-claim">mRNA vaccines change DNA</span>' in _sc_404
+  and 'href="/?q=green%20tea%20speeds%20up%20METABOLISM"' in _sc_404, _sc_404.count("entry-claim"))
+with appmod.app.test_request_context("/"):
+    _sc_r404 = appmod.render_template("404.html", labels=appmod.VERDICT_LABELS,
+                                      latest=[{"claim_text": x, "verdict": "false"} for x, _ in _SC_CASES if x.strip()])
+t("  and on each case the 404 list prints what the rule says",
+  all(f'<span class="entry-claim">{_msc_escape(w)}</span>' in _sc_r404 for x, w in _SC_CASES if x.strip()),
+  [w for x, w in _SC_CASES if x.strip() and f'<span class="entry-claim">{_msc_escape(w)}</span>' not in _sc_r404])
 
 _res = c.get("/?q=streamed%20claim").data.decode()
 t("a rendered result carries the evidence chart",
@@ -2808,8 +2883,8 @@ _tn_js_src = (ROOT / "static" / "app.js").read_text()
 t("  renderResult and the live stage both pass the reason to the note",
   "showTyped(data.typed, data.typed_reason)" in _tn_js_src and "showTyped(typed, ev.typed_reason)" in _tn_js_src)
 _tn_tpl = (ROOT / "templates" / "index.html").read_text()
-t("  the page renders the same line through display.typed_note",
-  "typed_note(result.typed, result.typed_reason)" in _tn_tpl)
+t("  the page renders the same line through display.typed_note_parts, the reader's words in <bdi>",
+  "{% set tn = typed_note_parts(result.typed, result.typed_reason) %}{{ tn[0] }}<bdi>{{ tn[1] }}</bdi>{{ tn[2] }}" in _tn_tpl)
 _tn_mark = _tn_tpl[_tn_tpl.index('<p class="typed-note"'):]
 _tn_mark = _tn_mark[:_tn_mark.index("</p>") + 4]
 with appmod.app.test_request_context("/"):
@@ -2817,7 +2892,7 @@ with appmod.app.test_request_context("/"):
     _tn_on = _tn_env.from_string(_tn_mark).render(result={"typed": "Does coffee cause cancer?", "typed_reason": "wording"})
     _tn_off = _tn_env.from_string(_tn_mark).render(result=None)
 t("  the template's own markup shows the line with a result that carries it, and stays hidden without",
-  _tn_on == '<p class="typed-note" id="typed-note">' + _tn_py[1] + "</p>"
+  _tn_on == '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>Does coffee cause cancer?</bdi>\u201d.</p>'
   and _tn_off == '<p class="typed-note" id="typed-note" hidden></p>', (_tn_on, _tn_off))
 if _shutil.which("node"):
     _tn_fn = _tn_js_src[_tn_js_src.index("function typedNote"):_tn_js_src.index("function showTyped")]
@@ -4880,6 +4955,19 @@ t("  no response at all (offline, a dropped stream, a silent server) is the netw
   _jsrc.count('renderError("network"') == 3)
 t("  an invalid claim offers Edit claim and no Retry; every other kind offers Retry",
   'back: "Edit claim"' in _kinds and _kinds.count("retry: true") == 3)
+if _shutil.which("node"):
+    _ea_fn = "const ERROR_KINDS = {" + _kinds + "};\n" + _jsrc[_jsrc.index("function errorActions"):_jsrc.index("// The draft stays in the field on every failure")]
+    _ea_cases = [["provider", None], ["provider", "reword"], ["provider", "either"], ["invalid", None], ["limit", None], ["network", None]]
+    _ea = json.loads(_subprocess.run(["node", "-e", _ea_fn + "console.log(JSON.stringify(" + json.dumps(_ea_cases)
+                                      + ".map(([k, w]) => errorActions(k, w))));"], capture_output=True, text=True, check=True).stdout)
+    t("  the ways out follow the server's way_out: none Retry and Check another claim, reword Edit claim only, either Retry and Edit claim",
+      _ea == [{"retry": True, "back": "Check another claim"}, {"retry": False, "back": "Edit claim"},
+              {"retry": True, "back": "Edit claim"}, {"retry": False, "back": "Edit claim"},
+              {"retry": True, "back": "Check another claim"}, {"retry": True, "back": "Check another claim"}], _ea)
+t("  both checks hand the server's way_out to the error screen, and it sets Retry and the back label from it",
+  "way_out: data && data.way_out" in _jsrc and "final.retry_after, final.way_out)" in _jsrc
+  and "const ways = errorActions(kind, wayOut)" in _jsrc and "back.hidden = !(ways.retry && lastClaim)" in _jsrc
+  and '$("error-back").textContent = ways.back' in _jsrc)
 t("  every failure keeps the draft in the field",
   "if (lastClaim && !input.value.trim()) input.value = lastClaim" in _jsrc)
 t("  the error screen has a title and a line under it, and none of that copy has a dash",
@@ -7106,7 +7194,8 @@ _rw_mark = _rw_tpl[_rw_tpl.index('<p class="typed-note"'):]
 _rw_mark = _rw_mark[:_rw_mark.index("</p>") + 4]
 with appmod.app.test_request_context("/"):
     _rw_on = appmod.app.jinja_env.from_string(_rw_mark).render(result=_rw)
-t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" id="typed-note">' + _rw_note + "</p>", _rw_on)
+t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>' + _RW_TYPED + "</bdi>\u201d.</p>"
+  and re.sub(r"</?bdi>", "", _rw_on) == '<p class="typed-note" id="typed-note">' + _rw_note + "</p>", _rw_on)
 if _shutil.which("node"):
     _rw_js = (ROOT / "static" / "app.js").read_text()
     _rw_fn = _rw_js[_rw_js.index("function typedNote"):_rw_js.index("function showTyped")]
@@ -7121,6 +7210,53 @@ with db.get_conn() as _conn:
     _rw_log = _conn.execute("SELECT claim_text FROM checks ORDER BY id DESC LIMIT 1").fetchone()["claim_text"]
 t("  and the stored text is the saved wording, with no row for the typed one",
   _rw_rows == [_RW_SAVED] and _rw_log == _RW_SAVED, (_rw_rows, _rw_log))
+
+# The reader's words in the note are bidi-isolated and still escaped, in both
+# renderers: right-to-left text, markup, quotes and very long text.
+_BD = [("\u0627\u0644\u0642\u0647\u0648\u0629 \u062a\u0633\u0628\u0628 \u0627\u0644\u0633\u0631\u0637\u0627\u0646", "wording"),
+       ("\u05e7\u05e4\u05d4 \u05d2\u05d5\u05e8\u05de\u05ea \u05dc\u05e1\u05e8\u05d8\u05df", "spelling"),
+       ("abc \u202e reversed", "wording"), ('<script>alert(1)</script> & "quoted" \'too\'', "wording"),
+       ("very long claim " * 31, "spelling")]
+with appmod.app.test_request_context("/"):
+    for _bt, _br in _BD:
+        _bd_on = appmod.app.jinja_env.from_string(_rw_mark).render(result={"typed": _bt, "typed_reason": _br})
+        _bd_p = _dsp.typed_note_parts(_bt, _br)
+        t(f"bidi: the template sets the typed text in <bdi>, escaped ({_bt[:12]!r})",
+          _bd_on == '<p class="typed-note" id="typed-note">' + str(_msc_escape(_bd_p[0])) + "<bdi>" + str(_msc_escape(_bt))
+          + "</bdi>" + str(_msc_escape(_bd_p[2])) + "</p>" and "<script>" not in _bd_on, _bd_on)
+if _shutil.which("node"):
+    _bd_fn = _rw_js[_rw_js.index("function typedNoteParts"):_rw_js.index("function showTyped")]
+    _bd_js = json.loads(_subprocess.run(["node", "-e", _bd_fn + "console.log(JSON.stringify(" + json.dumps(_BD)
+                                         + ".map(([a, b]) => typedNoteParts(a, b))));"], capture_output=True, text=True, check=True).stdout)
+    t("  and the script splits the note into the same three parts", _bd_js == [list(_dsp.typed_note_parts(a, b)) for a, b in _BD], _bd_js)
+_bd_show = _rw_js[_rw_js.index("function showTyped"):_rw_js.index("function logLine")]
+t("  and the script puts the typed part in a <bdi> as text, never as markup",
+  'document.createElement("bdi")' in _bd_show and "bdi.textContent = parts[1]" in _bd_show
+  and "note.append(parts[0], bdi, parts[2])" in _bd_show and "innerHTML" not in _bd_show)
+
+# A reworded match reached by a link (a shared or typed address) is complete
+# in the HTML before any script runs: the saved answer, its verdict, and the
+# note naming the reader's words.
+_ln = c.get("/?q=" + urllib.parse.quote(_RW_TYPED)).get_data(as_text=True)
+_ln_res = json.loads(_ln.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+t("link: a reworded match by address is server-rendered with its verdict and the note",
+  '<h1 class="claim-echo" id="claim-echo">' + _RW_SAVED + "</h1>" in _ln
+  and '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>'
+      + str(_msc_escape(_RW_TYPED)) + "</bdi>\u201d.</p>" in _ln
+  and "Zinc may shorten a cold a little." in _ln and _ln_res.get("typed") == _RW_TYPED
+  and _ln_res.get("typed_reason") == "wording" and _ln_res.get("claim") == _RW_SAVED, _ln[:0])
+t("  its link preview and canonical name the saved wording, and its card is the saved row's",
+  '<link rel="canonical" href="http://localhost/?q=Zinc%20lozenges%20shorten%20colds" />' in _ln
+  and "/og/" + urllib.parse.quote(db.normalize_claim(_RW_SAVED), safe="") + ".png" in _ln,
+  re.findall(r'<link rel="canonical"[^>]*>', _ln))
+_ln_exact = c.get("/?q=" + urllib.parse.quote(_RW_SAVED)).get_data(as_text=True)
+_ln_exact_res = json.loads(_ln_exact.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+t("  and the saved wording's own address carries no note",
+  'id="typed-note" hidden></p>' in _ln_exact and _ln_exact_res.get("typed") is None
+  and _ln_exact_res.get("claim") == _RW_SAVED, _ln_exact_res.get("typed"))
+_ln_none = c.get("/?q=" + urllib.parse.quote("a claim nobody has saved in any words")).get_data(as_text=True)
+t("  and a claim with no saved answer in any words still renders the checker, for the script to run",
+  'id="server-result"' not in _ln_none and 'id="typed-note" hidden></p>' in _ln_none)
 
 # ---- where the slices meet: a study set aside as off outcome -------------------
 # rc-reading's rule sets aside a structured abstract that names the claim's

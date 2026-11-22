@@ -4,6 +4,32 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21: A reworded match reached by a link is server-rendered
+
+The page looked a saved answer up by the claim's exact key only, so an
+address in other words than the saved claim's (a shared or typed `/?q=`)
+rendered the empty checker and the note came only from app.js, after a live
+check. `_render_home` now also asks `db.find_equivalent` (offline, the same
+lookup the check makes) and renders the saved answer under its saved
+wording, with the "Showing the saved check for this claim" note, the
+canonical and card of the saved row. A misspelling is not handled there:
+knowing what was meant needs the model (or a saved query), so a misspelled
+link still runs the live check, which carries its own note.
+
+## 2026-11-21: A failed check names a way out that can work
+
+The weighing call runs at temperature 0 with a fixed seed and nothing is
+saved, so a reply the model declined is almost always declined again, and
+each retry spends the reader's rate limit. The way out now follows the kind
+of failure. Declined: "Try the claim in other words.", the error carries
+`way_out: "reword"` and the screen offers Edit claim (the draft stays in the
+box) and no Retry. Cut off, or a line missing: "Try again, or try the claim
+in other words.", `way_out: "either"`, and the screen offers Retry and Edit
+claim. A reply that could not be read and a busy provider are unchanged (no
+`way_out`). The status stays 502 and the title stays "The checker couldn't
+finish this check": the kind still follows the status; `way_out` only sets
+the actions, reusing the invalid kind's existing "Edit claim" label.
+
 ## 2026-11-21: A reply that could not be read is a failed check, not a verdict
 
 A model reply that could not be read at all (cut off, declined, not JSON)

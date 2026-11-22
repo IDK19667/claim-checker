@@ -46,7 +46,7 @@
       {% for v in latest %}
       <li class="entry">
         <a class="entry-link" href="/?q={{ v.claim_text | urlencode }}">
-          <span class="entry-claim">{{ v.claim_text }}</span>
+          <span class="entry-claim">{{ v.claim_text | sentence_case }}</span>
           <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
         </a>
       </li>

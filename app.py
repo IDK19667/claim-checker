@@ -96,6 +96,8 @@ app.jinja_env.globals["design_note"] = display.design_note
 app.jinja_env.globals["study_why"] = display.study_why
 app.jinja_env.globals["source_groups"] = display.source_groups
 app.jinja_env.globals["typed_note"] = display.typed_note
+app.jinja_env.globals["typed_note_parts"] = display.typed_note_parts
+app.jinja_env.filters["sentence_case"] = display.sentence_case
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
 # full: the claim text is kept, nothing that identifies the person is, and
@@ -346,15 +348,24 @@ def _render_home():
     cached = None
     jsonld = None
     noindex = False
+    typed = None
     if claim:
         cached = db.get_cached_by_key(db.normalize_claim(claim))
+        # A link in other words than a saved claim's (a shared or typed
+        # address) reaches the same saved answer the check would give, so
+        # the page is complete before any script runs: the saved answer,
+        # under its saved wording, with the note naming the reader's words.
+        if not cached:
+            same = _equivalent(claim)
+            cached = db.get_cached_by_key(db.normalize_claim(same)) if same else None
+            typed = claim if cached else None
         if cached:
             label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
             share_url = f"{_base_url()}/?q={quote(cached['claim_text'])}"
             preview = {
                 "title": f"{label}: “{cached['claim_text']}”",
                 "description": cached["tldr"] or cached["explanation"],
-                "image": f"{_base_url()}/og/{quote(db.normalize_claim(claim), safe='')}.png",
+                "image": f"{_base_url()}/og/{quote(db.normalize_claim(cached['claim_text'] if typed else claim), safe='')}.png",
                 "url": share_url,
             }
             jsonld = _claim_review_jsonld(cached, share_url)
@@ -367,7 +378,7 @@ def _render_home():
                 cached["claim_text"], cached.get("search_query") or "", cached["verdict"],
                 cached["tldr"], cached["explanation"], cached["cited_studies"], cached["studies"],
                 _base_url(), cached_at=cached["cached_at"], still_open=cached.get("still_open", ""),
-                breakdown=cached.get("breakdown"))
+                breakdown=cached.get("breakdown"), typed=typed, typed_reason="wording" if typed else None)
             # The link preview and the markup say what the page says, with
             # the page's one certainty and stamp (both can be capped above).
             label = VERDICT_LABELS.get(cached["verdict"], cached["verdict"])
@@ -1085,7 +1096,7 @@ def _run_check(claim: str, client_ip: str, base_url: str):
 def _run_check_stages(claim: str, client_ip: str, base_url: str):
     """
     Yields stage dicts. Terminal stages are "done" (with "result") and
-    "error" (with "error", "status", optional "retry_after").
+    "error" (with "error", "status", optional "retry_after" and "way_out").
 
     Everything request-bound (ip, base_url) is passed in: when streamed,
     this generator runs after the request context has ended.
@@ -1201,6 +1212,10 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         if e.kind == "auth":
             app.logger.error("The AI provider rejected its key: %s", e.detail)
         ev = {"stage": "error", "status": status, "error": shown}
+        # Which way out the page offers beside the message: other words only,
+        # or other words beside trying again. Absent, trying again is the way.
+        if getattr(e, "way_out", ""):
+            ev["way_out"] = e.way_out
         if e.kind == "rate_limit":
             ev["retry_after"] = 20
         yield ev
@@ -1283,6 +1298,8 @@ def api_check():
         body = {"error": final["error"]}
         if "retry_after" in final:
             body["retry_after"] = final["retry_after"]
+        if "way_out" in final:
+            body["way_out"] = final["way_out"]
         resp = jsonify(body)
         if "retry_after" in final:
             resp.headers["Retry-After"] = str(final["retry_after"])

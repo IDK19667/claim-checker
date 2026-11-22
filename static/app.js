@@ -440,7 +440,7 @@ function renderNextSteps(ns, claim) {
     $("nosteps-related").innerHTML = rel.map((r) => `
       <li class="entry">
         <a class="entry-link" href="/?q=${encodeURIComponent(r.claim_text)}">
-          <span class="entry-claim">${escapeHtml(r.claim_text)}</span>
+          <span class="entry-claim">${escapeHtml(sentenceCase(r.claim_text))}</span>
           <span class="entry-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
         </a>
       </li>`).join("");
@@ -714,16 +714,28 @@ function renderPending(claim) {
 // words gets its saved check. Say which, and show what was typed, so the
 // reader can tell the answer is to their question. Mirrors display.typed_note;
 // a test runs both on the same inputs.
+// The note in three parts: the words before the reader's text, their text,
+// and the words after it. display.typed_note_parts is the same.
+function typedNoteParts(typed, reason) {
+  if (!typed) return null;
+  if (reason === "wording") return ["Showing the saved check for this claim. You typed \u201c", String(typed), "\u201d."];
+  return ["Spelling fixed. You typed \u201c", String(typed), "\u201d."];
+}
 function typedNote(typed, reason) {
-  if (!typed) return "";
-  if (reason === "wording") return `Showing the saved check for this claim. You typed \u201c${typed}\u201d.`;
-  return `Spelling fixed. You typed \u201c${typed}\u201d.`;
+  return (typedNoteParts(typed, reason) || []).join("");
 }
 
+// The reader's text goes in <bdi>, as text, so right-to-left words cannot
+// reorder the sentence around it and markup stays inert.
 function showTyped(typed, reason) {
   const note = $("typed-note");
-  note.hidden = !typed;
-  note.textContent = typedNote(typed, reason);
+  const parts = typedNoteParts(typed, reason);
+  note.hidden = !parts;
+  note.textContent = "";
+  if (!parts) return;
+  const bdi = document.createElement("bdi");
+  bdi.textContent = parts[1];
+  note.append(parts[0], bdi, parts[2]);
 }
 
 function logLine(text, live) {
@@ -782,9 +794,19 @@ function errorKindOf(status) {
   if (status === 429) return "limit";
   return "provider";
 }
+// The ways out beside the message. The kind sets them, and the server's
+// way_out can narrow them: "reword" when only other words can help (a reply
+// the model declined is declined again), so Edit claim and no Retry;
+// "either" when a retry may or may not help, so Retry and Edit claim.
+function errorActions(kind, wayOut) {
+  const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
+  if (wayOut === "reword") return { retry: false, back: "Edit claim" };
+  if (wayOut === "either") return { retry: true, back: "Edit claim" };
+  return { retry: k.retry, back: k.back };
+}
 // The draft stays in the field on every failure. Retry and Edit both start
 // from it, so nothing has to be typed again.
-function renderError(kind, message, retryAfter) {
+function renderError(kind, message, retryAfter, wayOut) {
   // Same night ground, same way out. Only what the screen says changes.
   const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
   countEvent("client_error." + (ERROR_KINDS[kind] ? kind : "provider"));
@@ -797,10 +819,11 @@ function renderError(kind, message, retryAfter) {
   // here too: the reader sees what Retry will send.
   $("error-claim").textContent = lastClaim || input.value.trim();
   $("error-claim").hidden = !$("error-claim").textContent;
-  $("error-back").textContent = k.back;
+  const ways = errorActions(kind, wayOut);
+  $("error-back").textContent = ways.back;
   const cd = $("countdown");
   const back = $("error-retry");
-  back.hidden = !(k.retry && lastClaim);
+  back.hidden = !(ways.retry && lastClaim);
   clearInterval(countdownTimer);
   if (retryAfter && retryAfter > 0) {
     let left = retryAfter;
@@ -906,7 +929,7 @@ async function checkPlain(claim) {
   });
   let data = null;
   try { data = await resp.json(); } catch { /* non-JSON error page */ }
-  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after };
+  if (!resp.ok || !data) return { stage: "error", status: resp.status, error: (data && data.error) || "Something went wrong. Try again in a moment.", retry_after: data && data.retry_after, way_out: data && data.way_out };
   return { stage: "done", result: data };
 }
 
@@ -988,7 +1011,7 @@ async function check(claim) {
 
     if (final.stage === "error") {
       endPending();
-      renderError(errorKindOf(final.status), final.error, final.retry_after);
+      renderError(errorKindOf(final.status), final.error, final.retry_after, final.way_out);
     } else {
       endPending();
       // The verdict arrived: the footage goes to its last frame and stays
@@ -1108,7 +1131,7 @@ function renderSuggest(rows) {
 
   suggestList.innerHTML = rows.map((r, i) => `
     <li class="suggest-row" id="suggest-${i}" role="option" aria-selected="false" data-i="${i}">
-      <span class="suggest-claim">${escapeHtml(r.claim_text)}${suggestAlso(r)}</span>
+      <span class="suggest-claim">${escapeHtml(sentenceCase(r.claim_text))}${suggestAlso(r)}</span>
       <span class="suggest-verdict">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict || "")}</span>
     </li>`).join("");
 
@@ -1205,11 +1228,25 @@ $("chips").addEventListener("click", (e) => {
   check(chip.textContent);
 });
 
+// A listed claim as every list shows it: the first letter raised only when the
+// first word is all lower case letters (parts joined by a hyphen or an
+// apostrophe, trailing punctuation aside). "mRNA", "pH", "DNA", "COVID-19", a
+// number or a quotation mark first are left as stored. The page only: the
+// data and links keep the saved wording. display.sentence_case is the same.
+function sentenceCase(text) {
+  text = String(text || "");
+  const word = text.trim() ? text.trim().split(/\s+/)[0] : "";
+  if (text.slice(0, 1) !== word.slice(0, 1)) return text;
+  const parts = word.replace(/[.,;:!?]+$/, "").split(/[-'\u2019]/);
+  if (parts.every((p) => /^\p{Ll}+$/u.test(p))) return text.slice(0, 1).toUpperCase() + text.slice(1);
+  return text;
+}
+
 function claimListHtml(items) {
   return items.map((r) => `
     <li>
       <button type="button" class="recent-btn" data-claim="${escapeHtml(r.claim)}">
-        <span>${escapeHtml(r.claim)}</span>
+        <span>${escapeHtml(sentenceCase(r.claim))}</span>
         <span class="tag v-${escapeHtml(r.verdict)}">${escapeHtml(VERDICT_LABELS[r.verdict] || r.verdict)}</span>
       </button>
     </li>`).join("");

@@ -192,6 +192,40 @@ def study_why(study) -> str:
     return "Read, not relied on."
 
 
+def sentence_case(text) -> str:
+    """
+    A listed claim as a list shows it: the first letter raised only when the
+    first word is all lower case letters (its parts joined by a hyphen or an
+    apostrophe, trailing punctuation aside). "mRNA", "pH", "DNA", "COVID-19",
+    a number or a quotation mark at the start are left exactly as stored.
+    The page only: stored text and links keep the wording as saved.
+    static/app.js sentenceCase is the same; a test runs both on the same inputs.
+    """
+    text = str(text or "")
+    word = text.split(None, 1)[0] if text.strip() else ""
+    if text[:1] != word[:1]:
+        return text
+    parts = re.split(r"[-'\u2019]", word.rstrip(".,;:!?"))
+    if all(p.isalpha() and p.islower() for p in parts):
+        return text[:1].upper() + text[1:]
+    return text
+
+
+def typed_note_parts(typed, reason=None):
+    """
+    The note in three parts: the words before the reader's text, the
+    reader's text, and the words after it, or None when there is nothing to
+    explain. The page sets the middle part in <bdi>, so right-to-left text
+    the reader typed cannot reorder the sentence around it.
+    static/app.js typedNoteParts is the same.
+    """
+    if not typed:
+        return None
+    if reason == "wording":
+        return ("Showing the saved check for this claim. You typed \u201c", str(typed), "\u201d.")
+    return ("Spelling fixed. You typed \u201c", str(typed), "\u201d.")
+
+
 def typed_note(typed, reason=None) -> str:
     """
     The line under the claim when the answer is to other words than the
@@ -200,11 +234,7 @@ def typed_note(typed, reason=None) -> str:
     when there is nothing to explain. static/app.js typedNote is the same; a
     test runs both on the same inputs.
     """
-    if not typed:
-        return ""
-    if reason == "wording":
-        return f"Showing the saved check for this claim. You typed \u201c{typed}\u201d."
-    return f"Spelling fixed. You typed \u201c{typed}\u201d."
+    return "".join(typed_note_parts(typed, reason) or ())
 
 
 # ---- The page's own words for a link preview and a search result -------------
