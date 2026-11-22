@@ -2073,6 +2073,8 @@ t("  short screens: while a check runs the wordmark, lede and button step aside 
   and "@media (max-height: 600px) { .reading li.live {" in _dcss)
 t("  short screens: on home the fold never pushes the claim box or button off the first screen",
   'if (k === 0 && !checked) { [].forEach.call(s0.querySelectorAll("[data-pushed]")' in _deskjs)
+t("  the wordmark in the strip is a 44px tap target, grown past the 32px strip without changing its height",
+  '.strip .sw { position: relative; } .strip .sw::after { content: ""; position: absolute; inset: -6px -8px; }' in _dcss)
 t("  a check started from a result's claim box first goes back to stop 1",
   'if (root.classList.contains("checked")) show(askSection);' in _js[_js.find("function renderPending"):][:400])
 # Engine rules (E1, E2, E4, E5), checked in a browser by the builder's scripts; here

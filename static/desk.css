@@ -421,6 +421,8 @@ html:not(.checked) .bar, html:not(.checked) .rail { display: none; }
 /* the strip: the wordmark goes home, Beta says what this is, the disclaimer stays */
 .strip .name { display: inline-flex; align-items: center; gap: 10px; }
 .strip .sw { color: var(--on-deep); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+/* the strip is 32px tall; the wordmark's tap area grows past it to 44px, so the strip keeps its height */
+.strip .sw { position: relative; } .strip .sw::after { content: ""; position: absolute; inset: -6px -8px; }
 .strip .sw:hover { text-decoration: underline; }
 .strip .beta { font-weight: 400; color: var(--on-deep-2); }
 
