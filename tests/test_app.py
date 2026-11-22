@@ -10453,6 +10453,12 @@ t("  and it writes down the first-screen sizes and the one automatic move",
   all(z in _dm for z in ("1366x650", "1280x720", "1440x900", "1024x768", "1920x1080", "320x568"))
   and "One glide to the answer" in _dm and "No verdict is ever coloured" in _dm)
 
+_qa2 = (ROOT / "scripts" / "qa.mjs").read_text()
+t("qa.mjs audits the desk front: 3D and text mode, a saved result, the first screen at seven sizes, the library refused, CSP and both stylesheets' tokens",
+  '"/?nogl=1"' in _qa2 and "first screen" in _qa2 and "[1366, 650]" in _qa2 and "[375, 667]" in _qa2
+  and "securitypolicyviolation" in _qa2 and "/static\\/(vendor|desk)\\//" in _qa2
+  and '"static/desk.css", "static/style.css"' in _qa2 and "QA_OUT" in _qa2 and "/api/check" not in _qa2.split("*/", 1)[1])
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template
