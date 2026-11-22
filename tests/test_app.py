@@ -5668,6 +5668,35 @@ t("  a guidance answer that relies on studies keeps every sentence",
   _h6_milk["evidence_line"] == verdict.GUIDANCE_LINE and _h6_milk["explanation"] == _H6_MILK, _h6_milk["explanation"])
 t("  and a Not enough evidence answer keeps its sentence describing the background papers",
   _h6_oils["verdict"] == "insufficient" and _h6_oils["explanation"] == _H6_OILS, _h6_oils["explanation"])
+# J2: the folded sections of that answer cite no study for a finding either.
+_J2_BD = {"parts": [{"part": "Antibiotics cure colds", "assessment": "Antibiotics should not be used (Study 2).",
+                     "studies": [2]},
+                    {"part": "Colds are viral", "assessment": "Colds are caused by viruses.", "studies": []}],
+          "evidence": ["Antibiotics should not be used (Study 2). Viruses cause colds (Study 2).",
+                       "Recovery is usually spontaneous (Study 3).", "Guidelines advise against antibiotics for colds."],
+          "effect_size": "", "strength": "Reviews agree antibiotics are ineffective (Study 2).",
+          "applies_to": "Patients with colds (Study 2).", "not_applies_to": "", "unknowns": "Timing varies (Study 3)."}
+_J2_MILK_BD = {"parts": [], "evidence": [_H6_MILK], "effect_size": "", "strength": "Two reviews (Studies 1, 2).",
+               "applies_to": "", "not_applies_to": "", "unknowns": ""}
+with appmod.app.test_request_context("/"):
+    _j2 = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                 _GU_TLDR, _H6_LIVE, [], [dict(_H6_OFF)] + [dict(s) for s in _H6_ST],
+                                 "http://x", still_open="Whether a better treatment exists.", breakdown=json.loads(json.dumps(_J2_BD)))
+    _j2_milk = appmod._check_response("Raw milk is healthier than pasteurized milk", "(raw milk) AND (health)", "false",
+                                      verdict.GUIDELINE_LEAD + "raw milk can carry harmful germs.", _H6_MILK,
+                                      ["H6M1", "H6M2"], [dict(s) for s in _H6_MS], "http://x",
+                                      still_open="Whether any benefit outweighs the risk.", breakdown=json.loads(json.dumps(_J2_MILK_BD)))
+_j2_b = _j2["breakdown"]
+t("J2: under a guidance answer relying on no study, no part, paragraph or field cites a study",
+  not any(breakdown.refs(x, 3) for x in breakdown.prose_of(_j2_b)), breakdown.prose_of(_j2_b))
+t("  a part whose answer went is dropped, not pointed at paragraphs below; uncited prose stays; empty fields are blank",
+  [p_["assessment"] for p_ in _j2_b["parts"]] == ["Colds are caused by viruses."]
+  and _j2_b["evidence"] == ["Guidelines advise against antibiotics for colds."]
+  and _j2_b["strength"] == "" and _j2_b["applies_to"] == "" and _j2_b["unknowns"] == "" and _j2_b["concluded"] == [],
+  _j2_b)
+t("  and a guidance answer that relies on studies keeps its folded sections citing them",
+  _j2_milk["breakdown"]["evidence"] == [_H6_MILK] and _j2_milk["breakdown"]["strength"] == "Two reviews (Studies 1, 2).",
+  _j2_milk["breakdown"])
 
 # ---- final fix F2: the evidence line sizes only a figure about the outcome ----
 # breakdown.line_label lends the line a size only when the figure's sentence

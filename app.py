@@ -1030,6 +1030,15 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
                 explanation = " ".join(kept)
                 if verdict.GUIDANCE_RESTS not in explanation:
                     explanation = f"{explanation} {verdict.GUIDANCE_RESTS}".strip()
+            # The folded sections too: no part, paragraph or field cites a
+            # study for a finding. A part whose answer goes is dropped, not
+            # pointed at paragraphs of studies the answer does not rest on;
+            # a section left with nothing is not rendered.
+            if breakdown and any(breakdown_mod.refs(t, count) for t in breakdown_mod.prose_of(breakdown)):
+                uncited = lambda t: breakdown_mod.drop_any_citing(t, range(1, count + 1), count)
+                breakdown = breakdown_mod.map_prose(
+                    {**breakdown, "parts": [p for p in breakdown.get("parts") or []
+                                            if uncited(p.get("assessment") or "")]}, uncited)
     # One certainty for the whole page, settled on the way out so a check
     # cached before the rule existed gets it too. The evidence line is never
     # surer than the least sure thing the page says, and a certainty phrase
