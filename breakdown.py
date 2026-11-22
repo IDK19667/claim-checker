@@ -2541,10 +2541,32 @@ def _modifies_another(t: str, m) -> bool:
     return bool(re.match(r"-[a-z]", t[m.end():], re.IGNORECASE))
 
 
-def names_outcome_itself(text: str, outcome: str) -> bool:
+# A classifying adjective right before the outcome word makes a longer term
+# that names something else: "oxidative stress" is not stress, "metabolic
+# syndrome" is not a syndrome in general. Read by its ending. The words that
+# only say how bad, how long or how much are not such terms.
+_CLASSIFIER = re.compile(r"\b([a-z]+(?:ive|ic|al|ar|ary|ous|ory))\s+$", re.IGNORECASE)
+_DEGREE = frozenset("""chronic acute clinical total overall general usual normal actual initial final
+    additional typical potential physical mental emotional psychological substantial several serious
+    similar particular regular natural daily various previous""".split())
+
+
+def _inside_longer_term(t: str, m, words: set) -> bool:
+    """The mention follows a classifying adjective the claim does not use."""
+    before = _CLASSIFIER.search(t[:m.start()])
+    if not before:
+        return False
+    adj = before.group(1).lower()
+    return adj not in _DEGREE and adj not in words
+
+
+def names_outcome_itself(text: str, outcome: str, claim: str = "") -> bool:
     """True when at least one mention of the outcome in `text` is the
-    outcome itself, not a word that only describes something else."""
-    return any(not _modifies_another(t, m) for t, m in _outcome_mentions(text, outcome))
+    outcome itself, not a word that only describes something else nor part
+    of a longer term the claim does not use."""
+    words = set(re.findall(r"[a-z]+", f"{claim} {outcome}".lower()))
+    return any(not _modifies_another(t, m) and not _inside_longer_term(t, m, words)
+               for t, m in _outcome_mentions(text, outcome))
 
 
 def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | None:
@@ -2555,7 +2577,8 @@ def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | Non
     own outcome. A large rise in inflammation is not a large effect on
     immunity, nor is one in a sentence that names the outcome only to set it
     aside ("not muscle") or only as a word describing another noun
-    ("triglyceride-lowering drugs"). The effect box keeps its figure and its own
+    ("triglyceride-lowering drugs") or inside a longer term ("oxidative
+    stress"). The effect box keeps its figure and its own
     sentence either way.
     """
     effect = (bd or {}).get("effect") or {}
@@ -2564,7 +2587,7 @@ def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | Non
         return None
     said = figure_sentence(bd)
     if (not names_outcome(said, outcome) or sets_outcome_aside(said, outcome)
-            or not names_outcome_itself(said, outcome)):
+            or not names_outcome_itself(said, outcome, claim)):
         return None
     if label in ("small", "moderate", "large") and not agrees_direction(effect, said, claim):
         return None

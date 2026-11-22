@@ -5483,6 +5483,18 @@ t("F2b: a sentence that also names the outcome itself still sizes it",
   and breakdown.line_label(_f2_bd("Triglycerides fell 30% more than with triglyceride-lowering drugs.", "30%",
                                   "about 30% lower"), *_F2_TG) == "large")
 
+_F2_ST = ("Ashwagandha reduces stress", "(stress)")
+_F2_SMD = ("SMD -1.75", "a difference of 1.75 standard deviations")
+t("F2c: a sentence where the outcome word sits inside a longer term ('oxidative stress markers') lends no size",
+  breakdown.line_label(_f2_bd("Oxidative stress markers fell, SMD -1.75.", *_F2_SMD), *_F2_ST) is None
+  and breakdown.line_label(_f2_bd("Metabolic syndrome fell, SMD -1.75.", *_F2_SMD),
+                           "Yoga reduces the risk of syndrome", "(syndrome)") is None)
+t("F2c: a word that says only how bad or how felt, or one the claim uses, still lets it size",
+  breakdown.line_label(_f2_bd("Perceived stress fell, SMD -1.75.", *_F2_SMD), *_F2_ST) == "large"
+  and breakdown.line_label(_f2_bd("Chronic stress fell, SMD -1.75.", *_F2_SMD), *_F2_ST) == "large"
+  and breakdown.line_label(_f2_bd("Oxidative stress fell, SMD -1.75.", *_F2_SMD),
+                           "Ashwagandha reduces oxidative stress", "(stress)") == "large")
+
 # ---- final fix F3: what "cannot be rated" means under a guidance stamp --------
 # verdict.unrated_said removes a sentence (or its closing clause) that says the
 # claim, the evidence, "this" or "it" cannot be rated or judged, in any of the
