@@ -6508,6 +6508,10 @@ _ft_p = _ft_home.split('<footer class="foot')[1].split("</footer>")[0]
 _ft_p = [x for x in _ft_p.split("<p") if "identifies you" in x][0].split("</p>")[0]
 t("  in the footer the sentence is followed by a link to /privacy",
   _re_s.search(r'identifies you and is sent to [^<]* to check it\.\s*<a href="/privacy">[^<]+</a>\s*$', _ft_p), _ft_p)
+_ft_css = (ROOT / "static" / "style.css").read_text()
+t("  the footer's Privacy details link has a tap area of 44px or more, grown around it, so the sentence does not move",
+  re.search(r"\.foot \.fine:not\(\.foot-links\) a \{[^}]*position: relative", _ft_css)
+  and re.search(r"\.foot \.fine:not\(\.foot-links\) a::after \{[^}]*inset: -26px -6px -2px", _ft_css))
 t("  and it stays true: /privacy keeps the claim text with nothing that identifies the person, and sends it to the same provider",
   all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check",
                          "it does not get your IP address or anything else that identifies you"))

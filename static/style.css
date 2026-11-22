@@ -1039,6 +1039,11 @@ body.view-ask .band .wrap { padding-bottom: 56px; }
 .foot b, .foot strong { color: var(--on-deep); font-weight: 500; }
 .foot .fine { color: var(--on-deep-3); }
 .foot a { color: var(--on-deep-2); }
+/* The link after the privacy sentence: a 44px tap area grown around it, as
+   under the claim box, so the sentence itself does not move. It grows
+   upward, over its own sentence, because the row of links sits just below. */
+.foot .fine:not(.foot-links) a { position: relative; }
+.foot .fine:not(.foot-links) a::after { content: ""; position: absolute; inset: -26px -6px -2px; }
 /* The footer links are controls, not a sentence: each one is a 44px row. */
 .doc-back { margin-top: 28px; }
 .tap { display: inline-flex; align-items: center; min-height: 44px; }
