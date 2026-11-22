@@ -516,11 +516,20 @@ _RATIO_WORDS = [
 # not an odds ratio of 80, and reading it as one printed "7900% higher odds".
 # "aOR" and "AOR", "aHR" and "AHR" are the adjusted ratios; "Hr" is not a
 # ratio, and nor is "ARR", which usually means an absolute risk reduction.
+# A number followed by a unit is a measure, not a ratio: "time in the OR was
+# 45 minutes" is no odds ratio of 45. The number is read whole first, so
+# "1.45 mg" is never read as a ratio of 1.
+_NOT_A_MEASURE = (
+    r"(?!\.?\d)\b(?!\s*%)(?!\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|h|days?|d|weeks?|wks?"
+    r"|months?|mos?|years?|yrs?|y|mg|g|kg|µg|mcg|ng|ml|mL|l|L|dL|cm|mm|m|km|lbs?|kcal|cal|IU|units?"
+    r"|mmHg|mmol|µmol|nmol|pmol|beats|bpm|steps|points?|patients?|people|persons?|participants?"
+    r"|adults?|children|subjects?|women|men|cases?|deaths?|studies|trials|cigarettes|drinks|servings?"
+    r"|cups?|times a)\b)")
 _RATIO = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
     r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
     r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
-    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)" + _NOT_A_MEASURE, re.IGNORECASE)
 
 # The same figure with the outcome named in between: "the hazard ratio for
 # heart and blood vessel deaths for each more 50 g of egg was 1.09". The gap
@@ -532,7 +541,7 @@ _RATIO_WAS = re.compile(
     r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
     r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
     r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
-    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)" + _NOT_A_MEASURE, re.IGNORECASE)
 
 _SMD = re.compile(
     r"\b(?:standardi[sz]ed mean difference|SMD|Cohen's d)\s*"

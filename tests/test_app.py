@@ -1195,6 +1195,14 @@ t("  the adjusted ratios read in capitals too: AOR, AHR and aIRR",
 t("  but ARR (an absolute risk reduction) and mixed case 'Hr' are no ratio",
   evidence.effect_size("ARR 0.05") is None and evidence.effect_size("Hr 0.8") is None
   and evidence.ratio_kinds("ARR 0.05, Hr 0.8") == set())
+t("  a number followed by a unit is a measure, not a ratio: no odds ratio of 45 from 'the OR was 45 minutes'",
+  evidence.effect_size("Time in the OR was 45 minutes (Study 2).") is None
+  and evidence.effect_size("OR 12 patients were excluded.") is None
+  and evidence.effect_size("The hazard ratio for those on 1.45 mg was 2 days shorter.") is None
+  and evidence.effect_size("OR 1.45 mg") is None
+  and (evidence.effect_size("OR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
+  and (evidence.effect_size("The hazard ratio for death was 0.8.") or {}).get("figure") == "hazard ratio 0.8",
+  (evidence.effect_size("Time in the OR was 45 minutes (Study 2)."), evidence.effect_size("OR 1.45 mg")))
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))
