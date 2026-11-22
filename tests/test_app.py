@@ -8935,6 +8935,50 @@ t("meet: a guidance-set answer shows the fixed line whatever either reading says
   and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false") == verdict.GUIDANCE_LINE,
   (_tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false"),))
 
+# ---- where the fixes meet: 'no clear effect' needs both rules ---------------
+# rc-reading round 3: a sentence with a significant figure is never a null
+# (breakdown.all_null). rc-guidance: the line carries a label, "none" included,
+# only when the figure's own sentence names the claim's outcome (line_label).
+# Each case below gets past one rule alone; the page says "no clear effect"
+# only for the one that passes both.
+def _nc_line(effect):
+    with appmod.app.test_request_context("/"):
+        r_ = verdict._read_verdict(json.dumps({
+            "verdict": "complicated", "tldr": "The diet is linked to weight change, but only in an observational study.",
+            "explanation": "Adults on the diet were followed (Study 1).", "still_open": "Whether it causes it.",
+            "cited_study_numbers": [1], "relevance": [{"study": 1, "subject": True, "outcome": True, "in_people": True,
+                                                       "finding": "for"}],
+            "parts": [], "evidence": ["Adults on the diet were followed for 5 years (Study 1)."], "effect_size": effect,
+            "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""}), None, [dict(x) for x in _WT_ST],
+            "This diet helps weight loss", subject="(diet)", outcome="(weight loss OR body weight)", surrogate="")
+        return appmod._check_response("This diet helps weight loss", "(diet) AND (weight loss OR body weight)",
+                                      r_["verdict"], r_["tldr"], r_["explanation"], r_["cited_studies"],
+                                      [dict(x) for x in _WT_ST], "http://x", still_open="Whether it causes it.",
+                                      breakdown=r_.get("breakdown")).get("evidence_line") or ""
+
+
+_NC_SIG = "Body weight showed no clear difference, while adults lost 4.1 kg more (p < 0.001) (Study 1)."
+_NC_OFF = "Waist size changed by 0.4 cm, which was not statistically significant (Study 1)."
+_NC_BOTH = "Body weight changed by 0.4 kg, which was not statistically significant (Study 1)."
+t("meet: a null beside a significant figure names the outcome (line_label alone would pass it), all_null refuses it",
+  breakdown.names_outcome(_NC_SIG, "(weight loss OR body weight)") and not breakdown.all_null(_NC_SIG, _WT_ST))
+t("  a null about another outcome is all null (all_null alone would pass it), line_label refuses it",
+  breakdown.all_null(_NC_OFF, _WT_ST) and not breakdown.names_outcome(_NC_OFF, "(weight loss OR body weight)"))
+t("  and on the page neither says 'no clear effect', while a null on the claim's own outcome does",
+  "no clear effect" not in _nc_line(_NC_SIG) and "no clear effect" not in _nc_line(_NC_OFF)
+  and "no clear effect" in _nc_line(_NC_BOTH), (_nc_line(_NC_SIG), _nc_line(_NC_OFF), _nc_line(_NC_BOTH)))
+# Round 3 skips a number that cannot be a ratio when it reads a figure; the
+# evidence line finds the figure's sentence through the same reader. They
+# agree on which sentence the figure came from, a heart rate beside it or not.
+_FS = {"effect_size": "Mean HR was 72 per minute (Study 1). The hazard ratio for death was 0.80 (Study 1).",
+       "evidence": [], "parts": [], "effect": {"label": "small", "figure": "hazard ratio 0.80"}}
+_fs_sent = breakdown.figure_sentence(_FS)
+t("meet: figure_sentence and effect_size agree on the sentence a figure came from, past a number that is no ratio",
+  evidence.effect_size("Mean HR was 72 per minute (Study 1).") is None
+  and _fs_sent.startswith("The hazard ratio for death was 0.80")
+  and (evidence.effect_size(_fs_sent) or {}).get("figure") == (evidence.effect_size(_FS["effect_size"]) or {}).get("figure"),
+  (_fs_sent, evidence.effect_size(_FS["effect_size"])))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
