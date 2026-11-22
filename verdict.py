@@ -1042,8 +1042,19 @@ _CANNOT_RATE = re.compile(
     # "the evidence does not allow us to rate it"
     rf"|\b(?:does|do|did)(?:\s+not|n[’']t)\s+(?:allow|let|permit)\s+(?:us\s+|one\s+|anyone\s+|readers?\s+)?(?:to\s+)?{_RATE_V}\b{_RATE_OBJ}"
     # "unratable", "unrateable"
-    r"|\bunrat(?:e)?able\b",
+    r"|\bunrat(?:e)?able\b"
+    # "no basis to rate it", "no basis for rating"
+    rf"|\bno\s+(?:real\s+|clear\s+|sound\s+)?basis\s+(?:to\s+{_RATE_V}|for\s+(?:rating|judging|grading))\b{_RATE_OBJ}"
+    # "Rating this claim is not possible", "... impossible", "... cannot be done"
+    r"|\b(?:rating|judging|grading)\s+(?:it|this|this\s+claim|the\s+claim|this\s+question)\s+"
+    r"(?:is\s+(?:not\s+possible|impossible)|isn[’']t\s+possible|can\s*not\s+be\s+done|can[’']t\s+be\s+done)\b",
     re.IGNORECASE)
+# A sentence that reports what a study or its people judged ("Investigators
+# judged that ...") is about the study, whatever it says about rating.
+_REPORTED = re.compile(
+    r"\b(?:investigators?|authors?|researchers?|reviewers?|raters?|panel|committee|the\s+(?:trial|study|review|analysis"
+    r"|meta-analysis))\s+(?:\w+\s+){0,2}?(?:judged|concluded|found|reported|stated|said|noted|felt|decided"
+    r"|determined|argued|considered|wrote|suggested|thought|believed|agreed)\s+that\b", re.IGNORECASE)
 # The people a study asks to rate something: when one of them is who could
 # not rate, the sentence is about the study, not about this answer.
 _RATERS = re.compile(
@@ -1058,6 +1069,8 @@ def _says_unrated(s: str):
     rated or judged, or None. Not when a study's raters are who could not
     (a sentence on how much evidence there is names no rater)."""
     for m in _CANNOT_RATE.finditer(s or ""):
+        if _REPORTED.search(s, 0, m.start()):
+            continue
         # "could not be graded by the review authors": a study's raters,
         # named after a passive, did the rating. That is about the study.
         by = re.match(r"\s+by\s+((?:[\w-]+\s*){1,4})", s[m.end():])

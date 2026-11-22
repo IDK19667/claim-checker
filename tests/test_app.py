@@ -5680,6 +5680,17 @@ for _g in _G6_GO:
     t(f"G6: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
 for _k in _G6_STAY:
     t(f"G6: stays: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
+# H4: what a study or its people judged stays, whatever it says about
+# rating; "no basis to rate it" and "Rating this claim is not possible" go.
+_H4_GO = ["There is no basis to rate it.", "There is no basis for rating.", "Rating this claim is not possible.",
+          "Rating this claim is impossible.", "Rating this claim cannot be done."]
+_H4_STAY = ["Investigators judged that there was not enough evidence to rate the drug as first-line (Study 4).",
+            "The review concluded that it could not be rated with confidence (Study 2).",
+            "No conclusion can be drawn.", "We cannot say."]
+for _g in _H4_GO:
+    t(f"H4: goes under a guidance stamp: {_g}", verdict.unrated_said(_g) == "", verdict.unrated_said(_g))
+for _k in _H4_STAY:
+    t(f"H4: stays: {_k}", verdict.unrated_said(_k) == _k, verdict.unrated_said(_k))
 t("F3: a closing 'meaning we can't rate it' goes and what came before it stays",
   verdict.unrated_said("No trial tests this, meaning we can't rate it.") == "No trial tests this.")
 _f3_g = verdict.guidance_prose("No trial tests the claim. Researchers were unable to rate pain intensity.",
