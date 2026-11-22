@@ -9063,6 +9063,27 @@ t("  so the line over the trial and the reviews is no surer than over the trial 
   (evidence.evidence_line("false", _NR_ALL, ["NR1", "NR2", "NR3"], "Creatine causes hair loss"),
    evidence.evidence_line("false", _NR_ALL, ["NR1"], "Creatine causes hair loss")))
 
+# ---- L3: no empty reference ---------------------------------------------------
+_ER = ("A review found no consistent harm (Study 5), but other reviews note that alcohol is linked "
+       "to fetal harm (Study 6). The evidence is mixed (Study 5).")
+t("L3: a citation whose every number is taken out disappears whole, with the space before it",
+  breakdown.relied_only(_ER, {5}, 8) == "A review found no consistent harm (Study 5), but other reviews note "
+  "that alcohol is linked to fetal harm. The evidence is mixed (Study 5).", breakdown.relied_only(_ER, {5}, 8))
+t("  and no separator is left dangling in the same brackets, nor an empty pair of brackets anywhere",
+  breakdown.relied_only("Harm (Study 6; Study 5).", {5}, 8) == "Harm (Study 5)."
+  and breakdown.relied_only("Harm (Studies 6, 7) and help (Study 5).", {5}, 8) == "Harm and help (Study 5)."
+  and breakdown.relied_only("Harm (Studies ). Plain ( ) words (Study 5).", {5}, 8) == "Harm. Plain words (Study 5).")
+t("  a citation that was part of the sentence itself takes the sentence with it, and plain words stay",
+  breakdown.relied_only("Studies 6 and 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5)."
+  and breakdown.relied_only("As in other trials (see earlier studies).", {5}, 8)
+  == "As in other trials (see earlier studies).")
+_er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", "complicated", "Mixed.", _ER,
+                                ["P5"], [_study(f"P{i}", f"Study of alcohol {i}") for i in range(1, 9)],
+                                "http://x", still_open="Whether small amounts harm.")
+t("  and no prose field on a page carries an empty reference",
+  not any(re.search(r"\(\s*(?:Stud(?:y|ies)\s*)?\)", str(v)) for v in
+          (_er_pg.get("tldr"), _er_pg.get("explanation"), json.dumps(_er_pg.get("breakdown")))), _er_pg.get("explanation"))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
