@@ -4219,6 +4219,9 @@ t("  and the study, its finding and the evidence line stay exactly as they were"
   and _ge["evidence_line"] == _ge_plain["evidence_line"], (_ge["evidence_line"], _ge_plain["evidence_line"]))
 t("  and an answer the guidance rule did not set keeps its own figure",
   _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
+_ge_said = verdict.guidance_effect(dict(_GE_BD, says=["Experts advise avoiding it (Study 1).", _GE_EFF]))
+t("  and a line of 'What the research says' picked from the effect box goes with it; the others stay",
+  _ge_said["says"] == ["Experts advise avoiding it (Study 1)."], _ge_said["says"])
 _ge_none = verdict.guidance_effect(dict(_GE_BD, effect_size=""))
 t("  and a breakdown with no effect box is not given one",
   _ge_none["effect_size"] == "" and verdict.guidance_effect(None) is None, _ge_none)

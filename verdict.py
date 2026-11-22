@@ -1006,10 +1006,15 @@ GUIDANCE_EFFECT = ("This answer rests on what major health guidelines say, "
 def guidance_effect(bd: dict | None) -> dict | None:
     """The breakdown of an answer the guidance rule set, its effect box
     saying GUIDANCE_EFFECT in place of a study's figure. A breakdown with no
-    effect box gets none."""
-    if bd and str(bd.get("effect_size") or "").strip():
-        return {**bd, "effect_size": GUIDANCE_EFFECT}
-    return bd
+    effect box gets none. A line of "What the research says" that was picked
+    from the effect box (breakdown.says takes its figure) goes with it, so
+    the figure is not headlined there instead."""
+    if not bd or not str(bd.get("effect_size") or "").strip():
+        return bd
+    key = lambda t: re.sub(r"[^a-z0-9]+", "", t.lower())
+    boxed = {key(t) for t in breakdown.sentences(bd["effect_size"])}
+    says = [t for t in bd.get("says") or [] if key(t) not in boxed]
+    return {**bd, "effect_size": GUIDANCE_EFFECT, "says": says}
 
 
 def _complete_json(prompt: str, schema: dict, max_tokens: int, temperature: float | None = None):
