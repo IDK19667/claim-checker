@@ -1707,7 +1707,13 @@ def effect_alone(bd: dict | None) -> dict | None:
 
 
 # The size code appends to its translation of a figure: ", a large effect".
-_SIZE_TAIL = re.compile(r",\s+an?\s+(?:small|moderate|large)\s+effect\b")
+# A size said in a "That is ..." sentence, in every shape its writers give
+# it: ground's ", a large effect" after the arithmetic, and a faithfulness
+# rewrite (verdict.check_faithful swaps a line the model rewrote) that left
+# only the size, "That is a large effect (Study 3)".
+_SIZE_TAIL = re.compile(
+    r"(?:,\s*|\s+)(?:which\s+is\s+)?(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)"
+    r"\s+(?:effect|benefit|reduction|increase|improvement|difference)\b", re.IGNORECASE)
 
 
 def unsized(bd: dict | None) -> dict | None:
@@ -1717,7 +1723,7 @@ def unsized(bd: dict | None) -> dict | None:
     is blank, and the "That is ..." sentence code wrote beside the figure
     keeps its plain arithmetic ("about 12% lower odds") without the size
     ("a small effect"), in the effect box and in "What the research says".
-    One that only said no clear difference goes."""
+    One that only said no clear difference, or only the size, goes."""
     if not bd:
         return bd
 
@@ -1726,7 +1732,12 @@ def unsized(bd: dict | None) -> dict | None:
             return t
         if NULL_SAID in t:
             return ""
-        return _SIZE_TAIL.sub("", t)
+        left = _SIZE_TAIL.sub("", t)
+        # Where the size was the whole statement, the sentence goes, with
+        # its citation; the figure's own sentence stays.
+        if not re.search(r"\w", _REF.sub(" ", left[len(TRANSLATION_LEAD):]).replace("(", "").replace(")", "")):
+            return ""
+        return left
 
     out = {**bd, "says": [x for x in (bare(t) for t in bd.get("says") or []) if x]}
     if bd.get("effect_size"):

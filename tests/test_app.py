@@ -9002,6 +9002,69 @@ t("F8: the server-rendered page shows the figure and no code-written size word",
 with db.get_conn() as _conn:
     _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_f8_db),))
 
+# ---- G5: unsized handles every shape its writers give a size ----
+# Live: "Smoking causes lung cancer" kept "That is a large effect (Study 3)."
+# in the box with the size withheld: a faithfulness rewrite had left only
+# the size in code's sentence. The shapes come from the writers: ground's
+# arithmetic with ", a {label} effect", ground's arithmetic alone (the model
+# had said the size), and the lead with only the size.
+_G5_ST = [_study("G5A", "Cold water immersion and health: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Inflammation was higher with a relative risk of 2.5. Inflammation was higher "
+                          "with a relative risk of 1.3 in one subgroup. Inflammation was higher with a relative "
+                          "risk of 1.05 in another. Immune function was not measured.")]
+_g5_bds = []
+for _g5_x in ("2.5", "1.3", "1.05"):
+    _g5_eff = "Inflammation was higher with a relative risk of %s (Study 1)" % _g5_x
+    _g5_lab = evidence.effect_size(_g5_eff)["label"]
+    for _g5_tail in ("", ", a %s effect" % _g5_lab):
+        _g5_g = breakdown.ground({"evidence": ["Inflammation was higher after cold water immersion in the review (Study 1)."],
+                                  "says": [], "effect_size": _g5_eff + _g5_tail + ".", "parts": []},
+                                 _G5_ST, verdict.tidy_prose, "Cold showers boost immunity")
+        _g5_bds.append(dict(_g5_g, says=breakdown.sentences(_g5_g["effect_size"])))
+    _g5_only = (_g5_eff + ". " + breakdown.TRANSLATION_LEAD + "a %s effect (Study 1)." % _g5_lab)
+    _g5_bds.append(dict(_g5_bds[-2], effect_size=_g5_only, says=breakdown.sentences(_g5_only)))
+_G5_SIZE = re.compile(r"\b(?:small|moderate|large)\b", re.I)
+def _g5_code_sized(r):
+    bd = r["breakdown"] or {}
+    said = breakdown.sentences(bd.get("effect_size") or "") + list(bd.get("says") or [])
+    return [x for x in said if x.startswith(breakdown.TRANSLATION_LEAD) and _G5_SIZE.search(x)]
+def _g5_check(bd):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response("Cold showers boost immunity", _EL_Q, "complicated", "The studies point both ways.",
+                                      "Inflammation was higher (Study 1).", ["G5A"], [dict(s) for s in _G5_ST], "http://x",
+                                      still_open="Whether it lasts.", breakdown=json.loads(json.dumps(bd)))
+_g5_out = [_g5_check(b_) for b_ in _g5_bds]
+t("G5: the shapes come from the writers, each with a code size word before the gate",
+  len(_g5_bds) == 9 and all(any(x.startswith(breakdown.TRANSLATION_LEAD) and _G5_SIZE.search(x)
+                                for x in b_["says"]) or _G5_SIZE.search(b_["effect_size"]) for b_ in _g5_bds),
+  [b_["effect_size"] for b_ in _g5_bds])
+t("G5: with the size withheld, no code-written size word is left in the box or the research lines, in any shape",
+  all(o["breakdown"]["effect"]["label"] == "" and not _g5_code_sized(o) for o in _g5_out),
+  [_g5_code_sized(o) for o in _g5_out])
+t("  nor in the line, the short answer or what is still open",
+  not any(_G5_SIZE.search(" ".join([o["evidence_line"] or "", o["tldr"], o["still_open"]])) for o in _g5_out),
+  [o["evidence_line"] for o in _g5_out])
+t("  where the size was the whole statement the sentence goes, with its citation, and the figure's own sentence stays",
+  all(o["breakdown"]["effect_size"].startswith("Inflammation was higher with a relative risk")
+      and breakdown.TRANSLATION_LEAD not in o["breakdown"]["effect_size"] for o in _g5_out[2::3]),
+  [o["breakdown"]["effect_size"] for o in _g5_out[2::3]])
+t("  and the arithmetic stays where code wrote it beside the size",
+  all("That is about " in o["breakdown"]["effect_size"] for o in _g5_out[0::3]),
+  [o["breakdown"]["effect_size"] for o in _g5_out[0::3]])
+_g5_db = "Cold showers boost immunity G5"
+db.put_cached_verdict(_g5_db, _EL_Q, "complicated", "Inflammation was higher (Study 1).", ["G5A"],
+                      [dict(s) for s in _G5_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",
+                      breakdown=_g5_bds[2])
+_g5_pg = c.get("/?q=" + urllib.parse.quote(_g5_db)).get_data(as_text=True)
+_g5_ev = stream(_g5_db, ip="9.7.5.1")[1][-1].get("result") or {}
+t("G5: the server page and the stream agree: the figure, and no code-written size",
+  "Inflammation was higher with a relative risk" in _g5_pg
+  and not re.search(r"(?:That is|,) an? (?:small|moderate|large) effect", _g5_pg)
+  and _g5_ev.get("breakdown", {}).get("effect_size") == _g5_out[2]["breakdown"]["effect_size"]
+  and not _g5_code_sized(_g5_ev), (_g5_ev.get("breakdown") or {}).get("effect_size"))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_g5_db),))
+
 # ---- final fix F9: a guidance answer shows its line whenever a study is listed --
 # Live: antibiotics for a cold was a guidance answer whose only cited study was
 # set aside as an opinion piece, so the line was blank.
