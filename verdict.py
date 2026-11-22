@@ -1079,20 +1079,49 @@ _END_REF = re.compile(r"\s*(\((?:Study|Studies)\b[^)]*\))\s*[.!?]?\s*$")
 
 
 # The lead as a model might write it: any case, any spacing, with or
-# without "major" and "health", always with its colon.
-_LEAD_SAID = re.compile(r"^\s*(?:major\s+)?(?:health\s+)?guidelines\s+say\s*:\s*", re.IGNORECASE)
+# without "major" and "health", "say(s)" or "state(s)", always with its
+# colon. Read after any run of marks at the very start (quotes, dashes,
+# bold or italic marks, spaces, zero-width characters).
+_LEAD_SAID = re.compile(r"(?:major\s+)?(?:health\s+)?guidelines\s+(?:says?|states?)\s*:\s*", re.IGNORECASE)
+_MARK_PAIR = {"\u201c": "\u201d", "\u2018": "\u2019", "\u00ab": "\u00bb"}
+
+
+def _lead_marks(text: str) -> int:
+    """How many characters at the start of `text` are not letters or digits."""
+    i = 0
+    while i < len(text) and not text[i].isalnum():
+        i += 1
+    return i
 
 
 def without_lead(tldr: str) -> str:
     """The model's takeaway without a guidance lead it wrote itself. The
     lead is code's alone (follow_guidelines and _restamp write it), so a
     reply that opens with it is read as any other: the words after it stay,
-    with their capital back."""
+    with their capital back. A quote or mark that opened the lead is not
+    left dangling: its closing partner, when it is the last such mark in
+    what is left, goes too."""
     text = str(tldr or "")
-    m = _LEAD_SAID.match(text)
+    start = _lead_marks(text)
+    m = _LEAD_SAID.match(text, start)
     if not m:
         return text
-    rest = _LEAD_REPEAT.sub("", text[m.end():], count=1).strip()
+    opened = [ch for ch in text[:start] if not ch.isspace() and ch not in "-\u2010\u2011\u2012\u2013\u2014\u2015"
+              and ch not in "\u200b\u200c\u200d\u2060\ufeff"]
+    closers = [_MARK_PAIR.get(ch, ch) for ch in opened]
+    rest = text[m.end():].lstrip()
+    # A mark that closes the opening right after the colon ("**...say:**").
+    while rest[:1] and rest[:1] in closers:
+        closers.remove(rest[:1])
+        rest = rest[1:].lstrip()
+    rest = _LEAD_REPEAT.sub("", rest, count=1).strip()
+    # One that closes it at the end ("\"...say: stop it.\"").
+    for close in closers:
+        if close in "\"'*_`" and rest.count(close) % 2 == 0 and not rest.endswith(close):
+            continue
+        at = rest.rfind(close)
+        if at >= 0:
+            rest = (rest[:at] + rest[at + 1:]).strip()
     return rest[:1].upper() + rest[1:]
 
 

@@ -5472,6 +5472,25 @@ _G1B_KEEP = ["Guidelines say that adults should get 150 minutes of exercise.",
              "health guidelines say adults need sleep."]
 t("G1b: only the lead with its colon is taken off; a takeaway that says what guidelines say stays byte for byte",
   [verdict.without_lead(x) for x in _G1B_KEEP] == _G1B_KEEP, [verdict.without_lead(x) for x in _G1B_KEEP])
+# H2: a lead after quotes, dashes, bold or italic marks or a zero-width
+# character, or written with "state(s):", is taken off too, with no mark
+# of its opening left dangling.
+_H2_FORMS = ['"Major health guidelines say: stop your arthritis medicine."',
+             "\u201cMajor health guidelines say: stop your arthritis medicine.\u201d",
+             "- Major health guidelines say: stop your arthritis medicine.",
+             "\u2014 Guidelines say: stop your arthritis medicine.",
+             "**Major health guidelines say:** stop your arthritis medicine.",
+             "**Major health guidelines say: stop your arthritis medicine.**",
+             "*Guidelines say:* stop your arthritis medicine.",
+             "\u200bMajor health guidelines say: stop your arthritis medicine.",
+             "Major health guidelines state: stop your arthritis medicine.",
+             "Health guidelines states: stop your arthritis medicine."]
+t("H2: each of the reviewer's forms loses the lead and keeps the sentence, capital back",
+  [verdict.without_lead(x) for x in _H2_FORMS] == ["Stop your arthritis medicine."] * len(_H2_FORMS),
+  [verdict.without_lead(x) for x in _H2_FORMS])
+t("  and a takeaway that only reports what guidelines say, or quotes after the lead, keeps its own marks",
+  verdict.without_lead("Guidelines say that X helps.") == "Guidelines say that X helps."
+  and verdict.without_lead('Major health guidelines say: "the drug" works.') == '"the drug" works.')
 def _g1_run(claim, tldr, ip, v="true", way=P):
     with db.get_conn() as _conn:
         _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
