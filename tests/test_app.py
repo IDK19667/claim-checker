@@ -31,6 +31,23 @@ import ratelimit  # noqa: E402
 import verdict  # noqa: E402
 from google.genai import errors  # noqa: E402
 import requests  # noqa: E402
+import socket  # noqa: E402
+
+# No test may use the network: the provider and PubMed are faked. Any test
+# that opens a real connection, or looks a host up, fails here loudly and is
+# counted at the end, whatever the code under test does with the error.
+NET_TRIES = []
+
+
+def _no_network(*a, **k):
+    NET_TRIES.append(repr(a[1:] if a and isinstance(a[0], socket.socket) else a)[:120])
+    raise OSError("tests/test_app.py: a test tried to use the network")
+
+
+socket.socket.connect = _no_network
+socket.socket.connect_ex = _no_network
+socket.getaddrinfo = _no_network
+socket.create_connection = _no_network
 
 # Gemini calls are retried after a pause. No test waits for it: verdict's
 # clock is a recorder, and the retry tests below read what it was asked for.
@@ -45,6 +62,15 @@ results = []
 def t(label, cond, extra=""):
     results.append(bool(cond))
     print(f"{'PASS' if cond else 'FAIL'} {label} {extra if not cond else ''}")
+
+
+try:
+    requests.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi", timeout=1)
+    _net_refused = False
+except Exception:  # noqa: BLE001 — any failure is the guard working
+    _net_refused = True
+t("network guard: a real request from a test is refused and recorded", _net_refused and NET_TRIES, NET_TRIES)
+NET_TRIES.clear()
 
 
 def P(claim, ip="1.1.1.1", **hdr):
@@ -1200,9 +1226,17 @@ _ranked = pubmed.prioritise([_study("OFF", "Topical lotion for alopecia",
                             "dihydrotestosterone OR DHT")
 t("  a paper that never mentions the claim's subject sinks under the ones that do",
   [s["pmid"] for s in _ranked] == ["I1", "I2", "OFF"], [s["pmid"] for s in _ranked])
+_sur_asked = []
+_real_search_pubmed = pubmed.search_pubmed
+pubmed.search_pubmed = lambda q, max_results=8: _sur_asked.append((q, max_results)) or ["S1"]
+try:
+    _sur = pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
+                                   max_results=2)
+finally:
+    pubmed.search_pubmed = _real_search_pubmed
 t("  the surrogate search asks for the subject plus the stand-in, never the outcome",
-  pubmed.search_surrogate("(creatine) AND (hair loss)", "DHT OR dihydrotestosterone",
-                          max_results=2) is not None)
+  _sur is not None and _sur == ["S1"]
+  and _sur_asked == [("(creatine) AND (DHT OR dihydrotestosterone)", 2)], _sur_asked)
 
 # ---- the answer must not contradict itself ----------------------------------------
 t("consistency: calling a reported condition untested is caught",
@@ -6791,5 +6825,6 @@ t("old rows: a recent check on this device is replayed only when it has its shor
   re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
   and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
 
+t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
