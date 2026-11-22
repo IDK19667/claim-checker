@@ -10468,6 +10468,10 @@ t("CLAUDE.md and AGENTS.md describe the desk: desk.css and desk.js named, the ol
   and "desk.css" in _ag.split("## Styling rules")[1].split("## How to prompt")[0] and "pen ring" not in _ag
   and "static/desk.css static/desk.js" in _ag and "static/desk.css static/desk.js" in _cl_design)
 
+_dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
+t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",
+  "The first screen holds the claim box on a short laptop" in _dec and "DESIGN.md was replaced on purpose" in _dec)
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template

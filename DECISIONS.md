@@ -31,6 +31,21 @@ version"). It came in as `static/desk.css` and `static/desk.js` beside
   three.js or the wood there; the stops read as a page.
 - **Without scripts the claim box is hidden** (it cannot check
   anything) and a result reads top to bottom from the server's HTML.
+- **The first screen holds the claim box on a short laptop.** Most
+  laptops show 650 to 720px of page, and the sample's headline pushed
+  the button under the edge there. The headline is now sized by the
+  screen's height as well as its width (smaller, never cut or
+  reworded), stop 1 sits closer together under 760px high, and while a
+  check runs everything but the headline and the claim steps aside, a
+  log line the check has moved past keeps two lines, and under 600px
+  high the line it is on keeps four. Layout only: the glide to the
+  answer stays the one automatic move.
+- **DESIGN.md was replaced on purpose.** "The reading room after hours"
+  described a front page that is gone; the file now writes down the
+  desk's tokens and rules, and keeps `style.css`'s for the other pages.
+  `scripts/qa.mjs` was rewritten for the desk the same day, and
+  `style.css` lost the rules only the old front used (every other page
+  checked to render the same, style by style and picture by picture).
 
 ## 2026-11-22 (release): The reasoning cites only studies the answer stands on
 
