@@ -1191,11 +1191,16 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     narrow = narrow_populations(studies, cited_pmids)
     if narrow and narrow_only(studies, cited_pmids, claim):
         return f"{level} evidence, but only in {', '.join(narrow)}"
+    # Weak or low certainty evidence is the reason there is no plain answer,
+    # so the line says "so"; "but" is for evidence sure enough that a reader
+    # would expect one. "Low certainty evidence, but no plain yes or no"
+    # read as a contradiction.
+    joint = "so" if line_certainty(level) in ("low", "very low") else "but"
     if effect_label == "none":
-        return f"{level} evidence of no clear effect, but no plain yes or no"
+        return f"{level} evidence of no clear effect, {joint} no plain yes or no"
     if size:
-        return f"{level} evidence of a {size} effect, but no plain yes or no"
-    return f"{level} evidence, but no plain yes or no"
+        return f"{level} evidence of a {size} effect, {joint} no plain yes or no"
+    return f"{level} evidence, {joint} no plain yes or no"
 
 
 # ---------------------------------------------------------------------------

@@ -1676,7 +1676,7 @@ t("  the assessment and its confidence are two labelled rows under the answer",
   and '<span class="assess-label">Confidence</span>' in _ord
   and _at('id="tldr"') < _at('id="assess"') < _at('id="doctor-line"') < _at("What the research says"))
 t("  the confidence is the sentence the check worded, once",
-  "<mark>Low certainty evidence, but no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
+  "<mark>Low certainty evidence, so no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
   or "<mark>" in _ord.split('id="assess"')[1].split("</p>")[1], _ord.split('id="assess"')[1][:500])
 
 # ---- no sentence is printed twice -----------------------------------------------
@@ -3261,9 +3261,19 @@ _LOWREV = _gin_review("L1", "Ten randomized trials were pooled. Low-certainty ev
 _VLREV = _gin_review("L2", "Ten randomized trials were pooled. Very low certainty evidence suggests ginger reduces vomiting.")
 _MODREV = _gin_review("L3", _SPLIT)
 _PLAIN = _gin_review("L4", "Ten randomized trials were pooled and ginger reduced vomiting.")
+t("  weak or low certainty evidence is the reason for no plain answer, so the line says 'so', never 'but'",
+  evidence.evidence_line("complicated", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Very low certainty evidence, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, "small", outcome="(vomiting)")
+  == "Low certainty evidence of a small effect, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_gin_review("L5", "Ten trials.", types=["Case Reports"])], ["L5"],
+                             _GIN_CLAIM) == "Weak evidence, so no plain yes or no"
+  and evidence.evidence_line("complicated", [_PLAIN], ["L4"], _GIN_CLAIM, outcome="(vomiting)")
+  == "Strong evidence, but no plain yes or no",
+  [evidence.evidence_line("complicated", [x_], [x_["pmid"]], _GIN_CLAIM, outcome="(vomiting)") for x_ in (_VLREV, _PLAIN)])
 t("  the evidence line never says Strong when the lead review says low or very low",
   evidence.evidence_line("complicated", [_LOWREV], ["L1"], _GIN_CLAIM, outcome="(vomiting)")
-  == "Low certainty evidence, but no plain yes or no"
+  == "Low certainty evidence, so no plain yes or no"
   and evidence.evidence_line("false", [_VLREV], ["L2"], _GIN_CLAIM, outcome="(vomiting)")
   == "Very low certainty evidence against this claim"
   and evidence.evidence_line("true", [_MODREV], ["L3"], _GIN_CLAIM, outcome="(vomiting OR emesis)")
