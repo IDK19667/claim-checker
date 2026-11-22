@@ -10472,6 +10472,17 @@ _dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
 t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",
   "The first screen holds the claim box on a short laptop" in _dec and "DESIGN.md was replaced on purpose" in _dec)
 
+_sw3 = (ROOT / "static" / "sw.js").read_text()
+_shell3 = _sw3.split("const SHELL")[1].split("];")[0]
+_linked3 = set()
+for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
+    _src3 = (ROOT / "templates" / _f3).read_text()
+    _linked3 |= {"/static/" + x for x in re.findall(r"url_for\('static', filename='([^']+)'\)", _src3)}
+_linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
+t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
+  all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
+  and 'const CACHE = "evident-v118";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template

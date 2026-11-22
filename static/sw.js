@@ -5,7 +5,7 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v117";
+const CACHE = "evident-v118";
 const SHELL = [
   "/",
   "/static/style.css",
@@ -25,7 +25,11 @@ const SHELL = [
   "/static/icons/icon.svg",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
+  "/static/icons/icon-512-maskable.png",
+  "/static/icons/apple-touch-icon.png",
 ];
+// three.js and the wood are not shell: the desk fetches them only when it can
+// draw (never on Save-Data or 2G), and the fetch handler below keeps a copy.
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
