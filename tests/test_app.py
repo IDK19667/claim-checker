@@ -9465,7 +9465,32 @@ t("  and the same takeaway where the stamp is Not enough evidence",
   {k: (v[0]["tldr"], v[1]["tldr"]) for k, v in _g2.items()})
 t("  and one rule says when guidance alone may rate, for both paths",
   "guidance_may_rate" in _inspect.getsource(verdict.follow_guidelines)
-  and "guidance_may_rate" in _inspect.getsource(appmod._check_response))
+  and "guidance_may_rate" in _inspect.getsource(appmod._nothing_relied)
+  and "_nothing_relied" in _inspect.getsource(appmod._check_response))
+# G2b: every list shows the stamp the page shows, by the same decision
+# (app._nothing_relied over verdict.guidance_may_rate).
+_g2b = {}
+for _g2_c, _g2_v, _g2_says, _g2_doc, _g2_st in _G2_CASES:
+    _g2_t = (verdict.GUIDELINE_LEAD + _g2_says + " " + _g2_doc).strip()
+    db.put_cached_verdict(_g2_c, "(x) AND (y)", _g2_v, "Guidance says so (Study 1).", [_g2_st["pmid"]],
+                          [dict(_g2_st)], tldr=_g2_t, still_open="Whether a trial would settle it.")
+    _g2_row = db.get_cached_by_key(db.normalize_claim(_g2_c))
+    _g2_l = appmod._listed({"claim_text": _g2_row["claim_text"], "verdict": _g2_row["verdict"],
+                            "search_query": _g2_row.get("search_query") or "", "tldr": _g2_row.get("tldr") or "",
+                            "studies": _g2_row["studies"], "cited": _g2_row["cited_studies"]})
+    _g2_s = appmod._suggested({"claim_text": _g2_c, "verdict": _g2_v})
+    with appmod.app.test_request_context("/"):
+        _g2_p = appmod._check_response(_g2_c, _g2_row.get("search_query") or "", _g2_row["verdict"], _g2_row["tldr"],
+                                       _g2_row["explanation"], _g2_row["cited_studies"], _g2_row["studies"], "http://x",
+                                       still_open=_g2_row.get("still_open") or "")
+    _g2b[_g2_c] = (_g2_l["verdict"], _g2_s["verdict"], _g2_p["verdict"], _g2_l["tldr"] == _g2_p["tldr"])
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_g2_c),))
+t("G2b: for each case the stamp in the lists (recent, type-ahead) equals the stamp on the page",
+  all(l_ == s_ == p_ and same for l_, s_, p_, same in _g2b.values())
+  and [x[2] for x in _g2b.values()] == ["false", "insufficient", "insufficient"], _g2b)
+t("  and the lists reach it through the page's own decision",
+  "_nothing_relied" in _inspect.getsource(appmod._listed))
 # F1a and F1b (type-ahead shows only whole rows, at the stamp its page would
 # show) meet L1: a saved "true" that cites a retracted paper is out of date.
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(x) for x in _RT_ST]

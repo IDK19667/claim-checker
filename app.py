@@ -919,6 +919,23 @@ def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool
     return bool(evidence.certainty_cap(studies, cited, comparative, outcome))
 
 
+def _nothing_relied(claim, verdict_value, tldr):
+    """(stamp, takeaway, unseated) for an answer none of whose citations is
+    relied on, the one decision a result page and every list share. An
+    answer the guidance rule set keeps its stamp only where a fresh check
+    would let guidance alone rate the claim with nothing cited
+    (verdict.guidance_may_rate): a citation set aside (a retracted paper)
+    does not unseat it there. Anywhere else a rated answer becomes "Not
+    enough evidence", a guidance answer with the guidance sentence after
+    the untested takeaway, the shape a fresh check writes."""
+    if verdict_value == "insufficient":
+        return verdict_value, tldr, False
+    guided = verdict.from_guidance(tldr)
+    if guided and verdict.guidance_may_rate(claim, verdict_value):
+        return verdict_value, tldr, False
+    return "insufficient", (verdict.unrated_guidance_tldr(tldr) if guided else verdict.UNTESTED_TLDR), True
+
+
 def _listed(v: dict) -> dict:
     """A recent-checks entry with the stamp the page itself would show."""
     # Off-topic studies are not relied on here either (see _check_response),
@@ -926,8 +943,10 @@ def _listed(v: dict) -> dict:
     cited = display.relied_pmids(v.get("cited"), v.get("studies"))
     if set(v.get("cited") or []) - cited:
         v = dict(v, cited=[p for p in v.get("cited") or [] if p in cited])
-        if not cited and v.get("verdict") != "insufficient":
-            return dict(v, verdict="insufficient", **({"tldr": verdict.UNTESTED_TLDR} if "tldr" in v else {}))
+        if not cited:
+            stamp, tldr, unseated = _nothing_relied(v.get("claim_text"), v.get("verdict"), v.get("tldr"))
+            if unseated:
+                return dict(v, verdict=stamp, **({"tldr": tldr} if "tldr" in v else {}))
     outcome = _outcome_group(v.get("search_query"))
     try:
         if any(_capped_true(v["verdict"], v["claim_text"], v["studies"], used, outcome, v.get("tldr"))
@@ -953,17 +972,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         off_numbers = {i + 1 for i, s in enumerate(studies or [])
                        if s.get("off_topic") or evidence.withdrawn(s)}
         explanation = breakdown_mod.drop_citing(explanation, off_numbers, len(studies or []))
-        # An answer the guidance rule set keeps its stamp only where a fresh
-        # check would let guidance alone rate the claim with nothing cited
-        # (verdict.guidance_may_rate): a citation set aside (a retracted
-        # paper) does not unseat it there. Anywhere else it becomes "Not
-        # enough evidence" with the guidance sentence after the untested
-        # takeaway, the shape a fresh check writes.
-        guided = verdict.from_guidance(tldr)
-        if (not cited and verdict_value != "insufficient"
-                and not (guided and verdict.guidance_may_rate(claim, verdict_value))):
-            tldr = verdict.unrated_guidance_tldr(tldr) if guided else verdict.UNTESTED_TLDR
-            verdict_value = "insufficient"
+        unseated = False
+        if not cited:
+            verdict_value, tldr, unseated = _nothing_relied(claim, verdict_value, tldr)
+        if unseated:
             explanation = (explanation.rstrip() + " None of the studies found directly "
                            "test this claim, so there isn't enough evidence to rate it.").strip()
             breakdown = None
