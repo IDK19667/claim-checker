@@ -1,0 +1,825 @@
+{
+ "_note": "Saved results for the desk front's layout and escaping tests. The first is the sample's own saved check (EvidentDesk.fx4, 21 November 2026). The rest are invented for tests; their PMIDs start at 90000000 and point at nothing real.",
+ "rows": [
+  {
+   "claim": "Creatine improves cognitive performance",
+   "search_query": "(creatine OR creatine monohydrate) AND (cognitive performance OR cognition OR memory OR executive function OR mental fatigue)",
+   "verdict": "complicated",
+   "tldr": "Creatine can boost memory and reaction times, but results vary widely by age and task.",
+   "explanation": "Pooled reviews (meta-analyses) and clinical trials show creatine improves certain cognitive measures like memory and processing speed (Studies 1, 2, 8). But effects on other cognitive domains remain mixed or statistically non-significant across different groups (Studies 2, 3, 9).",
+   "still_open": "Long-term cognitive effects across diverse healthy and clinical populations remain poorly understood.",
+   "cited": [
+    "35984306",
+    "39070254",
+    "29704637",
+    "42578920",
+    "37968687",
+    "40854087",
+    "17828627",
+    "42075005",
+    "17046034",
+    "31403610",
+    "38418482"
+   ],
+   "studies": [
+    {
+     "pmid": "35984306",
+     "title": "Effects of creatine supplementation on memory in healthy individuals: a systematic review and meta-analysis of randomized controlled trials.",
+     "journal": "Nutrition reviews",
+     "year": "2023",
+     "publication_types": [
+      "Meta-Analysis",
+      "Systematic Review",
+      "Journal Article"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/35984306/"
+    },
+    {
+     "pmid": "39070254",
+     "title": "The effects of creatine supplementation on cognitive function in adults: a systematic review and meta-analysis.",
+     "journal": "Frontiers in nutrition",
+     "year": "2024",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/39070254/"
+    },
+    {
+     "pmid": "29704637",
+     "title": "Effects of creatine supplementation on cognitive function of healthy individuals: A systematic review of randomized controlled trials.",
+     "journal": "Experimental gerontology",
+     "year": "2018",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/29704637/"
+    },
+    {
+     "pmid": "40755023",
+     "title": "Creatine Supplementation in Combat Sport Athletes: A Narrative Systematic Review.",
+     "journal": "Journal of dietary supplements",
+     "year": "2025",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/40755023/",
+     "population": "athletes"
+    },
+    {
+     "pmid": "40971619",
+     "title": "Creatine and Cognition in Aging: A Systematic Review of Evidence in Older Adults.",
+     "journal": "Nutrition reviews",
+     "year": "2026",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/40971619/",
+     "population": "older adults"
+    },
+    {
+     "pmid": "37042504",
+     "title": "Neuroprotection and Therapeutic Implications of Creatine Supplementation for Brain Injury Complications.",
+     "journal": "Medical journal (Fort Sam Houston, Tex.)",
+     "year": "2023",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/37042504/"
+    },
+    {
+     "pmid": "38582412",
+     "title": "Creatine supplementation research fails to support the theoretical basis for an effect on cognition: Evidence from a systematic review.",
+     "journal": "Behavioural brain research",
+     "year": "2024",
+     "publication_types": [
+      "Systematic Review",
+      "Journal Article"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/38582412/"
+    },
+    {
+     "pmid": "42578920",
+     "title": "Effects of creatine supplementation with and without exercise and diet intervention on body composition, cognitive function, and markers of health in middle-aged and older adults.",
+     "journal": "Journal of the International Society of Sports Nutrition",
+     "year": "2026",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/42578920/",
+     "population": "older adults"
+    },
+    {
+     "pmid": "37968687",
+     "title": "The effects of creatine supplementation on cognitive performance-a randomised controlled study.",
+     "journal": "BMC medicine",
+     "year": "2023",
+     "publication_types": [
+      "Randomized Controlled Trial",
+      "Journal Article",
+      "Research Support, Non-U.S. Gov't"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/37968687/"
+    },
+    {
+     "pmid": "40854087",
+     "title": "The Effects of 8-Week Creatine Hydrochloride and Creatine Ethyl Ester Supplementation on Cognition, Clinical Outcomes, and Brain Creatine Levels in Perimenopausal and Menopausal Women (CONCRET-MENOPA): A Randomized Controlled Trial.",
+     "journal": "Journal of the American Nutrition Association",
+     "year": "2026",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/40854087/",
+     "population": "women after menopause"
+    },
+    {
+     "pmid": "17828627",
+     "title": "Creatine supplementation and cognitive performance in elderly individuals.",
+     "journal": "Neuropsychology, development, and cognition. Section B, Aging, neuropsychology and cognition",
+     "year": "2007",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial",
+      "Research Support, Non-U.S. Gov't"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/17828627/",
+     "population": "older adults"
+    },
+    {
+     "pmid": "42075005",
+     "title": "Single-Dose Creatine Reduces Sleep Deprivation-Induced Deterioration in Cognitive Performance.",
+     "journal": "Nutrients",
+     "year": "2026",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/42075005/"
+    },
+    {
+     "pmid": "17046034",
+     "title": "Creatine supplementation, sleep deprivation, cortisol, melatonin and behavior.",
+     "journal": "Physiology & behavior",
+     "year": "2007",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/17046034/"
+    },
+    {
+     "pmid": "11790638",
+     "title": "Brain proton magnetic resonance spectroscopy in Alzheimer disease: changes after treatment with xanomeline.",
+     "journal": "The American journal of geriatric psychiatry : official journal of the American Association for Geriatric Psychiatry",
+     "year": "2002",
+     "publication_types": [
+      "Clinical Trial",
+      "Clinical Trial, Phase III",
+      "Journal Article",
+      "Randomized Controlled Trial",
+      "Research Support, Non-U.S. Gov't"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/11790638/",
+     "off_topic": "tests something other than what this claim is about"
+    },
+    {
+     "pmid": "31403610",
+     "title": "Can Creatine Combat the Mental Fatigue-associated Decrease in Visuomotor Skills?",
+     "journal": "Medicine and science in sports and exercise",
+     "year": "2020",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/31403610/"
+    },
+    {
+     "pmid": "38418482",
+     "title": "Single dose creatine improves cognitive performance and induces changes in cerebral high energy phosphates during sleep deprivation.",
+     "journal": "Scientific reports",
+     "year": "2024",
+     "publication_types": [
+      "Journal Article"
+     ],
+     "authors": [],
+     "abstract": "",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/38418482/"
+    }
+   ],
+   "breakdown": {
+    "says": [
+     "Pooled reviews (meta-analyses) and clinical trials show creatine improves certain cognitive measures like memory and processing speed (Studies 1, 2, 8).",
+     "But effects on other cognitive domains remain mixed or statistically non-significant across different groups (Studies 2, 3, 9).",
+     "Creatine improved memory with a standard average difference of 0.29 (likely range, 0.04 to 0.53) (Study 1).",
+     "Who was studied: healthy adults, older adults, and sleep-deprived people tested in clinical trials (Studies 1, 2, 12).",
+     "Creatine can also improve intelligence and reasoning in healthy people (Study 3)."
+    ],
+    "parts": [
+     {
+      "part": "Creatine improves cognitive performance",
+      "assessment": "Creatine supplement use improves certain cognitive measures like memory and processing speed (Study 2).",
+      "studies": [
+       2
+      ]
+     }
+    ],
+    "evidence": [
+     "A systematic review found that creatine supplement use improved overall measures of memory compared with placebo (Study 1).",
+     "Subgroup (a smaller group picked out of the whole) analyses revealed a significant improvement in memory specifically in older adults aged 66 to 76 years (Study 1).",
+     "Another pooled review (meta-analysis) noted positive effects on memory, attention time, and processing speed time (Study 2).",
+     "A trial with 123 people showed a small helpful effect of creatine on cognitive tasks (Study 9).",
+     "Single-dose creatine studies showed reduced cognitive deterioration during sleep deprivation (Study 12)."
+    ],
+    "effect_size": "Creatine improved memory with a standard average difference of 0.29 (likely range, 0.04 to 0.53) (Study 1).",
+    "applies_to": "Healthy adults, older adults, and sleep-deprived people tested in clinical trials (Studies 1, 2, 12).",
+    "not_applies_to": "",
+    "unknowns": "",
+    "strength": "Multiple systematic reviews and randomized controlled trials support mild cognitive benefits, especially in older or stressed adults (Studies 1, 2, 8).",
+    "populations": [
+     "older adults",
+     "women after menopause"
+    ],
+    "concluded": [
+     {
+      "n": 1,
+      "said": "Creatine supplementation enhanced measures of memory performance in healthy individuals, especially in older adults (66-76 years)."
+     },
+     {
+      "n": 2,
+      "said": "Current evidence suggests that creatine monohydrate supplementation may confer beneficial effects on cognitive function in adults, particularly in the domains of memory, attention time, and information processing speed. Larger robust clinical trials are warranted to further validate these findings."
+     },
+     {
+      "n": 3,
+      "said": "Oral creatine administration may improve short-term memory and intelligence/reasoning of healthy individuals but its effect on other cognitive domains remains unclear. Findings suggest potential benefit for aging and stressed individuals. Since creatine is safe, future studies should include larger sample sizes. It is imperative that creatine should be tested on patients with dementias or cognitive impairment."
+     },
+     {
+      "n": 8,
+      "said": "CrM supplementation with and without exercise and diet intervention may help middle-aged and older adults maintain muscle mass and strength while favourably affecting selected markers of health and cognitive function. Individual cognitive and biomarker findings should be interpreted as exploratory."
+     },
+     {
+      "n": 9,
+      "said": "Our study, in combination with the literature, implies that creatine might have a small beneficial effect. Larger studies are needed to confirm or rule out this effect. Given the safety and broad availability of creatine, this is well worth investigating; a small effect could have large benefits when scaled over time and over many people."
+     },
+     {
+      "n": 10,
+      "said": "Our findings suggest that this supplementation protocol may be a promising, safe, effective, and practical dietary strategy for improving clinical outcomes and elevating brain creatine concentrations in perimenopausal and menopausal women."
+     },
+     {
+      "n": 12,
+      "said": "Our results show that a dose of 0.2 g/kg creatine is associated with a reduced deterioration in cognitive performance during sleep deprivation. Although the effect is less pronounced than with a high dose of 0.35 g/kg, there is still an improvement of up to 12%."
+     },
+     {
+      "n": 15,
+      "said": "Creatine supplementation improved physical (strength endurance) and prolonged cognitive (Stroop accuracy) performance, yet it did not combat MF-induced impairments in short sport-specific psychomotor or cognitive (Flanker) performance."
+     },
+     {
+      "n": 16,
+      "said": "Our results show that creatine induces changes in PCr/Pi, ATP, tCr/tNAA, prevents a drop in pH level, and improves cognitive performance and processing speed. These outcomes suggest that a high single dose of creatine can partially reverse metabolic alterations and fatigue-related cognitive deterioration."
+     }
+    ],
+    "contents": ""
+   }
+  },
+  {
+   "claim": "Fish oil lowers blood pressure",
+   "search_query": "(fish oil OR omega-3) AND blood pressure",
+   "verdict": "complicated",
+   "tldr": "Fish oil lowers blood pressure a little in people with high blood pressure, and hardly at all in others.",
+   "explanation": "Pooled trials found fish oil lowers blood pressure by a few points (Studies 1, 3). The drop was larger in people who already had high blood pressure (Studies 2, 5), and small in healthy volunteers (Study 4).",
+   "still_open": "Whether the small drop lasts beyond a year, and what dose matters.",
+   "cited": [
+    "90000001",
+    "90000002",
+    "90000003",
+    "90000004",
+    "90000005"
+   ],
+   "studies": [
+    {
+     "pmid": "90000001",
+     "title": "Omega-3 fatty acids and blood pressure: a meta-analysis of randomized trials.",
+     "journal": "Journal of Hypertension",
+     "year": "2022",
+     "publication_types": [
+      "Meta-Analysis",
+      "Systematic Review",
+      "Journal Article"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000001/"
+    },
+    {
+     "pmid": "90000002",
+     "title": "Fish oil supplements in adults with high blood pressure: a randomized controlled trial.",
+     "journal": "Hypertension",
+     "year": "2021",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000002/",
+     "population": "adults with high blood pressure"
+    },
+    {
+     "pmid": "90000003",
+     "title": "A systematic review of marine omega-3 intake and blood pressure.",
+     "journal": "Nutrients",
+     "year": "2020",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000003/"
+    },
+    {
+     "pmid": "90000004",
+     "title": "Twelve weeks of fish oil and resting blood pressure in healthy volunteers.",
+     "journal": "Clinical Nutrition",
+     "year": "2019",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000004/"
+    },
+    {
+     "pmid": "90000005",
+     "title": "Dose and response: omega-3 and blood pressure in older adults.",
+     "journal": "Age and Ageing",
+     "year": "2023",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000005/",
+     "population": "older adults"
+    },
+    {
+     "pmid": "90000006",
+     "title": "Diet, fish intake and blood pressure in a national cohort.",
+     "journal": "European Heart Journal",
+     "year": "2018",
+     "publication_types": [
+      "Journal Article",
+      "Observational Study"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000006/"
+    },
+    {
+     "pmid": "90000007",
+     "title": "Omega-3 fatty acids in heart health: a review.",
+     "journal": "Nutrition Reviews",
+     "year": "2017",
+     "publication_types": [
+      "Journal Article",
+      "Review"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000007/"
+    },
+    {
+     "pmid": "90000008",
+     "title": "Fish oil and triglycerides after heart surgery.",
+     "journal": "Annals of Surgery",
+     "year": "2016",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000008/",
+     "off_topic": "tests triglycerides after surgery, not blood pressure"
+    }
+   ],
+   "breakdown": {
+    "says": [
+     "Pooled trials found fish oil lowers blood pressure by a few points (Studies 1, 3).",
+     "The drop was larger in people who already had high blood pressure (Studies 2, 5), and small in healthy volunteers (Study 4)."
+    ],
+    "parts": [],
+    "evidence": [
+     "A pooled review found a small fall in systolic pressure (Study 1)."
+    ],
+    "effect_size": "",
+    "applies_to": "",
+    "not_applies_to": "",
+    "unknowns": "",
+    "strength": "Several trials and two pooled reviews agree on a small effect (Studies 1, 2, 3).",
+    "populations": [],
+    "concluded": [
+     {
+      "n": 1,
+      "said": "Omega-3 supplementation reduced systolic blood pressure modestly."
+     },
+     {
+      "n": 2,
+      "said": "Fish oil lowered blood pressure in hypertensive adults."
+     }
+    ],
+    "contents": ""
+   }
+  },
+  {
+   "claim": "Green tea helps weight loss",
+   "search_query": "green tea AND (weight loss OR body weight)",
+   "verdict": "complicated",
+   "tldr": "Green tea may help a little with weight, but the trials are small and short.",
+   "explanation": "Pooled trials found a small weight loss with green tea (Study 1). Single trials were short and small, and their results varied (Studies 2, 3).",
+   "still_open": "Whether any effect lasts, since most trials ran for 12 weeks or less.",
+   "cited": [
+    "90000011",
+    "90000012",
+    "90000013"
+   ],
+   "studies": [
+    {
+     "pmid": "90000011",
+     "title": "Green tea catechins and body weight: a meta-analysis.",
+     "journal": "Obesity Reviews",
+     "year": "2021",
+     "publication_types": [
+      "Meta-Analysis",
+      "Systematic Review",
+      "Journal Article"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000011/"
+    },
+    {
+     "pmid": "90000012",
+     "title": "Green tea extract for weight loss in adults with obesity: a randomized trial.",
+     "journal": "International Journal of Obesity",
+     "year": "2020",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000012/",
+     "population": "adults with obesity"
+    },
+    {
+     "pmid": "90000013",
+     "title": "Twelve weeks of green tea and waist size.",
+     "journal": "Clinical Nutrition",
+     "year": "2019",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000013/"
+    },
+    {
+     "pmid": "90000014",
+     "title": "Tea drinking habits and weight in a cohort of women.",
+     "journal": "Public Health Nutrition",
+     "year": "2018",
+     "publication_types": [
+      "Journal Article",
+      "Observational Study"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000014/"
+    },
+    {
+     "pmid": "90000015",
+     "title": "Green tea and liver enzymes in rats.",
+     "journal": "Food and Chemical Toxicology",
+     "year": "2017",
+     "publication_types": [
+      "Journal Article"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000015/",
+     "off_topic": "a study in rats about the liver, not weight in people"
+    }
+   ],
+   "breakdown": {
+    "says": [
+     "Pooled trials found a small weight loss with green tea (Study 1).",
+     "Single trials were short and small, and their results varied (Studies 2, 3)."
+    ],
+    "parts": [],
+    "evidence": [],
+    "effect_size": "",
+    "applies_to": "",
+    "not_applies_to": "",
+    "unknowns": "",
+    "strength": "",
+    "populations": [],
+    "concluded": [
+     {
+      "n": 1,
+      "said": "Green tea catechins produced a small reduction in body weight."
+     }
+    ],
+    "contents": ""
+   }
+  },
+  {
+   "claim": "Magnesium improves sleep",
+   "search_query": "magnesium AND sleep",
+   "verdict": "complicated",
+   "tldr": "Magnesium may help some older adults sleep a little better, but there are few good trials.",
+   "explanation": "A review of three small trials found older adults fell asleep a little sooner (Study 1). One trial found better sleep scores, in a small group (Study 2).",
+   "still_open": "Whether it helps people who are not short of magnesium.",
+   "cited": [
+    "90000021",
+    "90000022"
+   ],
+   "studies": [
+    {
+     "pmid": "90000021",
+     "title": "Magnesium supplementation for insomnia in older adults: a systematic review.",
+     "journal": "BMC Complementary Medicine",
+     "year": "2021",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000021/",
+     "population": "older adults"
+    },
+    {
+     "pmid": "90000022",
+     "title": "Oral magnesium and sleep quality: a randomized controlled trial.",
+     "journal": "Journal of Research in Medical Sciences",
+     "year": "2012",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000022/"
+    },
+    {
+     "pmid": "90000023",
+     "title": "Dietary magnesium and sleep duration in a cohort.",
+     "journal": "Nutrients",
+     "year": "2018",
+     "publication_types": [
+      "Journal Article",
+      "Observational Study"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000023/"
+    }
+   ],
+   "breakdown": {
+    "says": [
+     "A review of three small trials found older adults fell asleep a little sooner (Study 1).",
+     "One trial found better sleep scores, in a small group (Study 2)."
+    ],
+    "parts": [],
+    "evidence": [],
+    "effect_size": "",
+    "applies_to": "",
+    "not_applies_to": "",
+    "unknowns": "",
+    "strength": "",
+    "populations": [],
+    "concluded": [
+     {
+      "n": 2,
+      "said": "Magnesium appeared to improve subjective measures of insomnia."
+     }
+    ],
+    "contents": ""
+   }
+  },
+  {
+   "claim": "Copper bracelets ease arthritis pain",
+   "search_query": "copper bracelet AND arthritis",
+   "verdict": "insufficient",
+   "tldr": "Nothing on PubMed matched this claim well enough to weigh.",
+   "explanation": "No relevant studies were found on PubMed for this claim. That doesn't mean the claim is false, it may just not be well studied yet.",
+   "still_open": "Whether anyone has tested this claim directly. PubMed found nothing that does.",
+   "cited": [],
+   "studies": [],
+   "breakdown": null
+  },
+  {
+   "claim": "Escaping test <b>bold</b> & \"quoted\" <img src=x onerror=\"document.title='pwned'\">",
+   "search_query": "escape <test> & \"query\"",
+   "verdict": "complicated",
+   "tldr": "Short answer, it's \"quoted\", with <i>markup</i> & <img src=x onerror=\"document.title='pwned'\">",
+   "explanation": "The answer text has <b>markup</b> & a reference (Study 1) and <img src=x onerror=\"document.title='pwned'\">.",
+   "still_open": "Still open with <script>document.title='pwned'</script> in it.",
+   "cited": [
+    "90000031"
+   ],
+   "studies": [
+    {
+     "pmid": "90000031",
+     "title": "A \"quoted\" title, it's <script>document.title='pwned'</script> & ampersand.",
+     "journal": "Journal of <em>Markup</em>",
+     "year": "2020",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "<i>O'Evil</i> \"Q\" & Author",
+      "Plain Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000031/"
+    },
+    {
+     "pmid": "90000032",
+     "title": "A plain second title.",
+     "journal": "Plain Journal",
+     "year": "2019",
+     "publication_types": [
+      "Journal Article",
+      "Observational Study"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000032/"
+    }
+   ],
+   "breakdown": {
+    "says": [
+     "The answer text has <b>markup</b> & a reference (Study 1) and <img src=x onerror=\"document.title='pwned'\">."
+    ],
+    "parts": [],
+    "evidence": [],
+    "effect_size": "",
+    "applies_to": "",
+    "not_applies_to": "",
+    "unknowns": "",
+    "strength": "",
+    "populations": [],
+    "concluded": [
+     {
+      "n": 1,
+      "said": "A quote with <u>markup</u>."
+     }
+    ],
+    "contents": ""
+   }
+  }
+ ]
+}

@@ -4,6 +4,34 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-22 (desk-front): The lamp-lit desk is the front page
+
+The owner chose the lamp-and-desk sample as the real front ("Do the lamp
+version"). It came in as `static/desk.css` and `static/desk.js` beside
+`app.js`, which still makes every request it made before.
+
+- **The wood is a picture generated for this project.** The desk top,
+  `static/desk/wood-2048.jpg`, was generated for Evident on the owner's
+  image-generator account on 20 November 2026. It is not stock and not
+  someone else's photograph. It loads after the page has, and the text
+  desk needs none of it.
+- **The desk's fonts are for the front only.** Bricolage Grotesque's
+  wide optical range and Plex Mono 400 are self-hosted with the rest; the
+  other pages keep `style.css` and its three files.
+- **No empty stop.** Weighed needs a study, Research a study and
+  something written. A result with no studies has four stops, and the
+  bar, the rail and the menu count only those.
+- **The found and screened counts, the pile and "Found, not read"
+  left.** The desk shows what was read; the search that ran is on the
+  last stop.
+- **A saved result opens at the answer (stop 2).** Only a check the
+  reader just ran glides there, once, and any touch, wheel or key stops
+  it.
+- **Text mode on Save-Data or 2G.** The desk script never fetches
+  three.js or the wood there; the stops read as a page.
+- **Without scripts the claim box is hidden** (it cannot check
+  anything) and a result reads top to bottom from the server's HTML.
+
 ## 2026-11-22 (release): The reasoning cites only studies the answer stands on
 
 Output rules from the last two reviews and the last two runs on real

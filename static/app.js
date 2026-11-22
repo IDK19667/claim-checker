@@ -209,34 +209,19 @@ document.addEventListener("click", (e) => {
   input.focus({ preventScroll: true });
 });
 
-// The phone's share bar waits for the short answer to scroll past. On first
-// view the answer is all there is on screen, and a bar across the foot of it
-// would cover the lines the reader came for. Once the summary is above the top
-// edge the bar appears; scroll back up to it and the bar goes again.
-let shareBarWatch = null;
-function disarmShareBar() {
-  if (shareBarWatch) { shareBarWatch.disconnect(); shareBarWatch = null; }
-  $("bar-sticky").hidden = true;
-  document.body.classList.remove("has-bar");
-}
-function armShareBar() {
-  disarmShareBar();
-  const summary = document.querySelector("#result .answer");
-  if (!summary || !("IntersectionObserver" in window)) return;
-  shareBarWatch = new IntersectionObserver(([e]) => {
-    const past = !resultSection.hidden && !e.isIntersecting && e.boundingClientRect.bottom <= 0;
-    $("bar-sticky").hidden = !past;
-    document.body.classList.toggle("has-bar", past);
-  });
-  shareBarWatch.observe(summary);
-}
-
+// One page, three views. On a result <html> carries `checked`, and the desk's
+// stops after the first are shown; at home and on an error only stop 1 is.
+// The claim box, the error and the home panel are all in stop 1.
 function show(section) {
-  for (const s of [askSection, resultSection, errorSection]) s.hidden = s !== section;
+  const result = section === resultSection;
+  root.classList.toggle("checked", result);
+  // A result keeps the claim box: it is stop 1, the claim as typed, ready to edit.
+  askSection.hidden = !(section === askSection || result);
+  errorSection.hidden = section !== errorSection;
   askMore.hidden = section !== askSection;
   if (trustSection) trustSection.hidden = section !== askSection;
   document.body.classList.toggle("view-ask", section === askSection);
-  if (section !== resultSection) disarmShareBar();
+  if (!result) tellDesk("desk:home", {});
   window.scrollTo(0, 0);
 }
 if (!$("server-result")) document.body.classList.add("view-ask");
@@ -255,19 +240,6 @@ function setWorking(on) {
 let currentResult = null;
 let userTapped = false;
 window.addEventListener("pointerdown", () => { userTapped = true; }, { once: true, passive: true });
-
-// "Study 4" / "Studies 1, 4 and 6" in the explanation become tap targets
-// that open that study's sheet, so the reader never has to count rows.
-function linkStudyRefs(text, count) {
-  const safe = escapeHtml(text);
-  return safe.replace(/\b(Stud(?:y|ies))\s+(\d+(?:\s*(?:,\s*and|,|and|&amp;)\s*\d+)*)/gi, (m, word, nums) => {
-    const linked = nums.replace(/\d+/g, (n) => {
-      const i = Number(n);
-      return i >= 1 && i <= count ? `<button type="button" class="ref" data-i="${i - 1}" aria-label="Open study ${i}">${i}</button>` : n;
-    });
-    return `${word} ${linked}`;
-  });
-}
 
 // How much to lean on the answer, in one sentence. The wording of a real check
 // is made on the server (evidence.evidence_line); mirrors display.confidence_line.
@@ -347,88 +319,12 @@ function breakdownView(data) {
   };
 }
 
-// (d) on the result screen. The sentences are picked server-side in
-// breakdown.says from prose that has already passed the gate; a result
-// cached before the block existed falls back to the explanation, which is
-// what that reader was shown at the time.
-function renderSays(data) {
-  const sec = $("says-sec"), wrap = $("says");
-  if (!sec || !wrap) return;
-  const bv = breakdownView(data);
-  const lines = (bv ? bv.says : [data.explanation])
-    .filter((t) => String(t || "").trim());
-  sec.hidden = !lines.length;
-  wrap.innerHTML = lines
-    .map((t) => `<p class="says-p">${linkStudyRefs(t, data.studies.length)}</p>`)
-    .join("");
-}
-
 // A result saved on this device before the shelf existed carries no cloth:
 // its tier stands in, so an old check still draws a whole shelf.
 const KIND_FROM_TIER = { strong: "strong", weak: "weak", retracted: "retracted" };
 const kindOf = (s) => s.kind || KIND_FROM_TIER[s.tier] || "human";
 const KIND_LABELS = { strong: "Strong design", human: "Human study", lab: "Animal or lab",
                       weak: "Opinion or single case", retracted: "Retracted" };
-
-function renderChart(data) {
-  const sec = $("chart-sec");
-  if (!sec) return;
-  const ev = data.evidence;
-  if (!ev || !ev.read) { sec.hidden = true; return; }
-  sec.hidden = false;
-  $("chart-sum").textContent = ev.summary || "";
-  $("chart-facts").textContent = ev.facts || "";
-  $("chart-desc").textContent = ev.described || "";
-
-  const bars = $("chart-bars");
-  bars.classList.remove("reveal");
-  bars.innerHTML = data.studies.map((s, i) => {
-    const tip = [s.type_label, s.year, s.off_topic ? "off topic" : ""].filter(Boolean).join(" \u00b7 ");
-    const said = [`${s.spine ? s.spine + " " : "Study "}${String(i + 1).padStart(2, "0")}`,
-                  (s.type_label || "").toLowerCase() === (s.spine || "").toLowerCase() ? "" : (s.type_label || "").toLowerCase(), s.year,
-                  s.cited_in_verdict ? "used for this verdict"
-                    : s.off_topic ? "read, off topic"
-                    : s.background ? `${s.background_why || "animal or lab"}, background only` : "read but not used"]
-      .filter(Boolean).join(", ");
-    return `<button type="button" class="barcol${s.cited_in_verdict ? " is-used" : ""}" data-i="${i}" style="--i:${i}"` +
-      ` aria-label="${escapeHtml(said)}. Go to it in the list of studies.">` +
-      `<span class="barcol-track"><span class="barcol-bar h-${escapeHtml(s.tier || "moderate")} k-${escapeHtml(kindOf(s))}">` +
-      `<span class="barcol-spine" aria-hidden="true">${escapeHtml(s.spine || "")}</span></span></span> ` +
-      `<span class="barcol-no">${String(i + 1).padStart(2, "0")}</span>` +
-      (tip ? `<span class="barcol-tip" aria-hidden="true">${escapeHtml(tip)}</span>` : "") +
-      "</button>";
-  }).join("");
-  // The key names only the cloths on this shelf, worded once on the server.
-  const kinds = ev.kinds || Object.keys(KIND_LABELS)
-    .filter((k) => data.studies.some((s) => kindOf(s) === k))
-    .map((k) => ({ kind: k, label: KIND_LABELS[k] }));
-  $("shelf-key").innerHTML = kinds.map((k) =>
-    `<li><i class="k-${escapeHtml(k.kind)}${k.kind === "retracted" ? " h-retracted" : ""}"></i>${escapeHtml(k.label)}</li>`).join("");
-  fitSpines();
-  // The one new moment in the page, and only on a check that just happened:
-  // a cached result is not news and does not announce itself.
-  if (!data.cached && !data.restored) {
-    requestAnimationFrame(() => bars.classList.add("reveal"));
-  }
-}
-
-// A bar is a way into the study it stands for: mark the bar, unfold the group
-// the row sits in, put the row in view and give it the focus, so a reader on
-// a keyboard lands where a finger would have.
-function showStudy(i) {
-  for (const b of document.querySelectorAll("#chart-bars .barcol")) {
-    b.classList.toggle("is-on", Number(b.dataset.i) === i);
-  }
-  const li = document.querySelector(`#sources .study[data-i="${i}"]`);
-  if (!li) return;
-  const group = li.closest("details");
-  if (group) group.open = true;
-  for (const el of document.querySelectorAll("#sources .study.target")) el.classList.remove("target");
-  li.classList.add("target");
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  li.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
-  (li.querySelector(".study-go") || li).focus({ preventScroll: true });
-}
 
 // Shown only when a check came back without usable evidence. Everything
 // here is derived from the claim and the local cache, and none of it
@@ -470,146 +366,244 @@ function renderNextSteps(ns, claim) {
   }
 }
 
-// ---- The deeper layer -------------------------------------------------------
-// Mirrors the <details> in templates/index.html exactly: a cold shared link is
-// server rendered and a live check is rendered here, and the two must be the
-// same page. Nothing is computed from the text: every sentence that reaches
-// this point has already been through the gate in breakdown.py, which dropped
-// anything without a study number and anything carrying a figure the abstracts
-// do not have. This only lays it out.
-// Who the evidence covers and who it does not: the breakdown's own fields,
-// with what was already printed above taken out. The narrow groups come off
-// the PubMed records on the server, so that note is a list, not prose.
-function renderWho(data) {
-  const sec = $("who-sec"), wrap = $("who");
-  if (!sec || !wrap) return;
+// ---- The desk front's result stops ------------------------------------------
+// Mirrors templates/index.html exactly: a shared link is server rendered and a
+// live check is rendered here, and the two must be the same page. Every line
+// below is worded from the record's own study list (display.desk_stops,
+// desk_lines, desk_named, desk_refs and rests_by_design are the same; a test
+// runs both on the same records). Nothing is computed from the prose: every
+// sentence has already been through the gate in breakdown.py.
+
+const VERDICT_SETS = { relied: "Relied on", back: "Background only, not counted", read: "Read, not relied on", off: "Set aside: off topic" };
+const pad2 = (n) => String(n).padStart(2, "0");
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function joinAnd(items) {
+  const xs = items.filter(Boolean);
+  if (xs.length <= 1) return xs[0] || "";
+  return xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1];
+}
+// The lines of "What the research says": the breakdown's, or the explanation.
+function saysLines(data) {
   const bv = breakdownView(data);
-  const count = data.studies.length;
-  const groups = bv ? bv.populations : [];
-  const prose = (text) => `<p class="says-p">${linkStudyRefs(text, count)}</p>`;
-  const yes = !!(bv && (bv.applies_to || groups.length));
-  const label = $("who-label");
-  if (label) label.textContent = bv && !yes && bv.not_applies_to
-    ? "Who this does not apply to" : "Who and what this applies to";
-  const html = bv
-    ? (bv.applies_to ? prose(bv.applies_to) : "") +
-      (groups.length
-        ? `<p class="deeper-p narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(groups.join(", "))}. A result found in one group may not hold for everyone.</p>`
-        : "") +
-      (bv.not_applies_to
-        ? (yes ? `<p class="section-label label-2">And who it does not</p>` : "") + prose(bv.not_applies_to)
-        : "")
-    : "";
-  sec.hidden = !html;
-  wrap.innerHTML = html;
+  return (bv ? bv.says : [data.explanation]).filter((t) => String(t || "").trim());
+}
+// The stops this result shows, by name. A stop with nothing real to show is
+// left out: Weighed needs a study, Research a study and something written.
+function deskStops(data) {
+  const out = ["Claim", "Answer", "Read"];
+  if ((data.studies || []).length) {
+    out.push("Weighed");
+    if (breakdownView(data) || saysLines(data).length) out.push("Research");
+  }
+  out.push("Open");
+  return out;
+}
+function deskLines(data) {
+  const studies = data.studies || [];
+  const g = sourceGroups(studies);
+  const n = studies.length, r = g.cited.length, b = g.back.length, o = g.others.length, x = g.excluded.length;
+  if (!n) return { read: "No studies read.", path: "", legend: "", below: "Below: the search that ran, and what is still open.", rests: "" };
+  const path = joinAnd([r ? `${r} relied on` : "None relied on", b ? `${b} background only` : "",
+                        o ? `${o} read and not relied on` : "", x ? `${x} set aside as off topic` : ""]) + ".";
+  const rest = [];
+  if (o + b) rest.push(`the ${o + b} read but not relied on` + (r ? " at its edge" : ""));
+  if (x) rest.push(`the ${x} off topic face down`);
+  const legend = r
+    ? `In the light: the ${plural(r, "paper", "papers")} the answer relies on` + (rest.length ? ", with " + joinAnd(rest) : "") + "."
+    : "In the light: " + joinAnd(rest) + ". None was relied on.";
+  const below = "Below: what was read, the " + plural(n, "study", "studies")
+    + (deskStops(data).includes("Research") ? ", the full answer," : ",") + " and what is still open.";
+  const more = [];
+  if (o + b) more.push(`${o + b} more ${o + b === 1 ? "was" : "were"} read and not relied on`);
+  if (x) more.push(`${x} ${x === 1 ? "was" : "were"} set aside as off topic`);
+  const tail = joinAnd(more);
+  const rests = `Rests on ${plural(r, "study", "studies")}.` + (tail ? " " + tail.slice(0, 1).toUpperCase() + tail.slice(1) + "." : "");
+  return { read: plural(n, "study", "studies") + " read.", path, legend, below, rests };
+}
+function restsByDesign(studies) {
+  const order = [], by = {};
+  (studies || []).forEach((s, i) => {
+    if (!s.cited_in_verdict || s.off_topic) return;
+    const d = typeInfo(s.publication_types).label;
+    if (!by[d]) { by[d] = []; order.push(d); }
+    by[d].push(i + 1);
+  });
+  return order.map((d) => {
+    const ns = by[d];
+    let label = d.toLowerCase();
+    if (ns.length > 1) {
+      if (/analysis$/.test(label)) label = label.replace(/analysis$/, "analyses");
+      else if (/(review|trial|article|study)$/.test(label)) label = label.endsWith("study") ? label.replace(/study$/, "studies") : label + "s";
+      else if (!label.endsWith("y")) label += "s";
+    }
+    if (d === DEFAULT_TYPE[0]) label += ", design not labelled";
+    return { count: ns.length, label, refs: (ns.length > 1 ? "Studies " : "Study ") + ns.join(", ") };
+  });
+}
+// "Study 4", "Studies 1, 4 and 6": each number a link to its row in Weighed.
+const REF_RE = /\b(Stud(?:y|ies))\s+(\d+(?:\s*(?:,\s*and|,|and|&amp;)\s*\d+)*)/gi;
+function deskRefs(text, count) {
+  return escapeHtml(text).replace(REF_RE, (m, word, nums) => word + " " + nums.replace(/\d+/g, (d) => {
+    const i = Number(d);
+    return i >= 1 && i <= count
+      ? `<a class="ref" href="#row-${i}" data-n="${i}" aria-label="Study ${i}, show it in the list">${i}</a>` : d;
+  }));
+}
+function deskNamed(data) {
+  const n = (data.studies || []).length, out = new Set();
+  for (const line of saysLines(data)) {
+    for (const m of escapeHtml(line).matchAll(REF_RE)) {
+      for (const d of m[2].match(/\d+/g)) { const i = Number(d); if (i >= 1 && i <= n) out.add(i); }
+    }
+  }
+  return [...out].sort((a, b) => a - b);
 }
 
-function renderBreakdown(data, count, studies = []) {
-  const bd = data && data.breakdown, bv = breakdownView(data);
-  const wrap = $("deeper");
-  if (!wrap) return;
-  const body = $("deeper-body");
-  if (!bd) {
-    // A result cached before the breakdown existed has none. The section
-    // disappears rather than opening onto an apology.
-    wrap.hidden = true;
-    wrap.open = false;
-    body.innerHTML = "";
-    return;
-  }
-  wrap.hidden = false;
-  // The studies the verdict used, counted from the same cited_in_verdict
-  // flag the study list and the chart read. A count stored in an old
-  // breakdown is never shown.
-  const restsOn = studies.filter((s) => s.cited_in_verdict).length;
-  // Collapsed on every new result, including one reopened from history.
-  wrap.open = false;
+const backBtn = '<button class="back" type="button" data-go="1">Back to the short answer</button>';
+const eyebrow = (stops, name, text) =>
+  `<p class="eyebrow"${name === "Open" ? ' id="h-open"' : ""}><b>${pad2(stops.indexOf(name) + 1)}</b>${escapeHtml(text)}</p>`;
 
-  const prose = (text) => `<p class="deeper-p">${linkStudyRefs(text, count)}</p>`;
-  const sec = (label, inner) =>
-    `<section class="deeper-sec"><p class="section-label">${escapeHtml(label)}</p>${inner}</section>`;
-
-  const out = [];
-  if (bv.parts.length) {
-    out.push(sec("The claim, part by part", `<ol class="parts">${bv.parts.map((p) => `
-      <li class="part">
-        <p class="part-claim">${escapeHtml(p.part)}</p>
-        <p class="part-take">${linkStudyRefs(p.assessment, count)}</p>
-      </li>`).join("")}</ol>`));
-  }
-  if (bv.evidence.length || bv.effect_size) {
-    out.push(sec("What the evidence shows",
-      bv.evidence.map(prose).join("") +
-      (bv.effect_size
-        ? `<p class="effect"><b>How big the effect is</b><span>${linkStudyRefs(bv.effect_size, count)}</span></p>`
-        : "")));
-  }
-  // Quoted from the abstracts on the server, so the quote is escaped and never
-  // linked: a "study 2" inside it is the authors' study 2, not ours.
-  if ((bd.concluded || []).length) {
-    out.push(sec("What each study concluded", `<ol class="concluded">${bd.concluded.map((c) => {
-      const st = studies[c.n - 1] || {};
-      const who = [`Study ${c.n}`, st.type_label, st.year].filter(Boolean).join(" · ");
-      return `
-      <li class="said">
-        <p class="said-who">${linkStudyRefs(who, count)}</p>
-        <blockquote class="said-q">${escapeHtml(c.said)}</blockquote>
-      </li>`;
-    }).join("")}</ol><p class="said-note">In the authors' own words, from the summary each study was published with.</p>`));
-  }
-  if (bv.strength) out.push(sec("Why the verdict is what it is", prose(bv.strength)));
-  if (bv.unknowns) out.push(sec("What is still unknown", prose(bv.unknowns)));
-  out.push(`<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them. Tap a study number to read it.</p>`);
-  body.innerHTML = out.join("");
-
-  const head = wrap.querySelector(".deeper-head .group-count");
-  if (head) {
-    head.textContent = restsOn
-      ? `${restsOn} ${restsOn === 1 ? "study" : "studies"}`
-      : "";
-  }
-  $("deeper-count").hidden = !restsOn;
-  $("deeper-what").textContent = bd.contents || "";
+function studyRowHtml(s, i, key, named) {
+  const n = i + 1, d = typeInfo(s.publication_types).label;
+  const title = String(s.title || "");
+  const href = safeHref(s.url);
+  const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "")
+    + (href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="Study ${n} on PubMed, opens in a new tab">PubMed ${escapeHtml(s.pmid)}</a>` : `PubMed ${escapeHtml(s.pmid)}`);
+  return `<li class="row" id="row-${n}" data-n="${n}" data-i="${i}">`
+    + `<button class="row-head" type="button" aria-pressed="false" aria-label="Study ${n}, ${escapeHtml(d)}: ${escapeHtml(title.replace(/\n/g, " ").replace(/^\.+|\.+$/g, ""))}. Lift its sheet">`
+    + `<span class="num">${n}</span><span class="design">${escapeHtml(d)}</span><span class="ttl">${escapeHtml(title)}</span></button>`
+    + `<div class="body"><p class="src">${src}</p>`
+    + `<button class="row-more" type="button" aria-expanded="false" aria-controls="more-${n}" aria-label="Details for study ${n}">Details</button>`
+    + `<div class="more" id="more-${n}" hidden><p class="status${key !== "relied" ? " no" : ""}">${VERDICT_SETS[key]}</p>`
+    + (named.includes(n) ? '<p class="named">The answer names it</p>' : "")
+    + `<p class="note why">${escapeHtml(studyWhy(s))}</p>`
+    + `<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">Deep dive</button></div></div></li>`;
 }
 
-// A spine is lettered only when its word fits standing up. A short book with
-// a long word shows its cloth and leaves the word to the key and the tip,
-// never a word cut off part way.
-function fitSpines() {
-  for (const s of document.querySelectorAll(".barcol-spine")) {
-    s.hidden = false;
-    s.hidden = s.scrollHeight > s.clientHeight + 1;
-  }
+// Stop 4, Weighed: every study as a row, in its group; the first group open.
+function weighedHtml(data) {
+  const studies = data.studies || [];
+  if (!studies.length) return "";
+  const stops = deskStops(data), g = sourceGroups(studies), named = deskNamed(data);
+  const groups = [
+    ["relied", "Relied on for the verdict", g.cited],
+    ["back", (data.evidence && data.evidence.background_label) || "Background only: animal and lab studies", g.back],
+    ["read", g.cited.length ? "Read, not relied on" : "Read", g.others],
+    ["off", "Set aside: off topic", g.excluded],
+  ].filter((x) => x[2].length);
+  const rows = groups.map(([key, title, idx], gi) =>
+    `<h3 class="grp-h"><button class="grp-btn" type="button" aria-label="${escapeHtml(title)} (${idx.length})" aria-controls="grp-${key}" aria-expanded="${gi === 0}">${escapeHtml(title)} (${idx.length})</button></h3>`
+    + `<ul class="rows" id="grp-${key}"${gi ? " hidden" : ""}>${idx.map((i) => studyRowHtml(studies[i], i, key, named)).join("")}</ul>`).join("");
+  return `<section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort"><div class="cap left"><div class="inner wide">`
+    + `<div class="panel list" id="list-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Weighed", "Weighed, not counted")}`
+    + `<h2 id="h-sort">Which studies the answer rests on</h2>`
+    + `<p class="intro">Pick a study to lift its sheet. Tap a sheet on the desk to find it here. Details open its abstract, how often it has been cited and the studies next to it.</p>`
+    + `<div id="rows">${rows}</div></div></div></div></section>`;
 }
-if (document.fonts) document.fonts.ready.then(() => fitSpines());
+
+// Stop 5, Research: the thorough answer. The longer parts fold away, closed.
+function researchHtml(data) {
+  const stops = deskStops(data);
+  if (!stops.includes("Research")) return "";
+  const studies = data.studies || [], n = studies.length, bv = breakdownView(data);
+  const p = (cls, text) => `<p class="${cls}">${deskRefs(text, n)}</p>`;
+  let h = `<div class="says" id="says-sec">${saysLines(data).map((t) => p("says-p", t)).join("")}</div>`;
+  const whoYes = !!(bv && (bv.applies_to || bv.populations.length));
+  if (bv && (bv.applies_to || bv.not_applies_to || bv.populations.length)) {
+    h += `<div class="who" id="who-sec"><h3 id="who-label">${!whoYes && bv.not_applies_to ? "Who this does not apply to" : "Who and what this applies to"}</h3>`
+      + (bv.applies_to ? p("says-p", bv.applies_to) : "")
+      + (bv.populations.length ? `<p class="narrow">Some of this evidence comes from studies of one group only: ${escapeHtml(bv.populations.join(", "))}. A result found in one group may not hold for everyone.</p>` : "")
+      + (bv.not_applies_to ? (whoYes ? '<p class="intro label-2">And who it does not</p>' : "") + p("says-p", bv.not_applies_to) : "")
+      + "</div>";
+  }
+  if (bv) {
+    if (bv.parts.length) {
+      h += `<details class="said-wrap" data-fold><summary>The claim, part by part (${bv.parts.length})</summary>`
+        + bv.parts.map((x) => `<p class="intro part-claim">${escapeHtml(x.part)}</p>${p("part-take", x.assessment)}`).join("") + "</details>";
+    }
+    const pts = bv.evidence.length + (bv.effect_size ? 1 : 0);
+    if (pts) {
+      h += `<details class="said-wrap" data-fold><summary>What the evidence shows (${pts} ${pts === 1 ? "point" : "points"})</summary>`
+        + `<ul class="ev">${bv.evidence.map((x) => `<li>${deskRefs(x, n)}</li>`).join("")}</ul>`
+        + (bv.effect_size ? `<p class="effect"><b>How big the effect is.</b> <span>${deskRefs(bv.effect_size, n)}</span></p>` : "")
+        + "</details>";
+    }
+  }
+  const ev = String(data.evidence_line || "").replace(/^\.+|\.+$/g, "");
+  h += `<h3>How sure, and why</h3><p class="evline">${escapeHtml(data.evidence_line ? ev + "." : confidenceLine(data))}</p>`;
+  if (bv && bv.strength) h += p("strength", bv.strength);
+  if (bv && bv.unknowns) h += p("unknowns", bv.unknowns);
+  if (bv && bv.concluded.length) {
+    h += `<details class="said-wrap"><summary>What each study concluded (${bv.concluded.length})</summary><ol class="said">`
+      + bv.concluded.map((c) => {
+        const st = studies[c.n - 1] || {};
+        return `<li><p class="who">Study <a class="ref" href="#row-${Number(c.n)}" data-n="${Number(c.n)}" aria-label="Study ${Number(c.n)}, show it in the list">${Number(c.n)}</a>`
+          + (st.type_label ? ` · ${escapeHtml(st.type_label)}` : "") + (st.year ? ` · ${escapeHtml(st.year)}` : "")
+          + `</p><blockquote>${escapeHtml(c.said)}</blockquote></li>`;
+      }).join("")
+      + `</ol><p class="fine">In the authors' own words, from the summary each study was published with.</p></details>`;
+  }
+  h += `<h3>What the verdict rests on</h3><p class="rests-line">${escapeHtml(deskLines(data).rests)}</p>`;
+  const rb = restsByDesign(studies);
+  if (rb.length) h += `<ul class="rests">${rb.map((d) => `<li><b>${d.count}</b><span>${deskRefs(`${d.label} (${d.refs})`, n)}</span></li>`).join("")}</ul>`;
+  if (bv) h += '<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them.</p>';
+  return `<section class="stop long" id="s5" data-stop="Research" aria-labelledby="h-research"><div class="cap left"><div class="inner wider">`
+    + `<div class="panel read" id="read-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Research", "The thorough answer")}`
+    + `<h2 id="h-research">What the research says</h2><div id="research">${h}</div></div></div></div></section>`;
+}
+
+// The desk (static/desk.js) listens for these: a result to lay out, the way
+// home, and the one glide to the answer after a check the reader just ran.
+function tellDesk(name, detail) {
+  document.dispatchEvent(new CustomEvent(name, { detail }));
+}
 
 function renderResult(data) {
   dropOffTopicCites(data);
   currentResult = data;
+  const n = data.studies.length, stops = deskStops(data), dl = deskLines(data);
+  // Stop 1 keeps the claim in its box, so Back from the answer is the claim.
+  input.value = data.claim;
+  clearBtn.hidden = !input.value;
+  // Stop 2: the card and how sure.
   $("claim-echo").textContent = data.claim;
-  showTyped(data.typed, data.typed_reason);
-  $("case-line").textContent = (data.cached || data.restored) && !hasDate(data.cached_at) ? "PubMed" : `PubMed · ${fmtDate(data.cached_at)}`;
-
-  const block = document.querySelector(".verdict-block");
-  block.dataset.verdict = data.verdict;
-
   $("stamp").textContent = VERDICT_LABELS[data.verdict] || data.verdict;
-  $("doctor-line").hidden = false;
-  $("review-line").textContent = data.review_line || "";
-  $("review-line").hidden = !data.review_line;
-  if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
-
   $("tldr").textContent = data.tldr || "";
-  renderSays(data);
-  renderWho(data);
-  $("no-evidence").hidden = data.studies.length > 0;
+  showTyped(data.typed, data.typed_reason);
+  $("confidence").textContent = confidenceLine(data);
+  $("doctor-line").hidden = false;
+  $("below").textContent = dl.below;
+  resultSection.dataset.verdict = data.verdict;
+  if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
+  // Stop 3: what was read.
+  $("h-read").textContent = dl.read;
+  $("path").textContent = dl.path;
+  $("legend3").textContent = dl.legend;
+  $("legend3").hidden = !dl.legend;
+  const none = n === 0;
+  $("nothing").hidden = !none;
+  $("no-evidence").hidden = !none;
+  $("nothing").querySelectorAll(":scope > p.scope").forEach((x) => x.remove());
+  if (none) {
+    $("nothing").insertAdjacentHTML("afterbegin", saysLines(data).map((t) => `<p class="scope">${escapeHtml(t)}</p>`).join(""));
+  }
+  const usedQuery = (data.search_query_used || "").trim();
+  $("nothing").querySelector(".query-line").innerHTML = none && usedQuery ? `Searched PubMed for <code>${escapeHtml(usedQuery)}</code>` : "";
+  renderNextSteps(none ? data.next_steps : null, data.claim);
+  // Stops 4 and 5 are there only when they have something real to show.
+  $("s4")?.remove();
+  $("s5")?.remove();
+  $("s6").insertAdjacentHTML("beforebegin", weighedHtml(data) + researchHtml(data));
+  // Stop 6: what is still open, the search, and the ways on.
+  $("h-open").innerHTML = `<b>${pad2(stops.indexOf("Open") + 1)}</b>Still open`;
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
-  renderBreakdown(data, data.studies.length, data.studies);
-
-  const n = data.studies.length;
-  $("confidence").querySelector("mark").textContent = confidenceLine(data);
-
+  $("query").textContent = usedQuery;
+  $("query-what").hidden = !usedQuery;
+  $("broadened").textContent = data.search_broadened ? " (the first search found nothing, so it was widened)" : "";
+  $("more-link").href = safeHref(data.pubmed_url) || "#";
+  $("review-line").textContent = data.review_line ? `${data.review_line}.` : "";
+  $("review-line").hidden = !data.review_line;
   const note = $("cached-note");
   note.hidden = !(data.cached || data.restored);
   note.textContent = data.restored
@@ -618,118 +612,26 @@ function renderResult(data) {
     : hasDate(data.first_checked_at)
       ? `First checked on ${fmtDate(data.first_checked_at)}. Last re-checked on ${fmtDate(data.cached_at)}. Claims are re-checked after a day.`
       : `Result from a check on ${fmtDate(data.cached_at)}. Claims are re-checked after a day.`;
-
-  renderChart(data);
-  renderNextSteps(data.next_steps, data.claim);
-
-  $("evidence-label").textContent = n ? `Studies checked (${n})` : "Studies checked";
-  const studyRow = (s, i) => {
-    const ti = typeInfo(s.publication_types);
-    const src = [s.journal, s.year].filter(Boolean).join(", ");
-    const isDefault = ti.label === DEFAULT_TYPE[0];
-    return `
-      <li class="study k-${escapeHtml(kindOf(s))}${s.cited_in_verdict ? " cited" : ""}" data-i="${i}">
-        <p class="meta">
-          <span class="ord">${String(i + 1).padStart(2, "0")}</span>
-          ${isDefault ? "" : `<span class="type ${ti.cls}">${escapeHtml(ti.label)}</span>`}
-          ${s.year ? `<span>${escapeHtml(s.year)}</span>` : ""}
-          ${s.cited_in_verdict ? `<span class="sr-only">Used for the verdict</span>` : ""}
-        </p>
-        <p class="title"><span>${escapeHtml(s.title)}</span></p>
-        <p class="src">${escapeHtml(src)}${src ? " · " : ""}${safeHref(s.url) ? `<a href="${escapeHtml(safeHref(s.url))}" target="_blank" rel="noopener" data-stop>PMID ${escapeHtml(s.pmid)}</a>` : `PMID ${escapeHtml(s.pmid)}`}</p>
-        <p class="why">${escapeHtml(studyWhy(s))}</p>
-        <button type="button" class="study-go" aria-label="Deep dive on study ${i + 1}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
-      </li>`;
-  };
-  // Two groups, matching the Jinja: what the verdict leaned on is open, what
-  // was read and set aside is folded. Eight dense titles in a row is a wall.
-  const group = (name, rows, open) => rows.length
-    ? `<details class="source-group"${open ? " open" : ""}>` +
-      `<summary class="group-head"><span class="group-name">${name}</span>` +
-      `<span class="group-count">${rows.length}</span></summary>` +
-      `<ol class="studies">${rows.join("")}</ol></details>`
-    : "";
-  // Animal and lab studies read for a claim about people are background
-  // only: never counted as used, and grouped on their own so it shows. So
-  // are opinion pieces and buying guides; the server names the group. A
-  // study classified off topic goes in its own group, folded, last.
-  const g = sourceGroups(data.studies);
-  const rows = (idx) => idx.map((i) => studyRow(data.studies[i], i));
-  const citedRows = rows(g.cited), backRows = rows(g.back), otherRows = rows(g.others);
-  $("sources").innerHTML = n
-    ? group("Relied on for the verdict", citedRows, true) +
-      group(escapeHtml((data.evidence && data.evidence.background_label)
-                       || "Background only: animal and lab studies"),
-            backRows, !citedRows.length && !otherRows.length) +
-      group(citedRows.length ? "Read, not relied on" : "Read", otherRows, citedRows.length === 0) +
-      group("Set aside: off topic", rows(g.excluded), false)
-    : `<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>`;
-
-  const list = $("sources");
-  list.classList.remove("sweep");
-  if (!data.cached && !data.restored) {
-    list.querySelectorAll(".study.cited").forEach((li, i) => li.style.setProperty("--i", i));
-    requestAnimationFrame(() => list.classList.add("sweep"));
-  }
-  // A saved record with no search on file says nothing about one, rather
-  // than "Searched PubMed for" and a blank. The link to PubMed stays.
-  const usedQuery = (data.search_query_used || "").trim();
-  $("query").textContent = usedQuery;
-  $("query-what").hidden = !usedQuery;
-  $("broadened").textContent = data.search_broadened ? " (the first search found nothing, so it was widened)" : "";
-  $("more-link").href = safeHref(data.pubmed_url) || "#";
   $("toast").textContent = "";
   renderFeedbackState(data.claim);
   resetReport();
-
-  armShareBar();
   setTitle(data);
-  // The band goes to the verdict shot and the report lands on the sheet under
-  // it. Set before the reveal, so the sheet is never painted as a bare column
-  // for a frame on its way to being a sheet.
   screenState.settle("result");
   show(resultSection);
+  tellDesk("desk:result", { data, fresh: !data.cached && !data.restored });
 }
 
-// While a check runs, the claim is already on the ticket and the archive's
-// work prints beneath it. Cached results skip this and land directly.
+// While a check runs the claim stays in its box and the work prints under it,
+// in stop 1. Cached results skip this and land directly.
 function renderPending(claim) {
   currentResult = null;
-  $("claim-echo").textContent = claim;
-  showTyped(null);
-  $("case-line").textContent = "PubMed · checking";
-  const t = document.querySelector(".ticket");
-  t.classList.add("pending");
-  resultSection.classList.add("checking");
-  const chart = $("chart-sec");
-  if (chart) chart.hidden = true;
-  const bars = $("chart-bars");
-  if (bars) { bars.classList.remove("reveal"); bars.innerHTML = ""; }
-  const says = $("says-sec");
-  if (says) says.hidden = true;
-  const who = $("who-sec");
-  if (who) who.hidden = true;
-  document.querySelector(".verdict-block").dataset.verdict = "";
-  $("doctor-line").hidden = true;
-  $("review-line").hidden = true;
   const log = $("reading");
   log.innerHTML = ""; log.hidden = false;
-  $("feedback").hidden = true;
-  document.querySelector(".evidence").hidden = true;
-  $("cached-note").hidden = true;
-  $("still-open").hidden = true;
-  renderBreakdown(null, 0);
-  disarmShareBar();
-  for (const sec of [askSection, errorSection]) sec.hidden = true;
+  errorSection.hidden = true;
   askMore.hidden = true;
   if (trustSection) trustSection.hidden = true;
-  // Checking is the same screen as the verdict, minus the verdict: the band
-  // on top, the claim and the work printing on the sheet below it. The
-  // report is shown here rather than through show(), which would scroll and
-  // re-lay-out the page a second time on the way to the same place.
+  $("doctor-line").hidden = true;
   screenState.enter();
-  resultSection.hidden = false;
-  document.body.classList.remove("view-ask");
   logLine("Building the search", true);
 }
 
@@ -777,11 +679,7 @@ function logLine(text, live) {
 }
 
 function endPending() {
-  document.querySelector(".ticket").classList.remove("pending");
-  resultSection.classList.remove("checking");
   const log = $("reading"); log.hidden = true; log.innerHTML = "";
-  $("feedback").hidden = false;
-  document.querySelector(".evidence").hidden = false;
 }
 
 // What the reader is told while the screen reader's live region says it too.
@@ -956,36 +854,6 @@ async function checkPlain(claim) {
   return { stage: "done", result: data };
 }
 
-// The verdict lands where the work was printing, so the screen looks much as
-// it did while checking, and a reader can take the verdict for the whole page.
-// Once it has landed, the page moves down a little on its own: the claim and
-// its verdict at the top, the short answer and the reasoning under them, so
-// there is plainly more to read. Only after a check the reader ran here, once,
-// and never against them: a scroll, tap or key first and it stays put. Under
-// reduced motion it is a jump, not a glide. A tab in the background cannot
-// glide, so a reader who looked away while it checked sees it on coming back.
-const NUDGE_AFTER_MS = 900;
-function nudgeToAnswer() {
-  const head = document.querySelector("#result .thread");
-  if (!head) return;
-  let touched = false;
-  const stop = () => { touched = true; };
-  const inputs = ["wheel", "touchstart", "pointerdown", "keydown"];
-  for (const ev of inputs) addEventListener(ev, stop, { passive: true });
-  const go = () => {
-    for (const ev of inputs) removeEventListener(ev, stop);
-    if (touched || resultSection.hidden) return;
-    const top = Math.round(head.getBoundingClientRect().top + scrollY - 16);
-    if (top <= scrollY + 24) return;
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scrollTo({ top, behavior: still ? "auto" : "smooth" });
-  };
-  setTimeout(() => {
-    if (document.hidden) document.addEventListener("visibilitychange", go, { once: true });
-    else go();
-  }, NUDGE_AFTER_MS);
-}
-
 // The empty-field message belongs to the field: it is announced, tied to the
 // textarea with aria-describedby, and gone the moment the text is valid.
 const claimErrorEl = $("claim-error");
@@ -1057,7 +925,6 @@ async function check(claim) {
       const asChecked = "/?q=" + encodeURIComponent(final.result.claim || claim);
       if (location.search.includes("q=")) history.replaceState({ view: "result" }, "", asChecked);
       else history.pushState({ view: "result" }, "", asChecked);
-      nudgeToAnswer();
     }
   } catch (err) {
     endPending();
@@ -1215,7 +1082,7 @@ function goHome() {
 // The same control sits above the claim while a check is running, where it is
 // the way out of one. It cancels the check it is interrupting rather than
 // leaving it running unseen.
-$("back-btn").addEventListener("click", () => {
+for (const b of document.querySelectorAll("[data-again]")) b.addEventListener("click", () => {
   if (controller) { controller.abort(); return; }
   if (history.state && history.state.view === "result") history.back(); else { history.replaceState({ view: "ask" }, "", "/"); goHome(); }
 });
@@ -1551,8 +1418,8 @@ async function copyLink() {
   setTimeout(() => { $("toast").textContent = ""; }, 2500);
 }
 
-for (const id of ["share-btn", "share-btn-sticky"]) $(id).addEventListener("click", shareResult);
-for (const id of ["copy-btn", "copy-btn-sticky"]) $(id).addEventListener("click", copyLink);
+$("share-btn").addEventListener("click", shareResult);
+$("copy-btn").addEventListener("click", copyLink);
 
 // ---- Feedback -----------------------------------------------------------------
 
@@ -1746,47 +1613,11 @@ function openSheet(dialog, heading) {
   heading.focus({ preventScroll: true });
 }
 
-$("sources").addEventListener("click", (e) => {
-  if (e.target.closest("[data-stop]")) return; // the PMID link itself
-  const li = e.target.closest(".study");
-  if (li) openStudy(Number(li.dataset.i));
-});
-// A study number is a tap target wherever it appears: in the reasoning under
-// the panel, and in every sentence of the breakdown under that.
-for (const id of ["says", "deeper-body"]) {
-  $(id)?.addEventListener("click", (e) => {
-    const ref = e.target.closest(".ref");
-    if (ref) openStudy(Number(ref.dataset.i));
-  });
-}
-
-// A bar goes to its study. Enter and space come free with the button; the
-// arrows walk the row the way they walk the source column below it.
-$("chart-bars")?.addEventListener("click", (e) => {
-  const col = e.target.closest(".barcol");
-  if (col) showStudy(Number(col.dataset.i));
-});
-$("chart-bars")?.addEventListener("keydown", (e) => {
-  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-  const cols = [...$("chart-bars").querySelectorAll(".barcol")];
-  const here = cols.indexOf(e.target.closest(".barcol"));
-  if (here === -1) return;
-  const next = cols[here + (e.key === "ArrowRight" ? 1 : -1)];
-  if (!next) return;
-  e.preventDefault();
-  next.focus();
-});
-
-// Arrow keys walk the source column, the way a finger runs down a printed one.
-$("sources").addEventListener("keydown", (e) => {
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  const items = [...$("sources").querySelectorAll(".study")];
-  const here = items.indexOf(e.target.closest(".study"));
-  if (here === -1) return;
-  const next = items[here + (e.key === "ArrowDown" ? 1 : -1)];
-  if (!next) return;
-  e.preventDefault();
-  next.focus();
+// Deep dive under a study's details opens its sheet. The rest of the row (lift,
+// details, the group buttons, the study numbers in the answer) is the desk's.
+$("track").addEventListener("click", (e) => {
+  const go = e.target.closest(".study-go");
+  if (go) openStudy(Number(go.closest(".row").dataset.i));
 });
 
 // "/" returns to the claim box from anywhere, for the second check and the third.
@@ -1796,7 +1627,7 @@ window.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   e.preventDefault();
-  if (resultSection.hidden && errorSection.hidden) { input.focus(); input.select(); }
+  if (!root.classList.contains("checked") && errorSection.hidden) { input.focus(); input.select(); }
   else { history.replaceState({ view: "ask" }, "", "/"); goHome(); }
 });
 
@@ -1827,8 +1658,12 @@ for (const d of document.querySelectorAll("dialog.sheet")) {
     y0 = null;
   });
 }
-$("how-btn").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
-$("assess").addEventListener("click", (e) => { if (e.target.closest("#meter")) openSheet($("how-sheet"), $("how-title")); });
+// How it works is a link to /method, so it works with no script at all; with
+// one it opens the same words in a sheet over the page instead.
+for (const id of ["how-btn", "how-btn-2"]) {
+  $(id)?.addEventListener("click", (e) => { e.preventDefault(); openSheet($("how-sheet"), $("how-title")); });
+}
+$("meter").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
 
 // ---- Voice input (where the browser has it) --------------------------------
 

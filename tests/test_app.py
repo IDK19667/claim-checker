@@ -622,19 +622,19 @@ t("verdict is server-rendered, not JS-only",
   "streamed claim" in html and 'id="tldr">' in html and "Likely false" in html and 'id="result"' in html
   and 'id="server-result"' in html, html[:200])
 t("  the ask view is hidden when a result is rendered", '<section id="ask" aria-labelledby="ask-heading" hidden>' in html)
-t("  studies are in the HTML with their PMIDs", "PMID P1" in html and "T1" in html)
-# The source column folds into two groups. Every study stays in the HTML either
+t("  studies are in the HTML with their PMIDs", "PubMed P1" in html and "T1" in html)
+# The Weighed list folds into groups. Every study stays in the HTML either
 # way: a crawler, and a reader with no JavaScript, must still get the whole file.
 t("  sources split into relied on and set aside",
-  'Relied on for the verdict</span><span class="group-count">1' in html
-  and 'Read, not relied on</span><span class="group-count">2' in html, html[html.find("sources"):][:200])
+  'aria-controls="grp-relied" aria-expanded="true">Relied on for the verdict (1)</button>' in html
+  and 'aria-controls="grp-read" aria-expanded="false">Read, not relied on (2)</button>' in html,
+  html[html.find('id="rows"'):][:300])
 t("  the relied-on group is open and the rest is folded",
-  '<details class="source-group" open>' in html
-  and '<details class="source-group">' in html)
+  '<ul class="rows" id="grp-relied">' in html and '<ul class="rows" id="grp-read" hidden>' in html)
 t("  every study is still in the folded HTML",
-  all(f"PMID P{i}" in html for i in (1, 2, 3)))
+  all(f"PubMed P{i}" in html for i in (1, 2, 3)))
 t("  study numbers stay global so the prose can point at them",
-  '>01<' in html and '>02<' in html and '>03<' in html)
+  all(f'id="row-{i}" data-n="{i}"' in html for i in (1, 2, 3)))
 import re as _re
 m = _re.search(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, _re.S)
 ld = json.loads(m.group(1)) if m else {}
@@ -649,7 +649,9 @@ t("canonical points at the shared url", 'rel="canonical" href="http://localhost/
 _ci = _re.search(r'<textarea\s[^>]*id="claim-input"[^>]*>', c.get("/").get_data(as_text=True), _re.S).group(0)
 t("the claim field is a plain textbox: no role the textarea may not have, no aria-expanded",
   _ci and "role=" not in _ci and "aria-expanded" not in _ci and 'aria-controls="suggest-list"' in _ci and 'aria-autocomplete="list"' in _ci, _ci)
-t("uncached claim renders the ask view", '<section id="result" hidden>' in c.get("/?q=never%20checked").data.decode())
+_unc = c.get("/?q=never%20checked").data.decode()
+t("uncached claim renders the ask view", '<html lang="en">' in _unc and 'class="checked"' not in _unc
+  and '<section id="ask" aria-labelledby="ask-heading">' in _unc)
 
 r = c.get("/robots.txt")
 t("robots.txt allows crawlers and names the sitemap",
@@ -824,8 +826,11 @@ _css_led = (ROOT / "static" / "style.css").read_text()
 t("  its CSS is gone and the home page stops computing it, while db.ledger() stays",
   not re.search(r"^\.ledger[ ,{]", _css_led, re.M) and ".entry-no" not in _css_led
   and "db.ledger()" not in _insp_led.getsource(appmod._render_home) and callable(db.ledger))
+# The desk front: the shelf chart left the front page (deskfront_answer1), so
+# each latest check carries its evidence in words, not as a little shelf.
 t("the front page lists recent checks with their evidence",
-  "Latest checks" in _html and 'class="entry-claim"' in _html and 'class="mini"' in _html)
+  "Latest checks" in _html and 'class="entry-claim"' in _html and 'class="entry-meta"' in _html
+  and 'class="mini"' not in _html)
 _entry_css = re.search(r"^\.entry-link \{(.*?)\}", _css_led, re.M | re.S).group(1)
 t("  without the number line, a list row's link still has a 44px tap height, with the layout unmoved",
   "padding: 10px 0" in _entry_css and "margin: -10px 0" in _entry_css, _entry_css)
@@ -910,10 +915,13 @@ t("  and on each case the 404 list prints what the rule says",
   [w for x, w in _SC_CASES if x.strip() and f'<span class="entry-claim">{_msc_escape(w)}</span>' not in _sc_r404])
 
 _res = c.get("/?q=streamed%20claim").data.decode()
-t("a rendered result carries the evidence chart",
-  'id="chart-sec"' in _res and 'class="barcol' in _res
-  and "barcol-bar h-moderate" in _res and "Based on 3 studies" in _res
-  and 'id="chart-desc"' in _res and "Each book is one study, numbered as in the list." in _res)
+# The shelf chart left the front with the desk (deskfront_answer1): the Read
+# stop says the same counts in words, from the record's own study list.
+t("a rendered result says what was read, in words, where the evidence chart was",
+  'id="chart-sec"' not in _res and 'class="barcol' not in _res
+  and '<h2 class="h2" id="h-read">3 studies read.</h2>' in _res
+  and '<span id="path">1 relied on and 2 read and not relied on.</span>' in _res,
+  _res[_res.find('id="h-read"'):][:300])
 
 # ---- type-ahead over checked claims ----------------------------------------------
 import suggest as suggest_mod  # noqa: E402
@@ -1868,33 +1876,34 @@ t("  and the answer the reader gets is the consistent one",
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
 
 _html = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+# The desk front: the breakdown is stop 5, Research ("The thorough answer").
+# Its longer parts fold away, closed, and its last part says what it rests on.
 t("the breakdown is server rendered, so a shared link carries it",
-  "Read the full breakdown" in _html and "The claim, part by part" in _html
+  'data-stop="Research"' in _html and "The thorough answer" in _html and "The claim, part by part" in _html
   and "11,321 people found an odds ratio" in _html
   and "only if you are deficient" in _html)
-t("  it is collapsed by default, on the server and in the markup",
-  '<details class="deeper" id="deeper">' in _html
-  and '<details class="deeper" id="deeper" open' not in _html)
-t("  the summary says how many studies it rests on",
-  '<span class="group-count">2 studies</span>' in _html)
+t("  its folds are closed by default, on the server and in the markup",
+  '<details class="said-wrap" data-fold><summary>The claim, part by part' in _html
+  and not re.search(r"<details[^>]*\bopen\b", _html))
+t("  it says how many studies it rests on",
+  '<p class="rests-line">Rests on 2 studies.' in _html, _html[_html.find("rests-line"):][:200])
 # A list item with role="button" around a PubMed link is a control inside a
 # control, which screen readers cannot reach cleanly (axe: serious).
 t("  each study opens from a real button, not a list item playing one",
-  '<button type="button" class="study-go" aria-label="Deep dive on study 1">' in _html
-  and 'role="button"' not in _html.split('id="sources"', 1)[-1].split("</section>", 1)[0]
-  and '<button type="button" class="study-go" aria-label="Deep dive on study ${i + 1}">'
-      in (ROOT / "static" / "app.js").read_text()
-  and ".study-go::after { content: \"\"; position: absolute; inset: 0; }"
-      in (ROOT / "static" / "style.css").read_text())
+  '<button type="button" class="row-more study-go" aria-label="Deep dive on study 1">' in _html
+  and '<button class="row-head" type="button" aria-pressed="false" aria-label="Study 1,' in _html
+  and 'role="button"' not in _html.split('id="rows"', 1)[-1].split("</section>", 1)[0]
+  and '<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">'
+      in (ROOT / "static" / "app.js").read_text())
 t("  what was gated out is not in the page either",
   "47%" not in _html and "cites nothing" not in _html and "wards off" not in _html)
 t("  the effect size is printed once: in 'What the research says', not again as its own line",
   "How big the effect is" not in _html.split('id="server-result"')[0]
   and _html.split('id="server-result"')[0].count("was 0.88, and 0.30") == 1)
 t("  and every section of the layer is there",
-  all(s in _html for s in ("What the evidence shows", "Why the verdict is what it is",
+  all(s in _html for s in ("What the evidence shows", "How sure, and why",
                            "Who and what this applies to", "And who it does not",
-                           "What is still unknown")))
+                           "What the verdict rests on", "What the research says")))
 
 # A verdict with nothing cited cannot have a breakdown of what the evidence
 # shows: the deeper layer goes wherever the verdict goes.
@@ -1909,36 +1918,33 @@ db.put_cached_verdict("old row with no breakdown", "q", "complicated", "Because.
                       ["D1"], _BD_STUDIES, tldr="Short take.", still_open="Open.")
 _old = c.get("/?q=old+row+with+no+breakdown").data.decode()
 t("a result cached before the breakdown existed renders cleanly",
-  "Short take." in _old and '<details class="deeper" id="deeper" hidden>' in _old
-  and "Read the full breakdown" in _old)
+  "Short take." in _old and 'data-stop="Research"' in _old and '<p class="says-p">Because.</p>' in _old
+  and "The claim, part by part" not in _old and "What the evidence shows" not in _old)
 _oldj = P("old row with no breakdown", ip="4.4.4.4").get_json()
 t("  and reports no breakdown rather than an empty one",
   _oldj["breakdown"] is None and _oldj["cached"] is True)
 
-# The Jinja and renderBreakdown draw the same section. Two renderers for one
+# The Jinja and researchHtml draw the same stop. Two renderers for one
 # layout is how a cold shared link and a live check start disagreeing, so the
-# headings are compared rather than trusted.
+# headings are compared rather than trusted (the R4 parity test below compares
+# the whole rendered stops on the fixture records).
 _tpl = (ROOT / "templates" / "index.html").read_text()
 _js = (ROOT / "static" / "app.js").read_text()
-_deeper_tpl = _tpl[_tpl.find('<details class="deeper"'):]
-_deeper_tpl = _deeper_tpl[:_deeper_tpl.find("</details>")]
-_tpl_labels = set(re.findall(r'class="section-label[^"]*">([^<]+)<', _deeper_tpl))
-_js_deeper = _js.split("function renderBreakdown(")[1].split("\nfunction ")[0]
-_js_labels = set(re.findall(r'sec\("([^"]+)"', _js_deeper)) | set(
-    re.findall(r'class="section-label label-2">([^<]+)<', _js_deeper))
+_res_tpl = _tpl[_tpl.find('<section class="stop long" id="s5"'):]
+_res_tpl = _res_tpl[:_res_tpl.find("</section>")]
+_res_js = _js.split("function researchHtml(data) {")[1].split("\nfunction ")[0]
+_heads = lambda src: set(re.findall(r"<h3[^>]*>([A-Z][^<{$]+)</h3>", src)) | set(
+    re.findall(r"<summary>([A-Z][^<{($]+?)\s*\(", src))
 t("the server and the browser render the same breakdown headings",
-  _tpl_labels == _js_labels, sorted(_tpl_labels ^ _js_labels))
+  _heads(_res_tpl) == _heads(_res_js) and len(_heads(_res_tpl)) >= 5, sorted(_heads(_res_tpl) ^ _heads(_res_js)))
 t("the browser's renderer runs every sentence through the same ref linking",
-  "renderBreakdown(data, " in _js and "linkStudyRefs(p.assessment" in _js)
-# The one rounded thing in the layer is its Open control, at the controls'
-# radius. Nothing that holds reading is boxed.
-_deeper_css = ((ROOT / "static" / "style.css").read_text()
-               .split("---- The deeper layer")[1].split("---- Sticky share bar")[0])
-_open_rule = re.search(r"\n\.deeper-open \{[^}]*\}", _deeper_css)
+  'p("part-take", x.assessment)' in _res_js and "deskRefs(text, n)" in _res_js and "deskRefs(bv.effect_size, n)" in _res_js
+  and "desk_refs(p.assessment, n_st)" in _res_tpl)
+# Nothing that holds reading is boxed, and nothing in it is colour coded.
+_desk_css = (ROOT / "static" / "desk.css").read_text()
 t("nothing in the breakdown is a card, and nothing in it is colour coded",
-  _open_rule is not None and "border-radius: var(--r-control)" in _open_rule.group(0)
-  and "border-radius" not in _deeper_css.replace(_open_rule.group(0), "")
-  and "data-verdict" not in _deeper_css)
+  "data-verdict" not in _desk_css
+  and not re.search(r"\.said-wrap[^{]*\{[^}]*(border-radius|background)", _desk_css))
 
 # ---- what each study concluded, in its authors' words ----------------------------
 #
@@ -2006,26 +2012,89 @@ t("the payload carries each used study's conclusion, and the head's contents lin
 _conh = c.get("/?q=conclusions+render").data.decode()
 t("  the conclusions are server rendered as quotes, labelled by study",
   "What each study concluded" in _conh
-  and '<blockquote class="said-q">Vitamin D supplementation was safe' in _conh
-  and "Study 1 · " in _conh)
-t("  and the head says what is inside before it is opened",
-  '<span class="deeper-what" id="deeper-what">The claim part by part, each study' in _conh)
+  and '<blockquote>Vitamin D supplementation was safe' in _conh
+  and re.search(r'<p class="who">Study <a class="ref" href="#row-1" data-n="1"[^>]*>1</a> · ', _conh))
+# The desk front has no single breakdown head to summarise: each fold's own
+# summary says what is inside it, with its count, before it is opened.
+t("  and each fold says what is inside before it is opened",
+  "<summary>What each study concluded (1)</summary>" in _conh
+  and re.search(r"<summary>The claim, part by part \(\d+\)</summary>", _conh))
 t("  the browser draws the same quotes, never linking inside them",
   "What each study concluded" in _js and "escapeHtml(c.said)" in _js)
 
-# After a check the reader ran, the page moves down a little so the answer is
-# not mistaken for the whole result. Once, never on a shared link, never against
-# a reader who is already scrolling, and a jump rather than a glide for anyone
-# who asked for less motion.
-_nudge = _js[_js.find("function nudgeToAnswer"):]
-_nudge = _nudge[:_nudge.find("\n}\n")]
-_check_fn = _js[_js.find("async function check"):]
+# After a check the reader ran, the page glides to the answer (stop 2) so the
+# answer is not mistaken for the whole result. Once, never on a shared link,
+# never against a reader who is already scrolling, and a jump rather than a
+# glide for anyone who asked for less motion. The desk front moved it from
+# app.js (nudgeToAnswer) to desk.js (glideToAnswer), on the desk:result event.
+_deskjs = (ROOT / "static" / "desk.js").read_text() if (ROOT / "static" / "desk.js").exists() else ""
+_nudge = _deskjs[_deskjs.find("function glideToAnswer"):]
+# desk.js is one closure, so its functions end at a two-space brace.
+_nudge = _nudge[:_nudge.find("\n  }\n")]
 t("after a check the page moves to the answer, once",
-  _js.count("nudgeToAnswer();") == 1 and "nudgeToAnswer();" in _check_fn)
+  _deskjs.count("glideToAnswer(") == 2 and "if (detail.fresh) glideToAnswer(" in _deskjs
+  and "nudgeToAnswer" not in _js and 'tellDesk("desk:result", { data, fresh: !data.cached && !data.restored })' in _js)
 t("  any touch, wheel or key from the reader cancels it",
   all(e in _nudge for e in ('"wheel"', '"touchstart"', '"pointerdown"', '"keydown"')))
 t("  it honours reduced motion and waits for a hidden tab",
-  "prefers-reduced-motion: reduce" in _nudge and "visibilitychange" in _nudge)
+  "prefers-reduced-motion: reduce" in _deskjs and "visibilitychange" in _nudge
+  and "if (reduce.matches || slowGl" in _deskjs)
+
+# ---- the desk script ------------------------------------------------------------
+# One closure (app.js's top-level names stay app.js's), loaded with the page's
+# nonce, writing no markup from data, and the stops it walks are the ones on
+# the page: a result with no studies has four, and the bar, the rail and the
+# menu count only those.
+_desk_tpl = (ROOT / "templates" / "index.html").read_text()
+t("desk.js loads after app.js with the page's nonce, and is one closure",
+  '<script src="{{ url_for(\'static\', filename=\'desk.js\') }}" nonce="{{ csp_nonce }}"></script>' in _desk_tpl
+  and _desk_tpl.find("filename='app.js'") < _desk_tpl.find("filename='desk.js'")
+  and _deskjs.lstrip().startswith(("/*", "//", "(function")) and _deskjs.rstrip().endswith("})();"))
+t("desk.js writes no markup from strings and sets no inline handler or style attribute from data",
+  ".innerHTML" not in _deskjs and "insertAdjacentHTML" not in _deskjs and "outerHTML" not in _deskjs
+  and not re.search(r"setAttribute\(\"on", _deskjs) and "eval(" not in _deskjs and "new Function" not in _deskjs)
+t("desk.js reads its stops from the page, so an absent stop is never walked",
+  'querySelectorAll(".stop[data-stop]")' in _deskjs and "[0, 1, 2, 5]" not in _deskjs
+  and "stops: NS" in _deskjs)
+t("desk.js falls back to the text desk on Save-Data or a 2G connection, and fetches three.js only from this site",
+  "c.saveData" in _deskjs and "2g" in _deskjs and '"/static/vendor/three-r128.min.js"' in _deskjs
+  and not re.search(r"https?://", re.sub(r"//[^\n]*|/\*.*?\*/", "", _deskjs, flags=re.S)))
+t("the menu offers How it works, About and Privacy in every state",
+  all(f'"{h}"' in _deskjs for h in ("/method", "/about", "/privacy"))
+  and all(w in _deskjs for w in ('"How it works"', '"About"', '"Privacy"')))
+# With scripts off a saved result reads top to bottom from the server's HTML:
+# no claim box (it could check nothing), every group of studies open, no
+# control only a script could work, and the desk itself not drawn.
+_desk_css2 = (ROOT / "static" / "desk.css").read_text()
+t("without scripts a result hides the claim box, opens every group and hides the desk and the script-only controls",
+  "html:not(.js).checked #s1 { display: none; }" in _desk_css2 and "html:not(.js) .rows[hidden] { display: block; }" in _desk_css2
+  and "html:not(.js) #stage { display: none; }" in _desk_css2.replace(".no-gl #stage, ", "")
+  and all(f"html:not(.js) {x}" in _desk_css2 for x in (".bar", ".rail", ".row-more", ".back"))
+  and '<script nonce="{{ csp_nonce }}">document.documentElement.classList.add("js");</script>' in _desk_tpl)
+# A listener on an element the page no longer has stops app.js at that line,
+# and every listener after it with it. Each id the script binds without ?.
+# must be in the template.
+_ids_tpl = set(re.findall(r'\bid="([^"{]+)"', _desk_tpl))
+_ids_bound = set(re.findall(r'\$\("([\w-]+)"\)\.addEventListener', _js))
+for _lst in re.findall(r"for \(const id of \[([^\]]+)\]\) \$\(id\)\.addEventListener", _js):
+    _ids_bound |= set(re.findall(r'"([\w-]+)"', _lst))
+t("every element app.js binds a listener to without a guard is on the page",
+  _ids_bound and not (_ids_bound - _ids_tpl), sorted(_ids_bound - _ids_tpl))
+_ids_desk = set(re.findall(r'byId\("([\w-]+)"\)', _deskjs))
+t("  and so is every element desk.js looks up, but for the stops a result may leave out",
+  _ids_desk and not (_ids_desk - _ids_tpl - {"s4", "s5"}), sorted(_ids_desk - _ids_tpl))
+if _shutil.which("node"):
+    _kw = _deskjs[_deskjs.find("function keepWords"):]
+    _kw = _kw[:_kw.find("\n  }\n") + 4]
+    _kw_out = json.loads(_subprocess.run(["node", "-e", _kw + "console.log(JSON.stringify([keepWords(0, false), keepWords(1, false),"
+                                          " keepWords(7, false), keepWords(7, true), keepWords(1, true)]))"],
+                                         capture_output=True, text=True, check=True).stdout)
+    t("E3: in Weighed the label counts the studies left: N more studies, 1 more study, the short form at 420px and under",
+      _kw_out == ["Keep reading", "Keep reading: 1 more study", "Keep reading: 7 more studies",
+                  "Keep reading: 7 more", "Keep reading: 1 more"], _kw_out)
+t("  only rows that are shown are counted, and the accessible name is always the full words",
+  "shown(r)" in _deskjs and "innerWidth <= 420" in _deskjs
+  and 'setAttribute("aria-label", ' in _deskjs and "keepWords(left, false)" in _deskjs)
 
 # ---- the result screen: a labelled claim, an answer, then the evidence -----------
 #
@@ -2050,16 +2119,20 @@ def _at(needle):
     return _ord.index(needle)
 
 
-t("the result reads claim, answer, assessment, research, still open, breakdown, evidence, then sources",
-  _at("The claim you checked") < _at("The short answer") < _at('id="tldr"') < _at('id="stamp"')
-  < _at("What the research says") < _at(">Still open<") < _at("Read the full breakdown")
-  < _at('id="chart-sec"') < _at("Studies checked") < _at('id="share-btn"') < _at('id="report-open"'))
+# The desk front's stops: the answer card (claim, verdict, short answer), how
+# sure, what was read, the studies weighed, the thorough answer, still open.
+t("the result reads claim, answer, how sure, what was read, the studies, research, then still open",
+  _at("The short answer") < _at("The claim you checked") < _at('id="stamp"') < _at('id="tldr"')
+  < _at('id="confidence"') < _at('id="h-read"') < _at('id="h-sort"') < _at("What the research says")
+  < _at(">Still open<") < _at('id="share-btn"') < _at('id="report-open"'))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
   and "Vitamin D supplements in winter cut colds</h1>" in _ord)
-t("  the claim is the result view's h1 and the error title the error view's; the home h1 sits in the hidden ask section",
-  '<h1 class="claim-echo" id="claim-echo">' in _ord and '<h1 class="error-title" id="error-title">' in _ord
-  and '<section id="ask" aria-labelledby="ask-heading" hidden>' in _ord and "<h2 class=\"claim-echo\"" not in _ord)
+t("  the claim is the result view's one h1; the home heading steps down to an h2 in the hidden ask section",
+  '<h1 class="q claim-echo" id="claim-echo">' in _ord and _ord.count("<h1") == 1
+  and '<h2 class="error-title" id="error-title" tabindex="-1">' in _ord
+  and '<section id="ask" aria-labelledby="ask-heading" hidden>' in _ord
+  and '<h2 class="h1" id="ask-heading">' in _ord and "<h2 class=\"claim-echo\"" not in _ord)
 t("  its quotation marks come from the stylesheet, so the text stays the text",
   ".claim-echo::before" in _css and "\\201C" in _css)
 # Sizes are compared rather than eyeballed.
@@ -2076,13 +2149,13 @@ t("  and the answer sentence is set larger than the claim and the assessment at 
 t("  the assessment is plain text: no oval, no ring, no pen drawn round it on the result",
   'class="ring"' not in _ord and 'class="vwrap"' not in _ord and ".ring" not in _css
   and ".vwrap" not in _css and "fitRing" not in (ROOT / "static" / "app.js").read_text())
-t("  the assessment and its confidence are two labelled rows under the answer",
-  '<span class="assess-label">Assessment</span><span class="stamp" id="stamp">' in _ord
-  and '<span class="assess-label">Confidence</span>' in _ord
-  and _at('id="tldr"') < _at('id="assess"') < _at('id="doctor-line"') < _at("What the research says"))
-t("  the confidence is the sentence the check worded, once",
-  "<mark>Low certainty evidence, so no plain yes or no.</mark>" in _ord.split('id="server-result"')[0]
-  or "<mark>" in _ord.split('id="assess"')[1].split("</p>")[1], _ord.split('id="assess"')[1][:500])
+t("  the verdict is on the card and how sure is the labelled line under it",
+  '<h2 class="v" id="stamp">It' in _ord and '<p class="sure-label">How sure</p><p class="sure" id="confidence">' in re.sub(r">\s+<", "><", _ord)
+  and _at('id="tldr"') < _at('id="confidence"') < _at('id="doctor-line"') < _at("What the research says"))
+_conf_txt = re.search(r'<p class="sure" id="confidence">([^<]+)</p>', _ord).group(1)
+t("  the confidence is the sentence the check worded: on the answer, and again only as the head of 'How sure, and why'",
+  _ord.split('id="server-result"')[0].count(_conf_txt) == 2
+  and f'<p class="evline">{_conf_txt}</p>' in _ord, _conf_txt)
 
 # ---- no sentence is printed twice -----------------------------------------------
 # "What the research says" is picked from the paragraphs the breakdown prints,
@@ -2117,11 +2190,11 @@ import html as _htmllib  # noqa: E402
 
 
 def _printed(page):
-    """Each sentence the reading column and the breakdown print, quotes of the authors left out."""
-    body = page.split('id="says"', 1)[1].split('class="evidence"', 1)[0]
-    body = body.split('<p class="fine">')[0] + (body.split('</details>', 1)[1] if "</details>" in body else "")
-    paras = _re.findall(r'<p class="(?:says-p|deeper-p|part-take|effect)[^"]*"[^>]*>(.*?)</p>|<span>(.*?)</span></p>', body, _re.S)
-    text = " ".join(a or b for a, b in paras)
+    """Each sentence the Research stop prints, quotes of the authors left out (the desk front: stop 5)."""
+    body = page.split('id="research"', 1)[1].split("<h3>What the verdict rests on</h3>", 1)[0]
+    body = _re.sub(r'<details class="said-wrap"><summary>What each study concluded.*?</details>', "", body, flags=_re.S)
+    paras = _re.findall(r'<p class="(?:says-p|part-take|strength|unknowns)"[^>]*>(.*?)</p>|<li>(.*?)</li>|<span>(.*?)</span></p>', body, _re.S)
+    text = " ".join(a or b or c for a, b, c in paras)
     text = _htmllib.unescape(_re.sub(r"<[^>]+>", "", text))
     return [s.strip() for s in _display.split_sentences(text)]
 
@@ -2137,7 +2210,7 @@ t("  the effect-size sentence is on the page once, in the research block, and th
 
 import shutil as _shutil, subprocess as _subprocess  # noqa: E402
 if _shutil.which("node"):
-    _hsrc = (ROOT / "static" / "app.js").read_text().split("// ---- What the page prints from the breakdown, each sentence once")[1].split("// (d) on the result screen.")[0]
+    _hsrc = (ROOT / "static" / "app.js").read_text().split("// ---- What the page prints from the breakdown, each sentence once")[1].split("// A result saved on this device before the shelf existed")[0]
     _hsrc = _hsrc.split("\n", 1)[1]
     _recs = [_DUP, dict(_DUP, breakdown=dict(_DUP["breakdown"], says=[], evidence=[])),
              {"claim": "x", "explanation": "e", "breakdown": None}]
@@ -2169,14 +2242,14 @@ t("  that Close is at least 44px tall and wide, and has a word, not just an icon
 t("  focus moves into the dialog on open, Escape closes it natively, and the opener gets focus back",
   "heading.focus(" in _appjs.split("function openSheet")[1].split("\n}")[0]
   and "showModal()" in _appjs and "cancel" not in _appjs.split("function openSheet")[1].split("\n}")[0])
-_bar = _appjs.split("function armShareBar()")[1].split("\n}\n")[0]
-t("the phone's share bar is shown only once the short answer has scrolled above the top edge, never on first view",
-  'querySelector("#result .answer")' in _bar and "e.boundingClientRect.bottom <= 0" in _bar
-  and "!e.isIntersecting" in _bar and '$("bar-sticky").hidden = false' not in _appjs
-  and 'classList.add("has-bar")' not in _appjs)
-t("  and it is put away with the result: leaving the result or starting a check disarms it",
-  "if (section !== resultSection) disarmShareBar()" in _appjs and _appjs.count("disarmShareBar();") >= 2
-  and "shareBarWatch.disconnect()" in _appjs)
+# The desk front has no sticky share bar: the bar at the foot is the desk's own
+# (Back, where you are, Next), and Share sits with the other ways on in stop 6.
+_dcss = (ROOT / "static" / "desk.css").read_text()
+t("the phone's share bar is gone: the desk's bar is the only one at the foot, and Share is in the Open stop",
+  'id="bar-sticky"' not in _ord and "armShareBar" not in _appjs and "bar-sticky" not in _appjs
+  and _ord.index('id="h-open"') < _ord.index('id="share-btn"') < _ord.index('<div class="bar" id="bar">'))
+t("  and nothing is left watching for it",
+  "shareBarWatch" not in _appjs and "disarmShareBar" not in _appjs and "has-bar" not in _appjs)
 t("the service worker no longer precaches the still",
   "verdict.webp" not in (ROOT / "static" / "sw.js").read_text() and not hasattr(appmod, "BAND_STILL"))
 
@@ -2201,29 +2274,33 @@ if _shutil.which("node"):
 
 # ---- edit the claim --------------------------------------------------------------
 _edit_js = (ROOT / "static" / "app.js").read_text().split('$("edit-claim").addEventListener("click", () => {')[1].split("\n});")[0]
-t("the result offers 'Edit claim' right under the claim, before anything else on the sheet",
-  _at("The claim you checked") < _at('id="edit-claim"') < _at("The short answer")
+# The desk front: Edit claim is one of the ways on in the Open stop, beside
+# Share and Check another claim; Back from the answer is the claim box itself.
+t("the result offers 'Edit claim' with the other ways on, after what is still open",
+  _at("The claim you checked") < _at(">Still open<") < _at('id="edit-claim"') < _at('id="report-open"')
   and '>Edit claim</button>' in _ord and 'id="claim-echo"' in _ord)
 t("  it goes back to the claim box with the claim filled, cursor at the end, suggestions shut",
   "goHome()" in _edit_js and "input.value = claim" in _edit_js and "currentResult.claim" in _edit_js
   and "setSelectionRange(claim.length, claim.length)" in _edit_js and "closeSuggest()" in _edit_js
   and "check(" not in _edit_js)
-t("  it is a 44px target and is not offered while a check runs",
-  "min-height: 44px" in _css.split(".edit-claim {")[1].split("}")[0] and "#result.checking .edit-claim { display: none; }" in _css)
+t("  it is a 44px target and is not offered while a check runs (the stops after the first are hidden until a result)",
+  '<button class="btn quiet" id="edit-claim" type="button">' in _ord
+  and int(re.search(r"^\.btn \{[^}]*min-height: (\d+)px", _dcss, re.M).group(1)) >= 44
+  and "html:not(.checked) .stop:not(#s1) { display: none; }" in _dcss)
 
 # ---- who and what it applies to, then the limitation -----------------------------
-_deeper_html = _ord.split('<details class="deeper"')[1].split("</details>")[0]
+_folds_html = " ".join(_re.findall(r'<details class="said-wrap".*?</details>', _ord, _re.S))
 t("who and what the answer applies to is its own block, between the research and what is still open",
   _at("What the research says") < _at("Who and what this applies to") < _at(">Still open<")
   and "Adults aged 18 to 67" in _ord.split(">Still open<")[0].split("Who and what this applies to")[1])
-t("  it leaves the breakdown, so the breakdown does not say it a second time",
-  "Who and what this applies to" not in _deeper_html and "And who it does not" not in _deeper_html
-  and "Adults aged 18 to 67" not in _deeper_html)
+t("  it is not inside a fold, so the folds do not say it a second time",
+  "Who and what this applies to" not in _folds_html and "And who it does not" not in _folds_html
+  and "Adults aged 18 to 67" not in _folds_html)
 t("  the main limitation is still the still_open field, and still printed",
   _re.search(r'<p class="still-open" id="still-open">.*?<span id="still-open-text">[^<]+</span>', _ord, _re.S) is not None)
 t("  the script fills the same block from the same view",
-  'function renderWho(data)' in (ROOT / "static" / "app.js").read_text()
-  and "renderWho(data);" in (ROOT / "static" / "app.js").read_text())
+  '<div class="who" id="who-sec"><h3 id="who-label">' in (ROOT / "static" / "app.js").read_text()
+  and "bv.applies_to || bv.not_applies_to || bv.populations.length" in (ROOT / "static" / "app.js").read_text())
 
 # ---- sources say why they are listed ---------------------------------------------
 _SW = [{"cited_in_verdict": True, "publication_types": ["Journal Article", "Meta-Analysis"]},
@@ -2248,8 +2325,8 @@ t("  the table of designs is the same in the script and on the server",
               (ROOT / "static" / "app.js").read_text().split("const TYPES = [")[1].split("\n];")[0])
   == [tuple(x) for x in _display.DESIGN_NOTES])
 t("  every source on the result page carries its line",
-  _ord.split('id="server-result"')[0].count('<li class="study ') == _ord.split('id="server-result"')[0].count('<p class="why">')
-  and _ord.count('<p class="why">') >= 1)
+  _ord.split('id="server-result"')[0].count('<li class="row" ') == _ord.split('id="server-result"')[0].count('<p class="note why">')
+  and _ord.count('<p class="note why">') >= 1)
 if _shutil.which("node"):
     _tsrc = (ROOT / "static" / "app.js").read_text()
     _tsrc = ("const TYPES = [" + _tsrc.split("const TYPES = [")[1].split("function escapeHtml")[0])
@@ -2264,9 +2341,12 @@ t("what the research says is three to five sentences, every one of them cited",
   and all(breakdown.refs(line, 2) for line in _says), _says)
 t("  and carries no figure the abstracts do not have",
   not any("47%" in line for line in _says), _says)
-t("  it is in the payload, server rendered, and outside the fold",
-  "What the research says" in _ord and _at("What the research says") < _at("deeper")
-  and all(line in _ord for line in _says))
+# The who-line is said once, in the who block (see "the who-line is not said twice").
+t("  it is in the payload, server rendered, and outside the folds",
+  "What the research says" in _ord and _at("What the research says") < _at("The claim, part by part")
+  and all(line in _htmllib.unescape(_re.sub(r"<[^>]+>", "", _ord.split('id="server-result"')[0]))
+          for line in _says if not line.startswith("Who was studied")),
+  [line for line in _says if line not in _htmllib.unescape(_re.sub(r"<[^>]+>", "", _ord.split('id="server-result"')[0]))])
 # The figure and the plain words for it are one pair. The translation is
 # written last in the field, so picking the first two sentences would print a
 # ratio and leave its translation behind.
@@ -2392,67 +2472,37 @@ t("every study in the payload carries the word for its spine",
 t("every study carries the type name the chart shows on hover",
   _vd["studies"][0]["type_label"] == "Meta-Analysis"
   and _vd["studies"][1]["type_label"] == "Randomized Controlled Trial")
-t("the bars are drawn in the order of the list, numbered the same way",
-  _ord.index('data-i="0"') < _ord.index('data-i="1"')
-  and ">01<" in _ord and ">02<" in _ord)
-t("height is the kind of study and fill is whether the verdict used it",
-  'class="barcol is-used" data-i="0"' in _ord and "barcol-bar h-strong" in _ord)
-t("each bar names itself for a screen reader and says where it goes",
-  'aria-label="Meta-analysis 01, 2017, used for this verdict. '
-  'Go to it in the list of studies."' in _ord)
-
-# The chart is drawn twice, by Jinja for a shared link and by renderChart for
-# a live check. Two renderers for one drawing is how they start to diverge.
-_bar_tpl = _tpl[_tpl.index("{% macro barcol"):]
-_bar_tpl = _bar_tpl[:_bar_tpl.index("{% endmacro %}")]
-_bar_js = _js[_js.index("function renderChart"):]
-_bar_js = _bar_js[:_bar_js.index("function showStudy")]
-t("the server and the browser draw the same bar",
-  all(piece in _bar_tpl and piece in _bar_js
-      for piece in ("barcol-track", "barcol-bar h-", " k-", "barcol-spine", "barcol-no",
-                    "barcol-tip", "is-used", "Go to it in the list of studies")))
-t("  and read the chart's words off the same server counts",
-  all(f"ev.{k}" in _bar_js or f"ev.{k}" in _tpl for k in ("summary", "facts", "described")))
-
-_chart_css = _css.split("---- The evidence chart")[1].split("/* The study the reader")[0]
-t("the chart draws only in named tokens: no raw colour reaches the evidence",
-  not re.search(r"#[0-9a-f]{3}|rgb\(|hsl\(", _chart_css, re.I), _chart_css[:200])
-t("  the cloth says what kind of study it is, and nothing is coloured by verdict",
-  all(f".k-{k}" in _css for k in ("strong", "human", "lab", "weak"))
-  and "data-verdict" not in _css)
-t("  a spine word that cannot stand up on its book is left off, never cut",
-  "function fitSpines" in _js and "fitSpines();" in _bar_js
-  and ".h-retracted .barcol-spine { display: none; }" in _css)
-t("a bar is at least a finger tall, and the gap between books is inside the "
-  "button, so no strip between them is dead to a finger",
-  int(re.search(r"--plot-h: (\d+)px", _chart_css).group(1)) >= 44
-  and ".barcol-track { height: var(--plot-h); display: flex; align-items: flex-end; padding: 0 1px; }" in _chart_css)
-t("a book is as wide as a book: columns stop at 46px and the row ends at a "
-  "bookend, so a short list never stretches into a bar chart",
-  "flex: 0 1 46px;" in _chart_css and ".chart-bars::after {" in _chart_css)
-t("a relied-on book is solid cloth and a book read but not used is outlined "
-  "in its cloth on a pale wash, never faded, on the shelf, the mini shelves "
-  "and the share card",
-  not re.search(r"barcol-bar[^{]*\{[^}]*opacity", _chart_css.split("@keyframes bar-grow")[0])
-  and "opacity" not in _css.split(".mini {")[1].split("/* Before you trust")[0]
-  and ".barcol:not(.is-used) .barcol-bar:not(.h-retracted) {" in _chart_css
-  and "border: 2px solid var(--k" in _chart_css
-  and ".mini i:not(.on):not(.h-retracted) {" in _css
-  and ".is-used .barcol-bar::before {" in _chart_css
-  and "globalAlpha" not in _js and "CARD.wash" in _js and "strokeRect" in _js
-  and "Outlined books were read but not used." in (ROOT / "templates" / "index.html").read_text())
-_grow = _css.split("@keyframes bar-grow")[1].split("}")[0]
-t("the reveal moves transform and opacity only",
-  "transform" in _grow and "opacity" in _grow
-  and not re.search(r"\b(height|width|margin|top|left)\b", _grow), _grow)
-t("  under 400ms end to end, and nothing at all under reduced motion",
-  "250ms" in _chart_css and "* 20ms" in _chart_css
-  and ".chart-bars.reveal .barcol-bar { animation: none; }"
-  in _css.split("@media (prefers-reduced-motion: reduce)")[1])
-t("a bar is a button, so the keyboard reaches it, and it marks what it opens",
-  'type="button" class="barcol' in _ord and "showStudy(Number(col.dataset.i))" in _js
-  and "scrollIntoView" in _js[_js.index("function showStudy"):]
-  and ".barcol.is-on .barcol-bar" in _css)
+# The desk front: the shelf chart left the result page (deskfront_answer1).
+# Its job, every study in list order with its design and whether the verdict
+# used it, is done by the Weighed rows, and the sheets on the desk carry the
+# cloths. These are the shelf tests' replacements.
+t("the rows are in the order of the list, numbered the same way",
+  _ord.index('id="row-1" data-n="1" data-i="0"') < _ord.index('id="row-2" data-n="2" data-i="1"'))
+t("each row names its design, and its group says whether the verdict used it",
+  '<span class="num">1</span><span class="design">Meta-Analysis</span>' in _ord
+  and _ord.index('id="grp-relied"') < _ord.index('id="row-1"'))
+t("each row names itself for a screen reader and says what it does",
+  re.search(r'aria-label="Study 1, Meta-Analysis: [^"]+\. Lift its sheet"', _ord) is not None)
+_row_tpl = _tpl[_tpl.index("{% macro row("):]
+_row_tpl = _row_tpl[:_row_tpl.index("{% endmacro %}")]
+_row_js = _js[_js.index("function studyRowHtml"):]
+_row_js = _row_js[:_row_js.index("\n}\n")]
+t("the server and the browser draw the same row",
+  all(piece in _row_tpl and piece in _row_js
+      for piece in ('<li class="row" id="row-', '<button class="row-head" type="button" aria-pressed="false"',
+                    '<span class="design">', '<p class="src">', 'aria-controls="more-', "Lift its sheet",
+                    "The answer names it", '<p class="note why">', "Deep dive on study")))
+t("  and the chart's code is gone from the page and the script",
+  "barcol" not in _ord and "function renderChart" not in _js and "fitSpines" not in _js
+  and 'id="chart-sec"' not in _tpl)
+_desk_cloth = (ROOT / "static" / "desk.css").read_text()
+# The desk's sheets are paper, not cloth: the kind of study is named in words
+# on each row, and nothing on the front is coloured by verdict.
+t("nothing on the desk front is coloured by verdict, and the row names the kind of study",
+  "data-verdict" not in _desk_cloth and "[data-verdict" not in _desk_cloth
+  and '<span class="design">Meta-Analysis</span>' in _ord)
+t("the share card still draws read-but-unused books outlined on a wash, never faded",
+  "globalAlpha" not in _js and "CARD.wash" in _js and "strokeRect" in _js)
 
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
@@ -3167,8 +3217,8 @@ t("the prompt asks for subject and outcome for every study, and marks OFF TOPIC"
 db.put_cached_verdict("off topic render", "q", "true", "Because (Study 1).", ["L1"], _SMOKE,
                       tldr="Smoking causes lung cancer.", still_open="Doses vary.")
 _html = c.get("/?q=off%20topic%20render").data.decode()
-t("the server-rendered chart says which bars are off topic",
-  "read, off topic" in _html and "3 off topic" in _html)
+t("the server-rendered result says which studies are off topic (the Weighed group and the Read line)",
+  "Set aside: off topic (3)</button>" in _html and "3 set aside as off topic" in _html)
 
 
 # 6. A fourth verdict, "Not enough evidence", for when nothing tests the claim.
@@ -5198,8 +5248,8 @@ t("  a pointer left with nothing above it, after a later step, is taken out",
                                "evidence": ["LDL fell by 0.19 mmol/L (Study 1)."]})["effect_size"]
   == breakdown.EFFECT_SIZE_ABOVE)
 t("  and the page prints no effect row when there is no line",
-  "{%- if bv.effect_size %}" in (ROOT / "templates" / "index.html").read_text()
-  and "(bv.effect_size\n        ? `<p class=\"effect\">" in (ROOT / "static" / "app.js").read_text())
+  '{% if bv.effect_size %}<p class="effect">' in (ROOT / "templates" / "index.html").read_text()
+  and '(bv.effect_size ? `<p class="effect">' in (ROOT / "static" / "app.js").read_text())
 
 # All of it, through a real check.
 _LENT_CLAIM = "Lentils lower LDL cholesterol"
@@ -5942,8 +5992,8 @@ db.put_cached_verdict(_GE_CLAIM, "(alcohol) AND (pregnancy)", "false",
                       "The review found no consistent effects (Study 1).", ["GE1"], [dict(s) for s in _GE_ST],
                       tldr=_GE_TLDR, still_open="Exact low dose limits.", breakdown=json.loads(json.dumps(_GE_BD)))
 _ge_page = c.get("/?q=" + urllib.parse.quote(_GE_CLAIM)).get_data(as_text=True)
-_ge_box = re.search(r'<p class="effect"><b>How big the effect is</b><span>(.*?)</span></p>', _ge_page)
-_ge_conf = re.search(r'<span class="confidence" id="confidence"><mark>(.*?)</mark>', _ge_page)
+_ge_box = re.search(r'<p class="effect"><b>How big the effect is\.</b> <span>(.*?)</span></p>', _ge_page)
+_ge_conf = re.search(r'<p class="sure" id="confidence">(.*?)</p>', _ge_page)
 t("  and the server-rendered page shows that line as its confidence, and the script renders the same field",
   _ge_conf and _ge_conf.group(1) == verdict.GUIDANCE_LINE + "."
   and "Strong evidence against this claim" not in _ge_page
@@ -6146,13 +6196,20 @@ verdict.guideline_view = lambda claim: None
 # crawler get it with no script), in the shared text and on the link card.
 _DOC = "Check important health decisions with a doctor."
 _BETA = '<a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span>'
+# The desk front's masthead is the strip along the top of every stop.
+_BETA_DESK = '<a class="sw" href="/" aria-label="Evident home">Evident</a> <span class="beta">Beta</span>'
 _mast = {p: c.get(p).get_data(as_text=True) for p in ("/", "/privacy", "/no-such-page")}
 t("every masthead carries a Beta label right after the wordmark: home, privacy, 404",
-  all(_BETA in h for h in _mast.values()), {p: _BETA in h for p, h in _mast.items()})
+  all((_BETA_DESK if p == "/" else _BETA) in h for p, h in _mast.items()),
+  {p: (_BETA_DESK if p == "/" else _BETA) in h for p, h in _mast.items()})
 t("  it is plain text, not a link, a button or a tab stop",
   all(_re.search(r'<span class="beta">Beta</span>', h) and not _re.search(r'<(a|button)[^>]*>\s*Beta\s*<', h)
       for h in _mast.values()))
 _beta_css = (ROOT / "static" / "style.css").read_text().split(".beta {")[1].split("}")[0]
+_beta_desk = (ROOT / "static" / "desk.css").read_text().split(".strip .beta {")[1].split("}")[0]
+t("  on the desk front, on the night's quiet ink, with no fill and no motion",
+  "var(--on-deep-2)" in _beta_desk and "background" not in _beta_desk and "animation" not in _beta_desk
+  and "transition" not in _beta_desk, _beta_desk)
 t("  set in the mono, on the night's quiet ink, with no fill and no motion",
   "var(--mono)" in _beta_css and "var(--on-deep-2)" in _beta_css and "background" not in _beta_css
   and "animation" not in _beta_css and "transition" not in _beta_css, _beta_css)
@@ -6165,14 +6222,14 @@ fg.models.script = [Resp("sleep AND memory"),
 _dl = P("Sleeping eight hours improves memory", ip="7.7.7.41").get_json()
 _dl_page = c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
 _i_stamp = _dl_page.find('id="stamp"')
-_i_doc = _dl_page.find('<p class="doctor-line" id="doctor-line">' + _DOC + "</p>")
+_i_doc = _dl_page.find('<p class="doctor" id="doctor-line">' + _DOC + "</p>")
 t("a server-rendered result carries the doctor line, after the assessment and before what the research says",
   0 < _i_stamp < _i_doc < _dl_page.find('id="says-sec"'), (_i_stamp, _i_doc))
 t("  exactly once, and visible: no hidden attribute on a page that has a verdict",
   _dl_page.count(_DOC) == 1 and 'id="doctor-line" hidden' not in _dl_page)
 _cold = c.get("/?q=never%20checked%20for%20the%20line").get_data(as_text=True)
 t("  an unchecked page keeps the line hidden until a verdict shows",
-  '<p class="doctor-line" id="doctor-line" hidden>' + _DOC in _cold)
+  '<p class="doctor" id="doctor-line" hidden>' + _DOC in _cold)
 _js = (ROOT / "static" / "app.js").read_text()
 _rr = _js.split("function renderResult(data) {")[1].split("\nfunction ")[0]
 _rp = _js.split("function renderPending(claim) {")[1].split("\nfunction ")[0]
@@ -6353,7 +6410,7 @@ t("a result that rests on no studies says what to try next (server-rendered, hid
   'id="no-evidence"{% if not result or result.studies %} hidden{% endif %}' in _tpl
   and 'id="no-evidence" hidden' in c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
   and "Name the condition and the treatment" in _tpl and not _DASH.search(_tpl.split('id="no-evidence"')[1].split("</p>")[0])
-  and '$("no-evidence").hidden = data.studies.length > 0' in _jsrc)
+  and 'const none = n === 0;' in _jsrc and '$("no-evidence").hidden = !none;' in _jsrc)
 _strings = _re2.findall(r'"([^"\n]{12,})"', _jsrc.split("const SLOW_MS")[1].split("async function checkStreamed")[0])
 t("  none of that copy has a dash", not any(_DASH.search(x) for x in _strings) and not _DASH.search(_tpl.split('id="error"')[1].split("</section>")[0]))
 
@@ -6427,12 +6484,15 @@ t("a result's og:image is absolute and /og/<key>.png is a 1200x630 PNG, with twi
 # 7. Beta and the doctor line are on the first screen of the ask, the 404 and the error screen.
 _ask = c.get("/").get_data(as_text=True)
 t("the ask screen carries Not medical advice and the doctor sentence right under its introduction",
-  'class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
+  'class="nma ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>' in _ask)
+# The desk front: the note sits in stop 1 outside both the claim box and the
+# error block, so the error screen shows the same line.
 t("  so do the 404 page and the error screen",
   'class="ask-note">Not medical advice. Ask a doctor' in c.get("/nope-nope").get_data(as_text=True)
-  and 'class="error-note">Not medical advice. Ask a doctor' in _tpl)
-t("  and every result's head has the notice in the same row as the case line",
-  'class="case case-nma">Not medical advice</p>' in _srv)
+  and _tpl.index('<section id="error" hidden>') < _tpl.index('class="nma ask-note">Not medical advice. Ask a doctor')
+  < _tpl.index('id="ask-more"'))
+t("  and every result carries the notice in the strip along its top",
+  '<header class="strip" id="strip" role="note"><span class="name">' in _srv and "<b>Not medical advice.</b></header>" in _srv)
 
 # 8. scripts/stats.py: read-only, from the table that already exists.
 _sdb = os.path.join(tempfile.mkdtemp(), "s.db")
@@ -6782,8 +6842,8 @@ db.put_cached_verdict("count mismatch saved", "q AND r", "true", "Because (Study
                       ["R1", "R2", "R3"], _RS, tldr="Short.", still_open="Open.", breakdown=_rs_bd)
 _rsh = c.get("/?q=count+mismatch+saved").data.decode()
 t("a saved result's 'Rests on' count equals the studies marked used (server render)",
-  "Rests on" in _rsh and '<span class="group-count">3 studies</span>' in _rsh
-  and '5 studies</span>' not in _rsh, re.findall(r"Rests on.{0,80}", _rsh))
+  '<p class="rests-line">Rests on 3 studies.' in _rsh and "Rests on 5" not in _rsh
+  and "Relied on for the verdict (3)" in _rsh, re.findall(r"Rests on.{0,80}", _rsh))
 _rsj = P("count mismatch saved", ip="4.4.4.5").get_json()
 t("  and in the JSON the browser draws from",
   _rsj["breakdown"]["rests_on"] == 3
@@ -6793,11 +6853,11 @@ with db.get_conn() as _cn:
                           ("count mismatch saved",)).fetchone()[0]
 t("  while the stored record is not rewritten", json.loads(_raw_bd)["rests_on"] == 5)
 _js_now = (ROOT / "static" / "app.js").read_text()
-_rb = _js_now[_js_now.index("function renderBreakdown"):]
+_rb = _js_now[_js_now.index("function deskLines"):]
 _rb = _rb[:_rb.index("\n}\n")]
-t("renderBreakdown counts the used studies itself, not the stored number",
-  "const restsOn = studies.filter((s) => s.cited_in_verdict).length" in _rb
-  and "bd.rests_on" not in _js_now and _rb.index("const restsOn") < _rb.index("head.textContent = restsOn"))
+t("deskLines counts the used studies itself, not the stored number",
+  "const g = sourceGroups(studies);" in _rb and "r = g.cited.length" in _rb
+  and "Rests on ${plural(r, " in _rb and "rests_on" not in _js_now)
 
 # A saved record with no search query on file hides the "Searched PubMed for"
 # line in the server render and in renderResult, and invents no query.
@@ -6918,11 +6978,19 @@ t("errors: the claim is shown on the error screen and no copy points at a hidden
   and '$("error-claim").textContent' in _js and "still in the box" not in _js)
 
 _home2 = c.get("/").get_data(as_text=True)
-_foot = _home2.split('<footer class="foot')[1]
+# The desk front has no footer: stop 1 carries How it works, About and
+# Privacy in every state, and the Open stop ends on the medical-scope line and
+# all four links (R2 of the desk build).
+_foot = _tpl.split('<section class="stop" id="s6"')[1].split("</section>")[0]
+_s1 = _home2.split('<section class="stop" id="s1"')[1].split('id="ask-more"')[0]
 t("footer: About, Methodology, Corrections and contact, Privacy, and the medical-scope line",
-  all(x in _foot for x in ('href="/about"', 'href="/method"', 'href="/corrections"', 'href="/privacy"',
-                           "does not replace a clinician"))
-  and 'id="about-link" href="/about"' in _home2)
+  all(x in _foot for x in ("site_links(True)", "does not replace a clinician"))
+  and all(x in c.get("/?q=streamed%20claim").get_data(as_text=True).split('<section class="stop" id="s6"')[1]
+          for x in ('href="/about"', 'href="/method">Methodology</a>', 'href="/corrections"', 'href="/privacy"',
+                    "does not replace a clinician"))
+  and 'id="about-link" href="/about"' in _home2
+  and all(x in _s1 for x in ('id="how-btn" class="how-link" href="/method">How it works</a>',
+                             'id="about-link" href="/about">About</a>', 'href="/privacy">Privacy</a>')))
 for _slug in ("about", "method", "corrections", "privacy"):
   _r = c.get("/" + _slug); _h = _r.get_data(as_text=True)
   t(f"/{_slug} page: 200, footer links, Not medical advice, no dashes",
@@ -6951,8 +7019,10 @@ _qa_src = (ROOT / "scripts" / "qa.mjs").read_text()
 t("touch: qa.mjs fails any tap target under 44px, and the footer links are 44px rows on every page",
   "h < 43.5 || w < 43.5" in _qa_src and "tap target < 44px" in _qa_src
   and re.search(r"\.foot-links a \{[^}]*min-height: 44px", _css9) is not None
-  and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/", "/about", "/privacy")))
-_fl = [re.search(r'<p class="fine foot-links">(.*?)</p>', c.get(u).get_data(as_text=True), re.S).group(1) for u in ("/", "/about", "/privacy")]
+  and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/about", "/privacy"))
+  and re.search(r"\.site-links a \{[^}]*min-height: 44px", (ROOT / "static" / "desk.css").read_text()) is not None
+  and '<p class="site-links">' in c.get("/").get_data(as_text=True))
+_fl = [re.search(r'<p class="fine foot-links">(.*?)</p>', c.get(u).get_data(as_text=True), re.S).group(1) for u in ("/about", "/privacy")]
 t("footer: the separators are CSS on the links, not dots in the text, so none can end or start a wrapped line",
   all("\u00b7" not in x and x.count("<a ") == 4 and x.startswith('<span class="foot-row">') for x in _fl)
   and re.search(r"\.foot-links a::before \{[^}]*content: \"\\00b7\"", _css9) is not None
@@ -6963,8 +7033,9 @@ t("DESIGN.md: palette roles are written down and say green never signals safe or
   and all(h in _design9 for h in ("#f1f2ee", "#fafaf8", "#121514", "#434a46", "#5d6560", "#2c5848", "#d4e4da", "#0f1211")))
 _tpl_who = (ROOT / "templates" / "index.html").read_text()
 t("who: with only a 'does not apply' sentence, the heading says so and no empty 'applies to' heading is left",
-  "Who this does not apply to" in _tpl_who and "{%- if who_yes %}<p class=\"section-label label-2\">" in _tpl_who
-  and "Who this does not apply to" in _js and "(yes ? `<p class=\"section-label label-2\">" in (ROOT / "static" / "app.js").read_text())
+  "Who this does not apply to" in _tpl_who and '{% if who_yes %}<p class="intro label-2">And who it does not</p>{% endif %}' in _tpl_who
+  and "Who this does not apply to" in _js
+  and '(whoYes ? \'<p class="intro label-2">And who it does not</p>\' : "")' in (ROOT / "static" / "app.js").read_text())
 
 # ---- B6 F1: one certainty per page --------------------------------------------
 # The apple cider vinegar page said "low certainty" in the short answer,
@@ -7496,11 +7567,13 @@ db.put_cached_verdict(_ec, _GIN_Q, "complicated", "Ginger helped 99% of people (
                       ["L3"], [_MODREV], tldr="Ginger may reduce vomiting a little.", still_open="Doses vary.")
 _ea = P(_ec, "9.9.9.7").get_json() or {}
 _eh = c.get("/", query_string={"q": _ec}).get_data(as_text=True)
-_esays = _eh.split('id="says-sec"')[1].split("</section>")[0]
+# The desk front leaves a stop with nothing to show out (R1): no Research stop.
+_esays = _eh.split('<main id="track">')[1].split('id="server-result"')[0]
 t("extra: an explanation the gate empties is empty, not the short answer again",
   _ea.get("explanation") == "" and _ea.get("tldr") == "Ginger may reduce vomiting a little.", _ea.get("explanation"))
-t("extra: the server-rendered page then hides the research block instead of printing the short answer twice",
-  _esays.lstrip().startswith("hidden") and "Ginger may reduce vomiting a little." not in _esays, _esays[:120])
+t("extra: the server-rendered page then leaves the research stop out instead of printing the short answer twice",
+  'id="s5"' not in _esays and 'id="says-sec"' not in _esays
+  and _esays.count("Ginger may reduce vomiting a little.") == 1, _esays.count("Ginger may reduce vomiting a little."))
 
 # ---- Review extra: /corrections lists everything a report stores ----------------
 _cor = c.get("/corrections").get_data(as_text=True)
@@ -8340,24 +8413,26 @@ db.put_cached_verdict("creatine strength off topic saved", "creatine AND strengt
                       "Studies 1 and 2 show a gain. Study 3 shows hair loss.", ["OT1", "OT2", "OT3"], _OT,
                       tldr="Creatine increases strength.", still_open="Doses vary.", breakdown=_ot_bd)
 _oth = c.get("/?q=creatine+strength+off+topic+saved").data.decode()
-_ot_src = _oth[_oth.index('id="sources"'):_oth.index('class="nosteps"')]
-_ot_groups = [(m.group(2), m.group(1) is not None, int(m.group(3)), _re_s.findall(r">PMID (\w+)</a>", m.group(4)))
-              for m in _re_s.finditer(r'<details class="source-group"( open)?>\s*<summary class="group-head">'
-                                      r'<span class="group-name">([^<]*)</span><span class="group-count">(\d+)</span>'
-                                      r'</summary>(.*?)</details>', _ot_src, _re_s.S)]
+# The desk front's Weighed list: a group button, then its rows (open when the
+# button says aria-expanded="true", the list hidden otherwise).
+_ot_src = _oth[_oth.index('id="rows"'):_oth.index('id="s5"') if 'id="s5"' in _oth else _oth.index('id="s6"')]
+_ot_groups = [(m.group(2), m.group(1) == "true", int(m.group(3)), _re_s.findall(r">PubMed (\w+)</a>", m.group(4)))
+              for m in _re_s.finditer(r'<h3 class="grp-h"><button class="grp-btn" type="button" aria-label="[^"]*" '
+                                      r'aria-controls="grp-\w+" aria-expanded="(true|false)">([^<]*) \((\d+)\)</button></h3>'
+                                      r'\s*<ul class="rows" id="grp-\w+"(?: hidden)?>(.*?)</ul>', _ot_src, _re_s.S)]
 _otg = {name: (opened, n, pm) for name, opened, n, pm in _ot_groups}
 t("off topic: a study both cited and off topic is never under 'Relied on' on the server-rendered page",
   "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
   and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
 t("  it sits in a 'Set aside: off topic' group, folded, with the other off-topic study",
-  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PMID OT3</a>") == 1, _ot_groups)
+  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PubMed OT3</a>") == 1, _ot_groups)
 t("  and its line says it was set aside, not relied on",
-  "Read and set aside: measures a different outcome" in _ot_src.split("PMID OT3")[1].split("</li>")[0])
+  "Read and set aside: measures a different outcome" in _ot_src.split("PubMed OT3")[1].split("</li>")[0])
 _otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
 _ot_used = [s_["pmid"] for s_ in _otj["studies"] if s_["cited_in_verdict"]]
 t("  the counts agree: Rests on 2, '2 used', a relied-on group of 2, and 2 marked used in the JSON",
-  '<span class="group-count">2 studies</span>' in _oth and '3 studies</span>' not in _oth
-  and "2 used for this verdict" in _oth and "3 used for this verdict" not in _oth
+  '<p class="rests-line">Rests on 2 studies.' in _oth and "Rests on 3" not in _oth
+  and '<span id="path">2 relied on' in _oth and "3 relied on" not in _oth
   and _otg["Relied on for the verdict"][1] == 2 and _ot_used == ["OT1", "OT2"]
   and _otj["breakdown"]["rests_on"] == 2 and _otj["evidence"]["relied_on"] == 2, (_ot_used, re.findall(r"Rests on.{0,60}", _oth)))
 t("  the sentence resting only on the off-topic study is not printed, and the stamp stands on the two left",
@@ -8437,12 +8512,14 @@ if _shutil.which("node"):
       _ot_out["d"][0] == [True, False, False, False, False]
       and _ot_out["d"][1] == [s_["cited_in_verdict"] for s_ in _otj["studies"]])
 _ot_rr = _ot_js[_ot_js.index("function renderResult"):] if _shutil.which("node") else (ROOT / "static" / "app.js").read_text()
+_ot_wh = (ROOT / "static" / "app.js").read_text().split("function weighedHtml(data) {")[1].split("\nfunction ")[0]
 t("  renderResult clears the stale flags first and builds the list from sourceGroups, with the excluded group folded",
-  _ot_rr.index("dropOffTopicCites(data)") < _ot_rr.index("currentResult = data")
-  and "sourceGroups(data.studies)" in _ot_rr and 'group("Set aside: off topic", rows(g.excluded), false)' in _ot_rr)
+  _ot_rr.index("dropOffTopicCites(data)") < _ot_rr.index("currentResult = data") < _ot_rr.index("weighedHtml(data)")
+  and "g = sourceGroups(studies)" in _ot_wh and '["off", "Set aside: off topic", g.excluded]' in _ot_wh
+  and '${gi ? " hidden" : ""}' in _ot_wh)
 _ot_tpl = (ROOT / "templates" / "index.html").read_text()
 t("  both renderers name the off-topic group in the same words, and the old label is gone from both",
-  '<span class="group-name">Set aside: off topic</span>' in _ot_tpl and 'group("Set aside: off topic",' in _ot_rr
+  '("off", "Set aside: off topic", "Set aside: off topic", g.excluded)' in _ot_tpl and '["off", "Set aside: off topic", g.excluded]' in _ot_wh
   and not any("Excluded (off-topic)" in x for x in (_ot_tpl, (ROOT / "static" / "app.js").read_text())))
 
 # ---- /privacy says exactly what is counted -------------------------------------------------
@@ -8457,8 +8534,10 @@ t("privacy: it says a count is per day with no IP address, user agent, cookie, v
 t("privacy: it has no dash", not _DASH.search(_pt))
 # The footer's privacy sentence is the one at the top of /privacy, from one
 # source, and it says the claim text is kept: no stronger than the page.
-_ft_home = c.get("/").get_data(as_text=True)
-_ft_foot = " ".join(_re_s.sub(r"<[^>]+>", " ", _ft_home.split('<footer class="foot')[1].split("</footer>")[0]).split())
+# The desk front has no footer: the sentence is the privacy line in the Open
+# stop of every result, where the footer's line was.
+_ft_home = c.get("/?q=streamed%20claim").get_data(as_text=True)
+_ft_foot = " ".join(_re_s.sub(r"<[^>]+>", " ", _ft_home.split('<p class="legend privacy">')[1].split("</p>")[0]).split())
 _ft_lede = " ".join(_re_s.sub(r"<[^>]+>", " ", _pv.split('<p class="lede">')[1].split("</p>")[0]).split())
 import html as _ft_html  # noqa: E402
 _ft_foot = _ft_html.unescape(_ft_foot)
@@ -8471,14 +8550,15 @@ t("  the footer and the /privacy short version print the same sentence",
   _ft_line in _ft_foot and _ft_lede == "The short version: " + _ft_line[0].lower() + _ft_line[1:], (_ft_foot, _ft_lede))
 t("  the lede runs on after its colon in lower case, with no stray capital",
   _ft_lede.startswith("The short version: claim text is stored"), _ft_lede)
-_ft_p = _ft_home.split('<footer class="foot')[1].split("</footer>")[0]
-_ft_p = [x for x in _ft_p.split("<p") if "identifies you" in x][0].split("</p>")[0]
+_ft_p = _ft_home.split('<p class="legend privacy">')[1].split("</p>")[0]
 t("  in the footer the sentence is followed by a link to /privacy",
   _re_s.search(r'identifies you and is sent to [^<]* to check it\.\s*<a href="/privacy">[^<]+</a>\s*$', _ft_p), _ft_p)
 _ft_css = (ROOT / "static" / "style.css").read_text()
 t("  the footer's Privacy details link has a tap area of 44px or more, grown around it, so the sentence does not move",
   re.search(r"\.foot \.fine:not\(\.foot-links\) a \{[^}]*position: relative", _ft_css)
-  and re.search(r"\.foot \.fine:not\(\.foot-links\) a::after \{[^}]*inset: -26px -6px -2px", _ft_css))
+  and re.search(r"\.foot \.fine:not\(\.foot-links\) a::after \{[^}]*inset: -26px -6px -2px", _ft_css)
+  and re.search(r"\.legend\.privacy a \{[^}]*position: relative", (ROOT / "static" / "desk.css").read_text())
+  and re.search(r"\.legend\.privacy a::after \{[^}]*inset: -12px -6px", (ROOT / "static" / "desk.css").read_text()))
 t("  and it stays true: /privacy keeps the claim text with nothing that identifies the person, and sends it to the same provider",
   all(x in _pt for x in ("The text of each claim", "no name", "no account", "no IP address stored with a check",
                          "it does not get your IP address or anything else that identifies you"))
@@ -8663,7 +8743,7 @@ t("  and the script puts the typed part in a <bdi> as text, never as markup",
 _ln = c.get("/?q=" + urllib.parse.quote(_RW_TYPED)).get_data(as_text=True)
 _ln_res = json.loads(_ln.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
 t("link: a reworded match by address is server-rendered with its verdict and the note",
-  '<h1 class="claim-echo" id="claim-echo">' + _RW_SAVED + "</h1>" in _ln
+  '<h1 class="q claim-echo" id="claim-echo">' + _RW_SAVED + "</h1>" in _ln
   and '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>'
       + str(_msc_escape(_RW_TYPED)) + "</bdi>\u201d.</p>" in _ln
   and "Zinc may shorten a cold a little." in _ln and _ln_res.get("typed") == _RW_TYPED
@@ -8706,10 +8786,11 @@ t("meet: a study whose abstract names the outcome only in its background is set 
   _mo_hair and _mo_hair[0]["off_topic"] == verdict.OFF_OUTCOME and not _mo_hair[0]["cited_in_verdict"],
   [(s_["pmid"], s_.get("off_topic")) for s_ in _mo.get("studies") or []])
 _mo_pg = c.get("/?q=" + urllib.parse.quote(_MO_CLAIM)).get_data(as_text=True)
-_mo_grp = _mo_pg.split('<span class="group-name">Set aside: off topic</span>')
+_mo_grp = _mo_pg.split('aria-controls="grp-off"')
 t("  the page puts it in 'Set aside: off topic' with the line: " + _MO_WHY,
-  len(_mo_grp) == 2 and _HAIR["study"]["title"][:30] in _mo_grp[1].split("</details>")[0]
-  and f'<p class="why">{_MO_WHY}</p>' in _mo_grp[1].split("</details>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
+  len(_mo_grp) == 2 and "Set aside: off topic (" in _mo_grp[1].split("</button>")[0]
+  and _HAIR["study"]["title"][:30] in _mo_grp[1].split("</ul>")[0]
+  and f'<p class="note why">{_MO_WHY}</p>' in _mo_grp[1].split("</ul>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
 t("  and that line is true of the rule: the study measured something else, and no dash",
   "different outcome" in _MO_WHY and not any(ch in _MO_WHY for ch in "\u2013\u2014"))
 if _shutil.which("node"):
@@ -9013,7 +9094,7 @@ _bl_pg = _bl.get_data(as_text=True)
 t("meet: a reworded link, through the bounded lookup, renders the saved answer with its note",
   _bl.status_code == 200 and "Kelp may shorten a cold a little." in _bl_pg
   and "Showing the saved check for this claim. You typed \u201c<bdi>" in _bl_pg
-  and '<h1 class="claim-echo" id="claim-echo">' + _BL_SAVED + "</h1>" in _bl_pg)
+  and '<h1 class="q claim-echo" id="claim-echo">' + _BL_SAVED + "</h1>" in _bl_pg)
 _bl_scan = db.EQUIVALENT_SCAN
 db.EQUIVALENT_SCAN = 1
 db.put_cached_verdict("Kelp newer row pushes the scan", "(kelp) AND (x)", "complicated", "Mixed (Study 1).", ["P1"],
@@ -10368,9 +10449,199 @@ if _shutil.which("node"):
                           None, None, None, None, None, None, None], _r4out["hrefs"])
 _r4js = (ROOT / "static" / "app.js").read_text()
 t("R4b: every href the script builds from data goes through the gate",
-  not re.findall(r'href="\$\{(?!escapeHtml\((?:exactUrl|widerUrl|safeHref\())', _r4js)
+  not re.findall(r'href="\$\{(?!escapeHtml\((?:exactUrl|widerUrl|href\)|safeHref\())', _r4js)
+  and "const href = safeHref(s.url)" in _r4js and _r4js.count('href="${escapeHtml(href)}"') == 1
   and "div.textContent = str" not in _r4js,
   re.findall(r'href="\$\{[^}]*\}', _r4js))
+
+# ---- R4: both render paths, on the desk front's fixture results ----------------
+# The saved results the fixture server serves (16, 8, 5, 3 and no studies, and
+# one with " ' < > & in its claim, a title, an author and the answer) go
+# through the template here and through app.js in node, against a page that
+# does nothing. Weighed and Research must come out as the same tree, the
+# lines of stops 2, 3 and 6 the same words, and on both paths the hostile
+# words read back exactly, with no attribute the template did not give and no
+# href off http, https, this site or a fragment.
+_R4_ROWS = json.loads((ROOT / "scripts" / "fixtures" / "desk_saved.json").read_text())["rows"]
+for _r4r in _R4_ROWS:
+    db.put_cached_verdict(_r4r["claim"], _r4r["search_query"], _r4r["verdict"], _r4r["explanation"], _r4r["cited"],
+                          _r4r["studies"], tldr=_r4r["tldr"], still_open=_r4r["still_open"], breakdown=_r4r["breakdown"])
+_R4_HOST = _R4_ROWS[-1]
+# Its plain twin: the same row with every " ' < > & taken out, so the two must draw the same elements.
+def _r4_plain(v):
+    if isinstance(v, str):
+        return re.sub(r"[\"'<>&]", "", v)
+    if isinstance(v, list):
+        return [_r4_plain(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _r4_plain(x) for k, x in v.items()}
+    return v
+
+
+_R4_TWIN = _r4_plain(_R4_HOST)
+_R4_TWIN["claim"] = _R4_TWIN["claim"].replace("Escaping test", "Plain twin test", 1)
+db.put_cached_verdict(_R4_TWIN["claim"], _R4_TWIN["search_query"], _R4_TWIN["verdict"], _R4_TWIN["explanation"], _R4_TWIN["cited"],
+                      _R4_TWIN["studies"], tldr=_R4_TWIN["tldr"], still_open=_R4_TWIN["still_open"], breakdown=_R4_TWIN["breakdown"])
+t("R4: the hostile fixture carries \" ' < > & in its claim, a title, an author and the answer",
+  all(all(ch in v for ch in "\"'<>&") for v in (_R4_HOST["claim"], _R4_HOST["studies"][0]["title"],
+                                                _R4_HOST["studies"][0]["authors"][0], _R4_HOST["tldr"])))
+
+
+class _R4Full(_R4Parser):
+    """Start tags, end tags and text runs, whitespace folded; plus the text of each id'd element."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.stack, self.byid, self.els = [], [], {}, []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        self.out.append(("<", tag, tuple(sorted((k, v or "") for k, v in attrs))))
+        self.els.append((tag, a, [k for k, _ in attrs]))
+        if tag in ("br", "img", "input", "meta", "link", "source", "hr", "wbr"):
+            return
+        self.stack.append(a.get("id"))
+        if a.get("id"):
+            self.byid.setdefault(a["id"], "")
+
+    def handle_endtag(self, tag):
+        self.out.append((">", tag))
+        if self.stack:
+            self.stack.pop()
+
+    def handle_data(self, data):
+        for i in self.stack:
+            if i:
+                self.byid[i] += data
+        d = re.sub(r"\s+", " ", data)
+        if d.strip():
+            if self.out and self.out[-1][0] == "t":
+                self.out[-1] = ("t", self.out[-1][1] + d)
+            else:
+                self.out.append(("t", d))
+
+
+def _r4_full(html_):
+    p_ = _R4Full()
+    p_.feed(html_)
+    p_.close()
+    p_.out = [(x[0], x[1].strip()) if x[0] == "t" else x for x in p_.out]
+    return p_
+
+
+def _r4_section(html_, sid):
+    i = html_.find(f'<section class="stop long" id="{sid}"')
+    if i < 0:
+        return ""
+    depth = 0
+    for m in re.finditer(r"<(/?)section\b[^>]*>", html_[i:]):
+        depth += -1 if m.group(1) else 1
+        if depth == 0:
+            return html_[i:i + m.end()]
+    return ""
+
+
+_r4_pages = [c.get("/?q=" + urllib.parse.quote(r["claim"])).get_data(as_text=True) for r in _R4_ROWS]
+_r4_datas = [json.loads(p_.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+             if 'id="server-result"' in p_ else None for p_ in _r4_pages]
+t("R4: every fixture result renders on the server, the stored words in its data",
+  all(_r4_datas) and [d["claim"] for d in _r4_datas] == [r["claim"] for r in _R4_ROWS]
+  and _r4_datas[-1]["studies"][0]["authors"][0] == _R4_HOST["studies"][0]["authors"][0]
+  and _r4_datas[-1]["studies"][0]["title"] == _R4_HOST["studies"][0]["title"],
+  [d and d["claim"] for d in _r4_datas])
+_R4_HARNESS = r"""
+const fs = require("fs"), vm = require("vm");
+const nop = new Proxy(function () {}, {
+  get(t, k) {
+    if (k === Symbol.iterator) return function* () {};
+    if (k === Symbol.toPrimitive) return () => "";
+    if (k === "then") return undefined;
+    if (k === "length") return 0;
+    return nop;
+  },
+  apply() { return nop; }, construct() { return nop; }, set() { return true; }, has() { return true; },
+});
+const ctx = { console, URL, URLSearchParams, JSON, Math, Date, Intl, Set, Map, Promise, setTimeout() {}, clearTimeout() {},
+  document: nop, navigator: nop, localStorage: nop, sessionStorage: nop, history: nop,
+  location: { search: "", pathname: "/", href: "http://localhost/" }, matchMedia: () => nop, requestAnimationFrame() {},
+  fetch: () => new Promise(() => {}), CustomEvent: function () {}, visualViewport: nop, addEventListener() {},
+  IntersectionObserver: nop, ResizeObserver: nop, getComputedStyle: () => nop, scrollTo() {}, innerWidth: 390, innerHeight: 844 };
+ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;
+vm.createContext(ctx);
+const rows = JSON.parse(fs.readFileSync(0, "utf8"));
+ctx.__rows = rows;
+const out = vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + `
+;__rows.map((d) => { dropOffTopicCites(d); return { stops: deskStops(d), lines: deskLines(d),
+  weighed: weighedHtml(d), research: researchHtml(d) }; })`, ctx);
+process.stdout.write(JSON.stringify(out));
+"""
+if _shutil.which("node"):
+    _r4js_out = json.loads(_subprocess.run(["node", "-e", _R4_HARNESS, str(ROOT / "static" / "app.js")],
+                                           input=json.dumps(_r4_datas), capture_output=True, text=True, check=True).stdout)
+    _r4_trees = [_r4_full(p_) for p_ in _r4_pages]
+    _r4_same, _r4_diff = 0, []
+    for _r, _pg, _js_ in zip(_R4_ROWS, _r4_pages, _r4js_out):
+        for _sid, _key in (("s4", "weighed"), ("s5", "research")):
+            _a, _b = _r4_full(_r4_section(_pg, _sid)).out, _r4_full(_js_[_key]).out
+            if _a == _b:
+                _r4_same += bool(_a)
+            else:
+                _k = next((i for i, (x, y) in enumerate(zip(_a, _b)) if x != y), min(len(_a), len(_b)))
+                _r4_diff.append((_r["claim"][:24], _sid, _a[_k:_k + 2], _b[_k:_k + 2]))
+    t("R4: the server and the script draw the same Weighed and Research, tag for tag and word for word, on every fixture",
+      not _r4_diff and _r4_same == 2 * sum(1 for r in _R4_ROWS if r["studies"]), _r4_diff[:3])
+    t("R4: the same stops, in the same order, on both paths (no empty stop: no studies, no Weighed and no Research)",
+      all([s_.split('data-stop="')[1].split('"')[0] for s_ in re.findall(r'<section class="stop[^"]*" id="s\d"[^>]*>', _pg)]
+          == _js_["stops"] for _pg, _js_ in zip(_r4_pages, _r4js_out))
+      and _r4js_out[4]["stops"] == ["Claim", "Answer", "Read", "Open"]
+      and _r4js_out[0]["stops"] == ["Claim", "Answer", "Read", "Weighed", "Research", "Open"],
+      [j["stops"] for j in _r4js_out])
+    t("R4: stops 2 and 3 carry the same lines on both paths",
+      all(_tr.byid.get("below", "").strip() == _js_["lines"]["below"] and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
+          and _tr.byid.get("path", "").strip() == _js_["lines"]["path"] and _tr.byid.get("legend3", "").strip() == _js_["lines"]["legend"]
+          for _tr, _js_ in zip(_r4_trees, _r4js_out)),
+      [(_tr.byid.get("h-read"), _js_["lines"]["read"]) for _tr, _js_ in zip(_r4_trees, _r4js_out)])
+    _r4h_tr = _r4_trees[-1]
+    _r4h_js = _r4_full(_r4js_out[-1]["weighed"] + _r4js_out[-1]["research"])
+    t("R4: on the server the hostile claim, answer and still open read back as the stored words",
+      _r4h_tr.byid.get("claim-echo") == _R4_HOST["claim"] and _r4h_tr.byid.get("tldr") == _R4_HOST["tldr"]
+      and _r4h_tr.byid.get("still-open-text") == _R4_HOST["still_open"],
+      (_r4h_tr.byid.get("claim-echo"), _r4h_tr.byid.get("tldr")))
+    _r4_ttl = lambda tr: [x[1] for i, x in enumerate(tr.out) if x[0] == "t" and i and tr.out[i - 1][:2] == ("<", "span")
+                          and ("class", "ttl") in tr.out[i - 1][2]]
+    t("R4: on both paths the hostile title reads back as the stored words",
+      _r4_ttl(_r4_full(_r4_section(_r4_pages[-1], "s4")))[:1] == [_R4_HOST["studies"][0]["title"]]
+      and _r4_ttl(_r4h_js)[:1] == [_R4_HOST["studies"][0]["title"]], (_r4_ttl(_r4h_js), _R4_HOST["studies"][0]["title"]))
+    t("  and the authors reach the page only as text (the study sheet sets them with textContent)",
+      '$("sheet-authors").textContent = ' in _r4js and "sheet-authors\").innerHTML" not in _r4js
+      and "Evil" not in _r4js_out[-1]["weighed"] + _r4js_out[-1]["research"]
+      and "Evil" not in _r4_pages[-1].split('id="server-result"')[0])
+    # Every element and attribute name the hostile result shows, its plain twin shows too.
+    _r4_sig = lambda els: {(tg, tuple(sorted(n))) for tg, _, n in els}
+    _r4_main = lambda pg: _r4_full(pg.split('<main id="track">')[1].split('id="server-result"')[0]).els
+    _r4_twin_pg = c.get("/?q=" + urllib.parse.quote(_R4_TWIN["claim"])).get_data(as_text=True)
+    _r4_twin_data = json.loads(_r4_twin_pg.split('id="server-result" type="application/json"')[1].split(">", 1)[1].split("</script>")[0])
+    _r4_twin_js = json.loads(_subprocess.run(["node", "-e", _R4_HARNESS, str(ROOT / "static" / "app.js")],
+                                             input=json.dumps([_r4_twin_data]), capture_output=True, text=True, check=True).stdout)[0]
+    _r4_extra = (_r4_sig(_r4_main(_r4_pages[-1])) - _r4_sig(_r4_main(_r4_twin_pg))) | (
+        _r4_sig(_r4h_js.els) - _r4_sig(_r4_full(_r4_twin_js["weighed"] + _r4_twin_js["research"]).els))
+    t("R4: no element on either path carries a tag or attribute its plain twin does not, and none an on* handler",
+      not _r4_extra and not [n for tr in (_r4h_tr, _r4h_js) for _, _, ns in tr.els for n in ns if n.startswith("on")],
+      sorted(_r4_extra)[:5])
+    t("R4: every href on both paths starts with http://, https://, / or #",
+      not [h for tr in _r4_trees + [_r4_full(j["weighed"] + j["research"]) for j in _r4js_out] for h in _r4_hrefs_ok(tr)],
+      [h for tr in _r4_trees for h in _r4_hrefs_ok(tr)][:5])
+_nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
+t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
+  _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)
+  and appmod.VERDICT_LABELS[_R4_ROWS[0]["verdict"]] in _nojs_body
+  and _nojs_body.count('<li class="row" ') == len(_R4_ROWS[0]["studies"]) == 16,
+  (_nojs_body.count('<li class="row" '), len(_R4_ROWS[0]["studies"])))
+_r4_tpl = (ROOT / "templates" / "index.html").read_text()
+_r4_disp = (ROOT / "display.py").read_text()
+t("R4: the template never marks a value safe, and the one Markup on the server wraps text escaped first (desk_refs)",
+  "|safe" not in _r4_tpl.replace(" ", "") and _r4_disp.count("Markup(") == 1
+  and 'safe = str(escape(text or ""))' in _r4_disp.split("def desk_refs")[1].split("return Markup(")[0])
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

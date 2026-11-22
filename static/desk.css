@@ -262,9 +262,14 @@ html:not(.checked) .bar, html:not(.checked) .rail { display: none; }
 .menu[hidden] { display: none; }
 .menu button { appearance: none; background: none; border: 0; min-height: 44px; text-align: left; padding: 0 12px; color: var(--on-deep-2); font: 500 15px/1 var(--body); cursor: pointer; border-radius: 3px; }
 .menu button[aria-current="step"] { color: var(--on-deep); background: var(--deep-2); }
+.menu-links { margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid var(--deep-line); display: grid; }
+.menu-links a { min-height: 44px; display: flex; align-items: center; padding: 0 12px; color: var(--on-deep-2); font: 500 15px/1 var(--body); }
+.menu-links a:hover { color: var(--on-deep); }
 
 /* the verdict card, real text */
 .vcard { display: none; }
+/* the claim on the card is quoted, as the sample prints it; desk.js paints the same quotes on the card's face */
+.vcard .q::before { content: "\201C"; } .vcard .q::after { content: "\201D"; }
 .vcard .lbl { display: none; }
 #short-label { display: none; }
 /* with the 3D desk: the card's words are HTML laid exactly over the settled paper card (placed by script); words in the page pass over it */
@@ -278,7 +283,7 @@ html:not(.checked) .bar, html:not(.checked) .rail { display: none; }
 .has-gl .vcard.compact { padding: 10px 16px; }
 .has-gl .vcard.compact p, .has-gl .vcard.compact h1, .has-gl .vcard.compact h2 { position: static; white-space: normal; }
 .has-gl .vcard.compact .lbl { font-size: 13px; line-height: 16px; margin-bottom: 8px; }
-.has-gl .vcard.compact .q { font-size: 17px; line-height: 1.2; }
+.has-gl .vcard.compact .q { font-size: 17px; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .has-gl .vcard.compact .v { line-height: 1.02; margin: 5px 0 5px; letter-spacing: -0.01em; }
 .has-gl .vcard.compact .t { font-size: 17px; line-height: 1.24; }
 .has-gl #short-label { display: block; position: fixed; z-index: 1; margin: 0; opacity: 0; pointer-events: none; left: 0; top: 0; }
@@ -544,6 +549,9 @@ html.checked .home-more { display: none; }
 /* stop 6 */
 #s6 .still-open { margin: 0 0 6px; }
 #s6 .legend { display: block; }
+/* The Privacy details link sits in a sentence: its tap area grows round it to 44px, so the sentence does not move. */
+.legend.privacy a { position: relative; }
+.legend.privacy a::after { content: ""; position: absolute; inset: -12px -6px; }
 .qwrap .legend { margin-top: 0; }
 .legend.checked, #cached-note { font-size: 17px; }
 .toast { display: inline-block; margin: 10px 0 0; font: 500 13px/1.5 var(--mono); color: var(--on-deep-2); }

@@ -112,6 +112,14 @@ for claim, r in seed_rows.items():
     db.put_cached_verdict(claim, r["search_query"], r["verdict"], r["explanation"], r["cited"], r["studies"],
                           tldr=r["tldr"], still_open=r["still_open"], breakdown=r["breakdown"])
 
+# The desk front's saved results: the sample's own 16-study check ("Creatine
+# improves cognitive performance"), results with 8, 5, 3 and no studies, and
+# one with markup in every field (scripts/fixtures/desk_saved.json).
+DESK_SAVED = json.loads((ROOT / "scripts" / "fixtures" / "desk_saved.json").read_text())["rows"]
+for r in DESK_SAVED:
+    db.put_cached_verdict(r["claim"], r["search_query"], r["verdict"], r["explanation"], r["cited"], r["studies"],
+                          tldr=r["tldr"], still_open=r["still_open"], breakdown=r["breakdown"])
+
 # ---- gates ------------------------------------------------------------------
 gates = {n: threading.Event() for n in ("query", "found", "done")}
 

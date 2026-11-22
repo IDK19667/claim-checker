@@ -1,10 +1,13 @@
 <!doctype html>
-{# `data-screen` is what turns the page into a band over a sheet. A result
-   that came off a shared link is already one when it arrives, so the server
-   sets it: waiting for app.js would mean one painted frame of the home page's
-   layout before the sheet took its place. app.js sets it for the other two
-   screens, checking and error, and clears it on the way back out. #}
-<html lang="en"{% if result %} data-screen="result"{% endif %}>
+{# The front is the lamp-lit desk (static/desk.css, static/desk.js). A result
+   that came off a shared link arrives already checked: `checked` shows the
+   six stops and `data-screen` says which screen this is, both set here so the
+   page never paints the home layout first. app.js sets them for a live check. #}
+{%- set bv = breakdown_view(result) if result else None %}
+{%- set stops = desk_stops(result) if result else ["Claim"] %}
+{%- set dl = desk_lines(result) if result else None %}
+{%- set says_lines = ((bv.says if bv else [result.explanation]) | select | list) if result else [] %}
+<html lang="en"{% if result %} class="checked" data-screen="result"{% endif %}>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
@@ -39,7 +42,7 @@
   <meta property="og:site_name" content="Evident" />
 
   <meta name="theme-color" content="#0f1211" />
-  <meta name="color-scheme" content="light" />
+  <meta name="color-scheme" content="dark" />
 
   <!-- PWA -->
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -50,111 +53,91 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="Evident" />
 
-  <!-- Fonts are served from here (latin subsets): no third-party request, and they work offline. -->
-  <!-- The two faces the first screen sets: the display face for the headline
-       and the body face for everything else. The mono labels are small and
-       arrive with the stylesheet's own request. Preloading a font the page
-       never asks for costs a high-priority download and delays the ones it
-       does need, so this list must track @font-face. -->
-  <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/bricolagegrotesque-opsz96-300-500.woff2') }}" as="font" type="font/woff2" crossorigin />
+  <!-- Scripts are on: the stops are laid out by desk.js. Without this class
+       the page reads as one column of text, the claim box hidden on a result. -->
+  <script nonce="{{ csp_nonce }}">document.documentElement.classList.add("js");</script>
+  <!-- Fonts are served from here (latin subsets): no third-party request, and they work offline.
+       The display face and the body face set the first screen; this list must track @font-face in desk.css. -->
+  <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/bricolagegrotesque-opsz12-96-200-800.woff2') }}" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="{{ url_for('static', filename='fonts/woff2/instrumentsans-normal-400-600.woff2') }}" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='desk.css') }}" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
-      <symbol id="i-back" viewBox="0 0 20 20"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-share" viewBox="0 0 20 20"><path d="M10 12.5V3.5m0 0L6.75 6.75M10 3.5l3.25 3.25M4.5 10.5v4a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-link" viewBox="0 0 20 20"><path d="M8.5 11.5a3 3 0 0 0 4.25 0l2.5-2.5a3 3 0 0 0-4.25-4.25l-1 1M11.5 8.5a3 3 0 0 0-4.25 0l-2.5 2.5a3 3 0 0 0 4.25 4.25l1-1" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-up" viewBox="0 0 20 20"><path d="M6 9v7H3.5V9H6Zm0 0 3.2-5.4a1.6 1.6 0 0 1 3 .9V8h3.1a1.6 1.6 0 0 1 1.55 2l-1.3 4.8A1.6 1.6 0 0 1 14 16H6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-down" viewBox="0 0 20 20"><path d="M14 11V4h2.5v7H14Zm0 0-3.2 5.4a1.6 1.6 0 0 1-3-.9V12H4.7a1.6 1.6 0 0 1-1.55-2l1.3-4.8A1.6 1.6 0 0 1 6 4h8" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-mic" viewBox="0 0 20 20"><path d="M10 12.5a2.75 2.75 0 0 0 2.75-2.75v-4a2.75 2.75 0 0 0-5.5 0v4A2.75 2.75 0 0 0 10 12.5Zm4.5-2.75a4.5 4.5 0 0 1-9 0M10 14.25v2.25" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-quote" viewBox="100 120 320 260"><g fill="currentColor"><circle cx="176" cy="300" r="62"/><path d="M114 300 C114 222 150 168 232 140 L246 172 C198 192 176 224 176 264 Z"/><circle cx="346" cy="300" r="62"/><path d="M284 300 C284 222 320 168 402 140 L416 172 C368 192 346 224 346 264 Z"/></g></symbol>
       <symbol id="i-x" viewBox="0 0 20 20"><path d="M5.5 5.5l9 9m0-9-9 9" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
-      <symbol id="i-dive" viewBox="0 0 20 20"><path d="M4 3.5h7l4 4v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Zm6.5.5v4h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m11.4 14.4 2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9.3" cy="12.3" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 20 20"><path d="M10 12.5a2.75 2.75 0 0 0 2.75-2.75v-4a2.75 2.75 0 0 0-5.5 0v4A2.75 2.75 0 0 0 10 12.5Zm4.5-2.75a4.5 4.5 0 0 1-9 0M10 14.25v2.25" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-ext" viewBox="0 0 20 20"><path d="M11.5 4.5h4v4m0-4-6 6M8.5 5.5h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     </defs>
   </svg>
 
-  <div class="band">
-    <header class="top">
-      <div class="nameplate"><a class="wordmark" href="/" aria-label="Evident home">Evident</a><span class="beta">Beta</span></div>
-      <nav class="top-actions" aria-label="Site">
-        <button class="ghost" id="how-btn" type="button">How it works</button>
-        <a class="navlink" id="about-link" href="/about">About</a>
-        <a class="navlink" href="/privacy">Privacy</a>
-        <button class="install" id="install-btn" type="button" hidden>Install</button>
-      </nav>
-    </header>
+<header class="strip" id="strip" role="note"><span class="name"><a class="sw" href="/" aria-label="Evident home">Evident</a> <span class="beta">Beta</span></span><b>Not medical advice.</b></header>
 
-    <div class="wrap">
-    <!-- ===== Ask ===== -->
-    <section id="ask" aria-labelledby="ask-heading"{% if result %} hidden{% endif %}>
-      <div class="hero-block">
-        <h1 id="ask-heading" class="hero">Heard a health claim?<br /><em>Check it against the research.</em></h1>
-        <p class="lede">
-          Paste it in. We read the studies on PubMed and weigh how
-          strong they are.
-        </p>
-        <p class="ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>
-      </div>
+<div id="stage" aria-hidden="true"><canvas id="gl"></canvas></div>
 
-      <form class="claim-form" id="claim-form" novalidate>
-        <label class="field-title" for="claim-input">Health claim to check</label>
-        <p class="field-help" id="claim-help">Enter one claim. Add the group or situation if it matters.</p>
-        <div class="claim-box">
-          <textarea
-            id="claim-input"
-            rows="3"
-            maxlength="500"
-            placeholder="Apple cider vinegar cures diabetes"
-            autocomplete="off"
-            autocapitalize="sentences"
-            enterkeyhint="go"
-            required
-            aria-controls="suggest-list"
-            aria-autocomplete="list"
-            aria-describedby="claim-help suggest-hint"
-          ></textarea>
-          <button type="button" class="clear" id="clear-btn" hidden aria-label="Clear">
-            <svg width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
-          </button>
-          <button type="button" class="mic" id="mic-btn" hidden aria-label="Say the claim instead">
-            <svg width="22" height="22" aria-hidden="true"><use href="#i-mic"/></svg>
-          </button>
+<nav class="rail" id="rail" aria-label="Where you are"></nav>
+
+{% macro site_links(extra=False) -%}
+<p class="site-links"><a id="{{ 'how-btn' if not extra else 'how-btn-2' }}" class="how-link" href="/method">How it works</a> <a{% if not extra %} id="about-link"{% endif %} href="/about">About</a>{% if extra %} <a href="/method">Methodology</a> <a href="/corrections">Corrections and contact</a>{% endif %} <a href="/privacy">Privacy</a>{% if not extra %} <button class="btn quiet install" id="install-btn" type="button" hidden>Install</button>{% endif %}</p>
+{%- endmacro %}
+
+<main id="track">
+  <section class="stop" id="s1" data-stop="Claim" aria-labelledby="ask-heading">
+    <div class="cap right"><div class="inner">
+      <section id="ask" aria-labelledby="ask-heading"{% if result %} hidden{% endif %}>
+        <p class="wordmark">Evident</p>
+        {% if result %}<h2 class="h1" id="ask-heading">Heard a health claim?</h2>{% else %}<h1 id="ask-heading">Heard a health claim?</h1>{% endif %}
+        <p class="lede">Check it against the research. Paste it in: we read the studies on PubMed and weigh how strong they are.</p>
+        <form class="ask" id="claim-form" novalidate>
+          <label class="field-title" for="claim-input">Health claim to check</label>
+          <p class="field-help" id="claim-help">Enter one claim. Add the group or situation if it matters.</p>
+          <div class="claim-box">
+            <textarea id="claim-input" rows="2" maxlength="500" placeholder="Apple cider vinegar cures diabetes" autocomplete="off" autocapitalize="sentences" enterkeyhint="go" required aria-controls="suggest-list" aria-autocomplete="list" aria-describedby="claim-help suggest-hint"></textarea>
+            <button type="button" class="clear" id="clear-btn" hidden aria-label="Clear"><svg width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg></button>
+            <button type="button" class="mic" id="mic-btn" hidden aria-label="Say the claim instead"><svg width="22" height="22" aria-hidden="true"><use href="#i-mic"/></svg></button>
+          </div>
+          <p class="field-error" id="claim-error" role="alert" hidden></p>
+          <!-- Type-ahead over claims already checked. Literal hits and near
+               misses are labelled separately: a corrected spelling is never
+               passed off as what was typed. -->
+          <div class="suggest" id="suggest" hidden>
+            <p class="suggest-head" id="suggest-head">Previously checked claims</p>
+            <p class="suggest-note" id="suggest-note">Choose one to open its saved answer.</p>
+            <ul class="suggest-list" id="suggest-list" role="listbox" aria-labelledby="suggest-head" aria-describedby="suggest-note"></ul>
+          </div>
+          <p class="sr-only" id="suggest-hint">Previously checked claims appear as you type. Use the arrow keys to choose one, and Enter to open its saved answer.</p>
+          <p class="sr-only" id="suggest-live" role="status" aria-live="polite"></p>
+          <button type="submit" class="btn" id="submit-btn"><span class="btn-label">Check the research</span></button>
+          <p class="privacy-line" id="privacy-line">Don't include names or personal medical details. Claim text is stored and sent to our AI provider. <a href="/privacy">Privacy details</a></p>
+          <p class="status" id="status" role="status" aria-live="polite"></p>
+          <button class="btn quiet cancel" id="cancel-btn" type="button" hidden>Cancel</button>
+          <div class="examples" id="examples">
+            <p class="field-help" id="examples-label">Or try one of these:</p>
+            <div class="chips" id="chips" role="group" aria-labelledby="examples-label"></div>
+          </div>
+        </form>
+      </section>
+      <ol class="reading" id="reading" hidden aria-live="polite"></ol>
+      <!-- ===== Error: what went wrong and the way out ===== -->
+      <section id="error" hidden>
+        <h2 class="error-title" id="error-title" tabindex="-1"></h2>
+        <p class="error-msg" id="error-msg"></p>
+        <p class="error-claim" id="error-claim"></p>
+        <p class="countdown" id="countdown" hidden></p>
+        <div class="two error-actions">
+          <button class="btn" id="error-retry" type="button" hidden>Retry this claim</button>
+          <button class="btn ghost" id="error-back" type="button">Check another claim</button>
         </div>
+      </section>
+      <p class="nma ask-note">Not medical advice. Ask a doctor before you change a treatment.</p>
+      {{ site_links() }}
+    </div></div>
+  </section>
 
-        <p class="field-error" id="claim-error" role="alert" hidden></p>
-
-        <!-- Type-ahead over claims already checked. Cached answers are
-             instant and free, so this is the cheapest good outcome the app
-             has. Literal hits and near misses are labelled separately: a
-             corrected spelling is never passed off as what was typed. -->
-        <div class="suggest" id="suggest" hidden>
-          <p class="suggest-head" id="suggest-head">Previously checked claims</p>
-          <p class="suggest-note" id="suggest-note">Choose one to open its saved answer.</p>
-          <ul class="suggest-list" id="suggest-list" role="listbox" aria-labelledby="suggest-head" aria-describedby="suggest-note"></ul>
-        </div>
-        <p class="sr-only" id="suggest-hint">Previously checked claims appear as you type. Use the arrow keys to choose one, and Enter to open its saved answer.</p>
-        <p class="sr-only" id="suggest-live" role="status" aria-live="polite"></p>
-
-        <button type="submit" class="primary" id="submit-btn">
-          <span class="btn-label">Check the research</span>
-        </button>
-        <p class="privacy-line" id="privacy-line">Don't include names or personal medical details. Claim text is stored and sent to our AI provider. <a href="/privacy">Privacy details</a></p>
-        <p class="status" id="status" role="status" aria-live="polite"></p>
-        <button class="link-btn cancel" id="cancel-btn" type="button" hidden>Cancel</button>
-        <div class="examples" id="examples">
-          <p class="field-help" id="examples-label">Or try one of these:</p>
-          <div class="chips" id="chips" role="group" aria-labelledby="examples-label"></div>
-        </div>
-      </form>
-    </section>
-    </div>
-  </div>
-
-  <main class="wrap">
-    <section id="ask-more" aria-label="More claims"{% if result %} hidden{% endif %}>
+  {# Before a check only: what others checked, what this device checked, and
+     the questions a stranger asks before believing anything here. #}
+  <section id="ask-more" class="home-more" aria-label="More claims"{% if result %} hidden{% endif %}>
+    <div class="panel home">
       {% if latest %}
       <div class="latest">
         <h2 class="sec-title">Latest checks</h2>
@@ -167,13 +150,6 @@
               <span class="entry-verdict">{{ labels.get(v.verdict, v.verdict) }}</span>
             </a>
             {% if v.evidence.mix %}
-            {# A mini shelf: one spine per study, strongest first. Same
-               heights, cloth, and solid or outlined as the shelf on the
-               result page. #}
-            <span class="mini" role="img"
-                  aria-label="{% for m in v.evidence.mix %}{{ m.count }} {{ m.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
-              {%- for b in v.shelf %}<i class="h-{{ b.tier }} k-{{ b.kind }}{% if b.used %} on{% endif %}"></i>{% endfor -%}
-            </span>
             <p class="entry-meta">
               {{ v.evidence.read }} stud{{ "y" if v.evidence.read == 1 else "ies" }} read, {{ v.evidence.relied_on }} relied on{% if v.evidence.pooled %}, {{ v.evidence.pooled }} pooled{% endif %}{% if v.evidence.year_from %}, <span class="entry-years">{% if v.evidence.year_from == v.evidence.year_to %}{{ v.evidence.year_from }}{% else %}{{ v.evidence.year_from }} to {{ v.evidence.year_to }}{% endif %}</span>{% endif %}
             </p>
@@ -185,419 +161,279 @@
       {% endif %}
 
       <div class="trending" id="trending" hidden>
-        <p class="section-label">Trending this week</p>
+        <h3 class="section-label">Trending this week</h3>
         <ul class="claim-list" id="trending-list"></ul>
       </div>
 
       <div class="recent" id="recent" hidden>
         <div class="section-row">
-          <p class="section-label">Your recent checks</p>
-          <button class="link-btn" id="clear-recent" type="button">Clear</button>
+          <h3 class="section-label">Your recent checks</h3>
+          <button class="btn quiet" id="clear-recent" type="button">Clear</button>
         </div>
         <ul class="claim-list" id="recent-list"></ul>
-        <button class="link-btn" id="recent-more" type="button" hidden>Show all</button>
+        <button class="btn quiet" id="recent-more" type="button" hidden>Show all</button>
         <p class="fine">Saved only on this device. Works offline.</p>
       </div>
 
       <div class="nudge" id="nudge" hidden>
-        <p class="section-label">Keep it on your phone</p>
+        <h3 class="section-label">Keep it on your phone</h3>
         <p class="nudge-body" id="nudge-body"></p>
-        <div class="nudge-actions">
-          <button class="primary small" id="nudge-install" type="button" hidden>Install</button>
-          <button class="ghost" id="nudge-dismiss" type="button">Not now</button>
+        <div class="two nudge-actions">
+          <button class="btn" id="nudge-install" type="button" hidden>Install</button>
+          <button class="btn ghost" id="nudge-dismiss" type="button">Not now</button>
         </div>
       </div>
-    </section>
 
-    <!-- ===== Before you trust a verdict =====
-         The questions a stranger asks before believing anything here, in
-         plain words, each answer ending back at the claim box. Every
-         sentence is something the code or the privacy page makes true: the
-         study count is pubmed.py's, the two labels are VERDICT_LABELS, and
-         the real check is the one the fly-through replays. -->
-    <section id="trust" class="trust" aria-labelledby="trust-heading"{% if result %} hidden{% endif %}>
-      <h2 class="trust-title" id="trust-heading">Before you trust a verdict</h2>
-      <div class="trust-row">
-        <h3 class="trust-q">Where do the studies come from?</h3>
-        <div class="trust-a">
-          <p>From PubMed, the U.S. National Library of Medicine's index of medical research, with more than 37 million records. A new check searches it and reads the abstracts of up to 8 of the closest matches. Every study it read is listed under the verdict, with a link to its PubMed page.</p>
-        </div>
-      </div>
-      <div class="trust-row">
-        <h3 class="trust-q">Is an AI making this up?</h3>
-        <div class="trust-a">
-          <p>An AI model{% if provider != "an AI model API" %} ({{ provider }}){% endif %} reads those abstracts and writes the verdict. It can only cite studies it was shown: the code checks every citation against that list. A verdict with no citations, or one resting only on case reports or animal and lab studies, is turned into “{{ labels.insufficient }}” before you see it. It can still misread an abstract, which is why every study it used is one tap away.</p>
-        </div>
-      </div>
-      <div class="trust-row">
-        <h3 class="trust-q">Is it biased? Who made it?</h3>
-        <div class="trust-a">
-          <p>Evident is an independent project. It shows no ads, has no accounts and sells no data, so no verdict makes it money. Its rules lean towards caution: “{{ labels.complicated }}” and “{{ labels.insufficient }}” are ordinary answers here, and a confident one needs studies behind it. Research has blind spots of its own, so every verdict also says what is still open. <a href="/about">Who runs Evident</a></p>
-        </div>
-      </div>
-      <div class="trust-row">
-        <h3 class="trust-q">Is it free?</h3>
-        <div class="trust-a">
-          {%- if on_gemini %}
-          <p>Yes. No account, no paywall and no ads. It runs on the free tier of an AI service, so on a busy day it can reach its limit, and the page then says so and when to try again. A claim someone has already checked opens straight away. On that free tier, Google's terms let it use the text you paste to improve its products, so leave out anything personal.</p>
-          {%- else %}
-          <p>Yes. No account, no paywall and no ads. On a busy day it can reach the usage limit of the AI service it uses, and the page then says so and when to try again. A claim someone has already checked opens straight away.</p>
-          {%- endif %}
-        </div>
-      </div>
-      <div class="trust-row">
-        <h3 class="trust-q">Is this medical advice?</h3>
-        <div class="trust-a">
-          <p>No. It tells you what published research says about a claim, which is not the same as what is right for you. Take what you find to a doctor or pharmacist who knows your history.</p>
-        </div>
-      </div>
-      {% if example %}
-      <div class="trust-row">
-        <h3 class="trust-q">Can I see a real one?</h3>
-        <div class="trust-a">
-          <div class="proof">
-            <p class="proof-claim">“{{ example.claim }}”</p>
-            <p class="proof-verdict">{{ labels.get(example.verdict, example.verdict) }}</p>
-            <p class="proof-tldr">{{ example.tldr }}</p>
-            <p class="proof-meta">Checked {{ example.checked }}. {{ example.read }} studies read.</p>
+      <!-- ===== Before you trust a verdict =====
+           Every sentence is something the code or the privacy page makes true:
+           the study count is pubmed.py's and the labels are VERDICT_LABELS. -->
+      <section id="trust" class="trust" aria-labelledby="trust-heading"{% if result %} hidden{% endif %}>
+        <h2 class="trust-title" id="trust-heading">Before you trust a verdict</h2>
+        <div class="trust-row">
+          <h3 class="trust-q">Where do the studies come from?</h3>
+          <div class="trust-a">
+            <p>From PubMed, the U.S. National Library of Medicine's index of medical research, with more than 37 million records. A new check searches it and reads the abstracts of up to 8 of the closest matches. Every study it read is listed under the verdict, with a link to its PubMed page.</p>
           </div>
-          <p class="trust-links">
-            <a class="link-btn" href="{{ example.href }}">Read the whole check</a>
-          </p>
         </div>
+        <div class="trust-row">
+          <h3 class="trust-q">Is an AI making this up?</h3>
+          <div class="trust-a">
+            <p>An AI model{% if provider != "an AI model API" %} ({{ provider }}){% endif %} reads those abstracts and writes the verdict. It can only cite studies it was shown: the code checks every citation against that list. A verdict with no citations, or one resting only on case reports or animal and lab studies, is turned into “{{ labels.insufficient }}” before you see it. It can still misread an abstract, which is why every study it used is one tap away.</p>
+          </div>
+        </div>
+        <div class="trust-row">
+          <h3 class="trust-q">Is it biased? Who made it?</h3>
+          <div class="trust-a">
+            <p>Evident is an independent project. It shows no ads, has no accounts and sells no data, so no verdict makes it money. Its rules lean towards caution: “{{ labels.complicated }}” and “{{ labels.insufficient }}” are ordinary answers here, and a confident one needs studies behind it. Research has blind spots of its own, so every verdict also says what is still open. <a href="/about">Who runs Evident</a></p>
+          </div>
+        </div>
+        <div class="trust-row">
+          <h3 class="trust-q">Is it free?</h3>
+          <div class="trust-a">
+            {%- if on_gemini %}
+            <p>Yes. No account, no paywall and no ads. It runs on the free tier of an AI service, so on a busy day it can reach its limit, and the page then says so and when to try again. A claim someone has already checked opens straight away. On that free tier, Google's terms let it use the text you paste to improve its products, so leave out anything personal.</p>
+            {%- else %}
+            <p>Yes. No account, no paywall and no ads. On a busy day it can reach the usage limit of the AI service it uses, and the page then says so and when to try again. A claim someone has already checked opens straight away.</p>
+            {%- endif %}
+          </div>
+        </div>
+        <div class="trust-row">
+          <h3 class="trust-q">Is this medical advice?</h3>
+          <div class="trust-a">
+            <p>No. It tells you what published research says about a claim, which is not the same as what is right for you. Take what you find to a doctor or pharmacist who knows your history.</p>
+          </div>
+        </div>
+        {% if example %}
+        <div class="trust-row">
+          <h3 class="trust-q">Can I see a real one?</h3>
+          <div class="trust-a">
+            <div class="proof">
+              <p class="proof-claim">“{{ example.claim }}”</p>
+              <p class="proof-verdict">{{ labels.get(example.verdict, example.verdict) }}</p>
+              <p class="proof-tldr">{{ example.tldr }}</p>
+              <p class="proof-meta">Checked {{ example.checked }}. {{ example.read }} studies read.</p>
+            </div>
+            <p class="trust-links"><a class="btn ghost" href="{{ example.href }}">Read the whole check</a></p>
+          </div>
+        </div>
+        {% endif %}
+      </section>
+    </div>
+  </section>
+
+  {# ===== Result: the stops after the claim. Server rendered from the record,
+     rebuilt identically by renderResult in static/app.js after a live check.
+     A stop with nothing real to show is not printed (display.desk_stops). The
+     card's words and every line here are the same ink whatever the verdict. #}
+  {% macro eyebrow(name, text) %}<p class="eyebrow"{% if name == "Open" %} id="h-open"{% endif %}><b>{{ "%02d"|format(stops.index(name) + 1) }}</b>{{ text }}</p>{% endmacro %}
+  {% macro back() %}<button class="back" type="button" data-go="1">Back to the short answer</button>{% endmacro %}
+  <div id="result"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
+  <section class="stop" id="s2" data-stop="Answer" aria-labelledby="claim-echo">
+    <p class="layer" id="short-label">The short answer</p>
+    <div class="vcard" id="vcard">
+      <p class="lbl">The claim you checked</p>
+      <h1 class="q claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h1>
+      <h2 class="v" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</h2>
+      <p class="t" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
+    </div>
+    <div class="cap right bottom" id="cap-answer"><div class="inner">
+      {# A result that carries what was typed (a live check, or a link in other
+         words than the saved claim's) shows the line from
+         display.typed_note_parts, which renderResult's typedNoteParts mirrors.
+         The reader's text is in <bdi>, so right-to-left text cannot reorder
+         the sentence around it. #}
+      <p class="typed-note" id="typed-note"{% if not (result and result.typed) %} hidden{% endif %}>{% if result and result.typed %}{% set tn = typed_note_parts(result.typed, result.typed_reason) %}{{ tn[0] }}<bdi>{{ tn[1] }}</bdi>{{ tn[2] }}{% endif %}</p>
+      <p class="sure-label">How sure</p>
+      <p class="sure" id="confidence">{% if result %}{{ confidence_line(result) }}{% endif %}</p>
+      <p class="sure-more"><button type="button" class="btn quiet" id="meter">What does this mean?</button></p>
+      <p class="doctor" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
+      <div class="two">
+        <button class="btn" type="button" id="how-answer">See how we got this answer</button>
+        <button class="btn quiet" type="button" id="back-btn" data-again>Check another claim</button>
       </div>
-      {% endif %}
-    </section>
+      <p class="below" id="below">{% if dl %}{{ dl.below }}{% endif %}</p>
+    </div></div>
+  </section>
 
-    <!-- ===== Result ===== -->
-    <section id="result"{% if not result %} hidden{% endif %}>
-      <!-- The head holds the claim as it was checked, set quietly, and the way
-           back to it. The answer is the first thing on the sheet below, in the
-           largest type on the page. The ground is identical on every verdict,
-           so nothing here is colour coded. -->
-      <div class="report-head">
-        <button class="back" id="back-btn" type="button">
-          <svg width="20" height="20" aria-hidden="true"><use href="#i-back"/></svg>Check another claim
-        </button>
-        <div class="case-row">
-          <p class="case" id="case-line">{% if result %}PubMed{% endif %}</p>
-          <p class="case case-nma">Not medical advice</p>
-        </div>
-        <div class="thread">
-          <p class="field-label">The claim you checked</p>
-          <h1 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h1>
-          {# A result that carries what was typed (a live check, or a link
-             in other words than the saved claim's) shows the line from
-             display.typed_note_parts, which renderResult's typedNoteParts
-             mirrors. The reader's text is in <bdi>, so right-to-left text
-             cannot reorder the sentence around it. #}
-          <p class="typed-note" id="typed-note"{% if not (result and result.typed) %} hidden{% endif %}>{% if result and result.typed %}{% set tn = typed_note_parts(result.typed, result.typed_reason) %}{{ tn[0] }}<bdi>{{ tn[1] }}</bdi>{{ tn[2] }}{% endif %}</p>
-          {# Back to the claim box with this claim in it, to reword and check again. #}
-          <button class="edit-claim" id="edit-claim" type="button">Edit claim</button>
-          <ol class="reading" id="reading" hidden aria-live="polite"></ol>
-        </div>
-      </div>
-
-      {# One book per study: height is the design, cloth is what it was run
-         on, solid or outlined is whether the verdict leaned on it, and
-         the number under it is the number the list of studies and every
-         sentence of the prose use. #}
-      {% macro barcol(s, i) %}<button type="button" class="barcol{% if s.cited_in_verdict %} is-used{% endif %}" data-i="{{ i }}" style="--i:{{ i }}" aria-label="{{ s.spine ~ " " if s.spine else "Study " }}{{ "%02d"|format(i + 1) }}{% if s.type_label and (s.type_label|lower) != ((s.spine or "")|lower) %}, {{ s.type_label|lower }}{% endif %}{% if s.year %}, {{ s.year }}{% endif %}, {{ 'used for this verdict' if s.cited_in_verdict else ('read, off topic' if s.off_topic else ((s.background_why or 'animal or lab') ~ ', background only' if s.background else 'read but not used')) }}. Go to it in the list of studies."><span class="barcol-track"><span class="barcol-bar h-{{ s.tier }} k-{{ s.kind }}"><span class="barcol-spine" aria-hidden="true">{{ s.spine }}</span></span></span> <span class="barcol-no">{{ "%02d"|format(i + 1) }}</span>{% set tip = [s.type_label, s.year, 'off topic' if s.off_topic else '']|select|join(" · ") %}{% if tip %}<span class="barcol-tip" aria-hidden="true">{{ tip }}</span>{% endif %}</button>{% endmacro %}
-
-      {% set bv = breakdown_view(result) if result else None %}
-      <div class="verdict-block"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
-        <article class="ticket" aria-labelledby="claim-echo">
-          {# The panel reads top to bottom: the short answer, the research
-             behind it, what is still open, then the evidence all three were
-             drawn from. A reader who stops after the first block still has an
-             answer; a reader who keeps going gets the reasoning. #}
-          <section class="answer">
-            <p class="section-label">The short answer</p>
-            <p class="tldr" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
-            {# The assessment is the same four words whatever it says, set
-               in the same ink and the same size: it marks where the answer
-               stands, never what it is. The confidence is worded on the
-               server (evidence.evidence_line) and says how much to lean on
-               it. #}
-            <div class="assess" id="assess">
-              <p class="assess-row"><span class="assess-label">Assessment</span><span class="stamp" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</span></p>
-              <p class="assess-row"><span class="assess-label">Confidence</span><span class="confidence" id="confidence"><mark>{% if result %}{{ confidence_line(result) }}{% endif %}</mark> <button type="button" class="what link-btn" id="meter">What does this mean?</button></span></p>
-            </div>
-            <p class="doctor-line" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
-            {# When the check ran and the years of the studies it relied on,
-               worded once in app.py (_review_line). #}
-            <p class="case review-line" id="review-line"{% if not result or not result.review_line %} hidden{% endif %}>{% if result %}{{ result.review_line }}{% endif %}</p>
-          </section>
-
-          {# Always visible, never folded. Every sentence here has already
-             passed the breakdown's gate: it names the studies it rests on,
-             carries no figure the abstracts do not have, and is short enough
-             to read. Picked in breakdown.says from prose that already
-             exists, so the block costs no extra model call. #}
-          {%- set says_lines = ((bv.says if bv else [result.explanation]) | select | list) if result else [] %}
-          <section class="says-sec" id="says-sec"{% if not says_lines %} hidden{% endif %}>
-            <p class="section-label">What the research says</p>
-            <div class="says" id="says">
-              {%- for line in says_lines %}
-              <p class="says-p">{{ line }}</p>
-              {%- endfor %}
-            </div>
-          </section>
-
-          {# Who the evidence covers, and who it does not. From the breakdown's
-             own fields, with the sentences already printed above taken out. #}
-          <section class="who-sec" id="who-sec"{% if not (bv and (bv.applies_to or bv.not_applies_to or bv.populations)) %} hidden{% endif %}>
-            {%- set who_yes = bv and (bv.applies_to or bv.populations) %}
-            <p class="section-label" id="who-label">{% if bv and not who_yes and bv.not_applies_to %}Who this does not apply to{% else %}Who and what this applies to{% endif %}</p>
-            <div class="who" id="who">
-              {%- if bv %}
-              {%- if bv.applies_to %}<p class="says-p">{{ bv.applies_to }}</p>{% endif %}
-              {#- Read off the records, not written by the model: these are the
-                  narrow groups the cited studies were actually run in. #}
-              {%- if bv.populations %}
-              <p class="deeper-p narrow">Some of this evidence comes from studies
-                of one group only: {{ bv.populations|join(", ") }}. A result found
-                in one group may not hold for everyone.</p>
-              {%- endif %}
-              {%- if bv.not_applies_to %}
-              {%- if who_yes %}<p class="section-label label-2">And who it does not</p>{% endif %}
-              <p class="says-p">{{ bv.not_applies_to }}</p>
-              {%- endif %}
-              {%- endif %}
-            </div>
-          </section>
-
-          {# A check that found no studies says what to try, beside the verdict
-             that says why: nothing on PubMed matched. #}
-          <p class="no-evidence" id="no-evidence"{% if not result or result.studies %} hidden{% endif %}><b>Nothing on PubMed matched</b>Name the condition and the treatment, then check again. Edit claim puts your wording back in the box.</p>
-
-          <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><b>Still open</b><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
-
-          {# ===== The deeper layer =====
-             Collapsed, always, and straight under what is still open, before
-             the shelf: the answer is above it, and a reader who wants the
-             reasoning meets the way in while still reading, not at the foot of
-             the page. Its head says what is folded inside, so it is worth
-             opening. Server rendered so a shared link and a crawler get the
-             whole thing with no JavaScript, and rebuilt identically by
-             renderBreakdown in static/app.js after a live check. Every sentence
-             the model wrote in here cites a study number and carries no figure
-             that is not in one of the abstracts: breakdown.py drops the rest
-             before it is ever written out. The conclusions are not the model's
-             at all: they are quoted from the abstracts, by evidence.conclusion. #}
-          <details class="deeper" id="deeper"{% if not (result and result.breakdown) %} hidden{% endif %}>
-            <summary class="deeper-head">
-              <span class="deeper-title">
-                {% set rests_n = (result.studies | selectattr("cited_in_verdict") | list | length) if (result and result.breakdown) else 0 %}<span class="deeper-count" id="deeper-count"{% if not rests_n %} hidden{% endif %}>Rests on <span class="group-count">{% if rests_n %}{{ rests_n }} stud{{ "y" if rests_n == 1 else "ies" }}{% endif %}</span></span>
-                <span class="deeper-name">Read the full breakdown</span>
-                <span class="deeper-what" id="deeper-what">{% if result and result.breakdown %}{{ result.breakdown.contents }}{% endif %}</span>
-              </span>
-              <span class="deeper-open" aria-hidden="true"><span class="when-shut">Open</span><span class="when-open">Close</span></span>
-            </summary>
-            <div class="deeper-body" id="deeper-body">
-              {%- if bv %}
-              {%- if bv.parts %}
-              <section class="deeper-sec">
-                <p class="section-label">The claim, part by part</p>
-                <ol class="parts">
-                  {%- for p in bv.parts %}
-                  <li class="part">
-                    <p class="part-claim">{{ p.part }}</p>
-                    <p class="part-take">{{ p.assessment }}</p>
-                  </li>
-                  {%- endfor %}
-                </ol>
-              </section>
-              {%- endif %}
-              {%- if bv.evidence or bv.effect_size %}
-              <section class="deeper-sec">
-                <p class="section-label">What the evidence shows</p>
-                {%- for para in bv.evidence %}
-                <p class="deeper-p">{{ para }}</p>
-                {%- endfor %}
-                {%- if bv.effect_size %}
-                <p class="effect"><b>How big the effect is</b><span>{{ bv.effect_size }}</span></p>
-                {%- endif %}
-              </section>
-              {%- endif %}
-              {%- if bv.concluded %}
-              <section class="deeper-sec">
-                <p class="section-label">What each study concluded</p>
-                <ol class="concluded">
-                  {%- for c in bv.concluded %}{% set st = result.studies[c.n - 1] %}
-                  <li class="said">
-                    <p class="said-who">Study {{ c.n }}{% if st.type_label %} · {{ st.type_label }}{% endif %}{% if st.year %} · {{ st.year }}{% endif %}</p>
-                    <blockquote class="said-q">{{ c.said }}</blockquote>
-                  </li>
-                  {%- endfor %}
-                </ol>
-                <p class="said-note">In the authors' own words, from the summary each study was published with.</p>
-              </section>
-              {%- endif %}
-              {%- if bv.strength %}
-              <section class="deeper-sec">
-                <p class="section-label">Why the verdict is what it is</p>
-                <p class="deeper-p">{{ bv.strength }}</p>
-              </section>
-              {%- endif %}
-              {%- if bv.unknowns %}
-              <section class="deeper-sec">
-                <p class="section-label">What is still unknown</p>
-                <p class="deeper-p">{{ bv.unknowns }}</p>
-              </section>
-              {%- endif %}
-              <p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them. Tap a study number to read it.</p>
-              {%- endif %}
-            </div>
-          </details>
-
-          {# The evidence, as a chart rather than a row of marks. Heights are
-             the three tiers and nothing else, so two charts of the same set
-             are always the same drawing. Counted on the server in
-             evidence.snapshot, including the three lines of words, so a
-             streamed check and a cached page cannot word them differently. #}
-          {% set ev = result.evidence if result else None %}
-          <section class="chart-sec" id="chart-sec"{% if not (ev and ev.read) %} hidden{% endif %}>
-            <p class="section-label">The evidence</p>
-            <p class="chart-sum" id="chart-sum">{% if ev %}{{ ev.summary }}{% endif %}</p>
-            <figure class="chart">
-              <div class="chart-plot">
-                <i class="chart-base" aria-hidden="true"></i>
-                <div class="chart-bars" id="chart-bars" role="group" aria-label="The studies, by kind of study" aria-describedby="chart-desc">{% if result %}{% for s in result.studies %}{{ barcol(s, loop.index0) }}{% endfor %}{% endif %}</div>
-              </div>
-              <figcaption>
-                <ul class="shelf-key" id="shelf-key">{% if ev %}{% for k in ev.kinds %}<li><i class="k-{{ k.kind }}{% if k.kind == 'retracted' %} h-retracted{% endif %}"></i>{{ k.label }}</li>{% endfor %}{% endif %}</ul>
-                <p class="chart-key">Each book is one study, numbered as in the list. Taller is a stronger kind of study. Solid books, with a silver band and a dot, are the ones this verdict used. Outlined books were read but not used.</p>
-              </figcaption>
-            </figure>
-            <p class="sr-only" id="chart-desc">{% if ev %}{{ ev.described }}{% endif %}</p>
-            <p class="chart-facts" id="chart-facts">{% if ev %}{{ ev.facts }}{% endif %}</p>
-          </section>
-          <p class="cached-note" id="cached-note" hidden></p>
-        </article>
-      </div>
-
-
-
-      <div class="evidence">
-        <div class="section-row">
-          <p class="section-label" id="evidence-label">Studies checked</p>
-          <p class="key"><mark class="key-mark">Highlighted</mark>: relied on</p>
-        </div>
-        <p class="fine" style="margin:0 0 8px">Open any study for its abstract, how often it has been cited, free full text where there is any, and the studies next to it.</p>
-
-        {% macro study_row(s, i) %}{% set d = design_note(s.publication_types) %}<li class="study k-{{ s.kind }}{% if s.cited_in_verdict %} cited{% endif %}" data-i="{{ i }}">
-          <p class="meta"><span class="ord">{{ "%02d"|format(i + 1) }}</span>{% if d[0] != "Journal article" %}<span class="type {{ d[1] }}">{{ d[0] }}</span>{% endif %}{% if s.year %}<span>{{ s.year }}</span>{% endif %}</p>
-          <p class="title"><span>{{ s.title }}</span></p>
-          <p class="src">{{ s.journal }}{% if s.journal %} · {% endif %}<a href="{{ s.url }}" target="_blank" rel="noopener" data-stop>PMID {{ s.pmid }}</a></p>
-          <p class="why">{{ study_why(s) }}</p>
-          <!-- The button opens the study, and its hit area covers the whole
-               row. The row is not itself a button: it holds the PMID link,
-               and a link inside a button is lost to a screen reader. -->
-          <button type="button" class="study-go" aria-label="Deep dive on study {{ i + 1 }}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
-        </li>{% endmacro %}
-        <!-- The sources fold into groups: what the verdict leaned on, open;
-             background only (animal and lab studies for a claim about
-             people, opinion pieces, buying guides), closed; what was
-             read and not relied on, closed; and what was set aside as off
-             topic, closed, never under relied on. Every study stays in the
-             HTML either way, so crawlers and a reader with no JavaScript get
-             the whole file. -->
-        <div class="sources" id="sources">{% if result %}{% set g = source_groups(result.studies) %}{% if g.cited %}<details class="source-group" open>
-          <summary class="group-head"><span class="group-name">Relied on for the verdict</span><span class="group-count">{{ g.cited | length }}</span></summary>
-          <ol class="studies">{% for i in g.cited %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
-        </details>{% endif %}{% if g.back %}<details class="source-group"{% if not g.cited and not g.others %} open{% endif %}>
-          <summary class="group-head"><span class="group-name">{{ result.evidence.background_label or 'Background only: animal and lab studies' }}</span><span class="group-count">{{ g.back | length }}</span></summary>
-          <ol class="studies">{% for i in g.back %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
-        </details>{% endif %}{% if g.others %}<details class="source-group"{% if not g.cited %} open{% endif %}>
-          <summary class="group-head"><span class="group-name">{% if g.cited %}Read, not relied on{% else %}Read{% endif %}</span><span class="group-count">{{ g.others | length }}</span></summary>
-          <ol class="studies">{% for i in g.others %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
-        </details>{% endif %}{% if g.excluded %}<details class="source-group">
-          <summary class="group-head"><span class="group-name">Set aside: off topic</span><span class="group-count">{{ g.excluded | length }}</span></summary>
-          <ol class="studies">{% for i in g.excluded %}{{ study_row(result.studies[i], i) }}{% endfor %}</ol>
-        </details>{% endif %}{% if not result.studies %}<ol class="studies"><li class="empty">Nothing on PubMed matched this well enough to weigh. That doesn't make the claim true or false: it may just not have been studied yet.</li></ol>{% endif %}{% endif %}</div>
+  <section class="stop" id="s3" data-stop="Read" aria-labelledby="h-read">
+    <div class="cap right"><div class="inner">
+      {{ back() }}
+      {% if result %}{{ eyebrow("Read", "What was read") }}{% else %}<p class="eyebrow"><b>03</b>What was read</p>{% endif %}
+      <h2 class="h2" id="h-read">{% if dl %}{{ dl.read }}{% endif %}</h2>
+      <p class="scope" id="scope"><span id="path">{% if dl %}{{ dl.path }}{% endif %}</span></p>
+      <p class="legend" id="legend3"{% if not (dl and dl.legend) %} hidden{% endif %}>{% if dl %}{{ dl.legend }}{% endif %}</p>
+      {# A check that found no studies says what to try, beside the verdict
+         that says why: nothing on PubMed matched. #}
+      <div class="nothing" id="nothing"{% if not result or result.studies %} hidden{% endif %}>
+        {%- if result and not result.studies %}{% for line in says_lines %}<p class="scope">{{ line }}</p>{% endfor %}{% endif %}
+        <p class="no-evidence" id="no-evidence"{% if not result or result.studies %} hidden{% endif %}><b>Nothing on PubMed matched</b> Name the condition and the treatment, then check again. Edit claim puts your wording back in the box.</p>
+        <p class="legend query-line">{% if result and (result.search_query_used or "")|trim %}Searched PubMed for <code>{{ (result.search_query_used or "")|trim }}</code>{% endif %}</p>
         <!-- Shown only when the check found nothing to stand on. Every line
              here is checkable: the search that ran, a wider one, and claims
-             we have already answered. It never guesses at the answer. -->
+             already answered. It never guesses at the answer. -->
         <aside class="nosteps" id="next-steps" hidden>
-          <p class="section-label" id="nosteps-head"></p>
+          <h3 class="section-label" id="nosteps-head"></h3>
           <p class="nosteps-why" id="nosteps-why"></p>
           <ul class="nosteps-acts" id="nosteps-acts"></ul>
           <div id="nosteps-related-wrap" hidden>
-            <p class="section-label nosteps-sub">Claims we have checked that are close to this</p>
+            <h3 class="section-label nosteps-sub">Claims we have checked that are close to this</h3>
             <ol class="ledger-list" id="nosteps-related"></ol>
           </div>
         </aside>
-
-        <p class="query"><span id="query-what"{% if result and not (result.search_query_used or "")|trim %} hidden{% endif %}>Searched PubMed for <code id="query">{% if result %}{{ (result.search_query_used or "")|trim }}{% endif %}</code><span id="broadened"></span>
-          · </span><a id="more-link" href="#" target="_blank" rel="noopener">More on PubMed<svg width="16" height="16" aria-hidden="true"><use href="#i-ext"/></svg></a></p>
       </div>
+    </div></div>
+  </section>
 
-      <div class="after" id="after">
-      <div class="actions">
-        <button class="secondary" id="share-btn" type="button">
-          <svg width="20" height="20" aria-hidden="true"><use href="#i-share"/></svg>Share this verdict
-        </button>
-        <button class="ghost" id="copy-btn" type="button">
-          <svg width="18" height="18" aria-hidden="true"><use href="#i-link"/></svg><span class="sr-only">Copy link</span>
-        </button>
+  {% macro row(s, i, key, status, named) %}{% set n = i + 1 %}{% set d = design_note(s.publication_types) %}<li class="row" id="row-{{ n }}" data-n="{{ n }}" data-i="{{ i }}"><button class="row-head" type="button" aria-pressed="false" aria-label="Study {{ n }}, {{ d[0] }}: {{ s.title | replace('\n', ' ') | trim('.') }}. Lift its sheet"><span class="num">{{ n }}</span><span class="design">{{ d[0] }}</span><span class="ttl">{{ s.title }}</span></button><div class="body"><p class="src">{% if s.journal %}{{ s.journal }} · {% endif %}{% if s.year %}{{ s.year }} · {% endif %}{% set href = safe_href(s.url) %}{% if href %}<a href="{{ href }}" target="_blank" rel="noopener" aria-label="Study {{ n }} on PubMed, opens in a new tab">PubMed {{ s.pmid }}</a>{% else %}PubMed {{ s.pmid }}{% endif %}</p><button class="row-more" type="button" aria-expanded="false" aria-controls="more-{{ n }}" aria-label="Details for study {{ n }}">Details</button><div class="more" id="more-{{ n }}" hidden><p class="status{% if key != 'relied' %} no{% endif %}">{{ status }}</p>{% if n in named %}<p class="named">The answer names it</p>{% endif %}<p class="note why">{{ study_why(s) }}</p><button type="button" class="row-more study-go" aria-label="Deep dive on study {{ n }}">Deep dive</button></div></div></li>{% endmacro %}
+  {% if result and result.studies %}{% set g = source_groups(result.studies) %}{% set named = desk_named(result) %}
+  <section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort">
+    <div class="cap left"><div class="inner wide">
+      <div class="panel list" id="list-panel" tabindex="-1">
+        {{ back() }}
+        {{ eyebrow("Weighed", "Weighed, not counted") }}
+        <h2 id="h-sort">Which studies the answer rests on</h2>
+        <p class="intro">Pick a study to lift its sheet. Tap a sheet on the desk to find it here. Details open its abstract, how often it has been cited and the studies next to it.</p>
+        <div id="rows">
+          {%- set groups = [("relied", "Relied on for the verdict", "Relied on", g.cited),
+                            ("back", result.evidence.background_label or "Background only: animal and lab studies", "Background only, not counted", g.back),
+                            ("read", "Read, not relied on" if g.cited else "Read", "Read, not relied on", g.others),
+                            ("off", "Set aside: off topic", "Set aside: off topic", g.excluded)] | selectattr(3) | list %}
+          {%- for key, title, status, idx in groups %}
+          <h3 class="grp-h"><button class="grp-btn" type="button" aria-label="{{ title }} ({{ idx | length }})" aria-controls="grp-{{ key }}" aria-expanded="{{ 'true' if loop.first else 'false' }}">{{ title }} ({{ idx | length }})</button></h3>
+          <ul class="rows" id="grp-{{ key }}"{% if not loop.first %} hidden{% endif %}>{% for i in idx %}{{ row(result.studies[i], i, key, status, named) }}{% endfor %}</ul>
+          {%- endfor %}
+        </div>
+      </div>
+    </div></div>
+  </section>
+  {% endif %}
+
+  {% if "Research" in stops %}
+  <section class="stop long" id="s5" data-stop="Research" aria-labelledby="h-research">
+    <div class="cap left"><div class="inner wider">
+      <div class="panel read" id="read-panel" tabindex="-1">
+        {{ back() }}
+        {{ eyebrow("Research", "The thorough answer") }}
+        <h2 id="h-research">What the research says</h2>
+        {%- set n_st = result.studies|length %}
+        <div id="research">
+          {#- Every sentence here has passed the breakdown's gate: it names the
+              studies it rests on and carries no figure the abstracts do not have. #}
+          <div class="says" id="says-sec">{% for line in says_lines %}<p class="says-p">{{ desk_refs(line, n_st) }}</p>{% endfor %}</div>
+          {%- set who_yes = bv and (bv.applies_to or bv.populations) %}
+          {%- if bv and (bv.applies_to or bv.not_applies_to or bv.populations) %}
+          <div class="who" id="who-sec">
+            <h3 id="who-label">{% if not who_yes and bv.not_applies_to %}Who this does not apply to{% else %}Who and what this applies to{% endif %}</h3>
+            {%- if bv.applies_to %}<p class="says-p">{{ desk_refs(bv.applies_to, n_st) }}</p>{% endif %}
+            {#- Read off the records, not written by the model: the narrow groups the cited studies were run in. #}
+            {%- if bv.populations %}<p class="narrow">Some of this evidence comes from studies of one group only: {{ bv.populations|join(", ") }}. A result found in one group may not hold for everyone.</p>{% endif %}
+            {%- if bv.not_applies_to %}{% if who_yes %}<p class="intro label-2">And who it does not</p>{% endif %}<p class="says-p">{{ desk_refs(bv.not_applies_to, n_st) }}</p>{% endif %}
+          </div>
+          {%- endif %}
+          {%- if bv %}
+          {%- if bv.parts %}
+          <details class="said-wrap" data-fold><summary>The claim, part by part ({{ bv.parts | length }})</summary>{% for p in bv.parts %}<p class="intro part-claim">{{ p.part }}</p><p class="part-take">{{ desk_refs(p.assessment, n_st) }}</p>{% endfor %}</details>
+          {%- endif %}
+          {%- if bv.evidence or bv.effect_size %}
+          <details class="said-wrap" data-fold><summary>What the evidence shows ({{ (bv.evidence | length) + (1 if bv.effect_size else 0) }} {{ "point" if (bv.evidence | length) + (1 if bv.effect_size else 0) == 1 else "points" }})</summary><ul class="ev">{% for para in bv.evidence %}<li>{{ desk_refs(para, n_st) }}</li>{% endfor %}</ul>{% if bv.effect_size %}<p class="effect"><b>How big the effect is.</b> <span>{{ desk_refs(bv.effect_size, n_st) }}</span></p>{% endif %}</details>
+          {%- endif %}
+          {%- endif %}
+          <h3>How sure, and why</h3>
+          <p class="evline">{% if result.evidence_line %}{{ result.evidence_line | trim('.') }}.{% else %}{{ confidence_line(result) }}{% endif %}</p>
+          {%- if bv and bv.strength %}<p class="strength">{{ desk_refs(bv.strength, n_st) }}</p>{% endif %}
+          {%- if bv and bv.unknowns %}<p class="unknowns">{{ desk_refs(bv.unknowns, n_st) }}</p>{% endif %}
+          {%- if bv and bv.concluded %}
+          <details class="said-wrap"><summary>What each study concluded ({{ bv.concluded | length }})</summary><ol class="said">{% for c in bv.concluded %}{% set st = result.studies[c.n - 1] %}<li><p class="who">Study <a class="ref" href="#row-{{ c.n }}" data-n="{{ c.n }}" aria-label="Study {{ c.n }}, show it in the list">{{ c.n }}</a>{% if st.type_label %} · {{ st.type_label }}{% endif %}{% if st.year %} · {{ st.year }}{% endif %}</p><blockquote>{{ c.said }}</blockquote></li>{% endfor %}</ol><p class="fine">In the authors' own words, from the summary each study was published with.</p></details>
+          {%- endif %}
+          <h3>What the verdict rests on</h3>
+          <p class="rests-line">{{ dl.rests }}</p>
+          {%- set rb = rests_by_design(result.studies) %}
+          {%- if rb %}<ul class="rests">{% for d in rb %}<li><b>{{ d.count }}</b><span>{{ desk_refs(d.label ~ " (" ~ d.refs ~ ")", n_st) }}</span></li>{% endfor %}</ul>{% endif %}
+          {%- if bv %}<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them.</p>{% endif %}
+        </div>
+      </div>
+    </div></div>
+  </section>
+  {% endif %}
+
+  <section class="stop" id="s6" data-stop="Open" aria-labelledby="h-open">
+    <div class="cap left"><div class="inner">
+      {{ back() }}
+      {% if result %}{{ eyebrow("Open", "Still open") }}{% else %}<p class="eyebrow" id="h-open"><b>06</b>Still open</p>{% endif %}
+      <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
+      <details class="said-wrap qwrap" id="qwrap"><summary>Search used</summary>
+        <p class="legend query"><span id="query-what"{% if result and not (result.search_query_used or "")|trim %} hidden{% endif %}>Searched PubMed for <code id="query">{% if result %}{{ (result.search_query_used or "")|trim }}{% endif %}</code><span id="broadened">{% if result and result.search_broadened %} (the first search found nothing, so it was widened){% endif %}</span>. </span><a id="more-link" href="{{ (safe_href(result.pubmed_url) or '#') if result else '#' }}" target="_blank" rel="noopener">More on PubMed</a></p>
+      </details>
+      {# When the check ran and the years of the studies it relied on, worded once in app.py (_review_line). #}
+      <p class="legend checked" id="review-line"{% if not result or not result.review_line %} hidden{% endif %}>{% if result %}{{ result.review_line }}.{% endif %}</p>
+      <p class="legend" id="cached-note" hidden></p>
+      <div class="two">
+        <button class="btn" id="share-btn" type="button">Share this verdict</button>
+        <button class="btn ghost" id="copy-btn" type="button">Copy link</button>
+        <button class="btn quiet" id="edit-claim" type="button">Edit claim</button>
+        <button class="btn quiet" type="button" data-again>Check another claim</button>
       </div>
       <span class="toast" id="toast" role="status"></span>
-
       <div class="feedback" id="feedback">
         <span id="feedback-q">Was this verdict helpful?</span>
-        <button class="thumb" data-helpful="1" type="button" aria-label="Yes, helpful"><svg width="20" height="20" aria-hidden="true"><use href="#i-up"/></svg></button>
-        <button class="thumb" data-helpful="0" type="button" aria-label="No, not helpful"><svg width="20" height="20" aria-hidden="true"><use href="#i-down"/></svg></button>
+        <button class="btn quiet thumb" data-helpful="1" type="button" aria-label="Yes, helpful">Yes</button>
+        <button class="btn quiet thumb" data-helpful="0" type="button" aria-label="No, not helpful">No</button>
       </div>
-      {# A report is anonymous like a thumb: it goes to /api/feedback tied to
-         the claim and nothing else. The note is optional and short. #}
+      {# A report is anonymous like a thumb: it goes to /api/feedback tied to the claim and nothing else. #}
       <div class="report" id="report">
-        <button class="ghost report-open" id="report-open" type="button" aria-expanded="false" aria-controls="report-form">Report a wrong answer</button>
-        <form class="report-form" id="report-form" hidden novalidate>
+        <button class="btn quiet report-open" id="report-open" type="button" aria-expanded="false" aria-controls="report-form">Report a wrong answer</button>
+        <form class="ask report-form" id="report-form" hidden novalidate>
           <label for="report-note">What is wrong with this answer? (optional)</label>
           <textarea id="report-note" rows="3" maxlength="280" autocomplete="off"></textarea>
           <p class="fine">Leave out anything personal. Reports are anonymous and tied only to the claim. <a href="/corrections">How corrections work</a></p>
-          <div class="report-actions">
-            <button class="secondary" id="report-send" type="submit">Send report</button>
-            <button class="ghost" id="report-cancel" type="button">Cancel</button>
+          <div class="two report-actions">
+            <button class="btn" id="report-send" type="submit">Send report</button>
+            <button class="btn ghost" id="report-cancel" type="button">Cancel</button>
           </div>
         </form>
         <p class="report-done" id="report-done" role="status" hidden></p>
       </div>
-      </div>
+      <p class="legend privacy">Studies from PubMed, U.S. National Library of Medicine. Verdicts written by an AI model that reads the abstracts. {{ privacy_line(provider) }} <a href="/privacy">Privacy details</a></p>
+      <p class="nma">Not medical advice. Evident summarizes published research and can be wrong. It does not replace a clinician.</p>
+      {{ site_links(True) }}
+    </div></div>
+  </section>
+  </div>
+</main>
 
-      <div class="bar-sticky" id="bar-sticky" hidden>
-        <button class="primary" id="share-btn-sticky" type="button">
-          <svg width="20" height="20" aria-hidden="true"><use href="#i-share"/></svg>Share this verdict
-        </button>
-        <button class="ghost" id="copy-btn-sticky" type="button" aria-label="Copy link">
-          <svg width="20" height="20" aria-hidden="true"><use href="#i-link"/></svg>
-        </button>
-      </div>
-    </section>
-
-    <!-- ===== Error ===== -->
-    <section id="error" hidden>
-      <h1 class="error-title" id="error-title"></h1>
-      <p class="error-msg" id="error-msg"></p>
-      <p class="error-claim" id="error-claim"></p>
-      <p class="countdown" id="countdown" hidden></p>
-      <div class="error-actions">
-        <button class="secondary" id="error-retry" type="button" hidden>Retry this claim</button>
-        <button class="ghost" id="error-back" type="button">Check another claim</button>
-      </div>
-      <p class="error-note">Not medical advice. Ask a doctor before you change a treatment.</p>
-    </section>
-
-  </main>
+<div class="bar" id="bar">
+  <!-- Next comes first in the tab order and Back right after it, so Shift+Tab from Back reaches Next without leaving the bar; the grid still places Back, place, Next left to right. -->
+  <button class="next" type="button" id="next"><span id="next-label">Next</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+  <button class="prev" type="button" id="prev" aria-label="Back one stop"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2.5L4.5 7 9 11.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="lab">Back</span></button>
+  <button class="where" type="button" id="where" aria-haspopup="true" aria-expanded="false" aria-controls="menu"></button>
+</div>
+<div class="menu" id="menu" hidden></div>
 
   <!-- ===== Study sheet ===== -->
   <dialog class="sheet" id="study-sheet" aria-labelledby="sheet-title">
-    {# Close stays at the top while the abstract scrolls, so a long one is never
-       a long way back. It is the only Close: the one at the foot is gone. #}
     <div class="sheet-bar">
       <div class="sheet-handle" aria-hidden="true"></div>
-      <button class="sheet-close" type="button" data-close>Close</button>
+      <button class="btn quiet sheet-close" type="button" data-close>Close</button>
     </div>
     <div class="sheet-body">
       <p class="meta" id="sheet-meta"></p>
@@ -605,34 +441,33 @@
       <p class="sheet-src" id="sheet-src"></p>
       <div class="type-card" id="sheet-type"></div>
       <div class="sheet-section">
-        <p class="section-label">Abstract</p>
+        <h3 class="section-label">Abstract</h3>
         <div class="abstract" id="sheet-abstract"></div>
       </div>
-      <!-- Layer 3: what the rest of the literature did with this study.
-           Loaded on demand from /api/study/<pmid>; the abstract above is
-           always enough on its own if this never arrives. -->
+      <!-- What the rest of the literature did with this study, loaded on
+           demand from /api/study/<pmid>; the abstract above is always enough
+           on its own if this never arrives. -->
       <div class="sheet-section" id="sheet-dive">
-        <p class="section-label">What happened next</p>
+        <h3 class="section-label">What happened next</h3>
         <p class="dive-status" id="dive-status">Looking it up on PubMed.</p>
         <dl class="dive-figs" id="dive-figs" hidden></dl>
         <p class="dive-links" id="dive-links" hidden></p>
         <div id="dive-related-wrap" hidden>
-          <p class="section-label dive-sub">Studies next to this one</p>
+          <h3 class="section-label dive-sub">Studies next to this one</h3>
           <ol class="studies related" id="dive-related"></ol>
         </div>
       </div>
-
       <div class="sheet-section" id="sheet-data-wrap" hidden>
-        <p class="section-label">Registered data</p>
+        <h3 class="section-label">Registered data</h3>
         <p id="sheet-data"></p>
       </div>
       <div class="sheet-section" id="sheet-authors-wrap">
-        <p class="section-label">Researchers</p>
+        <h3 class="section-label">Researchers</h3>
         <p id="sheet-authors"></p>
         <p class="fine">Their contact details are usually on the PubMed page. Most researchers don't answer cold emails, but some do.</p>
       </div>
-      <div class="sheet-actions">
-        <a class="primary link-as-btn" id="sheet-link" href="#" target="_blank" rel="noopener">Open on PubMed<svg width="18" height="18" aria-hidden="true"><use href="#i-ext"/></svg></a>
+      <div class="two sheet-actions">
+        <a class="btn" id="sheet-link" href="#" target="_blank" rel="noopener">Open on PubMed</a>
       </div>
     </div>
   </dialog>
@@ -649,7 +484,7 @@
         <li><strong>The verdict is stamped, with rules.</strong> "False" needs studies that contradict the claim. Nothing that tests the claim, or only single case reports and lab work, means "not enough evidence," never a confident answer. "It's complicated" is for real evidence that is mixed or uncertain. Studies that only match the words don't count.</li>
         <li><strong>Every verdict says what's still open.</strong> Research is rarely finished. The last line names the gap: who the studies left out, how short they ran, or what finding would change the answer.</li>
       </ol>
-      <p class="section-label">Reading the evidence meter</p>
+      <h3 class="section-label">Reading the evidence meter</h3>
       <ul class="legend">
         <li><b>Strong:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
         <li><b>Moderate:</b> human studies or expert reviews, but no randomized trial behind it.</li>
@@ -657,30 +492,19 @@
         <li><b>No direct evidence:</b> nothing found actually tests the claim.</li>
         <li><b>Low certainty:</b> the review behind it rates its own evidence low, or every trial is small or a pilot.</li>
       </ul>
-      <p class="fine">The highlighted line says what that evidence shows about the claim itself. Strong evidence of a small effect is not strong evidence for a cure.</p>
+      <p class="fine">The How sure line says what that evidence shows about the claim itself. Strong evidence of a small effect is not strong evidence for a cure.</p>
       <p class="fine"><a href="/method">The full method, and what Evident cannot do</a></p>
       <p class="fine">Not medical advice. The model can misread an abstract, and PubMed doesn't index everything. Read the studies. Talk to a clinician about your own health.</p>
-      <div class="sheet-actions">
-        <button class="primary" type="button" data-close>Got it</button>
+      <div class="two sheet-actions">
+        <button class="btn" type="button" data-close>Got it</button>
       </div>
     </div>
   </dialog>
 
   <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
-  <footer class="foot wrap">
-    <p>
-      <strong>Not medical advice.</strong> Evident summarizes published research
-      and can be wrong. It does not replace a clinician.
-    </p>
-    <p class="fine">
-      Studies from PubMed, U.S. National Library of Medicine. Verdicts written
-      by an AI model that reads the abstracts. {{ privacy_line(provider) }} <a href="/privacy">Privacy details</a>
-    </p>
-    <p class="fine foot-links"><span class="foot-row"><a href="/about">About</a><a href="/method">Methodology</a><a href="/corrections">Corrections and contact</a><a href="/privacy">Privacy</a></span></p>
-  </footer>
-
   {% if result %}<script id="server-result" type="application/json" nonce="{{ csp_nonce }}">{{ result | tojson }}</script>{% endif %}
   <script src="{{ url_for('static', filename='app.js') }}" nonce="{{ csp_nonce }}"></script>
+  <script src="{{ url_for('static', filename='desk.js') }}" nonce="{{ csp_nonce }}"></script>
 </body>
 </html>

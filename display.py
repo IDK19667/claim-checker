@@ -9,6 +9,8 @@ the same records and compares them.
 """
 import re
 
+from markupsafe import Markup, escape
+
 import evidence
 
 WHO_LABEL = "Who was studied: "
@@ -208,6 +210,157 @@ def study_why(study) -> str:
         why = str(study.get("background_why") or "").rstrip(".")
         return f"Background only, not counted: {why}." if why else "Background only, not counted."
     return "Read, not relied on."
+
+
+def _count(n, one, many) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+def _join_and(items) -> str:
+    items = [i for i in items if i]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1] if items else ""
+
+
+def desk_stops(result) -> list:
+    """The stops the desk front shows for this result, by name, in order. A
+    stop with nothing real to show is left out: Weighed needs a study, Research
+    needs a study and something written about it. static/app.js deskStops is
+    the same; a test runs both on the same records."""
+    studies = (result or {}).get("studies") or []
+    out = ["Claim", "Answer", "Read"]
+    if studies:
+        out.append("Weighed")
+        bv = breakdown_view(result)
+        says = (bv["says"] if bv else [result.get("explanation")]) if result else []
+        if bv or any(str(x or "").strip() for x in says):
+            out.append("Research")
+    out.append("Open")
+    return out
+
+
+def desk_lines(result) -> dict:
+    """The desk front's counted sentences, each worded from the record's own
+    study list and nothing else: the Read stop's heading and line, the key to
+    the desk, the line under the short answer, and what the verdict rests on.
+    static/app.js deskLines is the same; a test runs both on the same records."""
+    studies = (result or {}).get("studies") or []
+    g = source_groups(studies)
+    n, r, b, o, x = len(studies), len(g["cited"]), len(g["back"]), len(g["others"]), len(g["excluded"])
+    stops = desk_stops(result)
+    if not n:
+        return {"read": "No studies read.", "path": "", "legend": "",
+                "below": "Below: the search that ran, and what is still open.", "rests": ""}
+    path = _join_and([f"{r} relied on" if r else "None relied on",
+                      f"{b} background only" if b else "",
+                      f"{o} read and not relied on" if o else "",
+                      f"{x} set aside as off topic" if x else ""]) + "."
+    rest = []
+    if o + b:
+        rest.append(f"the {o + b} read but not relied on" + (" at its edge" if r else ""))
+    if x:
+        rest.append(f"the {x} off topic face down")
+    if r:
+        legend = f"In the light: the {_count(r, 'paper', 'papers')} the answer relies on" + (
+            ", with " + _join_and(rest) if rest else "") + "."
+    else:
+        legend = "In the light: " + _join_and(rest) + ". None was relied on."
+    below = ("Below: what was read, the " + _count(n, "study", "studies")
+             + (", the full answer," if "Research" in stops else ",") + " and what is still open.")
+    more = []
+    if o + b:
+        more.append(f"{o + b} more {'was' if o + b == 1 else 'were'} read and not relied on")
+    if x:
+        more.append(f"{x} {'was' if x == 1 else 'were'} set aside as off topic")
+    tail = _join_and(more)
+    rests = f"Rests on {_count(r, 'study', 'studies')}." + (" " + tail[:1].upper() + tail[1:] + "." if tail else "")
+    return {"read": _count(n, "study", "studies") + " read.", "path": path, "legend": legend,
+            "below": below, "rests": rests}
+
+
+def rests_by_design(studies) -> list:
+    """The relied-on studies grouped by design, in first-seen order, each with
+    its count, a plural label and the study numbers: "2 meta-analyses (Studies
+    1, 4)". static/app.js restsByDesign is the same."""
+    order, by = [], {}
+    for i, s in enumerate(studies or []):
+        if not relied_on(s):
+            continue
+        d = design_note(s.get("publication_types"))[0]
+        if d not in by:
+            by[d] = []
+            order.append(d)
+        by[d].append(i + 1)
+    out = []
+    for d in order:
+        ns = by[d]
+        label = d.lower()
+        if len(ns) > 1:
+            if re.search(r"analysis$", label):
+                label = re.sub(r"analysis$", "analyses", label)
+            elif re.search(r"(review|trial|article|study)$", label):
+                label = re.sub(r"study$", "studies", label) if label.endswith("study") else label + "s"
+            elif not label.endswith("y"):
+                label += "s"
+        if d == DEFAULT_DESIGN[0]:
+            label += ", design not labelled"
+        out.append({"count": len(ns), "label": label,
+                    "refs": ("Studies " if len(ns) > 1 else "Study ") + ", ".join(str(n) for n in ns)})
+    return out
+
+
+_REF_RE = re.compile(r"\b(Stud(?:y|ies))\s+(\d+(?:\s*(?:,\s*and|,|and|&amp;)\s*\d+)*)", re.I)
+
+
+def desk_refs(text, count) -> Markup:
+    """The text, escaped, with each study number it names ("Study 4",
+    "Studies 1, 4 and 6") made a link to that study's row in the Weighed list.
+    A number past the list stays text. static/app.js deskRefs is the same; a
+    test runs both on the same strings."""
+    safe = str(escape(text or ""))
+
+    def link(m):
+        def one(d):
+            i = int(d.group(0))
+            if 1 <= i <= count:
+                return (f'<a class="ref" href="#row-{i}" data-n="{i}" '
+                        f'aria-label="Study {i}, show it in the list">{i}</a>')
+            return d.group(0)
+        return m.group(1) + " " + re.sub(r"\d+", one, m.group(2))
+
+    return Markup(_REF_RE.sub(link, safe))
+
+
+def desk_named(result) -> list:
+    """The study numbers the short reasoning names ("What the research says"),
+    sorted: those rows say "The answer names it". static/app.js deskNamed is
+    the same."""
+    if not result:
+        return []
+    n = len(result.get("studies") or [])
+    bv = breakdown_view(result)
+    lines = [x for x in (bv["says"] if bv else [result.get("explanation")]) if str(x or "").strip()]
+    out = set()
+    for line in lines:
+        for m in _REF_RE.finditer(str(escape(line))):
+            out.update(i for i in (int(d) for d in re.findall(r"\d+", m.group(2))) if 1 <= i <= n)
+    return sorted(out)
+
+
+def safe_href(url):
+    """The address when it may go in an href: http or https, or a path on this
+    site; otherwise None, and the page leaves the link out. static/app.js
+    safeHref is the same; a test runs both on the same addresses."""
+    from urllib.parse import urlsplit
+    raw = str(url if url is not None else "").strip()
+    if not raw:
+        return None
+    if raw.startswith("/") and not raw.startswith("//") and not raw.startswith("/\\"):
+        return raw
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return None
+    return raw if parts.scheme.lower() in ("http", "https") and parts.netloc else None
 
 
 def sentence_case(text) -> str:
