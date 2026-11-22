@@ -6870,6 +6870,30 @@ t("  and a claim that says no direction ('improves'), or a figure that says none
   and breakdown.figure_direction({"plain": "a difference of 1.03 standard deviations"},
                                      "Inflammation increased with an effect size of 1.03 (Study 1).") == "up")
 
+# ---- A review that calls its own evidence thin lowers the evidence line ----
+# Live run: the cold water review concluded "the current evidence base is
+# constrained by few RCTs, small sample sizes", and the line said "Strong".
+_TH_ABS = ("RESULTS: Eleven studies were included. CONCLUSIONS: Cold water has time-dependent effects. "
+           "However, the current evidence base is constrained by few RCTs, small sample sizes, and a lack "
+           "of diversity in study populations.")
+_TH = _study("TH1", "Cold water immersion: a systematic review", types=["Systematic Review"], abstract=_TH_ABS)
+_TH_OK = _study("TH2", "Cold water immersion: a systematic review", types=["Systematic Review"],
+                abstract="RESULTS: Forty large trials were included. CONCLUSIONS: The evidence is consistent.")
+t("thin evidence: a relied-on review that says its evidence is held back by few or small studies lowers the line",
+  evidence.evidence_line("complicated", [_TH], ["TH1"]) == "Low certainty evidence, so no plain yes or no"
+  and evidence.evidence_line("true", [_TH_OK], ["TH2"]) == "Strong evidence for this claim",
+  (evidence.evidence_line("complicated", [_TH], ["TH1"]), evidence.evidence_line("true", [_TH_OK], ["TH2"])))
+t("  and the family is general: 'limited by the small number of included trials' and 'small sample sizes limit'",
+  evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: The findings are limited by the small number of included trials."))
+  and evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: Small sample sizes limit these results."))
+  and not evidence.says_thin(dict(_TH, abstract="METHODS: Searches were limited to English. Studies were small."))
+  and not evidence.says_thin(dict(_TH, abstract="CONCLUSIONS: The evidence is limited by few trials.",
+                                  publication_types=["Randomized Controlled Trial"])))
+t("  and it never raises a line already at very low",
+  evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")],
+                         ["TH1"]).startswith("Very low certainty"),
+  evidence.evidence_line("complicated", [dict(_TH, abstract=_TH_ABS + " Certainty of evidence was very low.")], ["TH1"]))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

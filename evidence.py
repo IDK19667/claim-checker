@@ -1161,6 +1161,13 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # the claim, not the case against it.
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
+    # A relied-on review that says its own evidence is held back by few or
+    # small studies has said how sure it is, and the line is no surer. Only
+    # ever lowers: a line already at low or very low stays.
+    cited = set(cited_pmids or ())
+    if (line_certainty(level) not in ("low", "very low")
+            and any(says_thin(s) for s in studies or [] if s.get("pmid") in cited)):
+        level = "Low certainty"
     # One certainty for the whole page. The line is never surer than the
     # least sure thing the page already says: the lowest rating any review
     # it relied on gives its own evidence, or a certainty word in the prose
@@ -1807,6 +1814,37 @@ def confounded(study) -> bool:
     """A systematic review or meta-analysis that says its link is likely
     explained by lifestyle or other factors rather than the thing itself."""
     return is_review(study) and bool(_CONFOUNDED.search(_text(study)))
+
+
+# A review that says its own evidence is thin: "the current evidence base is
+# constrained by few RCTs, small sample sizes", "limited by the small number
+# of included trials". Three things in one sentence: the evidence (or the
+# data, the findings, the studies), a word that it is held back, and the
+# reason being few studies or small ones. A review's own word that its
+# evidence is thin is a rating of it, though not in GRADE's words.
+_THIN_SUBJECT = re.compile(r"\b(?:evidence|data|literature|findings|results|conclusions?|studies|trials)\b",
+                           re.IGNORECASE)
+_THIN_HELD = re.compile(r"\b(?:limit(?:s|ed|ing)?|constrain(?:s|ed)?|hamper(?:s|ed)?|weaken(?:s|ed)?|"
+                        r"restrict(?:s|ed)?|undermin(?:es|ed))\b", re.IGNORECASE)
+_THIN_REASON = re.compile(
+    r"\b(?:few|small number of|limited number of|low number of|paucity of|scarcity of|lack of)\s+"
+    r"(?:[\w-]+\s+){0,3}?(?:RCTs?|trials?|studies)\b|"
+    r"\bsmall(?:er)?\s+(?:sample(?:\s+size)?s?|trials|studies|cohorts)\b|"
+    r"\bsample sizes?\s+(?:were|was|are|is)\s+(?:\w+\s+)?small\b", re.IGNORECASE)
+_THIN_NOT = re.compile(r"\bnot\s+(?:\w+\s+)?(?:limited|constrained|hampered|restricted)\b", re.IGNORECASE)
+
+
+def says_thin(study) -> bool:
+    """True when a review says its own evidence is held back by few
+    studies or small ones (_THIN_REASON), in one sentence that names the
+    evidence and says it is limited."""
+    if not is_review(study):
+        return False
+    for sentence in _SENTENCE.split(" ".join(str(study.get("abstract") or "").split())):
+        if (_THIN_SUBJECT.search(sentence) and _THIN_HELD.search(sentence)
+                and _THIN_REASON.search(sentence) and not _THIN_NOT.search(sentence)):
+            return True
+    return False
 
 
 CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "
