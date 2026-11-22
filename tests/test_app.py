@@ -2731,6 +2731,53 @@ t("  nor is a record with a problem the page cannot repair",
   bool(appmod.display.saved_record_problems(_EQ_PERS, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
   and db.find_equivalent("My son Jake 7 get sick from milk") is None)
 
+# The search for a reworded match reads at most the newest EQUIVALENT_SCAN
+# saved claims, newest first; the claim's own key is one lookup at any age.
+t("equivalent: the search for a reworded match reads at most the newest 2,000 saved claims",
+  db.EQUIVALENT_SCAN == 2000)
+_scan_db = os.path.join(tempfile.mkdtemp(), "scan.db")
+_real_db_path = db.DB_PATH
+_real_scan = db.EQUIVALENT_SCAN
+db.DB_PATH = _scan_db
+db.EQUIVALENT_SCAN = 5
+try:
+    db.init_db()
+
+    def _scan_put(claim, date):
+        db.put_cached_verdict(claim, "(q)", "complicated", "Mixed (Study 1).", ["P1"], STUDIES,
+                              tldr="Short.", still_open="Open.")
+        with db.get_conn() as _conn:
+            _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                          (date, db.normalize_claim(claim)))
+
+    _scan_put("Saffron lifts mood in adults", "2020-01-01T00:00:00+00:00")
+    _scan_put("Beetroot juice lowers blood pressure", "2020-01-02T00:00:00+00:00")
+    for _i in range(4):
+        _scan_put(f"Filler claim number {_i} about sleep", f"2021-01-0{_i + 1}T00:00:00+00:00")
+    t("  a match among the newest N is found", db.find_equivalent("Does beetroot juice lower blood pressure?")
+      == "Beetroot juice lowers blood pressure")
+    _folded = []
+    _real_fold = db.claim_fold
+    db.claim_fold = lambda c: _folded.append(c) or _real_fold(c)
+    try:
+        _beyond = db.find_equivalent("Does saffron lift mood in adults?")
+    finally:
+        db.claim_fold = _real_fold
+    t("  a row beyond the newest N is not read, so it is not matched",
+      _beyond is None and "Saffron lifts mood in adults" not in _folded
+      and len(_folded) <= db.EQUIVALENT_SCAN + 1, (_beyond, _folded))
+    with db.get_conn() as _conn:
+        _plan = " ".join(str(tuple(r)) for r in _conn.execute(
+            "EXPLAIN QUERY PLAN SELECT claim_key, claim_text, tldr, still_open FROM verdict_cache "
+            "ORDER BY created_at DESC, rowid DESC LIMIT 5").fetchall())
+    t("  the newest rows are read from an index on the date, not by sorting the whole table",
+      "verdict_cache_time" in _plan and "TEMP B-TREE" not in _plan, _plan)
+    t("  the claim's own saved row is found at any age, first",
+      db.find_equivalent("Saffron lifts mood in adults") == "Saffron lifts mood in adults")
+finally:
+    db.DB_PATH = _real_db_path
+    db.EQUIVALENT_SCAN = _real_scan
+
 # Both renderers say the same line, from the same two fields.
 _TN = [("x", None), ("Does coffee cause cancer?", "wording"), ("smokng causs cancr", "spelling"), (None, "wording"), ("", None)]
 _tn_py = [appmod.display.typed_note(a, b) for a, b in _TN]

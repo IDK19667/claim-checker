@@ -371,6 +371,9 @@ def _init_schema(conn):
         "UPDATE checks SET claim_key = lower(trim(claim_text)) WHERE claim_key IS NULL"
     )
     conn.execute("CREATE INDEX IF NOT EXISTS checks_key_time ON checks (claim_key, checked_at)")
+    # The newest saved claims first (find_equivalent, the latest list) are
+    # read from this index, not by sorting the whole table.
+    conn.execute("CREATE INDEX IF NOT EXISTS verdict_cache_time ON verdict_cache (created_at)")
 
 
 def init_db():
@@ -754,27 +757,41 @@ def claim_fold(claim: str) -> tuple:
 _REPAIRED_AT_RENDER = frozenset({"count_mismatch", "cited_off_topic"})
 
 
+# How many saved claims a search for a reworded match reads: the newest ones.
+# Folding costs about 0.2 ms a claim, and on Turso the rows come back in one
+# request under its timeout, so the cost of a miss is bounded. An older claim
+# past this many is not matched (a miss only costs a fresh check). See
+# DECISIONS.md: when the table nears this size, add an indexed fold key.
+EQUIVALENT_SCAN = 2000
+
+
 @_routed
 def find_equivalent(claim: str) -> str | None:
     """
     The stored wording of a saved answer to this same claim, or None. Only a
     whole row (`_whole`) whose record has no problem the page cannot repair
-    is returned. A row stored under this claim's own key comes first, then
-    the newest. Any age: the caller decides whether it is fresh enough.
-    Every saved claim is read, with no cap, so an old one is never missed.
+    is returned. A row stored under this claim's own key comes first (one
+    lookup by key, at any age), then the newest of the EQUIVALENT_SCAN
+    newest saved claims. Any age: the caller decides whether it is fresh
+    enough.
     """
     key = claim_fold(claim)
     if not key:
         return None
     own = normalize_claim(claim)
+    # The unrouted reader: this call already runs on one backend.
+    mine = get_cached_by_key.__wrapped__(own)
+    if mine and claim_fold(mine["claim_text"]) == key and servable(mine):
+        return mine["claim_text"]
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT claim_key, claim_text, tldr, still_open FROM verdict_cache "
-            "ORDER BY created_at DESC, rowid DESC").fetchall()
-    found = [r for r in rows if r["claim_text"] and _whole(r) and claim_fold(r["claim_text"]) == key]
-    found.sort(key=lambda r: r["claim_key"] != own)
-    for r in found:
-        # The unrouted reader: this call already runs on one backend.
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (EQUIVALENT_SCAN,)).fetchall()
+    for r in rows:
+        if r["claim_key"] == own or not (r["claim_text"] and _whole(r)):
+            continue
+        if claim_fold(r["claim_text"]) != key:
+            continue
         saved = get_cached_by_key.__wrapped__(r["claim_key"])
         if servable(saved):
             return saved["claim_text"]
