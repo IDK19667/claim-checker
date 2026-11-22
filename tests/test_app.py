@@ -883,6 +883,31 @@ t("grounding: an effect line that says no clear difference is sized as none, wit
   and evidence.evidence_line("false", _NULL_ST, ["NL1"], "Gargling mouthwash cures the infection",
                              _null_bd["effect"]["label"], breakdown.absolute_claim("Gargling mouthwash cures the infection"))
   .endswith("evidence of no clear effect"), (_null_bd["effect"], _null_bd["effect_size"]))
+# But only when every sentence in the line that carries a figure is a null. A
+# real weight loss beside a waist result that was not significant is an effect
+# with one null beside it, in either order.
+_WT_ST = [{"pmid": "WT1", "title": "A diet and weight in 5000 adults: a cohort study", "journal": "J", "year": "2020",
+           "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Journal Article", "Observational Study"],
+           "abstract": "METHODS: 5000 adults were followed for 5 years. RESULTS: Adults on the diet lost 4.1 kg more over "
+                       "5 years (p < 0.001). Waist circumference changed by 0.4 cm and did not differ significantly "
+                       "between groups. "
+                       "CONCLUSIONS: The diet was linked to weight loss."}]
+_wt_lost = "Adults on the diet lost 4.1 kg more over 5 years (Study 1)."
+_wt_waist = "The change in waist size was not statistically significant (Study 1)."
+def _wt(effect):
+    return breakdown.ground({"parts": [], "evidence": ["Adults on the diet lost more weight (Study 1)."],
+                             "effect_size": effect, "strength": "", "applies_to": "", "not_applies_to": "",
+                             "unknowns": ""}, _WT_ST, verdict.tidy_prose)
+_wt_a, _wt_b = _wt(f"{_wt_lost} {_wt_waist}"), _wt(f"{_wt_waist} {_wt_lost}")
+t("grounding: a real effect beside a null that was not significant is never sized as none, in either order",
+  not ((_wt_a or {}).get("effect") or {}).get("null") and not ((_wt_b or {}).get("effect") or {}).get("null"),
+  ((_wt_a or {}).get("effect"), (_wt_b or {}).get("effect")))
+_wt_c = _wt("Waist size changed by 0.4 cm, which was not statistically significant (Study 1).")
+t("  and a line whose every figure is a null still is",
+  ((_wt_c or {}).get("effect") or {}).get("label") == "none", (_wt_c or {}).get("effect"))
+t("  on the way out too: a saved size is not turned to none by one null beside a real effect",
+  breakdown.settle_effect({"evidence": [], "parts": [], "effect_size": f"{_wt_lost} {_wt_waist}",
+                           "effect": {"label": "large", "plain": "x", "figure": "odds ratio 80"}})["effect"] is None)
 # A saved answer whose size was read from a misread ratio keeps no size on the
 # way out; one whose ratio the page prints keeps it.
 _mis = breakdown.settle_effect({"evidence": ["Trials enrolled 35 people or 80 adults (Studies 4, 6)."],

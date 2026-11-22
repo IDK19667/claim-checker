@@ -1683,6 +1683,29 @@ def null_figure(sentence: str, studies: list[dict]) -> str | None:
     return None
 
 
+# A sentence that reports a finding as none: "no drop in viral titer",
+# "did not differ", "was not statistically significant".
+_NULL_FINDING = re.compile(
+    r"\bno (?:clear |significant |real )?(?:drop|fall|change|difference|effect|benefit|reduction|rise"
+    r"|increase|improvement|association|link)\b|\b(?:did|does|do|was|were) not (?:differ|change|reduce"
+    r"|improve|lower|raise|increase|affect)\b|\bnot (?:statistically )?significant|\bno clear difference\b",
+    re.IGNORECASE)
+
+
+def all_null(text: str, studies: list[dict] = ()) -> bool:
+    """
+    Whether an effect line reports nothing but nulls: every sentence in it
+    that carries a figure is a null, by its own words or by its abstract.
+    With no figure at all, every sentence has to be one. "Lost 4.1 kg
+    (p < 0.001)" beside a waist result that was not significant is a real
+    effect with one null beside it, not "no clear effect".
+    """
+    said = sentences(text or "")
+    pool = [t for t in said if _figures(t)] or said
+    return bool(pool) and all(_NULL_FINDING.search(t) or null_figure(t, list(studies)) is not None
+                              for t in pool)
+
+
 def say_nulls(text: str, studies: list[dict]) -> str:
     """
     Every sentence whose figure its abstract calls no clear difference says
@@ -2501,7 +2524,7 @@ def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: st
     # minutes" is no effect, not a missing size for the line to guess at.
     null_ref = next((r for r in (null_figure(t, studies) for t in sentences(effect))
                      if r is not None), None)
-    if null_ref is not None or _SAID_NULL.search(effect):
+    if (null_ref is not None or _SAID_NULL.search(effect)) and all_null(effect, studies):
         sized = dict(evidence.NULL_EFFECT, figure=(sized or {}).get("figure", ""))
         if null_ref:
             effect = effect.replace(NOT_SIGNIFICANT_SAID.format(ref=null_ref),
@@ -3260,7 +3283,8 @@ def settle_effect(bd: dict | None) -> dict | None:
     kind = evidence.ratio_kind((bd.get("effect") or {}).get("figure") or "")
     if kind and not any(kind in evidence.ratio_kinds(t) for t in [bd.get("effect_size") or ""] + said):
         bd = {**bd, "effect": (dict(evidence.NULL_EFFECT, figure="")
-                               if _SAID_NULL.search(bd.get("effect_size") or "") else None)}
+                               if _SAID_NULL.search(bd.get("effect_size") or "")
+                               and all_null(bd.get("effect_size") or "") else None)}
     if bd.get("effect_size") != EFFECT_SIZE_ABOVE:
         return bd
     return bd if any(shows_effect(t) for t in said) else {**bd, "effect_size": ""}
