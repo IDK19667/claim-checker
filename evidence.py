@@ -1175,7 +1175,7 @@ _PROMISES = [
     (re.compile(r"revers", re.IGNORECASE), "a reversal"),
     (re.compile(r"prevent|protect|block", re.IGNORECASE), "complete prevention"),
     (re.compile(r"stop", re.IGNORECASE), "a complete stop"),
-    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "getting rid of it"),
+    (re.compile(r"eliminat|eradicat|rid of|wipe", re.IGNORECASE), "complete removal"),
     (re.compile(r"heal|fix", re.IGNORECASE), "a full fix"),
 ]
 

@@ -9452,7 +9452,7 @@ _L4_ST = [_study("Q1", "Vinegar and blood sugar: a meta-analysis", types=["Meta-
 _l4 = {noun: (evidence.evidence_line("false", _L4_ST, ["Q1"], "x", None, word),
               evidence.evidence_line("false", _L4_ST, ["Q1"], "x", "small", word))
        for word, noun in (("cure", "a cure"), ("reverse", "a reversal"), ("prevent", "complete prevention"),
-                          ("stop", "a complete stop"), ("eliminate", "getting rid of it"), ("heal", "a full fix"))}
+                          ("stop", "a complete stop"), ("eliminate", "complete removal"), ("heal", "a full fix"))}
 t("L4: a false answer to a promise with no size says none of the evidence shows it, for every promise",
   all(a == f"Strong evidence, and none of it shows {n}" and b == f"Strong evidence of a small effect, not {n}"
       for n, (a, b) in _l4.items()), _l4)
