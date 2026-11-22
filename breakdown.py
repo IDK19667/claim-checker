@@ -2392,6 +2392,66 @@ def off_outcome(text: str, studies: list[dict], outcome: str, surrogate: str = "
         for n in numbers)
 
 
+def figure_sentence(bd: dict | None) -> str:
+    """
+    The sentence the breakdown's sized figure (`effect`) was read from: the
+    first sentence of the effect box, then of the evidence paragraphs, that
+    gives the same figure, or failing that names its number. A figureless
+    "no clear difference" is the effect box's own first sentence. The
+    "That is ..." translation is code's arithmetic, never the source. ""
+    when it cannot be found.
+    """
+    bd = bd or {}
+    figure = str((bd.get("effect") or {}).get("figure") or "")
+    pool = [t for text in [bd.get("effect_size")] + list(bd.get("evidence") or [])
+            for t in sentences(str(text or "")) if not t.startswith(TRANSLATION_LEAD)]
+    if not figure:
+        return pool[0] if pool and bd.get("effect_size") else ""
+    for t in pool:
+        if (evidence.effect_size(t) or {}).get("figure") == figure:
+            return t
+    number = figure.split()[-1].rstrip("%")
+    exact = re.compile(r"(?<![\d.])" + re.escape(number) + r"(?![\d])")
+    return next((t for t in pool if exact.search(t)), "")
+
+
+def _general_term(term: str) -> bool:
+    """An outcome term made only of words that name no outcome ("health",
+    "disease risk"). A short name such as "ASD" is not general: it is just
+    too short to read a stem from."""
+    words = re.findall(r"[a-z]+", term.lower())
+    return bool(words) and all(w in evidence._NOT_AN_OUTCOME for w in words)
+
+
+def names_outcome(text: str, outcome: str) -> bool:
+    """True when `text` names the query's outcome group, or its kin, by the
+    words evidence.measured_outcome reads a study by. False when that cannot
+    be told: no outcome group, or one also named in general words ("health"),
+    which any sentence would meet."""
+    stems = evidence.outcome_stems(outcome)
+    if not stems or any(_general_term(term)
+                        for term in re.split(r"\s+OR\s+", outcome.strip("() "))):
+        return False
+    return evidence.names_any(text, evidence.outcome_kin(stems))
+
+
+def line_label(bd: dict | None, claim: str = "", outcome: str = "") -> str | None:
+    """
+    The effect label the evidence line may carry, or None. The line puts a
+    size ("a large effect", "no clear effect") next to the claim, so it
+    takes one only when the sentence the figure came from names the claim's
+    own outcome. A large rise in inflammation is not a large effect on
+    immunity. The effect box keeps its figure and its own sentence either way.
+    """
+    effect = (bd or {}).get("effect") or {}
+    label = effect.get("label")
+    if not label:
+        return None
+    if not names_outcome(figure_sentence(bd), outcome):
+        return None
+    return label
+
+
 def ground(raw, studies: list[dict], tidy, claim: str = "", skip=(), outcome: str = "",
            surrogate: str = "") -> dict | None:
     """

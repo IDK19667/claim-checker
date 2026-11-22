@@ -1128,7 +1128,7 @@ def observational_only(studies, cited_pmids=()) -> bool:
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
                   comparative: bool = False, outcome: str = "",
-                  stated: str | None = None) -> str:
+                  stated: str | None = None, withheld: bool = False) -> str:
     """
     What the evidence used shows about the claim, as one short line with no
     full stop, or "" when nothing was used (the page says "no direct
@@ -1136,7 +1136,9 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     breakdown.absolute_claim; `effect_label` is the breakdown's size label;
     `outcome` is the query's outcome group; `stated` is the lowest certainty
     the page's own prose already states (stated_certainty), and the line is
-    never surer than it.
+    never surer than it. `withheld` says the breakdown had a size the line
+    may not carry (breakdown.line_label): the line then says no size at
+    all, not even "a partial effect".
     """
     level = level_word(studies, cited_pmids)
     if not level or verdict not in ("true", "false", "complicated"):
@@ -1185,7 +1187,7 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     if verdict == "false":
         if effect_label == "none":
             return f"{level} evidence of no clear effect"
-        if absolute:
+        if absolute and not (withheld and not size):
             return f"{level} evidence of a {size or 'partial'} effect, not {promise}"
         return f"{level} evidence against this claim"
     narrow = narrow_populations(studies, cited_pmids)

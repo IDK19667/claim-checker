@@ -889,12 +889,15 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # surer than the least sure thing the page says, and a certainty phrase
     # in the prose that is surer than the line is rewritten down to it.
     stated = evidence.stated_certainty(tldr, explanation, *breakdown_mod.prose_of(breakdown))
+    # The line sizes only a figure about the claim itself (line_label).
+    withheld = bool(((breakdown or {}).get("effect") or {}).get("label")) and not \
+        breakdown_mod.line_label(breakdown, claim, outcome)
     evidence_line = evidence.evidence_line(
         verdict_value, studies, cited, claim,
-        ((breakdown or {}).get("effect") or {}).get("label"),
+        breakdown_mod.line_label(breakdown, claim, outcome),
         breakdown_mod.absolute_claim(claim),
         bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-        outcome, stated=stated)
+        outcome, stated=stated, withheld=withheld)
     # The stamp follows the same cap a fresh check gets in verdict.py: a
     # "true" the evidence cannot carry (the lead review rates itself low, or
     # only small and pilot trials) is not shown as likely true, and nor is a
@@ -909,10 +912,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
                     else verdict.LOW_CERTAINTY_TLDR)
         evidence_line = evidence.evidence_line(
             verdict_value, studies, cited, claim,
-            ((breakdown or {}).get("effect") or {}).get("label"),
+            breakdown_mod.line_label(breakdown, claim, outcome),
             breakdown_mod.absolute_claim(claim),
             bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-            outcome, stated=stated)
+            outcome, stated=stated, withheld=withheld)
     # A figure that was not significant is said as one, in words that do not
     # contradict an answer that there is an effect.
     if breakdown and breakdown_mod.answers_effect(verdict_value, claim):

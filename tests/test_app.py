@@ -6773,6 +6773,59 @@ t("old rows: a recent check on this device is replayed only when it has its shor
   re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
   and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
 
+# ---- The evidence line sizes only an effect on the claim's own outcome ----
+# Live run: "Cold showers boost immunity" read "Strong evidence of a large
+# effect", where the large effect was a rise in inflammation.
+_EL_ST = [_study("EL1", "Cold water immersion and health: a systematic review", types=["Systematic Review"],
+                 abstract="RESULTS: Inflammation increased with an effect size of 1.03. Immune function rose with an "
+                          "effect size of 1.03. There was no drop in salivary viral titer. The autism hazard ratio "
+                          "was 0.93 (95% CI 0.85 to 1.02). Deaths were lower with a relative risk of 0.83. "
+                          "CONCLUSIONS: Effects on immunity, autism and health were mixed.")]
+
+
+def _el_bd(effect_size, effect, evidence_=()):
+    return {"parts": [], "evidence": list(evidence_) or ["The review pooled 11 trials (Study 1)."],
+            "effect_size": effect_size, "strength": "", "applies_to": "", "not_applies_to": "",
+            "unknowns": "", "effect": effect}
+
+
+def _el(claim, query, verdict_, bd, tldr="The studies point both ways."):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, tldr, "The review pooled 11 trials (Study 1).",
+                                      ["EL1"], [dict(s) for s in _EL_ST], "http://x", still_open="Whether it lasts.",
+                                      breakdown=json.loads(json.dumps(bd)))["evidence_line"]
+
+
+_EL_LARGE = {"figure": "standardised mean difference 1.03", "label": "large",
+             "plain": "a difference of 1.03 standard deviations"}
+_EL_Q = "(cold shower OR cold water immersion) AND (immune system OR immunity OR immune function)"
+_el_off = _el("Cold showers boost immunity", _EL_Q, "complicated",
+              _el_bd("Inflammation increased with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+                     "standard deviations, a large effect (Study 1).", _EL_LARGE))
+_el_on = _el("Cold showers boost immunity", _EL_Q, "complicated",
+             _el_bd("Immune function rose with an effect size of 1.03 (Study 1).", _EL_LARGE))
+t("effect line: a figure whose sentence names another outcome gives the evidence line no size",
+  _el_off == "Strong evidence, but no plain yes or no", _el_off)
+t("  and a figure whose sentence names the claim's outcome keeps it",
+  _el_on == "Strong evidence of a large effect, but no plain yes or no", _el_on)
+_EL_NONE = {"figure": "", "label": "none", "null": True, "plain": "no clear difference between the groups"}
+_el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)", "false",
+               _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
+               tldr="No, it does not cure it.")
+t("  and under a promise of a cure, a withheld size is not turned into 'a partial effect'",
+  _el_cure == "Strong evidence against this claim", _el_cure)
+_el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
+              _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
+                     dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
+t("  and a short name in the outcome group (ASD) does not make the outcome unreadable",
+  _el_asd == "Strong evidence of no clear effect", _el_asd)
+_el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
+              _el_bd("Deaths were lower with a relative risk of 0.83 (Study 1).",
+                     {"figure": "relative risk 0.83", "label": "small", "plain": "about 17% lower risk"}),
+              tldr="Yes, coffee drinkers lived longer.")
+t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
+  _el_gen == "Strong evidence for this claim", _el_gen)
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
