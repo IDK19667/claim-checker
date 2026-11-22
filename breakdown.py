@@ -146,6 +146,12 @@ _ARTICLE_AFTER = {"lacked", "lack", "lacks", "showed", "show", "shows", "demonst
                   "confirmed", "confirm", "confirms", "without", "with"}
 
 
+_CLAUSE_SLOT = {"measured", "measure", "measures", "measuring", "estimated", "estimate", "assessed",
+                "assess", "assesses", "examined", "examine", "examines", "studied", "tested", "test",
+                "tests", "compared", "compare", "compares", "evaluated", "evaluate", "evaluates",
+                "about", "on", "for", "in", "regarding", "whether", "to", "into"}
+
+
 def _how_well(m: re.Match) -> str:
     before = re.search(r"([\w-]+)\s+$", m.string[:m.start()])
     word = before.group(1).lower() if before else ""
@@ -158,7 +164,14 @@ def _how_well(m: re.Match) -> str:
     # "Safety and efficacy of X" needs a noun too: "safety and effect of X".
     if re.match(r"\s+of\b", m.string[m.end():]):
         return "effect"
-    return "how well it works"
+    # A clause reads only where a clause can stand: at the head of the
+    # sentence, or after a verb or preposition asking what was measured
+    # ("tested how well it works"). After any other word, a modifier, the
+    # word stays: "the pooled efficacy" is English, "the pooled how well it
+    # works" is not.
+    if not before or word in _CLAUSE_SLOT or re.search(r"[.;:,(]\s*$", m.string[:m.start()]):
+        return "how well it works"
+    return m.group(0)
 
 
 # "Prevalence" and "incidence" are nouns in nearly every slot they fill:

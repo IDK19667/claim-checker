@@ -6907,6 +6907,17 @@ t("  and where it brings in examples it still reads 'like'",
   breakdown.plain("Trials including adults and children (Study 1).") == "Trials like adults and children (Study 1).",
   breakdown.plain("Trials including adults and children (Study 1)."))
 
+# ---- Plain words: "efficacy" becomes a clause only where a clause can stand ----
+# Live log: "The pooled how well it works is about 69 percent".
+t("plain efficacy: after a modifier the word stays, so no sentence reads 'the pooled how well it works'",
+  breakdown.plain("The pooled efficacy is about 69 percent (Study 4).") == "The pooled efficacy is about 69 percent (Study 4).",
+  breakdown.plain("The pooled efficacy is about 69 percent (Study 4)."))
+t("  and after a verb that asks what was measured, or at the head of a sentence, the clause still reads",
+  breakdown.plain("The trial tested efficacy in adults (Study 1).") == "The trial tested how well it works in adults (Study 1)."
+  and breakdown.plain("Efficacy was 69 percent (Study 1).") == "How well it works was 69 percent (Study 1)."
+  and breakdown.plain("It lacked efficacy (Study 1).") == "It lacked an effect (Study 1).",
+  breakdown.plain("The trial tested efficacy in adults (Study 1)."))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
