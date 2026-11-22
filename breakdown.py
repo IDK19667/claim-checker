@@ -538,8 +538,11 @@ SOFTEN = [
     (r"\bprevents\b", "lowers the risk of"),
     (r"\bprevent\b", "lower the risk of"),
     (r"\bprevented\b", "lowered the risk of"),
-    (r"\bcures\b", "helps with"),
-    (r"\bcure\b", "help with"),
+    # Not "cure" the noun: "effect sizes for cold cures (Study 5)" became
+    # "effect sizes for cold helps with". A verb has its object after it; a
+    # noun is followed by a bracket, a stop, or "for", "of", "is" and kin.
+    (r"\bcures\b(?!\s*(?:[(.,;:!?]|$|(?:for|of|is|are|was|were|exist|exists)\b))", "helps with"),
+    (r"\bcure\b(?!\s*(?:[(.,;:!?]|$|(?:for|of|is|are|was|were|exist|exists)\b))", "help with"),
     (r"\bcured\b", "helped with"),
     (r"\beliminates\b", "reduces"),
     (r"\beliminate\b", "reduce"),

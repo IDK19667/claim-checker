@@ -9101,6 +9101,14 @@ t("  and line_certainty still reads the level off the new line, so the prose cap
 t("  a false answer to a claim with no promise still says 'against this claim'",
   evidence.evidence_line("false", _L4_ST, ["Q1"], "Vinegar raises blood sugar") == "Strong evidence against this claim")
 
+# ---- L5: "cure" the noun is not softened as a verb ----------------------------
+t("L5: the softening swap leaves 'cure' the noun alone and still softens the verb",
+  breakdown.soften("The abstracts do not report numerical effect sizes for cold cures (Study 5).")
+  == "The abstracts do not report numerical effect sizes for cold cures (Study 5)."
+  and breakdown.soften("There is no cure for the common cold (Study 2).") == "There is no cure for the common cold (Study 2)."
+  and breakdown.soften("Garlic cures colds (Study 1).") == "Garlic helps with colds (Study 1)."
+  and breakdown.soften("Garlic cures and prevents colds.") == "Garlic helps with and lowers the risk of colds.")
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
