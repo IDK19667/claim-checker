@@ -905,6 +905,38 @@ t("grounding: a real effect beside a null that was not significant is never size
 _wt_c = _wt("Waist size changed by 0.4 cm, which was not statistically significant (Study 1).")
 t("  and a line whose every figure is a null still is",
   ((_wt_c or {}).get("effect") or {}).get("label") == "none", (_wt_c or {}).get("effect"))
+# A sentence that carries a significant figure, a p value under 0.05 or an
+# interval that excludes no effect, is not a null, whatever else it says, in
+# any order, joined by any word, or split in two.
+_wt_null = "there was no clear difference in waist size"
+_wt_sig = "adults on the diet lost 4.1 kg more over 5 years (p < 0.001)"
+_wt_one = [f"{_wt_null.capitalize()}, {j} {_wt_sig} (Study 1)." for j in ("but", "while", "whereas")] + [
+    f"{_wt_sig.capitalize()}, {j} {_wt_null} (Study 1)." for j in ("but", "while", "whereas")] + [
+    f"Although {_wt_null}, {_wt_sig} (Study 1).", f"Although {_wt_sig}, {_wt_null} (Study 1).",
+    f"{_wt_null.capitalize()} (Study 1). {_wt_sig.capitalize()} (Study 1).",
+    f"{_wt_sig.capitalize()} (Study 1). {_wt_null.capitalize()} (Study 1)."]
+_wt_got = [((_wt(e) or {}).get("effect") or {}).get("null") for e in _wt_one]
+t("grounding: a null and a significant figure in one sentence is not 'no clear effect', in both orders and with any join",
+  not any(_wt_got) and not any(breakdown.all_null(e, _WT_ST) for e in _wt_one), list(zip(_wt_got, _wt_one)))
+t("  an interval that excludes no effect is a significant figure too, and a p value of 0.05 or more is not",
+  not breakdown.all_null("No clear difference in waist size, but the odds ratio was 0.6 (95% CI 0.4 to 0.8) (Study 1).")
+  and breakdown.all_null("There was no clear difference in waist size (p = 0.40) (Study 1).")
+  and breakdown.all_null("The odds ratio was 0.9 (95% CI 0.7 to 1.2), no clear difference (Study 1)."))
+with appmod.app.test_request_context("/"):
+    _wt_r = verdict._read_verdict(json.dumps({
+        "verdict": "complicated", "tldr": "The diet is linked to weight loss, but only in an observational study.",
+        "explanation": "Adults on the diet lost 4.1 kg more (Study 1).", "still_open": "Whether it causes it.",
+        "cited_study_numbers": [1], "relevance": [{"study": 1, "subject": True, "outcome": True, "in_people": True,
+                                                   "finding": "for"}],
+        "parts": [], "evidence": ["Adults on the diet lost more weight (Study 1)."], "effect_size": _wt_one[0],
+        "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""}), None, [dict(x) for x in _WT_ST],
+        "This diet helps weight loss", subject="(diet)", outcome="(weight loss OR body weight)", surrogate="")
+    _wt_page = appmod._check_response("This diet helps weight loss", "(diet) AND (weight loss OR body weight)",
+                                      _wt_r["verdict"], _wt_r["tldr"], _wt_r["explanation"], _wt_r["cited_studies"],
+                                      [dict(x) for x in _WT_ST], "http://x", still_open="Whether it causes it.",
+                                      breakdown=_wt_r.get("breakdown"))
+t("  and on the page the evidence line never says 'no clear effect' for it",
+  "no clear effect" not in (_wt_page.get("evidence_line") or ""), _wt_page.get("evidence_line"))
 t("  on the way out too: a saved size is not turned to none by one null beside a real effect",
   breakdown.settle_effect({"evidence": [], "parts": [], "effect_size": f"{_wt_lost} {_wt_waist}",
                            "effect": {"label": "large", "plain": "x", "figure": "odds ratio 80"}})["effect"] is None)

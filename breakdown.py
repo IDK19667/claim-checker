@@ -1702,8 +1702,20 @@ def all_null(text: str, studies: list[dict] = ()) -> bool:
     """
     said = sentences(text or "")
     pool = [t for t in said if _figures(t)] or said
-    return bool(pool) and all(_NULL_FINDING.search(t) or null_figure(t, list(studies)) is not None
-                              for t in pool)
+    return bool(pool) and all((_NULL_FINDING.search(t) or null_figure(t, list(studies)) is not None)
+                              and not significant_figure(t) for t in pool)
+
+
+def significant_figure(sentence: str) -> bool:
+    """
+    Whether this sentence carries a significant figure: a p value under
+    0.05, or a figure whose interval or p value rules out no effect. Such a
+    sentence is not a null, whatever else it says ("no clear difference in
+    waist size, while adults lost 4.1 kg (p < 0.001)").
+    """
+    if evidence._P_SIGNIFICANT.search(sentence or ""):
+        return True
+    return any(evidence.significance(sentence, fig) == "clear" for fig in _figures(sentence))
 
 
 def say_nulls(text: str, studies: list[dict]) -> str:
