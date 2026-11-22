@@ -1518,18 +1518,21 @@ def api_suggest():
     except sqlite3.Error as e:
         app.logger.warning("Could not read claims for suggestions: %s", e)
         return jsonify({"suggestions": []})
-    return jsonify({"suggestions": [_suggested(r) for r in suggest_mod.suggest(q, claims)]})
+    shown = (_suggested(r) for r in suggest_mod.suggest(q, claims))
+    return jsonify({"suggestions": [r for r in shown if r is not None]})
 
 
-def _suggested(r: dict) -> dict:
+def _suggested(r: dict) -> dict | None:
     """A suggestion with the stamp its page would show. Only a "true" can be
-    capped, and at most a handful are offered, so only those few rows are read."""
+    capped, and at most a handful are offered, so only those few rows are read.
+    A "true" whose row cannot be read for the cap (a race, or a key that no
+    longer matches) is None, and left out: never shown uncapped."""
     if r.get("verdict") != "true":
         return r
     try:
         row = db.get_cached_by_key(db.normalize_claim(r["claim_text"]))
         if not row:
-            return r
+            return None
         shown = _listed({"claim_text": row["claim_text"], "verdict": row["verdict"],
                          "search_query": row.get("search_query") or "", "tldr": row.get("tldr") or "",
                          "studies": row["studies"], "cited": row["cited_studies"]})

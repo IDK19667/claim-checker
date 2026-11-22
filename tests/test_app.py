@@ -8492,6 +8492,31 @@ with db.get_conn() as _conn:
                   tuple(db.normalize_claim(x) for x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]))
 appmod._sitemap_memo["stamp"] = None
 
+# ---- final fix F1b: a "true" suggestion that cannot be capped is left out --------
+# app._suggested reads the row behind a "true" for the low-certainty cap. When
+# that read gives nothing (a race with a replace, or a key that no longer
+# matches), the suggestion is left out of /api/suggest, never shown uncapped.
+_SB_TRUE, _SB_MIX = "Numbat honey soothes throats", "Numbat tea eases coughs"
+db.put_cached_verdict(_SB_TRUE, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+db.put_cached_verdict(_SB_MIX, "(tea) AND (cough)", "complicated", "Because (Study 1).", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Maybe.", still_open="For how long.")
+_sb_seen = [r_["claim_text"] for r_ in c.get("/api/suggest?q=numbat").get_json()["suggestions"]]
+_sb_get = db.get_cached_by_key
+db.get_cached_by_key = lambda key, *a, **k: None
+try:
+    _sb_race = c.get("/api/suggest?q=numbat").get_json()["suggestions"]
+    _sb_one = appmod._suggested({"claim_text": _SB_TRUE, "verdict": "true"})
+finally:
+    db.get_cached_by_key = _sb_get
+t("F1b: both suggestions show while the rows can be read", _SB_TRUE in _sb_seen and _SB_MIX in _sb_seen, _sb_seen)
+t("F1b: a 'true' whose row cannot be read for the cap is left out of /api/suggest, and the others stay",
+  [r_["claim_text"] for r_ in _sb_race] == [_SB_MIX] and _sb_race[0]["verdict"] == "complicated", _sb_race)
+t("F1b: _suggested gives None for it, never the raw 'true'", _sb_one is None, _sb_one)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (?, ?)",
+                  (db.normalize_claim(_SB_TRUE), db.normalize_claim(_SB_MIX)))
+
 # ---- where the fixes meet: a reworded link reads the bounded lookup -----------
 # rc-site-fix renders a reworded link as the saved answer (app._equivalent);
 # rc-saved-fix bounds that lookup (db.find_equivalent, db.EQUIVALENT_SCAN). A
