@@ -9802,6 +9802,23 @@ t("  a dangling separator or an odd reference is rebuilt from the numbers it sti
   == ["Harm (Study 4).", "Harm (Study 4).", "Harm (Study 2)."])
 t("  a sentence whose subject was the reference still goes whole",
   breakdown.relied_only("Study 6 and Study 7 show harm (Study 5). Help (Study 5).", {5}, 8) == "Help (Study 5).")
+_H5_GONE = [("Harm (see Studies ) here (Study 5).", "Harm here (Study 5)."),
+            ("Harm (see also Studies 6, 7) and help (Study 5).", "Harm and help (Study 5)."),
+            ("Harm (e.g. Study 6), then (cf. Study 7) help (Study 5).", "Harm, then help (Study 5)."),
+            ("Harm (as in Studies 6 and 7) and help (Study 5).", "Harm and help (Study 5).")]
+_H5_LEFT = [("Harm (see Studies , 4).", "Harm (see Study 4)."), ("Harm (cf. Studies 6, 5).", "Harm (cf. Study 5)."),
+            ("Harm (e.g. Studies 2, ).", "Harm (e.g. Study 2).")]
+t("H5: an emptied reference with a lead-in goes whole, with the space before it",
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_GONE] == [y for _, y in _H5_GONE],
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_GONE])
+t("  with numbers left it keeps its lead-in and the numbers it has",
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_LEFT] == [y for _, y in _H5_LEFT],
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x, _ in _H5_LEFT])
+_H5_SAME = ["Harm (see Study 4).", "Harm (see below).", "Harm (e.g. pain or swelling).", "As in other trials (see earlier studies).",
+            "That is, about 12% lower odds (Study 4).", "Harm (cf. Studies 2, 4, 5)."]
+t("  and a lead-in bracket that lost nothing comes back byte for byte",
+  all(breakdown.without_empty_refs(x) == x and breakdown.relied_only(x, {2, 4, 5}, 8) == x for x in _H5_SAME),
+  [breakdown.relied_only(x, {2, 4, 5}, 8) for x in _H5_SAME])
 _er_pg = appmod._check_response("Empty ref claim", "(alcohol) AND (pregnancy)", "complicated", "Mixed.", _ER,
                                 ["P5"], [_study(f"P{i}", f"Study of alcohol {i}") for i in range(1, 9)],
                                 "http://x", still_open="Whether small amounts harm.")

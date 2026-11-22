@@ -1966,7 +1966,10 @@ def without_empty_refs(sentence: str) -> str:
     "(Studies )", "(Study )", "( )" and the space before it. A citation
     that still has numbers but lost some, or whose list begins or ends
     with a separator ("(Study 5; )", "(Studies , 4)"), is rebuilt from the
-    numbers it has: "(Study 5)", "(Study 4)". A citation that was part of
+    numbers it has: "(Study 5)", "(Study 4)". A short lead-in in the
+    bracket ("see", "see also", "e.g.", "cf.", "as in") is part of the
+    citation: "(see Studies )" goes whole, "(see Studies , 4)" reads
+    "(see Study 4)". A citation that was part of
     the sentence itself ("Studies and show") cannot be taken out without
     rewriting it, so the sentence goes: "" is returned. Everything else in
     the sentence, a sentence with no such citation included, comes back
@@ -1976,6 +1979,9 @@ def without_empty_refs(sentence: str) -> str:
         body = m.group("body")
         if not body.strip():
             return ""
+        lead = _REF_LEAD.match(body)
+        lead = lead.group(0) if lead and _REF_BODY.fullmatch(body[lead.end():]) else ""
+        body = body[len(lead):]
         if not _REF_BODY.fullmatch(body) or not (_GONE in body or re.search(r"\bStud", body)):
             return m.group(0)
         nums = re.findall(r"\d+", body)
@@ -1985,7 +1991,7 @@ def without_empty_refs(sentence: str) -> str:
             return m.group(0)
         open_, close = m.group("open"), m.group("close")
         said = f"Study {nums[0]}" if len(nums) == 1 else "Studies " + ", ".join(nums)
-        return f"{m.group('space')}{open_}{said}{close}"
+        return f"{m.group('space')}{open_}{lead}{said}{close}"
 
     out = _BRACKET_REF.sub(fix, sentence)
     return "" if _GONE in out else out
@@ -1993,6 +1999,9 @@ def without_empty_refs(sentence: str) -> str:
 
 # A bracket and the space before it; its body is judged in without_empty_refs.
 _BRACKET_REF = re.compile(r"(?P<space>\s*)(?P<open>[(\[])(?P<body>[^()\[\]]*)(?P<close>[)\]])")
+# A short lead-in a citation can carry inside its bracket: "(see Study 4)",
+# "(e.g. Studies 2, 3)". Judged with the rest of the body after it.
+_REF_LEAD = re.compile(r"\s*(?:see(?:\s+also)?|e\.g\.,?|cf\.|as\s+in)\s+", re.IGNORECASE)
 # A body made only of the words, numbers and separators of a citation.
 _REF_BODY = re.compile(r"(?:\s|Stud(?:y|ies)\b|\d+|[,;&]|\band\b|\x00)*")
 # A list that begins or ends with a separator, or a "Study" with no number
