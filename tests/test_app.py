@@ -1239,6 +1239,12 @@ t("  and under an answer of no effect the effect's plain words stay",
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")
+t("  and it leaves 'cure' the noun alone where nothing else would: before a bracket, 'for' or 'rates'",
+  breakdown.soften("Cure rates rose (Study 1).") == "Cure rates rose (Study 1)."
+  and breakdown.soften("The cure rate was 80% (Study 2).") == "The cure rate was 80% (Study 2)."
+  and breakdown.soften("A cure for colds was sought (Study 1).") == "A cure for colds was sought (Study 1)."
+  and breakdown.soften("Effect sizes for cold cures (Study 5) were small.")
+  == "Effect sizes for cold cures (Study 5) were small.")
 t("  and under a 'not' it leaves the verb alone, since weakening it there would strengthen the sentence",
   breakdown.soften("Vitamin C does not cure cancer.") == "Vitamin C does not cure cancer."
   and breakdown.soften("Garlic doesn't cure HIV.") == "Garlic doesn't cure HIV."
