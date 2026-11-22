@@ -1789,7 +1789,9 @@ def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
     beside the figure it explains. In each block ("What the research says",
     each list item, each field), one whose sentence before it is missing or
     gives no figure goes: "That is no clear difference ... (Study 2)." under
-    a sentence with no number explains nothing. One that only repeats what
+    a sentence with no number explains nothing, and so does one under
+    another study's figure: when it cites a study, the sentence before it
+    has to cite that study too. One that only repeats what
     the block already says, short words aside ("That is a risk drop of 26%
     (Study 1)." after "The risk drop was 26% ... (Study 1)."), goes too,
     whether or not the size is withheld; one that converts the figure
@@ -1806,11 +1808,16 @@ def translations_follow(bd: dict | None, withheld: bool = False) -> dict | None:
         return [w for w in re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", _REF.sub(" ", t).lower())
                 if w not in _FILLER]
 
+    def cited(t: str) -> set:
+        return {n for m in _REF.finditer(t) for n in re.findall(r"\d+", m.group(1))}
+
     def block(units: list[str]) -> list[str]:
         kept = []
         for i, t in enumerate(units):
             if code_translation(t):
                 if not kept or not figure(kept[-1]):
+                    continue
+                if cited(t) and not cited(t) & cited(kept[-1]):
                     continue
                 if figure(t):
                     said = {w for u in units[:i] + units[i + 1:] for w in words(u)}

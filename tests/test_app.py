@@ -9326,6 +9326,16 @@ t("L2: a 'That is' sentence that only repeats its figure goes, size withheld or 
 _L2_HR = "Mortality was lower (HR = 0.46, 95% CI 0.30 to 0.70) (Study 6)."
 _L2_KEEP = ["That is a hazard ratio of 0.46, meaning a lower risk over time (Study 6).",
             "That is about 54% lower risk (Study 6)."]
+# L3: it follows a figure sentence about the same study. Live: intermittent
+# fasting, Study 4's null translation under Study 1's weight-loss range.
+_L3_ONE = "Trials showed weight loss ranging from 0.8 percent to 13.0 percent of baseline weight (Study 1)."
+_L3_FOUR = "The average difference in weight loss was 0.26 kg (Study 4)."
+_l3 = breakdown.translations_follow({"says": ["Reviews found equal weight loss (Studies 1, 3, 4).", _L3_ONE, _H8_NULL.replace("Study 1", "Study 4"),
+                                              "Who was studied: adults (Study 1)."],
+                                     "effect_size": _L3_FOUR + " " + _H8_NULL.replace("Study 1", "Study 4")})
+t("L3: a 'That is' sentence under another study's figure goes; under its own study's figure it stays",
+  _l3["says"] == ["Reviews found equal weight loss (Studies 1, 3, 4).", _L3_ONE, "Who was studied: adults (Study 1)."]
+  and _l3["effect_size"].endswith(_H8_NULL.replace("Study 1", "Study 4")), _l3)
 t("  one that spells out or converts the figure stays",
   all(breakdown.translations_follow({"says": [_L2_HR, x]}, w)["says"] == [_L2_HR, x]
       for x in _L2_KEEP for w in (False, True)))
