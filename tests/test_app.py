@@ -1050,6 +1050,31 @@ t("grounding: an effect line that says no clear difference is sized as none, wit
   and evidence.evidence_line("false", _NULL_ST, ["NL1"], "Gargling mouthwash cures the infection",
                              _null_bd["effect"]["label"], breakdown.absolute_claim("Gargling mouthwash cures the infection"))
   .endswith("evidence of no clear effect"), (_null_bd["effect"], _null_bd["effect_size"]))
+# But only when every sentence in the line that carries a figure is a null. A
+# real weight loss beside a waist result that was not significant is an effect
+# with one null beside it, in either order.
+_WT_ST = [{"pmid": "WT1", "title": "A diet and weight in 5000 adults: a cohort study", "journal": "J", "year": "2020",
+           "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Journal Article", "Observational Study"],
+           "abstract": "METHODS: 5000 adults were followed for 5 years. RESULTS: Adults on the diet lost 4.1 kg more over "
+                       "5 years (p < 0.001). Waist circumference changed by 0.4 cm and did not differ significantly "
+                       "between groups. "
+                       "CONCLUSIONS: The diet was linked to weight loss."}]
+_wt_lost = "Adults on the diet lost 4.1 kg more over 5 years (Study 1)."
+_wt_waist = "The change in waist size was not statistically significant (Study 1)."
+def _wt(effect):
+    return breakdown.ground({"parts": [], "evidence": ["Adults on the diet lost more weight (Study 1)."],
+                             "effect_size": effect, "strength": "", "applies_to": "", "not_applies_to": "",
+                             "unknowns": ""}, _WT_ST, verdict.tidy_prose)
+_wt_a, _wt_b = _wt(f"{_wt_lost} {_wt_waist}"), _wt(f"{_wt_waist} {_wt_lost}")
+t("grounding: a real effect beside a null that was not significant is never sized as none, in either order",
+  not ((_wt_a or {}).get("effect") or {}).get("null") and not ((_wt_b or {}).get("effect") or {}).get("null"),
+  ((_wt_a or {}).get("effect"), (_wt_b or {}).get("effect")))
+_wt_c = _wt("Waist size changed by 0.4 cm, which was not statistically significant (Study 1).")
+t("  and a line whose every figure is a null still is",
+  ((_wt_c or {}).get("effect") or {}).get("label") == "none", (_wt_c or {}).get("effect"))
+t("  on the way out too: a saved size is not turned to none by one null beside a real effect",
+  breakdown.settle_effect({"evidence": [], "parts": [], "effect_size": f"{_wt_lost} {_wt_waist}",
+                           "effect": {"label": "large", "plain": "x", "figure": "odds ratio 80"}})["effect"] is None)
 # A saved answer whose size was read from a misread ratio keeps no size on the
 # way out; one whose ratio the page prints keeps it.
 _mis = breakdown.settle_effect({"evidence": ["Trials enrolled 35 people or 80 adults (Studies 4, 6)."],
@@ -1083,6 +1108,11 @@ with appmod.app.test_request_context("/"):
     _ns_no = appmod._check_response("Daily sunscreen does not lower melanoma risk", "(sunscreen) AND (melanoma)", "true",
                                     "It does not.", "No clear change (Study 1).", ["NS1"],
                                     [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+t("wording: 'false' on a claim that denies an effect is an answer that there is one",
+  breakdown.answers_effect("false", "Vaccines do not cause autism")
+  and not breakdown.answers_effect("false", "Vaccines cause autism")
+  and breakdown.answers_effect("true", "Vaccines cause autism")
+  and not breakdown.answers_effect("complicated", "Vaccines do not cause autism"))
 t("wording: under 'Likely true' on a claim of an effect, a figure that was not significant is never 'no clear difference'",
   _ns_yes["verdict"] == "true" and "no clear difference" not in " ".join(breakdown.prose_of(_ns_yes["breakdown"]))
   and "On its own, that result could be chance, because it was not statistically significant (Study 1)."
@@ -1328,6 +1358,29 @@ t("  the word 'or' before a number is not an odds ratio: no '7900% higher odds' 
   and evidence.effect_size("aOR = 1.5")["figure"] == "odds ratio 1.5"
   and evidence.effect_size("RRs of 1.2")["figure"] == "risk ratio 1.2",
   (evidence.effect_size("such as 35 people or 80 adults"), evidence.effect_size("OR 0.88")))
+t("  the adjusted ratios read in capitals too: AOR, AHR and aIRR",
+  (evidence.effect_size("AOR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
+  and (evidence.effect_size("The AHR for death was 0.8") or {}).get("figure") == "hazard ratio 0.8"
+  and (evidence.effect_size("aIRR 1.3") or {}).get("figure") == "incidence rate ratio 1.3"
+  and evidence.ratio_kinds("AOR 1.45 and AHR 0.8") == {"odds ratio", "hazard ratio"},
+  (evidence.effect_size("AOR 1.45"), evidence.effect_size("The AHR for death was 0.8")))
+t("  but ARR (an absolute risk reduction) and mixed case 'Hr' are no ratio",
+  evidence.effect_size("ARR 0.05") is None and evidence.effect_size("Hr 0.8") is None
+  and evidence.ratio_kinds("ARR 0.05, Hr 0.8") == set())
+t("  capitals rule the ratio read across a gap too: 'patients or their carers were 80' is no odds ratio",
+  evidence.effect_size("Patients or their carers were 80 (Study 1).") is None
+  and (evidence.effect_size("The OR for patients was 1.4 (Study 1).") or {}).get("figure") == "odds ratio 1.4")
+t("  and a figure after the word 'or' still needs its unit, while one after OR needs none",
+  breakdown._unit_in("80", "Trials had 35 people or 80 in all.") is None
+  and breakdown._unit_in("0.88", "The OR 0.88 (95% CI 0.80 to 0.95) was small.") == "")
+t("  a number followed by a unit is a measure, not a ratio: no odds ratio of 45 from 'the OR was 45 minutes'",
+  evidence.effect_size("Time in the OR was 45 minutes (Study 2).") is None
+  and evidence.effect_size("OR 12 patients were excluded.") is None
+  and evidence.effect_size("The hazard ratio for those on 1.45 mg was 2 days shorter.") is None
+  and evidence.effect_size("OR 1.45 mg") is None
+  and (evidence.effect_size("OR 1.45 (95% CI 1.10 to 1.90)") or {}).get("figure") == "odds ratio 1.45"
+  and (evidence.effect_size("The hazard ratio for death was 0.8.") or {}).get("figure") == "hazard ratio 0.8",
+  (evidence.effect_size("Time in the OR was 45 minutes (Study 2)."), evidence.effect_size("OR 1.45 mg")))
 t("  a ratio above 1 reads as an increase",
   evidence.effect_size("hazard ratio 1.80")["plain"] == "about 80% higher risk over time",
   evidence.effect_size("hazard ratio 1.80"))
@@ -2640,6 +2693,171 @@ t("off outcome: hyperactivity rated as behaviour, and stress rated as tension, w
                                        abstract="BACKGROUND: It is said to reduce stress.\nMETHODS: 59 adults, POMS.\n"
                                                 "RESULTS: Less tension and fatigue.\nCONCLUSION: Some benefit."),
                                 "(stress OR psychological stress OR cortisol)") is True)
+# A missing word proves nothing: a study reports its outcome by an instrument
+# (1RM, A1C, PSQI), an abbreviation the background defined, or other words
+# ("died", "flu"). An independent grader wrote 54 such abstracts of studies
+# that did measure the outcome. The rule sets a study aside only on a positive
+# sign it is about another outcome. One case it still cannot read without the
+# claim's subject: "Sleep loss and word learning", for a claim about memory,
+# names sleep in its title and conclusions as the exposure.
+_ATTACKS = json.loads((ROOT / "tests" / "off_outcome_attacks.json").read_text())["cases"]
+_attacked = [a_["name"] for a_ in _ATTACKS if evidence.measured_outcome(a_["study"], a_["outcome"]) is False]
+t("off outcome: of 54 abstracts that did measure the outcome in other words, only one is set aside",
+  len(_ATTACKS) == 54 and _attacked == ["recall"], _attacked)
+_recall = next(a_ for a_ in _ATTACKS if a_["name"] == "recall")
+t("  and that one stays in once the claim's subject (sleep) is known, as it is in an answer",
+  evidence.measured_outcome(_recall["study"], _recall["outcome"], "", "(sleep deprivation OR sleep loss)") is None)
+t("  a background that never names the outcome sets nothing aside, whatever the title names",
+  evidence.measured_outcome(_study("MO11", "Creatine and hair density: a randomized trial",
+                                   abstract="BACKGROUND: Creatine is popular.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Hair density did not change.\nCONCLUSIONS: No hair loss."),
+                            _hair_out) is None)
+t("  a title naming another outcome is not enough when the findings never name it",
+  evidence.measured_outcome(_study("MO12", "Creatine and hair: a randomized trial",
+                                   abstract="BACKGROUND: Creatine raises muscle strength.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Leg press load rose by 12 kg.\nCONCLUSIONS: It helped."),
+                            _hair_out) is None)
+t("  the hair trial is still set aside: its background names strength, its title and results name hair",
+  evidence.measured_outcome(_hair, _hair_out) is False)
+t("  text before the first heading is no structure to read, so nothing is set aside on it",
+  evidence.measured_outcome(_study("MO13", "Creatine and hair: a randomized trial",
+                                   abstract="Muscle strength was measured by 1RM in every participant. "
+                                            "BACKGROUND: Creatine raises muscle strength.\nMETHODS: 40 men.\n"
+                                            "RESULTS: Hair density did not change.\nCONCLUSIONS: Hair was unchanged."),
+                            _hair_out) is None)
+# Setting a study aside removes its citation and nothing else. Two trials
+# disagree and the answer is "complicated"; code sets one aside; the page must
+# not then say "Randomized trials say yes". The mirror: the one set aside is
+# the one that agreed.
+def _flip_st(pmid, title, abstract, types):
+    return _study(pmid, title, abstract=abstract, types=types)
+_FL_FOR = _flip_st("FL1", "Creatine and muscle strength in 240 older adults: a randomized controlled trial",
+                   "BACKGROUND: Ageing lowers strength.\nMETHODS: 240 adults were randomized to creatine or placebo.\n"
+                   "RESULTS: Muscle strength rose more with creatine (mean difference 8 kg, p < 0.001).\n"
+                   "CONCLUSIONS: Creatine raised strength.", ["Randomized Controlled Trial"])
+_FL_AGAINST = _flip_st("FL2", "Creatine and muscle strength in 260 older women: a randomized controlled trial",
+                       "BACKGROUND: Creatine is said to help.\nMETHODS: 260 women were randomized to creatine or placebo.\n"
+                       "RESULTS: Leg press strength did not differ between groups (p = 0.6).\n"
+                       "CONCLUSIONS: Creatine gave no strength benefit.", ["Randomized Controlled Trial"])
+_FL_HAIR = _flip_st("FL3", "Creatine and hair in 250 older women: a randomized controlled trial",
+                    "BACKGROUND: Creatine is said to raise muscle strength in older adults.\n"
+                    "METHODS: 250 women were randomized to creatine or placebo.\n"
+                    "RESULTS: Hair density did not differ between groups (p = 0.6).\nCONCLUSIONS: Hair was unchanged.",
+                    ["Randomized Controlled Trial"])
+_FL_SURVEY = _flip_st("FL4", "Creatine use and muscle strength in 5,000 gym members: a cross-sectional study",
+                      "BACKGROUND: Many take creatine.\nMETHODS: A survey of 5,000 gym members.\n"
+                      "RESULTS: Creatine users were {} than non-users.\nCONCLUSIONS: {}.",
+                      ["Journal Article", "Observational Study"])
+def _flip(trials_findings, survey_finding, survey_words):
+    survey = dict(_FL_SURVEY, abstract=_FL_SURVEY["abstract"].format(*survey_words))
+    sts = [dict(s_) for s_, _ in trials_findings] + [survey]
+    finds = [f_ for _, f_ in trials_findings] + [survey_finding]
+    parsed = {"verdict": "complicated", "tldr": "Trials disagree on whether creatine raises strength in older adults.",
+              "explanation": "One trial found more strength with creatine (Study 1). Another found none (Study 2).",
+              "still_open": "Which doses help, and for whom.", "cited_study_numbers": list(range(1, len(sts) + 1)),
+              "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f_}
+                            for i, f_ in enumerate(finds)],
+              "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+              "not_applies_to": "", "unknowns": ""}
+    return sts, verdict._read_verdict(json.dumps(parsed), None, sts, "Creatine increases muscle strength in older adults",
+                                      subject="(creatine)", outcome="(muscle strength OR strength)", surrogate="")
+_fs, _fr = _flip([(_FL_FOR, "for"), (_FL_HAIR, "against")], "against", ("no stronger", "No association"))
+t("set aside: a trial code sets aside that disagreed still disagrees, so the trials settle nothing",
+  "FL3" not in _fr["cited_studies"] and _fr["off_topic"].get("FL3") == verdict.OFF_OUTCOME
+  and _fr["verdict"] == "complicated" and "Randomized trials say yes" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+_fs, _fr = _flip([(_FL_HAIR, "for"), (_FL_AGAINST, "against")], "for", ("stronger", "Users were stronger"))
+t("  and the mirror: the one set aside agreed, and the answer still does not become 'trials say no'",
+  "FL3" not in _fr["cited_studies"] and _fr["verdict"] == "complicated"
+  and "Randomized trials say no" not in _fr["tldr"], (_fr["verdict"], _fr["tldr"]))
+# The harm guard with a study set aside: it is worked out on the studies as
+# they stand and with the set-aside ones put back, and the set-aside study
+# counts exactly as it would have in view, never more.
+def _hg_st(pmid, title, results, types, background="Flu vaccines are given to adults each winter."):
+    return _study(pmid, title, types=types,
+                  abstract=f"BACKGROUND: {background}\nMETHODS: Adults took part over two winters.\n"
+                           f"RESULTS: {results}\nCONCLUSIONS: See results.")
+_HG_FOR = _hg_st("HG1", "Flu vaccine and hospital admissions in 3,000 adults: a randomized controlled trial",
+                 "Hospital admissions fell with the vaccine (p < 0.01).", ["Randomized Controlled Trial"])
+_HG_HAIR_WEAK = _hg_st("HG2", "Flu vaccine and hair loss in 800 adults: a cohort study",
+                       "Hair loss did not differ between groups.", ["Observational Study"],
+                       background="Flu vaccines are said to reduce hospital admissions.")
+_HG_HAIR_RCT = _hg_st("HG3", "Flu vaccine and hair loss in 2,000 adults: a randomized controlled trial",
+                      "Hair loss did not differ between groups (p = 0.6).", ["Randomized Controlled Trial"],
+                      background="Flu vaccines are said to reduce hospital admissions.")
+def _hg(claim, outcome, model_verdict, studies_findings, cited, subject="(flu vaccine OR influenza vaccine)"):
+    sts = [dict(s_) for s_, _ in studies_findings]
+    parsed = {"verdict": model_verdict, "tldr": "The studies here lean one way.",
+              "explanation": "The trials were read (Study 1).", "still_open": "Who it helps most.",
+              "cited_study_numbers": cited,
+              "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f_}
+                            for i, (_, f_) in enumerate(studies_findings)],
+              "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+              "not_applies_to": "", "unknowns": ""}
+    return verdict._read_verdict(json.dumps(parsed), None, sts, claim, subject=subject,
+                                 outcome=outcome, surrogate="")
+_HG_C = "Flu vaccines reduce hospital admissions"
+_HG_O = "(hospital admissions)"
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_WEAK, "against")], [1, 2])
+t("harm guard, set aside: strong trials point the safe way and a weak set-aside study disagrees, so the safe answer stands",
+  _hr["off_topic"].get("HG2") == verdict.OFF_OUTCOME and _hr["verdict"] == "true" and "HG1" in _hr["cited_studies"],
+  (_hr["verdict"], _hr["tldr"], _hr["off_topic"]))
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_WEAK, "against")], [1])
+t("  and the same with the set-aside study never cited",
+  _hr["off_topic"].get("HG2") == verdict.OFF_OUTCOME and _hr["verdict"] == "true", (_hr["verdict"], _hr["tldr"]))
+_hr = _hg(_HG_C, _HG_O, "false", [(_HG_FOR, "for"), (_HG_HAIR_RCT, "against")], [1, 2])
+t("  a strong, cited set-aside trial that backs the risky answer stops it at 'complicated', with the risk said",
+  _hr["off_topic"].get("HG3") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
+  and "Going without vaccination" in _hr["tldr"] and "support this claim" not in _hr["tldr"],
+  (_hr["verdict"], _hr["tldr"]))
+_HG_SAFE_C = "Melatonin is safe for children"
+_HG_SAFE_O = "(adverse events OR side effects)"
+_HG_HARM = _hg_st("HG4", "Melatonin and adverse events in 400 children: a randomized controlled trial",
+                  "Adverse events were more common with melatonin (p < 0.01).", ["Randomized Controlled Trial"],
+                  background="Melatonin is given to children who sleep badly.")
+_HG_SAFE_HAIR = _hg_st("HG5", "Melatonin and hair growth in 300 children: a randomized controlled trial",
+                       "Hair growth did not differ between groups (p = 0.6).", ["Randomized Controlled Trial"],
+                       background="Melatonin is said to cause few adverse events in children.")
+_hr = _hg(_HG_SAFE_C, _HG_SAFE_O, "true", [(_HG_HARM, "against"), (_HG_SAFE_HAIR, "for")], [1, 2], subject="(melatonin)")
+t("  and the mirror for a claim that something is safe: 'complicated', saying safety is not shown, never 'false' made firm",
+  _hr["off_topic"].get("HG5") == verdict.OFF_OUTCOME and _hr["verdict"] == "complicated"
+  and _hr["tldr"] == verdict._UNSAFE_UNPROVEN, (_hr["verdict"], _hr["tldr"]))
+t("  a cap either reading earns applies: the studies used, and those with the set-aside put back",
+  verdict._with_aside(["A"], ["B"]) == [["A"], ["A", "B"]] and verdict._with_aside(["A"], []) == [["A"]])
+_SA_TRIAL = _study("SA1", "Creatine and muscle strength in 900 older adults: a randomized controlled trial",
+                   abstract="BACKGROUND: Ageing lowers strength.\nMETHODS: 900 adults were randomized.\n"
+                            "RESULTS: Muscle strength rose more with creatine (p < 0.001).\nCONCLUSIONS: Creatine raised strength.",
+                   types=["Randomized Controlled Trial"])
+_SA_REVIEW = dict(_study("SA2", "Creatine and hair loss: a systematic review and meta-analysis",
+                         abstract="BACKGROUND: Creatine raises muscle strength.\nMETHODS: We pooled 12 trials.\n"
+                                  "RESULTS: Hair loss did not differ between groups.\nCONCLUSIONS: Hair was unchanged. "
+                                  "The certainty of the evidence was very low.",
+                         types=["Systematic Review", "Meta-Analysis"]), off_topic=verdict.OFF_OUTCOME)
+with appmod.app.test_request_context("/"):
+    _sa = appmod._check_response("Creatine increases muscle strength", "(creatine) AND (muscle strength OR strength)",
+                                 "true", "Creatine raises strength.", "Strength rose (Study 1).", ["SA1"],
+                                 [dict(_SA_TRIAL), dict(_SA_REVIEW)], "http://x", still_open="Doses.")
+t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
+  _sa["evidence_line"].startswith("Very low certainty") and _sa["verdict"] == "complicated",
+  (_sa["verdict"], _sa["evidence_line"]))
+# A saved answer that relied on a study the current code sets aside was written
+# with that study in view, and code cannot tell which of its sentences lean
+# on it. It is not patched and served: it is out of date, and checked fresh.
+db.put_cached_verdict("creatine raises strength in men", "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1), and hormones too (Study 2).", ["MO1", "40265319"],
+                      [dict(_RES_ONLY), dict(_hair)], tldr="Creatine raises strength and hormones.",
+                      still_open="Doses vary.")
+db.put_cached_verdict("creatine raises strength in women", "(creatine) AND (" + _hair_out + ")", "true",
+                      "Strength rose (Study 1).", ["MO1"], [dict(_RES_ONLY), dict(_hair)],
+                      tldr="Creatine raises strength.", still_open="Doses vary.")
+_calls0 = fg.models.calls
+fg.models.script = [Resp("(creatine) AND (strength)"), Resp(VJ("complicated", [1]))]
+_od = P("creatine raises strength in men", ip="7.7.7.71").get_json()
+t("a saved answer that relied on a study code now sets aside is out of date and checked fresh",
+  _od.get("cached") is False and fg.models.calls > _calls0, (_od.get("cached"), fg.models.calls - _calls0))
+_calls0 = fg.models.calls
+_ok = P("creatine raises strength in women", ip="7.7.7.72").get_json()
+t("  and one that only listed that study, without relying on it, is served as saved",
+  _ok.get("cached") is True and fg.models.calls == _calls0, (_ok.get("cached"), fg.models.calls - _calls0))
 _MO = [dict(_RES_ONLY), dict(_hair), dict(_UNSTRUCT)]
 fg.models.script = [Resp(VJ("true", [1, 2, 3], tldr="Creatine raises strength.",
                             explanation="Strength rose (Study 1). Hair was unchanged (Study 2). Hair again (Study 3).",

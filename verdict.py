@@ -2090,6 +2090,12 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # that leans on it alone reaches the reader.
     off = _relevance(parsed, studies, claim, subject, outcome, surrogate)
     off_numbers = {i + 1 for i, s in enumerate(studies) if s["pmid"] in off}
+    # The studies code itself set aside as measuring another outcome, against
+    # the model's reading. Setting one aside removes its citation and nothing
+    # else: wherever code below decides whether the studies agree, how sure
+    # the evidence is or which sentence leads, it still counts as a study that
+    # was read and may disagree, so the answer never grows surer for it.
+    aside = set_aside(studies, off, outcome, surrogate, subject)
     cited_pmids = [p for p in cited_pmids if p not in off]
 
     # Animal and lab studies are background for a claim about people. They
@@ -2102,6 +2108,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # "not tested in people", which says more than "nothing cited".
     reasons = {**_not_tested(parsed, studies, claim),
                **evidence.background_reasons(studies, claim)}
+    aside_reasons = {p: why for p, why in reasons.items() if p in aside}
     reasons = {p: why for p, why in reasons.items() if p not in off}
     background = [s["pmid"] for s in studies if s["pmid"] in reasons]
     leaned_on = cited_pmids
@@ -2131,7 +2138,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # "No clear effect" is never the answer when a randomized trial used
     # here found the effect and calls it significant: the size is left
     # unsaid rather than said wrong.
-    if sized.get("null") and _significant_trial(parsed, studies, cited_pmids):
+    if sized.get("null") and _significant_trial(parsed, studies, cited_pmids + aside):
         deeper["effect"] = sized = {}
     if sized.get("label"):
         tldr = _cap(breakdown.match_effect(tldr, sized["label"]), TLDR_MAX)
@@ -2142,7 +2149,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # way and observational studies, surveys or animal work the other, the
     # verdict follows the trials and the answer says the rest disagree: a
     # trial that says yes against a survey that says no is not a tie.
-    ranked = _trials_outweigh(parsed, studies, off, reasons)
+    ranked = _trials_outweigh(parsed, studies, off, reasons, aside)
     # It settles a tie, and it may turn a yes into a no when trials found
     # nothing. It never turns the model's no into a yes: a "for" finding is
     # about what a trial measured (blood sugar), and a no that reads the
@@ -2173,7 +2180,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # call something safe, has to rest on a randomized trial or a major
     # review that says so. Otherwise it follows the strongest evidence and
     # states the risk plainly.
-    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids)
+    guarded = _harm_guard(claim, verdict, parsed, studies, off, reasons, cited_pmids, aside, aside_reasons)
     if guarded:
         for n in guarded["follows"]:
             pmid = studies[n - 1]["pmid"]
@@ -2239,7 +2246,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
         deeper = None
 
     if (not forced and verdict in ("true", "false")
-            and evidence.narrow_only(studies, cited_pmids, claim)):
+            and any(evidence.narrow_only(studies, c, claim) for c in _with_aside(cited_pmids, aside))):
         verdict = "complicated"
         forced_narrow = ", ".join(narrow)
         explanation = (explanation.rstrip() + f" Every study behind this was run in "
@@ -2251,9 +2258,8 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # pilot trials, makes an answer lean; it does not make it likely true.
     forced_low = ""
     if not forced and verdict == "true":
-        forced_low = evidence.certainty_cap(
-            studies, cited_pmids, bool(breakdown._COMPARATIVE_CLAIM.search(claim)),
-            outcome) or ""
+        forced_low = next((cap for c in _with_aside(cited_pmids, aside) if (cap := evidence.certainty_cap(
+            studies, c, bool(breakdown._COMPARATIVE_CLAIM.search(claim)), outcome))), "")
         if forced_low:
             verdict = "complicated"
             explanation = (explanation.rstrip() + f" The certainty of this evidence is "
@@ -2271,7 +2277,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     if (absolute and verdict == "complicated" and cited_pmids
             and not (forced or thin or forced_narrow or forced_low)
             and breakdown.denies_absolute(tldr, claim)
-            and not evidence.narrow_only(studies, cited_pmids, claim)):
+            and not any(evidence.narrow_only(studies, c, claim) for c in _with_aside(cited_pmids, aside))):
         verdict = "false"
         explanation = (explanation.rstrip() + f' The claim says "{absolute}", and these '
                        f"studies found a smaller effect than that, so as written it is "
@@ -2365,6 +2371,22 @@ OFF_SUBJECT = "tests something other than what this claim is about"
 OFF_OUTCOME = "measures a different outcome from the one this claim names"
 
 
+def set_aside(studies: list[dict], off: dict, outcome: str, surrogate: str = "",
+              subject: str = "") -> list[str]:
+    """The PMIDs code itself ruled off outcome (evidence.measured_outcome),
+    as opposed to the ones the model judged so. Those still count as read."""
+    return [s["pmid"] for s in studies if off.get(s["pmid"]) == OFF_OUTCOME
+            and evidence.measured_outcome(s, outcome, surrogate, subject) is False]
+
+
+def _with_aside(cited: list[str], aside: list[str]) -> list[list[str]]:
+    """The studies used, and the same with the ones code set aside put back:
+    a cap or a downgrade that either reading earns applies, so setting a
+    study aside never lifts one."""
+    back = [p for p in aside if p not in cited]
+    return [list(cited), list(cited) + back] if back else [list(cited)]
+
+
 def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "",
                outcome: str = "", surrogate: str = "") -> dict:
     """
@@ -2391,7 +2413,7 @@ def _relevance(parsed: dict, studies: list[dict], claim: str, subject: str = "",
             off[s["pmid"]] = why
         elif subject and not evidence.names_subject(s, subject):
             off[s["pmid"]] = OFF_SUBJECT
-        elif evidence.measured_outcome(s, outcome, surrogate) is False:
+        elif evidence.measured_outcome(s, outcome, surrogate, subject) is False:
             off[s["pmid"]] = OFF_OUTCOME
     for item in parsed.get("relevance") or []:
         if not isinstance(item, dict):
@@ -2448,7 +2470,8 @@ def _findings(parsed: dict, studies: list[dict]) -> dict:
     return found
 
 
-def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict) -> dict | None:
+def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict,
+                     aside: list[str] = ()) -> dict | None:
     """
     When the randomized evidence used points one way and weaker studies
     the other: {"verdict", "trials", "weaker", "kinds"}, else None. The
@@ -2457,6 +2480,9 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
     each other, and at least one has to be able to bear it: a review of
     trials, or a randomized trial that is not small, a pilot, uncontrolled
     or paid for by the maker. One small pilot does not outrank a field.
+    A study code set aside (`aside`) is no trial here, but one whose finding
+    points another way is still a disagreement, and a disagreement means
+    the trials settle nothing.
     """
     found = {n: f for n, f in _findings(parsed, studies).items() if f in ("for", "against")}
     trials, weaker = [], []
@@ -2474,6 +2500,9 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
     if len(directions) != 1:
         return None
     direction = directions.pop()
+    if any(f != direction for n, f in _findings(parsed, studies).items()
+           if studies[n - 1]["pmid"] in aside and f in ("for", "against", "mixed")):
+        return None
     against = [n for n, f in weaker if f != direction]
     if not against or not any(evidence.is_review(studies[n - 1])
                               or not evidence.trial_caveats(studies[n - 1])
@@ -2513,7 +2542,33 @@ def _strong(study: dict) -> bool:
 
 
 def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
-                reasons: dict, cited_pmids: list[str]) -> dict | None:
+                reasons: dict, cited_pmids: list[str], aside: list[str] = (),
+                aside_reasons: dict | None = None) -> dict | None:
+    """
+    The guard below, worked out twice when code set studies aside: on the
+    studies as they stand, and with the set-aside ones put back (not off,
+    cited, with the background reason they would have had). A study set
+    aside counts exactly as it would have in view, never more: when both
+    readings act, the answer is the one the studies as they stand give;
+    when only the standing one acts, because a set-aside study would have
+    backed the model's verdict, the answer stops at "complicated" with the
+    risk said, never the safe way made firm by removing that study.
+    """
+    stand = _guard_reading(claim, verdict, parsed, studies, off, reasons, cited_pmids)
+    back = [p for p in aside if p in off]
+    if not stand or not back:
+        return stand
+    put_back = _guard_reading(
+        claim, verdict, parsed, studies, {p: why for p, why in off.items() if p not in back},
+        {**reasons, **{p: why for p, why in (aside_reasons or {}).items() if p in back}},
+        list(cited_pmids) + [p for p in back if p not in cited_pmids])
+    if put_back:
+        return stand
+    return {**stand, "verdict": "complicated", "follows": []}
+
+
+def _guard_reading(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,
+                   reasons: dict, cited_pmids: list[str]) -> dict | None:
     """
     When this verdict would steer a reader away from a protective practice
     (sunscreen, vaccination, pasteurization, a prescribed medicine), or

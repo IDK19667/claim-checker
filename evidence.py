@@ -507,18 +507,29 @@ _RATIO_WORDS = [
     (r"odds ratios?|\bORs?\b|\baORs?\b", "odds"),
     (r"hazard ratios?|\bHRs?\b|\baHRs?\b", "risk over time"),
     (r"risk ratios?|relative risks?|\bRRs?\b|\baRRs?\b", "risk"),
-    (r"incidence rate ratios?|\bIRRs?\b", "rate"),
+    (r"incidence rate ratios?|\ba?IRRs?\b", "rate"),
     (r"rate ratios?", "rate"),
 ]
 
 # "adjusted odds ratio 0.88", "OR, 0.88", "aOR = 0.88 (95% CI ...)". An
 # abbreviation names a ratio only in capitals: "35 people or 80 adults" is
 # not an odds ratio of 80, and reading it as one printed "7900% higher odds".
+# "aOR" and "AOR", "aHR" and "AHR" are the adjusted ratios; "Hr" is not a
+# ratio, and nor is "ARR", which usually means an absolute risk reduction.
+# A number followed by a unit is a measure, not a ratio: "time in the OR was
+# 45 minutes" is no odds ratio of 45. The number is read whole first, so
+# "1.45 mg" is never read as a ratio of 1.
+_NOT_A_MEASURE = (
+    r"(?!\.?\d)\b(?!\s*%)(?!\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|h|days?|d|weeks?|wks?"
+    r"|months?|mos?|years?|yrs?|y|mg|g|kg|µg|mcg|ng|ml|mL|l|L|dL|cm|mm|m|km|lbs?|kcal|cal|IU|units?"
+    r"|mmHg|mmol|µmol|nmol|pmol|beats|bpm|steps|points?|patients?|people|persons?|participants?"
+    r"|adults?|children|subjects?|women|men|cases?|deaths?|studies|trials|cigarettes|drinks|servings?"
+    r"|cups?|times a)\b)")
 _RATIO = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
     r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
-    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
-    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+    r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
+    r"[\s,:=]*(?:of\s+|was\s+)?(\d+(?:\.\d+)?)" + _NOT_A_MEASURE, re.IGNORECASE)
 
 # The same figure with the outcome named in between: "the hazard ratio for
 # heart and blood vessel deaths for each more 50 g of egg was 1.09". The gap
@@ -528,9 +539,9 @@ _RATIO = re.compile(
 _RATIO_WAS = re.compile(
     r"\b(?:adjusted\s+|pooled\s+|summary\s+)?"
     r"(odds ratios?|hazard ratios?|risk ratios?|relative risks?|incidence rate ratios?|rate ratios?"
-    r"|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))"
+    r"|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))"
     r"(?:(?!\b(?:not|no|ratios?|unknown|unclear|unreported)\b)[^.;:=%]){1,90}?"
-    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+    r"\b(?:was|were)\s+(\d+(?:\.\d+)?)" + _NOT_A_MEASURE, re.IGNORECASE)
 
 _SMD = re.compile(
     r"\b(?:standardi[sz]ed mean difference|SMD|Cohen's d)\s*"
@@ -569,7 +580,7 @@ NOT_SIGNIFICANT = re.compile(
     r"\bnot (?:statistically )?significant(?:ly)?\b|\bnon-?significant\b|"
     r"\bno (?:statistically )?significant\b|\bdid not (?:significantly )?differ\b|"
     r"\bno (?:clear |significant |real )?difference\b|\bcould be chance\b", re.IGNORECASE)
-_RATIO_BEFORE = re.compile(r"\b(?:(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?)|odds ratios?|hazard ratios?|"
+_RATIO_BEFORE = re.compile(r"\b(?:(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?)|odds ratios?|hazard ratios?|"
                            r"risk ratios?|relative risks?|rate ratios?)\b", re.IGNORECASE)
 _DIFF_BEFORE = re.compile(r"\b(?:W?MDs?|SMDs?|mean difference|difference|net|"
                           r"standardi[sz]ed mean difference|Hedges'? g|Cohen'?s d)\b",
@@ -662,7 +673,7 @@ def _smd_label(d: float) -> str:
 
 
 _RATIO_NAMES = [(r"a?ORs?", "odds ratio"), (r"a?HRs?", "hazard ratio"),
-                (r"a?RRs?", "risk ratio"), (r"IRRs?", "incidence rate ratio")]
+                (r"a?RRs?", "risk ratio"), (r"a?IRRs?", "incidence rate ratio")]
 
 
 def _ratio_name(name: str) -> str:
@@ -674,7 +685,7 @@ def _ratio_name(name: str) -> str:
 
 
 _RATIO_NAMED = re.compile(r"\b(?:odds ratios?|hazard ratios?|risk ratios?|relative risks?"
-                          r"|incidence rate ratios?|rate ratios?|(?-i:a?ORs?|a?HRs?|a?RRs?|IRRs?))\b",
+                          r"|incidence rate ratios?|rate ratios?|(?-i:[aA]?ORs?|[aA]?HRs?|a?RRs?|a?IRRs?))\b",
                           re.IGNORECASE)
 
 
@@ -931,23 +942,48 @@ _FINDINGS_HEAD = re.compile(r"(?i)method|result|finding|conclusion|outcome|desig
 # aim there, and an aim names what the study set out to measure.
 _AIM_SENTENCE = re.compile(
     r"(?i)\b(?:we (?:report|aim|aimed|sought|examine|examined|investigate|investigated|assess|assessed"
-    r"|evaluate|evaluated|test|tested|compare|compared|studied)"
+    r"|evaluate|evaluated|test|tested|compare|compared|studied|hypothesi[sz]ed)"
     r"|th(?:is|e present) (?:study|trial|review|analysis|meta-analysis) (?:aim|examin|investigat|assess"
     r"|evaluat|test|compar|sought|was designed)"
-    r"|(?:aim|purpose|objective|goal)s? (?:of (?:this|the present)|was|were|is|are)\b)")
+    r"|(?:aim|purpose|objective|goal)s? (?:of (?:this|the present)|was|were|is|are)\b"
+    r"|was designed to|(?:was|were) (?:tested|examined|assessed|evaluated|investigated|compared)\b)"
+    r"|^to (?:determine|assess|evaluate|examine|investigate|test|compare|explore)\b")
+# A heading that states the study's aim, whatever the journal calls it.
+_AIM_HEAD = re.compile(r"(?i)^(?:objectives?|aims?|purposes?|goals?|aims? and objectives?"
+                       r"|study objectives?)$")
 
 
-def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
+# The headings under which a study reports what it found.
+_FOUND_HEAD = re.compile(r"(?i)result|finding|conclusion|interpretation")
+
+
+def other_outcomes(text: str, kin: list[str], skip: list[str] = ()) -> set[int]:
+    """The outcome word families the text names that share no word with
+    `kin` (a title about hair, for a claim about strength), as indexes into
+    _OUTCOME_KIN. A family that shares a word with `skip`, the claim's
+    subject, is the exposure, not another outcome ("sleep loss and word
+    learning", for a claim about memory)."""
+    near = lambda f, words: any(k.startswith(w) or w.startswith(k) for k in words for w in f)
+    return {i for i, family in enumerate(_OUTCOME_KIN)
+            if not near(family, kin) and not near(family, list(skip))
+            and names_any(text, list(family))}
+
+
+def measured_outcome(study, outcome: str, surrogate: str = "", subject: str = "") -> bool | None:
     """
-    Whether a study with a structured abstract measured the claim's outcome:
-    False when its title and every section but the background (methods,
-    results, conclusions, and any other) never name the outcome, its kin,
-    or the declared stand-in for it. A background sentence is the authors'
-    reason for the study, not something it measured, unless it states the
-    study's aim. None when this cannot be read: no outcome, an outcome also
-    named in general words, no abstract, or an abstract without a methods,
-    results or conclusions heading, where there is no telling the
-    background from the findings.
+    Whether a study with a structured abstract measured the claim's outcome.
+    True when its title, or a section past the background, or a background
+    sentence that states its aim, names the outcome, its kin or the declared
+    stand-in. False only on a positive sign that the study is about another
+    outcome: the background names the claim's outcome and nothing after it
+    does, and the title or the stated aim and the results or conclusions
+    both name the same outcome from another word family, one that is not
+    the claim's subject (a hair trial whose background says creatine raises
+    strength). A word missing proves nothing by itself, since a study can
+    report its outcome by an instrument, an abbreviation or other words, so
+    everything else is None and left to the model's reading. None too when
+    this cannot be read: no outcome, an outcome also named in general words,
+    no abstract, or no methods, results or conclusions heading.
     """
     stems = outcome_stems(outcome)
     abstract = str((study or {}).get("abstract") or "").strip()
@@ -964,26 +1000,38 @@ def measured_outcome(study, outcome: str, surrogate: str = "") -> bool | None:
     if not _ANY_HEAD.match(text):
         return None
     heads = list(_ANY_HEAD.finditer(text))
-    kept, findings = [], False
+    kept, aims, background, found, findings = [], [], [], [], False
     for i, m in enumerate(heads):
         body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
         name = re.sub(r"^\(\d\)\s*", "", m.group().strip()).rstrip(":").strip()
         if _BACKGROUND_HEAD.match(name):
-            kept += [sent for sent in _SENTENCE.split(body) if _AIM_SENTENCE.search(sent)]
+            for sent in _SENTENCE.split(body):
+                (aims if _AIM_SENTENCE.search(sent.strip()) else background).append(sent)
         else:
             kept.append(body)
+            if _AIM_HEAD.match(name):
+                aims.append(body)
+            if _FOUND_HEAD.search(name):
+                found.append(body)
             findings = findings or bool(_FINDINGS_HEAD.search(name))
     if not findings:
         return None
-    read = f"{study.get('title') or ''} {' '.join(kept)}"
-    if names_any(read, outcome_kin(stems)):
+    title = str(study.get("title") or "")
+    kin = outcome_kin(stems)
+    read = f"{title} {' '.join(kept + aims)}"
+    if names_any(read, kin):
         return True
     if surrogate:
         for term in re.split(r"\s+OR\s+", surrogate.strip("() ")):
             term = term.strip("() ").strip()
             if len(term) > 2 and re.search(re.escape(term), _us(read), re.IGNORECASE):
                 return True
-    return False
+    if not names_any(" ".join(background), kin):
+        return None
+    skip = outcome_stems(subject)
+    if other_outcomes(f"{title} {' '.join(aims)}", kin, skip) & other_outcomes(" ".join(found), kin, skip):
+        return False
+    return None
 
 
 # How the chart's description counts each kind of study. The count follows
