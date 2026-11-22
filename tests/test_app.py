@@ -2692,6 +2692,38 @@ t("  a hedged wording is another claim: it is checked fresh under its own words"
   not d["cached"] and d["claim"] == "Creatine can cause hair loss in men" and d["typed"] is None, d)
 t("  a claim checked under its own words carries no note reason", d["typed_reason"] is None, d)
 
+# The second look for a reworded match, after the spelling switch: a
+# misspelled rewording of a saved claim gets the saved answer, with one model
+# call (the search) and none for the verdict.
+_EQ_SP = "Creatine causes hair loss in women"
+db.put_cached_verdict(_EQ_SP, "(creatine) AND (hair loss)", "false", "No trial found it (Study 1).",
+                      ["P1"], STUDIES, tldr="No, the trials found no hair loss in women.", still_open="Longer trials.")
+fg.models.script = [Resp("(creatine) AND (hair loss)\nClaim: Does creatine cause hair loss in women?")]
+fg.models.calls = 0
+d = P("Does creatin cause hair los in women?", ip="7.7.8.7").get_json()
+t("equivalent: after the spelling fix, a reworded match is looked for again and answered from the saved check",
+  d.get("cached") and d.get("claim") == _EQ_SP and d.get("typed") == "Does creatin cause hair los in women?"
+  and d.get("typed_reason") == "spelling" and fg.models.calls == 1 and not fg.models.script, (d, fg.models.calls))
+
+# Own key first: a stale row under the claim's own words is checked again
+# under those words, even when a newer row of the same claim in other words
+# is fresh. It is never swapped for the other wording.
+_OWN = "Turmeric eases joint pain in adults"
+db.put_cached_verdict(_OWN, "(turmeric) AND (joint pain)", "complicated", "Mixed (Study 1).",
+                      ["P1"], STUDIES, tldr="Own old answer.", still_open="Own open line.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
+                  ("2020-01-01T00:00:00+00:00", db.normalize_claim(_OWN)))
+db.put_cached_verdict("Does turmeric ease joint pain in adults?", "(turmeric) AND (joint pain)", "complicated",
+                      "Mixed (Study 1).", ["P1"], STUDIES, tldr="Other wording answer.", still_open="Open.")
+t("equivalent: a row under the claim's own key comes before a newer row in other words",
+  db.find_equivalent(_OWN) == _OWN)
+fg.models.script = [Resp("(turmeric) AND (joint pain)"), Resp(VJ("complicated", [1], tldr="Own fresh answer."))]
+d = P(_OWN, ip="7.7.8.8").get_json()
+t("  so its stale row is checked again under its own words, with no note",
+  not d.get("cached") and d.get("claim") == _OWN and d.get("tldr") == "Own fresh answer."
+  and d.get("typed") is None, d)
+
 # A saved check older than the window is checked again under its saved
 # wording: its one row is refreshed, and no second row for it is made.
 _EQ_OLD = "Green tea lowers blood pressure in adults"
@@ -2974,6 +3006,25 @@ fg.models.script = []; fg.models.calls = 0
 d = P("Steady record check unchanged", ip="7.7.10.7").get_json()
 t("  and unchanged records keep the saved answer, with no model call",
   d["cached"] and d["tldr"] == "Saved short answer." and fg.models.calls == 0, (d.get("tldr"), fg.models.calls))
+
+# _steady refuses a row with a problem the page cannot repair, even with the
+# current stamp and the same records, and keeps nothing while the cache is off.
+_SP = "My son Jake 7 gets sick from oat milk"
+_steady_row(_SP)
+t("steady: a row with a problem the page cannot repair is not kept, even with the same stamp and records",
+  bool(appmod.display.saved_record_problems(_SP, "complicated", ["P1"], STUDIES, None, "q", "2026-01-01"))
+  and appmod._steady(_SP, STUDIES) is None and _saved_row(_SP)["created_at"] == _OLD_DATE)
+_SH = "Steady claim while the cache is switched off"
+_steady_row(_SH)
+_real_hours = appmod.VERDICT_CACHE_HOURS
+appmod.VERDICT_CACHE_HOURS = 0
+try:
+    _off = appmod._steady(_SH, STUDIES)
+finally:
+    appmod.VERDICT_CACHE_HOURS = _real_hours
+t("  with the cache switched off nothing is kept and the saved date is left alone",
+  _off is None and _saved_row(_SH)["created_at"] == _OLD_DATE)
+t("  and with it on, the same row is kept", appmod._steady(_SH, STUDIES) is not None)
 
 _SR = "Steady claim saved in its own words"
 _steady_row(_SR)
