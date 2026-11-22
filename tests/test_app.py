@@ -8774,6 +8774,49 @@ t("  and 'male participants' reads 'males', 'female subjects' 'females', with no
   and not any(re.search(r"\b(?:men|women|boys|girls)\b", x, re.I) for x in _sx)
   and not hasattr(breakdown, "_YOUNG"), _sx)
 
+# ---- where the fixes meet: the evidence line over two readings, made the new way ----
+# rc-reading builds the line over the studies used and with the set-aside ones
+# put back, and shows the less sure. rc-guidance gives the line only a size
+# about the claim itself (line_label, withheld), lowers it for a thin review
+# (evidence.says_thin), and under a guidance-set answer shows GUIDANCE_LINE.
+# Joined: each reading is built the new way, the less sure one shows, and the
+# guidance line replaces it last.
+_TR_REV = _study("TR1", "Creatine supplementation and muscle strength: a systematic review and meta-analysis",
+                 types=["Systematic Review", "Meta-Analysis"],
+                 abstract="BACKGROUND: Strength matters.\nMETHODS: We pooled 40 randomized trials with 3,000 adults.\n"
+                          "RESULTS: Muscle strength rose with creatine (moderate certainty evidence).\n"
+                          "CONCLUSIONS: Creatine raises muscle strength.")
+_TR_THIN = _study("TR2", "Creatine and hair loss: a systematic review", types=["Systematic Review"],
+                  abstract="BACKGROUND: Creatine is taken to raise muscle strength.\nMETHODS: We pooled trials of "
+                           "creatine and hair.\nRESULTS: Hair density did not change. The evidence is limited by the "
+                           "small number of included trials.\nCONCLUSIONS: No hair loss was seen.")
+_TR_THIN["off_topic"] = verdict.OFF_OUTCOME
+_TR_Q, _TR_C = "(creatine) AND (" + _hair_out + ")", "Creatine raises muscle strength"
+
+
+def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd=None):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(_TR_C, _TR_Q, verdict_value, tldr, "Strength rose (Study 1).", ["TR1"],
+                                      [dict(s_) for s_ in studies], "http://localhost",
+                                      still_open="Doses vary.", breakdown=bd)["evidence_line"]
+
+
+t("meet: the thin review is one code sets aside, and it says its evidence is thin",
+  evidence.measured_outcome(_TR_THIN, _hair_out, "", "(creatine)") is False and evidence.says_thin(_TR_THIN))
+t("meet: a thin review among the put-back studies lowers the line shown",
+  _tr_line([_TR_REV]).startswith("Moderate certainty") and _tr_line([_TR_REV, _TR_THIN]).startswith("Low certainty"),
+  (_tr_line([_TR_REV]), _tr_line([_TR_REV, _TR_THIN])))
+_TR_BD = {"effect": {"label": "large", "effect_size": "Inflammation rose with an effect size of 1.03 (Study 1)."}}
+t("meet: a size about another outcome is withheld in both readings, and the less sure line still shows",
+  "large" not in _tr_line([_TR_REV], bd=_TR_BD) and "large" not in _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)
+  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).startswith("Low certainty"),
+  (_tr_line([_TR_REV], bd=_TR_BD), _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)))
+_TR_G = verdict.GUIDELINE_LEAD + "creatine is fine for most adults."
+t("meet: a guidance-set answer shows the fixed line whatever either reading says",
+  _tr_line([_TR_REV], tldr=_TR_G, verdict_value="false") == verdict.GUIDANCE_LINE
+  and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false") == verdict.GUIDANCE_LINE,
+  (_tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false"),))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
