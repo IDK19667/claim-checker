@@ -714,16 +714,28 @@ function renderPending(claim) {
 // words gets its saved check. Say which, and show what was typed, so the
 // reader can tell the answer is to their question. Mirrors display.typed_note;
 // a test runs both on the same inputs.
+// The note in three parts: the words before the reader's text, their text,
+// and the words after it. display.typed_note_parts is the same.
+function typedNoteParts(typed, reason) {
+  if (!typed) return null;
+  if (reason === "wording") return ["Showing the saved check for this claim. You typed \u201c", String(typed), "\u201d."];
+  return ["Spelling fixed. You typed \u201c", String(typed), "\u201d."];
+}
 function typedNote(typed, reason) {
-  if (!typed) return "";
-  if (reason === "wording") return `Showing the saved check for this claim. You typed \u201c${typed}\u201d.`;
-  return `Spelling fixed. You typed \u201c${typed}\u201d.`;
+  return (typedNoteParts(typed, reason) || []).join("");
 }
 
+// The reader's text goes in <bdi>, as text, so right-to-left words cannot
+// reorder the sentence around it and markup stays inert.
 function showTyped(typed, reason) {
   const note = $("typed-note");
-  note.hidden = !typed;
-  note.textContent = typedNote(typed, reason);
+  const parts = typedNoteParts(typed, reason);
+  note.hidden = !parts;
+  note.textContent = "";
+  if (!parts) return;
+  const bdi = document.createElement("bdi");
+  bdi.textContent = parts[1];
+  note.append(parts[0], bdi, parts[2]);
 }
 
 function logLine(text, live) {

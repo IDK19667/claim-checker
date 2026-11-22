@@ -2883,8 +2883,8 @@ _tn_js_src = (ROOT / "static" / "app.js").read_text()
 t("  renderResult and the live stage both pass the reason to the note",
   "showTyped(data.typed, data.typed_reason)" in _tn_js_src and "showTyped(typed, ev.typed_reason)" in _tn_js_src)
 _tn_tpl = (ROOT / "templates" / "index.html").read_text()
-t("  the page renders the same line through display.typed_note",
-  "typed_note(result.typed, result.typed_reason)" in _tn_tpl)
+t("  the page renders the same line through display.typed_note_parts, the reader's words in <bdi>",
+  "{% set tn = typed_note_parts(result.typed, result.typed_reason) %}{{ tn[0] }}<bdi>{{ tn[1] }}</bdi>{{ tn[2] }}" in _tn_tpl)
 _tn_mark = _tn_tpl[_tn_tpl.index('<p class="typed-note"'):]
 _tn_mark = _tn_mark[:_tn_mark.index("</p>") + 4]
 with appmod.app.test_request_context("/"):
@@ -2892,7 +2892,7 @@ with appmod.app.test_request_context("/"):
     _tn_on = _tn_env.from_string(_tn_mark).render(result={"typed": "Does coffee cause cancer?", "typed_reason": "wording"})
     _tn_off = _tn_env.from_string(_tn_mark).render(result=None)
 t("  the template's own markup shows the line with a result that carries it, and stays hidden without",
-  _tn_on == '<p class="typed-note" id="typed-note">' + _tn_py[1] + "</p>"
+  _tn_on == '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>Does coffee cause cancer?</bdi>\u201d.</p>'
   and _tn_off == '<p class="typed-note" id="typed-note" hidden></p>', (_tn_on, _tn_off))
 if _shutil.which("node"):
     _tn_fn = _tn_js_src[_tn_js_src.index("function typedNote"):_tn_js_src.index("function showTyped")]
@@ -7194,7 +7194,8 @@ _rw_mark = _rw_tpl[_rw_tpl.index('<p class="typed-note"'):]
 _rw_mark = _rw_mark[:_rw_mark.index("</p>") + 4]
 with appmod.app.test_request_context("/"):
     _rw_on = appmod.app.jinja_env.from_string(_rw_mark).render(result=_rw)
-t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" id="typed-note">' + _rw_note + "</p>", _rw_on)
+t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" id="typed-note">Showing the saved check for this claim. You typed \u201c<bdi>' + _RW_TYPED + "</bdi>\u201d.</p>"
+  and re.sub(r"</?bdi>", "", _rw_on) == '<p class="typed-note" id="typed-note">' + _rw_note + "</p>", _rw_on)
 if _shutil.which("node"):
     _rw_js = (ROOT / "static" / "app.js").read_text()
     _rw_fn = _rw_js[_rw_js.index("function typedNote"):_rw_js.index("function showTyped")]
@@ -7209,6 +7210,29 @@ with db.get_conn() as _conn:
     _rw_log = _conn.execute("SELECT claim_text FROM checks ORDER BY id DESC LIMIT 1").fetchone()["claim_text"]
 t("  and the stored text is the saved wording, with no row for the typed one",
   _rw_rows == [_RW_SAVED] and _rw_log == _RW_SAVED, (_rw_rows, _rw_log))
+
+# The reader's words in the note are bidi-isolated and still escaped, in both
+# renderers: right-to-left text, markup, quotes and very long text.
+_BD = [("\u0627\u0644\u0642\u0647\u0648\u0629 \u062a\u0633\u0628\u0628 \u0627\u0644\u0633\u0631\u0637\u0627\u0646", "wording"),
+       ("\u05e7\u05e4\u05d4 \u05d2\u05d5\u05e8\u05de\u05ea \u05dc\u05e1\u05e8\u05d8\u05df", "spelling"),
+       ("abc \u202e reversed", "wording"), ('<script>alert(1)</script> & "quoted" \'too\'', "wording"),
+       ("very long claim " * 31, "spelling")]
+with appmod.app.test_request_context("/"):
+    for _bt, _br in _BD:
+        _bd_on = appmod.app.jinja_env.from_string(_rw_mark).render(result={"typed": _bt, "typed_reason": _br})
+        _bd_p = _dsp.typed_note_parts(_bt, _br)
+        t(f"bidi: the template sets the typed text in <bdi>, escaped ({_bt[:12]!r})",
+          _bd_on == '<p class="typed-note" id="typed-note">' + str(_msc_escape(_bd_p[0])) + "<bdi>" + str(_msc_escape(_bt))
+          + "</bdi>" + str(_msc_escape(_bd_p[2])) + "</p>" and "<script>" not in _bd_on, _bd_on)
+if _shutil.which("node"):
+    _bd_fn = _rw_js[_rw_js.index("function typedNoteParts"):_rw_js.index("function showTyped")]
+    _bd_js = json.loads(_subprocess.run(["node", "-e", _bd_fn + "console.log(JSON.stringify(" + json.dumps(_BD)
+                                         + ".map(([a, b]) => typedNoteParts(a, b))));"], capture_output=True, text=True, check=True).stdout)
+    t("  and the script splits the note into the same three parts", _bd_js == [list(_dsp.typed_note_parts(a, b)) for a, b in _BD], _bd_js)
+_bd_show = _rw_js[_rw_js.index("function showTyped"):_rw_js.index("function logLine")]
+t("  and the script puts the typed part in a <bdi> as text, never as markup",
+  'document.createElement("bdi")' in _bd_show and "bdi.textContent = parts[1]" in _bd_show
+  and "note.append(parts[0], bdi, parts[2])" in _bd_show and "innerHTML" not in _bd_show)
 
 # ---- where the slices meet: a study set aside as off outcome -------------------
 # rc-reading's rule sets aside a structured abstract that names the claim's

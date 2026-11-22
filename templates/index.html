@@ -286,11 +286,12 @@
         <div class="thread">
           <p class="field-label">The claim you checked</p>
           <h1 class="claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h1>
-          {# A live check fills this: a shared or saved link already carries
-             the saved claim, so there is nothing to explain. When a result
-             does carry what was typed, the line is display.typed_note,
-             which renderResult's typedNote mirrors. #}
-          <p class="typed-note" id="typed-note"{% if not (result and result.typed) %} hidden{% endif %}>{% if result and result.typed %}{{ typed_note(result.typed, result.typed_reason) }}{% endif %}</p>
+          {# A result that carries what was typed (a live check, or a link
+             in other words than the saved claim's) shows the line from
+             display.typed_note_parts, which renderResult's typedNoteParts
+             mirrors. The reader's text is in <bdi>, so right-to-left text
+             cannot reorder the sentence around it. #}
+          <p class="typed-note" id="typed-note"{% if not (result and result.typed) %} hidden{% endif %}>{% if result and result.typed %}{% set tn = typed_note_parts(result.typed, result.typed_reason) %}{{ tn[0] }}<bdi>{{ tn[1] }}</bdi>{{ tn[2] }}{% endif %}</p>
           {# Back to the claim box with this claim in it, to reword and check again. #}
           <button class="edit-claim" id="edit-claim" type="button">Edit claim</button>
           <ol class="reading" id="reading" hidden aria-live="polite"></ol>
