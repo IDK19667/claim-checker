@@ -290,10 +290,28 @@ def _latest(n: int) -> list[dict]:
     limit = n * LIST_OVERFETCH
     while True:
         rows = db.recent_verdicts(limit)
-        out = _public_claims([r for r in rows if db.whole(r)], n)
+        whole = [r for r in rows if db.whole(r)]
+        out = _one_per_question(_public_claims(whole, len(whole)))[:n]
         if len(out) >= n or len(rows) < limit:
             return out
         limit *= 2
+
+
+def _one_per_question(rows: list[dict]) -> list[dict]:
+    """
+    Each question once, newest first. Rows whose db.claim_fold keys are equal
+    are one question asked in other words ("Does creatine cause hair loss" and
+    "Creatine causes hair loss"); the newest row stands, under its own saved
+    wording. A row whose key is empty is never merged with another.
+    """
+    seen, out = set(), []
+    for r in rows:
+        key = db.claim_fold(r["claim_text"])
+        if key and key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
 
 
 def _trust_example():

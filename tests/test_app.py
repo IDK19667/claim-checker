@@ -7188,6 +7188,46 @@ t("meet: the method stamp is made from every answer file the reading rules chang
 t("  and a change to any one of them changes the stamp",
   _ms_same == verdict._method_stamp() and all(_ms_changed.values()), _ms_changed)
 
+# ---- the Latest list shows each question once ---------------------------------
+# Rows whose db.claim_fold keys are equal are one question; the list shows the
+# newest whole row for each, under its own saved wording. A row whose key is
+# empty is never merged. The wordings are the real saved pairs find_equivalent
+# merges, and the three vinegar claims that are three questions.
+_OQ = ["Does creatine cause hair loss", "Creatine causes hair loss",
+       "Red wine is good for your heart", "Apple cider vinegar cures diabetes",
+       "Red wine is good for the heart", "Apple cider vinegar cure diabetes",
+       "Apple cider vinegar helps diabetes", "Apple cider vinegar causes diabetes",
+       "Is it?", "Does it?"]          # oldest first; the last two fold to an empty key
+with db.get_conn() as _conn:
+    _oq_had = {r_["claim_key"]: dict(r_) for r_ in _conn.execute(
+        "SELECT * FROM verdict_cache WHERE claim_key IN (%s)" % ",".join("?" * len(_OQ)),
+        [db.normalize_claim(x) for x in _OQ]).fetchall()}
+for _x in _OQ:
+    db.put_cached_verdict(_x, "(x) AND (y)", "complicated", "Study 1 found a little.", ["P1"],
+                          [dict(s_) for s_ in STUDIES], tldr="A little, maybe.", still_open="For how long.")
+_oq_list = [r_["claim_text"] for r_ in appmod._latest(500) if r_["claim_text"] in _OQ]
+t("one per question: each pair find_equivalent merges shows once, as its newest row under its own wording",
+  _oq_list == ["Does it?", "Is it?", "Apple cider vinegar causes diabetes", "Apple cider vinegar helps diabetes",
+               "Apple cider vinegar cure diabetes", "Red wine is good for the heart", "Creatine causes hair loss"],
+  _oq_list)
+t("  the three vinegar claims (cures, helps, causes) stay three",
+  sum(x.startswith("Apple cider vinegar") for x in _oq_list) == 3, _oq_list)
+t("  and a row whose key is empty is never merged with another",
+  "Is it?" in _oq_list and "Does it?" in _oq_list and db.claim_fold("Is it?") == db.claim_fold("Does it?") == (), _oq_list)
+_oq_home = c.get("/").get_data(as_text=True)
+_oq_items = _oq_home.split('<ol class="ledger-list">')[1].split("</ol>")[0]
+t("  the home page's list shows each once too",
+  _oq_items.count("pple cider vinegar cure diabetes") == 1 and _oq_items.count("pple cider vinegar causes diabetes") == 1,
+  _oq_items[:300])
+t("  and suggest.group_similar is not what folds it", "group_similar" not in _inspect.getsource(appmod._latest)
+  + _inspect.getsource(appmod._one_per_question))
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key IN (%s)" % ",".join("?" * len(_OQ)),
+                  [db.normalize_claim(x) for x in _OQ])
+    for _r in _oq_had.values():
+        _conn.execute("INSERT INTO verdict_cache (%s) VALUES (%s)" % (",".join(_r), ",".join("?" * len(_r))),
+                      list(_r.values()))
+
 # ---- rows saved from a reply that could not be read ---------------------------
 # Before a failed reply was refused, its fallback was saved as a row. Such rows
 # stay in the database, recognised by the fallback's own short answer, and are
