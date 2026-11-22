@@ -2547,10 +2547,12 @@ t("  the page has the note, hidden until a check fills it",
 # in tests/equivalent_pairs.json are the approved rule, one test each.
 _EQ_PAIRS = json.loads((ROOT / "tests" / "equivalent_pairs.json").read_text())
 for _p in _EQ_PAIRS:
-    _same = db.claim_fold(_p["a"]) == db.claim_fold(_p["b"])
+    _same = db.claim_fold(_p["a"]) == db.claim_fold(_p["b"]) != ()
     t(f"equivalent [{_p['cat']}] {_p['a']!r} vs {_p['b']!r}: {_p['expect']}",
       _same == (_p["expect"] == "match"), (db.claim_fold(_p["a"]), db.claim_fold(_p["b"])))
-_eqf = lambda a, b: db.claim_fold(a) == db.claim_fold(b)
+# Two claims match when they fold to the same key and that key is not empty
+# (find_equivalent never matches an empty key).
+_eqf = lambda a, b: db.claim_fold(a) == db.claim_fold(b) != ()
 t("equivalent: question form, plural, punctuation and articles fold together",
   _eqf("Coffee causes cancer", "Does coffee cause cancer?")
   and _eqf("Eggs raise cholesterol", "Egg raises cholesterol")
@@ -2585,6 +2587,34 @@ t("equivalent: a short form is spelled out as its own word, never glued into ano
       ("Id causes anxiety", "I'd causes anxiety")])
   and _eqf("She'll get sick from vaccines", "She will get sick from vaccines")
   and _eqf("I'm tired after sugar", "I am tired after sugar"))
+# No letter is silently dropped: a claim whose folding would lose any part of
+# a word (a combining mark, an invisible joiner) has no key and matches nothing.
+_nokey = lambda c: db.claim_fold(c) == ()
+t("equivalent: a vowel sign or other combining mark is never dropped, in any script",
+  all(_nokey(x) for x in (
+      "दाल से कैंसर होता है", "दिल से कैंसर होता है", "का", "की",    # Devanagari
+      "ডাল খেলে ক্যান্সার হয়", "ডিল খেলে ক্যান্সার হয়",              # Bengali
+      "กาแฟทำให้เป็นมะเร็ง",                                       # Thai
+      "القَهوة تسبب السرطان",                                       # Arabic with a vowel mark
+      "קָפֶה גורם לסרטן",                                           # Hebrew with points
+      "காபி புற்றுநோயை உண்டாக்கும்",                                 # Tamil
+      "Coq\u0301 au vin raises cholesterol"))                       # a Latin accent with no composed form
+  and not _eqf("दाल से कैंसर होता है", "दिल से कैंसर होता है") and not _eqf("का", "की")
+  and not _eqf("ডাল খেলে ক্যান্সার হয়", "ডিল খেলে ক্যান্সার হয়"))
+t("  an invisible character inside a word is part of the word too",
+  _nokey("Vaccines n\u200bot cause autism") and _nokey("Soft\u00adware causes stress")
+  and not _eqf("Vaccines n\u200bot cause autism", "Vaccines n ot cause autism"))
+t("  scripts written without combining marks still fold as before",
+  _eqf("кофе вызывает рак", "Кофе вызывает рак?") and _eqf("咖啡致癌", "咖啡致癌？")
+  and _eqf("القهوة تسبب السرطان", "القهوة تسبب السرطان؟") and not _eqf("咖啡致癌", "茶致癌"))
+t("  café is never cafe; a composed and a decomposed é are the same letter",
+  not _eqf("Café au lait raises cholesterol", "Cafe au lait raises cholesterol")
+  and _eqf("Café au lait raises cholesterol", "Cafe\u0301 au lait raises cholesterol")
+  and db.claim_fold("Café au lait raises cholesterol") != ())
+db.put_cached_verdict("दाल से कैंसर होता है", "(lentils) AND (cancer)", "false", "No (Study 1).",
+                      ["P1"], STUDIES, tldr="No.", still_open="Open.")
+t("  and a claim with no key is never matched to a saved claim", db.find_equivalent("दिल से कैंसर होता है") is None
+  and db.find_equivalent("दाल से कैंसर होता है?") is None)
 t("  the small words dropped never include a negation, a preposition that sets direction or a hedge",
   not (db._FOLD_DROP & {"not", "no", "never", "without", "over", "under", "before", "after", "more",
                         "less", "to", "from", "and", "or", "can", "may", "might", "should", "will"}))

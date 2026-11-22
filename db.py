@@ -683,17 +683,28 @@ def _fold_tokens(claim: str) -> list:
     out = []
     for tok in _FOLD_TOKEN.findall(t):
         if len(tok) == 1 and not tok.isalnum():
+            cat = unicodedata.category(tok)
             # Symbols (% + < > $ # and emoji) stay; punctuation goes.
-            if unicodedata.category(tok).startswith("S") or tok in "%‰#":
+            if cat.startswith("S") or tok in "%‰#":
                 out.append(tok)
+            elif cat[0] in "MLN" or cat == "Cf":
+                # A combining mark (a vowel sign, an accent that does not
+                # compose), a letter or digit the tokens do not keep, or an
+                # invisible joiner inside a word: dropping it could make two
+                # different words one. Such a claim has no fold key at all.
+                return None
             continue
         out.append(tok)
     return out
 
 
 def claim_fold(claim: str) -> tuple:
-    """The ordered key two wordings of one claim share. See the notes above."""
+    """The ordered key two wordings of one claim share. See the notes above.
+    Empty, so it matches nothing, when folding would drop any character that
+    is part of a word (see `_fold_tokens`): no letter is ever silently lost."""
     toks = _fold_tokens(claim)
+    if toks is None:
+        return ()
     changed = True
     while changed:
         changed = False
