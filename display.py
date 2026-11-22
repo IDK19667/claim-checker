@@ -447,7 +447,9 @@ def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search
     pmids = {s.get("pmid") for s in studies if isinstance(s, dict)}
     if set(cited) - pmids:
         out.append("cited_not_in_studies")
-    if set(cited) - relied_pmids(cited, studies):
+    # Only a listed study that is set aside: a PMID no listed study has is
+    # the flag above, not this one.
+    if (set(cited) & pmids) - relied_pmids(cited, studies):
         out.append("cited_off_topic")
     if isinstance(breakdown, dict) and breakdown.get("rests_on") is not None \
             and breakdown["rests_on"] != len(set(cited) & pmids):

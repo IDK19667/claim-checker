@@ -8369,6 +8369,11 @@ t("  the ClaimReview markup does not mark it as a source the verdict was based o
 t("  the saved-record check names it, so a crawler is told to skip the record",
   "cited_off_topic" in _dsp.saved_record_problems("c", "true", ["OT1", "OT3"], _OT, None, "q", "2020-01-01T00:00:00")
   and "cited_off_topic" not in _dsp.saved_record_problems("c", "true", ["OT1"], _OT, None, "q", "2020-01-01T00:00:00"))
+_k5_flags = _dsp.saved_record_problems("c", "true", ["OT1", "NOPE9"], _OT, None, "q", "2020-01-01T00:00:00")
+t("  a cited PMID no listed study has is 'cited_not_in_studies' only, not 'cited_off_topic'; a listed off-topic one still is",
+  "cited_not_in_studies" in _k5_flags and "cited_off_topic" not in _k5_flags
+  and "cited_off_topic" in _dsp.saved_record_problems("c", "true", ["OT3", "NOPE9"], _OT, None, "q", "2020-01-01T00:00:00"),
+  _k5_flags)
 # A saved verdict whose only cited study is off topic rests on nothing, so the
 # rule a fresh check obeys applies: "Not enough evidence".
 db.put_cached_verdict("creatine only off topic saved", "creatine AND strength", "true",
