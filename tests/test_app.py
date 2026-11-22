@@ -9472,6 +9472,82 @@ t("  the server-rendered page shows it set aside with the reason",
 _rt_v = verdict._format_study_for_prompt(1, dict(_RT_ST[0]), claim="Vinegar lowers blood sugar")
 t("  the model is told the journal retracted it and not to cite it",
   "BACKGROUND ONLY: the journal retracted this paper" in _rt_v and "Do not cite it" in _rt_v, _rt_v)
+# H1: no sentence a reader sees as reasoning cites a study the page shows as
+# set aside (withdrawn, a journal notice, or off topic), on any path.
+_H1_A = {"retracted": _study("HA1", "Turmeric for knee pain: a randomized trial",
+                             types=["Journal Article", "Randomized Controlled Trial", "Retracted Publication"],
+                             abstract="Knee pain fell with turmeric over 8 weeks."),
+         "notice": _study("HA1", "Retraction notice: turmeric for knee pain", types=["Retraction of Publication"],
+                          abstract="Knee pain fell with turmeric over 8 weeks. This article has been retracted."),
+         "off topic": _study("HA1", "Turmeric and knee pain in a trial", types=["Randomized Controlled Trial"],
+                             abstract="Knee pain fell with turmeric over 8 weeks.")}
+_H1_B = _study("HB2", "Turmeric and knee pain: a second randomized trial", types=["Randomized Controlled Trial"],
+               abstract="Pain scores fell with turmeric in a second trial of adults with knee pain.")
+_H1_SAID_A = "Knee pain fell with turmeric (Study 1)."
+_H1_SAID_B = "Pain scores fell with turmeric in a second trial (Study 2)."
+_H1_OFF = [{"study": 1, "subject": False, "outcome": True, "in_people": True, "finding": "unclear"},
+           {"study": 2, "subject": True, "outcome": True, "in_people": True, "finding": "for"}]
+def _h1_seen(r):
+    return [r["explanation"] or "", r["tldr"] or ""] + breakdown.prose_of(r.get("breakdown"))
+_h1_bad, _h1_lost, _h1_n = [], [], 0
+for _h1_kind, _h1_a in _H1_A.items():
+    for _h1_listed in (True, False):
+        for _h1_cites in (True, False):
+            for _h1_other in (True, False):
+                _nums = ([1] if _h1_listed else []) + ([2] if _h1_other else [])
+                _expl = " ".join(([_H1_SAID_A] if _h1_cites else []) + ([_H1_SAID_B] if _h1_other else [])) or "Because."
+                _extra = {"relevance": _H1_OFF} if _h1_kind == "off topic" else {}
+                for _h1_way in ("plain", "streamed", "saved"):
+                    _h1_n += 1
+                    _cl = "Turmeric eases knee pain H1 %d" % _h1_n
+                    pubmed.search_and_fetch = lambda q, max_results=8, surrogate='', _a=_h1_a: [dict(_a), dict(_H1_B)]
+                    if _h1_way == "saved":
+                        _st = [dict(_h1_a, **({"off_topic": verdict.OFF_SUBJECT + "."} if _h1_kind == "off topic" else {})),
+                               dict(_H1_B)]
+                        with appmod.app.test_request_context("/"):
+                            _h1_r = appmod._check_response(_cl, "(turmeric) AND (knee pain)", "true", "Turmeric eases knee pain.",
+                                                           _expl, [x["pmid"] for x, n_ in zip(_st, (1, 2)) if n_ in _nums],
+                                                           _st, "http://x", still_open="Longer trials.",
+                                                           breakdown=dict(_el_bd(_expl, None, [_expl]), says=breakdown.sentences(_expl)))
+                    else:
+                        fg.models.script = [Resp("(turmeric) AND (knee pain)"),
+                                            Resp(VJ("true", _nums, tldr="Turmeric eases knee pain.", explanation=_expl, **_extra))]
+                        if _h1_way == "plain":
+                            _h1_r = P(_cl, ip="7.9.%d.%d" % (_h1_n // 200, _h1_n % 200 + 1)).get_json()
+                        else:
+                            _h1_r = stream(_cl, ip="7.8.%d.%d" % (_h1_n // 200, _h1_n % 200 + 1))[1][-1].get("result") or {}
+                    _cell = (_h1_kind, _h1_listed, _h1_cites, _h1_other, _h1_way)
+                    if not _h1_r.get("studies"):
+                        _h1_bad.append((_cell, "no result", _h1_r)); continue
+                    _sa = next(s for s in _h1_r["studies"] if s["pmid"] == "HA1")
+                    _num = [s["pmid"] for s in _h1_r["studies"]].index("HA1") + 1
+                    if _sa["cited_in_verdict"] or any(_num in breakdown.refs(x, len(_h1_r["studies"])) for x in _h1_seen(_h1_r)):
+                        _h1_bad.append((_cell, [x for x in _h1_seen(_h1_r) if _num in breakdown.refs(x, len(_h1_r["studies"]))]))
+                    if _h1_other and "Pain scores fell with turmeric in a second trial" not in _h1_r["explanation"]:
+                        _h1_lost.append((_cell, _h1_r["explanation"]))
+                    if not _h1_other and _h1_r["verdict"] != "insufficient":
+                        _h1_bad.append((_cell, "stamp", _h1_r["verdict"]))
+t("H1: in every cell no prose field cites the set-aside study, and with nothing else relied on the stamp is insufficient",
+  _h1_n == 72 and not _h1_bad, _h1_bad[:6])
+t("  and a sentence that cites only a relied-on study is still there", not _h1_lost, _h1_lost[:6])
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(_H1_A["retracted"])]
+fg.models.script = [Resp("(turmeric) AND (knee pain)"), Resp(VJ("true", [1], tldr="Turmeric eases knee pain.",
+                                                                explanation=_H1_SAID_A))]
+_h1_rx = P("Turmeric eases knee pain, the reviewer's case", ip="7.9.9.1").get_json()
+fg.models.script = [Resp("(turmeric) AND (knee pain)"), Resp(VJ("true", [1], tldr="Turmeric eases knee pain.",
+                                                                explanation=_H1_SAID_A))]
+_h1_rxs = stream("Turmeric eases knee pain, the reviewer's case streamed", ip="7.9.9.2")[1][-1].get("result") or {}
+t("H1: the reviewer's case, plain and streamed: the sentence is gone, the paper set aside, the stamp insufficient",
+  all(r_["verdict"] == "insufficient" and _H1_SAID_A[:-10] not in json.dumps(r_.get("explanation"))
+      and r_["studies"][0]["background"] and not r_["studies"][0]["cited_in_verdict"] for r_ in (_h1_rx, _h1_rxs)),
+  [(r_.get("verdict"), r_.get("explanation")) for r_ in (_h1_rx, _h1_rxs)])
+_H1_PLAIN = "Nothing here tests the claim in people. A second trial is under way."
+with appmod.app.test_request_context("/"):
+    _h1_same = appmod._check_response("Turmeric eases knee pain H1 same", "(turmeric) AND (knee pain)", "insufficient",
+                                      "Unproven either way.", _H1_PLAIN, [], [dict(_H1_A["retracted"]), dict(_H1_B)],
+                                      "http://x", still_open="Longer trials.")
+t("H1: with nothing relied on and no set-aside study cited, the explanation comes back unchanged",
+  _h1_same["explanation"] == _H1_PLAIN, _h1_same["explanation"])
 pubmed.search_and_fetch = _rt_search
 
 # ---- where the rounds meet: final fixes and rc-live-fix --------------------------

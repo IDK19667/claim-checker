@@ -968,10 +968,24 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # a rated verdict resting on nothing, the rule a fresh check obeys
     # applies: it becomes "Not enough evidence".
     cited = display.relied_pmids(cited_studies, studies)
-    if set(cited_studies or []) - cited:
-        off_numbers = {i + 1 for i, s in enumerate(studies or [])
-                       if s.get("off_topic") or evidence.withdrawn(s)}
-        explanation = breakdown_mod.drop_citing(explanation, off_numbers, len(studies or []))
+    # No sentence a reader sees as reasoning cites a study the page shows as
+    # set aside (withdrawn, a journal notice, or off topic), whether or not
+    # the answer listed it: a fresh check has already taken it out of the
+    # cited list, so nothing below would hold its sentences to anything.
+    # A sentence resting only on such studies goes; one citing a mix keeps
+    # the others. Text that cites none of them is left exactly as it was.
+    count = len(studies or [])
+    aside = {i + 1 for i, s in enumerate(studies or []) if s.get("off_topic") or evidence.withdrawn(s)}
+    if aside:
+        others = set(range(1, count + 1)) - aside
+        unaside = lambda t: (breakdown_mod.relied_only(t, others, count)
+                             if aside & set(breakdown_mod.refs(t, count)) else t)
+        explanation = unaside(explanation or "")
+        if breakdown and any(unaside(t) != t for t in breakdown_mod.prose_of(breakdown)):
+            breakdown = breakdown_mod.map_prose(breakdown, unaside)
+    # A rated verdict resting on nothing is "Not enough evidence", as on a
+    # fresh check, save where guidance alone may rate it (_nothing_relied).
+    if not cited or set(cited_studies or []) - cited:
         unseated = False
         if not cited:
             verdict_value, tldr, unseated = _nothing_relied(claim, verdict_value, tldr)
