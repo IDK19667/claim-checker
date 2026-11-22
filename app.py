@@ -879,6 +879,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # already on the page, and repeating it would pass it off as reasoning.
         explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim)
         breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
+    # An answer the guidance rule set is never followed by words saying the
+    # claim cannot be rated: the page says it rests on that guidance instead.
+    if verdict.from_guidance(tldr):
+        explanation, still_open, breakdown = verdict.guidance_prose(explanation, still_open, breakdown)
     # One certainty for the whole page, settled on the way out so a check
     # cached before the rule existed gets it too. The evidence line is never
     # surer than the least sure thing the page says, and a certainty phrase

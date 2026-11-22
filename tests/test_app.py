@@ -4113,6 +4113,69 @@ t("  with no dash anywhere in what the reader sees",
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 verdict.guideline_view = lambda claim: None
 
+# ---- Under an answer the guidance rule set, nothing says the claim cannot be rated ----
+# The live safety run: "type 1 diabetes and insulin" and "antibiotics and the
+# cold" were False from guidance, with the model's "so there isn't enough
+# evidence to rate it" still under the stamp.
+_UNRATED = re.compile(r"enough evidence[^.]*\bto rate\b|\bcannot be rated\b|\bto rate (?:it|this claim)\b", re.I)
+_GU_STUDIES = [_study("GU1", "Antibiotic prescribing for colds", types=["Editorial"],
+                      abstract="Antibiotics should not be used for the common cold, which viruses cause."),
+               _study("GU2", "Respiratory infections in general practice", types=["Review"],
+                      abstract="Recovery from colds is usually spontaneous without antibiotics.")]
+_GU_TLDR = verdict.GUIDELINE_LEAD + "antibiotics do not cure colds. Check treatment decisions with a doctor."
+_GU_EXPL = ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually spontaneous "
+            "(Study 2). Nothing here tests this claim in people, only opinion pieces, so there isn't "
+            "enough evidence to rate it.")
+_GU_BD = {"parts": [], "evidence": ["Antibiotics should not be used for the common cold (Study 1).",
+                                    "No trial here tests the claim, so there isn't enough evidence to rate it (Study 2)."],
+          "says": ["Antibiotics should not be used for the common cold (Study 1)."],
+          "effect_size": "", "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "", "effect": None}
+def _gu_seen(r):
+    return " ".join([r["tldr"], r["explanation"], r["still_open"], r["evidence_line"] or ""]
+                    + breakdown.prose_of(r["breakdown"]))
+with appmod.app.test_request_context("/"):
+    _gu = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                 _GU_TLDR, _GU_EXPL, ["GU1", "GU2"], [dict(s) for s in _GU_STUDIES], "http://x",
+                                 still_open="Whether a trial would settle it, since there isn't enough evidence to rate it.",
+                                 breakdown=dict(_GU_BD))
+    _gu_none = appmod._check_response("People with type 1 diabetes can replace insulin with a strict diet",
+                                      "(diet) AND (type 1 diabetes)", "false",
+                                      verdict.GUIDELINE_LEAD + "people with type one diabetes need insulin. "
+                                      "Stopping a prescribed medicine without a doctor's advice can be risky.",
+                                      "None of the studies found directly test this claim, so there isn't "
+                                      "enough evidence to rate it.", [], [dict(s) for s in _GU_STUDIES], "http://x",
+                                      still_open="Whether diet changes insulin needs.", breakdown=None)
+    _gu_plain = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)",
+                                       "insufficient", verdict.UNTESTED_TLDR, _GU_EXPL, ["GU1", "GU2"],
+                                       [dict(s) for s in _GU_STUDIES], "http://x", still_open="Whether it works.",
+                                       breakdown=dict(_GU_BD))
+t("guidance prose: under an answer the guidance rule set, no line says the claim cannot be rated",
+  _gu["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu))
+  and _gu_none["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu_none)),
+  (_gu_seen(_gu), _gu_seen(_gu_none)))
+t("  what the studies did and did not test stays, and the fixed line says what the answer rests on",
+  _gu["explanation"] == ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually "
+                         "spontaneous (Study 2). Nothing here tests this claim in people, only opinion pieces. "
+                         + verdict.GUIDANCE_RESTS)
+  and _gu_none["explanation"] == "None of the studies found directly test this claim. " + verdict.GUIDANCE_RESTS
+  and verdict.GUIDANCE_RESTS == "This answer rests on what major health guidelines say, not on these studies."
+  and "No trial here tests the claim (Study 2)." in " ".join(_gu["breakdown"]["evidence"])
+  and _gu["still_open"] == "Whether a trial would settle it.", (_gu["explanation"], _gu["breakdown"], _gu["still_open"]))
+t("  and an answer the guidance rule did not set keeps its own words",
+  _gu_plain["verdict"] == "insufficient" and _gu_plain["explanation"].endswith("enough evidence to rate it.")
+  and verdict.GUIDANCE_RESTS not in _gu_seen(_gu_plain), _gu_plain["explanation"])
+db.put_cached_verdict("People with type 1 diabetes can replace insulin with a strict diet",
+                      "(diet) AND (type 1 diabetes)", "false",
+                      "None of the studies found directly test this claim, so there isn't enough evidence to rate it.",
+                      [], [dict(s) for s in _GU_STUDIES],
+                      tldr=verdict.GUIDELINE_LEAD + "people with type one diabetes need insulin.",
+                      still_open="Whether diet changes insulin needs.")
+_gu_page = c.get("/?q=" + urllib.parse.quote("People with type 1 diabetes can replace insulin with a strict diet")
+                 ).get_data(as_text=True)
+t("  and the saved answer's page, its markup and its short answer say the same",
+  'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
+  [m.group(0) for m in _UNRATED.finditer(_gu_page)])
+
 # ---- Guidance that rejects a forgo-treatment or medicine-cures claim is a False ----
 _FG_SAYS = "this is not safe, and the medicine is still advised."
 _FG_LINE = "Major health guidelines say: " + _FG_SAYS
