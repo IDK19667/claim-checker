@@ -7087,6 +7087,107 @@ t("old rows: a recent check on this device is replayed only when it has its shor
   re.search(r"saved\.result\.tldr", _rclick) and re.search(r"saved\.result\.still_open", _rclick)
   and "renderResult(" in _rclick and "check(btn.dataset.claim)" in _rclick, _rclick)
 
+# ---- where the slices meet: the reworded-match note --------------------------
+# Sentence case is for list rows in the template only. The note under a reworded
+# match shows the reader's own words exactly as typed, in both renderers, and the
+# stored claim keeps its saved wording.
+_RW_SAVED, _RW_TYPED = "Zinc lozenges shorten colds", "do zinc lozenges shorten colds?"
+db.put_cached_verdict(_RW_SAVED, "(zinc) AND (cold)", "complicated", "Study 1 found a shorter cold.", ["P1"],
+                      [dict(s_) for s_ in STUDIES], tldr="Zinc may shorten a cold a little.",
+                      still_open="Which dose works.")
+fg.models.script = []
+_rw = P(_RW_TYPED, ip="9.6.1.1").get_json()
+_rw_note = _dsp.typed_note(_rw.get("typed"), _rw.get("typed_reason"))
+t("meet: a reworded match carries the reader's words unchanged, not sentence-cased",
+  _rw.get("claim") == _RW_SAVED and _rw.get("typed") == _RW_TYPED and _rw.get("typed_reason") == "wording"
+  and _rw_note == f"Showing the saved check for this claim. You typed \u201c{_RW_TYPED}\u201d.", (_rw.get("typed"), _rw_note))
+_rw_tpl = (ROOT / "templates" / "index.html").read_text()
+_rw_mark = _rw_tpl[_rw_tpl.index('<p class="typed-note"'):]
+_rw_mark = _rw_mark[:_rw_mark.index("</p>") + 4]
+with appmod.app.test_request_context("/"):
+    _rw_on = appmod.app.jinja_env.from_string(_rw_mark).render(result=_rw)
+t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" id="typed-note">' + _rw_note + "</p>", _rw_on)
+if _shutil.which("node"):
+    _rw_js = (ROOT / "static" / "app.js").read_text()
+    _rw_fn = _rw_js[_rw_js.index("function typedNote"):_rw_js.index("function showTyped")]
+    _rw_out = json.loads(_subprocess.run(["node", "-e", _rw_fn + "console.log(JSON.stringify(typedNote("
+                                          + json.dumps(_rw["typed"]) + ", " + json.dumps(_rw["typed_reason"]) + ")));"],
+                                         capture_output=True, text=True, check=True).stdout)
+    t("  and so does the script's", _rw_out == _rw_note, _rw_out)
+with db.get_conn() as _conn:
+    _rw_rows = [r_["claim_text"] for r_ in _conn.execute(
+        "SELECT claim_text FROM verdict_cache WHERE claim_key IN (?, ?)",
+        (db.normalize_claim(_RW_SAVED), db.normalize_claim(_RW_TYPED))).fetchall()]
+    _rw_log = _conn.execute("SELECT claim_text FROM checks ORDER BY id DESC LIMIT 1").fetchone()["claim_text"]
+t("  and the stored text is the saved wording, with no row for the typed one",
+  _rw_rows == [_RW_SAVED] and _rw_log == _RW_SAVED, (_rw_rows, _rw_log))
+
+# ---- where the slices meet: a study set aside as off outcome -------------------
+# rc-reading's rule sets aside a structured abstract that names the claim's
+# outcome only in its background. What a reader sees for it is the same in the
+# Jinja page and in renderResult: the off-topic group, and the reason line.
+_MO_CLAIM = "Creatine supplements increase muscle strength in adults"
+_MO_STUDIES = [dict(_HAIR["study"]),
+               _study("MOK", "Creatine and strength in adults: a randomised trial",
+                      abstract="BACKGROUND: Ageing brings frailty.\nMETHODS: Sixty adults took creatine.\n"
+                               "RESULTS: Muscle strength rose by 8 kg.\nCONCLUSION: Creatine helped.",
+                      types=["Randomized Controlled Trial"])]
+_mo_search = pubmed.search_with_fallback
+pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": ([dict(s_) for s_ in _MO_STUDIES], q, False)
+fg.models.script = [Resp("(creatine) AND (" + _hair_out + ")"),
+                    Resp(VJ("true", [1, 2], tldr="Creatine raises strength a little.",
+                            explanation="A trial found more strength (Study 2)."))]
+try:
+    _mo = P(_MO_CLAIM, ip="9.6.2.1").get_json()
+finally:
+    pubmed.search_with_fallback = _mo_search
+_mo_hair = [s_ for s_ in _mo.get("studies") or [] if s_["pmid"] == _HAIR["study"]["pmid"]]
+_MO_WHY = "Read and set aside: " + verdict.OFF_OUTCOME + "."
+t("meet: a study whose abstract names the outcome only in its background is set aside as off outcome",
+  _mo_hair and _mo_hair[0]["off_topic"] == verdict.OFF_OUTCOME and not _mo_hair[0]["cited_in_verdict"],
+  [(s_["pmid"], s_.get("off_topic")) for s_ in _mo.get("studies") or []])
+_mo_pg = c.get("/?q=" + urllib.parse.quote(_MO_CLAIM)).get_data(as_text=True)
+_mo_grp = _mo_pg.split('<span class="group-name">Set aside: off topic</span>')
+t("  the page puts it in 'Set aside: off topic' with the line: " + _MO_WHY,
+  len(_mo_grp) == 2 and _HAIR["study"]["title"][:30] in _mo_grp[1].split("</details>")[0]
+  and f'<p class="why">{_MO_WHY}</p>' in _mo_grp[1].split("</details>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
+t("  and that line is true of the rule: the study measured something else, and no dash",
+  "different outcome" in _MO_WHY and not any(ch in _MO_WHY for ch in "\u2013\u2014"))
+if _shutil.which("node"):
+    _mo_js = (ROOT / "static" / "app.js").read_text()
+    _mo_fn = "const TYPES = [" + _mo_js.split("const TYPES = [")[1].split("function escapeHtml")[0]
+    _mo_out = json.loads(_subprocess.run(
+        ["node", "-e", _mo_fn + "const S = " + json.dumps(_mo["studies"]) + ";"
+         "const g = sourceGroups(S); console.log(JSON.stringify({g, w: g.excluded.map((i) => studyWhy(S[i]))}));"],
+        capture_output=True, text=True, check=True).stdout)
+    t("  and renderResult groups it the same and writes the same line",
+      _mo_out["g"] == _dsp.source_groups(_mo["studies"]) and _mo_out["w"] == [_MO_WHY], _mo_out)
+
+# ---- where the slices meet: the method stamp covers the reading rules ----------
+# rc-reading changed evidence.py, verdict.py and breakdown.py (and, in app.py,
+# only _check_response, which runs again on every render). A change to any of
+# those three files must change the stamp, so a saved answer is made again.
+import shutil as _sh_ms  # noqa: E402
+_ms_dir = pathlib.Path(tempfile.mkdtemp())
+for _f in verdict.ANSWER_FILES:
+    _sh_ms.copy(ROOT / _f, _ms_dir / _f)
+_ms_file = verdict.__file__
+verdict.__file__ = str(_ms_dir / "verdict.py")
+try:
+    _ms_same = verdict._method_stamp()
+    _ms_changed = {}
+    for _f in ("evidence.py", "verdict.py", "breakdown.py"):
+        _orig = (_ms_dir / _f).read_bytes()
+        (_ms_dir / _f).write_bytes(_orig + b"\n# changed\n")
+        _ms_changed[_f] = verdict._method_stamp() != _ms_same
+        (_ms_dir / _f).write_bytes(_orig)
+finally:
+    verdict.__file__ = _ms_file
+t("meet: the method stamp is made from every answer file the reading rules changed",
+  {"evidence.py", "verdict.py", "breakdown.py"} <= set(verdict.ANSWER_FILES))
+t("  and a change to any one of them changes the stamp",
+  _ms_same == verdict._method_stamp() and all(_ms_changed.values()), _ms_changed)
+
 # ---- rows saved from a reply that could not be read ---------------------------
 # Before a failed reply was refused, its fallback was saved as a row. Such rows
 # stay in the database, recognised by the fallback's own short answer, and are
