@@ -10272,6 +10272,31 @@ t("L5: the softening swap leaves 'cure' the noun alone and still softens the ver
   and breakdown.soften("Garlic cures colds (Study 1).") == "Garlic helps with colds (Study 1)."
   and breakdown.soften("Garlic cures and prevents colds.") == "Garlic helps with and lowers the risk of colds.")
 
+# ---- The desk front: the files it is drawn with ---------------------------------
+# Each outside file is pinned by its bytes. Sources: three.js r128 from
+# https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js, byte for byte
+# npm three@0.128.0/build/three.min.js (MIT, licence in its first lines); the two
+# font files from Google Fonts' latin subsets (OFL, licences in static/fonts/):
+# Bricolage Grotesque opsz 12..96 wght 200..800 and IBM Plex Mono 400; the wood
+# picture was generated for this project on the owner's account (DECISIONS.md).
+import hashlib as _dk_hash
+_DESK_FILES = {
+    "static/vendor/three-r128.min.js": "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2",
+    "static/fonts/woff2/bricolagegrotesque-opsz12-96-200-800.woff2": "85f55a58a31e61a2e19e8bb25fed503181bf2a6b4cab76c589992cfaac377447",
+    "static/fonts/woff2/ibmplexmono-400.woff2": "52de70091213c9eab340e2a7ac59e7b6b2b94e089bf69ef38479b22cfde4274c",
+    "static/desk/wood-2048.jpg": "4ba81eb4121b389335273240bd7ecd5702e5b878fa3240342e485c8a26621cb2",
+}
+_dk_bad = {f: _dk_hash.sha256((ROOT / f).read_bytes()).hexdigest() for f in _DESK_FILES
+           if not (ROOT / f).exists() or _dk_hash.sha256((ROOT / f).read_bytes()).hexdigest() != _DESK_FILES[f]}
+t("desk: the library, the two front fonts and the wood picture are the pinned bytes", not _dk_bad, _dk_bad)
+_dk_served = {f: c.get("/" + f).status_code for f in _DESK_FILES}
+t("  and each is served from the site's own static folder", all(v == 200 for v in _dk_served.values()), _dk_served)
+t("  the library is r128 and carries its licence line",
+  (ROOT / "static/vendor/three-r128.min.js").read_text()[:200].count("SPDX-License-Identifier: MIT") == 1
+  and "eval(" not in (ROOT / "static/vendor/three-r128.min.js").read_text())
+t("  the fonts' licences are in the repo beside them",
+  (ROOT / "static/fonts/OFL-BricolageGrotesque.txt").exists() and (ROOT / "static/fonts/OFL-IBMPlexMono.txt").exists())
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
