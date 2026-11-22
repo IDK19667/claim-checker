@@ -10297,6 +10297,70 @@ t("  the library is r128 and carries its licence line",
 t("  the fonts' licences are in the repo beside them",
   (ROOT / "static/fonts/OFL-BricolageGrotesque.txt").exists() and (ROOT / "static/fonts/OFL-IBMPlexMono.txt").exists())
 
+# ---- R4b: text inside an attribute cannot end it ------------------------------
+# The script's own escaper and href gate run in node on hostile values, and the
+# markup they build is parsed back here: every attribute is one the template
+# gave, it reads back as the exact stored words, and no href leaves http,
+# https, a path on this site or a fragment.
+from html.parser import HTMLParser as _R4Parser  # noqa: E402
+
+
+class _R4Tree(_R4Parser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.els, self.text = [], []
+
+    def handle_starttag(self, tag, attrs):
+        self.els.append((tag, dict(attrs), [k for k, _ in attrs]))
+
+    def handle_data(self, data):
+        self.text.append(data)
+
+
+def _r4_parse(html_):
+    p_ = _R4Tree()
+    p_.feed(html_)
+    p_.close()
+    return p_
+
+
+def _r4_hrefs_ok(tree):
+    return [a["href"] for _, a, _ in tree.els if "href" in a
+            and not a["href"].startswith(("http://", "https://", "/", "#"))]
+
+
+_R4_HOSTILE = 'It\'s "x" style="position:fixed;inset:0" <b>&amp; & <img src=x onerror=1>'
+if _shutil.which("node"):
+    _r4src = (ROOT / "static" / "app.js").read_text()
+    _r4fn = ("const VERDICT_LABELS = {" + _r4src.split("const VERDICT_LABELS = {")[1].split("};")[0] + "};\n"
+             + "const HTML_ESCAPES" + _r4src.split("const HTML_ESCAPES")[1].split("// ---- Views")[0]
+             + "function sentenceCase" + _r4src.split("function sentenceCase")[1].split("function claimListHtml")[0]
+             + "function claimListHtml" + _r4src.split("function claimListHtml")[1].split("async function loadTrending")[0])
+    _r4out = json.loads(_subprocess.run(["node", "-e", _r4fn + "console.log(JSON.stringify({"
+        "esc: escapeHtml(" + json.dumps(_R4_HOSTILE) + "),"
+        "list: claimListHtml([{claim: " + json.dumps(_R4_HOSTILE) + ", verdict: 'complicated'}]),"
+        "hrefs: ['https://pubmed.ncbi.nlm.nih.gov/1/', 'http://x.org/a?b=1', '/?q=a', 'javascript:alert(1)',"
+        " 'data:text/html,x', '//evil.example/x', '/\\\\evil.example', ' JavaScript:1', 'vbscript:x', ''].map(safeHref)}))"],
+        capture_output=True, text=True, check=True).stdout)
+    t("R4b: the script's escaper encodes & < > and both quotes",
+      _r4out["esc"] == str(_msc_escape(_R4_HOSTILE)).replace("&#34;", "&quot;"), _r4out["esc"])
+    _r4tree = _r4_parse(_r4out["list"])
+    _r4btn = [e for e in _r4tree.els if e[0] == "button"]
+    t("R4b: a home list button carries type, class and data-claim and nothing else, and data-claim is the claim",
+      len(_r4btn) == 1 and sorted(_r4btn[0][2]) == ["class", "data-claim", "type"]
+      and _r4btn[0][1]["data-claim"] == _R4_HOSTILE
+      and [e[0] for e in _r4tree.els] == ["li", "button", "span", "span"],
+      _r4tree.els)
+    t("  and the words on it are the stored words", _R4_HOSTILE in "".join(_r4tree.text), _r4tree.text)
+    t("R4b: the href gate passes http, https and site paths and refuses every other scheme",
+      _r4out["hrefs"] == ["https://pubmed.ncbi.nlm.nih.gov/1/", "http://x.org/a?b=1", "/?q=a",
+                          None, None, None, None, None, None, None], _r4out["hrefs"])
+_r4js = (ROOT / "static" / "app.js").read_text()
+t("R4b: every href the script builds from data goes through the gate",
+  not re.findall(r'href="\$\{(?!escapeHtml\((?:exactUrl|widerUrl|safeHref\())', _r4js)
+  and "div.textContent = str" not in _r4js,
+  re.findall(r'href="\$\{[^}]*\}', _r4js))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

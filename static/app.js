@@ -107,10 +107,27 @@ function dropOffTopicCites(data) {
   return data;
 }
 
+// The one escaper for text written through innerHTML. It encodes the quotes
+// too, so a value inside an attribute cannot end it: a saved claim such as
+// `is "x" style="..."` stays one attribute value. Where the code can set
+// textContent or setAttribute instead, it does; that is the better way.
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str == null ? "" : String(str);
-  return div.innerHTML;
+  return (str == null ? "" : String(str)).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}
+
+// The one gate for an address taken from result data into an href: it passes
+// only an http or https address, or a path on this site, and anything else
+// (javascript:, data:, a protocol-relative //host) comes back as null so the
+// link is left out.
+function safeHref(url) {
+  const raw = String(url == null ? "" : url).trim();
+  if (!raw) return null;
+  if (raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\")) return raw;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch { return null; }
 }
 
 // ---- Views -----------------------------------------------------------------
@@ -430,11 +447,12 @@ function renderNextSteps(ns, claim) {
     : "Papers came back, but none of them actually test this claim, so there is nothing here to weigh. That is not the same as the claim being false.";
 
   const acts = [];
-  if (ns.exact_url) {
-    acts.push(`<li>See the exact search on PubMed: <a href="${escapeHtml(ns.exact_url)}" target="_blank" rel="noopener"><code>${escapeHtml(ns.searched)}</code><svg width="15" height="15" aria-hidden="true"><use href="#i-ext"/></svg></a></li>`);
+  const exactUrl = safeHref(ns.exact_url), widerUrl = safeHref(ns.wider_url);
+  if (exactUrl) {
+    acts.push(`<li>See the exact search on PubMed: <a href="${escapeHtml(exactUrl)}" target="_blank" rel="noopener"><code>${escapeHtml(ns.searched)}</code><svg width="15" height="15" aria-hidden="true"><use href="#i-ext"/></svg></a></li>`);
   }
-  if (ns.wider_url) {
-    acts.push(`<li>Search any of these terms instead of all of them: <a href="${escapeHtml(ns.wider_url)}" target="_blank" rel="noopener">${escapeHtml((ns.terms || []).slice(0, 4).join(", "))}<svg width="15" height="15" aria-hidden="true"><use href="#i-ext"/></svg></a></li>`);
+  if (widerUrl) {
+    acts.push(`<li>Search any of these terms instead of all of them: <a href="${escapeHtml(widerUrl)}" target="_blank" rel="noopener">${escapeHtml((ns.terms || []).slice(0, 4).join(", "))}<svg width="15" height="15" aria-hidden="true"><use href="#i-ext"/></svg></a></li>`);
   }
   acts.push("<li>Try the claim in plainer words. Name the thing and the effect, and leave out the story around them.</li>");
   $("nosteps-acts").innerHTML = acts.join("");
@@ -618,7 +636,7 @@ function renderResult(data) {
           ${s.cited_in_verdict ? `<span class="sr-only">Used for the verdict</span>` : ""}
         </p>
         <p class="title"><span>${escapeHtml(s.title)}</span></p>
-        <p class="src">${escapeHtml(src)}${src ? " · " : ""}<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" data-stop>PMID ${escapeHtml(s.pmid)}</a></p>
+        <p class="src">${escapeHtml(src)}${src ? " · " : ""}${safeHref(s.url) ? `<a href="${escapeHtml(safeHref(s.url))}" target="_blank" rel="noopener" data-stop>PMID ${escapeHtml(s.pmid)}</a>` : `PMID ${escapeHtml(s.pmid)}`}</p>
         <p class="why">${escapeHtml(studyWhy(s))}</p>
         <button type="button" class="study-go" aria-label="Deep dive on study ${i + 1}">Deep dive<svg width="15" height="15" aria-hidden="true"><use href="#i-dive"/></svg></button>
       </li>`;
@@ -659,7 +677,7 @@ function renderResult(data) {
   $("query").textContent = usedQuery;
   $("query-what").hidden = !usedQuery;
   $("broadened").textContent = data.search_broadened ? " (the first search found nothing, so it was widened)" : "";
-  $("more-link").href = data.pubmed_url || "#";
+  $("more-link").href = safeHref(data.pubmed_url) || "#";
   $("toast").textContent = "";
   renderFeedbackState(data.claim);
   resetReport();
@@ -1658,8 +1676,8 @@ async function loadDeepDive(pmid) {
     figs.hidden = false;
   }
 
-  if (dive.full_text_url) {
-    links.innerHTML = `<a href="${escapeHtml(dive.full_text_url)}" target="_blank" rel="noopener">Read the whole paper free<svg width="16" height="16" aria-hidden="true"><use href="#i-ext"/></svg></a>`;
+  if (safeHref(dive.full_text_url)) {
+    links.innerHTML = `<a href="${escapeHtml(safeHref(dive.full_text_url))}" target="_blank" rel="noopener">Read the whole paper free<svg width="16" height="16" aria-hidden="true"><use href="#i-ext"/></svg></a>`;
     links.hidden = false;
   }
 
@@ -1668,7 +1686,7 @@ async function loadDeepDive(pmid) {
     $("dive-related").innerHTML = related.map((r) => `<li class="study">
       <p class="meta"><span>${escapeHtml(typeInfo(r.publication_types).label)}</span>${r.year ? `<span>${escapeHtml(r.year)}</span>` : ""}</p>
       <p class="title"><span>${escapeHtml(r.title)}</span></p>
-      <p class="src">${escapeHtml(r.journal || "")}${r.journal ? " · " : ""}<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">PMID ${escapeHtml(r.pmid)}</a></p>
+      <p class="src">${escapeHtml(r.journal || "")}${r.journal ? " · " : ""}${safeHref(r.url) ? `<a href="${escapeHtml(safeHref(r.url))}" target="_blank" rel="noopener">PMID ${escapeHtml(r.pmid)}</a>` : `PMID ${escapeHtml(r.pmid)}`}</p>
     </li>`).join("");
     relWrap.hidden = false;
   }
@@ -1714,7 +1732,7 @@ function openStudy(i) {
   $("sheet-authors-wrap").hidden = authors.length === 0;
   $("sheet-authors").textContent = authors.length > 6 ? `${authors.slice(0, 6).join(", ")} and ${authors.length - 6} more` : authors.join(", ");
 
-  $("sheet-link").href = s.url;
+  $("sheet-link").href = safeHref(s.url) || "https://pubmed.ncbi.nlm.nih.gov/";
   loadDeepDive(s.pmid);
   openSheet(studySheet, $("sheet-title"));
 }
