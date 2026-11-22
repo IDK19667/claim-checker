@@ -8906,6 +8906,45 @@ t("effect line: a figure whose sentence names another outcome gives the evidence
   _el_off == "Strong evidence, but no plain yes or no", _el_off)
 t("  and a figure whose sentence names the claim's outcome keeps it",
   _el_on == "Strong evidence of a large effect, but no plain yes or no", _el_on)
+# ---- final fix F8: the effect box follows the line's size gate ---------------
+# Live: cold showers showed "a large effect" for a figure about inflammation.
+# When line_label withholds the size from the line, code writes no size word
+# anywhere in the answer; the figure stays with its own sentence.
+def _f8(claim, query, verdict_, bd):
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_, "The studies point both ways.",
+                                      "The review pooled 11 trials (Study 1).", ["EL1"], [dict(s) for s in _EL_ST],
+                                      "http://x", still_open="Whether it lasts.", breakdown=json.loads(json.dumps(bd)))
+_F8_SAID = ("Inflammation increased with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+            "standard deviations, a large effect (Study 1).")
+_f8_bd = dict(_el_bd(_F8_SAID, _EL_LARGE), says=["Inflammation increased with an effect size of 1.03 (Study 1).",
+                                                  "That is a difference of 1.03 standard deviations, a large effect (Study 1)."])
+_f8_off = _f8("Cold showers boost immunity", _EL_Q, "complicated", _f8_bd)
+_f8_text = json.dumps(_f8_off["breakdown"]).lower()
+t("F8: a withheld size leaves the effect label blank in the response",
+  _f8_off["breakdown"]["effect"]["label"] == "" and _f8_off["breakdown"]["effect"]["figure"], _f8_off["breakdown"]["effect"])
+t("F8: and the code-written size ('a large effect') is in neither the box nor the research lines",
+  "large effect" not in _f8_text and "a large" not in _f8_text, _f8_off["breakdown"])
+t("F8: the figure stays, with the outcome its own sentence names and code's plain arithmetic, and the box does not "
+  "say no size is reported",
+  _f8_off["breakdown"]["effect_size"] == "Inflammation increased with an effect size of 1.03 (Study 1). "
+                                         "That is a difference of 1.03 standard deviations (Study 1)."
+  and breakdown.NO_EFFECT_SIZE not in json.dumps(_f8_off), _f8_off["breakdown"]["effect_size"])
+_f8_on = _f8("Cold showers boost immunity", _EL_Q, "complicated",
+             _el_bd("Immune function rose with an effect size of 1.03 (Study 1). That is a difference of 1.03 "
+                    "standard deviations, a large effect (Study 1).", _EL_LARGE))
+t("F8: a size the line carries keeps its label and its sentence",
+  _f8_on["breakdown"]["effect"]["label"] == "large" and "a large effect" in _f8_on["breakdown"]["effect_size"])
+_f8_db = "Cold showers boost immunity F8"
+db.put_cached_verdict(_f8_db, _EL_Q, "complicated", "The review pooled 11 trials (Study 1).", ["EL1"],
+                      [dict(s) for s in _EL_ST], tldr="The studies point both ways.", still_open="Whether it lasts.",
+                      breakdown=_f8_bd)
+_f8_pg = c.get("/?q=" + urllib.parse.quote(_f8_db)).get_data(as_text=True)
+t("F8: the server-rendered page shows the figure and no code-written size word",
+  "Inflammation increased with an effect size of 1.03" in _f8_pg and "large effect" not in _f8_pg)
+with db.get_conn() as _conn:
+    _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_f8_db),))
+
 _EL_NONE = {"figure": "", "label": "none", "null": True, "plain": "no clear difference between the groups"}
 _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)", "false",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),

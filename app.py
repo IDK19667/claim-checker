@@ -985,6 +985,11 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     readings = _readings(studies, cited, search_query)
     sized = breakdown_mod.line_label(breakdown, claim, outcome)
     withheld = bool(((breakdown or {}).get("effect") or {}).get("label")) and not sized
+    # The effect box follows the same gate: a size the line may not carry is
+    # said nowhere by code, neither as a label nor as "That is ... a large
+    # effect" under the figure. The figure and its own sentence stay.
+    if withheld:
+        breakdown = breakdown_mod.unsized(breakdown)
 
     def line_for(stamp):
         lines = [evidence.evidence_line(

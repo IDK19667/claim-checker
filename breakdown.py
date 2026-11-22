@@ -1703,6 +1703,36 @@ def effect_alone(bd: dict | None) -> dict | None:
     return bd
 
 
+# The size code appends to its translation of a figure: ", a large effect".
+_SIZE_TAIL = re.compile(r",\s+an?\s+(?:small|moderate|large)\s+effect\b")
+
+
+def unsized(bd: dict | None) -> dict | None:
+    """The breakdown with no size word code wrote, for an answer whose
+    evidence line may not carry its figure's size (line_label refused it).
+    The figure stays, in its own sentence naming its own outcome; the label
+    is blank, and the "That is ..." sentence code wrote beside the figure
+    keeps its plain arithmetic ("about 12% lower odds") without the size
+    ("a small effect"), in the effect box and in "What the research says".
+    One that only said no clear difference goes."""
+    if not bd:
+        return bd
+
+    def bare(t: str) -> str:
+        if not str(t).startswith(TRANSLATION_LEAD):
+            return t
+        if NULL_SAID in t:
+            return ""
+        return _SIZE_TAIL.sub("", t)
+
+    out = {**bd, "says": [x for x in (bare(t) for t in bd.get("says") or []) if x]}
+    if bd.get("effect_size"):
+        out["effect_size"] = " ".join(x for x in (bare(t) for t in sentences(bd["effect_size"])) if x)
+    if bd.get("effect"):
+        out["effect"] = {**bd["effect"], "label": ""}
+    return out
+
+
 def answers_effect(verdict: str, claim: str) -> bool:
     """True when the answer says there is an effect: "true" on a claim of
     one, or "false" on a claim of none ("vaccines do not cause autism")."""
