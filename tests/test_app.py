@@ -898,6 +898,30 @@ _real = {"evidence": [], "parts": [], "effect_size": "The matched odds ratio (ho
 t("grounding: a saved size read from a ratio the page never prints is dropped on the way out",
   _mis["effect"] is None and (_mis_null["effect"] or {}).get("label") == "none"
   and breakdown.settle_effect(_real)["effect"] == _real["effect"], (_mis["effect"], _mis_null["effect"]))
+# A figure that was not significant, under an answer that there is an effect,
+# is said in words that do not contradict the answer. Under an answer of no
+# effect, "no clear difference" is the point and stays.
+_NS_ST = [dict(_NULL_ST[0], pmid="NS1", publication_types=["Meta-Analysis"],
+               abstract="METHODS: Twelve trials in 50,000 adults were pooled. RESULTS: Melanoma was less common "
+                        "with daily use (hazard ratio 0.50, 95% CI 0.24 to 1.02).")]
+_NS_EFF = ("The hazard ratio for melanoma was 0.50 with a likely range of 0.24 to 1.02 (Study 1). "
+           "That is no clear difference between the groups, because the result was not statistically significant (Study 1).")
+_NS_BD = {"parts": [], "evidence": ["Melanoma was less common with daily use (Study 1)."], "effect_size": _NS_EFF,
+          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": "",
+          "effect": dict(evidence.NULL_EFFECT, figure="hazard ratio 0.50")}
+with appmod.app.test_request_context("/"):
+    _ns_yes = appmod._check_response("Daily sunscreen lowers melanoma risk", "(sunscreen) AND (melanoma)", "true",
+                                     "Daily sunscreen lowers melanoma risk.", "Less melanoma (Study 1).", ["NS1"],
+                                     [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+    _ns_no = appmod._check_response("Daily sunscreen does not lower melanoma risk", "(sunscreen) AND (melanoma)", "true",
+                                    "It does not.", "No clear change (Study 1).", ["NS1"],
+                                    [dict(_NS_ST[0])], "http://x", still_open="Long term.", breakdown=dict(_NS_BD))
+t("wording: under 'Likely true' on a claim of an effect, a figure that was not significant is never 'no clear difference'",
+  _ns_yes["verdict"] == "true" and "no clear difference" not in " ".join(breakdown.prose_of(_ns_yes["breakdown"]))
+  and "On its own, that result could be chance, because it was not statistically significant (Study 1)."
+  in _ns_yes["breakdown"]["effect_size"], (_ns_yes["verdict"], _ns_yes["breakdown"]["effect_size"]))
+t("  and under an answer of no effect it still says no clear difference",
+  "That is no clear difference between the groups" in _ns_no["breakdown"]["effect_size"], _ns_no["breakdown"]["effect_size"])
 t("grounding: softening only ever weakens a claim",
   breakdown.soften("It prevents flu and cures colds.")
   == "It lowers the risk of flu and helps with colds.")

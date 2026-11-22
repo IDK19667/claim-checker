@@ -908,6 +908,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
             breakdown_mod.absolute_claim(claim),
             bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
             outcome, stated=stated)
+    # A figure that was not significant is said as one, in words that do not
+    # contradict an answer that there is an effect.
+    if breakdown and breakdown_mod.answers_effect(verdict_value, claim):
+        breakdown = breakdown_mod.map_prose(breakdown, breakdown_mod.null_alone)
     level = evidence.line_certainty(evidence_line)
     if level:
         tldr = evidence.cap_certainty(tldr, level)

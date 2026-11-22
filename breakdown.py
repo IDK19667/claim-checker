@@ -1615,6 +1615,26 @@ def label(text: str, limit: int = 120) -> str:
 NOT_SIGNIFICANT_SAID = "That difference was not statistically significant ({ref})."
 NULL_SAID = ("no clear difference between the groups, because the result was "
              "not statistically significant")
+# The same translation under an answer that there is an effect ("Likely
+# true" on "sunscreen lowers skin cancer"). "No clear difference between the
+# groups" under it reads as a contradiction; what the figure shows is that
+# this one result could be chance.
+NULL_SAID_ALONE = ("On its own, that result could be chance, because it was not "
+                   "statistically significant")
+
+
+def null_alone(text: str) -> str:
+    """The null translation code wrote under a figure, reworded for a page
+    whose answer is that there is an effect. Model prose is not touched."""
+    return re.sub(re.escape(TRANSLATION_LEAD + NULL_SAID), NULL_SAID_ALONE, text or "")
+
+
+def answers_effect(verdict: str, claim: str) -> bool:
+    """True when the answer says there is an effect: "true" on a claim of
+    one, or "false" on a claim of none ("vaccines do not cause autism")."""
+    return verdict in ("true", "false") and (verdict == "true") != claim_denies(claim)
+
+
 _SIZE_SAID = re.compile(
     r"\b(?:an?\s+)?(?:very\s+)?(?:small|slight|modest|moderate|large|big|tiny)\s+"
     r"(?:effect|benefit|reduction|increase|improvement|difference)\b", re.IGNORECASE)
