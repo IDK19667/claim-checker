@@ -877,11 +877,11 @@ def _original_check_date(claim, cached_at):
     return first
 
 
-def _from_guidance(tldr) -> bool:
-    """A stamp set by verdict.follow_guidelines: its takeaway begins with the
-    guidance lead. /method says the verdict follows that guidance, so no
-    output-time cap may overrule it."""
-    return str(tldr or "").startswith(verdict.GUIDELINE_LEAD)
+def _from_guidance(tldr, claim) -> bool:
+    """A stamp set by verdict.follow_guidelines (verdict.from_guidance: the
+    lead, on a claim guidance is read for). /method says the verdict follows
+    that guidance, so no output-time cap may overrule it."""
+    return verdict.from_guidance(tldr, claim)
 
 
 def _on_gemini() -> bool:
@@ -913,7 +913,7 @@ def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool
     is not a low rating: a review that rates several outcomes differently
     gives that range, and capping on it turned well-supported vaccine
     answers into "It's complicated, but the certainty is low"."""
-    if verdict_value != "true" or not cited or _from_guidance(tldr):
+    if verdict_value != "true" or not cited or _from_guidance(tldr, claim):
         return False
     comparative = bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or ""))
     return bool(evidence.certainty_cap(studies, cited, comparative, outcome))
@@ -930,7 +930,7 @@ def _nothing_relied(claim, verdict_value, tldr):
     the untested takeaway, the shape a fresh check writes."""
     if verdict_value == "insufficient":
         return verdict_value, tldr, False
-    guided = verdict.from_guidance(tldr)
+    guided = verdict.from_guidance(tldr, claim)
     if guided and verdict.guidance_may_rate(claim, verdict_value):
         return verdict_value, tldr, False
     return "insufficient", (verdict.unrated_guidance_tldr(tldr) if guided else verdict.UNTESTED_TLDR), True
@@ -953,7 +953,7 @@ def _listed(v: dict) -> dict:
                for used in _readings(v["studies"], cited, v.get("search_query"))):
             return dict(v, verdict="complicated")
     except Exception:  # noqa: BLE001
-        if v.get("verdict") == "true" and not _from_guidance(v.get("tldr")):
+        if v.get("verdict") == "true" and not _from_guidance(v.get("tldr"), v.get("claim_text")):
             return dict(v, verdict="complicated")
     return v
 
@@ -1006,7 +1006,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
     # An answer the guidance rule set is never followed by words saying the
     # claim cannot be rated: the page says it rests on that guidance instead.
-    if verdict.from_guidance(tldr):
+    if verdict.from_guidance(tldr, claim):
         explanation, still_open, breakdown = verdict.guidance_prose(explanation, still_open, breakdown)
         breakdown = verdict.guidance_effect(breakdown)
     # One certainty for the whole page, settled on the way out so a check
@@ -1067,7 +1067,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # It shows whenever any study is listed, even when none is relied on (the
     # one cited was set aside), so the line is never blank under such an
     # answer; with no study listed at all the page keeps its own wording.
-    if verdict.from_guidance(tldr) and (evidence_line or studies):
+    if verdict.from_guidance(tldr, claim) and (evidence_line or studies):
         evidence_line = verdict.GUIDANCE_LINE
     # The response's effect field says what the page says (after every
     # rewrite above, since settling the effect can set it afresh).

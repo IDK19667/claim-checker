@@ -7310,6 +7310,25 @@ t("second fix 1: their lines still read as ranges that start low, which is not a
   [p["evidence_line"] for _c, _t, p, _l in _r1])
 _tur1 = appmod._check_response("Turmeric eases joint pain", "(turmeric) AND (joint pain)", "true", "Turmeric eases joint pain.",
                                "It helps (Study 1).", ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
+# H3: a saved takeaway is read as guidance only on a claim guidance is read
+# for (verdict.guideline_topic, the gate follow_guidelines opens with).
+_h3 = {}
+for _h3_c in ("Turmeric eases joint pain", "Antibiotics cure joint infections"):
+    for _h3_t in (verdict.GUIDELINE_LEAD + "turmeric eases joint pain.", "Turmeric eases joint pain."):
+        _h3[_h3_c, _h3_t[:5]] = appmod._check_response(
+            _h3_c, "(turmeric) AND (joint pain)", "true", _h3_t, "It helps (Study 1).", ["L1"], [_LOWREV], "http://x",
+            cached_at="2026-11-01T00:00:00+00:00")
+_h3_f, _h3_b = _h3["Turmeric eases joint pain", "Major"], _h3["Turmeric eases joint pain", "Turme"]
+t("H3: a row with the lead on a claim no guideline covers shows no guidance line and is capped like the same answer without it",
+  not verdict.guideline_topic("Turmeric eases joint pain") and _h3_f["evidence_line"] != verdict.GUIDANCE_LINE
+  and (_h3_f["verdict"], _h3_f["evidence_line"]) == (_h3_b["verdict"], _h3_b["evidence_line"]) == ("complicated", _h3_b["evidence_line"])
+  and not verdict.from_guidance(verdict.GUIDELINE_LEAD + "x.", "Turmeric eases joint pain"),
+  (_h3_f["verdict"], _h3_f["evidence_line"], _h3_b["verdict"], _h3_b["evidence_line"]))
+t("  and on a guideline topic the same lead still reads as guidance: the line, and no cap",
+  verdict.guideline_topic("Antibiotics cure joint infections")
+  and _h3["Antibiotics cure joint infections", "Major"]["evidence_line"] == verdict.GUIDANCE_LINE
+  and _h3["Antibiotics cure joint infections", "Major"]["verdict"] == "true",
+  _h3["Antibiotics cure joint infections", "Major"]["evidence_line"])
 _exd1 = _gin_review("E1", "Network meta-analysis of 200 trials. Walking reduced depression. Confidence in accordance with CINeMA was low.")
 _exp1 = appmod._check_response("Exercise reduces depression", "(exercise) AND (depression)", "true", "Exercise reduces depression.",
                                "It helps (Study 1).", ["E1"], [_exd1], "http://x", cached_at="2026-11-01T00:00:00+00:00")
@@ -9365,9 +9384,9 @@ _TR_THIN["off_topic"] = verdict.OFF_OUTCOME
 _TR_Q, _TR_C = "(creatine) AND (" + _hair_out + ")", "Creatine raises muscle strength"
 
 
-def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd=None):
+def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd=None, claim=_TR_C):
     with appmod.app.test_request_context("/"):
-        return appmod._check_response(_TR_C, _TR_Q, verdict_value, tldr, "Strength rose (Study 1).", ["TR1"],
+        return appmod._check_response(claim, _TR_Q, verdict_value, tldr, "Strength rose (Study 1).", ["TR1"],
                                       [dict(s_) for s_ in studies], "http://localhost",
                                       still_open="Doses vary.", breakdown=bd)["evidence_line"]
 
@@ -9383,10 +9402,14 @@ t("meet: a size about another outcome is withheld in both readings, and the less
   and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).startswith("Low certainty"),
   (_tr_line([_TR_REV], bd=_TR_BD), _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)))
 _TR_G = verdict.GUIDELINE_LEAD + "creatine is fine for most adults."
+# A guidance-set answer is one on a claim guidance is read for (H3): the
+# lead on "Creatine raises muscle strength" is no guidance answer.
+_TR_GC = "Creatine supplements are safe in pregnancy"
 t("meet: a guidance-set answer shows the fixed line whatever either reading says",
-  _tr_line([_TR_REV], tldr=_TR_G, verdict_value="false") == verdict.GUIDANCE_LINE
-  and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false") == verdict.GUIDANCE_LINE,
-  (_tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false"),))
+  _tr_line([_TR_REV], tldr=_TR_G, verdict_value="false", claim=_TR_GC) == verdict.GUIDANCE_LINE
+  and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false", claim=_TR_GC) == verdict.GUIDANCE_LINE
+  and _tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false") != verdict.GUIDANCE_LINE,
+  (_tr_line([_TR_REV, _TR_THIN], tldr=_TR_G, verdict_value="false", claim=_TR_GC),))
 
 # ---- where the fixes meet: 'no clear effect' needs both rules ---------------
 # rc-reading round 3: a sentence with a significant figure is never a null
@@ -9629,7 +9652,7 @@ for _g2_c, _g2_label in ((_G2_CASES[1][0], "a pregnancy claim that says safe, se
     t("G2: " + _g2_label + ": Not enough evidence, the guidance sentence after the untested takeaway, no guidance line",
       _g2_s["verdict"] == "insufficient" and _g2_s["evidence_line"] != verdict.GUIDANCE_LINE
       and _g2_s["tldr"] == verdict.UNTESTED_TLDR + " " + verdict.GUIDELINE_LEAD + _g2_says
-      and not verdict.from_guidance(_g2_s["tldr"]), (_g2_s["verdict"], _g2_s["tldr"], _g2_s["evidence_line"]))
+      and not verdict.from_guidance(_g2_s["tldr"], _g2_c), (_g2_s["verdict"], _g2_s["tldr"], _g2_s["evidence_line"]))
 t("G2: for each case a fresh check with nothing cited and the saved answer with everything set aside give the same stamp",
   all(_s["verdict"] == _f["verdict"] for _s, _f in _g2.values())
   and [_f["verdict"] for _s, _f in _g2.values()] == ["false", "insufficient", "insufficient"],

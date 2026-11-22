@@ -1125,10 +1125,13 @@ def without_lead(tldr: str) -> str:
     return rest[:1].upper() + rest[1:]
 
 
-def from_guidance(tldr) -> bool:
-    """An answer the guidance rule set: its takeaway opens with the lead.
-    Guidance only added to a "Not enough evidence" takeaway does not."""
-    return str(tldr or "").startswith(GUIDELINE_LEAD)
+def from_guidance(tldr, claim) -> bool:
+    """An answer the guidance rule set: its takeaway opens with the lead,
+    on a claim the rule reads at all (guideline_topic: follow_guidelines
+    writes the lead on no other claim). A lead on any other claim (a row
+    saved before the model's own lead was taken off) is an ordinary answer.
+    Guidance only added to a "Not enough evidence" takeaway does not count."""
+    return str(tldr or "").startswith(GUIDELINE_LEAD) and guideline_topic(claim)
 
 
 def unrated_said(text: str) -> str:
