@@ -1211,8 +1211,7 @@ def soften(text: str) -> str:
     for pattern, weaker in _SOFTEN:
         t = pattern.sub(_soften_unless_negated(weaker), t)
     # A substitution at the head of a sentence must not leave it lowercase.
-    return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
-                  lambda m: m.group(1) + m.group(2).upper(), t)
+    return heads_up(t)
 
 
 # Research-paper grammar that nobody says out loud. Each pair fixes the
@@ -1270,8 +1269,7 @@ def natural(text: str) -> str:
     for pattern, fixed in _NATURAL:
         t = pattern.sub(fixed, t)
     # "Vitamin D is linked to" needs its capital back if it opened the line.
-    return re.sub(r"(^|(?<=[.!?]\s))([a-z])",
-                  lambda m: m.group(1) + m.group(2).upper(), t)
+    return heads_up(t)
 
 
 # "a" before a vowel sound, "an" before a consonant one. Swapping a word
@@ -1497,6 +1495,15 @@ def sentences(text: str) -> list[str]:
     if buf.strip():
         out.append(buf.strip())
     return out
+
+
+def heads_up(text: str) -> str:
+    """Each sentence of text starting with a capital. "coli" after "E." is
+    not a sentence's head ("E. coli", the rule sentences() reads by)."""
+    t = text or ""
+    return re.sub(r"(?:^|(?<=[.!?]\s))[a-z]",
+                  lambda m: m.group(0) if m.start() and _joins(t[:m.start()].rstrip(), t[m.start():])
+                  else m.group(0).upper(), t)
 
 
 def first_sentence(text: str) -> str:

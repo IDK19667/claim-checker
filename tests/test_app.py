@@ -6733,6 +6733,11 @@ t("L4: a stop after a single capital before a lowercase word does not end a sent
   and breakdown.first_sentence("E. coli grew in raw milk. Boiling killed it.") == "E. coli grew in raw milk"
   and breakdown.first_sentence("It has vitamin C. It also has iron.") == "It has vitamin C",
   breakdown.sentences(_L4))
+t("K4: the capital code gives a sentence's head is not given to 'coli' after 'E.' (soften, natural)",
+  breakdown.heads_up("like E. coli grew. then it fell.") == "Like E. coli grew. Then it fell."
+  and breakdown.soften("Like E. coli in a lab, it fell.") == "Like E. coli in a lab, it fell."
+  and breakdown.natural("Like E. coli, it links to colds.") == "Like E. coli, it is linked to colds.",
+  breakdown.soften("Like E. coli in a lab, it fell."))
 _RO = [dict(_BD_STUDIES[0]), dict(_BD_STUDIES[1])]
 _ro_raw = json.dumps({
     "verdict": "true", "tldr": "Vitamin D lowers infections a little.",
@@ -6742,6 +6747,14 @@ _ro_raw = json.dumps({
     "strength": "One pooled review found a small drop (Study 1). A trial found no change (Study 2).",
     "parts": [], "effect_size": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
 _ro = verdict._read_verdict(_ro_raw, None, _RO, "Vitamin D lowers infections")
+# K4: a takeaway the model left empty is the explanation's first sentence,
+# read past "E. coli" (breakdown.first_sentence), on a fresh check.
+_k4_tl = verdict._read_verdict(_ro_raw.replace('"tldr": "Vitamin D lowers infections a little."', '"tldr": ""').replace(
+    '"explanation": "Pooled trials found a small drop (Study 1)."',
+    '"explanation": "Like E. coli in a lab, infections fell a little in pooled trials (Study 1). More trials are needed."'),
+    None, _RO, "Vitamin D lowers infections")
+t("K4: L4 in the takeaway fallback: an empty takeaway is the whole first sentence, not cut at 'E.'",
+  _k4_tl["tldr"].startswith("Like E. coli in a lab, infections fell"), _k4_tl["tldr"])
 t("the verdict's 'why' paragraph never credits a study it did not rely on",
   _ro["cited_studies"] == ["D1"] and "Study 2" not in _ro["breakdown"]["strength"]
   and "Study 1" in _ro["breakdown"]["strength"], _ro["breakdown"]["strength"])
