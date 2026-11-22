@@ -703,6 +703,7 @@ def _fold_plural(w: str) -> str:
 # Compatibility forms whose plain form loses what they say: a raised or
 # lowered digit (10⁹ is not 109, H₂O is not H2O) and a fraction (½ is not 12).
 _FOLD_LOSSY_TAGS = ("<super>", "<sub>", "<fraction>")
+_FOLD_BEFORE_NUMBER = re.compile(r"\s+\.?\d")
 
 
 def _fold_tokens(claim: str) -> list:
@@ -724,7 +725,13 @@ def _fold_tokens(claim: str) -> list:
         t = t.replace(d, "-")
     t = _fold_contractions(t.casefold().replace("&", " and ")).replace("'", "")
     out = []
-    for tok in _FOLD_TOKEN.findall(t):
+    for m in _FOLD_TOKEN.finditer(t):
+        tok = m.group()
+        if tok == "-" and _FOLD_BEFORE_NUMBER.match(t, m.end()):
+            # A dash standing free right before a number ("at - 5 C",
+            # "5 - 10 kg") may be a minus or a range: it is kept, never dropped.
+            out.append(tok)
+            continue
         if len(tok) == 1 and not tok.isalnum():
             cat = unicodedata.category(tok)
             # Symbols (% + < > $ # and emoji) stay; punctuation goes.

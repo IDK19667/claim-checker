@@ -2625,6 +2625,15 @@ t("equivalent: a number keeps its sign and its decimal point",
   and _eqf("Ice baths at -5 C help recovery", "Ice baths at \u22125 C help recovery")
   and _eqf("Omega-3 improves memory", "Omega 3 improves memory")
   and db.claim_fold("Take 2-5 mg") == ("take", "2-5", "mg"))
+t("  a dash standing free right before a number is kept, never dropped",
+  not any(_eqf(a, b) for a, b in [
+      ("Ice baths at - 5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Ice baths at \u2212 5 C help recovery", "Ice baths at 5 C help recovery"),
+      ("Lose 5 - 10 kg on keto", "Lose 5 10 kg on keto"),
+      ("Take vitamin C - 500 mg", "Take vitamin C 500 mg"),
+      ("Ice baths at - .5 C help", "Ice baths at .5 C help")])
+  and _eqf("Ice baths at - 5 C help recovery", "Ice baths at \u2013 5 C help recovery")
+  and _eqf("Coffee - the drink - causes cancer", "Coffee the drink causes cancer"))
 db.put_cached_verdict("Ice baths at 5 C help recovery", "(ice) AND (recovery)", "complicated", "Mixed (Study 1).",
                       ["P1"], STUDIES, tldr="Short.", still_open="Open.")
 db.put_cached_verdict("Take 5 mg melatonin for sleep", "(melatonin) AND (sleep)", "complicated", "Mixed (Study 1).",
