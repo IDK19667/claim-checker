@@ -5395,6 +5395,55 @@ t("  with no dash anywhere in what the reader sees",
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 verdict.guideline_view = lambda claim: None
 
+# ---- G1: the guidance lead is code's alone ----
+# A model takeaway that opens with "Major health guidelines say:" was read
+# as code's own, so check_faithful let it pass and the guidance line came
+# with it. verdict.without_lead takes it off in _read_verdict, which the
+# plain and the streamed check both reach.
+t("G1: without_lead takes the model's own lead off, in any spacing or case, and gives the capital back",
+  verdict.without_lead(verdict.GUIDELINE_LEAD + "stop your arthritis medicine.") == "Stop your arthritis medicine."
+  and verdict.without_lead("major  HEALTH guidelines say that turmeric works.") == "Turmeric works."
+  and verdict.without_lead("  Guidelines say: it is not safe.") == "It is not safe."
+  and verdict.without_lead("Turmeric eases joint pain.") == "Turmeric eases joint pain.")
+def _g1_run(claim, tldr, ip, v="true", way=P):
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
+        _conn.execute("DELETE FROM query_cache")
+    fg.models.script = [Resp("q"), Resp(VJ(v, [1], tldr=tldr))]
+    if way is P:
+        return P(claim, ip=ip).get_json()
+    _evs = stream(claim, ip=ip)[1]
+    return _evs[-1].get("result") or _evs[-1]
+def _g1_same(a, b):
+    return (a["verdict"], a["evidence_line"]) == (b["verdict"], b["evidence_line"])
+_G1_CHERRY = "Tart cherry juice speeds muscle recovery"
+_g1_lead = _g1_run(_G1_CHERRY, verdict.GUIDELINE_LEAD + "tart cherry juice speeds recovery.", "9.7.1.1")
+_g1_bare = _g1_run(_G1_CHERRY, "Tart cherry juice speeds recovery.", "9.7.1.2")
+t("G1: a model takeaway that opens with the lead, on a claim no guideline covers, loses the lead",
+  "guidelines say" not in _g1_lead["tldr"].lower() and _g1_lead["evidence_line"] != verdict.GUIDANCE_LINE,
+  _g1_lead)
+t("  and its stamp and evidence line are what the same reply gives without those words",
+  _g1_same(_g1_lead, _g1_bare), (_g1_lead["verdict"], _g1_lead["evidence_line"],
+                                 _g1_bare["verdict"], _g1_bare["evidence_line"]))
+_g1_slead = _g1_run(_G1_CHERRY, verdict.GUIDELINE_LEAD + "tart cherry juice speeds recovery.", "9.7.1.3", way=stream)
+t("  and the streamed check reads it the same way",
+  "guidelines say" not in _g1_slead["tldr"].lower() and _g1_same(_g1_slead, _g1_bare),
+  (_g1_slead["tldr"], _g1_slead["verdict"], _g1_slead["evidence_line"]))
+_G1_ARTH = "Stop your arthritis medicine and take turmeric"
+_g1_arth = _g1_run(_G1_ARTH, verdict.GUIDELINE_LEAD + "stop your arthritis medicine and take turmeric.", "9.7.1.4")
+_g1_arth_bare = _g1_run(_G1_ARTH, "Stop your arthritis medicine and take turmeric.", "9.7.1.5")
+t("G1: the reviewer's arthritis and turmeric reply no longer keeps 'true' and the guidance line because of the lead",
+  _g1_arth["evidence_line"] != verdict.GUIDANCE_LINE and "guidelines say" not in _g1_arth["tldr"].lower()
+  and _g1_same(_g1_arth, _g1_arth_bare),
+  (_g1_arth["verdict"], _g1_arth["evidence_line"], _g1_arth_bare["verdict"], _g1_arth_bare["evidence_line"]))
+verdict.guideline_view = _guide("false", "antibiotics do not work on colds, which are caused by viruses.")
+_g1_real = _g1_run("Antibiotics cure the common cold",
+                   verdict.GUIDELINE_LEAD + "antibiotics cure colds.", "9.7.1.6", v="complicated")
+verdict.guideline_view = lambda claim: None
+t("G1: a real guidance answer still carries the lead once, never twice",
+  _g1_real["verdict"] == "false" and _g1_real["tldr"].startswith(verdict.GUIDELINE_LEAD)
+  and _g1_real["tldr"].lower().count("guidelines say") == 1, _g1_real["tldr"])
+
 # ---- Under an answer the guidance rule set, nothing says the claim cannot be rated ----
 # The live safety run: "type 1 diabetes and insulin" and "antibiotics and the
 # cold" were False from guidance, with the model's "so there isn't enough

@@ -1039,6 +1039,24 @@ _SO_JOINT = re.compile(r",?\s+(?:and\s+)?(?:so|since)\b|,\s+(?:which means|meani
 _END_REF = re.compile(r"\s*(\((?:Study|Studies)\b[^)]*\))\s*[.!?]?\s*$")
 
 
+# The lead as a model might write it: any case, any spacing, with or
+# without "major" and "health", with or without the colon.
+_LEAD_SAID = re.compile(r"^\s*(?:major\s+)?(?:health\s+)?guidelines\s+say\b\s*:?\s*", re.IGNORECASE)
+
+
+def without_lead(tldr: str) -> str:
+    """The model's takeaway without a guidance lead it wrote itself. The
+    lead is code's alone (follow_guidelines and _restamp write it), so a
+    reply that opens with it is read as any other: the words after it stay,
+    with their capital back."""
+    text = str(tldr or "")
+    m = _LEAD_SAID.match(text)
+    if not m:
+        return text
+    rest = _LEAD_REPEAT.sub("", text[m.end():], count=1).strip()
+    return rest[:1].upper() + rest[1:]
+
+
 def from_guidance(tldr) -> bool:
     """An answer the guidance rule set: its takeaway opens with the lead.
     Guidance only added to a "Not enough evidence" takeaway does not."""
@@ -2219,6 +2237,10 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
             "The evidence-weighing step returned an unexpected format. "
             "Raw studies are still available below for manual review."
         ), unread=UNREADABLE)
+
+    # The guidance lead is code's alone. A reply that writes it is read as
+    # any other, before any gate or rule reads the takeaway.
+    parsed["tldr"] = without_lead(parsed.get("tldr") or "")
 
     verdict = str(parsed.get("verdict", "")).strip().lower()
     if verdict not in VALID_VERDICTS:
