@@ -4,6 +4,26 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-21 (later): Off outcome only on a positive sign, and never a surer answer
+
+An independent grader wrote 54 abstracts of studies that did measure the
+outcome in other words (1RM, A1C, PSQI, "died", "flu", an abbreviation the
+background defined) and the rule below set 43 aside. Absence of a word
+proves nothing, so the entry below is narrowed: code sets a study aside only
+when its background names the claim's outcome and nothing after it does,
+and its title or stated aim and its results or conclusions name the same
+outcome from another word family that is not the claim's subject. All else
+is the model's reading, as before. On the saved runs this leaves one study
+set aside (an onion and obesity study in mice, for a flu claim), and the
+stand-in studies (DHT, blood pressure) are no longer set aside. A study
+code sets aside loses its citation and nothing else: trial ranking, the
+harm guard, the certainty cap and the evidence line still count it as read
+and possibly disagreeing (`verdict.set_aside`, `app._readings`), and a
+saved answer that relied on one is checked fresh rather than patched
+(`app._current`). The kin families for stress and hyperactivity stay:
+without them the classic sugar and behaviour trial and an ashwagandha trial
+rated on tension are set aside.
+
 ## 2026-11-21: A study that never measured the outcome is set aside in code
 
 A hair-loss trial was relied on for a muscle-strength claim because its
