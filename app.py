@@ -1009,6 +1009,16 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     if verdict.from_guidance(tldr, claim):
         explanation, still_open, breakdown = verdict.guidance_prose(explanation, still_open, breakdown)
         breakdown = verdict.guidance_effect(breakdown)
+        # A guidance answer that relies on no study cites none for a finding:
+        # "Studies show ... (Study 5)" four sentences before code says nothing
+        # here tests the claim is a contradiction. Code's own sentences say
+        # what the papers are; a sentence that cites no study stays.
+        if not cited and verdict_value != "insufficient":
+            kept = [s for s in breakdown_mod.sentences(explanation or "") if not breakdown_mod.refs(s, count)]
+            if len(kept) != len(breakdown_mod.sentences(explanation or "")):
+                explanation = " ".join(kept)
+                if verdict.GUIDANCE_RESTS not in explanation:
+                    explanation = f"{explanation} {verdict.GUIDANCE_RESTS}".strip()
     # One certainty for the whole page, settled on the way out so a check
     # cached before the rule existed gets it too. The evidence line is never
     # surer than the least sure thing the page says, and a certainty phrase

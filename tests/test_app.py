@@ -5593,6 +5593,69 @@ t("  and the saved answer's page, its markup and its short answer say the same",
   'id="server-result"' in _gu_page and verdict.GUIDANCE_RESTS in _gu_page and not _UNRATED.search(_gu_page),
   [m.group(0) for m in _UNRATED.finditer(_gu_page)])
 
+# H6: a guidance answer that relies on nothing cites no paper for a finding.
+# Live, "Antibiotics cure the common cold": "Studies show ... (Study 5)" sat
+# four sentences before "Nothing here tests this claim in people".
+_H6_ST = [_study("H6A", "Antibiotics for colds: a commentary", types=["Editorial"],
+                 abstract="Antibiotics should not be used for the common cold, which viruses cause."),
+          _study("H6B", "Why we should not prescribe antibiotics for colds", types=["Comment"],
+                 abstract="Recovery from colds is usually spontaneous without antibiotics.")]
+_H6_SAID = ("Studies show that antibiotics should not be used for the common cold (Study 1). "
+            "Recovery is usually spontaneous without antibiotics (Study 2).")
+_h6_search = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s) for s in _H6_ST]
+verdict.guideline_view = _guide("false", "antibiotics do not work on colds, which are caused by viruses.")
+_h6_runs = []
+for _h6_n, _h6_way in enumerate((P, stream)):
+    with db.get_conn() as _conn:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_GU_CLAIM_H6 := "Antibiotics cure the common cold"),))
+        _conn.execute("DELETE FROM query_cache")
+    fg.models.script = [Resp("(antibiotics) AND (common cold)"),
+                        Resp(VJ("false", [1, 2], tldr=_GU_TLDR, explanation=_H6_SAID))]
+    _h6_runs.append(P(_GU_CLAIM_H6, ip="9.7.6.1").get_json() if _h6_way is P
+                    else (stream(_GU_CLAIM_H6, ip="9.7.6.2")[1][-1].get("result") or {}))
+verdict.guideline_view = lambda claim: None
+pubmed.search_and_fetch = _h6_search
+t("H6: a guidance answer relying on no study, plain and streamed, keeps no sentence citing a paper",
+  all(r_.get("verdict") == "false" and r_.get("evidence_line") == verdict.GUIDANCE_LINE
+      and not any(s_["cited_in_verdict"] for s_ in r_["studies"])
+      and not breakdown.refs(r_["explanation"], 2) and r_["explanation"].endswith(verdict.GUIDANCE_RESTS)
+      for r_ in _h6_runs), [(r_.get("verdict"), r_.get("explanation")) for r_ in _h6_runs])
+# The live shapes, each as the page gets it.
+_H6_OFF = dict(_study("H6O", "Antibiotic resistance in farm animals", types=["Review"]),
+               off_topic="tests something other than what this claim is about.")
+_H6_LIVE = ("Studies show that antibiotics should not be used for the common cold since viruses cause these "
+            "infections (Study 2). Recovery from these viral infections is usually spontaneous without antibiotics "
+            "(Study 3). Nothing here tests this claim in people, only opinion pieces and papers that test nothing "
+            "in people. " + verdict.GUIDANCE_RESTS)
+_H6_MILK = ("Studies show pasteurization reduces certain vitamins like B1, B2, C, and folate, while raw milk retains "
+            "them (Study 1). Other studies show raw milk consumption poses significant risks of bacterial zoonoses "
+            "(Study 2).")
+_H6_OILS = ("No studies test this exact claim in people to see if a cure occurs. The available papers are reviews "
+            "or background tests that do not provide human clinical trial data (Studies 1, 2).")
+_H6_MS = [_study("H6M1", "Effect of pasteurization on milk vitamins: a meta-analysis", types=["Meta-Analysis"],
+                 abstract="Pasteurization reduces vitamins B1, B2, C, and folate in milk, while raw milk retains them."),
+          _study("H6M2", "Raw milk and bacterial zoonoses: a systematic review", types=["Systematic Review"],
+                 abstract="Raw milk consumption poses significant risks of bacterial zoonoses.")]
+with appmod.app.test_request_context("/"):
+    _h6_cold = appmod._check_response("Antibiotics cure the common cold", "(antibiotics) AND (common cold)", "false",
+                                      _GU_TLDR, _H6_LIVE, [], [dict(_H6_OFF)] + [dict(s) for s in _H6_ST],
+                                      "http://x", still_open="Whether a better treatment exists.")
+    _h6_milk = appmod._check_response("Raw milk is healthier than pasteurized milk", "(raw milk) AND (health)", "false",
+                                      verdict.GUIDELINE_LEAD + "raw milk can carry harmful germs.", _H6_MILK,
+                                      ["H6M1", "H6M2"], [dict(s) for s in _H6_MS], "http://x",
+                                      still_open="Whether any benefit outweighs the risk.")
+    _h6_oils = appmod._check_response("Essential oils cure bacterial infections", "(essential oils) AND (infection)",
+                                      "insufficient", verdict.UNTESTED_TLDR, _H6_OILS, [],
+                                      [dict(s) for s in _H6_ST], "http://x", still_open="Whether oils help in people.")
+t("H6: the live antibiotics shape keeps only code's own sentences about the papers",
+  _h6_cold["explanation"] == ("Nothing here tests this claim in people, only opinion pieces and papers that test "
+                              "nothing in people. " + verdict.GUIDANCE_RESTS), _h6_cold["explanation"])
+t("  a guidance answer that relies on studies keeps every sentence",
+  _h6_milk["evidence_line"] == verdict.GUIDANCE_LINE and _h6_milk["explanation"] == _H6_MILK, _h6_milk["explanation"])
+t("  and a Not enough evidence answer keeps its sentence describing the background papers",
+  _h6_oils["verdict"] == "insufficient" and _h6_oils["explanation"] == _H6_OILS, _h6_oils["explanation"])
+
 # ---- final fix F2: the evidence line sizes only a figure about the outcome ----
 # breakdown.line_label lends the line a size only when the figure's sentence
 # is about the claim's outcome, not one that merely contains the word.
