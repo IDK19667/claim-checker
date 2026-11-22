@@ -5370,6 +5370,28 @@ t("  and say_nulls writes no null after the plain-words form on fresh text, thou
   breakdown.say_nulls(_K2_SIG, _K2_AB) == _K2_SIG
   and breakdown.say_nulls("The risk ratio for winter-dominant seasons was 0.79 (Study 1).", _K2_AB).endswith(_K2_N),
   breakdown.say_nulls(_K2_SIG, _K2_AB))
+# K3: a sentence's figure is matched to a result in its abstract, never to
+# the "0" of a decimal ("odds ratio 0.88") or to an interval's level ("95%
+# confidence interval"). Live: "ranged in age from 0 to 95 years".
+_K3_AGE = "People ranged in age from 0 to 95 years across multiple randomized controlled trials (Study 1)."
+_K3_DEC = [_study("K3a", "Vitamin D: individual participant data", types=["Meta-Analysis"],
+                  abstract="RESULTS: 25 trials (participants aged 0 to 95 years). Vitamin D did not significantly change "
+                           "the overall result (adjusted odds ratio 0.98, 95% CI 0.80 to 1.20).")]
+_K3_LVL = [_study("K3b", "Vitamin D: a meta-analysis", types=["Meta-Analysis"],
+                  abstract="RESULTS: No significant preventive effects (risk ratio [RR]: 0.99, 95% confidence interval "
+                           "[CI]: 0.97 to 1.01). Ages ranged from 0 to 95 years.")]
+_k3_st = lambda ab: [_study("K3c", "A trial", types=["Randomized Controlled Trial"], abstract=ab)]
+t("K3: an age range gets no 'not significant' sentence from a decimal's 0 or an interval's level in its abstract",
+  breakdown.say_nulls(_K3_AGE, _K3_DEC) == _K3_AGE and breakdown.say_nulls(_K3_AGE, _K3_LVL) == _K3_AGE
+  and breakdown.null_figure(_K3_AGE, _K3_DEC) is None and breakdown.null_figure(_K3_AGE, _K3_LVL) is None,
+  (breakdown.say_nulls(_K3_AGE, _K3_DEC), breakdown.say_nulls(_K3_AGE, _K3_LVL)))
+t("  a real null whose figure is 0.95 or 95% still gets its sentence",
+  breakdown.say_nulls("The risk ratio was 0.95 (Study 1).", _k3_st("RESULTS: RR 0.95 (95% CI 0.85 to 1.06)."))
+  .endswith(_K2_N)
+  and breakdown.say_nulls("The difference was 95% (Study 1).", _k3_st("RESULTS: The difference was 95% (p = 0.40)."))
+  .endswith(_K2_N)
+  and evidence.significance("odds ratio 4.0 (95% CI 0.9 to 9.0)", "4") is None
+  and evidence.significance("odds ratio 4 (95% CI 0.9 to 9.0)", "4") == "null")
 t("'prevalence' and 'incidence' are 'rate' wherever the sentence needs a noun",
   breakdown.plain("A pooled review estimated the global prevalence of alcohol use during pregnancy.")
   == "A pooled review estimated the global rate of alcohol use during pregnancy."

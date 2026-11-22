@@ -598,6 +598,8 @@ def _num(text: str) -> float:
 
 # The level an interval is given at: "95%", "90 percent", "99 per cent".
 CONFIDENCE_LEVEL = re.compile(r"\b9[059]\s?(?:%|per ?cent\b)", re.IGNORECASE)
+# What follows a number that is an interval's level, not a result.
+_LEVEL_NEXT = re.compile(r"\s?(?:%|per ?cent\b)\s*(?:C\.?I\.?\b|confidence|credible|likely range)", re.IGNORECASE)
 
 
 def _interval_after(text: str, start: int):
@@ -635,7 +637,13 @@ def significance(text: str, figure: str) -> str | None:
     bare = str(figure or "").lstrip("-\u2212")
     if not bare:
         return None
-    for m in re.finditer(r"(?<![\d.])[-\u2212]?" + re.escape(bare) + r"(?![\d])", t):
+    # A figure is matched whole: "0" in "aged 0 to 95" is not the "0" of
+    # "odds ratio 0.88" (a decimal part that is all zeros, "4" for "4.0",
+    # still matches). And an interval's level ("95% confidence interval",
+    # "95 percent CI") is not a result any figure is matched to.
+    for m in re.finditer(r"(?<![\d.])[-\u2212]?" + re.escape(bare) + r"(?!\d|\.0*[1-9])", t):
+        if _LEVEL_NEXT.match(t, m.end()):
+            continue
         before = t[max(0, m.start() - 60):m.start()]
         if _RATIO_BEFORE.search(before):
             null = 1.0
