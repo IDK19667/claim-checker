@@ -11470,6 +11470,11 @@ if _shutil.which("node"):
     _k2_diff = [(c, o, n) for c, (o, n) in zip(_K2_CASES, _k2_out) if o != n]
     t("K2: splitSentences returns exactly what the old lookbehind regex returned, on %d strings" % len(_K2_CASES),
       len(_K2_CASES) >= 25 and not _k2_diff and any(len(o) > 2 for o, _ in _k2_out), _k2_diff[:3])
+else:
+    # L5: with no node the comparison cannot run; say so as a failure rather than pass in silence.
+    t("K2: splitSentences returns exactly what the old lookbehind regex returned (node is needed and was not found)", False)
+t("L5: the K2 comparison records a visible failure when node is missing, never a silent skip",
+  "_k2_diff[:3])\nelse:\n    # L5" in (ROOT / "tests" / "test_app.py").read_text())
 _k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "sw.js")}
 t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
   not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],
