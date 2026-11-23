@@ -21,6 +21,7 @@ load_dotenv()  # must run before verdict.py reads the provider keys
 import requests
 from flask import (Flask, abort, Response, g, make_response, jsonify, redirect, render_template, request,
                    send_from_directory)
+from werkzeug.security import safe_join
 
 import breakdown as breakdown_mod
 import display
@@ -184,6 +185,73 @@ def _compress(response: Response) -> Response:
 
 
 db.init_db()
+
+
+# Static files carry a stamp: every static address a page prints ends in
+# ?v= and the first 10 hex digits of the file's sha256 (url_for adds it), and
+# a request with the right stamp may be kept for a year, because a changed
+# file gets a new address. Without a stamp, or with a wrong one, a file is
+# served as before (no-cache, revalidated). Fonts are named in CSS, which
+# cannot be stamped without a build step; their files never change (a
+# changed font gets a new file name), so /static/fonts/ is long-cached as it
+# is and never stamped (a stamped preload would not match the CSS address
+# and the font would download twice). A stamp is worked out the first time
+# an address is printed and again when the file changes on disk.
+LONG_CACHE = "public, max-age=31536000, immutable"
+_stamps: dict = {}
+
+
+def static_stamp(filename: str) -> str | None:
+    """First 10 hex digits of the static file's sha256, or None if there is no such file."""
+    path = safe_join(app.static_folder, filename)
+    try:
+        st = os.stat(path) if path else None
+    except OSError:
+        st = None
+    if st is None or not os.path.isfile(path):
+        return None
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _stamps.get(filename)
+    if hit and hit[0] == key:
+        return hit[1]
+    with open(path, "rb") as f:
+        stamp = hashlib.sha256(f.read()).hexdigest()[:10]
+    _stamps[filename] = (key, stamp)
+    return stamp
+
+
+def _stampable(filename: str) -> bool:
+    return not filename.startswith("fonts/")
+
+
+@app.url_defaults
+def _stamp_static(endpoint, values) -> None:
+    if endpoint == "static" and "v" not in values and _stampable(values.get("filename", "")):
+        stamp = static_stamp(values.get("filename", ""))
+        if stamp:
+            values["v"] = stamp
+
+
+_STATIC_IN_TEXT = re.compile(r'"/static/([^"?#]+)"')
+
+
+def stamped_text(text: str) -> str:
+    """Every "/static/..." string in a served text file (the manifest, sw.js) with its stamp."""
+    def one(m):
+        name = m.group(1)
+        stamp = static_stamp(name) if _stampable(name) else None
+        return f'"/static/{name}?v={stamp}"' if stamp else m.group(0)
+    return _STATIC_IN_TEXT.sub(one, text)
+
+
+@app.after_request
+def _static_cache(response: Response) -> Response:
+    if request.endpoint != "static" or response.status_code not in (200, 304):
+        return response
+    name = (request.view_args or {}).get("filename", "")
+    if not _stampable(name) or (request.args.get("v") and request.args.get("v") == static_stamp(name)):
+        response.headers["Cache-Control"] = LONG_CACHE
+    return response
 
 
 # ---------------------------------------------------------------------
@@ -811,18 +879,24 @@ def og_image(key):
 
 @app.route("/manifest.webmanifest")
 def manifest():
-    resp = send_from_directory(app.static_folder, "manifest.webmanifest")
-    resp.headers["Content-Type"] = "application/manifest+json"
+    resp = _stamped_file("manifest.webmanifest", "application/manifest+json")
     return resp
+
+
+def _stamped_file(name: str, mimetype: str) -> Response:
+    """A static text file with its static addresses stamped, revalidated as before (ETag)."""
+    with open(os.path.join(app.static_folder, name), encoding="utf-8") as f:
+        body = stamped_text(f.read())
+    resp = Response(body, mimetype=mimetype)
+    resp.set_etag(hashlib.sha256(body.encode("utf-8")).hexdigest()[:16])
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
 
 
 @app.route("/sw.js")
 def service_worker():
     # Served from the root so its scope covers the whole app.
-    resp = send_from_directory(app.static_folder, "sw.js")
-    resp.headers["Content-Type"] = "application/javascript"
-    resp.headers["Cache-Control"] = "no-cache"
-    return resp
+    return _stamped_file("sw.js", "application/javascript")
 
 
 def _deployed_commit():

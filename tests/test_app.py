@@ -10861,11 +10861,12 @@ _shell3 = _sw3.split("const SHELL")[1].split("];")[0]
 _linked3 = set()
 for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
     _src3 = (ROOT / "templates" / _f3).read_text()
-    _linked3 |= {"/static/" + x for x in re.findall(r"url_for\('static', filename='([^']+)'\)", _src3)}
+    _linked3 |= {"/static/" + x for x in re.findall(r"url_for\('static', filename='([^']+)'\)", _src3)
+                 if not x.startswith(("vendor/", "desk/"))}  # the 3D files are handed to desk.js, never shell
 _linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
 t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
   all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
-  and 'const CACHE = "evident-v120";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+  and 'const CACHE = "evident-v121";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
 
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
@@ -11496,6 +11497,77 @@ t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
+
+# ---- STAMPS: static addresses carry the file's hash, and a stamped file is kept a year ----
+import hashlib as _st_hash  # noqa: E402
+import re as _st_re  # noqa: E402
+
+
+def _st_of(path):
+    return _st_hash.sha256((ROOT / path.lstrip("/")).read_bytes()).hexdigest()[:10]
+
+
+_st_home = c.get("/").get_data(as_text=True)
+_st_res = c.get("/?q=" + urllib.parse.quote("mRNA vaccines change DNA")).get_data(as_text=True)
+_st_addr = set(_st_re.findall(r'(?:src|href|data-lib|data-wood)="(/static/[^"]+)"', _st_home + _st_res))
+_st_bad = [a for a in _st_addr if not a.startswith("/static/fonts/")
+           and not _st_re.fullmatch(r"/static/[^?]+\?v=" + _st_of(a.split("?")[0]), a)]
+t("STAMPS: every static address the home and a result page print (but fonts) ends in ?v= and its file's hash",
+  len(_st_addr) >= 8 and not _st_bad and any("three-r128" in a for a in _st_addr) and any("/static/desk/wood" in a for a in _st_addr),
+  (_st_bad, sorted(_st_addr)))
+t("STAMPS: font preloads stay unstamped, so they match the address the CSS asks for",
+  all("?" not in a for a in _st_addr if a.startswith("/static/fonts/")) and any(a.startswith("/static/fonts/") for a in _st_addr))
+for _st_page in ("/about", "/privacy", "/method", "/no-such-page"):
+    _st_p = c.get(_st_page).get_data(as_text=True)
+    _st_pa = _st_re.findall(r'(?:src|href)="(/static/(?!fonts/)[^"]+)"', _st_p)
+    t(f"STAMPS: {_st_page} prints its static addresses stamped", _st_pa and all("?v=" in a for a in _st_pa), _st_pa)
+_st_js = "/static/app.js?v=" + _st_of("/static/app.js")
+_st_r = c.get(_st_js)
+t("STAMPS: a static file asked for with the right stamp is kept for a year",
+  _st_r.status_code == 200 and _st_r.headers.get("Cache-Control") == "public, max-age=31536000, immutable", dict(_st_r.headers))
+for _st_u in ("/static/app.js", "/static/app.js?v=0000000000", "/static/app.js?v="):
+    _st_r = c.get(_st_u)
+    t(f"STAMPS: {_st_u} (no stamp or a wrong one) is served as before, revalidated each time",
+      _st_r.status_code == 200 and "immutable" not in (_st_r.headers.get("Cache-Control") or "")
+      and "no-cache" in (_st_r.headers.get("Cache-Control") or ""), dict(_st_r.headers))
+_st_r = c.get("/static/fonts/woff2/instrumentsans-normal-400-600.woff2")
+t("STAMPS: font files are kept a year as they are (a changed font gets a new file name)",
+  _st_r.status_code == 200 and _st_r.headers.get("Cache-Control") == "public, max-age=31536000, immutable")
+t("STAMPS: a missing static file is still a 404 and carries no long cache",
+  c.get("/static/nope.js?v=0000000000").status_code == 404
+  and "immutable" not in (c.get("/static/nope.js?v=0000000000").headers.get("Cache-Control") or ""))
+_st_sw = c.get("/sw.js")
+_st_swt = _st_sw.get_data(as_text=True)
+_st_shell = _st_re.findall(r'"(/static/[^"]+)"', _st_swt.split("const SHELL")[1].split("];")[0])
+t("STAMPS: /sw.js is still no-cache, and every non-font static file in its SHELL is stamped with its hash",
+  "no-cache" in _st_sw.headers.get("Cache-Control", "") and "immutable" not in _st_sw.headers.get("Cache-Control", "")
+  and _st_shell and all(a.startswith("/static/fonts/") and "?" not in a
+                        or a == a.split("?")[0] + "?v=" + _st_of(a.split("?")[0]) for a in _st_shell), _st_shell)
+t("STAMPS: /sw.js answers a matching If-None-Match with a 304",
+  c.get("/sw.js", headers={"If-None-Match": _st_sw.headers.get("ETag", "")}).status_code == 304, _st_sw.headers.get("ETag"))
+_st_mf = c.get("/manifest.webmanifest")
+_st_icons = [i["src"] for i in json.loads(_st_mf.get_data(as_text=True))["icons"]]
+t("STAMPS: the manifest is still no-cache and its icons are stamped",
+  "no-cache" in _st_mf.headers.get("Cache-Control", "") and _st_mf.headers.get("Content-Type", "").startswith("application/manifest+json")
+  and all(i == i.split("?")[0] + "?v=" + _st_of(i.split("?")[0]) for i in _st_icons), _st_icons)
+_st_dir = pathlib.Path(tempfile.mkdtemp())
+(_st_dir / "x.css").write_text("a{}")
+_st_real = appmod.app.static_folder
+appmod.app.static_folder = str(_st_dir)
+try:
+    _st_a = appmod.static_stamp("x.css")
+    (_st_dir / "x.css").write_text("b{color:red}")
+    _st_b = appmod.static_stamp("x.css")
+finally:
+    appmod.app.static_folder = _st_real
+t("STAMPS: a file changed on disk gets a new stamp", _st_a and _st_b and _st_a != _st_b
+  and _st_b == _st_hash.sha256(b"b{color:red}").hexdigest()[:10], (_st_a, _st_b))
+t("STAMPS: desk.js takes the 3D addresses from the page, and keeps the stamp on its one retry",
+  "glEl.dataset.lib" in (ROOT / "static/desk.js").read_text() and "glEl.dataset.wood" in (ROOT / "static/desk.js").read_text()
+  and '(LIB.indexOf("?") < 0 ? "?" : "&") + "retry=1"' in (ROOT / "static/desk.js").read_text())
+_st_swsrc = (ROOT / "static/sw.js").read_text()
+t("STAMPS: the service worker serves a stamped static address from its cache first and keeps one copy per path",
+  'url.searchParams.has("v")' in _st_swsrc and "dropOlderStamps" in _st_swsrc)
 
 # ---- HOME LISTS: the home page's lists are kept in memory for a short while ----
 _hl_calls = {"recent": 0, "example": 0, "fail": False}

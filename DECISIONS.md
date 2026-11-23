@@ -4,6 +4,34 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): Static files carry their hash and are kept a year
+
+Every static file was sent `no-cache`, so a returning reader asked again
+for each one (a 304 at best) and the service worker, network first, went
+to the network too. Now every static address a page prints ends in
+`?v=` and the first 10 hex digits of the file's sha256 (`url_for` adds
+it; `/sw.js` and the manifest have their `"/static/..."` strings stamped
+as they are served). A request with the right stamp is answered
+`public, max-age=31536000, immutable`; without one, or with a wrong one,
+it is served as before. `/sw.js` and the manifest stay `no-cache`.
+
+- Fonts are named in CSS and cannot be stamped without a build step.
+  Their files never change, so `/static/fonts/` is kept a year as it is
+  and a changed font gets a new file name. Their preloads stay
+  unstamped, or the preload and the CSS would be two addresses and the
+  font would download twice.
+- The two 3D files are handed to `desk.js` through `data-lib` and
+  `data-wood` on the canvas, not an inline script, so the CSP stays.
+- The service worker matches stamped addresses exactly: a stamped static
+  request is served cache first (a stored copy is that version, never a
+  stale one), and when a new stamp of a path is stored the older ones
+  are dropped. Unstamped static requests are network first, as before.
+  Offline first paint holds because the cached home page names the
+  stamped addresses its own deploy precached.
+- A stamp is worked out the first time an address is printed and again
+  when the file's size or modification time changes, so a file edited in
+  development gets a new address without a restart.
+
 ## 2026-11-22 (q10): Scoring runs are recorded and replayed
 
 The free model quota is small and a gold set is 120 claims, so fixes are

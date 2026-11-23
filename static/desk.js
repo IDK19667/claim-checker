@@ -722,14 +722,17 @@
   function lite() { var c = navigator.connection; return !!(c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ""))); }
   if (!hasGL() || lite()) { fallback(); return; }
   var woodImg = null;
-  var LIB = "/static/vendor/three-r128.min.js";
+  // the page hands over the stamped addresses (app.py static_stamp), so the two files can be kept a year
+  var glEl = document.getElementById("gl");
+  var LIB = (glEl && glEl.dataset.lib) || "/static/vendor/three-r128.min.js";
+  var WOOD = (glEl && glEl.dataset.wood) || "/static/desk/wood-2048.jpg";
   function loadLib(tries) {
     var sc = document.createElement("script"), done = false;
     var timer = setTimeout(function () { fail(); }, 8000);
     function fail() { if (done) return; done = true; clearTimeout(timer); sc.onload = sc.onerror = null; if (tries > 0) loadLib(tries - 1); else fallback(); }
     sc.onload = function () { if (done) return; done = true; clearTimeout(timer); if (typeof THREE === "undefined") { fallback(); return; } waitFonts(); };
     sc.onerror = fail;
-    sc.async = true; sc.src = LIB + (tries === 0 ? "?retry=1" : ""); document.body.appendChild(sc);
+    sc.async = true; sc.src = LIB + (tries === 0 ? (LIB.indexOf("?") < 0 ? "?" : "&") + "retry=1" : ""); document.body.appendChild(sc);
   }
   // the painted sheets use the page's faces: wait for them a little, never long
   function waitFonts() {
@@ -743,7 +746,7 @@
     fontsNow().then(start, start);
   }
   // at the load event, so the library and the wood never compete with the page and its fonts (the answer is already readable)
-  function begin() { woodImg = new Image(); woodImg.decoding = "async"; woodImg.src = "/static/desk/wood-2048.jpg"; loadLib(1); }
+  function begin() { woodImg = new Image(); woodImg.decoding = "async"; woodImg.src = WOOD; loadLib(1); }
   if (document.readyState === "complete") begin(); else addEventListener("load", begin);
 
   function start() {

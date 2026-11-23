@@ -109,6 +109,9 @@ build step is a feature: anyone can read the shipped file.
 - Fonts are self-hosted in `static/fonts/woff2/`. Don't reintroduce a
   Google Fonts link: it costs a third-party connection and breaks
   offline first paint.
+  Font files are kept a year by the browser (they cannot carry a stamp,
+  CSS names them), so a changed font gets a new file name, never new
+  bytes under the old one.
 
 ## Working rules (code)
 
@@ -124,6 +127,10 @@ build step is a feature: anyone can read the shipped file.
   `scripts/regression.py` (the 21 claims in `tests/regression_claims.json`).
 - Service worker: bump `CACHE` in `static/sw.js` when shell files change,
   and add new shell files to `SHELL`.
+- Static addresses: print them with `url_for('static', ...)` (or as a
+  `"/static/..."` string in `sw.js` or the manifest), never by hand, so
+  they carry `?v=` and the file's hash and can be kept a year. A file a
+  script loads is handed to it through the page (a `data-` attribute).
 - A result page is server-rendered: the verdict, the reasoning and the
   studies are in the HTML, with ClaimReview markup, before any JavaScript
   runs. Keep it that way. If you change how a result looks, change both

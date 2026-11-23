@@ -1,11 +1,15 @@
 /* Evident service worker.
-   - App shell + static assets: network first, cache fallback, so every
-     deploy is picked up immediately when online, and the app still opens
-     offline.
+   - App shell: network first, cache fallback, so every deploy is picked up
+     immediately when online, and the app still opens offline.
+   - Stamped static files (?v= and the file's hash, added by the server to
+     every address it prints, here included): cache first. A changed file
+     gets a new address, so a stored copy is never stale; the copy under an
+     older stamp of the same path is dropped when the new one is stored.
+   - Unstamped static files: network first, as before.
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v120";
+const CACHE = "evident-v121";
 const SHELL = [
   "/",
   "/static/style.css",
@@ -59,8 +63,18 @@ async function cacheFirst(req) {
   const hit = await cache.match(req);
   if (hit) return hit;
   const res = await fetch(req);
-  if (res.ok) cache.put(req, res.clone());
+  if (res.ok) cache.put(req, res.clone()).then(() => dropOlderStamps(cache, req.url));
   return res;
+}
+
+// one copy per path: the stored copies of this path under another stamp go
+async function dropOlderStamps(cache, href) {
+  const now = new URL(href);
+  if (!now.searchParams.has("v")) return;
+  for (const key of await cache.keys()) {
+    const k = new URL(key.url);
+    if (k.pathname === now.pathname && k.searchParams.has("v") && k.search !== now.search) await cache.delete(key);
+  }
 }
 
 self.addEventListener("fetch", (event) => {
@@ -82,8 +96,9 @@ self.addEventListener("fetch", (event) => {
   // reply is a 206, which a Cache cannot hold. They are not shell either: a
   // check needs a connection anyway, and the stills already cover offline.
   if (/\.(mp4|webm)$/.test(url.pathname)) return;
-  // Fonts are immutable files: serve from cache once seen.
-  if (url.pathname.startsWith("/static/fonts/")) {
+  // Fonts are immutable files, and a stamped address names one version of
+  // a file: serve from cache once seen.
+  if (url.pathname.startsWith("/static/fonts/") || (url.pathname.startsWith("/static/") && url.searchParams.has("v"))) {
     event.respondWith(cacheFirst(req));
     return;
   }
