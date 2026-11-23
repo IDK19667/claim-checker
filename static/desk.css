@@ -275,6 +275,8 @@ html.has-cue .bar > .next:focus-visible { outline-color: var(--focus); }
 .bar > .cue:hover { border-color: var(--desk-white); text-decoration: underline; text-underline-offset: 4px; }
 .bar > .cue svg { width: 20px; height: 20px; flex: none; }
 .bar > .cue:focus-visible { outline-color: var(--deep); }
+/* on a wide screen the cue is a button, not a band: no wider than the answer card, centred in the block */
+@media (min-width: 761px) { .bar > .cue { width: min(480px, 100%); justify-self: center; } }
 .bar > .cue.dip svg { animation: dip 600ms ease-in-out 2; }
 @keyframes dip { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }

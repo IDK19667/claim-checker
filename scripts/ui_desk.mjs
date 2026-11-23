@@ -448,7 +448,7 @@ const cueLook = (page) => page.evaluate(() => {
   const lab = document.getElementById("cue-label"), cs = getComputedStyle(lab);
   return { hidden: cue.hidden || getComputedStyle(cue).display === "none", words: lab.textContent, next: document.getElementById("next").getAttribute("aria-label") || document.getElementById("next-label").textContent, vis: document.getElementById("next-label").textContent,
     stop: window.__evident.stats().stop, c: { t: c.top, b: c.bottom, l: c.left, r: c.right, h: c.height }, row: { t: Math.min(p.top, n.top), l: p.left, r: n.right },
-    bar: { t: b.top, h: b.height }, vh: innerHeight, vw: innerWidth, size: parseFloat(cs.fontSize), fg: cs.color, bg: bg(lab),
+    bar: { t: b.top, h: b.height, l: b.left, r: b.right }, vh: innerHeight, vw: innerWidth, size: parseFloat(cs.fontSize), fg: cs.color, bg: bg(lab),
     ariaHidden: cue.getAttribute("aria-hidden"), tab: cue.tabIndex, svg: cue.querySelector("svg").getBoundingClientRect().width,
     one: document.documentElement.classList.contains("has-cue") };
 });
@@ -461,7 +461,7 @@ const cueFor = (next, stop) => {
 const FITS2 = new Set(["390x844 3d", "390x844 text", "768x1024 3d", "768x1024 text", "1440x900 3d", "1440x900 text", "1440x700 3d"]);
 for (const [w, h] of [[320, 568], [390, 844], [768, 1024], [1440, 900], [1440, 700]]) {
   for (const mode of ["3d", "text"]) {
-    await test(`the cue row sits on the bar row, as wide, says what Next says and moves as Next does, ${w}x${h} ${mode}`, async (page) => {
+    await test(`the cue row sits on the bar row, as wide below 761px and centred at 480px above, says what Next says and moves as Next does, ${w}x${h} ${mode}`, async (page) => {
       const wait = mode === "3d" ? 3500 : 1500;
       await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}${mode === "text" ? "&nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
       must((await page.evaluate(() => window.__evident.stats().mode)) === mode, "wrong mode");
@@ -470,7 +470,9 @@ for (const [w, h] of [[320, 568], [390, 844], [768, 1024], [1440, 900], [1440, 7
       must(!s.hidden && s.one, "no cue row on the Answer stop");
       must(s.c.t >= 0 && s.c.b <= s.vh && s.c.t >= s.bar.t - 0.5, `the cue row is not inside the block in view: ${Math.round(s.c.t)}..${Math.round(s.c.b)}, block top ${Math.round(s.bar.t)}`);
       must(s.c.b <= s.row.t && s.row.t - s.c.b <= 12, `the cue row is not directly on top of the bar row (${Math.round(s.c.b)} vs ${Math.round(s.row.t)})`);
-      must(Math.abs(s.c.l - s.row.l) < 1 && Math.abs(s.c.r - s.row.r) < 1, `the cue row is ${Math.round(s.c.l)}..${Math.round(s.c.r)}, the bar row ${Math.round(s.row.l)}..${Math.round(s.row.r)}`);
+      // at 760 wide and below the cue is as wide as the bar row; above, a button no wider than 480px, centred in the block
+      if (w <= 760) must(Math.abs(s.c.l - s.row.l) < 1 && Math.abs(s.c.r - s.row.r) < 1, `the cue row is ${Math.round(s.c.l)}..${Math.round(s.c.r)}, the bar row ${Math.round(s.row.l)}..${Math.round(s.row.r)}`);
+      else must(s.c.r - s.c.l <= 480.5 && Math.abs((s.c.l - s.bar.l) - (s.bar.r - s.c.r)) <= 1, `the cue is ${Math.round(s.c.l)}..${Math.round(s.c.r)} (${Math.round(s.c.r - s.c.l)} wide) in a block ${Math.round(s.bar.l)}..${Math.round(s.bar.r)}`);
       must(s.c.h >= (w <= 760 ? 48 : 44) - 0.5 && s.size >= 16 && s.svg >= 20, `height ${s.c.h}, words ${s.size}px, chevron ${s.svg}px`);
       must(ratio([s.fg, s.bg]) >= 7, `the cue's words read at ${ratio([s.fg, s.bg]).toFixed(2)}:1`);
       must(s.ariaHidden === "true" && s.tab === -1, `the cue is read or tabbed to (aria-hidden ${s.ariaHidden}, tabIndex ${s.tab})`);
