@@ -500,11 +500,17 @@
     var keep = moreBelow(k, y), up = checked && y - anchors[k] > 40, short = innerWidth <= 420, left = keep ? rowsLeft(k, y) : 0;
     var key = k + (keep ? "k" + left : "n") + (up ? "u" : "") + (short ? "s" : "") + NS;
     if (key === wayKey) return; wayKey = key;
-    if (keep) { nextLabel.textContent = keepWords(left, short); nextBtn.setAttribute("aria-label", left ? keepWords(left, false) : "Keep reading: more of " + STOPS[k].name + " below"); nextBtn.classList.remove("last"); }
-    else { nextLabel.textContent = (short && STOPS[k].short) || STOPS[k].next; nextBtn.removeAttribute("aria-label"); nextBtn.classList.toggle("last", k === LAST); }
+    // while the cue row shows, Next is its quiet partner: the bare verb on screen, the full words as its name
+    var cw = cueBtn && checked ? cueWords(k, keep, left, short) : null;
+    if (keep) { nextLabel.textContent = cw ? "Keep reading" : keepWords(left, short); nextBtn.setAttribute("aria-label", left ? keepWords(left, false) : "Keep reading: more of " + STOPS[k].name + " below"); nextBtn.classList.remove("last"); }
+    else {
+      var nw = (short && STOPS[k].short) || STOPS[k].next;
+      nextLabel.textContent = cw ? "Next" : nw;
+      if (cw) nextBtn.setAttribute("aria-label", nw); else nextBtn.removeAttribute("aria-label");
+      nextBtn.classList.toggle("last", k === LAST);
+    }
     prevBtn.setAttribute("aria-label", up ? "Back: up one screen in " + STOPS[k].name : "Back one stop");
     if (cueBtn) {
-      var cw = checked ? cueWords(k, keep, left, short) : null;
       if (cw) cueLabel.textContent = cw;
       cueBtn.hidden = !cw; root.classList.toggle("has-cue", !!cw);
     }

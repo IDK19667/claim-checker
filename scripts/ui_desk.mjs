@@ -446,7 +446,7 @@ const cueLook = (page) => page.evaluate(() => {
   const r = (id) => document.getElementById(id).getBoundingClientRect(), cue = document.getElementById("cue"), c = r("cue"), p = r("prev"), n = r("next"), b = r("bar");
   const bg = (e) => { for (let x = e; x; x = x.parentElement) { const v = getComputedStyle(x).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(v)) return v; } return "rgb(0, 0, 0)"; };
   const lab = document.getElementById("cue-label"), cs = getComputedStyle(lab);
-  return { hidden: cue.hidden || getComputedStyle(cue).display === "none", words: lab.textContent, next: document.getElementById("next-label").textContent,
+  return { hidden: cue.hidden || getComputedStyle(cue).display === "none", words: lab.textContent, next: document.getElementById("next").getAttribute("aria-label") || document.getElementById("next-label").textContent, vis: document.getElementById("next-label").textContent,
     stop: window.__evident.stats().stop, c: { t: c.top, b: c.bottom, l: c.left, r: c.right, h: c.height }, row: { t: Math.min(p.top, n.top), l: p.left, r: n.right },
     bar: { t: b.top, h: b.height }, vh: innerHeight, vw: innerWidth, size: parseFloat(cs.fontSize), fg: cs.color, bg: bg(lab),
     ariaHidden: cue.getAttribute("aria-hidden"), tab: cue.tabIndex, svg: cue.querySelector("svg").getBoundingClientRect().width,
@@ -503,6 +503,39 @@ for (const [w, h] of [[320, 568], [390, 844], [768, 1024], [1440, 900], [1440, 7
       await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })); await page.waitForTimeout(1500);
       const e = await cueLook(page);
       must(e.hidden && !e.one && e.next === "Back to the start" && e.bar.h < 90, `at the end: cue hidden ${e.hidden}, Next "${e.next}", block ${Math.round(e.bar.h)} px`);
+    }, { w, h });
+  }
+}
+// Next beside the cue is the quiet partner: drawn as Back (border, ground, words), the bare verb on screen
+// ("Next" or "Keep reading") and its full words as its name, so the cue is the one paper-filled control.
+// At the end of the last stop, with no cue, Next has the paper fill again
+const nextLook = (page) => page.evaluate(() => {
+  const st = (id) => { const o = getComputedStyle(document.getElementById(id)); return { bg: o.backgroundColor, bd: o.borderTopColor + " " + o.borderTopWidth + " " + o.borderTopStyle, fg: o.color }; };
+  const n = document.getElementById("next");
+  return { n: st("next"), p: st("prev"), vis: document.getElementById("next-label").textContent, aria: n.getAttribute("aria-label"),
+    words: document.getElementById("cue-label").textContent, stop: window.__evident.stats().stop, cue: !document.getElementById("cue").hidden, paper: getComputedStyle(document.documentElement).getPropertyValue("--paper").trim() };
+});
+for (const [w, h] of [[390, 844], [1440, 900]]) {
+  for (const mode of ["3d", "text"]) {
+    await test(`beside the cue Next is drawn as Back with the bare verb and its full name, ${w}x${h} ${mode}`, async (page) => {
+      const wait = mode === "3d" ? 3500 : 1500;
+      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}${mode === "text" ? "&nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
+      for (const k of [2, 4]) {
+        await page.evaluate((n) => window.__evident.goto(n), k); await page.waitForTimeout(wait);
+        const s = await nextLook(page);
+        must(s.cue, `no cue on stop ${k}`);
+        must(s.n.bg === s.p.bg && s.n.bd === s.p.bd && s.n.fg === s.p.fg, `on stop ${k} Next is ${JSON.stringify(s.n)}, Back ${JSON.stringify(s.p)}`);
+        must(s.vis === "Next" || s.vis === "Keep reading", `on stop ${k} Next shows "${s.vis}"`);
+        must(!!s.aria && s.aria.startsWith(s.vis) && s.aria.length > s.vis.length, `on stop ${k} Next's name is "${s.aria}", showing "${s.vis}"`);
+        must(s.words === cueFor(s.aria, k), `on stop ${k} the cue says "${s.words}", Next's name "${s.aria}"`);
+        const bgOf = await page.evaluate(() => { for (let x = document.getElementById("next"); x; x = x.parentElement) { const v = getComputedStyle(x).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(v)) return v; } return "rgb(0, 0, 0)"; });
+        must(ratio([s.n.fg, bgOf]) >= 4.5, `the quiet Next reads at ${ratio([s.n.fg, bgOf]).toFixed(2)}:1`);
+      }
+      await page.evaluate(() => window.__evident.goto(6)); await page.waitForTimeout(wait);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })); await page.waitForTimeout(1500);
+      const e = await nextLook(page);
+      const paperRgb = await page.evaluate(() => { const d = document.createElement("div"); d.style.background = "var(--paper)"; document.body.appendChild(d); const v = getComputedStyle(d).backgroundColor; d.remove(); return v; });
+      must(!e.cue && e.vis === "Back to the start" && e.n.bg === paperRgb && e.n.bg !== e.p.bg, `at the end Next shows "${e.vis}" on ${e.n.bg} (paper ${paperRgb})`);
     }, { w, h });
   }
 }

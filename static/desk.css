@@ -267,6 +267,10 @@ html.kbd .bar { visibility: hidden; }
 .next.last svg { transform: rotate(180deg); }
 /* the cue row: the bar's Next, as wide as the bar row and on top of it, saying to scroll */
 html.has-cue .bar > .prev, html.has-cue .bar > .where, html.has-cue .bar > .next { grid-row: 2; }
+/* beside the cue, Next goes quiet: drawn exactly as Back, so the cue is the one paper-filled control in the block */
+html.has-cue .bar > .next { border-color: var(--desk-edge); background: var(--panel); color: var(--on-deep-2); font-weight: 500; }
+html.has-cue .bar > .next:hover { color: var(--on-deep); border-color: var(--desk-edge-3); text-decoration: none; }
+html.has-cue .bar > .next:focus-visible { outline-color: var(--focus); }
 .bar > .cue { grid-column: 1 / -1; grid-row: 1; appearance: none; width: 100%; min-height: 44px; padding: 0 16px; border-radius: 3px; border: 1px solid var(--paper); background: var(--paper); color: var(--ink); font: 600 17px/1.2 var(--body); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
 .bar > .cue:hover { border-color: var(--desk-white); text-decoration: underline; text-underline-offset: 4px; }
 .bar > .cue svg { width: 20px; height: 20px; flex: none; }
