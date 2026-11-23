@@ -11931,6 +11931,55 @@ for _lab, _comp, _subj, _o, _st, _want in _F1B_CASES:
       bool(evidence.certainty_cap(_st, _p, _comp, _o))
       and evidence.lowest_review_certainty(_st, _p, _o) in ("low", "very low"))
 
+# Q10 F1 round 3: a claim to stop a medicine is recognised by general signs:
+# a general word, a class, a generic-name ending (whole word, six letters or
+# more) or a common prescribed name. The cure side is left exactly as it was.
+_FORGO_FIRE = {
+    "general": ["Stop your tablets", "Quit your meds", "Stop your prescription", "Stop the nicotine patches",
+                "Stop insulin injections", "You can stop the capsules once you feel better",
+                "Stop what you were prescribed", "Coming off your prescription meds is safe"],
+    "class": ["Stop taking your blood thinners before surgery", "Give up your blood pressure medication",
+              "Stop your epilepsy medicine", "Stop your thyroid tablets", "Quit your antipsychotics",
+              "Stop beta blockers", "Stop ACE inhibitors", "Stop water tablets", "Stop HRT",
+              "Stop the contraceptive pill", "Stop HIV medicine", "Stop antiretrovirals",
+              "Stop immunosuppressants", "Stop anticoagulants before a flight", "Stop diuretics in summer",
+              "Skip your asthma medication", "Stop your diabetes tablets", "Stop your heart pills",
+              "Stop hormone replacement after five years", "Stop seizure meds once seizures stop"],
+    "ending": ["Stop atorvastatin if your cholesterol is fine", "Coming off lisinopril is safe", "Stop taking losartan",
+               "Quit metoprolol cold turkey", "Stop amlodipine", "Stop omeprazole", "Stop apixaban before dental work",
+               "Stop sitagliptin", "Stop empagliflozin", "Stop semaglutide", "Stop adalimumab", "Stop imatinib",
+               "Stop fluoxetine", "Stop diazepam suddenly", "Stop alprazolam", "Stop amoxicillin early",
+               "Stop erythromycin", "Stop ciprofloxacin", "Stop doxycycline", "Stop fluconazole", "Stop famotidine",
+               "Stop heparin", "Stop hydrochlorothiazide", "Stop furosemide", "Stop sumatriptan", "Stop prednisone",
+               "Stop dexamethasone", "Stop prednisolone"],
+    "name": ["Stop warfarin", "Stop lithium", "Stop levothyroxine", "Quit methotrexate", "Stop isotretinoin",
+             "Stop codeine", "Give up morphine", "Stop tramadol", "Stop gabapentin", "Stop pregabalin", "Stop digoxin",
+             "Stop amiodarone", "Stop allopurinol", "Stop carbamazepine", "Stop lamotrigine", "Stop levetiracetam",
+             "Stop phenytoin", "Stop sertraline", "Stop citalopram", "Stop amitriptyline", "Stop quetiapine",
+             "Stop olanzapine", "Stop risperidone", "Stop methadone", "Stop tamoxifen", "Stop salbutamol",
+             "Replace albuterol with breathing exercises", "Valproate can be stopped in pregnancy, just stop valproate"],
+}
+_FORGO_QUIET = ["stop eating sugar", "quit smoking", "give up alcohol", "skip breakfast", "replace sugar with honey",
+                "go without sleep", "stop drinking coffee in April", "ditch the tartan", "stop being alone",
+                "stop eating bread", "quit sugar", "stop drinking soda", "skip dinner", "replace butter with olive oil",
+                "give up gluten", "stop eating meat", "quit vaping", "stop using your phone at night",
+                "replace coffee with tea", "go without food for a day", "stop running every day", "skip the gym",
+                "give up dairy", "stop eating gelatin", "quit caffeine", "stop drinking milk", "ditch the salt",
+                "replace white rice with brown rice", "stop eating chocolate", "give up red meat", "skip lunch",
+                "stop snacking", "stop sitting all day", "quit your job to reduce stress", "stop worrying",
+                "stop eating late", "give up processed food", "stop eating eggs", "stop eating bananas",
+                "stop drinking juice", "quit sugary cereal", "stop wearing shoes", "stop sleeping on your back"]
+for _kind, _cl in _FORGO_FIRE.items():
+    _miss = [c for c in _cl if verdict.forgoes_treatment(c) != "forgo"]
+    t(f"F1 round 3: a stopping word near a medicine {_kind} is a claim to stop a medicine ({len(_cl)})", not _miss, _miss)
+t("F1 round 3: at least 40 must-fire claims across the four kinds", sum(map(len, _FORGO_FIRE.values())) >= 40)
+_wrong = [c for c in _FORGO_QUIET if verdict.forgoes_treatment(c)]
+t(f"F1 round 3: everyday claims to stop a food, drink or habit are not ({len(_FORGO_QUIET)})",
+  len(_FORGO_QUIET) >= 40 and not _wrong, _wrong)
+t("F1 round 3: the cure side is unchanged: a new name does not make a cure claim",
+  verdict.forgoes_treatment("Warfarin cures blood clots") == "" and verdict.forgoes_treatment("Semaglutide treats obesity") == ""
+  and verdict.forgoes_treatment("Ivermectin cures COVID") == "cure")
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

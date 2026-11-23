@@ -4369,6 +4369,10 @@ What was deliberately rejected:
   "mixed": a mixed line agrees with a "false" and would let guidance that
   says to stop stamp a claim to stop false. "before changing" is dropped,
   and "needs to be stopped" no longer reads as "needs" a treatment.
+  Round 3: a claim to stop a medicine is recognised by general signs, a
+  stopping word near a general word (tablets, meds, prescribed), a class, a
+  generic-name ending of six letters or more, or a common prescribed name
+  (`verdict._FORGO_MEDICINE`); the cure side is unchanged.
 - Thin "complicated": becomes "Not enough evidence" (`verdict._too_thin`,
   `evidence.too_thin`) when every relied-on review that concludes says its
   evidence is not enough or thin, or, with no review, it rests on one small,

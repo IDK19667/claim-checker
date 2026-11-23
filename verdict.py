@@ -685,10 +685,33 @@ _STOPPING_TREATMENT = re.compile(
 _MEDICINE = (r"(?:medicines?|medications?|drugs?|pills?|antibiotics?|antivirals?|statins?|insulin|"
              r"chemo\w*|radiotherapy|aspirin|ibuprofen|paracetamol|acetaminophen|antidepressants?|"
              r"metformin|ivermectin|hydroxychloroquine|steroids?|opioids?|painkillers?|inhalers?)")
+# What a claim to stop a medicine names, wider than _MEDICINE (which also
+# decides "cure" and stays as it is): a general word for a medicine, a class
+# of prescribed medicine, a generic name by the ending such names are built
+# with (whole word, six letters or more, so April, tartan and alone never
+# match), or one of the common prescribed medicines whose names carry none.
+_MEDICINE_GENERAL = (r"tablets?|capsules?|meds|prescriptions?|prescribed|injections?|"
+                     r"patch(?:es)?")
+_MEDICINE_CLASS = (
+    r"blood[\s-]+thinners?|anticoagulants?|"
+    r"(?:blood\s+pressure|heart|thyroid|epilepsy|seizure|asthma|diabetes|HIV)\s+"
+    r"(?:medicines?|medications?|tablets?|pills?|meds|drugs?)|"
+    r"antipsychotics?|beta[\s-]?blockers?|ACE\s+inhibitors?|water\s+tablets?|diuretics?|"
+    r"immunosuppressants?|HRT|hormone\s+replacement|(?:contraceptive\s+)?pill|antiretrovirals?")
+_MEDICINE_ENDING = (
+    r"(?=[a-z]{6,}s?\b)[a-z]*(?:statin|pril|sartan|olol|dipine|prazole|xaban|gliptin|gliflozin|"
+    r"glutide|mab|nib|oxetine|azepam|zolam|cillin|mycin|floxacin|cycline|azole|tidine|parin|"
+    r"thiazide|semide|triptan|isone|asone|olone)s?")
+_MEDICINE_NAMED = (
+    r"warfarin|valproate|lithium|levothyroxine|methotrexate|isotretinoin|codeine|morphine|tramadol|"
+    r"gabapentin|pregabalin|digoxin|amiodarone|allopurinol|carbamazepine|lamotrigine|levetiracetam|"
+    r"phenytoin|sertraline|citalopram|amitriptyline|quetiapine|olanzapine|risperidone|methadone|"
+    r"tamoxifen|salbutamol|albuterol")
 _FORGO_MEDICINE = re.compile(
     r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
     r"go(?:ing)? without|giv(?:e|ing) up|ditch\w*|(?:do(?:es)?n[\u2019']?t|do(?:es)? not|no longer) need)\b"
-    r".{0,40}\b" + _MEDICINE + r"\b", re.IGNORECASE)
+    r".{0,40}\b(?:" + _MEDICINE + "|" + _MEDICINE_GENERAL + "|" + _MEDICINE_CLASS + "|"
+    + _MEDICINE_ENDING + "|" + _MEDICINE_NAMED + r")\b", re.IGNORECASE)
 _MEDICINE_CURES = re.compile(
     r"\b" + _MEDICINE + r"\b.{0,40}\b(?:cur(?:e|es|ed|ing)|treat(?:s|ed|ing)?|heal(?:s|ed|ing)?)\b",
     re.IGNORECASE)
@@ -699,7 +722,13 @@ CURE_DOCTOR = "Check treatment decisions with a doctor."
 def forgoes_treatment(claim: str) -> str:
     """"forgo" for a claim to stop, skip or replace an established treatment
     or medicine, "cure" for one saying a named medicine cures or treats
-    something, else "". Wording only, never one claim's text."""
+    something, else "". Wording only, never one claim's text.
+
+    A claim is to stop a medicine when a stopping word stands within reach of
+    a word for a medicine: a general one, a class of prescribed medicine, a
+    generic name known by its ending, or a common prescribed medicine named
+    without one (_FORGO_MEDICINE). It is a rule about how medicines are
+    named, so foods, drinks and habits never match."""
     claim = str(claim or "")
     if _STOPPING_TREATMENT.search(claim) or _FORGO_MEDICINE.search(claim):
         return "forgo"
