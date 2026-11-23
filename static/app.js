@@ -423,6 +423,14 @@ function deskLines(data) {
   const rests = `Rests on ${plural(r, "study", "studies")}.` + (tail ? " " + tail.slice(0, 1).toUpperCase() + tail.slice(1) + "." : "");
   return { read: plural(n, "study", "studies") + " read.", path, legend, below, rests };
 }
+// The plural of a lower-case design label; display._plural_design is the same.
+function pluralDesign(label) {
+  if (/analysis$/.test(label)) return label.replace(/analysis$/, "analyses");
+  if (/[^aeiou]y$/.test(label)) return label.slice(0, -1) + "ies";
+  if (/(ss|x|ch|sh)$/.test(label)) return label + "es";
+  if (label.endsWith("s")) return label;
+  return label + "s";
+}
 function restsByDesign(studies) {
   const order = [], by = {};
   (studies || []).forEach((s, i) => {
@@ -434,11 +442,7 @@ function restsByDesign(studies) {
   return order.map((d) => {
     const ns = by[d];
     let label = d.toLowerCase();
-    if (ns.length > 1) {
-      if (/analysis$/.test(label)) label = label.replace(/analysis$/, "analyses");
-      else if (/(review|trial|article|study)$/.test(label)) label = label.endsWith("study") ? label.replace(/study$/, "studies") : label + "s";
-      else if (!label.endsWith("y")) label += "s";
-    }
+    if (ns.length > 1) label = pluralDesign(label);
     if (d === DEFAULT_TYPE[0]) label += ", design not labelled";
     return { count: ns.length, label, refs: (ns.length > 1 ? "Studies " : "Study ") + ns.join(", ") };
   });

@@ -277,6 +277,21 @@ def desk_lines(result) -> dict:
             "below": below, "rests": rests}
 
 
+def _plural_design(label: str) -> str:
+    """The plural of a lower-case design label: "meta-analyses", "case studies",
+    "addresses"; a label already plural or with no plural ("case reports",
+    "news") stays. static/app.js pluralDesign is the same."""
+    if re.search(r"analysis$", label):
+        return re.sub(r"analysis$", "analyses", label)
+    if re.search(r"[^aeiou]y$", label):
+        return label[:-1] + "ies"
+    if re.search(r"(ss|x|ch|sh)$", label):
+        return label + "es"
+    if label.endswith("s"):
+        return label
+    return label + "s"
+
+
 def rests_by_design(studies) -> list:
     """The relied-on studies grouped by design, in first-seen order, each with
     its count, a plural label and the study numbers: "2 meta-analyses (Studies
@@ -295,12 +310,7 @@ def rests_by_design(studies) -> list:
         ns = by[d]
         label = d.lower()
         if len(ns) > 1:
-            if re.search(r"analysis$", label):
-                label = re.sub(r"analysis$", "analyses", label)
-            elif re.search(r"(review|trial|article|study)$", label):
-                label = re.sub(r"study$", "studies", label) if label.endswith("study") else label + "s"
-            elif not label.endswith("y"):
-                label += "s"
+            label = _plural_design(label)
         if d == DEFAULT_DESIGN[0]:
             label += ", design not labelled"
         out.append({"count": len(ns), "label": label,

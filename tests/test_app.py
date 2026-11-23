@@ -8594,6 +8594,31 @@ if _shutil.which("node"):
     t("  and a result saved on the device stops marking an off-topic study used before anything reads it",
       _ot_out["d"][0] == [True, False, False, False, False]
       and _ot_out["d"][1] == [s_["cited_in_verdict"] for s_ in _otj["studies"]])
+# C5 (F5): the plural of every design label either side can print, by name: two relied-on
+# studies of each design, through rests_by_design and restsByDesign. No "case reportss".
+_pl_want = {"Meta-Analysis": "meta-analyses", "Network Meta-Analysis": "network meta-analyses",
+            "Systematic Review": "systematic reviews", "Randomized Controlled Trial": "randomized controlled trials",
+            "Practice Guideline": "practice guidelines", "Case Reports": "case reports", "Editorial": "editorials",
+            "Comment": "comments", "Letter": "letters", "News": "news", "Controlled Clinical Trial": "controlled clinical trials",
+            "Clinical Trial": "clinical trials", "Observational Study": "observational studies",
+            "Multicenter Study": "multicenter studies", "Comparative Study": "comparative studies", "Review": "reviews",
+            "Journal Article": "journal articles, design not labelled", "Address": "addresses", "Biography": "biographies",
+            "Lectures": "lectures", "Twin Study": "twin studies", "Clinical Study": "clinical studies"}
+t("C5: every design label the table holds has its plural named here (the table is not larger than the test)",
+  {d[0] for d in _dsp.DESIGN_NOTES} - {"Retracted Publication"} <= set(_pl_want))
+_pl_recs = [[dict(_study("P%d%d" % (i, k), "x", types=[d]), cited_in_verdict=True) for k in (1, 2)]
+            for i, d in enumerate(_pl_want)]
+_pl_py = [_dsp.rests_by_design(r_)[0]["label"] for r_ in _pl_recs]
+t("  the server prints each plural by name", _pl_py == list(_pl_want.values()),
+  [(d, g) for d, g in zip(_pl_want, _pl_py) if _pl_want[d] != g])
+if _shutil.which("node"):
+    _pl_src = (ROOT / "static" / "app.js").read_text()
+    _pl_fn = ("const TYPES = [" + _pl_src.split("const TYPES = [")[1].split("function escapeHtml")[0]
+              + "function pluralDesign" + _pl_src.split("function pluralDesign")[1].split("\n// ")[0])
+    _pl_js = json.loads(_subprocess.run(["node", "-e", _pl_fn + "const R = " + json.dumps(_pl_recs) + ";"
+                                         "console.log(JSON.stringify(R.map((r) => restsByDesign(r)[0].label)));"],
+                                        capture_output=True, text=True, check=True).stdout)
+    t("  and the script prints the same", _pl_js == list(_pl_want.values()), _pl_js)
 # C4 (F4): the study-number links and the "says" lines read the same on both sides. Plain
 # digits only ("Study ٣" is text on both), the same word edge ("éStudy 2" is a link on both,
 # "XStudy 2" on neither), and a line of only spaces prints nothing on either side.
