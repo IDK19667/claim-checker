@@ -636,6 +636,14 @@ t("  every study is still in the folded HTML",
 t("  study numbers stay global so the prose can point at them",
   all(f'id="row-{i}" data-n="{i}"' in html for i in (1, 2, 3)))
 import re as _re
+# The number a reader sees, not only the ids: each printed number appears once
+# across both groups, sits on the row of that study, and the row's spoken name
+# says the same number. A second group that restarts at 1 fails here.
+_rows_seen = _re.findall(r'<li class="row" id="row-(\d+)" data-n="(\d+)"[^>]*><button class="row-head"[^>]*'
+                         r'aria-label="Study (\d+),[^"]*"><span class="num">(\d+)</span>.*?PubMed (P\d+)', html, _re.S)
+t("  the number printed on each row is its global number, once each, on that study's row",
+  len(_rows_seen) == 3 and sorted(int(r[3]) for r in _rows_seen) == [1, 2, 3]
+  and all(r[0] == r[1] == r[2] == r[3] and r[4] == f"P{r[3]}" for r in _rows_seen), _rows_seen)
 m = _re.search(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, _re.S)
 ld = json.loads(m.group(1)) if m else {}
 t("ClaimReview markup", ld.get("@type") == "ClaimReview" and ld["claimReviewed"] == "streamed claim"
