@@ -11554,6 +11554,10 @@ _SL_PROBES = {
     "steroid-tablets": ("Prednisolone tablets weaken bones", "Anabolic steroids build muscle"),
     "raw-milk": ("Raw milk cures lactose intolerance", "Milk builds strong bones"),
     "eucalyptus-oil": ("Drinking eucalyptus oil cures a cold", "Eucalyptus oil in a diffuser clears a stuffy nose"),
+    "peppermint-oil": ("Drinking peppermint essential oil cures IBS", "Peppermint oil capsules ease IBS"),
+    "colic-manipulation": ("Chiropractic treatment cures colic in babies", "Colic gets better by 6 months"),
+    "vaccines-on-time": ("Giving babies several vaccines at once overloads their immune system", "Vaccines cause autism"),
+    "pregnancy-ginger": ("Ginger capsules are safe in the first trimester", "Ginger tea eases nausea"),
 }
 # Every exclusion has a claim that its rule fires on but for that exclusion alone.
 _SL_EXCL = {
@@ -11585,6 +11589,7 @@ _SL_EXCL = {
     ("pregnancy-sleep-side", 0): "Sleeping on your side is best after pregnancy",
     ("pregnancy-ibuprofen", 0): "Ibuprofen is fine again after pregnancy",
     ("steroid-tablets", 0): "Stopping steroid cream suddenly makes eczema flare",
+    ("pregnancy-ginger", 0): "Ginger is fine again after pregnancy",
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
@@ -11708,6 +11713,11 @@ _sl_cot = "Babies need cuddles, and a camp cot is handy for festivals"
 t("F2: a cot far from any sleep or baby word is not a sleep word: counting it alone would fire the baby sleep line",
   _sl_ids(_sl_cot) == [] and re.search(_sl.BABY, _sl.normalise(_sl_cot), re.I)
   and not re.search(_sl.SLEEP, _sl.normalise(_sl_cot), re.I))
+t("F2: a swallowed peppermint oil line, poisoning first; vaccines on time; ginger in pregnancy replaces the general line",
+  _sl.BY_ID["peppermint-oil"].get("poison") is True
+  and _sl_ids("Delaying the MMR vaccine is safer") == ["vaccines-on-time"]
+  and _sl_ids("The HPV vaccine is safe") == []
+  and _sl_ids("Ginger helps morning sickness") == ["pregnancy-ginger"])
 t("F2: oral vitamin A for acne gets the vitamin A line; a cream does not",
   "vitamin-a-limit" in _sl_ids("Taking 50000 IU vitamin A for acne") and _sl_ids("Retinol cream reduces wrinkles") == [])
 t("F2: a remedy said to cure a serious condition gets the line whatever it is called; a medical treatment does not",

@@ -281,6 +281,17 @@ SWALLOW = _w(r"swallow\w*", r"drink\w*", r"ingest\w*", r"internally", r"by mouth
 ISOTRETINOIN = _w(r"isotretinoin", r"roaccutane", r"accutane")
 SLEEP_POSITION = _w(r"backs?", r"sides?", r"positions?", r"lying", r"lie", r"left", r"right", r"tummy",
                     r"stomach", r"front")
+PEPPERMINT_OIL = _w(r"peppermint (?:essential )?oils?")
+COLIC = _w(r"colic\w*")
+MANIPULATION = _w(r"chiropract\w*", r"osteopath\w*", r"cranial", r"cranio ?sacral", r"spinal manipulation",
+                  r"spine manipulation", r"manipulat\w*", r"adjustments?")
+VACCINE = _w(r"vaccin\w*", r"jabs?", r"immuni[sz]ations?", r"flu shots?", r"boosters?")
+VACCINE_TIMING = _w(r"delay\w*", r"spac(?:e|es|ed|ing) (?:\w+ )?out", r"spread(?:ing)? (?:\w+ )?out", r"schedules?",
+                    r"too many", r"(?:all )?at once", r"at the same time", r"together", r"overload\w*",
+                    r"wait(?:s|ed|ing)? (?:until|till|for)", r"postpon\w*", r"skip\w*", r"miss\w*",
+                    r"catch(?:ing)? up", r"one at a time", r"too (?:early|young|soon)", r"split\w*",
+                    r"separate(?:ly)?", r"on time", r"timing")
+GINGER = _w(r"ginger")
 VITAMIN_A_PREG = VITAMIN_A + r"|" + _w(r"multivitamins?")
 
 
@@ -434,6 +445,15 @@ ENTRIES = [
      "url": "https://www.nhs.uk/baby/babys-development/teething/tips-for-helping-your-teething-baby/",
      "page": "Tips for helping your teething baby",
      "quote": "General oral pain relief gels are not suitable for children."},
+    {"id": "colic-manipulation", "topic": "Spinal manipulation for colic", "rank": 2,
+     "when": [COLIC, MANIPULATION],
+     "trigger": "colic, and chiropractic, osteopathy, cranial or spinal manipulation",
+     "line": "For a baby with colic, do not try spinal manipulation or cranial osteopathy: there is little "
+             "evidence it works, and it may hurt your baby.",
+     "url": "https://www.nhs.uk/conditions/colic/",
+     "page": "Colic",
+     "quote": "do not try putting gentle pressure to your baby's spine (spinal manipulation) or skull (cranial "
+              "osteopathy) – there is little evidence this works, and it may hurt your baby"},
     {"id": "child-salt-gargle", "topic": "Gargling salt water", "rank": 2,
      "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt")],
      "trigger": "gargling with salt or salt water, at any age",
@@ -441,6 +461,15 @@ ENTRIES = [
      "url": "https://www.nhs.uk/symptoms/sore-throat/",
      "page": "Sore throat",
      "quote": "gargle with warm, salty water (children should not try this)"},
+    {"id": "vaccines-on-time", "topic": "Vaccines given on time", "rank": 2,
+     "when": [VACCINE, VACCINE_TIMING],
+     "trigger": "vaccines, and delaying, spacing out, missing or giving several at once, or the schedule",
+     "line": "Vaccines give the best protection when they are given on time; if you or your child missed one, "
+             "contact a doctor to catch up.",
+     "url": "https://www.nhs.uk/vaccinations/nhs-vaccinations-and-when-to-have-them/",
+     "page": "NHS vaccinations and when to have them",
+     "quote": "It's important that vaccines are given on time for the best protection, but if you or your child "
+              "missed a vaccine, contact your GP to catch up."},
     {"id": "ear-infection-decongestant", "topic": "Decongestants for an ear infection", "rank": 2,
      "when": [EAR_INFECTION, DECONGESTANT + "|" + _w(r"antihistamines?")],
      "over": ["child-decongestant"],
@@ -596,6 +625,13 @@ ENTRIES = [
      "url": "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/",
      "page": "Pregnancy vitamins and supplements",
      "quote": "Take folic acid for the first 12 weeks of pregnancy."},
+    {"id": "pregnancy-ginger", "topic": "Ginger supplements in pregnancy", "rank": 2,
+     "when": [PREGNANT, GINGER], "unless": [NOT_PREGNANT], "over": ["pregnancy-medicines"],
+     "trigger": "pregnancy or morning sickness, and ginger",
+     "line": "In pregnancy, check with a pharmacist before taking ginger supplements.",
+     "url": "https://www.nhs.uk/pregnancy/common-symptoms/vomiting-and-morning-sickness/",
+     "page": "Vomiting and morning sickness",
+     "quote": "check with your pharmacist before taking ginger supplements during pregnancy"},
     {"id": "pregnancy-medicines", "topic": "Medicines, supplements and remedies in pregnancy", "rank": 2,
      "when": [PREGNANT, MEDICINE + "|" + NAMED_MEDICINE], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and any medicine (by name too), supplement, vitamin or herbal remedy",
@@ -759,6 +795,15 @@ ENTRIES = [
      "page": "Eucalyptus oil overdose",
      "quote": "Eucalyptus oil can be harmful in large amounts. ... call the local emergency number (such as "
               "911), or the local poison control center"},
+    {"id": "peppermint-oil", "poison": True, "topic": "Swallowing peppermint oil", "rank": 1,
+     "when": [PEPPERMINT_OIL, SWALLOW],
+     "trigger": "peppermint oil swallowed, drunk or taken by mouth",
+     "line": "Peppermint oil can be poisonous in large amounts: if someone has swallowed a lot, call emergency "
+             "services or a poison control center.",
+     "url": "https://medlineplus.gov/ency/article/002685.htm",
+     "page": "Peppermint oil overdose",
+     "quote": "Menthol is the ingredient in peppermint oil that can be poisonous in large amounts. ... call the "
+              "local emergency number (such as 911), or the local poison control center"},
     {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
      "unless": [_w(r"creams?", r"serums?", r"topical\w*", r"skin ?care", r"lotions?", r"gels?", r"ointments?",
                    r"moisturi[sz]\w*", r"on (?:the|your) (?:skin|face)", r"appl(?:y|ied|ying)"), CHILD],
