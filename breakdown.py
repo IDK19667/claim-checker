@@ -938,8 +938,9 @@ _KEEPS_TREATMENT = re.compile(
 
 # Advice not to stop a treatment on one's own: "talk to your doctor before
 # stopping". On its own it answers a claim to stop with a no. Beside words
-# that say stopping happens, is fine or is advised (_SAYS_STOPPING), it is
-# only a caution, and the sentence keeps its plain stance: never "mixed",
+# that say stopping happens, is fine or is advised (_SAYS_STOPPING: the
+# treatment "is not advised", people are "told to come off" it, there is
+# "no need"), it is only a caution, and the sentence keeps its plain stance: never "mixed",
 # since a mixed line agrees with a "false" and would let guidance that says
 # to stop stamp a claim to stop false.
 _ASK_BEFORE_STOPPING = re.compile(
@@ -949,7 +950,9 @@ _ASK_BEFORE_STOPPING = re.compile(
     r"giving\s+up)\b(?:\s+(?:it|them|any\s+\w+(?:\s+\w+)?|\w+\s+early))?", re.IGNORECASE)
 _SAYS_STOPPING = re.compile(
     r"\b(?:stop\w*|paus\w*|avoid\w*|withdr[ae]w\w*|switch\w*|discontinu\w*|held|withheld|"
-    r"fine|safe|okay|ok|shorter|reported)\b", re.IGNORECASE)
+    r"fine|safe|okay|ok|shorter|reported|"
+    r"(?:not|never)\s+(?:\w+\s+)?(?:advised|recommended|used|given|prescribed)|"
+    r"told\s+to\s+(?:come|go)\s+off|no\s+(?:longer\s+)?need(?:ed)?)\b", re.IGNORECASE)
 
 
 def _asks_before_stopping(text: str, claim: str) -> str | None:

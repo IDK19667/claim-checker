@@ -11931,6 +11931,21 @@ for _lab, _comp, _subj, _o, _st, _want in _F1B_CASES:
       bool(evidence.certainty_cap(_st, _p, _comp, _o))
       and evidence.lowest_review_certainty(_st, _p, _o) in ("low", "very low"))
 
+# Q10 F1 round 3, rule 2: guidance that says the treatment is not advised, or
+# that people are told to come off it, says stopping is advised, so "ask
+# before stopping" beside it is not a no (it had made these read "no", which
+# would let the forgo rule stamp a claim to stop false).
+for _c, _g in (("You should stop taking ibuprofen in late pregnancy",
+                "ibuprofen is not advised in the third trimester; ask your midwife before stopping any medicine."),
+               ("You should stop taking ibuprofen if you get a stomach ulcer",
+                "ibuprofen can make ulcers worse and people with one are usually told to come off it; "
+                "speak to a pharmacist before stopping any medicine.")):
+    _st = breakdown.stance(verdict.GUIDELINE_LEAD + _g, _c)
+    t(f"F1 round 3, rule 2: guidance advising against the treatment is not a no: {_c}", _st != "no", _st)
+_st = breakdown.stance(verdict.GUIDELINE_LEAD + "talk to a doctor before stopping antidepressants, since coming off "
+                       "them too soon often brings symptoms back.", "You should stop taking antidepressants once you feel better")
+t("F1 round 3, rule 2: control: a warning that coming off brings symptoms back stays a no", _st == "no", _st)
+
 # Q10 F1 round 3: a claim to stop a medicine is recognised by general signs:
 # a general word, a class, a generic-name ending (whole word, six letters or
 # more) or a common prescribed name. The cure side is left exactly as it was.
