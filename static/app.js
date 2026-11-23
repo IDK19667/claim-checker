@@ -595,6 +595,12 @@ function renderResult(data, replay) {
   const usedQuery = (data.search_query_used || "").trim();
   $("nothing").querySelector(".query-line").innerHTML = none && usedQuery ? `Searched PubMed for <code>${escapeHtml(usedQuery)}</code>` : "";
   renderNextSteps(none ? data.next_steps : null, data.claim);
+  // D2: on the no-studies stop the explanation above already says nothing matched. The block's actions and close
+  // claims follow it without the block's own heading and paragraph, and the template's line (for scripts off)
+  // stands only when the block is not there.
+  const steps = none && !$("next-steps").hidden;
+  $("nosteps-head").hidden = $("nosteps-why").hidden = steps;
+  if (steps) $("no-evidence").hidden = true;
   // Stops 4 and 5 are there only when they have something real to show.
   $("s4")?.remove();
   $("s5")?.remove();

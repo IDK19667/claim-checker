@@ -10791,6 +10791,61 @@ t("D1: no result prints two full stops in a row, and the dated line reads the sa
   all(_d1_srv) and not [v for v in _d1_vis if re.search(r"\.\s*\.", v)]
   and all(x_.endswith(".") and not x_.endswith("..") for x_ in _d1_srv) and _d1_js == _d1_srv,
   ([re.search(r".{30}\.\s*\..{10}", v).group(0) for v in _d1_vis if re.search(r"\.\s*\.", v)][:3], _d1_srv[:2], _d1_js and _d1_js[:2]))
+# D2: the no-studies Read stop says "nothing matched" once. With scripts on: the
+# explanation, then the added block's actions and close claims without its own heading
+# and paragraph, and the template's line hidden. With scripts off: the explanation,
+# then the template's line. If the block is not there, the template's line stays.
+# renderResult runs in node against a page that records what is written and hidden.
+_D2_HARNESS = r"""
+const fs = require("fs"), vm = require("vm");
+const nop = new Proxy(function () {}, { get(t, k) { if (k === Symbol.iterator) return function* () {}; if (k === Symbol.toPrimitive) return () => "";
+  if (k === "then") return undefined; if (k === "length") return 0; return nop; }, apply() { return nop; }, construct() { return nop; }, set() { return true; }, has() { return true; } });
+const rec = {};
+function el(id) {
+  if (rec[id]) return rec[id].proxy;
+  const store = { writes: [] };
+  const proxy = new Proxy(function () {}, {
+    get(t, k) { if (k === "insertAdjacentHTML") return (w, h) => { store.writes.push(h); }; if (k in store && k !== "writes") return store[k];
+      if (k === "textContent" || k === "innerHTML") return ""; if (k === Symbol.toPrimitive) return () => ""; if (k === "then") return undefined; return nop; },
+    set(t, k, v) { store[k] = v; if (k === "textContent" || k === "innerHTML") store.writes.push(String(v)); return true; }, apply() { return nop; }, has() { return true; } });
+  rec[id] = { store, proxy }; return proxy;
+}
+const document = new Proxy(function () {}, { get(t, k) { if (k === "getElementById") return el; if (k === "then") return undefined; if (k === Symbol.toPrimitive) return () => ""; return nop; },
+  set() { return true; }, apply() { return nop; }, has() { return true; } });
+const ctx = { console, URL, URLSearchParams, JSON, Math, Date, Intl, Set, Map, Promise, setTimeout() {}, clearTimeout() {}, document, navigator: nop,
+  localStorage: nop, sessionStorage: nop, history: nop, location: { search: "", pathname: "/", href: "http://localhost/" }, matchMedia: () => nop,
+  requestAnimationFrame() {}, fetch: () => new Promise(() => {}), CustomEvent: function () {}, visualViewport: nop, addEventListener() {},
+  IntersectionObserver: nop, ResizeObserver: nop, getComputedStyle: () => nop, scrollTo() {}, innerWidth: 390, innerHeight: 844 };
+ctx.window = ctx; vm.createContext(ctx); ctx.__d = JSON.parse(fs.readFileSync(0, "utf8"));
+vm.runInContext(fs.readFileSync(process.argv[process.argv.length - 1], "utf8") + "\n;renderResult(__d, false);", ctx);
+const out = {};
+for (const [id, r] of Object.entries(rec)) out[id] = { hidden: r.store.hidden === undefined ? null : !!r.store.hidden, writes: r.store.writes };
+process.stdout.write(JSON.stringify(out));
+"""
+_d2_i = next((i for i, r in enumerate(_R4_ROWS) if not r["studies"]), None)
+_d2_on = _d2_off = None
+if _shutil.which("node") and _d2_i is not None and _r4_datas[_d2_i] and _r4_datas[_d2_i].get("next_steps"):
+    _d2_run = lambda d: json.loads(_subprocess.run(["node", "-e", _D2_HARNESS, str(ROOT / "static" / "app.js")], input=json.dumps(d),
+                                                   capture_output=True, text=True, check=True).stdout)
+    _d2_on = _d2_run(_r4_datas[_d2_i])
+    _d2_off = _d2_run(dict(_r4_datas[_d2_i], next_steps=None))
+_d2_hid = lambda o, i: (o.get(i) or {}).get("hidden")
+t("D2: scripts on, the no-studies Read stop shows the explanation, then the actions, with no second heading, paragraph or template line",
+  _d2_on is not None and _d2_hid(_d2_on, "nothing") is False and _d2_hid(_d2_on, "next-steps") is False
+  and _d2_hid(_d2_on, "nosteps-head") is True and _d2_hid(_d2_on, "nosteps-why") is True and _d2_hid(_d2_on, "no-evidence") is True
+  and _R4_ROWS[_d2_i]["explanation"].strip()[:40] in _htmllib.unescape(" ".join(_d2_on["nothing"]["writes"]))
+  and "Try the claim in plainer words" in " ".join(_d2_on["nosteps-acts"]["writes"]),
+  {k: _d2_hid(_d2_on or {}, k) for k in ("nothing", "next-steps", "nosteps-head", "nosteps-why", "no-evidence")})
+t("  and without the added block the template's line stands, with the block's heading free to show again",
+  _d2_off is not None and _d2_hid(_d2_off, "no-evidence") is False and _d2_hid(_d2_off, "next-steps") is True
+  and _d2_hid(_d2_off, "nosteps-head") is False)
+_d2_pg = _r4_pages[_d2_i] if _d2_i is not None else ""
+_d2_nothing = _d2_pg.split('id="nothing"')[1].split('id="next-steps"')[0] if 'id="nothing"' in _d2_pg else ""
+t("  scripts off, the stop reads the explanation, then the template's line, and the added block is hidden",
+  _d2_nothing and '<p class="no-evidence" id="no-evidence">' in _d2_pg
+  and _htmllib.unescape(_d2_nothing).find(_R4_ROWS[_d2_i]["explanation"].strip()[:40]) < _d2_nothing.find('id="no-evidence"')
+  and _htmllib.unescape(_d2_nothing).find(_R4_ROWS[_d2_i]["explanation"].strip()[:40]) >= 0
+  and '<aside class="nosteps" id="next-steps" hidden>' in _d2_pg)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)
