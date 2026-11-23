@@ -2197,7 +2197,7 @@ t("after a check the page moves to the answer, once",
 # place the browser restores (Back, Forward, a reload) is kept, not cut to stop 2.
 _pop = _js[_js.find('window.addEventListener("popstate"'):][:300]
 t("R5: Forward to a result shows it again as a replay, never a second glide",
-  "renderResult(currentResult, true)" in _pop and "function renderResult(data, replay, keepTyped)" in _js
+  "renderResult(currentResult, true, unsentWords())" in _pop and "function renderResult(data, replay, keepTyped)" in _js
   and "load(detail.data, !!detail.fresh && !typing, !!detail.replay || typing)" in _deskjs and "else if (replay) adoptScroll(" in _deskjs)
 t("  a reload or Back/Forward into the page keeps the place the browser restores",
   'navEntry.type === "reload" || navEntry.type === "back_forward"' in _deskjs
@@ -2373,8 +2373,12 @@ t("  closing the keyboard returns to the place, unless a check came in between; 
 t("J2: a change of height counts as the keyboard only on a touch screen",
   'var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };' in _deskjs
   and "if (!isField(e.target) || !coarse.matches) return;" in _deskjs
-  and _kbd.startswith("function keyboardMoved() {\n    if (!kbd || !coarse.matches) return false;")
+  and _kbd.startswith("function keyboardMoved() {\n    if (!kbd) return false;\n    if (!coarse.matches) {")
   and "a desktop window dragged shorter keeps the bar" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
+# L4: on a screen with no touch, the kept keyboard state is dropped, class and all, so a
+# window that later turns touch (or a stale kbd class) cannot leave the bar hidden.
+t("L4: a change of height on a desktop clears the kept keyboard state and the kbd class",
+  'if (!coarse.matches) { kbd = null; root.classList.remove("kbd"); return false; }' in _kbd)
 t("  and the browser check is in scripts/ui_desk.mjs: 500, 420 and 340 high, Enter sends, the bar slides, a turn",
   all(x in (ROOT / "scripts" / "ui_desk.mjs").read_text() for x in ("[500, 420, 340]", 'page.keyboard.press("Enter")', "reallocations over eight slides", "a turn kept the buffer")))
 t("desk.js writes no markup from strings and sets no inline handler or style attribute from data",
@@ -10818,6 +10822,33 @@ t("CLAUDE.md and AGENTS.md describe the desk: desk.css and desk.js named, the ol
   and "desk.css" in _ag.split("## Styling rules")[1].split("## How to prompt")[0] and "pen ring" not in _ag
   and "static/desk.css static/desk.js" in _ag and "static/desk.css static/desk.js" in _cl_design)
 
+_cue_tpl = (ROOT / "templates" / "index.html").read_text()
+_cue_js = (ROOT / "static" / "desk.js").read_text()
+_cue_css = (ROOT / "static" / "desk.css").read_text()
+t("the cue row: one wide button in the bar that does what Next does, out of the tab order and not read; the dim Below: line is gone",
+  'class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"' in _cue_tpl
+  and _cue_tpl.index('id="cue"') > _cue_tpl.index('id="where"') and _cue_tpl.index('id="cue"') < _cue_tpl.index('id="menu"')
+  and 'cueBtn.addEventListener("click", function () { nextBtn.click(); })' in _cue_js
+  and "function cueWords(k, keep, left, short)" in _cue_js and "cueWords(k, keep, left, short)" in _cue_js.split("function nextWords")[1]
+  and "Below:" not in _cue_tpl and "Below:" not in (ROOT / "static" / "app.js").read_text()
+  and "Below:" not in (ROOT / "display.py").read_text() and 'id="below"' not in _cue_tpl)
+t("the cue row's chevron dips once and never under reduced motion; Next no longer pulses; the docs say so",
+  "@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }" in _cue_css
+  and "animation: dip 600ms ease-in-out 2" in _cue_css and "pulse" not in _cue_css and "pulse" not in _cue_js
+  and "if (reduce.matches || cueBtn.hidden" in _cue_js and "if (detail.fresh && !typing) armDip();" in _cue_js.split('addEventListener("desk:result"')[1].split("});")[0]
+  and "The cue's chevron moves one time only, as two short dips" in (ROOT / "DESIGN.md").read_text()
+  and "chevron moves one time only, as two short dips" in _cl_design
+  and "Next pulses once" not in _cl_design)
+# the dip is said one way everywhere: one time only, as two short dips; never "dips once" beside "twice"
+_dip_docs = [(ROOT / "DESIGN.md").read_text(), (ROOT / "CLAUDE.md").read_text(), _cue_js]
+t("the docs and the code say the chevron's movement one way: one time only, as two short dips",
+  not [d for d in _dip_docs if "dips once" in d or "(600ms, twice)" in d or "twice, 600 ms" in d]
+  and all("one time only, as two short dips" in d for d in _dip_docs))
+_cue_design = (ROOT / "DESIGN.md").read_text().split("- **The cue row**")[1].split("\n- **")[0]
+t("DESIGN.md's cue paragraph says Next goes quiet beside the cue and how wide the cue is on a wide screen",
+  "quiet partner" in _cue_design and "drawn exactly as Back" in _cue_design and "no\n  wider than 480px" in _cue_design
+  and "centred in the block" in _cue_design and "accessible name" in _cue_design)
+
 _dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
 t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",
   "The first screen holds the claim box on a short laptop" in _dec and "DESIGN.md was replaced on purpose" in _dec)
@@ -10831,7 +10862,7 @@ for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
 _linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
 t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
   all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
-  and 'const CACHE = "evident-v119";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+  and 'const CACHE = "evident-v120";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
 
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
@@ -11058,7 +11089,9 @@ if _shutil.which("node"):
       and _r4js_out[0]["stops"] == ["Claim", "Answer", "Read", "Weighed", "Research", "Open"],
       [j["stops"] for j in _r4js_out])
     t("R4: stops 2 and 3 carry the same lines on both paths",
-      all(_tr.byid.get("below", "").strip() == _js_["lines"]["below"] and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
+      all("below" not in _tr.byid and "below" not in _js_["lines"]
+          and _tr.byid.get("cue-label", "").strip() == "Scroll down: what was read"
+          and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
           and _tr.byid.get("path", "").strip() == _js_["lines"]["path"] and _tr.byid.get("legend3", "").strip() == _js_["lines"]["legend"]
           for _tr, _js_ in zip(_r4_trees, _r4js_out)),
       [(_tr.byid.get("h-read"), _js_["lines"]["read"]) for _tr, _js_ in zip(_r4_trees, _r4js_out)])
@@ -11323,8 +11356,11 @@ _g3_lf = _g3_app.split("function landFocus(to, typing) {")[1].split("\n}")[0]
 t("G3: when the answer arrives, focus moves to the verdict unless the reader holds a control still on the page",
   "landFocus($(\"stamp\"), typing);" in _g3_app.split("renderResult(final.result, false, typing);")[1].split("remember(final.result)")[0]
   and "a === document.body" in _g3_lf and "!a.isConnected" in _g3_lf and "a.disabled" in _g3_lf and "(a === input && !typing)" in _g3_lf
-  and "const typing = document.activeElement === input && input.value.trim() !== claim;" in _g3_app
-  and "if (!keepTyped) input.value = data.claim;" in _g3_app
+  and "const typing = (document.activeElement === input || dictating) && editedSinceSend;" in _g3_app
+  and "dictating = true;" in _g3_app and _g3_app.count("rec = null; dictating = false;") == 2
+  and 'input.addEventListener("input", () => { editedSinceSend = true;' in _g3_app
+  and "editedSinceSend = false;\n  lastClaim = claim;" in _g3_app
+  and "if (!keepTyped) { input.value = data.claim; editedSinceSend = false; }" in _g3_app
   and "preventScroll: true" in _g3_lf
   and 'id="stamp" tabindex="-1"' in (ROOT / "templates" / "index.html").read_text()
   and "#stamp:focus { outline: none; }" in (ROOT / "static" / "desk.css").read_text())
@@ -11361,7 +11397,7 @@ t("  the server prints one h1: the headline at home, the claim on a result",
   _g6_h1(_g6_home) == ['<h1 class="h1" id="ask-heading">'] and _g6_h1(_g6_res) == ['<h1 class="q claim-echo" id="claim-echo">']
   and '<h2 class="q claim-echo" id="claim-echo">' in _g6_home, (_g6_h1(_g6_home), _g6_h1(_g6_res)))
 _g6_app = (ROOT / "static" / "app.js").read_text()
-_g6_show = _g6_app.split("function show(section) {")[1].split("\n}")[0]
+_g6_show = _g6_app.split("function show(section, keepPlace) {")[1].split("\n}")[0]
 if _shutil.which("node"):
     # setH1 on a small recording page: each screen leaves exactly one h1, the right one, and every attribute and word.
     _g6_fn = "function setH1" + _g6_app.split("function setH1")[1].split("\n}")[0] + "\n}"
@@ -11444,6 +11480,11 @@ if _shutil.which("node"):
     _k2_diff = [(c, o, n) for c, (o, n) in zip(_K2_CASES, _k2_out) if o != n]
     t("K2: splitSentences returns exactly what the old lookbehind regex returned, on %d strings" % len(_K2_CASES),
       len(_K2_CASES) >= 25 and not _k2_diff and any(len(o) > 2 for o, _ in _k2_out), _k2_diff[:3])
+else:
+    # L5: with no node the comparison cannot run; say so as a failure rather than pass in silence.
+    t("K2: splitSentences returns exactly what the old lookbehind regex returned (node is needed and was not found)", False)
+t("L5: the K2 comparison records a visible failure when node is missing, never a silent skip",
+  "_k2_diff[:3])\nelse:\n    # L5" in (ROOT / "tests" / "test_app.py").read_text())
 _k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "sw.js")}
 t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
   not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],

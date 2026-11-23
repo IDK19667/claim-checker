@@ -192,9 +192,11 @@ document.addEventListener("click", (e) => {
 // One page, three views. On a result <html> carries `checked`, and the desk's
 // stops after the first are shown; at home and on an error only stop 1 is.
 // The claim box, the error and the home panel are all in stop 1.
-function show(section) {
+// keepPlace: the reader is changing the claim as the answer lands, so the page stays where they are
+function show(section, keepPlace) {
   const result = section === resultSection;
   root.classList.toggle("checked", result);
+  root.classList.toggle("has-cue", result);
   setH1(section === askSection ? "ask" : result ? "result" : "error");
   $("skip").hidden = !result;
   // A result keeps the claim box: it is stop 1, the claim as typed, ready to edit.
@@ -203,7 +205,7 @@ function show(section) {
   askMore.hidden = section !== askSection;
   if (trustSection) trustSection.hidden = section !== askSection;
   if (!result) tellDesk("desk:home", {});
-  window.scrollTo(0, 0);
+  if (!keepPlace) window.scrollTo(0, 0);
 }
 
 // One h1 on every screen, as the server prints it: the headline at home, the
@@ -231,6 +233,11 @@ function setWorking(on) {
 }
 
 let currentResult = null;
+// Set by any input in the claim box after a check is sent, and cleared when the box is given a claim: the reader has
+// changed the words, even by a space or a word typed and rubbed out, so an answer landing then draws around them.
+let editedSinceSend = false;
+// The reader is dictating into the box (focus is on the mic button meanwhile): that counts as changing the words.
+let dictating = false;
 let userTapped = false;
 window.addEventListener("pointerdown", () => { userTapped = true; }, { once: true, passive: true });
 
@@ -399,7 +406,7 @@ function deskLines(data) {
   const studies = data.studies || [];
   const g = sourceGroups(studies);
   const n = studies.length, r = g.cited.length, b = g.back.length, o = g.others.length, x = g.excluded.length;
-  if (!n) return { read: "No studies read.", path: "", legend: "", below: "Below: the search that ran, and what is still open.", rests: "" };
+  if (!n) return { read: "No studies read.", path: "", legend: "", rests: "" };
   const path = joinAnd([r ? `${r} relied on` : "None relied on", b ? `${b} background only` : "",
                         o ? `${o} read and not relied on` : "", x ? `${x} set aside as off topic` : ""]) + ".";
   const rest = [];
@@ -408,14 +415,12 @@ function deskLines(data) {
   const legend = r
     ? `In the light: the ${plural(r, "paper", "papers")} the answer relies on` + (rest.length ? ", with " + joinAnd(rest) : "") + "."
     : "In the light: " + joinAnd(rest) + ". None was relied on.";
-  const below = "Below: what was read, the " + plural(n, "study", "studies")
-    + (deskStops(data).includes("Research") ? ", the full answer," : ",") + " and what is still open.";
   const more = [];
   if (o + b) more.push(`${o + b} more ${o + b === 1 ? "was" : "were"} read and not relied on`);
   if (x) more.push(`${x} ${x === 1 ? "was" : "were"} set aside as off topic`);
   const tail = joinAnd(more);
   const rests = `Rests on ${plural(r, "study", "studies")}.` + (tail ? " " + tail.slice(0, 1).toUpperCase() + tail.slice(1) + "." : "");
-  return { read: plural(n, "study", "studies") + " read.", path, legend, below, rests };
+  return { read: plural(n, "study", "studies") + " read.", path, legend, rests };
 }
 // The plural of a lower-case design label; display._plural_design is the same.
 function pluralDesign(label) {
@@ -567,7 +572,7 @@ function renderResult(data, replay, keepTyped) {
   currentResult = data;
   const n = data.studies.length, stops = deskStops(data), dl = deskLines(data);
   // Stop 1 keeps the claim in its box, so Back from the answer is the claim.
-  if (!keepTyped) input.value = data.claim;
+  if (!keepTyped) { input.value = data.claim; editedSinceSend = false; }
   clearBtn.hidden = !input.value;
   // Stop 2: the card and how sure.
   $("claim-echo").textContent = data.claim;
@@ -576,7 +581,9 @@ function renderResult(data, replay, keepTyped) {
   showTyped(data.typed, data.typed_reason);
   $("confidence").textContent = confidenceLine(data);
   $("doctor-line").hidden = false;
-  $("below").textContent = dl.below;
+  // the cue row on top of the bar, as the server prints it on the Answer stop; desk.js names it for each stop after
+  $("cue-label").textContent = "Scroll down: what was read";
+  $("cue").hidden = false;
   resultSection.dataset.verdict = data.verdict;
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
   // Stop 3: what was read.
@@ -629,7 +636,7 @@ function renderResult(data, replay, keepTyped) {
   resetReport();
   setTitle(data);
   screenState.settle("result");
-  show(resultSection);
+  show(resultSection, !!keepTyped);
   tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay, typing: !!keepTyped });
 }
 
@@ -907,6 +914,7 @@ async function check(claim) {
   }
 
   inFlight = true;
+  editedSinceSend = false;
   lastClaim = claim;
   gaveUp = false;
   controller = new AbortController();
@@ -934,7 +942,7 @@ async function check(claim) {
       try {
         // The words in the claim box changed while the check ran: the reader is
         // typing, so the answer is drawn and announced around them.
-        const typing = document.activeElement === input && input.value.trim() !== claim;
+        const typing = (document.activeElement === input || dictating) && editedSinceSend;
         renderResult(final.result, false, typing);
         landFocus($("stamp"), typing);
         remember(final.result);
@@ -980,7 +988,7 @@ if (window.visualViewport) {
 }
 
 const clearBtn = $("clear-btn");
-input.addEventListener("input", () => { clearBtn.hidden = !input.value; if (input.value.trim()) clearClaimError(); askSuggest(); });
+input.addEventListener("input", () => { editedSinceSend = true; clearBtn.hidden = !input.value; if (input.value.trim()) clearClaimError(); askSuggest(); });
 clearBtn.addEventListener("click", () => { input.value = ""; clearBtn.hidden = true; closeSuggest(); input.focus(); });
 
 // ---- Type-ahead over claims already checked -------------------------------
@@ -1113,21 +1121,28 @@ for (const b of document.querySelectorAll("[data-again]")) b.addEventListener("c
   if (controller) { controller.abort(); return; }
   if (history.state && history.state.view === "result") history.back(); else { history.replaceState({ view: "ask" }, "", "/"); goHome(); }
 });
+// The box holds words the reader typed and has not sent (kept when an answer
+// landed around them): Forward and Edit claim leave them there.
+function unsentWords() {
+  return editedSinceSend && !!input.value.trim() && !!currentResult && input.value !== currentResult.claim;
+}
 // Edit returns to the claim box with the claim already in it, cursor at the
-// end, to reword and check again. The suggestions stay shut: the reader has
-// not typed anything yet.
+// end, to reword and check again; words the reader typed and has not sent stay
+// instead. The suggestions stay shut.
 $("edit-claim").addEventListener("click", () => {
-  const claim = (currentResult && currentResult.claim) || $("claim-echo").textContent.trim();
+  const keep = unsentWords();
+  const claim = keep ? input.value : (currentResult && currentResult.claim) || $("claim-echo").textContent.trim();
   history.replaceState({ view: "ask" }, "", "/");
   goHome();
   input.value = claim;
+  if (!keep) editedSinceSend = false;
   clearBtn.hidden = !claim;
   closeSuggest();
   input.focus({ preventScroll: true });
   input.setSelectionRange(claim.length, claim.length);
 });
 window.addEventListener("popstate", () => {
-  if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult, true); return; }
+  if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult, true, unsentWords()); return; }
   goHome();
 });
 $("error-retry").addEventListener("click", () => { if (lastClaim) { input.value = lastClaim; check(lastClaim); } });
@@ -1705,9 +1720,10 @@ if (SR) {
     rec.lang = navigator.language || "en-US";
     rec.interimResults = true;
     mic.classList.add("listening");
-    rec.onresult = (e) => { input.value = Array.from(e.results).map((r) => r[0].transcript).join(""); };
-    rec.onend = () => { mic.classList.remove("listening"); rec = null; if (input.value.trim()) input.focus(); };
-    rec.onerror = () => { mic.classList.remove("listening"); rec = null; };
+    dictating = true;
+    rec.onresult = (e) => { input.value = Array.from(e.results).map((r) => r[0].transcript).join(""); editedSinceSend = true; clearBtn.hidden = !input.value; };
+    rec.onend = () => { mic.classList.remove("listening"); rec = null; dictating = false; if (input.value.trim()) input.focus(); };
+    rec.onerror = () => { mic.classList.remove("listening"); rec = null; dictating = false; };
     rec.start();
   });
 }

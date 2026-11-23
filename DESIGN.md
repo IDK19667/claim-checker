@@ -546,6 +546,22 @@ Sizes and floors:
 - **The bar** is fixed at the foot once a result shows: Back, where you
   are, and Next, which names the next stop. On a wide screen a rail of
   stop names sits at the right edge.
+- **The cue row** sits on top of the bar row whenever something is
+  below, and the two read as one block on the bar's ground: one
+  paper-filled button with a down chevron and the words "Scroll down: "
+  and what comes next ("what was read", or "11 more studies" on a long
+  stop, from the same state that names Next). At 760px wide and below
+  it is as wide as the bar row; on a wider screen it is a button no
+  wider than 480px, centred in the block, never a band. It does what
+  Next does. It goes at the end of the last stop. While it shows, Next
+  is its quiet partner: drawn exactly as Back (outline, panel ground,
+  quieter words), showing only "Next" or "Keep reading", with its full
+  words ("Next: what was read") as its accessible name; so the cue is
+  the one paper-filled control in the block. At the end of the last
+  stop, with no cue, Next has its paper fill again ("Back to the
+  start"). Next carries the same place for keyboards and screen
+  readers, so the cue is out of the tab order and not read. Everything
+  that lays itself out against the bar uses the whole block.
 - **The first screen holds the claim box.** At 1366x650, 1280x720,
   1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
   the claim box and "Check the research" are wholly on screen with no
@@ -623,8 +639,12 @@ value, so the scene is never ahead of the reader. Beyond that:
    stack (none under reduced motion), and each line of the log fades in
    as its stage happens.
 4. **The card's words** fade in over 150ms once the card has settled.
-5. **Next pulses once** after a check the reader just ran, cancelled by
-   any input.
+5. **The cue's chevron moves one time only, as two short dips**, a
+   deliberate exception beside the glide: about 3 seconds after an answer
+   the reader just ran lands, if nothing was touched, it goes 4px down and
+   back two times in a row, 600ms each, and never again on that answer.
+   Any input cancels it; never under reduced motion, never on a saved or
+   shared answer. Next does not pulse.
 6. **A sheet** rises in 260ms and its scrim fades in.
 
 Nothing else animates: no entrances on sections, no parallax beyond the

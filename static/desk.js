@@ -108,6 +108,8 @@
   // ---- wayfinding: rail, place menu, Back and Next ------------------------
   var rail = byId("rail"), menu = byId("menu"), where = byId("where");
   var nextBtn = byId("next"), nextLabel = byId("next-label"), prevBtn = byId("prev");
+  // the cue row on top of the bar: one wide button that does what Next does, in words that say to scroll (cueWords)
+  var cueBtn = byId("cue"), cueLabel = byId("cue-label");
   var railBtns = [], menuBtns = [], ro = null;
   function readStops() {
     checked = root.classList.contains("checked");
@@ -151,6 +153,12 @@
   // curStop is already the stop a glide is headed to, so Next and Back count from where the reader is going
   // on a stop whose words run on below the bar, Next keeps reading one screen down and Back reads one screen up
   nextBtn.addEventListener("click", function () { closeMenu(); if (!onePress(nextBtn)) return; if (keepDown()) return; jump(curStop >= LAST ? 0 : curStop + 1); });
+  // the cue is a second, larger target for the same press: a pointer or a finger. It is out of the tab order and hidden
+  // from screen readers, which have Next, first in the bar, with the same destination; a press never leaves focus on it
+  if (cueBtn) {
+    cueBtn.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    cueBtn.addEventListener("click", function () { nextBtn.click(); });
+  }
   prevBtn.addEventListener("click", function () { closeMenu(); if (!onePress(prevBtn)) return; if (keepUp()) return; if (curStop > 0) jump(curStop - 1); });
   function jump(k) { clearStudy(); go(k); }
   // Skip to the answer (results only): the Answer stop, with focus on the verdict and no second scroll.
@@ -201,13 +209,15 @@
   document.addEventListener("desk:result", function (e) {
     var detail = e.detail || {}, typing = !!detail.typing;
     load(detail.data, !!detail.fresh && !typing, !!detail.replay || typing);
+    if (cueBtn) cueBtn.classList.remove("dip");
     if (detail.fresh && !typing) glideToAnswer();
+    if (detail.fresh && !typing) armDip(); else if (dipOff) dipOff();
   });
   // during a check: at "found N", N blank sheets stand in the stack (3D only; text mode has no sheets)
   var onStage = function () {};
   document.addEventListener("desk:stage", function (e) { var d = e.detail || {}; if (d.stage === "found") onStage(Math.max(0, Math.min(40, +d.count || 0))); });
   document.addEventListener("desk:home", function () {
-    endTween(); clearStudy(); closeMenu();
+    endTween(); clearStudy(); closeMenu(); if (dipOff) dipOff();
     readStops(); onHome(); layout(); updateWay(); wake();
   });
   // ---- the page's shape: stop tops, where the camera holds, and the fold on small screens ----
@@ -378,7 +388,6 @@
   });
 
   // ---- wayfinding follows the page ----------------------------------------------------
-  var pulsed = false, arriveT = 0, pulseTimer = 0;
   function updateWay() {
     var P = rawProgress(), now = performance.now();
     var cur = navTo >= 0 ? navTo : Math.max(0, Math.min(LAST, Math.round(P)));
@@ -390,17 +399,10 @@
       where.setAttribute("aria-label", "Stop " + (cur + 1) + " of " + NS + ": " + STOPS[cur].name + ". Choose a stop");
       prevBtn.setAttribute("aria-disabled", String(cur === 0));
       if (cur !== WEIGH && !tween) clearStudy();
-      arriveT = 0;
     }
     // the Next label: at once for a press (named for where it lands), otherwise once the page is at rest, so it never flickers
     if (tween) { if (navTo >= 0 && curGlide) nextWords(navTo, Math.round(curGlide.at())); }
     else armWords();
-    // once, on first arrival at the answer: if nothing moves for 4 seconds, Next pulses
-    if (!pulsed && !reduce.matches && !slowGl && cur === 1 && Math.abs(P - 1) < 0.02 && !tween) {
-      if (!arriveT) arriveT = now;
-      if (now - Math.max(arriveT, lastInput) > 4000) { pulsed = true; nextBtn.classList.add("pulse"); }
-      else if (!pulseTimer) pulseTimer = setTimeout(function () { pulseTimer = 0; updateWay(); }, 4100 - (now - Math.max(arriveT, lastInput)));
-    }
   }
   // ---- Next never skips what the reader has not seen ------------------------------------
   // a stop whose last line of text is more than 2 px below the bar's top edge reads "Keep reading": a press moves down
@@ -486,13 +488,52 @@
     if (!n) return "Keep reading";
     return "Keep reading: " + n + " more" + (short ? "" : n === 1 ? " study" : " studies");
   }
+  // the cue row's words, from the same state as Next's: the next stop by its plain name, or what is left of this one
+  // with the same count; null at the end of the last stop, where there is nothing below
+  function cueWords(k, keep, left, short) {
+    if (keep) return "Scroll down: " + (left ? left + " more " + (left === 1 ? "study" : "studies") : "more of this part");
+    if (k >= LAST) return null;
+    var nx = STOPS[k + 1].name;
+    return "Scroll down: " + (nx === "Answer" ? "your answer" : ((short && STOPS[k].short) || STOPS[k].next).replace(/^Next: /, ""));
+  }
   function nextWords(k, y) {
     var keep = moreBelow(k, y), up = checked && y - anchors[k] > 40, short = innerWidth <= 420, left = keep ? rowsLeft(k, y) : 0;
     var key = k + (keep ? "k" + left : "n") + (up ? "u" : "") + (short ? "s" : "") + NS;
     if (key === wayKey) return; wayKey = key;
-    if (keep) { nextLabel.textContent = keepWords(left, short); nextBtn.setAttribute("aria-label", left ? keepWords(left, false) : "Keep reading: more of " + STOPS[k].name + " below"); nextBtn.classList.remove("last"); }
-    else { nextLabel.textContent = (short && STOPS[k].short) || STOPS[k].next; nextBtn.removeAttribute("aria-label"); nextBtn.classList.toggle("last", k === LAST); }
+    // while the cue row shows, Next is its quiet partner: the bare verb on screen, the full words as its name
+    var cw = cueBtn && checked ? cueWords(k, keep, left, short) : null;
+    if (keep) { nextLabel.textContent = cw ? "Keep reading" : keepWords(left, short); nextBtn.setAttribute("aria-label", left ? keepWords(left, false) : "Keep reading: more of " + STOPS[k].name + " below"); nextBtn.classList.remove("last"); }
+    else {
+      var nw = (short && STOPS[k].short) || STOPS[k].next;
+      nextLabel.textContent = cw ? "Next" : nw;
+      if (cw) nextBtn.setAttribute("aria-label", nw); else nextBtn.removeAttribute("aria-label");
+      nextBtn.classList.toggle("last", k === LAST);
+    }
     prevBtn.setAttribute("aria-label", up ? "Back: up one screen in " + STOPS[k].name : "Back one stop");
+    if (cueBtn) {
+      if (cw) cueLabel.textContent = cw;
+      cueBtn.hidden = !cw; root.classList.toggle("has-cue", !!cw);
+    }
+  }
+  // once, after an answer the reader just ran: if they have done nothing for 3 seconds since it landed, the cue's
+  // chevron moves one time only, as two short dips of 600 ms. Any touch, wheel, press or key before then cancels it for good. Never under
+  // reduced motion, never on a saved, shared or replayed answer
+  var dipT = 0, dipOff = null;
+  function armDip() {
+    if (dipOff) dipOff();
+    if (!cueBtn || reduce.matches) return;
+    var evs = ["wheel", "touchstart", "pointerdown", "keydown"];
+    function cancel() { clearTimeout(dipT); dipT = 0; off(); }
+    function off() { evs.forEach(function (ev) { removeEventListener(ev, cancel, true); }); dipOff = null; }
+    evs.forEach(function (ev) { addEventListener(ev, cancel, { capture: true, passive: true }); });
+    dipOff = cancel;
+    function fire() {
+      if (tween || document.visibilityState === "hidden") { dipT = setTimeout(fire, 300); return; }
+      off(); dipT = 0;
+      if (reduce.matches || cueBtn.hidden || root.classList.contains("kbd")) return;
+      cueBtn.classList.remove("dip"); void cueBtn.offsetWidth; cueBtn.classList.add("dip");
+    }
+    dipT = setTimeout(fire, 3000);
   }
   function armWords() { clearTimeout(wordsT); wordsT = setTimeout(restWords, 150); }
   function restWords() {
@@ -624,7 +665,8 @@
     window.scrollTo({ top: Math.max(0, Math.round(window.scrollY + r.top - stripH - Math.max(8, (room - r.height) / 2))), behavior: "instant" });
   }
   function keyboardMoved() {
-    if (!kbd || !coarse.matches) return false;
+    if (!kbd) return false;
+    if (!coarse.matches) { kbd = null; root.classList.remove("kbd"); return false; }
     if (innerWidth !== kbd.w) { kbd = null; root.classList.remove("kbd"); return false; }
     if (innerHeight < kbd.h - 1) { kbd.shrunk = true; root.classList.toggle("kbd", isField(document.activeElement)); showField(); adoptScroll(400); return true; }
     root.classList.remove("kbd");
