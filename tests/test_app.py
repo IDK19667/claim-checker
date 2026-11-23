@@ -11557,6 +11557,72 @@ t("  a latency replay spaces PubMed starts across threads as _paced_get does, an
   len(_sp_starts) == 4 and min(b - a for a, b in zip(_sp_starts, _sp_starts[1:])) >= 0.095
   and not _sp_h.misses and _sp_h.snapshot()["pubmed_replayed"] == 4, (_sp_starts, _sp_h.misses))
 
+# Task 2: the guidance view starts beside the verdict call, on the claim
+# alone, and is used where it always was.
+_sp_log = []
+_sp_real_gen = fg.models.generate_content
+_sp_prev_view = verdict.guideline_view
+
+
+def _sp_slow_gen(**kw):
+    _sp_log.append(("model", _time.monotonic()))
+    _time.sleep(0.25)
+    return _sp_real_gen(**kw)
+
+
+def _sp_slow_view(claim):
+    _sp_log.append(("guidance", _time.monotonic()))
+    _time.sleep(0.25)
+    return {"verdict": "true", "says": "sugar does not change how children behave.", "bodies": ["NHS"]}
+
+
+def _sp_weigh(claim):
+    del _sp_log[:]
+    fg.models.calls = 0
+    fg.models.script = [_SUGAR_NO, DIR("no"),
+                        Resp(VJ("false", [1, 2], tldr=_NO_TLDR,
+                                evidence=["Sugar did not change behaviour (Study 1)."]))]
+    t0 = _time.monotonic()
+    out = verdict.weigh_evidence(claim, [dict(s_) for s_ in _SUGAR], "(sugar) AND (hyperactivity)")
+    return out, _time.monotonic() - t0, list(_sp_log), fg.models.calls
+
+
+fg.models.generate_content = _sp_slow_gen
+verdict.guideline_view = _sp_slow_view
+try:
+    _sp_fast = _sp_weigh("Sugar in pregnancy makes children hyperactive")
+    _sp_real_ahead = verdict.guidance_ahead
+    verdict.guidance_ahead = lambda claim: None      # today's order: guidance last, in line
+    try:
+        _sp_serial = _sp_weigh("Sugar in pregnancy makes children hyperactive")
+    finally:
+        verdict.guidance_ahead = _sp_real_ahead
+    _sp_plain = _sp_weigh("Sugar makes people hyperactive")
+finally:
+    fg.models.generate_content = _sp_real_gen
+    verdict.guideline_view = _sp_prev_view
+    fg.models.script = []
+_sp_first_model = min(ts for k, ts in _sp_fast[2] if k == "model")
+_sp_guide = [ts for k, ts in _sp_fast[2] if k == "guidance"]
+t("speed: on a guideline topic the guidance call starts with the verdict call, not after every pass",
+  len(_sp_guide) == 1 and abs(_sp_guide[0] - _sp_first_model) < 0.2, _sp_fast[2])
+t("  the answer is the one the in-line order gives, with the same model calls",
+  json.dumps(_sp_fast[0], sort_keys=True) == json.dumps(_sp_serial[0], sort_keys=True)
+  and _sp_fast[3] == _sp_serial[3], (_sp_fast[0], _sp_serial[0]))
+t("  and it is sooner by about the guidance call's own time",
+  _sp_fast[1] < _sp_serial[1] - 0.15, (_sp_fast[1], _sp_serial[1]))
+t("  a claim outside the guideline topics starts no guidance call",
+  verdict.guidance_ahead("Sugar makes people hyperactive") is None
+  and not [k for k, _ in _sp_plain[2] if k == "guidance"], _sp_plain[2])
+_sp_boom = verdict._AHEAD.submit(lambda: (_ for _ in ()).throw(ValueError("x")))
+try:
+    verdict.follow_guidelines({"verdict": "true"}, [], "Vaccines cause autism", ahead=_sp_boom)
+    _sp_raised = False
+except ValueError:
+    _sp_raised = True
+t("  an error the view does not catch itself is raised where the view is used, as in line",
+  _sp_raised)
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

@@ -27,6 +27,8 @@ import os
 import re
 import time
 
+from concurrent.futures import ThreadPoolExecutor
+
 import breakdown
 import evidence
 import pubmed
@@ -922,7 +924,24 @@ def unrated_guidance_tldr(tldr: str, lead: str = "") -> str:
     return f"{lead or UNTESTED_TLDR} {line}".strip()
 
 
-def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
+# The guidance view depends on the claim alone, so weigh_evidence starts it
+# at its top, beside the verdict call, instead of after every other pass.
+# Same request, same claim, used at the same point in the same order.
+_AHEAD = ThreadPoolExecutor(max_workers=8, thread_name_prefix="guidance")
+
+
+def guidance_ahead(claim: str):
+    """guideline_view(claim) started now on a worker thread, for
+    follow_guidelines(..., ahead=) to collect, or None when follow_guidelines
+    would not ask for it (not a guideline topic). It fails open as it does
+    in line: guideline_view catches the provider's errors itself, and
+    anything else it raises is raised again where the result is collected."""
+    if not guideline_topic(claim):
+        return None
+    return _AHEAD.submit(guideline_view, claim)
+
+
+def follow_guidelines(result: dict, studies: list[dict], claim: str, ahead=None) -> dict:
     """
     The last word on a high-stakes claim. When the major health bodies give
     plain guidance and the verdict says otherwise, the verdict follows the
@@ -934,7 +953,8 @@ def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     """
     if not guideline_topic(claim):
         return result
-    view = guideline_view(claim)
+    # `ahead`: the same view, started early by guidance_ahead(claim).
+    view = ahead.result() if ahead is not None else guideline_view(claim)
     if not view or view["verdict"] == result.get("verdict"):
         return result
     line = GUIDELINE_LEAD + view["says"]
@@ -1731,6 +1751,10 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
             verdict="insufficient",
         ), studies, claim)
 
+    # From here follow_guidelines(..., claim) is always reached unless a
+    # step fails, and its guidance call reads the claim alone: start it now,
+    # beside the verdict call.
+    ahead = guidance_ahead(claim)
     groups = pubmed.split_and(query or "")
     subject = groups[0] if groups else ""
     outcome = groups[1] if len(groups) > 1 else ""
@@ -1809,7 +1833,7 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    result = follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    result = follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim, ahead=ahead)
     # Every finished answer has a short answer and a line on what is still
     # open. A reply that leaves either empty, after every gate and the retry
     # above, is a failed reply: it ends in the app's error response, with a
