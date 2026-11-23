@@ -246,23 +246,35 @@ GEMINI_RETRY_PAUSES = (1.0, 3.0)
 _provider_log = logging.getLogger("evident.provider")
 
 
+def _unreachable():
+    """What a call that never got an answer raises: a dropped or refused
+    connection, a failed host lookup, a time-out. google.genai sends through
+    httpx, whose errors are not OSErrors, so both kinds are named."""
+    import httpx
+    return (httpx.TransportError, OSError)
+
+
 def _gemini_wrap(fn):
     from google.genai import errors
+    unreachable = _unreachable()
 
     try:
-        # A busy (5xx) or rate-limited (429) call is asked again, up to twice.
-        # Anything else, a bad key included, fails on the first try as before.
+        # A busy (5xx) or rate-limited (429) call is asked again, up to twice,
+        # and so is one that never reached the service (a dropped connection,
+        # a failed lookup, a time-out). Anything else, a bad key included,
+        # fails on the first try as before.
         for attempt in range(len(GEMINI_RETRY_PAUSES) + 1):
             try:
                 return fn()
-            except (errors.ServerError, errors.ClientError) as e:
+            except (errors.ServerError, errors.ClientError, *unreachable) as e:
                 code = getattr(e, "code", None)
-                retryable = isinstance(e, errors.ServerError) or code == 429
+                retryable = isinstance(e, (errors.ServerError, *unreachable)) or code == 429
                 if not retryable or attempt >= len(GEMINI_RETRY_PAUSES):
                     raise
                 pause = GEMINI_RETRY_PAUSES[attempt]
                 _provider_log.warning("Gemini returned %s; trying again in %ss (try %d of %d)",
-                                      code, pause, attempt + 2, len(GEMINI_RETRY_PAUSES) + 1)
+                                      code if code is not None else type(e).__name__, pause,
+                                      attempt + 2, len(GEMINI_RETRY_PAUSES) + 1)
                 time.sleep(pause)
     except errors.ClientError as e:
         code = getattr(e, "code", None)
@@ -282,8 +294,9 @@ def _gemini_wrap(fn):
         raise ProviderError("unavailable", "The AI service is having trouble.", code=getattr(e, "code", None))
     except errors.APIError as e:
         raise ProviderError("other", "The AI service returned an error.", code=getattr(e, "code", None))
-    except (ConnectionError, TimeoutError, OSError):
-        raise ProviderError("unavailable", "Couldn't reach the AI service.")
+    except unreachable:
+        # The same answer as a busy service: it is one, from the reader's side.
+        raise ProviderError("unavailable", "The AI service is having trouble.")
 
 
 def _gemini_text(prompt: str, max_tokens: int, temperature: float | None = None) -> str:

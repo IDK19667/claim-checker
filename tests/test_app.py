@@ -203,10 +203,12 @@ class FakeModels:
         self.prompts = getattr(self, "prompts", []) + [kw.get("contents") or ""]
         # An empty script is a provider that is down: every call that can
         # fail open (the faithfulness check, the direction read) does. It is
-        # a dropped connection, which is not retried, so each call that finds
-        # the script empty still counts once.
+        # an error the provider answers and that is never retried (a dropped
+        # connection now is, like a 5xx), so each call that finds the script
+        # empty still counts once.
         if not self.script:
-            raise ConnectionError("script empty")
+            raise errors.ClientError(400, {"error": {"message": "script empty",
+                                                     "status": "FAILED_PRECONDITION"}})
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -521,8 +523,17 @@ t("  any other 4xx is never retried: 'other' after 1 try, no pause",
   _e is not None and _e.kind == "other" and _n == 1 and _p == [], (_e, _n, _p))
 _v, _e, _n, _p = _run_wrap(_e500(), "ok")
 t("  any 5xx is retried, not just 503", _v == "ok" and _n == 2 and _p == [1.0], (_v, _n, _p))
+import httpx  # noqa: E402
 _v, _e, _n, _p = _run_wrap(ConnectionError("down"), "ok")
-t("  a dropped connection is not retried", _e is not None and _e.kind == "unavailable" and _n == 1 and _p == [], (_e, _n, _p))
+t("  a dropped connection is retried like a 5xx", _v == "ok" and _n == 2 and _p == [1.0], (_v, _e, _n, _p))
+_v, _e, _n, _p = _run_wrap(httpx.ConnectError("[Errno 8] nodename nor servname provided"),
+                           httpx.ConnectError("down"), httpx.ConnectError("down"))
+t("  a connection or lookup failure three times ends in the busy answer after 1s and 3s",
+  _e is not None and _e.kind == "unavailable" and _e.detail == "The AI service is having trouble."
+  and _n == 3 and _p == [1.0, 3.0], (_e, _n, _p))
+_v, _e, _n, _p = _run_wrap(httpx.ReadTimeout("slow"), httpx.ReadTimeout("slow"), httpx.ReadTimeout("slow"))
+t("  and so does a time-out", _e is not None and _e.kind == "unavailable"
+  and _e.detail == "The AI service is having trouble." and _n == 3 and _p == [1.0, 3.0], (_e, _n, _p))
 del PAUSES[:]
 
 
@@ -11802,6 +11813,17 @@ finally:
     del pubmed._http.get
 t("  and _paced_get sends through it with the same URL, parameters and time limit",
   _sp_calls6 == [(pubmed.EUTILS_BASE + "/esearch.fcgi", {"term": "x"}, pubmed.TIMEOUT)], _sp_calls6)
+
+# Task 7: a check whose model call cannot connect ends in the busy answer
+# with a way out, not in "Something went wrong".
+import httpx as _sp_httpx  # noqa: E402
+ratelimit.PER_USER = ratelimit.SlidingWindow(1000, 600)
+fg.models.script = [_sp_httpx.ConnectError("[Errno 8] nodename nor servname provided")] * 3
+_sp_r7, _sp_evs7 = stream("Speed test claim nine that cannot reach the model", ip="9.5.5.9")
+fg.models.script = []
+t("speed: a model call that cannot connect is tried three times and ends in the busy answer (502)",
+  _sp_evs7 and _sp_evs7[-1] == {"stage": "error", "status": 502, "error": "The AI service is having trouble."},
+  _sp_evs7[-1:])
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
