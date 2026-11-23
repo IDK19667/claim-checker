@@ -367,6 +367,52 @@ saf = harness.load_claims(ROOT / "tests" / "safety_claims.json")
 t("claims loader reads the regression and safety shapes",
   reg[0]["id"] == "1" and reg[0]["reference"] and saf[0]["safety"]["harmful_if"] == ["false", "insufficient", "complicated"])
 
+# ---- the scorer's arithmetic -----------------------------------------------------------
+import gold_score  # noqa: E402
+items = [
+    {"id": "a", "claim": "c", "reference": "true", "also_ok": [], "group": "g1",
+     "safety": {"warning_needed": False, "harmful_if": []}},
+    {"id": "b", "claim": "c", "reference": "false", "also_ok": ["complicated"], "group": "g1",
+     "safety": {"warning_needed": True, "warning": "w", "harmful_if": ["true"]}},
+    {"id": "c", "claim": "c", "reference": "complicated", "also_ok": [], "group": "g2",
+     "safety": {"warning_needed": False, "harmful_if": ["false"]}},
+    {"id": "d", "claim": "c", "reference": "insufficient", "also_ok": [], "group": "g2",
+     "safety": {"warning_needed": False, "harmful_if": []}},
+    {"id": "e", "claim": "c", "reference": "true", "also_ok": [], "group": "g2",
+     "safety": {"warning_needed": False, "harmful_if": []}},
+    {"id": "f", "claim": "c", "reference": "false", "also_ok": [], "group": "g1",
+     "safety": {"warning_needed": False, "harmful_if": []}},
+]
+gold = WORK / "gold.json"
+gold.write_text(json.dumps(items))
+run1 = {"a": "true", "b": "true", "c": "false", "d": "complicated", "e": None}   # f not run
+run2 = {"a": "true", "b": "complicated", "c": "complicated", "d": "complicated", "e": "true", "f": "false"}
+for name, run in (("r1", run1), ("r2", run2)):
+    (WORK / name).mkdir()
+    (WORK / name / "results.jsonl").write_text("".join(json.dumps({"id": k, "verdict": v}) + "\n" for k, v in run.items()))
+s = gold_score.score(harness.load_claims(gold), gold_score.read_run(WORK / "r1"))
+T = s["totals"]
+t("scorer: right, allowed, wrong, no answer, not run",
+  (T["n"], T["right"], T["allowed"], T["wrong"], T["no_answer"]) == (5, 1, 0, 3, 1) and s["not_run"] == ["f"], T)
+t("scorer: confident and wrong out of answered (2 of 4) and out of true-or-false (2 of 3)",
+  s["confident_wrong"]["of_answered"] == {"count": 2, "of": 4, "rate": 0.5}
+  and s["confident_wrong"]["of_true_or_false"] == {"count": 2, "of": 3, "rate": 0.667}
+  and s["confident_wrong_ids"] == ["b", "c"], s["confident_wrong"])
+t("scorer: harmful is the verdict shown in harmful_if", s["harmful_ids"] == ["b", "c"], s["harmful_ids"])
+t("scorer: tables by group and by reference", s["by_group"]["g1"]["n"] == 2 and s["by_group"]["g2"]["no_answer"] == 1
+  and s["by_reference"]["true"]["n"] == 2 and s["by_reference"]["complicated"]["harmful"] == 1, s["by_group"])
+t("scorer: a warning claim is left for a grader", s["warning_needed"] == [{"id": "b", "shown": "true",
+                                                                            "warning_shown": None}])
+c = gold_score.compare(harness.load_claims(gold), gold_score.read_run(WORK / "r1"), gold_score.read_run(WORK / "r2"))
+t("scorer: before and after, and the ids whose verdict changed",
+  [x["id"] for x in c["changed"]] == ["b", "c", "e"] and c["delta"]["right"] == 3 and c["delta"]["harmful"] == -2
+  and c["after"]["totals"]["allowed"] == 1, c["changed"])
+p5 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_score.py"), str(gold), str(WORK / "r1"),
+                     str(WORK / "r2")], capture_output=True, text=True, timeout=60)
+t("scorer: the command prints ids and counts and writes score.json",
+  p5.returncode == 0 and "b: true -> complicated" in p5.stdout and (WORK / "r2" / "score.json").exists(),
+  p5.stderr[-300:])
+
 shutil.rmtree(WORK, ignore_errors=True)
 t("no test used the network", not NET_TRIES, NET_TRIES)
 print(f"\n{sum(results)}/{len(results)} passed")
