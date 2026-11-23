@@ -686,18 +686,21 @@ _MEDICINE = (r"(?:medicines?|medications?|drugs?|pills?|antibiotics?|antivirals?
              r"chemo\w*|radiotherapy|aspirin|ibuprofen|paracetamol|acetaminophen|antidepressants?|"
              r"metformin|ivermectin|hydroxychloroquine|steroids?|opioids?|painkillers?|inhalers?)")
 # What a claim to stop a medicine names, wider than _MEDICINE (which also
-# decides "cure" and stays as it is): a general word for a medicine, a class
-# of prescribed medicine, a generic name by the ending such names are built
+# decides "cure" and stays as it is): a word for a medicine, a class of
+# prescribed medicine, a generic name by the ending such names are built
 # with (whole word, six letters or more, so April, tartan and alone never
 # match), or one of the common prescribed medicines whose names carry none.
-_MEDICINE_GENERAL = (r"tablets?|capsules?|meds|prescriptions?|prescribed|injections?|"
-                     r"patch(?:es)?")
+_MEDICINE_GENERAL = (r"medicines?|medications?|meds|prescriptions?|prescribed|"
+                     r"(?:prescription|prescribed)\s+drugs?|antibiotics?|antivirals?|statins?|insulin|"
+                     r"chemo\w*|radiotherapy|aspirin|ibuprofen|paracetamol|acetaminophen|antidepressants?|"
+                     r"metformin|ivermectin|hydroxychloroquine|steroids?|opioids?|painkillers?|inhalers?")
 _MEDICINE_CLASS = (
     r"blood[\s-]+thinners?|anticoagulants?|"
     r"(?:blood\s+pressure|heart|thyroid|epilepsy|seizure|asthma|diabetes|HIV)\s+"
     r"(?:medicines?|medications?|tablets?|pills?|meds|drugs?)|"
     r"antipsychotics?|beta[\s-]?blockers?|ACE\s+inhibitors?|water\s+tablets?|diuretics?|"
-    r"immunosuppressants?|HRT|hormone\s+replacement|(?:contraceptive\s+)?pill|antiretrovirals?")
+    r"immunosuppressants?|HRT|hormone\s+replacement|contraceptive\s+pills?|the\s+pill|"
+    r"antiretrovirals?")
 _MEDICINE_ENDING = (
     r"(?=[a-z]{6,}s?\b)[a-z]*(?:statin|pril|sartan|olol|dipine|prazole|xaban|gliptin|gliflozin|"
     r"glutide|mab|nib|oxetine|azepam|zolam|cillin|mycin|floxacin|cycline|azole|tidine|parin|"
@@ -707,11 +710,44 @@ _MEDICINE_NAMED = (
     r"gabapentin|pregabalin|digoxin|amiodarone|allopurinol|carbamazepine|lamotrigine|levetiracetam|"
     r"phenytoin|sertraline|citalopram|amitriptyline|quetiapine|olanzapine|risperidone|methadone|"
     r"tamoxifen|salbutamol|albuterol")
-_FORGO_MEDICINE = re.compile(
+_FORGO_NAMES = re.compile(
+    r"\b(?:" + _MEDICINE_GENERAL + "|" + _MEDICINE_CLASS + "|" + _MEDICINE_ENDING + "|"
+    + _MEDICINE_NAMED + r")\b", re.IGNORECASE)
+# A container word names a medicine only when nothing beside it says the
+# product is of another kind: a vitamin, mineral, supplement, herbal or diet
+# product, nicotine, or a recreational drug.
+_CONTAINER = re.compile(r"\b(?:tablets?|capsules?|pills?|injections?|patch(?:es)?)\b", re.IGNORECASE)
+_NOT_MEDICINE = re.compile(
+    r"\b(?:vitamins?|multivitamins?|minerals?|iron|zinc|magnesium|calcium|potassium|selenium|iodine|"
+    r"folic|folate|B12|supplements?|herbal|herbs?|fish\s+oil|cod\s+liver|omega|probiotics?|diet|"
+    r"dietary|slimming|nicotine|recreational|street|illegal|party)\b", re.IGNORECASE)
+_FORGO_WORD = re.compile(
     r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
-    r"go(?:ing)? without|giv(?:e|ing) up|ditch\w*|(?:do(?:es)?n[\u2019']?t|do(?:es)? not|no longer) need)\b"
-    r".{0,40}\b(?:" + _MEDICINE + "|" + _MEDICINE_GENERAL + "|" + _MEDICINE_CLASS + "|"
-    + _MEDICINE_ENDING + "|" + _MEDICINE_NAMED + r")\b", re.IGNORECASE)
+    r"go(?:ing)? without|giv(?:e|ing) up|ditch\w*|"
+    r"(?:do(?:es)?n[’']?t|do(?:es)? not|no longer) need)\b", re.IGNORECASE)
+# Where the thing stopped ends: a clause break, or "with", "by", "using",
+# after which a medicine is the means ("quit smoking with nicotine patches").
+_STOPPED_ENDS = re.compile(r"[,.;:!?]|\b(?:and|but|then|with|by|using)\b", re.IGNORECASE)
+
+
+def _forgoes_medicine(claim: str) -> bool:
+    """A medicine is the thing a stopping word stops: it names it within 40
+    characters, in the same clause and before any "with", "by" or "using"."""
+    for m in _FORGO_WORD.finditer(claim):
+        seg = claim[m.end():m.end() + 80]
+        lead = re.match(r"\s+(?:taking|using)\b", seg)  # "stop using it": the verb, not the means
+        cut = _STOPPED_ENDS.search(seg, lead.end() if lead else 0)
+        if cut:
+            seg = seg[:cut.start()]
+        hit = _FORGO_NAMES.search(seg)
+        if hit and hit.start() <= 40:
+            return True
+        box = _CONTAINER.search(seg)
+        if box and box.start() <= 40 and not _NOT_MEDICINE.search(seg):
+            return True
+    return False
+
+
 _MEDICINE_CURES = re.compile(
     r"\b" + _MEDICINE + r"\b.{0,40}\b(?:cur(?:e|es|ed|ing)|treat(?:s|ed|ing)?|heal(?:s|ed|ing)?)\b",
     re.IGNORECASE)
@@ -724,13 +760,15 @@ def forgoes_treatment(claim: str) -> str:
     or medicine, "cure" for one saying a named medicine cures or treats
     something, else "". Wording only, never one claim's text.
 
-    A claim is to stop a medicine when a stopping word stands within reach of
-    a word for a medicine: a general one, a class of prescribed medicine, a
-    generic name known by its ending, or a common prescribed medicine named
-    without one (_FORGO_MEDICINE). It is a rule about how medicines are
-    named, so foods, drinks and habits never match."""
+    A claim is to stop a medicine when the thing a stopping word stops, in
+    its own clause and before any "with", "by" or "using", is named as a
+    medicine: a word for one, a class, a generic-name ending or a common
+    prescribed name (_forgoes_medicine). A tablet, capsule, pill, injection
+    or patch counts only when nothing beside it names another kind of
+    product (vitamin, mineral, supplement, herbal, diet, nicotine,
+    recreational), and "drugs" only beside a prescribing or class word."""
     claim = str(claim or "")
-    if _STOPPING_TREATMENT.search(claim) or _FORGO_MEDICINE.search(claim):
+    if _STOPPING_TREATMENT.search(claim) or _forgoes_medicine(claim):
         return "forgo"
     return "cure" if _MEDICINE_CURES.search(claim) else ""
 

@@ -4372,7 +4372,11 @@ What was deliberately rejected:
   Round 3: a claim to stop a medicine is recognised by general signs, a
   stopping word near a general word (tablets, meds, prescribed), a class, a
   generic-name ending of six letters or more, or a common prescribed name
-  (`verdict._FORGO_MEDICINE`); the cure side is unchanged.
+  (`verdict._forgoes_medicine`); the cure side is unchanged.
+  Round 4: a tablet, capsule, pill, injection or patch beside a vitamin,
+  mineral, supplement, herbal, diet, nicotine or recreational word is not a
+  medicine; "drugs" counts only as prescription or class drugs; and the
+  medicine must be what is stopped, in its clause and not after "with".
 - Thin "complicated": becomes "Not enough evidence" (`verdict._too_thin`,
   `evidence.too_thin`) when every relied-on review that concludes says its
   evidence is not enough or thin, or, with no review, it rests on one small,

@@ -11950,7 +11950,7 @@ t("F1 round 3, rule 2: control: a warning that coming off brings symptoms back s
 # a general word, a class, a generic-name ending (whole word, six letters or
 # more) or a common prescribed name. The cure side is left exactly as it was.
 _FORGO_FIRE = {
-    "general": ["Stop your tablets", "Quit your meds", "Stop your prescription", "Stop the nicotine patches",
+    "general": ["Stop your tablets", "Quit your meds", "Stop your prescription", "Stop the patches your doctor gave you",
                 "Stop insulin injections", "You can stop the capsules once you feel better",
                 "Stop what you were prescribed", "Coming off your prescription meds is safe"],
     "class": ["Stop taking your blood thinners before surgery", "Give up your blood pressure medication",
@@ -11991,6 +11991,28 @@ t("F1 round 3: at least 40 must-fire claims across the four kinds", sum(map(len,
 _wrong = [c for c in _FORGO_QUIET if verdict.forgoes_treatment(c)]
 t(f"F1 round 3: everyday claims to stop a food, drink or habit are not ({len(_FORGO_QUIET)})",
   len(_FORGO_QUIET) >= 40 and not _wrong, _wrong)
+# Round 4: a container word or "drugs" is not a medicine by itself, and the
+# medicine has to be the thing stopped (its own clause, not the means).
+_FORGO_OTHER_KIND = [
+    "quit smoking with nicotine patches", "stop taking vitamin D tablets in summer", "stop doing drugs to live longer",
+    "stop taking diet pills", "skip lunch and take your iron tablets", "stop taking fish oil capsules",
+    "Stop taking vitamin B12 injections", "stop taking iron supplements", "stop smoking using nicotine gum",
+    "quit drugs", "stop street drugs", "give up party pills", "stop taking herbal tablets", "stop slimming pills",
+    "stop taking calcium tablets", "stop the fish oil and keep your tablets", "stop taking zinc capsules",
+    "stop taking multivitamin pills", "stop taking probiotic capsules", "stop omega 3 capsules",
+    "quit nicotine patches", "stop illegal drugs", "stop recreational drugs", "stop your magnesium tablets",
+    "stop folic acid tablets in pregnancy", "Stop the nicotine patches", "quit sugar by taking cinnamon capsules",
+    "stop snacking, then take your tablets", "give up coffee but keep your medication",
+]
+_wrong = [c for c in _FORGO_OTHER_KIND if verdict.forgoes_treatment(c) == "forgo"]
+t(f"F1 round 4: a container word beside another kind of product, drugs alone, or a medicine that is the means "
+  f"or in another clause is not a claim to stop a medicine ({len(_FORGO_OTHER_KIND)})", not _wrong, _wrong)
+_FORGO_R4_FIRE = ["stop prescription drugs", "Stop your HIV drugs", "stop using your inhaler", "stop insulin injections",
+                  "stop taking warfarin, and eat garlic", "replace your statins with fish oil",
+                  "stop using your steroid cream once rash clears", "come off the pill to get pregnant", "You can stop the capsules once you feel better"]
+_miss = [c for c in _FORGO_R4_FIRE if verdict.forgoes_treatment(c) != "forgo"]
+t("F1 round 4: still a claim to stop a medicine: prescribing words, the verb 'using', a medicine before 'with'",
+  not _miss, _miss)
 t("F1 round 3: the cure side is unchanged: a new name does not make a cure claim",
   verdict.forgoes_treatment("Warfarin cures blood clots") == "" and verdict.forgoes_treatment("Semaglutide treats obesity") == ""
   and verdict.forgoes_treatment("Ivermectin cures COVID") == "cure")
