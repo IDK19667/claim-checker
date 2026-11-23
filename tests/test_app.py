@@ -11508,7 +11508,7 @@ _SL_PROBES = {
     "ear-infection-decongestant": ("Decongestants clear ear infections faster", "Decongestants clear a blocked nose"),
     "child-ibuprofen-chickenpox": ("Ibuprofen eases chickenpox itching", "Ibuprofen eases period pain"),
     "child-teething-gel": ("Teething gel is safe for babies", "Amber necklaces ease teething pain"),
-    "child-salt-gargle": ("Kids should gargle salt water for a sore throat", "Gargling with salt water kills throat germs"),
+    "child-salt-gargle": ("Gargling with salt water kills throat germs", "Salt water nasal rinses clear a blocked nose"),
     "child-ear-infection": ("Garlic oil cures ear infections in toddlers", "Ear infections are common in swimmers"),
     "pregnancy-stop-medicine": ("Pregnant women should come off their antidepressants", "Pregnancy tests work best in the morning"),
     "pregnancy-epilepsy": ("Epilepsy medicine is dangerous in pregnancy", "Epilepsy is linked to flashing lights"),
@@ -11615,10 +11615,9 @@ t("F2: an age under 18, 'babys' and a crib count as a child or baby; an adult's 
   and "baby-safe-sleep" in _sl_ids("Bumpers in the crib prevent injury")
   and "honey-under-1" in _sl_ids("Honey is fine for a babys cold")
   and "child-aspirin" not in _sl_ids("Aspirin helps my 40 year old husband's headaches"))
-t("F2: triggers stay on the point: no iron line on liver in pregnancy, no gel line on necklaces, no child line on adult gargling",
+t("F2: triggers stay on the point: no iron line on liver in pregnancy, no gel line on necklaces, no honey line for adults",
   "pregnancy-medicines" not in _sl_ids("Eating liver while pregnant is good for iron")
   and _sl_ids("Amber teething necklaces reduce teething pain") == []
-  and _sl_ids("Gargling with salt water kills throat germs") == []
   and _sl_ids("Honey is better than cough syrup for adults") == []
   and _sl_ids("Dehydration causes headaches in kids") == []
   and _sl_ids("A high sugar diet causes diabetes") == []
@@ -11658,6 +11657,42 @@ t("F2: one medical treatment said to work better than another is not a claim to 
 t("F2: statins, antidepressants and epilepsy medicine keep a line on any claim about them (the reader may stop)",
   _sl_ids("Statins lower cholesterol") == ["statins"] and _sl_ids("SSRIs cause weight gain") == ["antidepressants"]
   and _sl_ids("Epilepsy is more common in men") == ["epilepsy-medicine"])
+t("F2: more pregnancy words: unborn, morning sickness, TTC, 'is expecting', 'expecting and', weeks beside sleep",
+  "pregnancy-medicines" in _sl_ids("Painkillers can harm the unborn baby")
+  and "pregnancy-medicines" in _sl_ids("Anti sickness tablets for morning sickness are safe")
+  and "pregnancy-alcohol" in _sl_ids("A little wine is fine when TTC")
+  and "pregnancy-liver" in _sl_ids("My wife is expecting and eats liver every week")
+  and "pregnancy-caffeine" in _sl_ids("Coffee is fine if you're expecting")
+  and "pregnancy-sleep-side" in _sl_ids("At 30 weeks, is it safe to sleep on my back?")
+  and _sl_ids("Wine is fine when you are expecting results tomorrow") == []
+  and _sl_ids("Is coffee bad when you are expecting a parcel?") == []
+  and _sl_ids("She is expecting good news, so coffee helps") == []
+  and _sl_ids("Babies born at 30 weeks sleep more on their backs") != ["pregnancy-sleep-side"]
+  and "pregnancy-sleep-side" not in _sl_ids("Babies born at 30 weeks sleep more on their backs"))
+t("F2: more breastfeeding words: nursing mums, expressing and pumping milk; not a nursing home, pumping iron or feelings",
+  "breastfeeding-medicines" in _sl_ids("Cold medicine is safe for nursing moms")
+  and "breastfeeding-alcohol" in _sl_ids("A glass of wine is fine while pumping")
+  and "breastfeeding-medicines" in _sl_ids("Ibuprofen is safe when expressing breast milk")
+  and "breastfeeding-alcohol" in _sl_ids("Beer helps nursing mums make more milk")
+  and _sl_ids("Medicines are overused in nursing homes") == []
+  and _sl_ids("Wine with dinner is fine while nursing a cold") == []
+  and _sl_ids("Pumping iron while taking supplements builds muscle") == []
+  and _sl_ids("Expressing feelings while breastfeeding helps with stress") != ["breastfeeding-medicines"]
+  and _sl_ids("Expressing feelings helps with stress") == [])
+_sl_brands = _sl.BRAND_NAMES
+t("F2: a medicine by name counts for the pregnancy and breastfeeding lines, and no brand name is in any line",
+  "pregnancy-medicines" in _sl_ids("Tylenol in pregnancy causes ADHD")
+  and "pregnancy-medicines" in _sl_ids("Sertraline is safe in pregnancy")
+  and "pregnancy-medicines" in _sl_ids("Omeprazole is fine in the third trimester")
+  and "breastfeeding-medicines" in _sl_ids("Zyrtec is fine while breastfeeding")
+  and "pregnancy-stop-medicine" in _sl_ids("Stop taking sertraline as soon as you are pregnant")
+  and _sl_ids("Tylenol causes ADHD") == []
+  and _sl_ids("Pregnancy is a time of great examination") == []
+  and not [e_["id"] for e_ in _sl.ENTRIES if re.search(_sl_brands, e_["line"], re.I)])
+t("F2: the salt water gargle line fires at any age and keeps the page's note that children should not try it",
+  _sl_ids("Gargling with salt water kills throat germs") == ["child-salt-gargle"]
+  and _sl_ids("Kids should gargle salt water for a sore throat") == ["child-salt-gargle"]
+  and "children should not try it" in _sl.BY_ID["child-salt-gargle"]["line"])
 t("F2: oral vitamin A for acne gets the vitamin A line; a cream does not",
   "vitamin-a-limit" in _sl_ids("Taking 50000 IU vitamin A for acne") and _sl_ids("Retinol cream reduces wrinkles") == [])
 t("F2: a remedy said to cure a serious condition gets the line whatever it is called; a medical treatment does not",

@@ -36,7 +36,17 @@ def _w(*alts: str) -> str:
 
 # Word groups, each with its everyday synonyms.
 PREGNANT = _w(r"pregnan\w*", r"pregant\w*", r"expecting (?:a baby|twins|mothers?|moms?|mums?|parents?)",
-              r"(?:when|while|whilst|if) (?:\w+ ){0,2}expecting(?! (?:a|an|the|my|your|our) (?!baby\b)\w+)",
+              r"(?:when|while|whilst|if) (?:\w+ ){0,2}expecting(?! (?:a|an|the|my|your|our) (?!baby\b)\w+)"
+              r"(?! (?:results?|news|guests?|visitors?|calls?|deliver\w*|parcels?|rain|snow|it|them|him|that|this|"
+              r"too|more|much|to|trouble|problems?)\b)",
+              # "is expecting", "expecting and ...": expecting with nothing after it but a pause or a baby.
+              r"(?:is|am|are|was|were|i'm|im|she's|shes|we're|you're|youre|wife|partner|girlfriend|daughter|sister) "
+              r"(?:\w+ ){0,1}?expecting(?=\s*(?:$|[,.;:!?]|(?:and|but|so|or)\b|(?:a |our |my |her |their |your )?"
+              r"(?:baby|babies|twins|triplets|first|second|third|boy|girl|little one)\b))",
+              r"unborn", r"morning sickness", r"hyperemesis(?: gravidarum)?", r"ttc",
+              # Weeks of pregnancy beside a sleep word: "at 30 weeks, can I sleep on my back".
+              r"(?<!born at )(?<!born )(?:2\d|3\d|4[0-2]) weeks?(?! old)(?=.{0,40}?\b(?:sleep\w*|slept)\b)",
+              r"(?:sleep\w*|slept)\b.{0,40}?\b(?:at|after|from|past|over) (?:2\d|3\d|4[0-2]) weeks?(?! old)",
               r"mums? to be", r"moms? to be", r"mothers? to be", r"expectant (?:mothers?|moms?|mums?|parents?)",
               r"trying to conceive", r"trying for a baby", r"trimesters?", r"antenatal", r"prenatal",
               r"gestation(?:al)?", r"baby bump", r"miscarr\w*", r"stillbirths?",
@@ -59,8 +69,14 @@ CHILD = _w(r"child(?:ren)?", r"kids?", r"toddlers?", r"bab(?:y|ys|ies)(?! aspiri
            r"infants?", r"newborns?", r"p(?:a)?ediatric", r"teen(?:ager)?s?", r"adolescents?",
            r"young people", r"youngsters?", r"school ?children", r"under (?:5|6|12|16)s?",
            r"(?:boys|girls) and (?:girls|boys)")
-BREASTFEEDING = _w(r"breast ?feed\w*", r"breast-feed\w*", r"breastfed", r"nursing mothers?",
-                   r"lactat\w*", r"while nursing")
+BREASTFEEDING = _w(r"breast ?feed\w*", r"breast-feed\w*", r"breastfed", r"lactat\w*",
+                   r"(?:nursing|pumping|breastfeeding) (?:moms?|mums?|mothers?|parents?|women)",
+                   r"(?:when|while|whilst|if) (?:\w+ ){0,2}?nursing(?! (?:homes?|staff|care|students?|degrees?|"
+                   r"jobs?|a \w+|an \w+|the \w+|my \w+|your \w+|injur\w*|wounds?)\b)",
+                   r"express(?:ing|ed|es)? (?:breast ?)?milk", r"pump(?:ing|ed|s)? (?:breast ?)?milk",
+                   r"breast pump\w*", r"exclusively pumping",
+                   r"(?:when|while|whilst|if) (?:\w+ ){0,2}?(?:expressing|pumping)"
+                   r"(?=\s*(?:$|[,.;:!?]|(?:and|but|so|or|is|are)\b))")
 MEDICINE = _w(r"medicines?", r"medications?", r"meds", r"drugs?", r"tablets?", r"pills?", r"capsules?",
               r"painkillers?", r"pain ?relief", r"paracetamol", r"acetaminophen", r"ibuprofen",
               r"aspirin", r"codeine", r"antibiotics?", r"antihistamines?", r"antidepressants?",
@@ -69,6 +85,23 @@ MEDICINE = _w(r"medicines?", r"medications?", r"meds", r"drugs?", r"tablets?", r
               r"aromatherapy", r"essential oils?", r"prescri\w*", r"fish oil", r"omega 3s?",
               r"iron (?:tablets?|supplements?|pills?|drops?|capsules?)",
               r"omega-3s?", r"echinacea", r"ginseng", r"turmeric", r"ginger (?:capsules?|supplements?)")
+# A medicine by name: a generic by its ending (whole word, six letters or
+# more), or one of the commonest generic and brand names. Brand names are
+# for triggers only, never for a line.
+_GENERIC_END = (r"(?:azole|cillin|mycin|cycline|oxacin|statin|pril|sartan|olol|dipine|prazole|oxetine|triptan|"
+                r"tidine|tadine|zepam|zolam|profen|semide|thiazide|gliptin|gliflozin|lukast|olone|asone|codone|"
+                r"morphine|triptyline|parin|xaban|gatran|setron|opram|traline|apine|idone|azepine|ipramine)")
+GENERIC_NAMES = _w(r"(?=[a-z]{6,}\b)[a-z]+" + _GENERIC_END, r"cetirizine", r"metformin", r"insulin",
+                   r"levothyroxine", r"doxylamine", r"diphenhydramine", r"chlorphenamine", r"metoclopramide",
+                   r"salbutamol", r"albuterol", r"warfarin", r"lithium", r"valproate", r"lamotrigine",
+                   r"gabapentin", r"pregabalin", r"tramadol", r"methadone", r"buprenorphine", r"hydroxyzine",
+                   r"promethazine", r"cyclizine")
+BRAND_NAMES = _w(r"tylenol", r"panadol", r"calpol", r"advil", r"motrin", r"nurofen", r"aleve", r"benadryl",
+                 r"claritin", r"zyrtec", r"sudafed", r"gaviscon", r"tums", r"rennie", r"zofran", r"diclegis",
+                 r"unisom", r"prozac", r"zoloft", r"lexapro", r"xanax", r"valium", r"ventolin", r"lipitor",
+                 r"nexium", r"prilosec", r"imodium", r"pepto bismol", r"robitussin", r"nyquil", r"dayquil",
+                 r"mucinex", r"midol", r"excedrin", r"piriton", r"lemsip", r"night nurse")
+NAMED_MEDICINE = GENERIC_NAMES + "|" + BRAND_NAMES
 STOPPING = _w(r"stop\w*", r"quit\w*", r"skip\w*", r"com(?:e|ing) off", r"go(?:ing)? off",
               r"giv(?:e|ing) up", r"ditch\w*", r"replac\w*", r"instead of", r"in place of",
               r"rather than", r"swap\w*", r"without", r"no need", r"(?:do(?:es)?n'?t|do(?:es)? not) need",
@@ -401,9 +434,9 @@ ENTRIES = [
      "page": "Tips for helping your teething baby",
      "quote": "General oral pain relief gels are not suitable for children."},
     {"id": "child-salt-gargle", "topic": "Gargling salt water", "rank": 2,
-     "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt"), CHILD],
-     "trigger": "gargling with salt or salt water, with a child",
-     "line": "Gargling with warm salty water is not for children: they should not try it.",
+     "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt")],
+     "trigger": "gargling with salt or salt water, at any age",
+     "line": "Gargling with warm, salty water can help soothe a sore throat, but children should not try it.",
      "url": "https://www.nhs.uk/symptoms/sore-throat/",
      "page": "Sore throat",
      "quote": "gargle with warm, salty water (children should not try this)"},
@@ -426,7 +459,7 @@ ENTRIES = [
 
     # ---- pregnancy -----------------------------------------------------------------
     {"id": "pregnancy-stop-medicine", "topic": "Stopping a prescribed medicine in pregnancy", "rank": 1,
-     "when": [PREGNANT, MEDICINE, STOPPING], "unless": [NOT_PREGNANT],
+     "when": [PREGNANT, MEDICINE + "|" + NAMED_MEDICINE, STOPPING], "unless": [NOT_PREGNANT],
      "over": ["pregnancy-medicines", "stop-in-place-of-treatment"],
      "trigger": "pregnancy, a medicine, and stopping, skipping or doing without it",
      "line": "In pregnancy, never stop a medicine prescribed to keep you healthy without talking to "
@@ -563,8 +596,8 @@ ENTRIES = [
      "page": "Pregnancy vitamins and supplements",
      "quote": "Take folic acid for the first 12 weeks of pregnancy."},
     {"id": "pregnancy-medicines", "topic": "Medicines, supplements and remedies in pregnancy", "rank": 2,
-     "when": [PREGNANT, MEDICINE], "unless": [NOT_PREGNANT],
-     "trigger": "pregnancy, and any medicine, supplement, vitamin or herbal remedy",
+     "when": [PREGNANT, MEDICINE + "|" + NAMED_MEDICINE], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and any medicine (by name too), supplement, vitamin or herbal remedy",
      "line": "If you are pregnant, check with your doctor, midwife or pharmacist before taking any "
              "medicine, and tell them about any herbal remedies.",
      "url": "https://www.nhs.uk/pregnancy/keeping-well/medicines/",
@@ -574,8 +607,8 @@ ENTRIES = [
 
     # ---- breastfeeding -----------------------------------------------------------
     {"id": "breastfeeding-medicines", "topic": "Medicines while breastfeeding", "rank": 2,
-     "when": [BREASTFEEDING, MEDICINE],
-     "trigger": "breastfeeding, and any medicine, supplement or herbal remedy",
+     "when": [BREASTFEEDING, MEDICINE + "|" + NAMED_MEDICINE],
+     "trigger": "breastfeeding, and any medicine (by name too), supplement or herbal remedy",
      "line": "If you are breastfeeding, check with a doctor, midwife or pharmacist before taking a medicine "
              "or herbal remedy.",
      "url": "https://www.nhs.uk/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/medicines/",
@@ -798,11 +831,20 @@ def org_for(url: str) -> str | None:
     return next((name for h, name in ORGS.items() if host == h or host.endswith("." + h)), None)
 
 
+_COMPILED: dict[str, re.Pattern] = {}
+
+
+def _compile(p: str) -> re.Pattern:
+    # One compiled pattern per distinct word group, so match() can search
+    # each group once however many entries use it.
+    return _COMPILED.setdefault(p, re.compile(p, _FLAGS))
+
+
 for _e in ENTRIES:
     _e["checked"] = CHECKED
     _e["org"] = org_for(_e["url"])
-    _e["_when"] = [re.compile(p, _FLAGS) for p in _e["when"]]
-    _e["_unless"] = [re.compile(p, _FLAGS) for p in _e.get("unless", ())]
+    _e["_when"] = [_compile(p) for p in _e["when"]]
+    _e["_unless"] = [_compile(p) for p in _e.get("unless", ())]
 BY_ID = {e["id"]: e for e in ENTRIES}
 LINES = frozenset(e["line"] for e in ENTRIES)
 
@@ -815,9 +857,15 @@ def normalise(claim: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def _fires(entry: dict, text: str) -> bool:
-    return (all(p.search(text) for p in entry["_when"])
-            and not any(p.search(text) for p in entry["_unless"]))
+def _fires(entry: dict, text: str, seen: dict | None = None) -> bool:
+    if seen is None:
+        seen = {}
+
+    def found(p: re.Pattern) -> bool:
+        if p not in seen:
+            seen[p] = p.search(text) is not None
+        return seen[p]
+    return all(found(p) for p in entry["_when"]) and not any(found(p) for p in entry["_unless"])
 
 
 def match(claim: str) -> list[dict]:
@@ -826,7 +874,8 @@ def match(claim: str) -> list[dict]:
     says something like it already: a caution said twice costs less than
     one that is missing."""
     text = normalise(claim)
-    hits = [e for e in ENTRIES if _fires(e, text)]
+    seen: dict = {}
+    hits = [e for e in ENTRIES if _fires(e, text, seen)]
     covered = {o for e in hits for o in e.get("over", ())}
     hits = [e for e in hits if e["id"] not in covered]
     hits.sort(key=lambda e: e["rank"])  # stable: library order breaks ties
