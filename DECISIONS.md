@@ -4362,3 +4362,7 @@ What was deliberately rejected:
   `evidence.too_thin`) when every relied-on review that concludes says its
   evidence is not enough or thin, or, with no review, it rests on one small,
   pilot or uncontrolled study. Runs after the faithfulness check: no new call.
+- Evidence line: a relied-on review whose conclusion says its evidence is not
+  enough (`evidence.says_not_enough`) lowers the strength word to "Low
+  certainty", as `says_thin` already did. "Strong evidence" had come from the
+  review's design alone.

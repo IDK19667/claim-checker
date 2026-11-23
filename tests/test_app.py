@@ -11584,6 +11584,12 @@ t("F3: the rule does not fire on a review that leans yes beside one that says no
                         "Standing desks reduce back pain")["verdict"] == "complicated"
   and verdict._too_thin(dict(_F3_RES(["f3a"]), verdict="true"), [_F3_NO], "Garlic prevents colds")["verdict"] == "true")
 
+# Fix 4: the line's strength word is no surer than what a relied-on review concluded.
+t("F4: a review that concludes its evidence is not enough makes the line say low certainty, not strong",
+  evidence.evidence_line("complicated", [_F3_NO, _F3_YES], ["f3a", "f3b"], "Echinacea shortens colds")
+  .startswith("Low certainty")
+  and evidence.evidence_line("complicated", [_F3_YES], ["f3b"], "Echinacea shortens colds").startswith("Strong"))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

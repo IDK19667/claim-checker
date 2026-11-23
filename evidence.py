@@ -1262,11 +1262,12 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
     # A relied-on review that says its own evidence is held back by few or
-    # small studies has said how sure it is, and the line is no surer. Only
-    # ever lowers: a line already at low or very low stays.
+    # small studies, or concludes it is not enough to tell, has said how sure
+    # it is, and the line is no surer. Only ever lowers: a line already at
+    # low or very low stays.
     cited = set(cited_pmids or ())
     if (line_certainty(level) not in ("low", "very low")
-            and any(says_thin(s) for s in studies or [] if s.get("pmid") in cited)):
+            and any(says_thin(s) or says_not_enough(s) for s in studies or [] if s.get("pmid") in cited)):
         level = "Low certainty"
     # One certainty for the whole page. The line is never surer than the
     # least sure thing the page already says: the lowest rating any review
