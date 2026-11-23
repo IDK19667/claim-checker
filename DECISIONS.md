@@ -4347,3 +4347,9 @@ What was deliberately rejected:
   bill.
 - 2026-09-14 Verdict integrity rules: citations map to the studies the
   model was shown; an uncited true/false is forced to "complicated".
+
+## 2026-11-23: Safety lines come from a fixed, sourced library, never from the model
+- `safety_lines.py` holds one sentence per hazard (honey under 1, caffeine in pregnancy, stopping a statin...), each with the NHS, FDA or MedlinePlus sentence that supports it and the date it was read. Rules on the claim's words fire it; no model call, so the same claim always gets the same line.
+- A line lands at the end of `explanation`, where the harm guard's sentence goes, added on the way out in `app._check_response`, so fresh, saved and server-rendered answers match and nothing is stored. It never changes a stamp, a citation or the short answer. At most two, most serious first; none when the guard already said the same hazard.
+- The page prints `explanation` only when the answer has no breakdown paragraphs, so on most answers the line is in the response but not on screen. Showing it beside the short answer is a template change, not yet made.
+- To add an entry: write the line for everyone asking about the hazard, copy the source's own sentence into `quote`, and add a firing claim and a near miss to the F2 block in `tests/test_app.py`.

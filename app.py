@@ -28,6 +28,7 @@ import og
 import pubmed
 import nextsteps
 import ratelimit
+import safety_lines
 import suggest as suggest_mod
 import verdict
 
@@ -1133,6 +1134,11 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         if "rests_on" in breakdown:
             breakdown["rests_on"] = sum(1 for s in studies if s["pmid"] in cited)
         breakdown["contents"] = breakdown_mod.contents(breakdown)
+    # The fixed safety lines (safety_lines.py), last and on the way out like the
+    # lines above, so a saved answer gets the same lines as a fresh one and the
+    # library is never hidden behind saved answers. They add a sentence to the
+    # explanation, where the harm guard's goes, and change nothing else.
+    explanation = safety_lines.attach(claim, tldr, explanation)
     return {
         "claim": claim,
         # What the reader typed, present only when the answer is to other
