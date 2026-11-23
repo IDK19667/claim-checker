@@ -703,6 +703,83 @@ t("plain http is not told to be https-only", "Strict-Transport-Security" not in 
 t("the privacy page is protected too",
   "Content-Security-Policy" in c.get("/privacy").headers)
 
+# Nothing from another origin, read off the pages as a visitor gets them: every
+# src, every <link href>, every url(...) and @import in the HTML and in every
+# stylesheet and script the page loads (scripts a script loads included) points
+# at this site. The header above enforces it in a browser; this proves the pages
+# never ask in the first place.
+_oo_seen, _oo_bad, _oo_files = set(), [], []
+
+
+def _oo_url_ok(u):
+    p = urllib.parse.urlsplit(u.strip())
+    if not p.scheme and not p.netloc:
+        return True  # a path on this site
+    return p.scheme in ("http", "https") and p.hostname == "localhost"
+
+
+def _oo_scan_text(where, text, is_script=False):
+    for u in _re.findall(r"""url\(\s*['"]?([^'")]+)""", text):
+        if not _oo_url_ok(u):
+            _oo_bad.append((where, "url()", u))
+    for u in _re.findall(r"""@import\s+(?:url\()?\s*['"]?([^'");\s]+)""", text):
+        if not _oo_url_ok(u):
+            _oo_bad.append((where, "@import", u))
+    if is_script:
+        # a file a script loads itself: a string literal naming a script, a
+        # stylesheet, an image or a font, or one set as a src
+        for u in _re.findall(r"""\.src\s*=\s*["'`]([^"'`]+)["'`]""", text):
+            if not _oo_url_ok(u):
+                _oo_bad.append((where, "script src", u))
+        for u in _re.findall(r"""["'`]((?:(?:https?:)?//)?/?[^"'`\s:]*\.(?:js|mjs|css|jpe?g|png|webp|gif|svg|woff2?|ttf|otf))(?:\?[^"'`\s]*)?["'`]""", text):
+            if "/" not in u:
+                continue  # a bare file name in prose, not a load
+            if not _oo_url_ok(u):
+                _oo_bad.append((where, "script asset", u))
+            elif u.endswith((".js", ".css")):
+                _oo_fetch(u)
+
+
+def _oo_fetch(u):
+    path = urllib.parse.urlsplit(u).path
+    if path in _oo_seen:
+        return
+    _oo_seen.add(path)
+    rr = c.get(path)
+    if rr.status_code != 200:
+        _oo_bad.append((path, "not served", rr.status_code))
+        return
+    _oo_files.append(path)
+    _oo_scan_text(path, rr.get_data(as_text=True), is_script=path.endswith(".js"))
+
+
+_oo_pages = {"home": "/", "a result": "/?q=streamed%20claim", "about": "/about", "privacy": "/privacy",
+             "method": "/method", "the 404": "/no-such-page-here"}
+_oo_status = {}
+for _oo_name, _oo_path in _oo_pages.items():
+    _oo_r = c.get(_oo_path)
+    _oo_status[_oo_name] = _oo_r.status_code
+    _oo_html = _oo_r.get_data(as_text=True)
+    for _oo_tag in _re.findall(r"<[a-zA-Z][^>]*>", _oo_html):
+        _oo_name_tag = _re.match(r"<([a-zA-Z0-9-]+)", _oo_tag).group(1).lower()
+        for _oo_attr, _oo_val in _re.findall(r"""\s(src|srcset|href|poster|data)\s*=\s*["']([^"']*)["']""", _oo_tag):
+            if _oo_attr == "href" and _oo_name_tag != "link":
+                continue  # <a href> is a place a reader may go, not a load
+            for _oo_u in ([x.strip().split(" ")[0] for x in _oo_val.split(",")] if _oo_attr == "srcset" else [_oo_val]):
+                if not _oo_url_ok(_oo_u):
+                    _oo_bad.append((_oo_name, f"<{_oo_name_tag} {_oo_attr}>", _oo_u))
+                elif _oo_attr in ("src", "href") and _oo_u.split("?")[0].endswith((".js", ".css")):
+                    _oo_fetch(_oo_u)
+    _oo_scan_text(_oo_name, _oo_html)
+    for _oo_js in _re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", _oo_html, _re.S):
+        _oo_scan_text(_oo_name + " inline script", _oo_js, is_script=True)
+t("nothing from another origin: every src, <link href>, url() and @import on home, a result, about, privacy, "
+  "method and the 404, and in every stylesheet and script they load, points at this site",
+  not _oo_bad and _oo_status == {"home": 200, "a result": 200, "about": 200, "privacy": 200, "method": 200, "the 404": 404}
+  and {"/static/desk.css", "/static/style.css", "/static/app.js", "/static/desk.js",
+       "/static/vendor/three-r128.min.js"} <= set(_oo_files),
+  (_oo_bad[:6], _oo_status, sorted(_oo_files)))
+
 import app as _app_mod  # noqa: E402
 t("the debugger is off unless it is asked for",
   __import__("os").environ.get("FLASK_DEBUG", "0") == "0")
