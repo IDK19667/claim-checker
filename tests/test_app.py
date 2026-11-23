@@ -11778,6 +11778,28 @@ t("  a save that fails leaves the answer delivered and the error logged, and the
   and any("disk is full" in w_ for w_ in _sp_warned)
   and _sp_logged("Speed test claim six with a failing save") == 1, (_sp_evs6[-1:], _sp_warned))
 
+_sp_saved_args = []
+_sp_prev_put = db.put_cached_verdict
+_sp_prev_resp = appmod._check_response
+
+
+def _sp_mutating_response(*a, **k):
+    out = _sp_prev_resp(*a, **k)
+    a[6][0]["title"] = "changed while the response was built"
+    return out
+
+
+db.put_cached_verdict = lambda *a, **k: _sp_saved_args.append(json.dumps(a[5])) or _sp_prev_put(*a, **k)
+appmod._check_response = _sp_mutating_response
+try:
+    fg.models.script = [Resp("speed AND ten"), Resp(VJ("false", [2]))]
+    stream("Speed test claim ten saved as it was", ip="9.5.5.10")
+finally:
+    db.put_cached_verdict = _sp_prev_put
+    appmod._check_response = _sp_prev_resp
+t("  and what is saved after done is what was there before the response was built",
+  len(_sp_saved_args) == 1 and "changed while the response was built" not in _sp_saved_args[0], _sp_saved_args)
+
 _sp_reads = []
 _sp_prev_all = db.all_claims
 db.all_claims = lambda *a, **k: _sp_reads.append(

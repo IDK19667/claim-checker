@@ -1,3 +1,4 @@
+import copy
 import gzip
 import hashlib
 import hmac
@@ -1435,6 +1436,10 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
     shows_saved = not (studies and display.relied_pmids(result["cited_studies"], studies))
     if shows_saved:
         _save_and_log(claim, query_used, result, studies)
+    else:
+        # What is saved is what was there before the response was built,
+        # as when the writes came first.
+        kept = copy.deepcopy((result, studies))
     response = _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
@@ -1444,7 +1449,7 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         yield {"stage": "done", "result": response}
     finally:
         if not shows_saved:
-            _save_and_log(claim, query_used, result, studies)
+            _save_and_log(claim, query_used, *kept)
 
 
 def _save_and_log(claim, query_used, result, studies):
