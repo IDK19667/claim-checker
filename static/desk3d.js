@@ -667,6 +667,7 @@ window.__evidentDesk3d = function (O) {
         }
         if (woodState !== "loading" && !readyDone) { readyDone = true; requestAnimationFrame(function () { O.readyResolve(); }); }
         if (waiters.length) { var w = waiters; waiters = []; requestAnimationFrame(function () { w.forEach(function (r) { r(); }); }); }
+        if (readyDone) warmSoon();
       }
     }
     var lastShadowPs = -1, readyDone = false, lastSig = "", casters = null, handed = false;
@@ -939,6 +940,7 @@ window.__evidentDesk3d = function (O) {
       ready: true, gl: true, renderer: renderer, scene: scene, camera: camera,
       snap: function () { Ps = O.rawProgress(); sheets.forEach(function (o) { o.lift = O.openN === o.s.n ? 1 : 0; }); O.wake(); },
       dpr: function () { return lastRatio; },
+      warmed: function () { return warmGen === sheetGen; },
       open: function (n) { O.selectStudy(n, { from: "scene" }); O.wake(); },
       KEYS: KEYS, V: V, resize: resize, sheets: sheets, FAN: FAN,
       proj: function (x, y, z) { var v = new T.Vector3(x, y, z).project(camera); return [Math.round((v.x * 0.5 + 0.5) * W), Math.round((-v.y * 0.5 + 0.5) * H)]; }
@@ -964,6 +966,41 @@ window.__evidentDesk3d = function (O) {
         if (seen) O.wake();
         if (lazyQ.length) setTimeout(step, 16); else lazyQ = null;
       })();
+    }
+    // ---- the warm-up: the first press of Next pays for no compile and no upload ----------
+    // Once an answer is readable and the picture is still, the programs the scene uses are compiled and each texture
+    // is sent to the GPU, one piece per idle slice. Never mid-move, never while the reader types, scrolls, touches or
+    // presses (it waits and tries again). A press before it is done finds the scene as before; nothing drawn changes.
+    var warmGen = -1, warmQ = null, warmT = 0, inputAt = 0;
+    addEventListener("keydown", function () { inputAt = performance.now(); }, true);
+    addEventListener("input", function () { inputAt = performance.now(); }, true);
+    var idle = window.requestIdleCallback ? function (f) { requestIdleCallback(f, { timeout: 1000 }); } : function (f) { setTimeout(f, 50); };
+    function warmLater(ms) { clearTimeout(warmT); warmT = setTimeout(function () { idle(warmStep); }, ms); }
+    function warmSoon() { if (!warmQ && warmGen !== sheetGen && O.checked && !glLost) warmLater(250); }
+    function warmBusy() { var now = performance.now(); return looping || !!O.tween || O.touching || O.pressing || now - O.lastScrollAt < 400 || now - inputAt < 1000; }
+    function warmTextures() {
+      var list = [], seen = [];
+      scene.traverse(function (o) {
+        if (!o.isMesh) return;
+        [].concat(o.material).forEach(function (m) {
+          ["map", "emissiveMap", "alphaMap", "roughnessMap", "bumpMap"].forEach(function (k) { var t = m[k]; if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
+        });
+      });
+      return list;
+    }
+    function warmStep() {
+      if (glLost) return;
+      if (!warmQ) { if (warmGen === sheetGen || !O.checked) return; warmQ = { gen: sheetGen, compiled: false, list: null }; }
+      if (warmQ.gen !== sheetGen) { warmQ = null; warmSoon(); return; }
+      if (warmBusy()) { warmLater(300); return; }
+      if (!warmQ.compiled) { renderer.compile(scene, camera); warmQ.compiled = true; warmQ.list = warmTextures(); }
+      else {
+        var t = warmQ.list.shift(), im = t && t.image;
+        // only a texture whose picture is complete: one still loading is sent when it is first drawn, as before
+        if (t && t.version > 0 && im && im.complete !== false && (im.width || im.videoWidth)) renderer.initTexture(t);
+      }
+      if (!warmQ.list.length) { warmGen = warmQ.gen; warmQ = null; return; }
+      idle(warmStep);
     }
     O.onCheck = function () {
       casters = null; shadowDirty = true;

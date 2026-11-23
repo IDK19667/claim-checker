@@ -4,6 +4,23 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): The scene warms up before the first press of Next
+
+On a saved answer the first Next in 3D stalled for 2.2 s on the phone
+profile (3.4 s at 1440x900): the first frame of the move compiled two
+programs and sent about 21 textures (the sheets' faces) to the GPU, about
+500 ms of main-thread work at 4 times CPU slowdown before any drawing.
+Now, once an answer is readable and the picture is still, the scene
+compiles its programs (`renderer.compile`) and sends each texture
+(`renderer.initTexture`) one piece per idle slice: never mid-move, never
+while the reader types, scrolls, touches or presses. The longest piece
+measured is 65 ms; the first frame of the move now runs about 40 ms of
+script. A press before the warm-up ends behaves as before. Nothing drawn
+changes, and the home page has no warm-up. What remains on this machine
+is software drawing (SwiftShader, no GPU) at about a second a frame; the
+under-three-frames rule turns the later moves into cuts, and is left as
+it is.
+
 ## 2026-11-23 (q10): The 3D scene's code arrives with three.js, not with the first screen
 
 The first visit fetched about 214 KB before any 3D file, over the 200 KB

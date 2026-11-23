@@ -11605,6 +11605,15 @@ t("DESK3D: every desk.js name the scene uses has its accessor on the bridge, and
   _d3_names and _d3_names == _d3_bridge, sorted(_d3_names ^ _d3_bridge))
 _d3_gz = len(__import__("gzip").compress(_d3_desk.encode(), 6))
 t("DESK3D: desk.js, which the first screen needs, is under 20 KB gzipped", _d3_gz < 20 * 1024, _d3_gz)
+_wu = _d3_scene.split("function warmStep()", 1)[-1].split("O.onCheck", 1)[0]
+t("WARM: the scene compiles its programs and sends its textures ahead of the press, one piece per idle slice, only once an answer is readable",
+  "if (readyDone) warmSoon();" in _d3_scene and "renderer.compile(scene, camera)" in _wu and "renderer.initTexture(t)" in _wu
+  and "idle(warmStep);" in _wu and "warmLater(300)" in _wu and "O.checked" in _d3_scene.split("function warmSoon()", 1)[-1].split("\n", 1)[0])
+_wb = _d3_scene.split("function warmBusy()", 1)[-1].split("\n", 1)[0]
+t("WARM: it waits while the scene moves or the reader types, scrolls, touches or presses",
+  all(k in _wb for k in ("looping", "O.tween", "O.touching", "O.pressing", "O.lastScrollAt", "inputAt")), _wb)
+t("WARM: a texture whose picture is not complete is left to its first drawing (no console warning)",
+  "im.complete !== false" in _wu and "t.version > 0" in _wu)
 
 # ---- HOME LISTS: the home page's lists are kept in memory for a short while ----
 _hl_calls = {"recent": 0, "example": 0, "fail": False}

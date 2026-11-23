@@ -29,6 +29,11 @@
  *    kept home page within about 3 s and the late answer refreshes the copy; with
  *    a fast server the fresh page arrives; a first visit waits for the network;
  *    offline, the home page paints from the copy with its stylesheet and scripts.
+ * 19. The warm-up: on a saved answer in 3D the scene's programs and textures are
+ *    sent to the GPU ahead of the press, after the answer is readable; the first
+ *    Next then compiles no program and sends no texture it already had; a press
+ *    before the warm-up is done still lands on the next stop; the home page has
+ *    no warm-up.
  * 17. The cue row on top of the bar row: in view, as wide, sizes and contrast, its
  *    words from Next's state, a click moves as Next does, gone at the end; the
  *    chevron dips once and never under reduced motion; in 3D a wheel or a drag from
@@ -683,6 +688,36 @@ await test("18: offline, the home page paints from the copy with its stylesheet,
   must(look.box && look.css && look.ran, `offline: ${JSON.stringify(look)}`);
   must(look.faces.some((f) => /Instrument/.test(f)), `offline faces loaded: ${look.faces.join(", ")}`);
 }, { sw: true });
+
+// ---- 19. the warm-up: the first Next pays for no compile and no upload ----
+const warmed = (page) => page.waitForFunction(() => window.__evd && window.__evd.warmed && window.__evd.warmed(), null, { timeout: 30000, polling: 100 }).then(() => true, () => false);
+await test("19: on a saved answer the warm-up finishes after the answer is readable, and the first Next compiles and sends nothing new", async (page) => {
+  await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  must(await warmed(page), "the warm-up never finished");
+  const before = await page.evaluate(() => { const r = window.__evd.renderer; return { p: r.info.programs.length, t: r.info.memory.textures, stop: window.__evident.stats().stop }; });
+  await page.evaluate(() => { const r = window.__evd.renderer, gl = r.getContext(); window.__up = 0; const o = gl.texImage2D.bind(gl); gl.texImage2D = function (...a) { window.__up++; return o(...a); }; });
+  await page.click("#next"); await page.waitForTimeout(2500);
+  const after = await page.evaluate(() => ({ p: window.__evd.renderer.info.programs.length, up: window.__up, stop: window.__evident.stats().stop }));
+  must(after.stop === before.stop + 1, `stop ${before.stop} to ${after.stop}`);
+  must(after.p === before.p, `programs ${before.p} to ${after.p}`);
+  // the lifted top sheet's large face is painted on the way (hiRes): at most that one is new
+  must(after.up <= 1, `textures sent after the press: ${after.up}`);
+});
+await test("19: a press before the warm-up is done still lands on the next stop", async (page) => {
+  await page.goto(`${base}/?q=${encodeURIComponent(SAVED[1])}`, { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  const s0 = await page.evaluate(() => window.__evident.stats().stop);
+  await page.click("#next");
+  await page.waitForFunction((s) => window.__evident.stats().stop === s + 1 && !window.__evident.stats().looping, s0, { timeout: 15000 });
+  must(await warmed(page), "the warm-up did not finish after the press");
+});
+await test("19: the home page has no warm-up", async (page) => {
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  await page.waitForTimeout(1500);
+  must(await page.evaluate(() => !window.__evd.warmed()), "the home page warmed up");
+});
 
 await browser.close();
 const passed = results.filter(Boolean).length;
