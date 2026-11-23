@@ -10774,6 +10774,8 @@ _DESK_FILES = {
     "static/fonts/woff2/bricolagegrotesque-opsz12-96-200-800.woff2": "85f55a58a31e61a2e19e8bb25fed503181bf2a6b4cab76c589992cfaac377447",
     "static/fonts/woff2/ibmplexmono-400.woff2": "52de70091213c9eab340e2a7ac59e7b6b2b94e089bf69ef38479b22cfde4274c",
     "static/desk/wood-2048.jpg": "4ba81eb4121b389335273240bd7ecd5702e5b878fa3240342e485c8a26621cb2",
+    # the same picture, 1024 wide by 2048 tall, WebP quality 80 (Pillow, method 6): what the desk loads
+    "static/desk/wood-1024x2048.webp": "dff261ea0884030d052610617667e015e3c55051c070b205a17bc7a88024757e",
 }
 _dk_bad = {f: _dk_hash.sha256((ROOT / f).read_bytes()).hexdigest() for f in _DESK_FILES
            if not (ROOT / f).exists() or _dk_hash.sha256((ROOT / f).read_bytes()).hexdigest() != _DESK_FILES[f]}
@@ -11573,6 +11575,16 @@ t("STAMPS: desk.js takes the 3D addresses from the page, and keeps the stamp on 
 _st_swsrc = (ROOT / "static/sw.js").read_text()
 t("STAMPS: the service worker serves a stamped static address from its cache first and keeps one copy per path",
   'url.searchParams.has("v")' in _st_swsrc and "dropOlderStamps" in _st_swsrc)
+
+_wd_html = c.get("/").get_data(as_text=True)
+_wd_size = (ROOT / "static/desk/wood-1024x2048.webp").stat().st_size
+t("WOOD: the desk loads the 1024 by 2048 WebP (under 200 KB), not the 679 KB JPEG, and desk.js's own fallback names it too",
+  'data-wood="/static/desk/wood-1024x2048.webp?v=' in _wd_html and "wood-2048.jpg" not in _wd_html and _wd_size < 200 * 1024
+  and '"/static/desk/wood-1024x2048.webp"' in (ROOT / "static/desk.js").read_text()
+  and "wood-2048.jpg" not in (ROOT / "static/desk.js").read_text(), _wd_size)
+_wd_r = c.get("/static/desk/wood-1024x2048.webp")
+t("WOOD: the WebP is served as image/webp", _wd_r.status_code == 200 and _wd_r.headers.get("Content-Type") == "image/webp",
+  _wd_r.headers.get("Content-Type"))
 
 # ---- HOME LISTS: the home page's lists are kept in memory for a short while ----
 _hl_calls = {"recent": 0, "example": 0, "fail": False}

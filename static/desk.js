@@ -725,7 +725,7 @@
   // the page hands over the stamped addresses (app.py static_stamp), so the two files can be kept a year
   var glEl = document.getElementById("gl");
   var LIB = (glEl && glEl.dataset.lib) || "/static/vendor/three-r128.min.js";
-  var WOOD = (glEl && glEl.dataset.wood) || "/static/desk/wood-2048.jpg";
+  var WOOD = (glEl && glEl.dataset.wood) || "/static/desk/wood-1024x2048.webp";
   function loadLib(tries) {
     var sc = document.createElement("script"), done = false;
     var timer = setTimeout(function () { fail(); }, 8000);
@@ -902,7 +902,7 @@
       for (var i = 0; i < 260; i++) { x.fillStyle = "rgba(" + (hash(i, 1) > 0.5 ? "20,12,8" : "110,80,58") + "," + (0.05 + hash(i, 2) * 0.12) + ")"; x.fillRect(0, hash(i, 3) * 512, 512, 1 + hash(i, 4) * 3); }
       var fallbackTex = tex(fb); fallbackTex.wrapS = fallbackTex.wrapT = T.RepeatWrapping; fallbackTex.repeat.set(1, 1);
       woodMat.map = fallbackTex; woodMat.color.set(0xb09a8a); woodMat.needsUpdate = true;
-      // 2048 px photo, grain running along the image's width; the desk's UVs are in metres (see deskGeo), so one tile is WOOD_TILE metres square on every face
+      // the photo (1024 wide by 2048 tall, WebP, 190 KB: the grain is in the height, so only the width was halved), grain running along the image's width; the desk's UVs are in metres (see deskGeo), so one tile is WOOD_TILE metres square on every face
       // the photo has been loading since the page began (woodImg), alongside the library
       function woodOk() {
         var t = new T.Texture(woodImg); t.needsUpdate = true;
