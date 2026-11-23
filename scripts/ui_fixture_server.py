@@ -201,8 +201,26 @@ def _status(code):
     return "ok"
 
 
+# The live site's service worker, for the update path: /__fixture/oldsw/1
+# makes /sw.js answer the worker of commit f10ef54 (cache "evident-v118"),
+# read from git, until reset or /__fixture/oldsw/0.
+OLD_SW = "f10ef54"
+
+
+@appmod.app.route("/__fixture/oldsw/<int:on>")
+def _oldsw(on):
+    if on and "old_sw" not in hold:
+        import subprocess
+        hold["old_sw"] = subprocess.run(["git", "-C", str(ROOT), "show", OLD_SW + ":static/sw.js"],
+                                        capture_output=True, text=True, check=True).stdout
+    hold["oldsw"] = on
+    return "ok"
+
+
 @appmod.app.before_request
 def _held():
+    if hold.get("oldsw") and appmod.request.path == "/sw.js":
+        return appmod.Response(hold["old_sw"], mimetype="text/javascript", headers={"Cache-Control": "no-cache"})
     if hold["s"] and appmod.request.path == "/":
         time.sleep(hold["s"])
     if hold["status"] and appmod.request.path == "/":
@@ -220,6 +238,7 @@ def _reset():
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
     hold["s"] = 0.0
     hold["status"] = 0
+    hold["oldsw"] = 0
     appmod._drop_home_lists()  # those rows went without a save, so the home page's copy goes too
     return "ok"
 
