@@ -232,6 +232,9 @@ function setWorking(on) {
 }
 
 let currentResult = null;
+// Set by any input in the claim box after a check is sent, and cleared when the box is given a claim: the reader has
+// changed the words, even by a space or a word typed and rubbed out, so an answer landing then draws around them.
+let editedSinceSend = false;
 let userTapped = false;
 window.addEventListener("pointerdown", () => { userTapped = true; }, { once: true, passive: true });
 
@@ -566,7 +569,7 @@ function renderResult(data, replay, keepTyped) {
   currentResult = data;
   const n = data.studies.length, stops = deskStops(data), dl = deskLines(data);
   // Stop 1 keeps the claim in its box, so Back from the answer is the claim.
-  if (!keepTyped) input.value = data.claim;
+  if (!keepTyped) { input.value = data.claim; editedSinceSend = false; }
   clearBtn.hidden = !input.value;
   // Stop 2: the card and how sure.
   $("claim-echo").textContent = data.claim;
@@ -908,6 +911,7 @@ async function check(claim) {
   }
 
   inFlight = true;
+  editedSinceSend = false;
   lastClaim = claim;
   gaveUp = false;
   controller = new AbortController();
@@ -935,7 +939,7 @@ async function check(claim) {
       try {
         // The words in the claim box changed while the check ran: the reader is
         // typing, so the answer is drawn and announced around them.
-        const typing = document.activeElement === input && input.value.trim() !== claim;
+        const typing = document.activeElement === input && editedSinceSend;
         renderResult(final.result, false, typing);
         landFocus($("stamp"), typing);
         remember(final.result);
@@ -981,7 +985,7 @@ if (window.visualViewport) {
 }
 
 const clearBtn = $("clear-btn");
-input.addEventListener("input", () => { clearBtn.hidden = !input.value; if (input.value.trim()) clearClaimError(); askSuggest(); });
+input.addEventListener("input", () => { editedSinceSend = true; clearBtn.hidden = !input.value; if (input.value.trim()) clearClaimError(); askSuggest(); });
 clearBtn.addEventListener("click", () => { input.value = ""; clearBtn.hidden = true; closeSuggest(); input.focus(); });
 
 // ---- Type-ahead over claims already checked -------------------------------

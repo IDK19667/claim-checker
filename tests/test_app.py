@@ -11342,8 +11342,10 @@ _g3_lf = _g3_app.split("function landFocus(to, typing) {")[1].split("\n}")[0]
 t("G3: when the answer arrives, focus moves to the verdict unless the reader holds a control still on the page",
   "landFocus($(\"stamp\"), typing);" in _g3_app.split("renderResult(final.result, false, typing);")[1].split("remember(final.result)")[0]
   and "a === document.body" in _g3_lf and "!a.isConnected" in _g3_lf and "a.disabled" in _g3_lf and "(a === input && !typing)" in _g3_lf
-  and "const typing = document.activeElement === input && input.value.trim() !== claim;" in _g3_app
-  and "if (!keepTyped) input.value = data.claim;" in _g3_app
+  and "const typing = document.activeElement === input && editedSinceSend;" in _g3_app
+  and 'input.addEventListener("input", () => { editedSinceSend = true;' in _g3_app
+  and "editedSinceSend = false;\n  lastClaim = claim;" in _g3_app
+  and "if (!keepTyped) { input.value = data.claim; editedSinceSend = false; }" in _g3_app
   and "preventScroll: true" in _g3_lf
   and 'id="stamp" tabindex="-1"' in (ROOT / "templates" / "index.html").read_text()
   and "#stamp:focus { outline: none; }" in (ROOT / "static" / "desk.css").read_text())

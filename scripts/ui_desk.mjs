@@ -271,6 +271,27 @@ for (const [path, kind] of [["/", "typed"], ["/?nogl=1", "typed"], ["/", "sent"]
     must(z.f === "claim-input" && z.value === GATED + " today now" && z.stop === 1, `after one more word: focus on #${z.f}, the box holds "${z.value}", stop ${z.stop}`);
   });
 }
+// J1 follow-ups (review of batch 2): the reader is changing the claim if any input reached the box
+// after the check started, even a single space (M1) or dictation (L3); the page stays where they
+// are, even scrolled (L1); and words kept that way survive Back then Forward, and Edit claim (L2).
+// Text mode, where nothing moves the page on its own.
+const j1Start = async (page, { dictate = false } = {}) => {
+  if (dictate) await page.addInitScript(() => { window.SpeechRecognition = class { start() { window.__rec = this; } stop() { if (this.onend) this.onend(); } }; });
+  await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page); await page.waitForTimeout(400);
+  await send(page, GATED);
+  await page.waitForFunction(() => document.getElementById("submit-btn").disabled, null, { timeout: 15000 });
+  await release("query");
+};
+const j1Land = async (page) => { await release("found", "done"); await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 }); await page.waitForTimeout(2500); };
+const j1Look = (page) => page.evaluate(() => ({ f: document.activeElement && document.activeElement.id, value: document.getElementById("claim-input").value,
+  stop: window.__evident.stats().stop, y: Math.round(scrollY), stamp: document.getElementById("stamp").textContent.trim() }));
+await test("M1: a single space typed during a check counts as changing the claim: focus, words and place stay", async (page) => {
+  await j1Start(page);
+  await page.focus("#claim-input"); await page.press("#claim-input", "End"); await page.keyboard.type(" ");
+  await j1Land(page);
+  const s = await j1Look(page);
+  must(s.stamp && s.f === "claim-input" && s.value === GATED + " " && s.stop === 1, `focus on #${s.f}, the box holds "${s.value}", stop ${s.stop}`);
+});
 await test("an error lands focus on its title", async (page) => {
   await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
   await page.context().setOffline(true);
