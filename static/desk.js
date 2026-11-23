@@ -292,7 +292,7 @@
   var curGlide = null, glideLeft = null;
   function endTween(early) {
     glideLeft = early && curGlide ? curGlide : null; curGlide = null; runLen = 0;
-    tween = null; navTo = -1; root.classList.remove("gliding");
+    tween = null; navTo = -1;
   }
   function scrollToY(target, done) {
     // the target is read again on every step, so a page that reflows mid-glide (a late font, a fold) still lands on the true top
@@ -302,7 +302,6 @@
     goingTo = -1; glideLeft = null;
     // a cut under reduced motion, and on a machine drawing under three frames a second, where a glide would only stutter
     if (reduce.matches || slowGl || Math.abs(to - from) < 2) { endTween(); window.scrollTo({ top: to, behavior: "instant" }); prevY = progY = window.scrollY; if (nav >= 0) { landY = progY; nextWords(nav, progY); } restY = progY; measure(); noteRest(); updateWay(); if (done) done(); return; }
-    root.classList.add("gliding");
     navTo = nav; curGlide = { at: at, nav: nav };
     if (nav >= 0) { landY = -1; nextWords(nav, Math.round(to)); updateWay(); }
     // a settle finishing the reader's own move is quicker than a press, so one arrow tap is at rest well inside two seconds

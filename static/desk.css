@@ -178,7 +178,6 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .panel p, .panel li { font-size: 17px; line-height: 1.6; max-width: 30em; }
 .panel p { margin: 0 0 12px; color: var(--on-deep); }
 .panel .intro { color: var(--on-deep-2); margin-bottom: 4px; max-width: 28em; }
-.panel #overlap { margin-bottom: 10px; }
 .panel ul.ev { margin: 0; padding: 0 0 0 18px; }
 .panel ul.ev li { margin: 0 0 10px; color: var(--on-deep); }
 .effect { border-left: 2px solid var(--sage); padding: 2px 0 2px 14px; }

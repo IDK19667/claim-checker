@@ -3707,7 +3707,7 @@ t("  the template's own markup shows the line with a result that carries it, and
 if _shutil.which("node"):
     _tn_fn = _tn_js_src[_tn_js_src.index("function typedNote"):_tn_js_src.index("function showTyped")]
     _tn_js = json.loads(_subprocess.run(
-        ["node", "-e", _tn_fn + "console.log(JSON.stringify(" + json.dumps(_TN) + ".map(([a, b]) => typedNote(a, b))));"],
+        ["node", "-e", _tn_fn + "console.log(JSON.stringify(" + json.dumps(_TN) + ".map(([a, b]) => (typedNoteParts(a, b) || []).join(\"\"))));"],
         capture_output=True, text=True, check=True).stdout)
     t("  the script and the server write the same note, on five inputs", _tn_js == _tn_py, (_tn_js, _tn_py))
 t("  no note string carries a dash", not any(ch in s for s in _tn_py for ch in "\u2013\u2014"))
@@ -8834,8 +8834,8 @@ t("  the template's note prints it unchanged", _rw_on == '<p class="typed-note" 
 if _shutil.which("node"):
     _rw_js = (ROOT / "static" / "app.js").read_text()
     _rw_fn = _rw_js[_rw_js.index("function typedNote"):_rw_js.index("function showTyped")]
-    _rw_out = json.loads(_subprocess.run(["node", "-e", _rw_fn + "console.log(JSON.stringify(typedNote("
-                                          + json.dumps(_rw["typed"]) + ", " + json.dumps(_rw["typed_reason"]) + ")));"],
+    _rw_out = json.loads(_subprocess.run(["node", "-e", _rw_fn + "console.log(JSON.stringify((typedNoteParts("
+                                          + json.dumps(_rw["typed"]) + ", " + json.dumps(_rw["typed_reason"]) + ") || []).join(\"\")));"],
                                          capture_output=True, text=True, check=True).stdout)
     t("  and so does the script's", _rw_out == _rw_note, _rw_out)
 with db.get_conn() as _conn:
@@ -10913,6 +10913,20 @@ if _shutil.which("node") and _c6_i is not None:
 t("C6: when building the Weighed stop throws, the Weighed and Research stops already on the page are not removed",
   _c6_out is not None and _c6_out["__threw"] and not (_c6_out.get("s4") or {}).get("removed")
   and not (_c6_out.get("s5") or {}).get("removed"), _c6_out and {k: _c6_out.get(k) for k in ("__threw", "s4", "s5")})
+# C9 (F6): what shipped and did nothing is gone: classes set that no stylesheet or script
+# reads, a label table nobody reads, a rule for an element that does not exist, and a
+# function only tests called. kindOf and KIND_FROM_TIER stay: the shelf uses them.
+_c9_app = (ROOT / "static" / "app.js").read_text()
+_c9_desk = (ROOT / "static" / "desk.js").read_text()
+_c9_css = (ROOT / "static" / "desk.css").read_text()
+t("C9: app.js sets none of the classes nothing reads (paused, offscreen, live-check, view-ask, working)",
+  not any(f'"{c}"' in _c9_app for c in ("paused", "offscreen", "live-check", "view-ask", "working"))
+  and not any(f".{c}" in _c9_css for c in ("paused", "offscreen", "live-check", "view-ask", "working")))
+t("  desk.js sets no 'gliding' class, and no stylesheet the front loads reads one",
+  "gliding" not in _c9_desk and "gliding" not in _c9_css)
+t("  KIND_LABELS, the '.panel #overlap' rule and typedNote are gone; kindOf and KIND_FROM_TIER stay and are used",
+  "KIND_LABELS" not in _c9_app and "#overlap" not in _c9_css and "function typedNote(" not in _c9_app
+  and "const KIND_FROM_TIER" in _c9_app and _c9_app.count("kindOf(") >= 1 and "function typedNoteParts(" in _c9_app)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

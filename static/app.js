@@ -148,24 +148,6 @@ function setTitle(result) {
 }
 const root = document.documentElement;
 
-/* Pausing what nobody can see. A tab in the background is still asked to run
- * every animation on it, and a part of the page scrolled away is still asked
- * to loop. While the tab is hidden, body.paused freezes every CSS animation.
- * Scrolled out of view, the looping dots hold too: the mic while it listens,
- * the live line of the reading list, the working status. */
-function onTabVisibility() {
-  document.body.classList.toggle("paused", document.hidden);
-}
-document.addEventListener("visibilitychange", onTabVisibility);
-onTabVisibility();
-
-if ("IntersectionObserver" in window) {
-  const loops = new IntersectionObserver((entries) => {
-    for (const e of entries) e.target.classList.toggle("offscreen", !e.isIntersecting);
-  });
-  for (const id of ["mic-btn", "reading", "status"]) if ($(id)) loops.observe($(id));
-}
-
 /* The screen the reader is on. `null` is the home page. Everything else is
  * the report on its night ground, and the attribute on <html> is what styles
  * it. There is no picture above it: while a check runs the claim and the
@@ -176,10 +158,6 @@ const screenState = {
   enter() {
     this.phase = "checking";
     root.dataset.screen = "checking";
-    // The sheet arrives once, here. A shared link opens on the
-    // same layout but must not animate into it: nothing moved, the reader
-    // navigated there, and a fade-in would read as something still loading.
-    document.body.classList.add("live-check");
     window.scrollTo(0, 0);
   },
   settle(phase) {
@@ -190,7 +168,6 @@ const screenState = {
     if (!this.phase) return;
     this.phase = null;
     delete root.dataset.screen;
-    document.body.classList.remove("live-check");
     window.scrollTo(0, 0);
   },
 };
@@ -223,21 +200,18 @@ function show(section) {
   errorSection.hidden = section !== errorSection;
   askMore.hidden = section !== askSection;
   if (trustSection) trustSection.hidden = section !== askSection;
-  document.body.classList.toggle("view-ask", section === askSection);
   if (!result) tellDesk("desk:home", {});
   window.scrollTo(0, 0);
 }
-if (!$("server-result")) document.body.classList.add("view-ask");
 
-function setStatus(text, working) {
+function setStatus(text) {
   statusEl.textContent = text || "";
-  statusEl.classList.toggle("working", !!working);
 }
 
 function setWorking(on) {
   submitBtn.disabled = on;
   btnLabel.textContent = on ? "Checking…" : "Check the research";
-  if (!on) setStatus("", false);
+  if (!on) setStatus("");
 }
 
 let currentResult = null;
@@ -326,8 +300,6 @@ function breakdownView(data) {
 // its tier stands in, so an old check still draws a whole shelf.
 const KIND_FROM_TIER = { strong: "strong", weak: "weak", retracted: "retracted" };
 const kindOf = (s) => s.kind || KIND_FROM_TIER[s.tier] || "human";
-const KIND_LABELS = { strong: "Strong design", human: "Human study", lab: "Animal or lab",
-                      weak: "Opinion or single case", retracted: "Retracted" };
 
 // Shown only when a check came back without usable evidence. Everything
 // here is derived from the claim and the local cache, and none of it
@@ -657,17 +629,13 @@ function renderPending(claim) {
 
 // A misspelled claim is checked as it was meant, and the same claim in other
 // words gets its saved check. Say which, and show what was typed, so the
-// reader can tell the answer is to their question. Mirrors display.typed_note;
-// a test runs both on the same inputs.
-// The note in three parts: the words before the reader's text, their text,
-// and the words after it. display.typed_note_parts is the same.
+// reader can tell the answer is to their question. The note in three parts:
+// the words before the reader's text, their text, and the words after it.
+// display.typed_note_parts is the same; a test runs both on the same inputs.
 function typedNoteParts(typed, reason) {
   if (!typed) return null;
   if (reason === "wording") return ["Showing the saved check for this claim. You typed \u201c", String(typed), "\u201d."];
   return ["Spelling fixed. You typed \u201c", String(typed), "\u201d."];
-}
-function typedNote(typed, reason) {
-  return (typedNoteParts(typed, reason) || []).join("");
 }
 
 // The reader's text goes in <bdi>, as text, so right-to-left words cannot
@@ -1762,7 +1730,6 @@ const serverResult = (() => {
 })();
 
 if (serverResult) {
-  document.body.classList.remove("view-ask");
   renderResult(serverResult);
   remember(serverResult);
   input.value = serverResult.claim;

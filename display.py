@@ -420,7 +420,7 @@ def typed_note(typed, reason=None) -> str:
     The line under the claim when the answer is to other words than the
     reader's: their own words, and why they differ. A fixed spelling says so;
     a saved check of the same claim in other words says that instead. Empty
-    when there is nothing to explain. static/app.js typedNote is the same; a
+    when there is nothing to explain. static/app.js typedNoteParts(...).join("") is the same; a
     test runs both on the same inputs.
     """
     return "".join(typed_note_parts(typed, reason) or ())
