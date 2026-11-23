@@ -11722,6 +11722,72 @@ t("  the surrogate search runs beside them and its new ids still come after thei
 t("  and the pass is faster than one search after another",
   _sp_side_s < _sp_line_s - 0.2, (_sp_side_s, _sp_line_s))
 
+# Task 5: the answer leaves before the bookkeeping.
+import sqlite3 as _sp_sql  # noqa: E402
+ratelimit.PER_USER = ratelimit.SlidingWindow(1000, 600)
+ratelimit.GLOBAL_MINUTE = ratelimit.SlidingWindow(1000, 60)
+_sp_prev_saf = pubmed.search_and_fetch
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': [dict(s_) for s_ in STUDIES]
+
+
+def _sp_logged(claim):
+    with db.get_conn() as conn_:
+        return conn_.execute("SELECT COUNT(*) FROM checks WHERE claim_text = ?", (claim,)).fetchone()[0]
+
+
+_SP5 = "Speed test claim five saved after done"
+fg.models.script = [Resp("speed AND five"), Resp(VJ("false", [2]))]
+_sp_r = c.post("/api/check/stream", json={"claim": _SP5}, environ_base={"REMOTE_ADDR": "9.5.5.1"},
+               buffered=False)
+_sp_got = ""
+for _chunk in _sp_r.response:
+    _sp_got += _chunk.decode() if isinstance(_chunk, bytes) else _chunk
+    if '"stage": "done"' in _sp_got:
+        break
+_sp_at_done = (db.get_cached_verdict(_SP5, 24), _sp_logged(_SP5))
+_sp_r.close()
+_sp_after = (db.get_cached_verdict(_SP5, 24), _sp_logged(_SP5))
+t("speed: a reader who stops reading at done gets the answer before it is saved, and it is saved",
+  '"verdict": "false"' in _sp_got and _sp_at_done == (None, 0)
+  and _sp_after[0] and _sp_after[0]["verdict"] == "false" and _sp_after[1] == 1, (_sp_at_done, _sp_after))
+
+_sp_warned = []
+_sp_prev_put = db.put_cached_verdict
+db.put_cached_verdict = lambda *a, **k: (_ for _ in ()).throw(_sp_sql.OperationalError("disk is full"))
+appmod.app.logger.warning = lambda *a, **k: _sp_warned.append(a[0] % a[1:] if len(a) > 1 else a[0])
+try:
+    fg.models.script = [Resp("speed AND six"), Resp(VJ("false", [2]))]
+    _sp_r6, _sp_evs6 = stream("Speed test claim six with a failing save", ip="9.5.5.2")
+finally:
+    db.put_cached_verdict = _sp_prev_put
+    del appmod.app.logger.warning
+t("  a save that fails leaves the answer delivered and the error logged, and the check still logged",
+  _sp_r6.status_code == 200 and _sp_evs6 and _sp_evs6[-1]["stage"] == "done"
+  and _sp_evs6[-1]["result"]["verdict"] == "false"
+  and any("disk is full" in w_ for w_ in _sp_warned)
+  and _sp_logged("Speed test claim six with a failing save") == 1, (_sp_evs6[-1:], _sp_warned))
+
+_sp_reads = []
+_sp_prev_all = db.all_claims
+db.all_claims = lambda *a, **k: _sp_reads.append(
+    bool(db.get_cached_verdict("Speed test claim eight rests on none", 24))) or _sp_prev_all(*a, **k)
+try:
+    fg.models.script = [Resp("speed AND seven"), Resp(VJ("false", [2]))]
+    _sp_d7 = P("Speed test claim seven rests on studies", ip="9.5.5.3").get_json()
+    _sp_reads7 = len(_sp_reads)
+    fg.models.script = [Resp("speed AND eight"), Resp(VJ("insufficient", [], tldr="No study here tests it."))]
+    _sp_d8 = P("Speed test claim eight rests on none", ip="9.5.5.4").get_json()
+    _sp_saved8 = db.get_cached_verdict("Speed test claim eight rests on none", 24)
+finally:
+    db.all_claims = _sp_prev_all
+t("  the saved claims are not read when the answer rests on studies, and the plain route still saves",
+  _sp_reads7 == 0 and _sp_d7.get("next_steps") is None and _sp_d7["verdict"] == "false"
+  and db.get_cached_verdict("Speed test claim seven rests on studies", 24), (_sp_reads7, _sp_d7.get("verdict")))
+t("  and they are read, after the save as before, when it rests on none and next steps are shown",
+  _sp_reads == [True] and _sp_d8.get("next_steps") and _sp_saved8, (_sp_reads, _sp_d8.get("next_steps")))
+pubmed.search_and_fetch = _sp_prev_saf
+fg.models.script = []
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

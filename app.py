@@ -869,6 +869,10 @@ def _study_payload(s: dict, cited: set) -> dict:
 
 def _next_steps_safe(claim, query_used, studies, cited):
     """Never let the empty-state helper take down a check that worked."""
+    # nextsteps.build answers None whenever the verdict rests on studies,
+    # so the saved claims (500 rows) are read only when it will use them.
+    if studies and cited:
+        return None
     try:
         return nextsteps.build(claim, query_used, studies, cited, db.all_claims())
     except (sqlite3.Error, ValueError, TypeError) as e:
@@ -1215,10 +1219,16 @@ def _run_check(claim: str, client_ip: str, base_url: str):
     """
     if claim and len(claim) <= MAX_CLAIM_CHARS:
         db.count_event("check.submitted")
-    for ev in _run_check_stages(claim, client_ip, base_url):
-        if ev.get("stage") == "done":
-            db.count_event("check.completed")
-        yield ev
+    stages = _run_check_stages(claim, client_ip, base_url)
+    try:
+        for ev in stages:
+            if ev.get("stage") == "done":
+                db.count_event("check.completed")
+            yield ev
+    finally:
+        # A reader who leaves at "done" closes this generator: close the
+        # stages too, now, so the bookkeeping after "done" runs at once.
+        stages.close()
 
 
 def _current(cached, claim):
@@ -1417,16 +1427,40 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
                         "error": "Something went wrong while checking this claim. Try again in a moment."})
         return
 
-    db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
-                          result["cited_studies"], studies, tldr=result["tldr"],
-                          still_open=result.get("still_open", ""),
-                          breakdown=result.get("breakdown"), method_stamp=verdict.METHOD_STAMP)
-    _log_check_safe(claim, result["verdict"], result["explanation"], studies)
-    yield {"stage": "done", "result": _check_response(
+    # The answer goes to the reader first and is saved and logged after,
+    # in the finally below, which runs whether the reader reads on or
+    # closes the stream at "done". One exception: an answer that rests on
+    # no study shows next steps, which list the saved claims, this one
+    # included, so there the writes come first as before.
+    shows_saved = not (studies and display.relied_pmids(result["cited_studies"], studies))
+    if shows_saved:
+        _save_and_log(claim, query_used, result, studies)
+    response = _check_response(
         claim, query_used, result["verdict"], result["tldr"], result["explanation"],
         result["cited_studies"], studies, base_url, broadened=broadened,
         still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed,
-        typed_reason=reason)}
+        typed_reason=reason)
+    try:
+        yield {"stage": "done", "result": response}
+    finally:
+        if not shows_saved:
+            _save_and_log(claim, query_used, result, studies)
+
+
+def _save_and_log(claim, query_used, result, studies):
+    """Save a fresh answer and log the check. A write that fails is logged
+    and never reaches the reader, who may already have the answer."""
+    try:
+        db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
+                              result["cited_studies"], studies, tldr=result["tldr"],
+                              still_open=result.get("still_open", ""),
+                              breakdown=result.get("breakdown"), method_stamp=verdict.METHOD_STAMP)
+    except Exception as e:  # noqa: BLE001 — sqlite or Turso; the answer is already out
+        app.logger.warning("Could not save a fresh answer: %s", e)
+    try:
+        _log_check_safe(claim, result["verdict"], result["explanation"], studies)
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("Could not log check: %s", e)
 
 
 def _steady(claim: str, studies: list) -> dict | None:
@@ -1536,8 +1570,12 @@ def api_check_stream():
     base_url = _base_url()
 
     def events():
-        for ev in _run_check(claim, client_ip, base_url):
-            yield "data: " + json.dumps(ev) + "\n\n"
+        run = _run_check(claim, client_ip, base_url)
+        try:
+            for ev in run:
+                yield "data: " + json.dumps(ev) + "\n\n"
+        finally:
+            run.close()
 
     return Response(events(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
