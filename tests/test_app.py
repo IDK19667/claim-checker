@@ -2208,9 +2208,70 @@ t("  a reload or Back/Forward into the page keeps the place the browser restores
 # stack, placed and not moved, none under reduced motion, gone again on an error
 # or Cancel (both show stop 1, which tells the desk desk:home).
 _hs = _js[_js.find("function handleStage"):][:1400]
+# app.js run in node against a page that records what it does (each element
+# keeps its text, hidden flag, classes and data; events the page sends and
+# timers it sets are kept), so a behaviour can be checked, not its spelling.
+_APPRUN = r"""
+const fs = require("fs"), vm = require("vm");
+const nop = new Proxy(function () {}, { get(t, k) { if (k === Symbol.iterator) return function* () {}; if (k === Symbol.toPrimitive) return () => ""; if (k === "then") return undefined; if (k === "length") return 0; return nop; },
+  apply() { return nop; }, construct() { return nop; }, set() { return true; }, has() { return true; } });
+const els = {}, events = [], timers = [];
+function classes() { const s = new Set(); return { add: (...c) => c.forEach((x) => s.add(x)), remove: (...c) => c.forEach((x) => s.delete(x)), contains: (c) => s.has(c),
+  toggle: (c, on) => { const v = on === undefined ? !s.has(c) : !!on; if (v) s.add(c); else s.delete(c); return v; }, list: () => [...s] }; }
+function el(key) {
+  if (els[key]) return els[key].p;
+  const r = { classList: classes(), dataset: {}, html: [] };
+  const p = new Proxy(function () {}, {
+    get(t, k) {
+      if (k in r) return r[k];
+      if (k === "textContent" || k === "value" || k === "innerHTML") return "";
+      if (k === "insertAdjacentHTML") return (pos, h) => r.html.push(String(h));
+      if (k === "querySelector") return (sel) => el(key + " " + sel);
+      if (k === "querySelectorAll") return () => [];
+      if (k === Symbol.toPrimitive) return () => "";
+      if (k === "then") return undefined;
+      return nop;
+    },
+    set(t, k, v) { r[k] = v; if (k === "innerHTML") r.html.push(String(v)); return true; },
+    apply() { return nop; },
+  });
+  els[key] = { r, p };
+  return p;
+}
+const doc = new Proxy({}, { get(t, k) {
+  if (k === "getElementById") return (id) => id === "server-result" ? null : el("#" + id);
+  if (k === "documentElement") return el("html"); if (k === "body") return el("body");
+  if (k === "createElement") return (tag) => el("new " + tag + " " + Math.random());
+  if (k === "querySelector") return (sel) => el(sel); if (k === "querySelectorAll") return () => [];
+  if (k === "dispatchEvent") return (e) => { events.push([e.type, e.detail]); return true; };
+  if (k === "activeElement") return t.__active || null;
+  return nop; }, set(t, k, v) { t[k] = v; return true; } });
+const ctx = { console, URL, URLSearchParams, JSON, Math, Date, Intl, Set, Map, Promise,
+  setTimeout(f) { timers.push(f); return timers.length; }, clearTimeout() {}, setInterval() { return 0; }, clearInterval() {},
+  document: doc, navigator: nop, localStorage: nop, sessionStorage: nop, history: nop,
+  location: { search: "", pathname: "/", href: "http://localhost/" }, matchMedia: () => nop, requestAnimationFrame() {},
+  fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(ctx.__fetchJson || {}) }),
+  CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; }, visualViewport: nop, addEventListener() {},
+  IntersectionObserver: nop, ResizeObserver: nop, getComputedStyle: () => nop, scrollTo() {}, innerWidth: 390, innerHeight: 844 };
+ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;
+ctx.__out = {}; ctx.__events = events; ctx.__timers = timers; ctx.__el = (k) => els[k] ? els[k].r : {};
+vm.createContext(ctx);
+Promise.resolve(vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + "\n;(async () => {" + process.argv[2] + "})()", ctx))
+  .then(() => process.stdout.write(JSON.stringify(ctx.__out)));
+"""
+
+
+def _apprun(snippet):
+    return json.loads(_subprocess.run(["node", "-e", _APPRUN, str(ROOT / "static" / "app.js"), snippet],
+                                      capture_output=True, text=True, check=True).stdout)
+
+
+# Run, not read: the found stage, with a count and without one, is sent to the desk.
+_hs_run = _apprun('__events.length = 0; handleStage({ stage: "found", count: 7 }); handleStage({ stage: "found" });'
+                  ' handleStage({ stage: "weigh" }); __out.ev = __events.filter((e) => e[0] === "desk:stage");')
 t("the live check tells the desk how many papers were found",
-  'tellDesk("desk:stage", { stage: "found", count: ev.count || 0 })' in _hs
-  and 'document.addEventListener("desk:stage"' in _deskjs)
+  _hs_run["ev"] == [["desk:stage", {"stage": "found", "count": 7}], ["desk:stage", {"stage": "found", "count": 0}]]
+  and 'document.addEventListener("desk:stage"' in _deskjs, _hs_run)
 t("  the desk stands that many blank sheets in its stack, placed, none under reduced motion, dropped on the way home",
   "if (reduce.matches || checked) return;" in _deskjs and "o.placed = true" in _deskjs
   and "var td = o.placed ? 1 :" in _deskjs and "if (stagedN) { stagedN = 0; CHECK = { studies: [] }; dropSheets(); }" in _deskjs)
@@ -2220,8 +2281,16 @@ _ex_home = c.get("/").get_data(as_text=True)
 t("  \"Or try one of these:\" shows only with examples under it: the server sends the chips empty and the style hides the line until a script fills them",
   re.search(r'<div class="chips" id="chips"[^>]*></div>', _ex_home) is not None
   and "#examples:has(.chips:empty), html:not(.js) #examples { display: none; }" in (ROOT / "static" / "desk.css").read_text())
+# Run, not read: the same answer from /api/suggest opens the list while no check
+# runs, and draws nothing once a check has started.
+_sg_run = {k_: _apprun(f'__fetchJson = {{ suggestions: [{{ claim_text: "Turmeric eases joint pain", verdict: "true", kind: "match" }}] }};'
+                       f' document.__active = input; input.value = "turmeric"; inFlight = {k_};'
+                       ' __timers.length = 0; askSuggest(); for (const f of __timers.splice(0)) await f();'
+                       ' __out.list = __el("#suggest-list").html; __out.hidden = __el("#suggest").hidden;')
+           for k_ in ("false", "true")}
 t("  a list of saved claims that answers after Enter never opens over the check it started",
-  "if (inFlight) return;" in _js[_js.find("function askSuggest"):][:1200].split("renderSuggest(rows);")[0])
+  any("Turmeric eases joint pain" in h_ for h_ in _sg_run["false"]["list"]) and _sg_run["false"]["hidden"] is False
+  and not _sg_run["true"]["list"] and _sg_run["true"].get("hidden") is not False, _sg_run)
 _dcss = (ROOT / "static" / "desk.css").read_text()
 t("  short laptop screens: the headline is sized by the screen's height too, and stop 1 sits closer together",
   "font-size: clamp(46px, min(7.2vw, 11.5vh), 104px);" in _dcss
@@ -2234,8 +2303,14 @@ t("  short screens: on home the fold never pushes the claim box or button off th
   'if (k === 0 && !checked) { [].forEach.call(s0.querySelectorAll("[data-pushed]")' in _deskjs)
 t("  the wordmark in the strip is a 44px tap target, grown past the 32px strip without changing its height",
   '.strip .sw { position: relative; } .strip .sw::after { content: ""; position: absolute; inset: -6px -8px; }' in _dcss)
+# Run, not read: from a result, renderPending leaves it (stop 1 shows, the result
+# class goes, the desk is told to go home); from the ask screen it sends no home.
+_rp_run = {k_: _apprun(f'if ({k_}) root.classList.add("checked"); __events.length = 0; renderPending("x");'
+                       ' __out.checked = root.classList.contains("checked"); __out.ask = __el("#ask").hidden;'
+                       ' __out.home = __events.filter((e) => e[0] === "desk:home").length;')
+           for k_ in ("true", "false")}
 t("  a check started from a result's claim box first goes back to stop 1",
-  'if (root.classList.contains("checked")) show(askSection);' in _js[_js.find("function renderPending"):][:400])
+  _rp_run["true"] == {"checked": False, "ask": False, "home": 1} and _rp_run["false"]["home"] == 0, _rp_run)
 # Engine rules (E1, E2, E4, E5), checked in a browser by the builder's scripts; here
 # the rules' shape: lines are read from the text itself, the words laid over the
 # 3D card are never measured, and a press goes to min(last line 2 px above the
