@@ -469,6 +469,45 @@ ENTRIES = [
      "quote": "Take antibiotics as directed on the packet or the patient information leaflet that comes "
               "with the medicine."},
 
+    # ---- supplements and foods with known interactions or overdose risks ---------
+    {"id": "st-johns-wort", "topic": "St John's wort", "rank": 1, "when": [ST_JOHNS],
+     "trigger": "St John's wort",
+     "line": "St John's wort can interact with other medicines, and it can make the contraceptive pill "
+             "less effective.",
+     "source": ("NHS: Depression in adults, treatment",
+                "https://www.nhs.uk/mental-health/conditions/depression-in-adults/treatment/"),
+     "quote": "Also, St John's wort can interact with the contraceptive pill, reducing its effectiveness."},
+    {"id": "grapefruit", "topic": "Grapefruit and medicines", "rank": 2, "when": [GRAPEFRUIT],
+     "trigger": "grapefruit or grapefruit juice",
+     "line": "Grapefruit and grapefruit juice can affect how some medicines work; ask a doctor or "
+             "pharmacist whether it interacts with yours.",
+     "source": ("FDA: Grapefruit juice and some drugs don't mix",
+                "https://www.fda.gov/consumers/consumer-updates/grapefruit-juice-and-some-drugs-dont-mix"),
+     "quote": "Grapefruit juice and grapefruit can affect the way your medicines work, and that food and "
+              "drug interaction can be a concern."},
+    {"id": "warfarin-vitamin-k", "topic": "Vitamin K foods and warfarin", "rank": 2,
+     "when": [_w(r"vitamin k\d?", r"vit k") + "|" + WARFARIN,
+              VITAMIN_K + "|" + _w(r"diet", r"foods?", r"eat\w*", r"vegetables?", r"greens")],
+     "trigger": "vitamin K, or warfarin with food, diet, greens or cranberry",
+     "line": "If you take warfarin, foods high in vitamin K, such as green leafy vegetables, can affect "
+             "how it works; talk to your doctor before big changes to your diet.",
+     "source": ("NHS: Warfarin", "https://www.nhs.uk/medicines/warfarin/"),
+     "quote": "Foods high in vitamin K, such as broccoli, spinach and other green leafy vegetables, can "
+              "affect how warfarin works."},
+    {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
+     "unless": [_w(r"creams?", r"serums?", r"topical", r"skin ?care", r"wrinkles?", r"acne", r"face")],
+     "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not skin creams)",
+     "line": "Having more than 1.5mg of vitamin A a day over many years may affect your bones; if you "
+             "eat liver every week, do not take vitamin A supplements.",
+     "source": ("NHS: Vitamin A", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-a/"),
+     "quote": "having more than an average of 1.5 mg (1,500 µg) a day of vitamin A over many years may affect your bones"},
+    {"id": "vitamin-d-limit", "topic": "Too much vitamin D", "rank": 2, "when": [VITAMIN_D],
+     "trigger": "vitamin D",
+     "line": "Adults should not take more than 100 micrograms (4,000 IU) of vitamin D a day, as it "
+             "could be harmful.",
+     "source": ("NHS: Vitamin D", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/"),
+     "quote": "Do not take more than 100 micrograms (4,000 IU) of vitamin D a day as it could be harmful."},
+
 ]
 
 for _e in ENTRIES:

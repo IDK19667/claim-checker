@@ -11541,6 +11541,11 @@ _SL_PROBES = {
     "thyroid-medicine": ("Levothyroxine causes weight loss", "Thyroid cancer is rising in women"),
     "asthma-inhaler": ("Salt caves cure asthma", "Air pollution causes asthma"),
     "antibiotics": ("Antibiotics cure the flu", "Probiotics improve gut health"),
+    "st-johns-wort": ("St John's wort treats depression", "John's diet works"),
+    "grapefruit": ("Grapefruit burns belly fat", "Oranges prevent colds"),
+    "warfarin-vitamin-k": ("Vitamin K strengthens bones", "Vitamin C prevents colds"),
+    "vitamin-a-limit": ("Vitamin A supplements improve eyesight", "Retinol cream reduces wrinkles"),
+    "vitamin-d-limit": ("High dose vitamin D prevents depression", "Sunlight improves mood"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
