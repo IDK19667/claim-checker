@@ -2197,7 +2197,7 @@ t("after a check the page moves to the answer, once",
 # place the browser restores (Back, Forward, a reload) is kept, not cut to stop 2.
 _pop = _js[_js.find('window.addEventListener("popstate"'):][:300]
 t("R5: Forward to a result shows it again as a replay, never a second glide",
-  "renderResult(currentResult, true)" in _pop and "function renderResult(data, replay)" in _js
+  "renderResult(currentResult, true)" in _pop and "function renderResult(data, replay, keepTyped)" in _js
   and "load(detail.data, !!detail.fresh, !!detail.replay)" in _deskjs and "else if (replay) adoptScroll(" in _deskjs)
 t("  a reload or Back/Forward into the page keeps the place the browser restores",
   'navEntry.type === "reload" || navEntry.type === "back_forward"' in _deskjs
@@ -2427,7 +2427,7 @@ t("the answer is flat on the page: no shadow, no lift; the old front's answer bl
   "box-shadow" not in _dkc and "--shadow-near" not in _dkc and ".verdict-block" not in _css and "--shadow-near" not in _css)
 t("on a wide screen the reading is one column beside the desk, never a full-width page",
   ".inner.wide { width: min(600px, 47vw); }" in _dkc and ".inner.wider { width: min(700px, 54vw); }" in _dkc)
-_done = _js[_js.find("renderResult(final.result);"):][:900]
+_done = _js[_js.index("renderResult(final.result, false, typing);"):][:900]
 t("after a check the address carries the claim as checked, so a fixed spelling stays fixed on reload",
   'encodeURIComponent(final.result.claim || claim)' in _done
   and "encodeURIComponent(claim))" not in _done)
@@ -6575,7 +6575,7 @@ _cold = c.get("/?q=never%20checked%20for%20the%20line").get_data(as_text=True)
 t("  an unchecked page keeps the line hidden until a verdict shows",
   '<p class="doctor" id="doctor-line" hidden>' + _DOC in _cold)
 _js = (ROOT / "static" / "app.js").read_text()
-_rr = _js.split("function renderResult(data, replay) {")[1].split("\nfunction ")[0]
+_rr = _js.split("function renderResult(data, replay, keepTyped) {")[1].split("\nfunction ")[0]
 _rp = _js.split("function renderPending(claim) {")[1].split("\nfunction ")[0]
 t("  a live check shows it with the verdict and hides it while a check runs",
   '$("doctor-line").hidden = false' in _rr and '$("doctor-line").hidden = true' in _rp)
@@ -6763,7 +6763,7 @@ _srv = c.get("/?q=" + urllib.parse.quote(_dl["claim"])).get_data(as_text=True)
 t("a server-rendered result has the Report a wrong answer button and its form",
   "Report a wrong answer" in _srv and 'id="report-form"' in _srv and 'id="report-open"' in _srv)
 t("  and the script posts it to /api/feedback and resets it for every result",
-  "report: true" in _jsrc and "function resetReport()" in _jsrc and "resetReport();" in _jsrc.split("function renderResult(data, replay) {")[1].split("\nfunction ")[0])
+  "report: true" in _jsrc and "function resetReport()" in _jsrc and "resetReport();" in _jsrc.split("function renderResult(data, replay, keepTyped) {")[1].split("\nfunction ")[0])
 _before = _sq.connect(os.environ["DB_PATH"]).execute("select count(*) from feedback").fetchone()[0]
 _r = c.post("/api/feedback", json={"claim": _dl["claim"], "verdict": "true", "report": True,
                                     "note": "  The   study says\nthe opposite.  "},
@@ -11312,10 +11312,12 @@ t("G2: the page has one Cancel for a check, after the live log and outside it, a
 # and focus is lost or still in the claim box; an error takes it on its title; Escape in the
 # place menu gives it back to the place button. The browser half is ui_desk.mjs section 13.
 _g3_app = (ROOT / "static" / "app.js").read_text()
-_g3_lf = _g3_app.split("function landFocus(to) {")[1].split("\n}")[0]
+_g3_lf = _g3_app.split("function landFocus(to, typing) {")[1].split("\n}")[0]
 t("G3: when the answer arrives, focus moves to the verdict unless the reader holds a control still on the page",
-  "landFocus($(\"stamp\"));" in _g3_app.split("renderResult(final.result);")[1].split("remember(final.result)")[0]
-  and "a === document.body" in _g3_lf and "!a.isConnected" in _g3_lf and "a.disabled" in _g3_lf and "a === input" in _g3_lf
+  "landFocus($(\"stamp\"), typing);" in _g3_app.split("renderResult(final.result, false, typing);")[1].split("remember(final.result)")[0]
+  and "a === document.body" in _g3_lf and "!a.isConnected" in _g3_lf and "a.disabled" in _g3_lf and "(a === input && !typing)" in _g3_lf
+  and "const typing = document.activeElement === input && input.value.trim() !== claim;" in _g3_app
+  and "if (!keepTyped) input.value = data.claim;" in _g3_app
   and "preventScroll: true" in _g3_lf
   and 'id="stamp" tabindex="-1"' in (ROOT / "templates" / "index.html").read_text()
   and "#stamp:focus { outline: none; }" in (ROOT / "static" / "desk.css").read_text())

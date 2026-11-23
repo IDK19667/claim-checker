@@ -561,12 +561,13 @@ function tellDesk(name, detail) {
 
 // `replay` is the same result shown again by Back or Forward: the desk keeps the
 // place the browser restores and never glides to the answer a second time.
-function renderResult(data, replay) {
+// `keepTyped`: the reader is changing the words in the claim box, so they stay.
+function renderResult(data, replay, keepTyped) {
   dropOffTopicCites(data);
   currentResult = data;
   const n = data.studies.length, stops = deskStops(data), dl = deskLines(data);
   // Stop 1 keeps the claim in its box, so Back from the answer is the claim.
-  input.value = data.claim;
+  if (!keepTyped) input.value = data.claim;
   clearBtn.hidden = !input.value;
   // Stop 2: the card and how sure.
   $("claim-echo").textContent = data.claim;
@@ -736,12 +737,13 @@ function errorActions(kind, wayOut) {
 // from it, so nothing has to be typed again.
 // Focus is never left on nothing. When an answer arrives and focus is on the
 // page, on a control that is gone, disabled or not drawn, or still in the claim
-// box or button that sent the check, it goes to `to` (no scroll, no ring); a
-// reader holding any other control keeps it.
-function landFocus(to) {
+// box with the words it sent, it goes to `to` (no scroll, no ring); a reader
+// holding any other control, or changing the words (`typing`), keeps it, so a
+// phone keyboard does not close mid-word.
+function landFocus(to, typing) {
   const a = document.activeElement;
   const lost = !a || a === document.body || !a.isConnected || a.disabled || !a.getClientRects().length
-    || a === input || a === submitBtn;
+    || (a === input && !typing) || a === submitBtn;
   if (lost && to) to.focus({ preventScroll: true });
 }
 
@@ -930,8 +932,11 @@ async function check(claim) {
       // network's, and must not be reported as "couldn't reach the
       // server": that sends the reader to check their wifi over our bug.
       try {
-        renderResult(final.result);
-        landFocus($("stamp"));
+        // The words in the claim box changed while the check ran: the reader is
+        // typing, so the answer is drawn and announced around them.
+        const typing = document.activeElement === input && input.value.trim() !== claim;
+        renderResult(final.result, false, typing);
+        landFocus($("stamp"), typing);
         remember(final.result);
         announce(`Verdict: ${VERDICT_LABELS[final.result.verdict] || final.result.verdict}. ${final.result.tldr || ""}`);
       } catch (err) {

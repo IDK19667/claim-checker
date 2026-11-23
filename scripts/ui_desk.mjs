@@ -16,6 +16,7 @@
  * 13. Focus after a check: a keyboard check lands on the verdict, Tab goes on
  *    from the answer and not back to the claim box, Enter does not send again;
  *    an error lands on its title; Escape in the place menu returns to its button.
+ *    Words changed in the claim box during a check keep focus there when it lands.
  * 14. Every control Tab reaches on a result is fully clear of the strip and the
  *    bar, at 390 and 1440, in 3D and text mode.
  * 15. On a result the first Tab reaches "Skip to the answer", drawn only then;
@@ -183,6 +184,30 @@ for (const path of ["/", "/?nogl=1"]) {
     await page.keyboard.press("Tab");
     const t = await page.evaluate(() => { const a = document.activeElement; return { id: a.id, cls: a.className, inAsk: !!a.closest("#ask"), inChecker: !!a.closest("form.ask") }; });
     must(!t.inAsk && !t.inChecker, `the first Tab went back to the claim box area (${t.id || t.cls})`);
+  });
+}
+// J1: a reader changing the words in the claim box while a check runs keeps focus, caret and
+// words when the answer lands; the answer is still drawn and announced. Words left as sent
+// (focus still in the box) land on the verdict as before. The gated claim holds the check open.
+const GATED = "Gated claim for stage test";
+const release = async (...gates) => { for (const g of gates) await fetch(`${base}/__fixture/release/${g}`); };
+for (const [path, typed] of [["/", true], ["/?nogl=1", true], ["/?nogl=1", false]]) {
+  await test(`${typed ? "words typed during a check keep focus in the claim box when the answer lands" : "words left as sent land focus on the verdict"}, ${path === "/" ? "3D" : "text mode"}`, async (page) => {
+    await page.goto(base + path, { waitUntil: "load" }); await ready(page);
+    await send(page, GATED);
+    await page.waitForFunction(() => document.getElementById("submit-btn").disabled, null, { timeout: 15000 });
+    await release("query");
+    await page.focus("#claim-input");
+    if (typed) { await page.press("#claim-input", "End"); await page.keyboard.type(" today"); }
+    await release("found", "done");
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 });
+    await page.waitForTimeout(600);
+    const s = await page.evaluate(() => { const a = document.activeElement, i = document.getElementById("claim-input");
+      return { f: a && a.id, value: i.value, caret: i.selectionStart, stamp: document.getElementById("stamp").textContent.trim(),
+        echo: document.getElementById("claim-echo").textContent, said: document.getElementById("announce").textContent }; });
+    must(s.stamp && s.echo.includes(GATED) && /^Verdict: /.test(s.said), `the answer was not drawn and announced (verdict "${s.stamp}", claim "${s.echo}", said "${s.said}")`);
+    if (typed) must(s.f === "claim-input" && s.value === GATED + " today" && s.caret === s.value.length, `focus on #${s.f}, the box holds "${s.value}" with the caret at ${s.caret}`);
+    else must(s.f === "stamp", `focus is on #${s.f}`);
   });
 }
 await test("an error lands focus on its title", async (page) => {
