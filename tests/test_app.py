@@ -11546,6 +11546,8 @@ _SL_PROBES = {
     "warfarin-vitamin-k": ("Vitamin K strengthens bones", "Vitamin C prevents colds"),
     "vitamin-a-limit": ("Vitamin A supplements improve eyesight", "Retinol cream reduces wrinkles"),
     "vitamin-d-limit": ("High dose vitamin D prevents depression", "Sunlight improves mood"),
+    "cancer-remedies": ("Turmeric shrinks tumours", "Smoking causes lung cancer"),
+    "stop-in-place-of-treatment": ("Homeopathy can replace antibiotics", "Hormone replacement therapy causes breast cancer"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))

@@ -508,6 +508,26 @@ ENTRIES = [
      "source": ("NHS: Vitamin D", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/"),
      "quote": "Do not take more than 100 micrograms (4,000 IU) of vitamin D a day as it could be harmful."},
 
+    # ---- a remedy offered in place of treatment ----------------------------------
+    {"id": "cancer-remedies", "topic": "Remedies alongside cancer treatment", "rank": 1,
+     "when": [CANCER, CANCER_TREAT], "over": ["stop-in-place-of-treatment"],
+     "trigger": "cancer or chemotherapy, with a cure, treatment, remedy, supplement or alternative",
+     "line": "If you have cancer, talk to your care team about any remedy or supplement you use, so "
+             "they can check it works well with your treatment.",
+     "source": ("MedlinePlus: Cancer alternative therapies", "https://medlineplus.gov/canceralternativetherapies.html"),
+     "quote": "Your provider can help you make sure that everything you're using for your cancer care works well together."},
+    {"id": "stop-in-place-of-treatment", "topic": "A remedy in place of prescribed treatment", "rank": 1,
+     "when": [REMEDY + "|" + _w(r"lifestyle", r"therap(?:y|ies)"), REPLACES_TREATMENT],
+     "unless": [_w(r"(?:hormone|nicotine|joint|hip|knee|meal) replacement\w*", r"replacement therap(?:y|ies)")],
+     "hazard": "stop-medicine",
+     "trigger": "a remedy, supplement, food or therapy said to replace treatment, or to treat a serious "
+                "condition such as cancer, diabetes or HIV",
+     "line": "If you take a prescribed medicine, do not stop it without first talking to your doctor, "
+             "whatever else you try.",
+     "source": ("NHS: Complementary and alternative medicine",
+                "https://www.nhs.uk/conditions/complementary-and-alternative-medicine/"),
+     "quote": "do not stop taking any prescribed medicine without first talking to your doctor"},
+
 ]
 
 for _e in ENTRIES:
