@@ -324,6 +324,49 @@ h.uninstall()
 t("uninstall puts the engine back", verdict._gemini.__module__ == "verdict"
   and pubmed._paced_get.__module__ == "pubmed")
 
+# ---- the runner, end to end, in its own process, replaying the store --------------------
+claims_file = WORK / "claims.json"
+claims_file.write_text(json.dumps({"claims": [{"id": "x-01", "claim": CLAIM, "reference": "complicated",
+                                               "also_ok": [], "group": "g"}]}))
+run_out = WORK / "run"
+env = {**os.environ, "GEMINI_API_KEY": "", "DB_PATH": "", "TMPDIR": str(WORK)}
+p = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_run.py"), str(claims_file), "--mode", "replay",
+                    "--store", str(STORE), "--out", str(run_out), "--quiet-claims"],
+                   env=env, capture_output=True, text=True, timeout=300)
+lines = [json.loads(l) for l in (run_out / "results.jsonl").read_text().splitlines()] if p.returncode == 0 else []
+t("runner: replay of a recorded claim exits 0 and writes one line", p.returncode == 0 and len(lines) == 1,
+  p.stdout[-500:] + p.stderr[-1500:])
+if lines:
+    L = lines[0]
+    t("runner: the line carries status, verdict, response, events, numbers and wall time",
+      L["status"] == 200 and L["verdict"] == RECORDED["verdict"] and canon(L["response"]) == canon(RECORDED)
+      and [e["stage"] for e in L["events"]][-1] == "done" and L["harness"]["model_live"] == 0
+      and L["wall"] > 0, {k: L[k] for k in ("status", "verdict", "wall")})
+    t("runner: --quiet-claims prints no claim text", CLAIM not in p.stdout and "x-01" in p.stdout, p.stdout)
+    summ = json.loads((run_out / "summary.json").read_text())
+    t("runner: summary has wall time, each stage, calls, tokens and PubMed requests",
+      summ["wall"]["n"] == 1 and summ["stages"]["done"]["at"] and summ["model_calls"]["median"] == rep_snap["model_calls"]
+      and summ["pubmed_requests"]["median"] == rep_snap["pubmed_requests"] and summ["errors"] == 0, summ)
+p2 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_run.py"), str(claims_file), "--mode", "replay",
+                     "--store", str(STORE), "--out", str(run_out), "--quiet-claims", "--resume"],
+                    env=env, capture_output=True, text=True, timeout=300)
+t("runner: --resume skips ids already written",
+  p2.returncode == 0 and len((run_out / "results.jsonl").read_text().splitlines()) == 1, p2.stderr[-500:])
+p3 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_run.py"), str(claims_file), "--mode", "replay",
+                     "--store", str(WORK / "empty"), "--out", str(WORK / "run3"), "--quiet-claims"],
+                    env=env, capture_output=True, text=True, timeout=300)
+t("runner: a replay miss prints MISS with the kind and key and exits 4",
+  p3.returncode == 4 and "MISS x-01 model key " in p3.stdout, (p3.returncode, p3.stdout[-300:]))
+p4 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_run.py"), str(claims_file), "--mode", "replay",
+                     "--store", str(STORE), "--out", str(WORK / "run4")],
+                    env={**env, "DB_PATH": str(WORK / "elsewhere.db")}, capture_output=True, text=True, timeout=300)
+t("runner: refuses a DB_PATH outside --out", p4.returncode != 0 and "DB_PATH must be a file under" in p4.stderr,
+  p4.stderr[-300:])
+reg = harness.load_claims(ROOT / "tests" / "regression_claims.json")
+saf = harness.load_claims(ROOT / "tests" / "safety_claims.json")
+t("claims loader reads the regression and safety shapes",
+  reg[0]["id"] == "1" and reg[0]["reference"] and saf[0]["safety"]["harmful_if"] == ["false", "insufficient", "complicated"])
+
 shutil.rmtree(WORK, ignore_errors=True)
 t("no test used the network", not NET_TRIES, NET_TRIES)
 print(f"\n{sum(results)}/{len(results)} passed")
