@@ -2032,6 +2032,51 @@ def says_thin(study) -> bool:
     return False
 
 
+# A review that concludes its evidence is not enough to tell: "There is
+# insufficient clinical trial evidence", "have not here been shown to provide
+# benefits", "has not been established". Read in its conclusion only, so a
+# result line about one minor outcome is not taken for the review's answer.
+_NOT_ENOUGH = re.compile(
+    r"\b(?:insufficient|inadequate|not enough|too little|inconclusive)\s+(?:[\w-]+\s+){0,3}?evidence\b"
+    r"|\bevidence\s+(?:[\w-]+\s+){0,4}?(?:is|was|remains|are|were)\s+(?:\w+\s+)?"
+    r"(?:insufficient|inadequate|inconclusive|lacking|not enough)\b"
+    r"|\b(?:have|has)\s+not\s+(?:\w+\s+){0,2}?been\s+(?:shown|established|demonstrated|proven)\b"
+    r"|\bno\s+(?:firm|definitive|reliable|clear)\s+conclusions?\s+(?:can|could)\s+be\s+drawn\b"
+    r"|\bunable\s+to\s+draw\s+(?:any\s+)?(?:firm\s+|definitive\s+)?conclusions?\b", re.IGNORECASE)
+
+
+def says_not_enough(study) -> bool:
+    """True when a review's own conclusion says its evidence is not enough
+    to tell (_NOT_ENOUGH)."""
+    return is_review(study) and bool(_NOT_ENOUGH.search(conclusion(study)))
+
+
+def too_thin(studies, cited_pmids=()) -> str:
+    """
+    Why the evidence a "complicated" rests on is too thin to say what the
+    answer depends on, in words for the reader, or "". Two ways: every
+    relied-on review that states a conclusion says its evidence is not
+    enough, or is held back by few or small studies (says_thin); or there is
+    no relied-on review and the one study that says its size or design is a
+    small, pilot or uncontrolled trial (the rest say neither). Several small
+    trials can show where an effect holds and where it does not; one cannot.
+    """
+    cited = set(cited_pmids or ())
+    used = [s for s in studies or [] if s.get("pmid") in cited]
+    reviews = [s for s in used if is_review(s)]
+    concluded = [s for s in reviews if conclusion(s)]
+    if concluded and all(says_not_enough(s) or says_thin(s) for s in concluded):
+        return "the reviews behind it say their own evidence is not enough to tell"
+    if reviews:
+        return ""
+    told = [s for s in used if not narrative_review(s)
+            and (sample_size(s) is not None
+                 or any(not t.startswith(IGNORE_PREFIXES) for t in s.get("publication_types") or []))]
+    if len(told) == 1 and trial_caveats(told[0]):
+        return "it rests on a single small, pilot or uncontrolled study"
+    return ""
+
+
 CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "
                      "much of the link")
 

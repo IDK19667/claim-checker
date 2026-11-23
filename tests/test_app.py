@@ -11556,6 +11556,34 @@ t("F2: guidance that says stopping is fine still argues with a false, and the do
   breakdown.stance("Major health guidelines say: it is safe to stop most medicines in pregnancy.", _F2_CLAIM) == "yes"
   and breakdown.stance("Talk to your doctor before stopping statins.", "Garlic lowers blood pressure") != "no")
 
+# Fix 3: a "complicated" on evidence too thin to say what it depends on is "Not enough evidence".
+_F3_NO = {"pmid": "f3a", "title": "Garlic for the common cold", "publication_types": ["Systematic Review"],
+          "abstract": ("OBJECTIVES: To assess garlic for colds. MAIN RESULTS: One trial of 146 people. "
+                       "CONCLUSIONS: There is insufficient clinical trial evidence regarding the effects of "
+                       "garlic in preventing the common cold.")}
+_F3_YES = {"pmid": "f3b", "title": "Echinacea for colds", "publication_types": ["Meta-Analysis"],
+           "abstract": ("OBJECTIVES: To pool trials. RESULTS: Colds were shorter (WMD -1.4 days). "
+                        "CONCLUSIONS: Published evidence supports echinacea's benefit in decreasing the "
+                        "duration of the common cold.")}
+_F3_TRIAL = {"pmid": "f3c", "publication_types": ["Randomized Controlled Trial"], "title": "Gel for teething",
+             "abstract": "A pilot open-label trial in 27 infants. CONCLUSIONS: The gel eased symptoms."}
+_F3_LABELLED = lambda n: {"pmid": f"f3t{n}", "publication_types": ["Randomized Controlled Trial"],
+                          "title": "Standing desks", "abstract": f"A trial of {20 + n} office workers."}
+_F3_RES = lambda cited: {"verdict": "complicated", "tldr": "Garlic may help, but the evidence is very limited.",
+                         "explanation": "One trial found fewer colds.", "cited_studies": cited}
+_f3_moved = verdict._too_thin(_F3_RES(["f3a"]), [_F3_NO], "Eating garlic every day prevents colds")
+t("F3: a complicated whose reviews all conclude their evidence is not enough becomes Not enough evidence",
+  evidence.says_not_enough(_F3_NO) and _f3_moved["verdict"] == "insufficient"
+  and "too thin to rate" in _f3_moved["explanation"] and _f3_moved["tldr"] == _F3_RES([])["tldr"])
+t("F3: a single small or pilot trial with no review becomes Not enough evidence",
+  verdict._too_thin(_F3_RES(["f3c"]), [_F3_TRIAL], "Teething gels ease a baby's teething pain")["verdict"]
+  == "insufficient")
+t("F3: the rule does not fire on a review that leans yes beside one that says not enough, on several small trials, or on a true",
+  verdict._too_thin(_F3_RES(["f3a", "f3b"]), [_F3_NO, _F3_YES], "Echinacea shortens colds")["verdict"] == "complicated"
+  and verdict._too_thin(_F3_RES(["f3t1", "f3t2", "f3t3"]), [_F3_LABELLED(1), _F3_LABELLED(2), _F3_LABELLED(3)],
+                        "Standing desks reduce back pain")["verdict"] == "complicated"
+  and verdict._too_thin(dict(_F3_RES(["f3a"]), verdict="true"), [_F3_NO], "Garlic prevents colds")["verdict"] == "true")
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

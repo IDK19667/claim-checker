@@ -4358,3 +4358,7 @@ What was deliberately rejected:
   to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
   stop one with a no and the existing forgo rule can stamp it false. It had
   been read as a yes and thrown away as arguing with itself.
+- Thin "complicated": becomes "Not enough evidence" (`verdict._too_thin`,
+  `evidence.too_thin`) when every relied-on review that concludes says its
+  evidence is not enough or thin, or, with no review, it rests on one small,
+  pilot or uncontrolled study. Runs after the faithfulness check: no new call.

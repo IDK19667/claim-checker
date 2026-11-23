@@ -1809,7 +1809,8 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
         elif s["pmid"] in back:
             s["background"] = back[s["pmid"]]
     result = _settle_confounding(_settle_ruling(result, claim), studies)
-    result = follow_guidelines(check_faithful(result, studies, claim, outcome), studies, claim)
+    result = follow_guidelines(_too_thin(check_faithful(result, studies, claim, outcome), studies, claim),
+                               studies, claim)
     # Every finished answer has a short answer and a line on what is still
     # open. A reply that leaves either empty, after every gate and the retry
     # above, is a failed reply: it ends in the app's error response, with a
@@ -1819,6 +1820,31 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
                            {k: result.get(k) for k in ("verdict", "tldr", "still_open")})
         raise ProviderError("other", INCOMPLETE_REPLY, "either")
     return result
+
+
+THIN_TLDR = "The studies found are too few or too small to say whether this is true."
+
+
+def _too_thin(result: dict, studies: list[dict], claim: str) -> dict:
+    """
+    "It's complicated" says the answer depends on who, how much or which
+    outcome. On evidence too thin to show that (evidence.too_thin), the
+    answer is "Not enough evidence" instead, and says why. Only ever moves
+    "complicated" to "insufficient". Runs after the faithfulness check, on
+    what the model already returned, so it costs no call.
+    """
+    if result.get("verdict") != "complicated":
+        return result
+    why = evidence.too_thin(studies, result.get("cited_studies") or ())
+    if not why:
+        return result
+    _stamp_log.warning("a 'complicated' on thin evidence becomes 'insufficient': %s", why)
+    tldr = result.get("tldr") or ""
+    if not tldr or breakdown.stamp_conflict("insufficient", tldr, "", claim):
+        tldr = THIN_TLDR
+    explanation = (str(result.get("explanation") or "").rstrip()
+                   + f" The evidence is too thin to rate, because {why}.").strip()
+    return {**result, "verdict": "insufficient", "tldr": tldr, "explanation": explanation}
 
 
 # The way out a failure names follows the kind of failure. The weighing call
