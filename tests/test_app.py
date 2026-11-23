@@ -23,6 +23,9 @@ import dotenv  # noqa: E402
 dotenv.load_dotenv = lambda *a, **k: None  # keep the developer's .env out of the tests
 
 import app as appmod  # noqa: E402
+# Most tests change the database between two home visits; the 60 second
+# copy of the home lists is tested on its own (HOME LISTS, near the end).
+appmod.HOME_LIST_SECONDS = 0
 import og  # noqa: E402
 import db  # noqa: E402
 db.COUNT_FLUSH_SECONDS = 0  # no background writer in tests; they call db.flush_counts()
@@ -11493,6 +11496,78 @@ t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
+
+# ---- HOME LISTS: the home page's lists are kept in memory for a short while ----
+_hl_calls = {"recent": 0, "example": 0, "fail": False}
+_hl_real_rv, _hl_real_key = db.recent_verdicts, db.get_cached_by_key
+
+
+def _hl_rv(limit=12):
+    _hl_calls["recent"] += 1
+    if _hl_calls["fail"]:
+        raise sqlite3.OperationalError("database is locked")
+    return _hl_real_rv(limit)
+
+
+def _hl_key(key, *a, **k):
+    if key == db.normalize_claim(appmod.EXAMPLE_CLAIM):
+        _hl_calls["example"] += 1
+        if _hl_calls["fail"]:
+            raise sqlite3.OperationalError("database is locked")
+    return _hl_real_key(key, *a, **k)
+
+
+import sqlite3  # noqa: E402
+_hl_clock = [1000.0]
+_hl_real_mono = appmod.time.monotonic
+appmod.time = types.SimpleNamespace(**{k: getattr(__import__("time"), k) for k in dir(__import__("time")) if not k.startswith("_")})
+appmod.time.monotonic = lambda: _hl_clock[0]
+db.recent_verdicts, db.get_cached_by_key = _hl_rv, _hl_key
+appmod.HOME_LIST_SECONDS = 60
+appmod._drop_home_lists()
+try:
+    db.put_cached_verdict("Home list claim one", "q", "complicated", "x", ["P1"], STUDIES,
+                          tldr="Mixed.", still_open="Dose.")
+    _hl_a = c.get("/").get_data(as_text=True)
+    _hl_first = dict(_hl_calls)
+    _hl_clock[0] += 30
+    _hl_b = c.get("/").get_data(as_text=True)
+    t("HOME LISTS: two home visits inside the window read the database once, and the page is the same",
+      _hl_first["recent"] >= 1 and _hl_first["example"] == 1 and _hl_calls["recent"] == _hl_first["recent"]
+      and _hl_calls["example"] == 1 and _hl_a.count("Home list claim one") == _hl_b.count("Home list claim one") > 0,
+      (_hl_first, dict(_hl_calls)))
+    _hl_clock[0] += 31
+    c.get("/")
+    t("HOME LISTS: after the window the next home visit reads again",
+      _hl_calls["recent"] == 2 * _hl_first["recent"] and _hl_calls["example"] == 2, dict(_hl_calls))
+    _hl_clock[0] += 61
+    _hl_calls["fail"] = True
+    _hl_r = c.get("/")
+    _hl_calls["fail"] = False
+    t("HOME LISTS: a refresh that fails serves the last good list, with a 200",
+      _hl_r.status_code == 200 and "Home list claim one" in _hl_r.get_data(as_text=True)
+      and _hl_calls["recent"] > 2 * _hl_first["recent"], dict(_hl_calls))
+    _hl_n = _hl_calls["recent"]
+    db.put_cached_verdict("Home list claim two", "q", "complicated", "x", ["P1"], STUDIES,
+                          tldr="Mixed.", still_open="Dose.")
+    _hl_c = c.get("/").get_data(as_text=True)
+    t("HOME LISTS: a check saved in this process drops the copy, so the next visit lists it",
+      _hl_calls["recent"] > _hl_n and "Home list claim two" in _hl_c, dict(_hl_calls))
+    _hl_n = _hl_calls["recent"]
+    _hl_q = c.get("/?q=" + urllib.parse.quote("Home list claim two"))
+    t("HOME LISTS: a result page still reads its own verdict fresh",
+      _hl_q.status_code == 200 and "server-result" in _hl_q.get_data(as_text=True), _hl_q.status_code)
+    appmod._drop_home_lists()
+    _hl_calls["fail"] = True
+    _hl_r = c.get("/")
+    _hl_calls["fail"] = False
+    t("HOME LISTS: with no good copy yet, a failed read still renders the home page (empty list, as before)",
+      _hl_r.status_code == 200, _hl_r.status_code)
+finally:
+    db.recent_verdicts, db.get_cached_by_key = _hl_real_rv, _hl_real_key
+    appmod.time = __import__("time")
+    appmod.HOME_LIST_SECONDS = 0
+    appmod._drop_home_lists()
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

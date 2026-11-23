@@ -543,6 +543,25 @@ def _breakdown(row) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+# Called after this process saves or re-dates an answer. app.py keeps the
+# home page's lists in memory for a short while and drops its copy here, so
+# the reader who just checked sees their answer in the list.
+_after_save = []
+
+
+def after_save(fn):
+    _after_save.append(fn)
+    return fn
+
+
+def _saved():
+    for fn in _after_save:
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001  a listener never fails a save
+            log.warning("after_save listener failed: %s", type(e).__name__)
+
+
 @_routed
 def put_cached_verdict(
     claim: str,
@@ -577,6 +596,7 @@ def put_cached_verdict(
                 method_stamp or None,   # an empty stamp is no stamp
             ),
         )
+    _saved()
 
 
 @_routed
@@ -586,6 +606,7 @@ def refresh_saved(claim: str):
     with get_conn() as conn:
         conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?",
                      (_now(), normalize_claim(claim)))
+    _saved()
 
 
 # ---- Anonymous check log -------------------------------------------------

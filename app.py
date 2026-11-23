@@ -7,6 +7,8 @@ import os
 import re
 import secrets
 import subprocess
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
@@ -316,6 +318,46 @@ def _latest(n: int) -> list[dict]:
         limit *= 2
 
 
+# The home page's two lists (the latest answers and the trust example) are
+# kept in this process's memory for HOME_LIST_SECONDS, so a plain home visit
+# inside that window makes no database round trip (on the live site each one
+# is a request to the remote database). A save in this process drops the
+# copy (db.after_save), so the reader who just checked sees their answer. A
+# refresh that fails serves the last good copy and never raises to the reader.
+HOME_LIST_SECONDS = float(os.environ.get("HOME_LIST_SECONDS", "60"))
+_home_lists: dict = {}
+_home_lock = threading.Lock()
+
+
+def _home_list(name: str, fetch):
+    """fetch()'s value, from memory while it is younger than HOME_LIST_SECONDS."""
+    now = time.monotonic()
+    with _home_lock:
+        hit = _home_lists.get(name)
+    if hit and now - hit[0] < HOME_LIST_SECONDS:
+        return hit[1]
+    try:
+        value = fetch()
+    except Exception:  # noqa: BLE001
+        if hit:
+            app.logger.warning("Home list %s could not be refreshed; serving the last good copy", name)
+            return hit[1]
+        raise
+    # A remote store that failed answers from the local file instead (db._routed),
+    # which is no refresh: keep the last good copy then.
+    if hit and db.store_status() == "turso-failing":
+        return hit[1]
+    with _home_lock:
+        _home_lists[name] = (time.monotonic(), value)
+    return value
+
+
+@db.after_save
+def _drop_home_lists() -> None:
+    with _home_lock:
+        _home_lists.clear()
+
+
 def _one_per_question(rows: list[dict]) -> list[dict]:
     """
     Each question once, newest first. Rows whose db.claim_fold keys are equal
@@ -342,7 +384,7 @@ def _trust_example():
     it rather than with an invented example.
     """
     try:
-        row = db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM))
+        row = _home_list("example", lambda: db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM)))
         if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
                 or not row["tldr"].strip() or not row["still_open"].strip():
             return None
@@ -407,7 +449,7 @@ def _render_home():
     # recent verdicts with the evidence behind each. Best-effort; an empty
     # database must still render a usable page.
     try:
-        latest = _list_entries(_latest(10))
+        latest = _home_list("latest", lambda: _list_entries(_latest(10)))
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page's latest checks: %s", e)
         latest = []

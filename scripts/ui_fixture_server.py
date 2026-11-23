@@ -191,6 +191,7 @@ def _reset():
     with db.get_conn() as conn:
         for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE, DECLINED, CUT):
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
+    appmod._drop_home_lists()  # those rows went without a save, so the home page's copy goes too
     return "ok"
 
 
