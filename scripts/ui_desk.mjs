@@ -301,6 +301,18 @@ await test("L1: an answer that lands while the reader types leaves a scrolled pa
   const s = await j1Look(page);
   must(y0 > 0 && s.f === "claim-input" && s.y === y0, `scrollY ${y0} became ${s.y} (focus on #${s.f})`);
 }, { w: 390, h: 480 });
+await test("L2: words kept from a check survive Back then Forward, and Edit claim", async (page) => {
+  await j1Start(page);
+  await page.focus("#claim-input"); await page.press("#claim-input", "End"); await page.keyboard.type(" today");
+  await j1Land(page);
+  await page.goBack(); await page.waitForFunction(() => !document.documentElement.classList.contains("checked"), null, { timeout: 10000 });
+  await page.goForward(); await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 10000 }); await page.waitForTimeout(800);
+  const a = await j1Look(page);
+  must(a.value === GATED + " today", `after Back and Forward the box holds "${a.value}"`);
+  await page.evaluate(() => document.getElementById("edit-claim").click()); await page.waitForTimeout(800);
+  const b = await j1Look(page);
+  must(b.value === GATED + " today" && b.f === "claim-input", `after Edit claim the box holds "${b.value}", focus on #${b.f}`);
+});
 await test("an error lands focus on its title", async (page) => {
   await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
   await page.context().setOffline(true);

@@ -2197,7 +2197,7 @@ t("after a check the page moves to the answer, once",
 # place the browser restores (Back, Forward, a reload) is kept, not cut to stop 2.
 _pop = _js[_js.find('window.addEventListener("popstate"'):][:300]
 t("R5: Forward to a result shows it again as a replay, never a second glide",
-  "renderResult(currentResult, true)" in _pop and "function renderResult(data, replay, keepTyped)" in _js
+  "renderResult(currentResult, true, unsentWords())" in _pop and "function renderResult(data, replay, keepTyped)" in _js
   and "load(detail.data, !!detail.fresh && !typing, !!detail.replay || typing)" in _deskjs and "else if (replay) adoptScroll(" in _deskjs)
 t("  a reload or Back/Forward into the page keeps the place the browser restores",
   'navEntry.type === "reload" || navEntry.type === "back_forward"' in _deskjs

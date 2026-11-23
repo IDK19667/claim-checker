@@ -1119,21 +1119,28 @@ for (const b of document.querySelectorAll("[data-again]")) b.addEventListener("c
   if (controller) { controller.abort(); return; }
   if (history.state && history.state.view === "result") history.back(); else { history.replaceState({ view: "ask" }, "", "/"); goHome(); }
 });
+// The box holds words the reader typed and has not sent (kept when an answer
+// landed around them): Forward and Edit claim leave them there.
+function unsentWords() {
+  return editedSinceSend && !!input.value.trim() && !!currentResult && input.value !== currentResult.claim;
+}
 // Edit returns to the claim box with the claim already in it, cursor at the
-// end, to reword and check again. The suggestions stay shut: the reader has
-// not typed anything yet.
+// end, to reword and check again; words the reader typed and has not sent stay
+// instead. The suggestions stay shut.
 $("edit-claim").addEventListener("click", () => {
-  const claim = (currentResult && currentResult.claim) || $("claim-echo").textContent.trim();
+  const keep = unsentWords();
+  const claim = keep ? input.value : (currentResult && currentResult.claim) || $("claim-echo").textContent.trim();
   history.replaceState({ view: "ask" }, "", "/");
   goHome();
   input.value = claim;
+  if (!keep) editedSinceSend = false;
   clearBtn.hidden = !claim;
   closeSuggest();
   input.focus({ preventScroll: true });
   input.setSelectionRange(claim.length, claim.length);
 });
 window.addEventListener("popstate", () => {
-  if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult, true); return; }
+  if (history.state && history.state.view === "result" && currentResult) { renderResult(currentResult, true, unsentWords()); return; }
   goHome();
 });
 $("error-retry").addEventListener("click", () => { if (lastClaim) { input.value = lastClaim; check(lastClaim); } });
