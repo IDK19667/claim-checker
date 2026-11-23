@@ -382,7 +382,7 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
 @media (max-width: 760px) and (max-height: 700px) {
   .has-gl #cap-answer .inner { display: flex; flex-direction: column; align-items: flex-start; }
   .has-gl #cap-answer .two { display: contents; }
-  .has-gl #cap-answer .sure-label { order: 1; } .has-gl #cap-answer .sure { order: 2; }
+  .has-gl #cap-answer .sure-label { order: 1; } .has-gl #cap-answer .sure { order: 2; } .has-gl #cap-answer .sure-more { order: 2; }
   .has-gl #how-answer { order: 3; margin-top: 14px; }
   .has-gl #cap-answer .doctor { order: 5; align-self: stretch; }
   .has-gl #cap-answer [data-again] { order: 6; margin-top: 8px; }
@@ -391,7 +391,7 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
 @media (max-width: 760px) and (max-height: 600px) {
   .has-gl #how-answer { order: 1; margin-top: 0; }
   .has-gl #cap-answer .sure-label { order: 3; margin-top: 18px; }
-  .has-gl #cap-answer .sure { order: 4; }
+  .has-gl #cap-answer .sure { order: 4; } .has-gl #cap-answer .sure-more { order: 4; }
 }
 /* short laptop screens: stop 1 sits closer together */
 @media (min-width: 761px) and (max-height: 760px) {

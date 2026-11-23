@@ -541,6 +541,25 @@ for (const [w, h] of [[390, 844], [1440, 900]]) {
     }, { w, h });
   }
 }
+// on a short phone in 3D the Answer panel is reordered; "What does this mean?" stays right under the
+// sentence it explains (#confidence), never floated to the top of the panel
+for (const [w, h] of [[390, 664], [320, 568]]) {
+  await test(`on a short phone "What does this mean?" sits right under how sure, ${w}x${h}`, async (page) => {
+    await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+    must((await page.evaluate(() => window.__evident.stats().mode)) === "3d", "not in 3D");
+    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(3500);
+    const r = await page.evaluate(() => {
+      const inner = document.querySelector("#cap-answer .inner"), items = [];
+      const walk = (p) => { for (const c of p.children) { const o = getComputedStyle(c); if (o.display === "contents") walk(c); else if (o.display !== "none" && !c.hidden && c.getBoundingClientRect().height > 0) items.push(c); } };
+      walk(inner);
+      const conf = document.getElementById("confidence").getBoundingClientRect(), more = document.getElementById("meter").closest(".sure-more"), m = document.getElementById("meter").getBoundingClientRect();
+      const between = items.filter((c) => c !== more && c.id !== "confidence" && (() => { const q = c.getBoundingClientRect(); return q.top >= conf.bottom - 0.5 && q.bottom <= m.top + 0.5; })()).map((c) => c.id || c.className);
+      return { cb: conf.bottom, mt: m.top, between };
+    });
+    must(r.mt >= r.cb - 0.5, `the top of #meter (${Math.round(r.mt)}) is above the bottom of #confidence (${Math.round(r.cb)})`);
+    must(!r.between.length, `between how sure and its link: ${r.between.join(", ")}`);
+  }, { w, h });
+}
 // the dip: once, about 3 seconds after an answer the reader just ran lands and nothing was touched;
 // never under reduced motion, never on a saved or shared answer, and any input before it cancels it
 const dips = (page) => page.evaluate(() => window.__dips || 0);
