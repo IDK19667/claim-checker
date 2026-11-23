@@ -92,6 +92,8 @@
 .rows[hidden] { display: none; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; overflow-anchor: none; } /* the stops are measured by script; the browser shifting the page to keep an anchor would fight the glide */
+/* a control brought into view by Tab, or a link to a row, stops clear of the strip and of the bar (the script's own moves set exact positions and are not affected) */
+html { scroll-padding-top: calc(var(--strip) + 8px); scroll-padding-bottom: calc(var(--bar-space) + 8px); }
 body { margin: 0; background: var(--night); color: var(--on-deep); font-family: var(--body); font-size: 17px; line-height: 1.5; overflow-x: hidden; }
 a { color: var(--sage); text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 3px; }

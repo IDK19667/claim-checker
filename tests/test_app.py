@@ -10970,6 +10970,12 @@ t("G3: when the answer arrives, focus moves to the verdict unless the reader hol
 t("  an error moves focus to its title, and Escape in the place menu returns it to the place button",
   '$("error-title").focus({ preventScroll: true });' in _g3_app.split("function renderError(")[1].split("\n}")[0]
   and "if (wasOpen) where.focus({ preventScroll: true });" in (ROOT / "static" / "desk.js").read_text())
+# G4 (A1): a control Tab brings into view stops clear of the strip and the bar. The root
+# carries scroll padding the size of each; the browser half (every control reached by Tab
+# on a result, at 390 and 1440, in 3D and text mode) is ui_desk.mjs section 14.
+t("G4: the root's scroll padding is the strip's height at the top and the bar's space at the foot",
+  "html { scroll-padding-top: calc(var(--strip) + 8px); scroll-padding-bottom: calc(var(--bar-space) + 8px); }"
+  in (ROOT / "static" / "desk.css").read_text())
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

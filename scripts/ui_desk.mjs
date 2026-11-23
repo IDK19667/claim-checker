@@ -16,6 +16,8 @@
  * 13. Focus after a check: a keyboard check lands on the verdict, Tab goes on
  *    from the answer and not back to the claim box, Enter does not send again;
  *    an error lands on its title; Escape in the place menu returns to its button.
+ * 14. Every control Tab reaches on a result is fully clear of the strip and the
+ *    bar, at 390 and 1440, in 3D and text mode.
  */
 import { chromium } from "playwright";
 
@@ -195,6 +197,30 @@ await test("Escape in the place menu returns focus to the place button", async (
   const s = await page.evaluate(() => ({ hidden: document.getElementById("menu").hidden, f: document.activeElement && document.activeElement.id }));
   must(open && s.hidden && s.f === "where", `menu opened ${open}, closed ${s.hidden}, focus on #${s.f}`);
 });
+
+// ---- 14. Focus never hides under the bar or the strip ---------------------------------------
+for (const [w, h] of [[390, 844], [1440, 900]]) for (const path of ["/", "/?nogl=1"]) {
+  await test(`every control Tab reaches on a result is clear of the strip and the bar, ${w}x${h} ${path === "/" ? "3D" : "text mode"}`, async (page) => {
+    await page.goto(base + (path === "/" ? "/?" : "/?nogl=1&") + "q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page);
+    await page.waitForTimeout(1500);
+    const hidden = []; let seen = 0;
+    for (let i = 0; i < 70; i++) {
+      await page.keyboard.press("Tab"); await page.waitForTimeout(120);
+      const r = await page.evaluate(() => {
+        const a = document.activeElement; if (!a || a === document.body) return null;
+        if (a.closest(".strip, .bar, #menu, dialog")) return { skip: true };
+        const b = a.getBoundingClientRect(); if (!b.width || !b.height) return { skip: true };
+        const strip = document.querySelector(".strip").getBoundingClientRect().bottom;
+        const bar = document.querySelector(".bar"); const barTop = bar && getComputedStyle(bar).visibility !== "hidden" && bar.getBoundingClientRect().height ? bar.getBoundingClientRect().top : innerHeight;
+        return { id: a.id || a.className || a.tagName, top: Math.round(b.top), bottom: Math.round(b.bottom), strip: Math.round(strip), barTop: Math.round(barTop) };
+      });
+      if (!r || r.skip) continue;
+      seen++;
+      if (r.top < r.strip - 0.5 || r.bottom > r.barTop + 0.5) hidden.push(`${r.id} ${r.top}..${r.bottom} (strip ${r.strip}, bar ${r.barTop})`);
+    }
+    must(seen > 5 && !hidden.length, `${hidden.length} of ${seen} focused controls under the strip or the bar: ${hidden.slice(0, 4).join("; ")}`);
+  }, { w, h });
+}
 
 await browser.close();
 const passed = results.filter(Boolean).length;
