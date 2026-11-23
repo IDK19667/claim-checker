@@ -223,7 +223,9 @@ def _held():
     if hold["s"] and appmod.request.path == "/":
         time.sleep(hold["s"])
     if hold["status"] and appmod.request.path == "/":
-        return appmod.Response("Waking up", status=hold["status"], mimetype="text/plain")
+        # a 403 stands for a Cloudflare challenge: a page the reader has to see
+        body = "Challenge page: pass this check to go on" if hold["status"] == 403 else "Waking up"
+        return appmod.Response(body, status=hold["status"], mimetype="text/plain")
 
 
 @appmod.app.route("/__fixture/reset")

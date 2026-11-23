@@ -64,7 +64,7 @@ page is about 9 KB and a sound server delivers it well inside that on
 slow 4G (150 ms round trip, 1.6 Mbps), while a reader waiting on a blank
 screen past about three seconds starts to leave. With a fast server the
 fresh page is shown exactly as before; a first visit, with nothing kept,
-waits as before.
+waits as before. Only a 5xx or a 429 is hidden behind the kept copy: a 403 (a Cloudflare challenge) or any other answer reaches the reader as sent, or they could never pass the challenge.
 
 - A result address (`/?q=`, or a share's `?text=`/`?title=`) stays
   network first with the kept home page as its offline fallback, but is

@@ -716,6 +716,28 @@ await test("18: with a kept copy, a home answer of 503 or 429 shows the copy, an
   }
   await fetch(base + "/__fixture/status/0");
 }, { sw: true });
+await test("18: with a kept copy, a home answer of 403 (a challenge) reaches the reader as sent and is never stored", async (page, ctx) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload({ waitUntil: "load" });
+  must(await page.evaluate(() => !!navigator.serviceWorker.controller), "the page is not controlled by the service worker");
+  const keptNonce = () => page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); const r = await c.match("/"); return r ? ((await r.text()).match(/nonce="([^"]+)"/) || [])[1] : null; });
+  const mark = await keptNonce();
+  must((await fetch(base + "/__fixture/status/403")).ok, "the fixture server cannot answer 403");
+  const r = await page.reload({ waitUntil: "load" });
+  const text = await page.evaluate(() => document.body ? document.body.innerText : "");
+  await fetch(base + "/__fixture/status/0");
+  must(r.status() === 403 && /Challenge page/.test(text) && !(await painted(page)), `403: status ${r.status()}, on screen: ${JSON.stringify(text.slice(0, 80))}`);
+  must((await keptNonce()) === mark, "403: the challenge replaced the kept copy");
+  await page.reload({ waitUntil: "load" });
+  const fresh = await page.evaluate(() => { const s = document.querySelector("script[nonce]"); return s ? s.nonce : null; });
+  must(await painted(page) && fresh && fresh !== mark, `healthy again: the fresh page was not shown (${mark} then ${fresh})`);
+  const good = await keptNonce();
+  await ctx.setOffline(true);
+  await page.reload({ waitUntil: "load" });
+  const off = await page.evaluate(() => { const s = document.querySelector("script[nonce]"); return s ? s.nonce : null; });
+  await ctx.setOffline(false);
+  must(await painted(page) && off === good, `offline: the kept copy was not shown (${good} then ${off})`);
+}, { sw: true });
 await test("18: a first visit with nothing kept still gets the server's answer, as before", async (page) => {
   must((await fetch(base + "/__fixture/status/503")).ok, "the fixture server cannot answer 503");
   const r = await page.goto(base + "/");

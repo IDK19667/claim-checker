@@ -10877,8 +10877,9 @@ t("the service worker gives the home page a 2.5 s time limit when a copy is kept
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
 _hs3 = _sw3.split("async function homeShell", 1)[1].split("\n}\n", 1)[0]
-t("with a kept copy, a home answer that is not a good page (a 5xx, a 429) shows the copy, and only a good page is stored",
-  'return res && (res.ok || res.type === "opaqueredirect") ? res : kept;' in _hs3
+t("with a kept copy, only a home answer of a 5xx or a 429 shows the copy, any other answer (a 403 challenge) reaches the reader, and only a good page is stored",
+  'return res && !(res.status >= 500 || res.status === 429) ? res : kept;' in _hs3
+  and "res.ok ||" not in _hs3.split("Promise.race", 1)[1]
   and 'if (res.ok) return cache.put("/", res.clone())' in _hs3, _hs3[-300:])
 t("a result address (/?q=) is network first with the home page as its offline fallback, and is never kept in its place",
   'CLAIM_ARGS = ["q", "text", "title"]' in _sw3

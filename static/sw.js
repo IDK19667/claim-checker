@@ -3,8 +3,10 @@
      and the network has not answered in SHELL_WAIT_MS, the copy is shown
      and the network's answer, when it comes, is kept for next time. With
      no copy (a first visit) it waits for the network, as before. An
-     answer that is not a good page (a 5xx while the server wakes, a 429)
-     shows the copy when one is kept, and is never stored.
+     answer of a server waking (a 5xx) or busy (a 429) shows the copy
+     when one is kept; any other answer (a 403 challenge, another 4xx, a
+     redirect) goes to the reader as the network gave it. Only a good
+     page is stored.
    - Other pages: network first, cache fallback, each kept under its own
      address once visited; /checks and /flight, which the server sends on
      to the home page, are sent on by the worker too when offline; a result address (/?q=) falls back to the home
@@ -71,8 +73,9 @@ async function homeShell(event) {
   event.waitUntil(net.catch(() => {}));  // a late answer still refreshes the copy
   const late = new Promise((r) => setTimeout(() => r(null), SHELL_WAIT_MS));
   const res = await Promise.race([net.catch(() => null), late]);
-  // a server waking up (5xx) or busy (429) never replaces the good copy on screen
-  return res && (res.ok || res.type === "opaqueredirect") ? res : kept;
+  // only a server waking up (5xx) or busy (429) is hidden behind the good copy;
+  // any other answer (a 403 challenge, a redirect) is the reader's to see
+  return res && !(res.status >= 500 || res.status === 429) ? res : kept;
 }
 
 async function networkFirst(req, fallbackKey) {
