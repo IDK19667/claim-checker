@@ -11544,6 +11544,16 @@ _SL_PROBES = {
     "cancer-remedies": ("Turmeric shrinks tumours", "Smoking causes lung cancer"),
     "stop-in-place-of-treatment": ("Homeopathy can replace antibiotics", "Hormone replacement therapy causes breast cancer"),
     "psa-result": ("A normal PSA rules out prostate cancer", "PSA: drink more water in a heatwave"),
+    "heart-attack-signs": ("Coughing hard during a heart attack can save your life", "Heart disease runs in families"),
+    "anaphylaxis": ("Antihistamines can treat anaphylaxis", "Antihistamines help hay fever"),
+    "baby-fever-medicine": ("Calpol is safe for newborn babies", "Paracetamol eases headaches"),
+    "paracetamol-too-much": ("Taking paracetamol every day damages the liver", "Paracetamol eases headaches"),
+    "pregnancy-isotretinoin": ("Accutane causes birth defects", "Isotretinoin clears severe acne"),
+    "pregnancy-sleep-side": ("Sleeping on your back in pregnancy is dangerous", "Sleeping on your back causes snoring"),
+    "pregnancy-ibuprofen": ("Ibuprofen is safe in early pregnancy", "Ibuprofen eases back pain"),
+    "steroid-tablets": ("Prednisolone tablets weaken bones", "Anabolic steroids build muscle"),
+    "raw-milk": ("Raw milk cures lactose intolerance", "Milk builds strong bones"),
+    "eucalyptus-oil": ("Drinking eucalyptus oil cures a cold", "Eucalyptus oil in a diffuser clears a stuffy nose"),
 }
 # Every exclusion has a claim that its rule fires on but for that exclusion alone.
 _SL_EXCL = {
@@ -11569,6 +11579,9 @@ _SL_EXCL = {
     ("vitamin-a-limit", 0): "Retinol serum clears acne",
     ("stop-in-place-of-treatment", 0): "Hormone replacement therapy causes breast cancer",
     ("stop-in-place-of-treatment", 1): "Antibiotics cure bacterial infections",
+    ("pregnancy-sleep-side", 0): "Sleeping on your side is best after pregnancy",
+    ("pregnancy-ibuprofen", 0): "Ibuprofen is fine again after pregnancy",
+    ("steroid-tablets", 0): "Stopping steroid cream suddenly makes eczema flare",
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))

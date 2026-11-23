@@ -210,6 +210,34 @@ EXERCISE = _w(r"exercis\w*", r"sports?", r"running", r"jogging", r"gym", r"worko
               r"yoga", r"pilates", r"swimming", r"scuba", r"diving", r"cycling", r"weight ?lifting",
               r"lifting weights", r"physical activity", r"horse riding", r"skiing")
 FOLIC = _w(r"folic acid", r"folate", r"neural tube", r"spina bifida")
+HEART_ATTACK_SIGNS = _w(r"chest pains?", r"chest tightness", r"tight chest", r"crushing chest",
+                       r"(?:symptoms?|signs?|warning signs?) of (?:a )?heart attacks?",
+                       r"heart attack (?:symptoms?|signs?|warning signs?|first aid)",
+                       r"(?:during|having|survive|surviving|in the middle of) (?:a )?heart attacks?")
+ANAPHYLAXIS = _w(r"anaphyla\w*", r"epi ?pens?", r"(?:adrenaline|epinephrine) (?:auto )?injectors?", r"auto injectors?",
+                 r"severe allergic reactions?", r"allergic shock")
+FEVER_MEDICINE = _w(r"paracetamol", r"acetaminophen", r"calpol", r"tylenol", r"ibuprofen", r"nurofen",
+                    r"fever (?:medicines?|reducers?|reducing medicines?)", r"painkill\w*", r"pain ?relief")
+PARACETAMOL = _w(r"paracetamol", r"acetaminophen", r"tylenol", r"panadol")
+TOO_MUCH = _w(r"overdos\w*", r"too much", r"extra", r"doubl\w*", r"more than", r"max\w*", r"doses?", r"dosage",
+              r"liver", r"cold and flu", r"cold (?:remed(?:y|ies)|medicines?|tablets?|capsules?)",
+              r"flu (?:remed(?:y|ies)|medicines?)", r"combin\w*", r"together", r"at the same time",
+              r"with (?:other|another)", r"every day", r"daily", r"long term", r"as much", r"any amount")
+NSAID_ONLY = _w(r"ibuprofen", r"nurofen", r"advil", r"motrin", r"naproxen", r"nsaids?", r"anti ?inflammator\w*",
+                r"diclofenac")
+STEROID = _w(r"(?:cortico)?steroids?", r"prednisolone", r"prednisone", r"dexamethasone")
+STEROID_ORAL = _w(r"tablets?", r"pills?", r"oral", r"by mouth", r"liquid", r"stop\w*", r"com(?:e|es|ing) off",
+                  r"taper\w*", r"sudden\w*", r"abrupt\w*", r"withdraw\w*", r"long term", r"courses?",
+                  r"prednisolone", r"prednisone", r"dexamethasone")
+STEROID_OTHER = _w(r"anabolic", r"creams?", r"ointments?", r"inhal\w*", r"nasal", r"nose sprays?", r"injections?",
+                   r"eye drops?", r"ear drops?", r"topical\w*", r"gels?")
+RAW_MILK = _w(r"raw milk", r"unpasteuri[sz]ed milk", r"raw (?:cow'?s?|goat'?s?|sheep'?s?) milk", r"raw dairy")
+EUCALYPTUS = _w(r"eucalyptus(?: oil)?")
+SWALLOW = _w(r"swallow\w*", r"drink\w*", r"ingest\w*", r"internally", r"by mouth", r"orally", r"oral",
+             r"eat\w*", r"in (?:water|tea|a drink)", r"drops? (?:in|on) (?:the|your) tongue")
+ISOTRETINOIN = _w(r"isotretinoin", r"roaccutane", r"accutane")
+SLEEP_POSITION = _w(r"backs?", r"sides?", r"positions?", r"lying", r"lie", r"left", r"right", r"tummy",
+                    r"stomach", r"front")
 VITAMIN_A_PREG = VITAMIN_A + r"|" + _w(r"multivitamins?")
 
 
@@ -219,6 +247,24 @@ VITAMIN_A_PREG = VITAMIN_A + r"|" + _w(r"multivitamins?")
 # `quote` its own words, opened on the date in CHECKED.
 ENTRIES = [
     # ---- danger signs that need care today -------------------------------------
+    {"id": "heart-attack-signs", "topic": "Signs of a heart attack", "rank": 1,
+     "when": [HEART_ATTACK_SIGNS],
+     "trigger": "chest pain or tightness, or the signs or symptoms of a heart attack, or what to do during one",
+     "line": "For chest pain that feels tight or like squeezing, or spreads to your arms, neck or jaw, call "
+             "emergency services (999 in the UK, 911 in the US).",
+     "url": "https://www.nhs.uk/conditions/heart-attack/",
+     "page": "Heart attack",
+     "quote": "Call 999 if: you have chest pain that feels tight or like squeezing on your chest ... you have "
+              "chest pain that's spreading to your arms, neck or jaw"},
+    {"id": "anaphylaxis", "topic": "A severe allergic reaction", "rank": 1,
+     "when": [ANAPHYLAXIS],
+     "trigger": "anaphylaxis, a severe allergic reaction, or an adrenaline auto-injector",
+     "line": "Anaphylaxis is a life-threatening allergic reaction: use an adrenaline auto-injector if you have "
+             "one and call emergency services (999 in the UK, 911 in the US).",
+     "url": "https://www.nhs.uk/conditions/anaphylaxis/",
+     "page": "Anaphylaxis",
+     "quote": "Anaphylaxis is a life-threatening allergic reaction ... Use an adrenaline auto-injector (such as an "
+              "EpiPen) if you have one"},
     {"id": "baby-fever", "topic": "A fever in a baby under 3 months", "rank": 1,
      "when": [BABY, FEVER],
      "trigger": "a baby, infant or newborn, and a fever or temperature",
@@ -226,6 +272,15 @@ ENTRIES = [
      "url": "https://www.nhs.uk/symptoms/fever-in-children/",
      "page": "High temperature (fever) in children",
      "quote": "is under 3 months old and has a temperature of 38C or higher, or you think they have a high temperature"},
+    {"id": "baby-fever-medicine", "topic": "Fever medicines for young babies", "rank": 1,
+     "when": [BABY, FEVER_MEDICINE],
+     "trigger": "a baby, and paracetamol, ibuprofen or another fever or pain medicine",
+     "line": "Do not give paracetamol (acetaminophen) to a baby under 2 months, or ibuprofen to a baby under "
+             "3 months.",
+     "url": "https://www.nhs.uk/symptoms/fever-in-children/",
+     "page": "High temperature (fever) in children",
+     "quote": "do not give paracetamol to a child under 2 months ... do not give ibuprofen to a child who is "
+              "under 3 months"},
     {"id": "child-dehydration", "topic": "Dehydration in a young child", "rank": 1,
      "when": [CHILD, CHILD_SICK], "unless": [_w(r"vaccin\w*", r"immuni[sz]\w*")],
      "trigger": "a child or baby who has diarrhoea or is being sick (not a vaccine claim)",
@@ -284,6 +339,15 @@ ENTRIES = [
      "url": "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/",
      "page": "How and when to take ferrous sulfate",
      "quote": "Keep ferrous sulfate out of sight and reach of children, as an overdose may be fatal."},
+    {"id": "paracetamol-too-much", "topic": "Too much paracetamol", "rank": 1,
+     "when": [PARACETAMOL, TOO_MUCH],
+     "trigger": "paracetamol or acetaminophen, with a dose, too much, taking it daily or with other medicines",
+     "line": "Avoid taking paracetamol (acetaminophen) at the same time as other medicines that contain it, such "
+             "as cold and flu remedies: too much can be dangerous.",
+     "url": "https://www.nhs.uk/medicines/paracetamol-for-adults/",
+     "page": "Paracetamol for adults",
+     "quote": "avoid taking paracetamol at the same time as other medicines containing paracetamol, for example, "
+              "cold and flu remedies. This is because you may take too much, which can be dangerous."},
     {"id": "child-aspirin", "topic": "Aspirin and children", "rank": 1,
      "when": [ASPIRIN, CHILD + "|" + _w(r"reye'?s", r"under 16")],
      "trigger": "aspirin with a child, teenager or baby (\"baby aspirin\" does not count)",
@@ -369,6 +433,34 @@ ENTRIES = [
      "url": "https://www.nhs.uk/conditions/epilepsy/",
      "page": "Epilepsy",
      "quote": "keep taking your medicine but speak to your specialist team straight away"},
+    {"id": "pregnancy-isotretinoin", "topic": "Isotretinoin and pregnancy", "rank": 1,
+     "when": [ISOTRETINOIN, PREGNANT + "|" + _w(r"contracepti\w*", r"birth control", r"birth defects?",
+                                                r"conceiv\w*", r"women")],
+     "over": ["pregnancy-medicines", "pregnancy-stop-medicine"],
+     "trigger": "isotretinoin, with pregnancy, contraception, conceiving or birth defects",
+     "line": "Isotretinoin can cause miscarriage or serious problems with how a baby develops: tell your doctor "
+             "if you are pregnant or trying to get pregnant.",
+     "url": "https://www.nhs.uk/medicines/isotretinoin-roaccutane/",
+     "page": "Isotretinoin",
+     "quote": "it can cause miscarriage or serious problems with how your baby develops ... Tell your doctor if "
+              "you're pregnant or trying to get pregnant."},
+    {"id": "pregnancy-sleep-side", "topic": "Sleeping position late in pregnancy", "rank": 1,
+     "when": [PREGNANT, SLEEP, SLEEP_POSITION], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and sleeping on your back or side, or a sleeping position",
+     "line": "After 28 weeks of pregnancy, go to sleep on your side, not your back: going to sleep on your back "
+             "can increase the risk of stillbirth.",
+     "url": "https://www.nhs.uk/conditions/stillbirth/prevention/",
+     "page": "Preventing stillbirth",
+     "quote": "going to sleep on your back after 28 weeks of pregnancy can increase the risk of stillbirth"},
+    {"id": "pregnancy-ibuprofen", "topic": "Ibuprofen in pregnancy", "rank": 2,
+     "when": [PREGNANT, NSAID_ONLY], "unless": [NOT_PREGNANT], "over": ["pregnancy-medicines"],
+     "trigger": "pregnancy, and ibuprofen, naproxen or another anti-inflammatory painkiller",
+     "line": "In pregnancy, avoid ibuprofen unless a doctor or pharmacist advises it; paracetamol is usually "
+             "the best painkiller to take.",
+     "url": "https://www.nhs.uk/medicines/ibuprofen-for-adults/",
+     "page": "Ibuprofen for adults",
+     "quote": "You should avoid using ibuprofen during pregnancy unless you're advised to by a doctor or "
+              "pharmacist. Paracetamol is usually the best painkiller to take if you're pregnant."},
     {"id": "pregnancy-alcohol", "topic": "Alcohol in pregnancy", "rank": 1,
      "when": [PREGNANT, ALCOHOL], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy or trying for a baby, and alcohol, wine, beer or drinking",
@@ -548,6 +640,16 @@ ENTRIES = [
      "url": "https://www.nhs.uk/medicines/levothyroxine/",
      "page": "Levothyroxine",
      "quote": "Keep taking your medicine unless you're advised to stop."},
+    {"id": "steroid-tablets", "topic": "Steroid tablets", "rank": 1,
+     "when": [STEROID, STEROID_ORAL], "unless": [STEROID_OTHER],
+     "trigger": "steroid tablets or prednisolone, or stopping a steroid (not anabolic steroids, creams, "
+                "inhalers, sprays or injections)",
+     "line": "Do not stop taking a steroid medicine without talking to your doctor first: stopping some steroids "
+             "suddenly can cause withdrawal symptoms.",
+     "url": "https://www.nhs.uk/medicines/steroids/",
+     "page": "Steroids",
+     "quote": "Do not stop taking your steroid medicine without talking to your doctor first. ... Stopping taking "
+              "some steroids suddenly can cause symptoms"},
     {"id": "asthma-inhaler", "topic": "Asthma inhalers", "rank": 1,
      "when": [INHALER + "|" + ASTHMA, INHALER + "|" + STOPPING + "|" + TREATS + "|" + REMEDY + "|" + MEDICINE],
      "trigger": "an inhaler, or asthma with a treatment, a remedy or doing without",
@@ -595,6 +697,24 @@ ENTRIES = [
      "page": "Warfarin",
      "quote": "Foods high in vitamin K ... can affect how warfarin works. You can still eat these foods, but "
               "talk to your warfarin clinic for advice."},
+    {"id": "raw-milk", "topic": "Raw milk", "rank": 2,
+     "when": [RAW_MILK],
+     "trigger": "raw or unpasteurised milk",
+     "line": "Raw (unpasteurised) milk can contain germs that cause disease, and it is particularly unsafe for "
+             "children.",
+     "url": "https://www.fda.gov/food/buy-store-serve-safe-food/raw-milk-misconceptions-and-danger-raw-milk-consumption",
+     "page": "Raw Milk Misconceptions and the Danger of Raw Milk Consumption",
+     "quote": "Raw milk can contain a variety of disease-causing pathogens ... Raw milk is not an immune system "
+              "building food and is particularly unsafe for children."},
+    {"id": "eucalyptus-oil", "topic": "Swallowing eucalyptus oil", "rank": 1,
+     "when": [EUCALYPTUS, SWALLOW],
+     "trigger": "eucalyptus oil swallowed, drunk or taken by mouth",
+     "line": "Eucalyptus oil can be harmful if swallowed in large amounts: if someone has, call emergency "
+             "services or a poison control center.",
+     "url": "https://medlineplus.gov/ency/article/002646.htm",
+     "page": "Eucalyptus oil overdose",
+     "quote": "Eucalyptus oil can be harmful in large amounts. ... call the local emergency number (such as "
+              "911), or the local poison control center"},
     {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
      "unless": [_w(r"creams?", r"serums?", r"topical\w*", r"skin ?care", r"lotions?", r"gels?", r"ointments?",
                    r"moisturi[sz]\w*", r"on (?:the|your) (?:skin|face)", r"appl(?:y|ied|ying)")],
