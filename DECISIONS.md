@@ -4369,6 +4369,10 @@ What was deliberately rejected:
   "mixed": a mixed line agrees with a "false" and would let guidance that
   says to stop stamp a claim to stop false. "before changing" is dropped,
   and "needs to be stopped" no longer reads as "needs" a treatment.
+  Round 4 (`breakdown._stopping_guidance`): guidance says stopping is fine
+  only in words (can stop, safe to stop, not advised, should be stopped or
+  paused); a caution (do not stop, keep taking, ask before stopping, what
+  stopping risks) is a no; only both together are mixed.
   Round 3: a claim to stop a medicine is recognised by general signs, a
   stopping word near a general word (tablets, meds, prescribed), a class, a
   generic-name ending of six letters or more, or a common prescribed name

@@ -11507,7 +11507,7 @@ t("F2: guidance that says stopping is fine still argues with a false, and the do
   and breakdown.stance("Talk to your doctor before stopping statins.", "Garlic lowers blood pressure") != "no")
 
 # Fix 2, review: advice to ask a doctor before stopping is a no only when the sentence says nothing else
-# about stopping. Beside guidance that says to stop, the sentence keeps its plain yes, so a false is refused.
+# about stopping. Round 4 (the orchestrator's rule): beside guidance that says in words to stop, it is mixed.
 _F2R_L = verdict.GUIDELINE_LEAD
 for _claim, _says in [
     ("You should stop taking aspirin before an operation",
@@ -11517,12 +11517,11 @@ for _claim, _says in [
     ("You should stop taking statins if you get muscle pain",
      "muscle pain on statins should be reported, and some people stop or switch; talk to your doctor before stopping."),
 ]:
-    t(f"F2 review: guidance that says to stop is not read as a no, and a false is refused: {_claim}",
-      breakdown.stance(_F2R_L + _says, _claim) == "yes"
-      and breakdown.stamp_conflict("false", _F2R_L + _says, "", _claim) is not None)
-t("F2 review: guidance that stopping is fine for some, then asks a doctor, stays mixed as before",
+    t(f"F2 review, round 4: guidance that says to stop beside 'ask before stopping' is mixed, never a no: {_claim}",
+      breakdown.stance(_F2R_L + _says, _claim) == "mixed")
+t("F2 review, round 4: 'fine' that is not said of stopping, then 'ask before stopping', is a caution: a no",
   breakdown.stance(_F2R_L + "shorter courses are fine for some infections, so talk to your doctor before stopping "
-                   "antibiotics early.", "You can stop taking antibiotics once you feel better") == "mixed")
+                   "antibiotics early.", "You can stop taking antibiotics once you feel better") == "no")
 t("F2 review: 'before changing' is not advice to keep a medicine",
   breakdown.stance("Major health guidelines say: talk to your doctor before changing your medicines.",
                    "You should stop your medicines when you feel better") != "no")
@@ -11945,6 +11944,76 @@ for _c, _g in (("You should stop taking ibuprofen in late pregnancy",
 _st = breakdown.stance(verdict.GUIDELINE_LEAD + "talk to a doctor before stopping antidepressants, since coming off "
                        "them too soon often brings symptoms back.", "You should stop taking antidepressants once you feel better")
 t("F1 round 3, rule 2: control: a warning that coming off brings symptoms back stays a no", _st == "no", _st)
+
+# Q10 F1 round 4, rule 2: guidance says stopping is fine only in words; a
+# caution (do not stop, keep taking, ask before stopping, what stopping
+# risks) is a no; only both together are mixed.
+_SG_NO = [
+ "statins should not be stopped without medical advice.",
+ "do not stop taking it without talking to your doctor.",
+ "keep taking your statin to avoid a raised risk of heart attack.",
+ "people should keep taking statins, which are safe for most people.",
+ "ask your doctor before stopping statins, because stopping suddenly can raise heart risk.",
+ "speak to your doctor before stopping statins, as stopping suddenly can raise heart risk.",
+ "talk to your GP before stopping any prescribed medicine.",
+ "statins must not be stopped without a doctor's advice.",
+ "never stop taking statins on your own.",
+ "continue taking statins even when cholesterol is normal.",
+ "stopping statins is not advised for people with heart disease.",
+ "the risks of stopping statins include a heart attack.",
+ "cholesterol rises again when statins are stopped.",
+ "it is not safe to stop statins without advice.",
+ "there is no need to stop statins because of mild aches.",
+ "you should not stop statins without speaking to your doctor first.",
+ "stay on your statin unless your doctor says otherwise.",
+ "do not stop statins without checking with your pharmacist.",
+]
+_SG_FINE = [
+ "statins can be stopped if side effects are severe.",
+ "it is safe to stop statins at the end of life.",
+ "there is no need to keep taking statins once you are very old.",
+ "statins are not recommended in pregnancy.",
+ "statins are usually not used during pregnancy.",
+ "people with severe muscle damage are told to stop statins.",
+ "statins should be stopped if muscle damage is found.",
+ "statins may be stopped in people near the end of life.",
+ "you can stop statins if they are no longer helping.",
+ "it is fine to stop statins before a planned pregnancy.",
+ "statins are not advised for most people over 85 without heart disease.",
+ "there is no reason to continue statins in the last weeks of life.",
+ "statins need to be stopped if liver tests rise sharply.",
+ "people are advised to stop statins three months before trying for a baby.",
+ "statins can safely be stopped before surgery in most cases.",
+ "you may come off statins if your doctor agrees the risk is low.",
+]
+_SG_MIXED = [
+ "statins can be stopped if side effects are severe, but talk to your doctor before stopping.",
+ "statins are not recommended in pregnancy; ask your midwife before stopping any medicine.",
+ "there is no need to keep taking statins at the end of life; check with your doctor before stopping.",
+ "statins should be stopped if muscle damage is found, but never stop them on your own.",
+ "people are told to stop statins before pregnancy, but stopping suddenly can raise heart risk.",
+ "statins may be stopped near the end of life; otherwise keep taking them.",
+ "it is safe to stop statins in some cases, but do not stop without speaking to your doctor.",
+ "statins are usually not used in pregnancy, so talk to your doctor before stopping them.",
+ "you can stop statins if they cause muscle damage, but continue taking them otherwise.",
+ "statins are not advised for frail elderly people, but ask your GP before stopping.",
+ "statins need to be stopped if liver tests rise, but cholesterol rises again when statins are stopped.",
+ "it is fine to stop statins at the end of life, but the risks of stopping include a heart attack earlier on.",
+ "statins can safely be stopped before surgery, but you should not stop them without advice.",
+ "people with an allergy are advised to stop statins; everyone else should keep taking them.",
+ "statins are not recommended in severe liver disease, but do not stop taking them without talking to your doctor.",
+]
+_SG_IBU = [("You should stop taking ibuprofen in late pregnancy",
+        "ibuprofen is not advised in the third trimester; ask your midwife before stopping any medicine.", "mixed"),
+       ("You should stop taking ibuprofen if you get a stomach ulcer",
+        "ibuprofen can make ulcers worse and people with one are usually told to come off it; speak to a pharmacist before stopping any medicine.", "mixed")]
+for _want, _lst in (("no", _SG_NO), ("yes", _SG_FINE), ("mixed", _SG_MIXED)):
+    _bad = [(g_, breakdown.stance(verdict.GUIDELINE_LEAD + g_, "You can stop taking statins"))
+            for g_ in _lst if breakdown.stance(verdict.GUIDELINE_LEAD + g_, "You can stop taking statins") != _want]
+    t(f"F1 round 4, rule 2: guidance on stopping reads {_want} ({len(_lst)})", len(_lst) >= 15 and not _bad, _bad)
+for _c, _g, _w in _SG_IBU:
+    _st = breakdown.stance(verdict.GUIDELINE_LEAD + _g, _c)
+    t(f"F1 round 4, rule 2: r2b ibuprofen guidance is mixed: {_c}", _st == _w, _st)
 
 # Q10 F1 round 3: a claim to stop a medicine is recognised by general signs:
 # a general word, a class, a generic-name ending (whole word, six letters or
