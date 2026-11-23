@@ -11597,6 +11597,12 @@ t("F3: the rule does not fire on a review that leans yes beside one that says no
                         "Standing desks reduce back pain")["verdict"] == "complicated"
   and verdict._too_thin(dict(_F3_RES(["f3a"]), verdict="true"), [_F3_NO], "Garlic prevents colds")["verdict"] == "true")
 
+t("F3: the reason agrees with the count: one review says, two reviews say",
+  "the review behind it says its own" in _f3_moved["explanation"]
+  and "the reviews behind them" not in _f3_moved["explanation"]
+  and "the reviews behind it say their own" in verdict._too_thin(
+      _F3_RES(["f3a", "f3n"]), [_F3_NO, dict(_F3_NO, pmid="f3n")], "Garlic prevents colds")["explanation"])
+
 # Fix 4: the line's strength word is no surer than what a relied-on review concluded.
 t("F4: a review that concludes its evidence is not enough makes the line say low certainty, not strong",
   evidence.evidence_line("complicated", [_F3_NO, _F3_YES], ["f3a", "f3b"], "Echinacea shortens colds")

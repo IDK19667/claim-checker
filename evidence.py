@@ -2140,6 +2140,8 @@ def too_thin(studies, cited_pmids=()) -> str:
     reviews = [s for s in used if is_review(s)]
     concluded = [s for s in reviews if conclusion(s)]
     if concluded and all(says_not_enough(s) or says_thin(s) for s in concluded):
+        if len(concluded) == 1:
+            return "the review behind it says its own evidence is not enough to tell"
         return "the reviews behind it say their own evidence is not enough to tell"
     if reviews:
         return ""
