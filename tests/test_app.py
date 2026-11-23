@@ -10884,6 +10884,10 @@ t("a result address (/?q=) is network first with the home page as its offline fa
   'CLAIM_ARGS = ["q", "text", "title"]' in _sw3
   and 'event.respondWith(fetch(req).catch(() => caches.open(CACHE).then((c) => c.match("/")).then((r) => r || Response.error())));' in _sw3)
 
+t("offline, /checks (with its claim) and /flight are sent on to the home page by the worker, as the server does, never shown under their own address",
+  'const MOVED = { "/checks": true, "/flight": false };' in _sw3 and "Response.redirect(to, 301)" in _sw3
+  and c.get("/checks?q=x").headers.get("Location", "").endswith("/?q=x") and c.get("/flight").headers.get("Location", "").endswith("/"))
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template

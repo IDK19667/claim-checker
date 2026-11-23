@@ -6,7 +6,8 @@
      answer that is not a good page (a 5xx while the server wakes, a 429)
      shows the copy when one is kept, and is never stored.
    - Other pages: network first, cache fallback, each kept under its own
-     address once visited; a result address (/?q=) falls back to the home
+     address once visited; /checks and /flight, which the server sends on
+     to the home page, are sent on by the worker too when offline; a result address (/?q=) falls back to the home
      page and is never kept in its place.
    - Stamped static files (?v= and the file's hash, added by the server to
      every address it prints, here included): cache first. A changed file
@@ -38,6 +39,10 @@ const PAGES = ["/privacy", "/about", "/method", "/corrections"];
 // sleeping or overloaded server never leaves a returning reader on a blank
 // screen for longer than about three seconds.
 const SHELL_WAIT_MS = 2500;
+// Old addresses the server sends on to the home page (a 301). Offline the
+// worker sends them on itself, so the page shown carries the right address;
+// true: the query (a claim) goes along.
+const MOVED = { "/checks": true, "/flight": false };
 // A home address that names a claim is a result, not the home page.
 const CLAIM_ARGS = ["q", "text", "title"];
 
@@ -113,6 +118,9 @@ self.addEventListener("fetch", (event) => {
       event.respondWith(homeShell(event));
     } else if (PAGES.includes(url.pathname)) {
       event.respondWith(networkFirst(req, url.pathname));
+    } else if (Object.prototype.hasOwnProperty.call(MOVED, url.pathname)) {
+      const to = new URL("/" + (MOVED[url.pathname] ? url.search : ""), location.origin).href;
+      event.respondWith(fetch(req).catch(() => Response.redirect(to, 301)));
     } else {
       // Any other address (a result, a deep link) falls back to the cached
       // home page, which reads the URL; it is never kept in its place.

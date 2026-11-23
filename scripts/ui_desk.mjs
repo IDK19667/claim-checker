@@ -723,6 +723,20 @@ await test("18: a first visit with nothing kept still gets the server's answer, 
   must(r.status() === 503, `a first visit got ${r.status()}`);
 }, { sw: true });
 
+await test("18: offline, /checks with a claim and /flight are sent on to the home page under its own address", async (page, ctx) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload({ waitUntil: "load" });
+  await ctx.setOffline(true);
+  const seen = [];
+  for (const [from, to] of [["/checks?q=zinc", "/?q=zinc"], ["/flight", "/"]]) {
+    await page.goto(base + from, { waitUntil: "load" }).catch(() => {});
+    // the claim's address then behaves as /?q= does offline (the page reads it); the page and its notice are there
+    seen.push([from, page.url().replace(base, ""), await page.evaluate(() => /Not medical advice/.test(document.body.innerText)).catch(() => false)]);
+  }
+  await ctx.setOffline(false);
+  must(seen[0][1] === "/?q=zinc" && seen[1][1] === "/" && seen.every((x) => x[2]), JSON.stringify(seen));
+}, { sw: true });
+
 // ---- 19. the warm-up: the first Next pays for no compile and no upload ----
 const warmed = (page) => page.waitForFunction(() => window.__evd && window.__evd.warmed && window.__evd.warmed(), null, { timeout: 30000, polling: 100 }).then(() => true, () => false);
 await test("19: on a saved answer the warm-up finishes after the answer is readable, and the first Next compiles and sends nothing new", async (page) => {
