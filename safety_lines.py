@@ -286,7 +286,8 @@ VITAMIN_A_PREG = VITAMIN_A + r"|" + _w(r"multivitamins?")
 
 # Each entry. `when`: every pattern must match; `unless`: none may; `over`:
 # entries this one makes redundant when both fire; `rank`: 1 is the most
-# serious. `url` is the page the line rests on, `page` its main heading, and
+# serious; `poison`: an overdose or poisoning line, which leads among lines
+# of the same rank. `url` is the page the line rests on, `page` its main heading, and
 # `quote` its own words, opened on the date in CHECKED.
 ENTRIES = [
     # ---- danger signs that need care today -------------------------------------
@@ -375,14 +376,14 @@ ENTRIES = [
               "supplement throughout the year"},
 
     # ---- children ----------------------------------------------------------------
-    {"id": "child-iron-overdose", "topic": "Iron tablets and children", "rank": 1,
+    {"id": "child-iron-overdose", "poison": True, "topic": "Iron tablets and children", "rank": 1,
      "when": [IRON],
      "trigger": "iron tablets, supplements or drops, or taking iron, at any age (not iron in food or iron levels)",
      "line": "Keep iron tablets out of sight and reach of children, as an overdose may be fatal.",
      "url": "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/",
      "page": "How and when to take ferrous sulfate",
      "quote": "Keep ferrous sulfate out of sight and reach of children, as an overdose may be fatal."},
-    {"id": "paracetamol-too-much", "topic": "Too much paracetamol", "rank": 1,
+    {"id": "paracetamol-too-much", "poison": True, "topic": "Too much paracetamol", "rank": 1,
      "when": [PARACETAMOL, TOO_MUCH],
      "trigger": "paracetamol or acetaminophen, with a dose, too much, taking it daily or with other medicines",
      "line": "Avoid taking paracetamol (acetaminophen) at the same time as other medicines that contain it, such "
@@ -498,8 +499,8 @@ ENTRIES = [
     {"id": "pregnancy-ibuprofen", "topic": "Ibuprofen in pregnancy", "rank": 2,
      "when": [PREGNANT, NSAID_ONLY], "unless": [NOT_PREGNANT], "over": ["pregnancy-medicines"],
      "trigger": "pregnancy, and ibuprofen, naproxen or another anti-inflammatory painkiller",
-     "line": "In pregnancy, avoid ibuprofen unless a doctor or pharmacist advises it; paracetamol is usually "
-             "the best painkiller to take.",
+     "line": "In pregnancy, avoid ibuprofen unless a doctor or pharmacist advises it; paracetamol "
+             "(acetaminophen) is usually the best painkiller to take.",
      "url": "https://www.nhs.uk/medicines/ibuprofen-for-adults/",
      "page": "Ibuprofen for adults",
      "quote": "You should avoid using ibuprofen during pregnancy unless you're advised to by a doctor or "
@@ -574,7 +575,7 @@ ENTRIES = [
      "when": [PREGNANT, HERBAL_TEA], "unless": [NOT_PREGNANT], "over": ["pregnancy-medicines"],
      "trigger": "pregnancy, and herbal, fruit or liquorice tea",
      "line": "In pregnancy, drink no more than 4 cups of herbal tea a day, and avoid teas containing "
-             "liquorice root.",
+             "liquorice (licorice) root.",
      "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
      "page": "Foods to avoid in pregnancy",
      "quote": "avoid drinking more than 4 cups of herbal tea a day, and avoid teas containing liquorice root"},
@@ -749,7 +750,7 @@ ENTRIES = [
      "page": "Raw Milk Misconceptions and the Danger of Raw Milk Consumption",
      "quote": "Raw milk can contain a variety of disease-causing pathogens ... Raw milk is not an immune system "
               "building food and is particularly unsafe for children."},
-    {"id": "eucalyptus-oil", "topic": "Swallowing eucalyptus oil", "rank": 1,
+    {"id": "eucalyptus-oil", "poison": True, "topic": "Swallowing eucalyptus oil", "rank": 1,
      "when": [EUCALYPTUS, SWALLOW],
      "trigger": "eucalyptus oil swallowed, drunk or taken by mouth",
      "line": "Eucalyptus oil can be harmful if swallowed in large amounts: if someone has, call emergency "
@@ -878,7 +879,7 @@ def match(claim: str) -> list[dict]:
     hits = [e for e in ENTRIES if _fires(e, text, seen)]
     covered = {o for e in hits for o in e.get("over", ())}
     hits = [e for e in hits if e["id"] not in covered]
-    hits.sort(key=lambda e: e["rank"])  # stable: library order breaks ties
+    hits.sort(key=lambda e: (e["rank"], not e.get("poison")))  # stable: library order breaks ties
     return hits[:MAX_LINES]
 
 

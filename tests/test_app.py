@@ -11693,6 +11693,21 @@ t("F2: the salt water gargle line fires at any age and keeps the page's note tha
   _sl_ids("Gargling with salt water kills throat germs") == ["child-salt-gargle"]
   and _sl_ids("Kids should gargle salt water for a sore throat") == ["child-salt-gargle"]
   and "children should not try it" in _sl.BY_ID["child-salt-gargle"]["line"])
+t("F2: of two lines of the same rank an overdose or poisoning line leads",
+  _sl_ids("My toddler swallowed iron tablets and has diarrhoea")[:1] == ["child-iron-overdose"]
+  and _sl.BY_ID["child-dehydration"]["rank"] == _sl.BY_ID["child-iron-overdose"]["rank"])
+t("F2: US words in the pregnancy painkiller and herbal tea lines",
+  "paracetamol (acetaminophen)" in _sl.BY_ID["pregnancy-ibuprofen"]["line"]
+  and "liquorice (licorice) root" in _sl.BY_ID["pregnancy-herbal-tea"]["line"])
+_sl_boom = "Baby boomers sleep less than younger adults"
+t("F2: the 'baby boomers' exclusion is load-bearing: without it the claim would get the baby sleep line",
+  _sl_ids(_sl_boom) == [] and "(?! boomers?)" in _sl.BABY
+  and re.search(_sl.BABY.replace("(?! boomers?)", ""), _sl.normalise(_sl_boom), re.I)
+  and re.search(_sl.SLEEP, _sl.normalise(_sl_boom), re.I))
+_sl_cot = "Babies need cuddles, and a camp cot is handy for festivals"
+t("F2: a cot far from any sleep or baby word is not a sleep word: counting it alone would fire the baby sleep line",
+  _sl_ids(_sl_cot) == [] and re.search(_sl.BABY, _sl.normalise(_sl_cot), re.I)
+  and not re.search(_sl.SLEEP, _sl.normalise(_sl_cot), re.I))
 t("F2: oral vitamin A for acne gets the vitamin A line; a cream does not",
   "vitamin-a-limit" in _sl_ids("Taking 50000 IU vitamin A for acne") and _sl_ids("Retinol cream reduces wrinkles") == [])
 t("F2: a remedy said to cure a serious condition gets the line whatever it is called; a medical treatment does not",
