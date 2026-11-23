@@ -2358,8 +2358,8 @@ _rsz = _deskjs[_deskjs.find("function keepsPicture("):]; _rsz = _rsz[:_rsz.find(
 _kbd = _deskjs[_deskjs.find("function keyboardMoved()"):]; _kbd = _kbd[:_kbd.find("\n  }\n")]
 _css_d = (ROOT / "static" / "desk.css").read_text()
 t("F1: a change of height alone (the keyboard, the bar) keeps the 3D picture: no new buffer, no new framing",
-  "if (!sized || w !== W || d !== DPR_CAP || h > H) return false;" in _rsz
-  and "return isField(document.activeElement) || (coarse.matches && H - h <= 160);" in _rsz
+  "if (!sized || w !== W || d !== DPR_CAP || h > H || !coarse.matches) return false;" in _rsz
+  and "return isField(document.activeElement) || H - h <= 160;" in _rsz
   and 'if (keepsPicture(w, h, d)) { stage.style.height = H + "px"; return; }' in _rsz
   and _rsz.index("keepsPicture(w, h, d)) {") < _rsz.index("setRatio(dpr)"))
 t("  closing the keyboard returns to the place, unless a check came in between; while open the bar waits below, the page holds still and the box stays clear of the strip",
@@ -2368,6 +2368,13 @@ t("  closing the keyboard returns to the place, unless a check came in between; 
   and "html.kbd .bar { visibility: hidden; }" in _css_d and "showField(); adoptScroll(400); return true;" in _kbd
   and "function keepRest() {\n    if (keyboardOpen()) return;" in _deskjs and "if (!checked || tween || touching || pressing || keyboardOpen()) return;" in _deskjs
   and 'addEventListener("resize", function () { layout(); keyboardMoved(); updateWay(); wake(); });' in _deskjs)
+# J2: only a touch screen has that keyboard. On a desktop a window dragged shorter with the
+# claim box focused is a shorter window: the picture draws afresh and the bar stays.
+t("J2: a change of height counts as the keyboard only on a touch screen",
+  'var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };' in _deskjs
+  and "if (!isField(e.target) || !coarse.matches) return;" in _deskjs
+  and _kbd.startswith("function keyboardMoved() {\n    if (!kbd || !coarse.matches) return false;")
+  and "a desktop window dragged shorter keeps the bar" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
 t("  and the browser check is in scripts/ui_desk.mjs: 500, 420 and 340 high, Enter sends, the bar slides, a turn",
   all(x in (ROOT / "scripts" / "ui_desk.mjs").read_text() for x in ("[500, 420, 340]", 'page.keyboard.press("Enter")', "reallocations over eight slides", "a turn kept the buffer")))
 t("desk.js writes no markup from strings and sets no inline handler or style attribute from data",

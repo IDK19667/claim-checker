@@ -11,6 +11,7 @@
  * 8. The phone keyboard and the address bar change only the window's height:
  *    the claim box stays on screen, Enter sends, the 3D picture is not
  *    reallocated or reframed, and closing the keyboard returns to the place.
+ *    On a desktop a shorter window is only that: the picture follows, the bar stays.
  * 12. While a check runs there is one Cancel: it keeps focus while lines print,
  *    sits outside the live log, and pressing it ends the check.
  * 13. Focus after a check: a keyboard check lands on the verdict, Tab goes on
@@ -146,6 +147,35 @@ await test("the address bar sliding reallocates nothing and uncovers nothing; a 
     const t = await kb(page); must(t.allocs > z.allocs && t.buf !== z.buf, `a turn kept the buffer at ${t.buf}`);
   });
 });
+
+// J2: a desktop has no phone keyboard. With the claim box focused on a result, a window dragged shorter
+// (1440x900 to 1440x600) and back keeps the bar at the foot, never sets the keyboard state,
+// and the picture follows the window: the stage is not pinned and the buffer is drawn afresh.
+await test("a desktop window dragged shorter keeps the bar, never sets the keyboard state, and the picture follows the window", async (page) => {
+  await page.addInitScript(() => { window.__kbdSeen = 0; window.__allocs = 0; document.addEventListener("DOMContentLoaded", () => {
+    new MutationObserver(() => { if (document.documentElement.classList.contains("kbd")) window.__kbdSeen++; }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    const c = document.getElementById("gl"); if (c) new MutationObserver((m) => { window.__allocs += m.length; }).observe(c, { attributes: true, attributeFilter: ["width", "height"] }); }); });
+  // a saved result at its first stop: the claim box with the bar at the foot (home has no bar)
+  await page.goto(base + "/?q=" + encodeURIComponent(SAVED[0]), { waitUntil: "load" }); await ready(page);
+  await page.evaluate(() => window.__evident.goto(1)); await page.waitForTimeout(1500);
+  const touch = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
+  must(!touch, "this desktop context reports a touch screen");
+  await page.click("#claim-input"); await page.keyboard.type("Does walking lower blood sugar"); await page.waitForTimeout(300);
+  const look = () => page.evaluate(() => { const c = document.getElementById("gl"), bar = document.getElementById("bar"), bs = getComputedStyle(bar), st = document.getElementById("stage");
+    return { mode: window.__evident.stats().mode, f: document.activeElement && document.activeElement.id, kbd: document.documentElement.classList.contains("kbd"), seen: window.__kbdSeen,
+      bar: bs.display !== "none" && bs.visibility !== "hidden" && bar.getBoundingClientRect().height > 0, pinned: st.style.height,
+      buf: c.width + "x" + c.height, allocs: window.__allocs, stageH: Math.round(st.getBoundingClientRect().height), bottom: Math.round(c.getBoundingClientRect().bottom), vh: innerHeight }; });
+  const a = await look();
+  must(a.mode === "3d" && a.f === "claim-input" && a.bar, `at the start: mode ${a.mode}, focus #${a.f}, bar shown ${a.bar}`);
+  for (const h of [600, 900]) {
+    await page.setViewportSize({ width: 1440, height: h }); await page.waitForTimeout(2500);
+    const s = await look();
+    must(s.f === "claim-input", `at ${h} high focus moved to #${s.f}`);
+    must(s.bar && !s.kbd && s.seen === 0, `at ${h} high the bar is ${s.bar ? "shown" : "hidden"} and the keyboard state was set ${s.seen} time(s)`);
+    must(!s.pinned && s.bottom >= h && s.stageH <= h, `at ${h} high the stage is pinned at "${s.pinned}", ${s.stageH} px tall, the picture ends at ${s.bottom}`);
+    must(h === 600 ? s.buf !== a.buf && s.allocs > a.allocs : s.buf === a.buf, `at ${h} high the drawing buffer went ${a.buf} to ${s.buf}`);
+  }
+}, { w: 1440, h: 900 });
 
 // ---- 12. One Cancel that stays ---------------------------------------------------------------
 await test("while a check prints its lines, the focused Cancel stays the same node with focus, outside the live log, and ends the check", async (page) => {

@@ -602,10 +602,12 @@
   // that height at the same width (the keyboard closed) the page goes back to that place, as long as nothing was
   // checked or answered in between. The keyboard's own moves are the browser's, never counted as the reader's.
   // While the keyboard is open the bar at the foot is hidden (class "kbd"): it would sit on the box being typed in.
+  // Only a touch screen has that keyboard: on a desktop a window dragged shorter is just a shorter window.
   var kbd = null;
+  var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };
   function isField(a) { return !!a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(button|submit|reset|checkbox|radio|range|file|image|color)$/.test(a.type))); }
   document.addEventListener("focusin", function (e) {
-    if (!isField(e.target)) return;
+    if (!isField(e.target) || !coarse.matches) return;
     if (kbd && kbd.shrunk) return;
     kbd = { y: window.scrollY, w: innerWidth, h: innerHeight, checked: checked, shrunk: false };
   });
@@ -620,7 +622,7 @@
     window.scrollTo({ top: Math.max(0, Math.round(window.scrollY + r.top - stripH - Math.max(8, (room - r.height) / 2))), behavior: "instant" });
   }
   function keyboardMoved() {
-    if (!kbd) return false;
+    if (!kbd || !coarse.matches) return false;
     if (innerWidth !== kbd.w) { kbd = null; root.classList.remove("kbd"); return false; }
     if (innerHeight < kbd.h - 1) { kbd.shrunk = true; root.classList.toggle("kbd", isField(document.activeElement)); showField(); adoptScroll(400); return true; }
     root.classList.remove("kbd");
@@ -1165,14 +1167,14 @@
     // ratio drop, and never below 1; the first frame after the motion ends is drawn at the full ratio again.
     var W = 1, H = 1, sized = false, ratioNow = 0, lastRatio = 0, shadowDirty = true;
     function setRatio(r) { if (r !== ratioNow) { ratioNow = r; renderer.setPixelRatio(r); renderer.setSize(W, H, false); } }
-    // F1: a change of height alone keeps the picture as it is when it is the phone keyboard (a text field has focus) or
-    // the address bar sliding (a touch screen, 160 px or less): the stage stays at the height it was drawn for, running
-    // under the keyboard or the bar, so no strip is left uncovered and nothing is reallocated or reframed. Anything
-    // else (a new width, a new pixel ratio, a taller window, a desktop window dragged shorter) draws afresh, once.
-    var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };
+    // F1: on a touch screen a change of height alone keeps the picture as it is when it is the phone keyboard (a text
+    // field has focus) or the address bar sliding (160 px or less): the stage stays at the height it was drawn for,
+    // running under the keyboard or the bar, so no strip is left uncovered and nothing is reallocated or reframed.
+    // Anything else (a new width, a new pixel ratio, a taller window, a desktop window dragged shorter, text field or
+    // not) draws afresh, once.
     function keepsPicture(w, h, d) {
-      if (!sized || w !== W || d !== DPR_CAP || h > H) return false;
-      return isField(document.activeElement) || (coarse.matches && H - h <= 160);
+      if (!sized || w !== W || d !== DPR_CAP || h > H || !coarse.matches) return false;
+      return isField(document.activeElement) || H - h <= 160;
     }
     function resize() {
       var d = Math.min(2, window.devicePixelRatio || 1);
