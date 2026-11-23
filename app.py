@@ -32,6 +32,7 @@ import og
 import pubmed
 import nextsteps
 import ratelimit
+import safety_lines
 import suggest as suggest_mod
 import verdict
 
@@ -1257,7 +1258,12 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         if "rests_on" in breakdown:
             breakdown["rests_on"] = sum(1 for s in studies if s["pmid"] in cited)
         breakdown["contents"] = breakdown_mod.contents(breakdown)
-    return {
+    # The fixed safety lines (safety_lines.py), on the way out like the lines
+    # above, so a saved answer gets the same lines as a fresh one and the
+    # library is never hidden behind saved answers. They travel in their own
+    # field and change nothing else; with no line the key is absent.
+    safety = safety_lines.safety(claim)
+    response = {
         "claim": claim,
         # What the reader typed, present only when the answer is to other
         # words than theirs, so the page can say so: "spelling" when the
@@ -1294,6 +1300,9 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
         "studies": [_study_payload(s, cited) for s in _as_shown(studies)],
     }
+    if safety:
+        response["safety"] = safety
+    return response
 
 
 def _review_line(cached_at, studies, cited) -> str:
