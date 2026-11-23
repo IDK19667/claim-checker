@@ -8,6 +8,9 @@
  *
  * 4. When the browser drops the drawing context, the page goes to text mode on
  *    the same stop and stays there, every word of the card readable.
+ * 8. The phone keyboard and the address bar change only the window's height:
+ *    the claim box stays on screen, Enter sends, the 3D picture is not
+ *    reallocated or reframed, and closing the keyboard returns to the place.
  */
 import { chromium } from "playwright";
 
@@ -70,6 +73,64 @@ for (const [w, h] of [[390, 844], [1440, 900]]) {
     }, { w, h });
   }
 }
+
+// ---- 8. The phone keyboard and the address bar ------------------------------------------
+// A touch phone, the claim box focused, the window's height dropped as the keyboard does
+// (interactive-widget=resizes-content): the box and what is typed stay on screen, Enter
+// sends, the 3D picture keeps its drawing buffer (no reallocation, no reframing), and when
+// the keyboard closes the page is back where it was. The address bar sliding (a 74 px
+// change, four times) reallocates nothing and leaves no strip uncovered. A turn still
+// draws afresh.
+async function phone(url, fn) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
+  const page = await ctx.newPage(); const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.addInitScript(() => { window.__allocs = 0; document.addEventListener("DOMContentLoaded", () => { const c = document.getElementById("gl"); if (c) new MutationObserver((m) => { window.__allocs += m.length; }).observe(c, { attributes: true, attributeFilter: ["width", "height"] }); }); });
+  try { await fetch(base + "/__fixture/reset"); await page.goto(base + url, { waitUntil: "load" }); await ready(page); await page.waitForTimeout(600); await fn(page); must(!errors.length, "page errors: " + errors.join(" | ")); }
+  finally { await ctx.close(); }
+}
+// the box is on screen when it is below the top strip and above the bar at the foot (when the bar shows)
+const kb = (page) => page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); const c = document.getElementById("gl"), b = r(".claim-box");
+  const bar = document.getElementById("bar"), bs = getComputedStyle(bar), foot = bs.display !== "none" && bs.visibility !== "hidden" ? r("#bar").top : innerHeight;
+  return { y: Math.round(scrollY), allocs: window.__allocs, buf: c ? c.width + "x" + c.height : "", canvasBottom: c && getComputedStyle(document.getElementById("stage")).display !== "none" ? Math.round(c.getBoundingClientRect().bottom) : innerHeight,
+    boxOn: b.top >= r("#strip").bottom - 1 && b.bottom <= foot + 0.5, box: `${Math.round(b.top)}..${Math.round(b.bottom)} between ${Math.round(r("#strip").bottom)} and ${Math.round(foot)}`, value: document.getElementById("claim-input").value, mode: window.__evident.stats().mode }; });
+for (const path of ["/", "/?nogl=1", "/?q=" + encodeURIComponent(SAVED[0])]) {
+  await test(`the keyboard keeps the claim box and the picture, and closing it returns to the place, ${path}`, async () => {
+    await phone(path, async (page) => {
+      if (path.includes("q=")) { await page.evaluate(() => window.__evident.goto(1)); await page.waitForTimeout(1200); }
+      await page.tap("#claim-input"); await page.fill("#claim-input", ""); await page.waitForTimeout(300);
+      const a = await kb(page);
+      for (const h of [500, 420, 340]) {
+        await page.setViewportSize({ width: 390, height: h }); await page.waitForTimeout(500);
+        if (h === 500) { await page.keyboard.type("Does walking lower blood sugar"); await page.waitForTimeout(200); }
+        const s = await kb(page);
+        must(s.boxOn && s.value === "Does walking lower blood sugar", `at ${h} high the box (${s.box}) is ${s.boxOn ? "on" : "off"} screen and holds "${s.value}"`);
+        must(s.allocs === a.allocs && s.buf === a.buf, `at ${h} high the drawing buffer went ${a.buf} to ${s.buf} (${s.allocs - a.allocs} reallocations)`);
+        must(s.canvasBottom >= h, `at ${h} high the picture ends at ${s.canvasBottom}`);
+      }
+      await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(700);
+      const z = await kb(page);
+      must(z.y === a.y, `the page was at ${a.y} and is at ${z.y} after the keyboard closed`);
+      must(z.allocs === a.allocs, `${z.allocs - a.allocs} reallocations over the whole keyboard`);
+      await page.setViewportSize({ width: 390, height: 340 }); await page.waitForTimeout(400);
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(() => !document.getElementById("reading").hidden || document.documentElement.classList.contains("checked") && location.search.includes("walking"), null, { timeout: 15000 });
+    });
+  });
+}
+await test("the address bar sliding reallocates nothing and uncovers nothing; a turn draws afresh", async () => {
+  await phone("/?q=" + encodeURIComponent(SAVED[0]), async (page) => {
+    await page.evaluate(() => window.__evident.goto(4)); await page.waitForTimeout(1200);
+    const a = await kb(page); must(a.mode === "3d", "not in 3D: " + a.mode);
+    for (let i = 0; i < 4; i++) for (const h of [770, 844]) {
+      await page.setViewportSize({ width: 390, height: h }); await page.waitForTimeout(250);
+      const s = await kb(page); must(s.canvasBottom >= h, `at ${h} high the picture ends at ${s.canvasBottom}`);
+    }
+    const z = await kb(page); must(z.allocs === a.allocs, `${z.allocs - a.allocs} reallocations over eight slides`);
+    await page.setViewportSize({ width: 844, height: 390 }); await page.waitForTimeout(800);
+    const t = await kb(page); must(t.allocs > z.allocs && t.buf !== z.buf, `a turn kept the buffer at ${t.buf}`);
+  });
+});
 
 await browser.close();
 const passed = results.filter(Boolean).length;

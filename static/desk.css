@@ -244,6 +244,8 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 /* its own compositing group too, for the same Chromium fault as the strip: without it the canvas loses a band of rows under the top strip */
 .bar { opacity: 0.999; }
 html:not(.checked) .bar, html:not(.checked) .rail { display: none; }
+/* the phone keyboard is open (desk.js sets .kbd): the bar would sit on the box being typed in, so it waits below */
+html.kbd .bar { visibility: hidden; }
 .bar > * { pointer-events: auto; }
 .bar > .prev { grid-column: 1; grid-row: 1; } .bar > .where { grid-column: 2; grid-row: 1; } .bar > .next { grid-column: 3; grid-row: 1; }
 .prev { justify-self: start; appearance: none; min-height: 48px; padding: 0 14px 0 10px; border-radius: 3px; border: 1px solid var(--desk-edge); background: var(--panel); color: var(--on-deep-2); font: 500 15px/1 var(--body); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }

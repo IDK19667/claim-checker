@@ -2115,6 +2115,27 @@ t("desk.js answers a lost drawing context: the frame loop stops for good, the ca
   and "webglcontextrestored" not in _deskjs and "if (mode !== \"loading\") return;" in _deskjs)
 t("  and the browser check that loses it on purpose is in scripts/ui_desk.mjs, at the Answer and at Weighed, contrast measured",
   all(x in (ROOT / "scripts" / "ui_desk.mjs").read_text() for x in ("WEBGL_lose_context", '[[2, "Answer"], [4, "Weighed"]]', "ratio(p) >= 4.5")))
+# F1: the phone keyboard and the address bar change only the window's height. The 3D
+# picture keeps its drawing buffer and framing (the stage stays at the height it was
+# drawn for), a turn or a taller window draws afresh, the bar at the foot waits below
+# while the keyboard is open, and closing the keyboard returns the page to its place.
+# scripts/ui_desk.mjs section 8 measures it in a browser on a touch phone.
+_rsz = _deskjs[_deskjs.find("function keepsPicture("):]; _rsz = _rsz[:_rsz.find("camera.aspect = W / H;")]
+_kbd = _deskjs[_deskjs.find("function keyboardMoved()"):]; _kbd = _kbd[:_kbd.find("\n  }\n")]
+_css_d = (ROOT / "static" / "desk.css").read_text()
+t("F1: a change of height alone (the keyboard, the bar) keeps the 3D picture: no new buffer, no new framing",
+  "if (!sized || w !== W || d !== DPR_CAP || h > H) return false;" in _rsz
+  and "return isField(document.activeElement) || (coarse.matches && H - h <= 160);" in _rsz
+  and 'if (keepsPicture(w, h, d)) { stage.style.height = H + "px"; return; }' in _rsz
+  and _rsz.index("keepsPicture(w, h, d)) {") < _rsz.index("setRatio(dpr)"))
+t("  closing the keyboard returns to the place, unless a check came in between; while open the bar waits below, the page holds still and the box stays clear of the strip",
+  "window.scrollTo({ top: back.y, behavior: \"instant\" })" in _kbd and "if (back.checked !== checked) return false;" in _kbd
+  and "if (innerWidth !== kbd.w) { kbd = null;" in _kbd and 'root.classList.toggle("kbd", isField(document.activeElement))' in _kbd
+  and "html.kbd .bar { visibility: hidden; }" in _css_d and "showField(); adoptScroll(400); return true;" in _kbd
+  and "function keepRest() {\n    if (keyboardOpen()) return;" in _deskjs and "if (!checked || tween || touching || pressing || keyboardOpen()) return;" in _deskjs
+  and 'addEventListener("resize", function () { layout(); keyboardMoved(); updateWay(); wake(); });' in _deskjs)
+t("  and the browser check is in scripts/ui_desk.mjs: 500, 420 and 340 high, Enter sends, the bar slides, a turn",
+  all(x in (ROOT / "scripts" / "ui_desk.mjs").read_text() for x in ("[500, 420, 340]", 'page.keyboard.press("Enter")', "reallocations over eight slides", "a turn kept the buffer")))
 t("desk.js writes no markup from strings and sets no inline handler or style attribute from data",
   ".innerHTML" not in _deskjs and "insertAdjacentHTML" not in _deskjs and "outerHTML" not in _deskjs
   and not re.search(r"setAttribute\(\"on", _deskjs) and "eval(" not in _deskjs and "new Function" not in _deskjs)

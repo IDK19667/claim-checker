@@ -503,6 +503,7 @@
     restRef = { y: y, k: k, el: el, top: top };
   }
   function keepRest() {
+    if (keyboardOpen()) return;
     // while the browser is still putting the reader back (R5) the place is the browser's, not this
     var r = restRef; if (!r || tween || touching || pressing || window.scrollY !== r.y || performance.now() < adoptUntil) return;
     var to = r.k >= 0 ? anchors[r.k] : (r.el && r.el.isConnected ? window.scrollY + r.el.getBoundingClientRect().top - r.top : r.y);
@@ -549,7 +550,7 @@
   var settleGlide = false;
   function settleStop() {
     settleT = 0;
-    if (!checked || tween || touching || pressing) return;
+    if (!checked || tween || touching || pressing || keyboardOpen()) return;
     if (performance.now() - tabbedAt < 1200) { glideLeft = null; restY = window.scrollY; runLen = 0; return; }
     if (glideLeft) {
       var g = glideLeft; glideLeft = null;
@@ -589,7 +590,40 @@
     var r = a.getBoundingClientRect();
     return r.top - dy < stripH || r.bottom - dy > innerHeight - 70;
   }
-  addEventListener("resize", function () { layout(); updateWay(); wake(); });
+  // F1: the phone keyboard. Where the page was when a text field took focus is kept; when the window comes back to
+  // that height at the same width (the keyboard closed) the page goes back to that place, as long as nothing was
+  // checked or answered in between. The keyboard's own moves are the browser's, never counted as the reader's.
+  // While the keyboard is open the bar at the foot is hidden (class "kbd"): it would sit on the box being typed in.
+  var kbd = null;
+  function isField(a) { return !!a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(button|submit|reset|checkbox|radio|range|file|image|color)$/.test(a.type))); }
+  document.addEventListener("focusin", function (e) {
+    if (!isField(e.target)) return;
+    if (kbd && kbd.shrunk) return;
+    kbd = { y: window.scrollY, w: innerWidth, h: innerHeight, checked: checked, shrunk: false };
+  });
+  document.addEventListener("focusout", function () { root.classList.remove("kbd"); });
+  // while it is open the page does not settle or keep its rest by itself: the field being typed in owns the place
+  function keyboardOpen() { return !!(kbd && kbd.shrunk); }
+  // the field kept clear of the top strip and of the keyboard: centred in the room between them when it is not
+  function showField() {
+    var a = document.activeElement; if (!isField(a)) return;
+    var r = (a.closest(".claim-box") || a).getBoundingClientRect(), room = innerHeight - stripH;
+    if (r.top >= stripH + 8 && r.bottom <= innerHeight - 8) return;
+    window.scrollTo({ top: Math.max(0, Math.round(window.scrollY + r.top - stripH - Math.max(8, (room - r.height) / 2))), behavior: "instant" });
+  }
+  function keyboardMoved() {
+    if (!kbd) return false;
+    if (innerWidth !== kbd.w) { kbd = null; root.classList.remove("kbd"); return false; }
+    if (innerHeight < kbd.h - 1) { kbd.shrunk = true; root.classList.toggle("kbd", isField(document.activeElement)); showField(); adoptScroll(400); return true; }
+    root.classList.remove("kbd");
+    if (!kbd.shrunk) return false;
+    var back = kbd; kbd = isField(document.activeElement) ? { y: back.y, w: back.w, h: back.h, checked: back.checked, shrunk: false } : null;
+    if (back.checked !== checked) return false;
+    measure();
+    window.scrollTo({ top: back.y, behavior: "instant" }); adoptScroll(400);
+    return true;
+  }
+  addEventListener("resize", function () { layout(); keyboardMoved(); updateWay(); wake(); });
   // any stop changing height (fonts arriving, a group opening) moves the stops below it: measure again
   if (window.ResizeObserver) { ro = new ResizeObserver(function () { measure(); keepRest(); updateWay(); }); sections.forEach(function (s) { ro.observe(s); }); ro.observe(track); }
 
@@ -710,6 +744,7 @@
       }
       if (line) lines.push(line); return lines;
     }
+
     function tex(c, flip) {
       var t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = maxAniso; t.flipY = flip !== false;
       t.minFilter = T.LinearMipmapLinearFilter; return t;
@@ -1120,11 +1155,24 @@
     // ---- sizing and resolution ------------------------------------------------------
     // A still picture is always drawn at the full ratio, min(2, devicePixelRatio). Only while something moves may the
     // ratio drop, and never below 1; the first frame after the motion ends is drawn at the full ratio again.
-    var W = 1, H = 1, ratioNow = 0, lastRatio = 0, shadowDirty = true;
+    var W = 1, H = 1, sized = false, ratioNow = 0, lastRatio = 0, shadowDirty = true;
     function setRatio(r) { if (r !== ratioNow) { ratioNow = r; renderer.setPixelRatio(r); renderer.setSize(W, H, false); } }
+    // F1: a change of height alone keeps the picture as it is when it is the phone keyboard (a text field has focus) or
+    // the address bar sliding (a touch screen, 160 px or less): the stage stays at the height it was drawn for, running
+    // under the keyboard or the bar, so no strip is left uncovered and nothing is reallocated or reframed. Anything
+    // else (a new width, a new pixel ratio, a taller window, a desktop window dragged shorter) draws afresh, once.
+    var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };
+    function keepsPicture(w, h, d) {
+      if (!sized || w !== W || d !== DPR_CAP || h > H) return false;
+      return isField(document.activeElement) || (coarse.matches && H - h <= 160);
+    }
     function resize() {
-      DPR_CAP = Math.min(2, window.devicePixelRatio || 1); dpr = DPR_CAP;
-      W = stage.clientWidth; H = stage.clientHeight; ratioNow = 0; setRatio(dpr);
+      var d = Math.min(2, window.devicePixelRatio || 1);
+      stage.style.height = "";
+      var w = stage.clientWidth, h = stage.clientHeight;
+      if (keepsPicture(w, h, d)) { stage.style.height = H + "px"; return; }
+      DPR_CAP = d; dpr = DPR_CAP;
+      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr);
       camera.aspect = W / H; pickKeys(); layout(); cardKey = ""; shadowDirty = true; wake();
     }
     var frameTimes = [];
