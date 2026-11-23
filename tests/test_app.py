@@ -2670,6 +2670,15 @@ _desk_cloth = (ROOT / "static" / "desk.css").read_text()
 t("nothing on the desk front is coloured by verdict, and the row names the kind of study",
   "data-verdict" not in _desk_cloth and "[data-verdict" not in _desk_cloth
   and '<span class="design">Meta-Analysis</span>' in _ord)
+# Every stylesheet the site ships, not only the desk's: style.css still dresses
+# About, Method, Privacy and the 404, and a <style> block in any template counts.
+_all_sheets = {str(f.relative_to(ROOT)): f.read_text() for f in sorted((ROOT / "static").rglob("*.css"))}
+for _tf in sorted((ROOT / "templates").glob("*.html")):
+    for _i, _blk in enumerate(re.findall(r"<style[^>]*>(.*?)</style>", _tf.read_text(), re.S)):
+        _all_sheets[f"{_tf.name} <style> {_i}"] = _blk
+_sheet_hits = [k for k, v in _all_sheets.items() if re.search(r"data-verdict", v, re.I)]
+t("  and no stylesheet the site ships selects on the verdict: every .css under static and every <style> in a template",
+  not _sheet_hits and {"static/style.css", "static/desk.css"} <= set(_all_sheets), (_sheet_hits, sorted(_all_sheets)))
 t("the share card still draws read-but-unused books outlined on a wash, never faded",
   "globalAlpha" not in _js and "CARD.wash" in _js and "strokeRect" in _js)
 
