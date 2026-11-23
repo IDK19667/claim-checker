@@ -82,12 +82,10 @@ STATIN = _w(r"statins?", r"atorvastatin", r"simvastatin", r"rosuvastatin", r"pra
 ANTIDEPRESSANT = _w(r"antidepressants?", r"anti-depressants?", r"ssris?", r"snris?", r"sertraline",
                     r"fluoxetine", r"citalopram", r"escitalopram", r"paroxetine", r"venlafaxine",
                     r"duloxetine", r"mirtazapine", r"amitriptyline")
-BP_MEDICINE = _w(r"blood pressure (?:medicines?|medications?|tablets?|pills?|drugs?|treatment)",
-                 r"antihypertensives?", r"amlodipine", r"ramipril", r"lisinopril", r"losartan",
-                 r"candesartan", r"bisoprolol", r"ace inhibitors?", r"beta ?blockers?", r"beta-blockers?",
-                 r"calcium channel blockers?", r"diuretics?", r"water pills?")
-WARFARIN = _w(r"warfarin", r"blood thinn\w*", r"blood-thinn\w*", r"anticoagulants?", r"apixaban",
-              r"rivaroxaban", r"edoxaban", r"dabigatran")
+AMLODIPINE = _w(r"amlodipine")
+WARFARIN = _w(r"warfarin")
+ANTICOAGULANT = _w(r"blood thinn\w*", r"anti ?coagulants?", r"apixaban", r"rivaroxaban", r"edoxaban",
+                   r"dabigatran", r"doacs?")
 EPILEPSY = _w(r"epilep\w*", r"anti ?epileptics?", r"anti-epileptics?", r"anticonvulsants?",
               r"seizure (?:medicines?|medications?|drugs?|tablets?)", r"valproate", r"lamotrigine",
               r"levetiracetam", r"carbamazepine")
@@ -140,7 +138,10 @@ CANCER_TREAT = _w(r"cur(?:e|es|ed|ing)", r"treat(?:s|ed|ing|ment|ments)?", r"hea
                   r"shrinks?", r"fights?", r"beats?", r"instead of", r"in place of", r"rather than",
                   r"alongside", r"for cancer", r"with cancer", r"cancer patients?", r"people with cancer",
                   r"during chemo\w*", r"alternative (?:medicine|therap(?:y|ies)|treatments?)")
-PSA = _w(r"psa", r"prostate specific antigen", r"prostate-specific antigen")
+PSA = _w(r"psa", r"prostate specific antigen")
+# Words that make "PSA" the prostate test, not an announcement.
+PSA_CONTEXT = _w(r"prostate", r"tests?", r"testing", r"levels?", r"results?", r"screening", r"blood",
+                 r"raised", r"high", r"elevated", r"scores?", r"readings?", r"antigen")
 ALCOHOL = _w(r"alcohol\w*", r"wine", r"beers?", r"spirits", r"booze", r"units? of alcohol",
              r"cocktails?", r"prosecco", r"champagne", r"cider", r"lager", r"vodka", r"whisk(?:e)?y")
 CAFFEINE = _w(r"caffein\w*", r"coffees?", r"espressos?", r"lattes?", r"cappuccinos?", r"tea", r"teas",
@@ -151,6 +152,8 @@ HERBAL_TEA = _w(r"herbal teas?", r"herb teas?", r"chamomile", r"camomile", r"pep
 FISH = _w(r"fish(?! oil)(?! liver)", r"seafood", r"shellfish", r"tuna", r"salmon", r"sushi", r"sashimi",
           r"oily fish", r"swordfish", r"shark", r"marlin", r"oysters?", r"prawns?", r"shrimps?",
           r"mussels?", r"mercury", r"sardines?", r"mackerel")
+RAW_FISH = _w(r"raw fish", r"raw shellfish", r"raw seafood", r"sushi", r"sashimi", r"oysters?",
+              r"ceviche", r"poke bowls?", r"raw tuna", r"raw salmon")
 LIVER = _w(r"liver(?! (?:disease|function|cancer|damage|failure|enzymes?|problems?|tests?))(?! oil)",
            r"haggis")
 SOFT_CHEESE = _w(r"unpasteuri[sz]ed", r"raw milk", r"cheeses?", r"brie", r"camembert", r"blue cheese",
@@ -182,7 +185,7 @@ ENTRIES = [
     {"id": "baby-fever", "topic": "A fever in a baby under 3 months", "rank": 1,
      "when": [BABY, FEVER],
      "trigger": "a baby, infant or newborn, and a fever or temperature",
-     "line": "A baby under 3 months with a temperature of 38C or higher needs urgent medical advice.",
+     "line": "A baby under 3 months with a temperature of 38C (100.4F) or higher needs urgent medical advice.",
      "url": "https://www.nhs.uk/symptoms/fever-in-children/",
      "page": "High temperature (fever) in children",
      "quote": "is under 3 months old and has a temperature of 38C or higher, or you think they have a high temperature"},
@@ -190,7 +193,7 @@ ENTRIES = [
      "when": [CHILD, TUMMY_BUG],
      "trigger": "a child or baby, and diarrhoea, vomiting, dehydration or rehydration",
      "line": "A child under 5 with diarrhoea or vomiting who shows signs of dehydration, such as fewer "
-             "wet nappies, needs urgent medical advice.",
+             "wet nappies (diapers), needs urgent medical advice.",
      "url": "https://www.nhs.uk/symptoms/diarrhoea-and-vomiting/",
      "page": "Diarrhoea and vomiting",
      "quote": "a child under 5 years has signs of dehydration, such as fewer wet nappies"},
@@ -205,19 +208,19 @@ ENTRIES = [
      "quote": "Do not give your child honey until they're over 1 year old."},
     {"id": "baby-safe-sleep", "topic": "How a baby sleeps", "rank": 1,
      "when": [BABY, SLEEP],
-     "trigger": "a baby or infant, and sleep, a cot, bed sharing or SIDS",
-     "line": "Always put a baby to sleep on their back, with their feet at the foot of the cot, "
+     "trigger": "a baby or infant, and sleep, a cot or crib, bed sharing or SIDS",
+     "line": "Always put a baby to sleep on their back, with their feet at the bottom of the cot or crib, "
              "to lower the risk of sudden infant death syndrome.",
      "url": "https://www.nhs.uk/baby/caring-for-a-newborn/sudden-infant-death-syndrome-sids/",
      "page": "Sudden infant death syndrome (SIDS)",
-     "quote": "always place your baby on their back to sleep"},
+     "quote": "always place your baby on their back to sleep in the feet-to-foot position"},
     {"id": "baby-cows-milk", "topic": "Cows' milk for babies", "rank": 2,
      "when": [BABY + "|" + _w(r"first year", r"before 12 months", r"before (?:1|one) year"), COWS_MILK],
      "trigger": "a baby, or the first 12 months, and cows' or whole milk",
      "line": "Cows' milk should not be a baby's main drink until they are 12 months old.",
      "url": "https://www.nhs.uk/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/",
      "page": "Drinks and cups for babies and young children",
-     "quote": "Cows' milk should not be given as a main drink to babies until they're 12 months old"},
+     "quote": "Cows' milk can be introduced as a main drink from 12 months."},
     {"id": "baby-water", "topic": "Water for young babies", "rank": 2,
      "when": [BABY, WATER], "unless": [SALT_WATER],
      "trigger": "a baby or infant, and water (not salt water, a water birth or waters breaking)",
@@ -230,11 +233,12 @@ ENTRIES = [
      "when": [BABY + "|" + _w(r"breastfed", r"breast ?feed\w*", r"formula"), VITAMIN_D],
      "over": ["vitamin-d-limit", "breastfeeding-medicines"],
      "trigger": "a baby, breastfeeding or formula, and vitamin D",
-     "line": "Babies from birth to 1 year should have a daily vitamin D supplement, unless they drink "
-             "500ml or more of infant formula a day.",
+     "line": "Babies from birth to 1 year should have a daily vitamin D supplement, unless they have "
+             "more than 500ml (about a pint) of infant formula a day.",
      "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/",
      "page": "Vitamin D",
-     "quote": "babies from birth to 1 year of age should have a daily supplement"},
+     "quote": "all babies (unless they're having more than 500ml of infant formula a day) should take a daily "
+              "supplement throughout the year"},
 
     # ---- children ----------------------------------------------------------------
     {"id": "child-iron-overdose", "topic": "Iron tablets and children", "rank": 1,
@@ -246,24 +250,25 @@ ENTRIES = [
      "quote": "Keep ferrous sulfate out of sight and reach of children, as an overdose may be fatal."},
     {"id": "child-aspirin", "topic": "Aspirin and children", "rank": 1,
      "when": [ASPIRIN, CHILD + "|" + _w(r"reye'?s", r"under 16")],
-     "trigger": "aspirin with a child, teenager or baby (\"baby aspirin\" and \"low dose aspirin\" do not count)",
-     "line": "Do not give aspirin to children aged 15 or under: it can cause an uncommon but serious "
+     "trigger": "aspirin with a child, teenager or baby (\"baby aspirin\" does not count)",
+     "line": "Do not give aspirin to children aged 15 or under: in rare cases it can cause a serious "
              "condition called Reye's syndrome.",
      "url": "https://www.nhs.uk/medicines/aspirin/",
      "page": "Aspirin",
      "quote": "Do not give aspirin to children aged 15 years or under because it can cause a serious "
-              "condition called Reye's syndrome"},
+              "condition called Reye's syndrome in rare cases."},
     {"id": "child-cough-cold-medicine", "topic": "Cough and cold medicines for young children", "rank": 1,
      "when": [CHILD, COUGH_MEDICINE],
      "trigger": "a child or baby, and a cough or cold medicine or syrup",
-     "line": "Over the counter cough and cold medicines are not recommended for children under 2; "
-             "for an older child, check the age on the label first.",
+     "line": "The FDA does not recommend over the counter cough and cold medicines for children under 2, "
+             "and their labels say not to use them under 4.",
      "url": "https://www.fda.gov/consumers/consumer-updates/should-you-give-kids-medicine-coughs-and-colds",
      "page": "Should You Give Kids Medicine for Coughs and Colds?",
-     "quote": "The FDA doesn't recommend OTC medicines for cough and cold symptoms in children younger than 2."},
+     "quote": "The FDA doesn't recommend OTC medicines for cough and cold symptoms in children younger than 2 "
+              "... \"Do not use in children under 4 years of age.\""},
     {"id": "child-decongestant", "topic": "Decongestants for children", "rank": 2,
-     "when": [CHILD, DECONGESTANT], "over": ["child-cough-cold-medicine"],
-     "trigger": "a child or baby, and a decongestant or nasal spray",
+     "when": [CHILD, DECONGESTANT], "unless": [EAR_INFECTION], "over": ["child-cough-cold-medicine"],
+     "trigger": "a child or baby, and a decongestant or nasal spray (not with an ear infection)",
      "line": "Not all decongestants are suitable for children: check the leaflet before giving one to "
              "a child, and ask a pharmacist if you are not sure.",
      "url": "https://www.nhs.uk/medicines/decongestants/",
@@ -292,10 +297,18 @@ ENTRIES = [
      "url": "https://www.nhs.uk/symptoms/sore-throat/",
      "page": "Sore throat",
      "quote": "gargle with warm, salty water (children should not try this)"},
+    {"id": "ear-infection-decongestant", "topic": "Decongestants for an ear infection", "rank": 2,
+     "when": [EAR_INFECTION, DECONGESTANT + "|" + _w(r"antihistamines?")],
+     "over": ["child-decongestant"],
+     "trigger": "an ear infection or earache, and a decongestant, nasal spray or antihistamine",
+     "line": "For an ear infection, do not use decongestants or antihistamines: there is no evidence they help.",
+     "url": "https://www.nhs.uk/conditions/ear-infections/",
+     "page": "Ear infections",
+     "quote": "do not use decongestants or antihistamines – there's no evidence they help with ear infections"},
     {"id": "child-ear-infection", "topic": "Ear infections in children", "rank": 2,
      "when": [CHILD, EAR_INFECTION],
      "trigger": "a child or baby, and an ear infection or earache",
-     "line": "A baby under 12 months who may have an ear infection should see a GP; for an older child, "
+     "line": "A baby under 12 months who may have an ear infection should see a doctor; for an older child, "
              "a pharmacist can help first.",
      "url": "https://www.nhs.uk/conditions/ear-infections/",
      "page": "Ear infections",
@@ -353,11 +366,19 @@ ENTRIES = [
      "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
      "page": "Foods to avoid in pregnancy",
      "quote": "you should not have more than 200mg of caffeine a day"},
+    {"id": "pregnancy-raw-fish", "topic": "Raw fish and shellfish in pregnancy", "rank": 2,
+     "when": [PREGNANT, RAW_FISH], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and raw fish or shellfish, sushi, sashimi or oysters",
+     "line": "In pregnancy, avoid raw fish and raw shellfish, including sushi made with raw fish, even if it "
+             "has been frozen.",
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
+     "quote": "sushi made with raw fish (even if it has been previously frozen) or raw shellfish"},
     {"id": "pregnancy-fish", "topic": "Fish in pregnancy", "rank": 2,
      "when": [PREGNANT, FISH], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and fish, seafood, shellfish, tuna, sushi or mercury (not fish oil)",
-     "line": "In pregnancy, avoid shark, swordfish, marlin and raw shellfish, and eat no more than 2 "
-             "portions of oily fish and 4 cans of tuna a week.",
+     "line": "In pregnancy, avoid shark, swordfish and marlin, and eat no more than 2 portions of oily fish "
+             "and 4 cans of tuna a week.",
      "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
      "page": "Foods to avoid in pregnancy",
      "quote": "tuna – you should not eat more than 4 cans or 2 tuna steaks a week"},
@@ -415,13 +436,22 @@ ENTRIES = [
 
     # ---- breastfeeding -----------------------------------------------------------
     {"id": "breastfeeding-medicines", "topic": "Medicines while breastfeeding", "rank": 2,
-     "when": [BREASTFEEDING, MEDICINE + "|" + ALCOHOL],
+     "when": [BREASTFEEDING, MEDICINE],
      "trigger": "breastfeeding, and any medicine, supplement or herbal remedy",
-     "line": "If you are breastfeeding, check with a GP, midwife, health visitor or pharmacist before "
-             "taking a medicine or herbal remedy.",
+     "line": "If you are breastfeeding, check with a doctor, midwife or pharmacist before taking a medicine "
+             "or herbal remedy.",
      "url": "https://www.nhs.uk/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/medicines/",
      "page": "Breastfeeding and medicines",
      "quote": "Always check with a GP, your midwife, health visitor or a pharmacist, who can advise you."},
+    {"id": "breastfeeding-alcohol", "topic": "Alcohol while breastfeeding", "rank": 2,
+     "when": [BREASTFEEDING, ALCOHOL],
+     "trigger": "breastfeeding, and alcohol, wine or beer",
+     "line": "If you are breastfeeding, the safest approach is to avoid alcohol; an occasional drink is "
+             "unlikely to harm your baby if you wait at least 2 hours before feeding.",
+     "url": "https://www.nhs.uk/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/alcohol/",
+     "page": "Breastfeeding and drinking alcohol",
+     "quote": "for the safest approach, you should avoid alcohol completely when breastfeeding. But an "
+              "occasional drink is unlikely to harm your baby"},
 
     # ---- prescribed medicines a reader might stop or swap ------------------------
     {"id": "statins", "topic": "Statins", "rank": 1, "when": [STATIN],
@@ -436,20 +466,28 @@ ENTRIES = [
      "url": "https://www.nhs.uk/medicines/antidepressants/",
      "page": "Antidepressants",
      "quote": "Do not stop taking an antidepressant suddenly or without talking to your doctor first."},
-    {"id": "blood-pressure-medicine", "topic": "Blood pressure medicines", "rank": 1, "when": [BP_MEDICINE],
-     "trigger": "blood pressure medicine, by class or name",
-     "line": "Do not stop a blood pressure medicine unless a doctor tells you to: stopping some, such "
-             "as amlodipine, suddenly can be dangerous.",
+    {"id": "blood-pressure-medicine", "topic": "Amlodipine", "rank": 1, "when": [AMLODIPINE],
+     "trigger": "amlodipine",
+     "line": "If you take amlodipine, do not stop it unless a doctor tells you to: stopping suddenly can "
+             "be dangerous.",
      "url": "https://www.nhs.uk/medicines/amlodipine/",
      "page": "Amlodipine",
      "quote": "Do not stop taking amlodipine unless a doctor tells you to. Stopping suddenly can be dangerous."},
-    {"id": "warfarin", "topic": "Warfarin and blood thinners", "rank": 1, "when": [WARFARIN],
-     "trigger": "warfarin, blood thinners or anticoagulants",
+    {"id": "warfarin", "topic": "Warfarin", "rank": 1, "when": [WARFARIN],
+     "trigger": "warfarin",
      "line": "If you take warfarin, do not stop it unless your doctor tells you to, and tell them about "
              "any herbal remedy, vitamin or supplement.",
      "url": "https://www.nhs.uk/medicines/warfarin/",
      "page": "Warfarin",
      "quote": "Do not stop taking warfarin unless your doctor tells you to."},
+    {"id": "blood-thinners", "topic": "Blood thinners (anticoagulants)", "rank": 1, "when": [ANTICOAGULANT],
+     "trigger": "blood thinners, anticoagulants, or apixaban, rivaroxaban, edoxaban or dabigatran",
+     "line": "If you take a blood thinner (anticoagulant), speak to a doctor or pharmacist before taking any "
+             "other medicine, as some can affect how it works.",
+     "url": "https://www.nhs.uk/medicines/anticoagulants/",
+     "page": "Anticoagulant medicines",
+     "quote": "Speak to your GP, anticoagulant clinic or pharmacist before taking any other medicines, including "
+              "prescription and over-the-counter medicines"},
     {"id": "epilepsy-medicine", "topic": "Epilepsy medicines", "rank": 1, "when": [EPILEPSY],
      "trigger": "epilepsy, anticonvulsants or an epilepsy medicine by name",
      "line": "If you take epilepsy medicine, do not change the dose or stop it without talking to "
@@ -492,11 +530,12 @@ ENTRIES = [
     # ---- supplements and foods with known interactions or overdose risks ---------
     {"id": "st-johns-wort", "topic": "St John's wort", "rank": 1, "when": [ST_JOHNS],
      "trigger": "St John's wort",
-     "line": "St John's wort can interact with other medicines, and it can make the contraceptive pill "
-             "less effective.",
+     "line": "Taking St John's wort with other medicines, such as anticonvulsants, anticoagulants, "
+             "antidepressants or the contraceptive pill, can cause serious problems.",
      "url": "https://www.nhs.uk/mental-health/conditions/depression-in-adults/treatment/",
      "page": "Depression in adults: treatment",
-     "quote": "Also, St John's wort can interact with the contraceptive pill, reducing its effectiveness."},
+     "quote": "Taking St John's wort with other medicines, such as anticonvulsants, anticoagulants, "
+              "antidepressants and the contraceptive pill, can also cause serious problems."},
     {"id": "grapefruit", "topic": "Grapefruit and medicines", "rank": 2, "when": [GRAPEFRUIT],
      "trigger": "grapefruit or grapefruit juice",
      "line": "Grapefruit and grapefruit juice can affect how some medicines work; ask a doctor or "
@@ -509,12 +548,12 @@ ENTRIES = [
      "when": [_w(r"vitamin k\d?", r"vit k") + "|" + WARFARIN,
               VITAMIN_K + "|" + _w(r"diet", r"foods?", r"eat\w*", r"vegetables?", r"greens")],
      "trigger": "vitamin K, or warfarin with food, diet, greens or cranberry",
-     "line": "If you take warfarin, foods high in vitamin K, such as green leafy vegetables, can affect "
-             "how it works; talk to your doctor before big changes to your diet.",
+     "line": "If you take warfarin, foods high in vitamin K, such as green leafy vegetables, can affect how "
+             "it works: you can still eat them, but talk to your warfarin clinic.",
      "url": "https://www.nhs.uk/medicines/warfarin/",
      "page": "Warfarin",
-     "quote": "Foods high in vitamin K, such as broccoli, spinach and other green leafy vegetables, can "
-              "affect how warfarin works."},
+     "quote": "Foods high in vitamin K ... can affect how warfarin works. You can still eat these foods, but "
+              "talk to your warfarin clinic for advice."},
     {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
      "unless": [_w(r"creams?", r"serums?", r"topical", r"skin ?care", r"wrinkles?", r"acne", r"face")],
      "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not skin creams)",
@@ -552,14 +591,13 @@ ENTRIES = [
      "quote": "do not stop taking any prescribed medicine without first talking to your doctor"},
 
     # ---- a test result read at home ---------------------------------------------
-    {"id": "psa-result", "topic": "A raised PSA result", "rank": 3, "when": [PSA],
-     "trigger": "a PSA or prostate specific antigen test",
-     "line": "A high PSA does not on its own mean cancer, and a raised level usually leads to another "
-             "PSA test, so follow it up with a GP.",
+    {"id": "psa-result", "topic": "A raised PSA result", "rank": 3, "when": [PSA, PSA_CONTEXT],
+     "trigger": "a PSA or prostate specific antigen test, level or result (not PSA meaning an announcement)",
+     "line": "A high PSA does not mean you have cancer; if your level is raised, you may be offered another "
+             "PSA test to check it.",
      "url": "https://www.nhs.uk/tests-and-treatments/psa-test/",
      "page": "PSA test",
-     "quote": "If you have a raised PSA level, you may then be offered another PSA test to check if your "
-              "levels are still high."},
+     "quote": "A high PSA does not mean you have cancer."},
 ]
 
 # The health authority behind each allowed host, as the reader sees it.

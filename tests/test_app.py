@@ -11504,7 +11504,8 @@ _SL_PROBES = {
     "child-iron-overdose": ("Iron supplements boost energy", "Cast iron pans add iron to food"),
     "child-aspirin": ("Aspirin is good for a child with a fever", "Daily baby aspirin prevents heart attacks"),
     "child-cough-cold-medicine": ("Cough syrup helps kids sleep with a cold", "Cough syrup helps adults sleep"),
-    "child-decongestant": ("Nasal sprays help children breathe at night", "Decongestants raise blood pressure in adults"),
+    "child-decongestant": ("Nasal sprays help children breathe at night", "Nasal sprays help children with an ear infection"),
+    "ear-infection-decongestant": ("Decongestants clear ear infections faster", "Decongestants clear a blocked nose"),
     "child-ibuprofen-chickenpox": ("Ibuprofen eases chickenpox itching", "Ibuprofen eases period pain"),
     "child-teething-gel": ("Amber necklaces ease teething", "Teeth whitening damages enamel"),
     "child-salt-gargle": ("Gargling with salt water kills throat germs", "Gargling mouthwash freshens breath"),
@@ -11515,6 +11516,7 @@ _SL_PROBES = {
     "pregnancy-vitamin-a": ("Cod liver oil is good for pregnant women", "Taking a vitamin a day keeps doctors away while pregnant"),
     "pregnancy-liver": ("Eating liver in pregnancy is safe", "Pregnancy raises the risk of liver disease"),
     "pregnancy-caffeine": ("Two coffees a day are fine during pregnancy", "Raspberry leaf tea eases labour in pregnancy"),
+    "pregnancy-raw-fish": ("Sushi is fine when you are pregnant", "Cooked salmon is good for you in pregnancy"),
     "pregnancy-fish": ("Sushi is safe in pregnancy", "Fish oil in pregnancy boosts baby brains"),
     "pregnancy-soft-cheese": ("Brie is safe to eat while pregnant", "Cheese causes nightmares"),
     "pregnancy-raw-meat": ("Rare steak is fine when you are pregnant", "Red meat raises bowel cancer risk"),
@@ -11522,11 +11524,13 @@ _SL_PROBES = {
     "pregnancy-exercise": ("Running while pregnant causes miscarriage", "Running damages your knees"),
     "pregnancy-folic-acid": ("Folate prevents spina bifida", "Folic acid prevents heart disease in men"),
     "pregnancy-medicines": ("Paracetamol in pregnancy causes ADHD", "The pill prevents pregnancy"),
-    "breastfeeding-medicines": ("Antihistamines are safe while breastfeeding", "Breastfeeding lowers breast cancer risk"),
+    "breastfeeding-medicines": ("Antihistamines are safe while breastfeeding", "A glass of wine is fine while breastfeeding"),
+    "breastfeeding-alcohol": ("A glass of wine is fine while breastfeeding", "Breastfeeding lowers breast cancer risk"),
     "statins": ("Statins cause memory loss", "Statistics show most diets fail"),
     "antidepressants": ("SSRIs cause weight gain", "Exercise helps mild depression"),
-    "blood-pressure-medicine": ("Beta blockers cause tiredness", "Cutting salt lowers blood pressure"),
-    "warfarin": ("Blood thinners cause bruising", "Thin people live longer"),
+    "blood-pressure-medicine": ("Amlodipine causes swollen ankles", "Beta blockers cause tiredness"),
+    "warfarin": ("Warfarin causes bruising", "Apixaban causes bruising"),
+    "blood-thinners": ("Blood thinners are dangerous after 80", "Warfarin causes bruising"),
     "epilepsy-medicine": ("The ketogenic diet reduces seizures in epilepsy", "Seizures can follow a head injury"),
     "diabetes-medicine": ("Bitter melon lowers blood sugar", "Sugar causes type 1 diabetes"),
     "thyroid-medicine": ("Levothyroxine causes weight loss", "Thyroid cancer is rising in women"),
@@ -11539,7 +11543,7 @@ _SL_PROBES = {
     "vitamin-d-limit": ("High dose vitamin D prevents depression", "Sunlight improves mood"),
     "cancer-remedies": ("Turmeric shrinks tumours", "Smoking causes lung cancer"),
     "stop-in-place-of-treatment": ("Homeopathy can replace antibiotics", "Hormone replacement therapy causes breast cancer"),
-    "psa-result": ("A normal PSA rules out prostate cancer", "Prostate cancer is common in older men"),
+    "psa-result": ("A normal PSA rules out prostate cancer", "PSA: drink more water in a heatwave"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
@@ -11573,6 +11577,21 @@ t("F2: ids are unique, and no line tells anyone to stop a medicine or gives a ch
 t("F2: the one baby line with a number gives a formula volume, not a dose",
   "500ml" in _sl.BY_ID["baby-vitamin-d"]["line"] and "infant formula" in _sl.BY_ID["baby-vitamin-d"]["line"]
   and not re.search(r"\bmicrograms?\b|\bIU\b", _sl.BY_ID["baby-vitamin-d"]["line"]))
+t("F2: under a sushi claim in pregnancy the first line is the one about raw fish",
+  [e_["id"] for e_ in _sl.match("Sushi during pregnancy is dangerous")][0] == "pregnancy-raw-fish"
+  and "raw fish" in _sl.lines_for("Sushi during pregnancy is dangerous")[0])
+t("F2: under an ear infection claim the ear page's 'do not use decongestants' line replaces the general decongestant one",
+  [e_["id"] for e_ in _sl.match("Decongestants help my child's ear infection")][0] == "ear-infection-decongestant"
+  and "child-decongestant" not in [e_["id"] for e_ in _sl.match("Decongestants help my child's ear infection")])
+t("F2: the warfarin line fires on warfarin only; other blood thinners get their own page's line",
+  [e_["id"] for e_ in _sl.match("Apixaban is safer than aspirin")] == ["blood-thinners"]
+  and [e_["id"] for e_ in _sl.match("Warfarin causes bruising")] == ["warfarin"])
+t("F2: the PSA line follows its page and reads after any stamp: no 'follow it up', no cancer either way",
+  _sl.BY_ID["psa-result"]["line"].startswith("A high PSA does not mean you have cancer")
+  and "GP" not in _sl.BY_ID["psa-result"]["line"] and _sl.lines_for("PSA: the clinic is closed on Monday") == [])
+t("F2: words for readers outside the UK: no 'GP' or 'health visitor', and 999 only beside 911",
+  not [e_["id"] for e_ in _sl.ENTRIES if re.search(r"\bGP\b|health visitor", e_["line"])
+       or ("999" in e_["line"]) != ("911" in e_["line"])])
 t("F2: a more particular entry replaces the general one it covers (vitamin D for babies)",
   [e_["id"] for e_ in _sl.match("Breastfed babies need vitamin D")] == ["baby-vitamin-d"])
 _sl_many = "Aspirin, honey and cough syrup are fine for a baby with a fever and diarrhoea"
