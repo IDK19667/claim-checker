@@ -693,6 +693,16 @@ t("  the nonce in the header is the one in the page",
 r2 = c.get("/")
 _n2 = _re.search(r"'nonce-([^']+)'", r2.headers["Content-Security-Policy"]).group(1)
 t("  a fresh nonce per response", _n2 != _nonce)
+# The whole header, word for word with the nonce masked: an added source
+# anywhere (a CDN in script-src, data: in img-src) fails here.
+_csp_whole = ("default-src 'self'; script-src 'self' 'nonce-{nonce}'; style-src 'self' 'unsafe-inline'; "
+              "img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; "
+              "base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'")
+_csp_seen = {p: _re.sub(r"'nonce-[^']*'", "'nonce-{nonce}'", c.get(p).headers.get("Content-Security-Policy", ""))
+             for p in ("/", "/?q=streamed%20claim", "/privacy", "/about", "/no-such-page-here")}
+t("  the whole policy is exactly the one the site promises, on home, a result, privacy, about and the 404",
+  all(v == _csp_whole for v in _csp_seen.values()) and _csp.count("'nonce-") == 1,
+  {p: v for p, v in _csp_seen.items() if v != _csp_whole})
 
 t("a claim never leaks to PubMed as a referrer", _h.get("Referrer-Policy") == "no-referrer")
 t("content types are not sniffed", _h.get("X-Content-Type-Options") == "nosniff")
