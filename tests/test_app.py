@@ -11532,6 +11532,15 @@ _SL_PROBES = {
     "pregnancy-folic-acid": ("Folate prevents spina bifida", "Folic acid prevents heart disease in men"),
     "pregnancy-medicines": ("Paracetamol in pregnancy causes ADHD", "The pill prevents pregnancy"),
     "breastfeeding-medicines": ("Antihistamines are safe while breastfeeding", "Breastfeeding lowers breast cancer risk"),
+    "statins": ("Statins cause memory loss", "Statistics show most diets fail"),
+    "antidepressants": ("SSRIs cause weight gain", "Exercise helps mild depression"),
+    "blood-pressure-medicine": ("Beta blockers cause tiredness", "Cutting salt lowers blood pressure"),
+    "warfarin": ("Blood thinners cause bruising", "Thin people live longer"),
+    "epilepsy-medicine": ("The ketogenic diet reduces seizures in epilepsy", "Seizures can follow a head injury"),
+    "diabetes-medicine": ("Bitter melon lowers blood sugar", "Sugar causes type 1 diabetes"),
+    "thyroid-medicine": ("Levothyroxine causes weight loss", "Thyroid cancer is rising in women"),
+    "asthma-inhaler": ("Salt caves cure asthma", "Air pollution causes asthma"),
+    "antibiotics": ("Antibiotics cure the flu", "Probiotics improve gut health"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
@@ -11566,6 +11575,9 @@ t("F2: at most two lines on one answer, the most serious first",
   [e_["id"] for e_ in _sl.match(_sl_many)])
 t("F2: a more particular entry replaces the general one it covers (epilepsy medicine in pregnancy)",
   [e_["id"] for e_ in _sl.match("Epilepsy medicine is dangerous in pregnancy")] == ["pregnancy-epilepsy"])
+t("F2: no stop-medicine line when the guard's own stop-medicine sentence is already on the answer",
+  _sl.lines_for("Statins cause memory loss", "x. " + verdict.FORGO_DOCTOR) == []
+  and _sl.lines_for("Statins cause memory loss") == [_sl.BY_ID["statins"]["line"]])
 _sl_fc = "Paracetamol brings down a fever in babies"
 _sl_hl = _sl.BY_ID["baby-fever"]["line"]
 _sl_e1 = _sl.attach(_sl_fc, "Short.", "Because.")
@@ -11596,6 +11608,22 @@ for _sl_v in ("true", "false", "complicated", "insufficient"):
 t("F2: on all four stamps the library changes only the reasoning: stamp, short answer, citations and still open stay",
   not _sl_diff, _sl_diff)
 # A saved answer gets the same line as a fresh one, once, on both routes and the result page.
+fg.models.script = [Resp("statins AND memory"), Resp(VJ("complicated", [1, 2]))]
+_sl_claim = "Statins cause memory loss in older adults"
+_sl_fresh = P(_sl_claim, ip="6.6.1.1").get_json()
+_sl_saved = P(_sl_claim, ip="6.6.1.2").get_json()
+_sl_r, _sl_evs = stream(_sl_claim, ip="6.6.1.3")
+_sl_sd = next((e_["result"] for e_ in _sl_evs if e_.get("stage") == "done"), {})
+_sl_page = _htmllib.unescape(c.get("/?q=" + _sl_q(_sl_claim)).data.decode())
+_sl_line = _sl.BY_ID["statins"]["line"]
+t("F2: a saved answer gets the same safety line as a fresh one, once, on /api/check, the stream and /?q=",
+  not _sl_fresh.get("cached") and _sl_saved.get("cached") and _sl_sd.get("cached")
+  and _sl_fresh["explanation"].count(_sl_line) == 1 and _sl_saved["explanation"] == _sl_fresh["explanation"]
+  and _sl_sd["explanation"] == _sl_fresh["explanation"] and _sl_page.count(_sl_line) >= 1
+  and _sl_saved["verdict"] == _sl_fresh["verdict"] and _sl_saved["tldr"] == _sl_fresh["tldr"],
+  (_sl_fresh.get("cached"), _sl_saved.get("cached"), _sl_fresh.get("explanation"), _sl_saved.get("explanation")))
+t("F2: the line is never stored: the saved record holds the model's explanation without it",
+  _sl_line not in ((db.get_cached_verdict(_sl_claim, 1e6) or {}).get("explanation") or _sl_line))
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

@@ -404,6 +404,71 @@ ENTRIES = [
                 "https://www.nhs.uk/conditions/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/medicines/"),
      "quote": "Always check with a GP, your midwife, health visitor or a pharmacist, who can advise you."},
 
+    # ---- prescribed medicines a reader might stop or swap ------------------------
+    {"id": "statins", "topic": "Statins", "rank": 1, "when": [STATIN], "hazard": "stop-medicine",
+     "trigger": "statins, by name or as cholesterol lowering medicine",
+     "line": "If you take a statin, talk to a doctor or pharmacist before stopping it.",
+     "source": ("NHS: Statins", "https://www.nhs.uk/conditions/statins/"),
+     "quote": "Talk to a doctor or pharmacist before stopping."},
+    {"id": "antidepressants", "topic": "Antidepressants", "rank": 1, "when": [ANTIDEPRESSANT],
+     "hazard": "stop-medicine",
+     "trigger": "antidepressants, by class or name",
+     "line": "Do not stop taking an antidepressant suddenly or without talking to your doctor first.",
+     "source": ("NHS: Antidepressants",
+                "https://www.nhs.uk/mental-health/talking-therapies-medicine-treatments/medicines-and-psychiatry/antidepressants/overview/"),
+     "quote": "Do not stop taking an antidepressant suddenly or without talking to your doctor first."},
+    {"id": "blood-pressure-medicine", "topic": "Blood pressure medicines", "rank": 1, "when": [BP_MEDICINE],
+     "hazard": "stop-medicine",
+     "trigger": "blood pressure medicine, by class or name",
+     "line": "Do not stop a blood pressure medicine unless a doctor tells you to: stopping some, such "
+             "as amlodipine, suddenly can be dangerous.",
+     "source": ("NHS: Amlodipine", "https://www.nhs.uk/medicines/amlodipine/"),
+     "quote": "Do not stop taking amlodipine unless a doctor tells you to. Stopping suddenly can be dangerous."},
+    {"id": "warfarin", "topic": "Warfarin and blood thinners", "rank": 1, "when": [WARFARIN],
+     "hazard": "stop-medicine",
+     "trigger": "warfarin, blood thinners or anticoagulants",
+     "line": "If you take warfarin, do not stop it unless your doctor tells you to, and tell them about "
+             "any herbal remedy, vitamin or supplement.",
+     "source": ("NHS: Warfarin", "https://www.nhs.uk/medicines/warfarin/"),
+     "quote": "Do not stop taking warfarin unless your doctor tells you to."},
+    {"id": "epilepsy-medicine", "topic": "Epilepsy medicines", "rank": 1, "when": [EPILEPSY],
+     "hazard": "stop-medicine",
+     "trigger": "epilepsy, anticonvulsants or an epilepsy medicine by name",
+     "line": "If you take epilepsy medicine, do not change the dose or stop it without talking to "
+             "your specialist.",
+     "source": ("NHS: Epilepsy treatment", "https://www.nhs.uk/conditions/epilepsy/treatment/"),
+     "quote": "Do not change your dose or stop taking your medicine without talking to your specialist."},
+    {"id": "diabetes-medicine", "topic": "Diabetes medicines", "rank": 1,
+     "when": [DIABETES_MEDICINE + "|" + DIABETES, DIABETES_MEDICINE + "|" + TREATS + "|" + REMEDY],
+     "hazard": "stop-medicine", "over": ["stop-in-place-of-treatment"],
+     "trigger": "a diabetes medicine by name, or diabetes or blood sugar with a treatment, remedy or food",
+     "line": "If you take medicine for diabetes, keep taking it as prescribed: if you stop, your blood "
+             "sugar may start to rise again.",
+     "source": ("NHS: Metformin", "https://www.nhs.uk/medicines/metformin/"),
+     "quote": "It's important to keep taking your medicine. If you stop, your blood sugar level may start to rise again."},
+    {"id": "thyroid-medicine", "topic": "Thyroid medicine", "rank": 2, "when": [THYROID],
+     "hazard": "stop-medicine",
+     "trigger": "levothyroxine, thyroid medicine or an underactive thyroid",
+     "line": "If you take levothyroxine, keep taking it unless you are advised to stop; some "
+             "supplements, such as iron and calcium, may not mix well with it.",
+     "source": ("NHS: Levothyroxine", "https://www.nhs.uk/medicines/levothyroxine/"),
+     "quote": "Keep taking your medicine unless you're advised to stop."},
+    {"id": "asthma-inhaler", "topic": "Asthma inhalers", "rank": 1,
+     "when": [INHALER + "|" + ASTHMA, INHALER + "|" + STOPPING + "|" + TREATS + "|" + REMEDY + "|" + MEDICINE],
+     "hazard": "stop-medicine",
+     "trigger": "an inhaler, or asthma with a treatment, a remedy or doing without",
+     "line": "Use asthma inhalers as your care team recommends: a preventer inhaler is for every day, "
+             "to help prevent symptoms.",
+     "source": ("NHS: Asthma treatment", "https://www.nhs.uk/conditions/asthma/treatment/"),
+     "quote": "a preventer inhaler to use every day to help prevent symptoms"},
+    {"id": "antibiotics", "topic": "Antibiotics", "rank": 3, "when": [ANTIBIOTIC],
+     "trigger": "antibiotics",
+     "line": "If you are prescribed antibiotics, take them as directed on the packet or the leaflet "
+             "that comes with them.",
+     "source": ("NHS: Antibiotics", "https://www.nhs.uk/conditions/antibiotics/"),
+     "quote": "Take antibiotics as directed on the packet or the patient information leaflet that comes "
+              "with the medicine."},
+
 ]
 
 for _e in ENTRIES:
