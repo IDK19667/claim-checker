@@ -213,6 +213,32 @@ on real claims is the one thing tests can't cover. For a score, run
 `tests/regression_claims.json`, each against the verdict it should get,
 30 seconds apart (about 15 minutes of free-tier quota).
 
+### Record, replay and score
+
+`scripts/gold_run.py` runs a claims file (a gold set, or
+`tests/regression_claims.json` / `tests/safety_claims.json`) through
+`/api/check/stream` and saves every model call and PubMed request it
+makes (`scripts/harness.py`), so a later run on changed code spends
+quota only on calls whose input changed. Each line of `results.jsonl`
+carries the verdict, the whole response, the time each stage arrived and
+the calls, tokens and milliseconds the check used.
+
+```bash
+# Record (fill: replay what is saved, call out only for the rest)
+.venv/bin/python scripts/gold_run.py tests/regression_claims.json \
+    --mode fill --store runs/store --out runs/before --env-file .env
+# Replay on changed code, no quota; --latency sleeps the recorded times
+.venv/bin/python scripts/gold_run.py tests/regression_claims.json \
+    --mode replay --store runs/store --out runs/after --latency
+# Score one run, or compare two
+.venv/bin/python scripts/gold_score.py tests/regression_claims.json runs/before runs/after
+```
+
+A replay that meets a call it has no answer for stops with `MISS` and
+exit code 4; use `--mode fill` to make just those calls. A third rate
+limit in a row prints `QUOTA` and exits 3; `--resume` carries on. Use
+`--quiet-claims` on a sealed set. Tests: `.venv/bin/python tests/test_harness.py`.
+
 ## Not medical advice
 
 The app says so on every screen. It summarizes published abstracts with an

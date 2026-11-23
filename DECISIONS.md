@@ -4,6 +4,31 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-22 (q10): Scoring runs are recorded and replayed
+
+The free model quota is small and a gold set is 120 claims, so fixes are
+tested against saved calls, not fresh ones. `scripts/harness.py` wraps
+the engine from outside (it replaces `verdict._gemini` and
+`pubmed._paced_get` at run time; no engine file changes) and saves every
+successful model answer and PubMed response under a sha256 key of the
+request. A later run on changed code replays what it can and, in `fill`
+mode, calls out only where the request changed. A replay miss is an
+error, never a quiet live call.
+
+- The model key covers the model name, the whole prompt and the whole
+  config (temperature, seed, max tokens, schema, mime type). The PubMed
+  key covers the endpoint and its parameters, without `tool` and `email`.
+- Each claim runs on a fresh scratch database, so its answer does not
+  depend on which claims ran before it.
+- What it cannot prove: a replay shows what the changed code does with
+  the answers the model gave once. The model can answer the same prompt
+  differently on another day, even at temperature 0 with a seed, and
+  PubMed's results change as papers are added. A fix that only works on
+  the saved answers still needs a live run before it ships. With
+  `--latency` a replay sleeps the recorded times, so it times code
+  changes fairly, but it cannot time a change that makes the model
+  itself faster or slower.
+
 ## 2026-11-22 (desk-front): The lamp-lit desk is the front page
 
 The owner chose the lamp-and-desk sample as the real front ("Do the lamp
