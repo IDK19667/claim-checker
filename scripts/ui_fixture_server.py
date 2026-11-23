@@ -184,7 +184,7 @@ def _release(name):
 
 # A slow or sleeping server, for the service worker's time limit on the home
 # page: /__fixture/hold/10 makes every request for "/" wait 10 s until reset.
-hold = {"s": 0.0}
+hold = {"s": 0.0, "status": 0}
 
 
 @appmod.app.route("/__fixture/hold/<secs>")
@@ -193,10 +193,20 @@ def _hold(secs):
     return "ok"
 
 
+# A server that answers the home page badly: /__fixture/status/503 makes "/"
+# answer 503 (or 429, ...) until reset; /__fixture/status/0 ends it.
+@appmod.app.route("/__fixture/status/<int:code>")
+def _status(code):
+    hold["status"] = code
+    return "ok"
+
+
 @appmod.app.before_request
 def _held():
     if hold["s"] and appmod.request.path == "/":
         time.sleep(hold["s"])
+    if hold["status"] and appmod.request.path == "/":
+        return appmod.Response("Waking up", status=hold["status"], mimetype="text/plain")
 
 
 @appmod.app.route("/__fixture/reset")
@@ -209,6 +219,7 @@ def _reset():
         for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE, DECLINED, CUT):
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
     hold["s"] = 0.0
+    hold["status"] = 0
     appmod._drop_home_lists()  # those rows went without a save, so the home page's copy goes too
     return "ok"
 

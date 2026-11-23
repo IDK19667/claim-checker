@@ -2,7 +2,9 @@
    - The home page: network first, with a time limit. When a copy is kept
      and the network has not answered in SHELL_WAIT_MS, the copy is shown
      and the network's answer, when it comes, is kept for next time. With
-     no copy (a first visit) it waits for the network, as before.
+     no copy (a first visit) it waits for the network, as before. An
+     answer that is not a good page (a 5xx while the server wakes, a 429)
+     shows the copy when one is kept, and is never stored.
    - Other pages: network first, cache fallback, each kept under its own
      address once visited; a result address (/?q=) falls back to the home
      page and is never kept in its place.
@@ -63,7 +65,9 @@ async function homeShell(event) {
   if (!kept) return net.catch(() => Response.error());
   event.waitUntil(net.catch(() => {}));  // a late answer still refreshes the copy
   const late = new Promise((r) => setTimeout(() => r(null), SHELL_WAIT_MS));
-  return (await Promise.race([net.catch(() => null), late])) || kept;
+  const res = await Promise.race([net.catch(() => null), late]);
+  // a server waking up (5xx) or busy (429) never replaces the good copy on screen
+  return res && (res.ok || res.type === "opaqueredirect") ? res : kept;
 }
 
 async function networkFirst(req, fallbackKey) {

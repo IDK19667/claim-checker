@@ -10876,6 +10876,10 @@ t("the service worker's SHELL is what the home page needs to paint offline (the 
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
+_hs3 = _sw3.split("async function homeShell", 1)[1].split("\n}\n", 1)[0]
+t("with a kept copy, a home answer that is not a good page (a 5xx, a 429) shows the copy, and only a good page is stored",
+  'return res && (res.ok || res.type === "opaqueredirect") ? res : kept;' in _hs3
+  and 'if (res.ok) return cache.put("/", res.clone())' in _hs3, _hs3[-300:])
 t("a result address (/?q=) is network first with the home page as its offline fallback, and is never kept in its place",
   'CLAIM_ARGS = ["q", "text", "title"]' in _sw3
   and 'event.respondWith(fetch(req).catch(() => caches.open(CACHE).then((c) => c.match("/")).then((r) => r || Response.error())));' in _sw3)

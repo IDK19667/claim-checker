@@ -28,7 +28,9 @@
  * 18. The service worker: a returning visit to a held server (10 s) paints the
  *    kept home page within about 3 s and the late answer refreshes the copy; with
  *    a fast server the fresh page arrives; a first visit waits for the network;
- *    offline, the home page paints from the copy with its stylesheet and scripts.
+ *    offline, the home page paints from the copy with its stylesheet and scripts;
+ *    with a copy kept, a home answer of 503 or 429 shows the copy and is never
+ *    stored, while a first visit gets the server's answer as before.
  * 19. The warm-up: on a saved answer in 3D the scene's programs and textures are
  *    sent to the GPU ahead of the press, after the answer is readable; the first
  *    Next then compiles no program and sends no texture it already had; a press
@@ -687,6 +689,27 @@ await test("18: offline, the home page paints from the copy with its stylesheet,
   await ctx.setOffline(false);
   must(look.box && look.css && look.ran, `offline: ${JSON.stringify(look)}`);
   must(look.faces.some((f) => /Instrument/.test(f)), `offline faces loaded: ${look.faces.join(", ")}`);
+}, { sw: true });
+await test("18: with a kept copy, a home answer of 503 or 429 shows the copy, and the bad answer is never stored", async (page) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload({ waitUntil: "load" });
+  must(await page.evaluate(() => !!navigator.serviceWorker.controller), "the page is not controlled by the service worker");
+  const keptNonce = () => page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); const r = await c.match("/"); return r ? ((await r.text()).match(/nonce="([^"]+)"/) || [])[1] : null; });
+  const mark = await keptNonce();
+  for (const code of [503, 429]) {
+    must((await fetch(base + "/__fixture/status/" + code)).ok, "the fixture server cannot answer " + code);
+    const r = await page.reload({ waitUntil: "load" });
+    const shown = await page.evaluate(() => { const s = document.querySelector("script[nonce]"); return s ? s.nonce : null; });
+    must(r.status() === 200 && await painted(page) && shown === mark, `${code}: status ${r.status()}, the kept copy shown: ${shown === mark}`);
+    must((await keptNonce()) === mark, `${code}: the copy was replaced`);
+  }
+  await fetch(base + "/__fixture/status/0");
+}, { sw: true });
+await test("18: a first visit with nothing kept still gets the server's answer, as before", async (page) => {
+  must((await fetch(base + "/__fixture/status/503")).ok, "the fixture server cannot answer 503");
+  const r = await page.goto(base + "/");
+  await fetch(base + "/__fixture/status/0");
+  must(r.status() === 503, `a first visit got ${r.status()}`);
 }, { sw: true });
 
 // ---- 19. the warm-up: the first Next pays for no compile and no upload ----
