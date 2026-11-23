@@ -4389,6 +4389,18 @@ What was deliberately rejected:
   `evidence.too_thin`) when every relied-on review that concludes says its
   evidence is not enough or thin, or, with no review, it rests on one small,
   pilot or uncontrolled study. Runs after the faithfulness check: no new call.
+  Review on the same day: a review whose conclusion also reports a result
+  (a benefit in children, at high doses, in the short term) is not thin, its
+  "not enough" is about one group, dose, duration or side outcome, and the
+  answer can depend on it. A relied-on trial that is neither small, a pilot
+  nor uncontrolled keeps the answer "complicated", unless a relied-on review
+  is newer than the trial and so had it to weigh (`evidence._weighed_by`):
+  the garlic reviews of 2009 to 2014 all weighed the one 2001 trial. The
+  reason printed follows the count and the kind (not enough, few or small
+  studies, the only sized study). "Not enough evidence" over studies it
+  relied on gets its own evidence line, "Too little evidence to rate this
+  claim either way", where the page had printed "Strong study designs.";
+  and a breakdown sentence naming the old "complicated" goes.
 - Evidence line: a relied-on review whose conclusion says its evidence is not
   enough (`evidence.says_not_enough`) lowers the strength word to "Low
   certainty", as `says_thin` already did. "Strong evidence" had come from the

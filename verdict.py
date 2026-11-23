@@ -1844,7 +1844,13 @@ def _too_thin(result: dict, studies: list[dict], claim: str) -> dict:
         tldr = THIN_TLDR
     explanation = (str(result.get("explanation") or "").rstrip()
                    + f" The evidence is too thin to rate, because {why}.").strip()
-    return {**result, "verdict": "insufficient", "tldr": tldr, "explanation": explanation}
+    # A breakdown sentence that names the old stamp ("The verdict is
+    # complicated because ...") would argue with the new one, so it goes.
+    named = re.compile(r"\bcomplicated\b", re.IGNORECASE)
+    bd = breakdown.map_prose(result.get("breakdown"), lambda t: " ".join(
+        x for x in breakdown.sentences(t or "") if not named.search(x)))
+    return {**result, "verdict": "insufficient", "tldr": tldr, "explanation": explanation,
+            "breakdown": bd}
 
 
 # The way out a failure names follows the kind of failure. The weighing call

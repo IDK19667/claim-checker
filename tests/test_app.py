@@ -11624,6 +11624,67 @@ t("F3: the reason agrees with the count: one review says, two reviews say",
   and "the reviews behind it say their own" in verdict._too_thin(
       _F3_RES(["f3a", "f3n"]), [_F3_NO, dict(_F3_NO, pmid="f3n")], "Garlic prevents colds")["explanation"])
 
+# Fix 3, review: an answer that depends on group, dose, duration or side outcome stays "It's complicated",
+# and so does one with a trial that is neither small, a pilot nor uncontrolled beside the review.
+def _f3r(pmid, concl, res="Twelve trials with 4,210 participants were included. Results varied.", year=None):
+    return {"pmid": pmid, "title": "A review", "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "year": year, "abstract": f"Objectives: To assess the intervention. Results: {res} Conclusions: {concl}"}
+
+
+def _f3rct(pmid, n, year=None):
+    return {"pmid": pmid, "title": "A trial", "publication_types": ["Randomized Controlled Trial"], "year": year,
+            "abstract": f"Methods: We randomised {n} adults to the intervention or placebo. Results: The primary "
+                        "outcome improved. Conclusions: It helped."}
+
+
+for _lab, _st in [
+    ("benefit in children, insufficient evidence in adults",
+     [_f3r("d1", "Probiotics reduce antibiotic-associated diarrhoea in children. There is insufficient evidence in adults.")]),
+    ("higher doses work, lower doses not established",
+     [_f3r("d2", "Higher doses of vitamin D reduced falls, but a benefit of lower doses has not been established.")]),
+    ("pain reduced, function not shown",
+     [_f3r("d3", "Exercise reduced pain in knee osteoarthritis; an effect on function has not been shown.")]),
+    ("short-term clear, long-term inconclusive",
+     [_f3r("d4", "Short-term benefit was clear, but evidence for long-term outcomes is inconclusive.")]),
+    ("benefit in younger adults, no firm conclusions for older",
+     [_f3r("d5", "Moderate-certainty evidence shows benefit in younger adults; no firm conclusions can be drawn for older adults.")]),
+    ("benefit in severe cases, insufficient for routine use in mild",
+     [_f3r("d6", "Benefit was seen in severe cases, but there is insufficient evidence to recommend routine use in mild cases.")]),
+    ("a review that says not enough beside three trials of 900 to 2400 people",
+     [_f3r("d7", "There is insufficient evidence to tell."), _f3rct("d8", 1200), _f3rct("d9", 900), _f3rct("d10", 2400)]),
+    ("symptoms improved, insufficient evidence on rare harms",
+     [_f3r("d11", "Treatment improved symptoms. There was insufficient evidence on rare harms.")]),
+]:
+    t(f"F3 review: it depends, so it stays It's complicated: {_lab}",
+      not evidence.too_thin(_st, [s["pmid"] for s in _st])
+      and verdict._too_thin(_F3_RES([s["pmid"] for s in _st]), _st, "It works")["verdict"] == "complicated")
+_f3_old_trial = [_f3r("d12", "There is insufficient evidence to tell.", year=2014), _f3rct("d13", 146, year=2001)]
+t("F3 review: a trial older than the review that says not enough is one the review had to weigh, so the rule still fires",
+  evidence.too_thin(_f3_old_trial, ["d12", "d13"])
+  and not evidence.too_thin([_f3_old_trial[0], _f3rct("d14", 146, year=2020)], ["d12", "d14"]))
+_f3_thin_one = {"pmid": "d15", "title": "Cold water and immunity", "publication_types": ["Meta-Analysis"],
+                "abstract": ("Objectives: To pool trials. Results: Few trials. Conclusions: The evidence is limited by "
+                             "the small number of studies and small sample sizes.")}
+t("F3 review: each reason says what is true of its check: one review, two reviews, few or small studies, one study",
+  evidence.too_thin([_F3_NO], ["f3a"]) == "the review behind it says its own evidence is not enough to tell"
+  and evidence.too_thin([_F3_NO, dict(_F3_NO, pmid="f3n")], ["f3a", "f3n"])
+  == "the reviews behind it say their own evidence is not enough to tell"
+  and evidence.too_thin([_f3_thin_one], ["d15"]) == "the review behind it says its evidence comes from few or small studies"
+  and evidence.too_thin([_F3_TRIAL], ["f3c"])
+  == "the only study behind it that reports its size or design is small, a pilot or uncontrolled",
+  (evidence.says_thin(_f3_thin_one), evidence.too_thin([_f3_thin_one], ["d15"])))
+t("F3 review: Not enough evidence over studies it relied on has its own line, not the designs' strength",
+  evidence.evidence_line("insufficient", [_F3_NO], ["f3a"], "Garlic prevents colds") == evidence.INSUFFICIENT_LINE
+  and evidence.evidence_line("insufficient", [_F3_NO], [], "Garlic prevents colds") == ""
+  and "Strong" not in _display.confidence_line({"studies": [dict(_F3_NO, cited_in_verdict=True, tier="strong")],
+                                              "evidence_line": evidence.INSUFFICIENT_LINE}))
+_f3_bd = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown={
+    "strength": "The verdict is complicated because one trial found fewer colds (Study 1). The review asks for more trials (Study 1).",
+    "evidence": ["One trial found fewer colds (Study 1)."], "says": []}), [_F3_NO], "Garlic prevents colds")
+t("F3 review: a breakdown sentence that names the old stamp goes when the answer becomes Not enough evidence",
+  "complicated" not in _f3_bd["breakdown"]["strength"] and "more trials" in _f3_bd["breakdown"]["strength"],
+  _f3_bd["breakdown"])
+
 # Fix 4: the line's strength word is no surer than what a relied-on review concluded.
 t("F4: a review that concludes its evidence is not enough makes the line say low certainty, not strong",
   evidence.evidence_line("complicated", [_F3_NO, _F3_YES], ["f3a", "f3b"], "Echinacea shortens colds")

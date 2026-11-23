@@ -1221,6 +1221,9 @@ def observational_only(studies, cited_pmids=()) -> bool:
     return bool(strong) and all(is_review(s) and design_rank(s) == "weaker" for s in strong)
 
 
+INSUFFICIENT_LINE = "Too little evidence to rate this claim either way"
+
+
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
                   comparative: bool = False, outcome: str = "",
@@ -1240,6 +1243,11 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     that promises one, "against this claim" for any other.
     """
     level = level_word(studies, cited_pmids)
+    # "Not enough evidence" over studies it did rely on (too thin to rate,
+    # or only animal and lab work): the line says so rather than leave the
+    # page to name the studies' designs ("Strong study designs") under it.
+    if level and verdict == "insufficient":
+        return INSUFFICIENT_LINE
     if not level or verdict not in ("true", "false", "complicated"):
         return ""
     # A pooled review is a strong design, but pooling case-control studies
@@ -2162,31 +2170,88 @@ def says_not_enough(study) -> bool:
     return is_review(study) and bool(_NOT_ENOUGH.search(conclusion(study)))
 
 
+# A conclusion clause that reports a result: "reduced falls", "benefit was
+# seen", "improved symptoms". A hedged one ("may reduce") is not counted.
+_FINDING = re.compile(
+    r"\b(?:reduc\w*|lower(?:s|ed|ing)?|improv\w*|increas\w*|rais(?:es|ed|ing)|decreas\w*|"
+    r"shorten\w*|prevent(?:s|ed)?|benefits?|beneficial|effective|helped|eased|relieved|"
+    r"protect(?:s|ed|ive)?|worsen\w*)\b", re.IGNORECASE)
+_HEDGE = re.compile(r"\b(?:may|might|could|possibl\w*|suggest\w*|appear\w*|potential\w*|unclear)\b",
+                    re.IGNORECASE)
+_CLAUSE_TURN = re.compile(r"[.;]\s+|,\s+(?:but|whereas|although|while|though|yet)\s+|\s+but\s+",
+                          re.IGNORECASE)
+
+
+def _reports_finding(study) -> bool:
+    """True when a review's conclusion reports a result in a clause that
+    does not say the evidence is not enough: "Higher doses reduced falls,
+    but a benefit of lower doses has not been established". Its "not
+    enough" is then about one group, dose, duration or side outcome, and
+    the answer can depend on it."""
+    for clause in _CLAUSE_TURN.split(conclusion(study)):
+        if (clause.strip() and not _NOT_ENOUGH.search(clause) and _FINDING.search(clause)
+                and not _HEDGE.search(clause)):
+            return True
+    return False
+
+
+def _weighed_by(trial, reviews) -> bool:
+    """True when a relied-on review is newer than the trial, so the review
+    has had the trial to weigh: its "not enough" already speaks for it. A
+    trial with no year, or newer than every review, is fresh evidence."""
+    try:
+        year = int(str(trial.get("year") or "")[:4])
+    except ValueError:
+        return False
+    years = []
+    for r in reviews:
+        try:
+            years.append(int(str(r.get("year") or "")[:4]))
+        except ValueError:
+            continue
+    return any(y > year for y in years)
+
+
 def too_thin(studies, cited_pmids=()) -> str:
     """
     Why the evidence a "complicated" rests on is too thin to say what the
-    answer depends on, in words for the reader, or "". Two ways: every
-    relied-on review that states a conclusion says its evidence is not
-    enough, or is held back by few or small studies (says_thin); or there is
-    no relied-on review and the one study that says its size or design is a
-    small, pilot or uncontrolled trial (the rest say neither). Several small
-    trials can show where an effect holds and where it does not; one cannot.
+    answer depends on, in words for the reader that are true of this check,
+    or "". Two ways: every relied-on review that states a conclusion says
+    its evidence is not enough, or is held back by few or small studies
+    (says_thin), and reports no result of its own (_reports_finding), and
+    no relied-on trial that is neither small, a pilot nor uncontrolled
+    stands beside them unless a review had it to weigh (_weighed_by); or
+    there is no relied-on review and the one study that says its size or
+    design is a small, pilot or uncontrolled trial (the rest say neither).
+    Several small trials can show where an effect holds and where it does
+    not; one cannot.
     """
     cited = set(cited_pmids or ())
     used = [s for s in studies or [] if s.get("pmid") in cited]
     reviews = [s for s in used if is_review(s)]
     concluded = [s for s in reviews if conclusion(s)]
-    if concluded and all(says_not_enough(s) or says_thin(s) for s in concluded):
-        if len(concluded) == 1:
-            return "the review behind it says its own evidence is not enough to tell"
-        return "the reviews behind it say their own evidence is not enough to tell"
+    if concluded and all((says_not_enough(s) or says_thin(s)) and not _reports_finding(s)
+                         for s in concluded):
+        solid = [s for s in used if is_trial(s)
+                 and not [c for c in trial_caveats(s) if not c.startswith("funded")]
+                 and not _weighed_by(s, concluded)]
+        if solid:
+            return ""
+        one = len(concluded) == 1
+        if all(says_not_enough(s) for s in concluded):
+            return ("the review behind it says its own evidence is not enough to tell" if one else
+                    "the reviews behind it say their own evidence is not enough to tell")
+        if not any(says_not_enough(s) for s in concluded):
+            return ("the review behind it says its evidence comes from few or small studies" if one else
+                    "the reviews behind it say their evidence comes from few or small studies")
+        return "the reviews behind it say their evidence is too little, or from too few or small studies, to tell"
     if reviews:
         return ""
     told = [s for s in used if not narrative_review(s)
             and (sample_size(s) is not None
                  or any(not t.startswith(IGNORE_PREFIXES) for t in s.get("publication_types") or []))]
     if len(told) == 1 and trial_caveats(told[0]):
-        return "it rests on a single small, pilot or uncontrolled study"
+        return "the only study behind it that reports its size or design is small, a pilot or uncontrolled"
     return ""
 
 
