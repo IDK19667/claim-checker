@@ -920,23 +920,54 @@ def denies_absolute(text: str, claim: str) -> bool:
 
 
 # A sentence that tells people to keep a treatment going: "should keep taking",
-# "continue", "stay on", "need insulin", "must not stop", "cannot replace it",
-# or not to stop it on their own: "talk to your doctor before stopping".
+# "continue", "stay on", "need insulin", "must not stop", "cannot replace it".
 # Its words overlap a claim to stop or replace that treatment, but it answers
-# that claim with a no. "safe to stop" and "no need to" are not in it.
+# that claim with a no. "safe to stop", "no need to" and "needs to be
+# stopped" are not in it.
 _KEEPS_TREATMENT = re.compile(
-    r"\b(?:talk|speak|check|consult|ask)\w*\s+(?:\w+\s+){0,4}?(?:doctors?|midwi(?:fe|ves)|"
-    r"pharmacists?|GPs?|nurses?|prescribers?|(?:healthcare|health\s+care)\s+(?:providers?|"
-    r"professionals?|teams?))\s+before\s+(?:stopping|quitting|skipping|coming\s+off|going\s+off|"
-    r"giving\s+up|changing)\b|"
     r"\b(?:keep(?:\s+on)?\s+(?:taking|using|up|it|them)|continu\w*|stay(?:ing)?\s+on|"
     r"remain(?:ing)?\s+on|should\s+(?:take|use))\b|"
-    r"(?<!not )(?<!n't )(?<!no )(?<!longer )\bneeds?\b|"
+    r"(?<!not )(?<!n't )(?<!no )(?<!longer )\bneeds?\b"
+    r"(?!\s+to\s+be\s+(?:stopped|paused|held|withheld|discontinued|avoided|switched|changed))|"
     r"\b(?:(?:should|must|do|does|can|could|will)\s*(?:not|n't|never)|don't|never|cannot|can't|"
     r"shouldn't|mustn't)\s+(?:safely\s+)?(?:stop|quit|skip|replace|come\s+off|go\s+off|give\s+up|"
     r"ditch|swap|substitute)\b|"
     r"\bnot\s+(?:safe|advisable|recommended|wise)\s+to\s+(?:stop|quit|skip|replace|come\s+off|"
     r"go\s+off|give\s+up|ditch|swap)\b", re.IGNORECASE)
+
+
+# Advice not to stop a treatment on one's own: "talk to your doctor before
+# stopping". On its own it answers a claim to stop with a no. Beside words
+# that say stopping happens, is fine or is advised (_SAYS_STOPPING), it is
+# only a caution, and the sentence keeps its plain stance: never "mixed",
+# since a mixed line agrees with a "false" and would let guidance that says
+# to stop stamp a claim to stop false.
+_ASK_BEFORE_STOPPING = re.compile(
+    r"\b(?:talk|speak|check|consult|ask)\w*\s+(?:\w+\s+){0,4}?(?:doctors?|midwi(?:fe|ves)|"
+    r"pharmacists?|GPs?|nurses?|prescribers?|surgeons?|(?:healthcare|health\s+care)\s+(?:providers?|"
+    r"professionals?|teams?))\s+before\s+(?:stopping|quitting|skipping|coming\s+off|going\s+off|"
+    r"giving\s+up)\b(?:\s+(?:it|them|any\s+\w+(?:\s+\w+)?|\w+\s+early))?", re.IGNORECASE)
+_SAYS_STOPPING = re.compile(
+    r"\b(?:stop\w*|paus\w*|avoid\w*|withdr[ae]w\w*|switch\w*|discontinu\w*|held|withheld|"
+    r"fine|safe|okay|ok|shorter|reported)\b", re.IGNORECASE)
+
+
+def _asks_before_stopping(text: str, claim: str) -> str | None:
+    """For a claim to stop a treatment: "no" when the first sentence of
+    `text` advises against stopping without a professional and says nothing
+    else about stopping; otherwise None, and the sentence is read as it
+    plainly stands."""
+    import verdict  # late: verdict imports this module
+    if verdict.forgoes_treatment(claim) != "forgo":
+        return None
+    first = (sentences(text or "") or [""])[0]
+    m = _ASK_BEFORE_STOPPING.search(first)
+    if not m:
+        return None
+    rest = first[:m.start()] + " " + first[m.end():]
+    if _SAYS_STOPPING.search(rest) or _plain_stance(rest, claim) == "yes":
+        return None
+    return "no"
 
 
 def _keeps_treatment(text: str, claim: str) -> bool:
@@ -957,6 +988,9 @@ def stance(text: str, claim: str) -> str:
     """
     if _keeps_treatment(text, claim):
         return "no"
+    asked = _asks_before_stopping(text, claim)
+    if asked:
+        return asked
     said = _plain_stance(text, claim)
     if said in ("yes", "no") and claim_denies(claim):
         return "no" if said == "yes" else "yes"

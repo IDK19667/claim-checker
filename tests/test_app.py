@@ -11569,6 +11569,27 @@ t("F2: guidance that says stopping is fine still argues with a false, and the do
   breakdown.stance("Major health guidelines say: it is safe to stop most medicines in pregnancy.", _F2_CLAIM) == "yes"
   and breakdown.stance("Talk to your doctor before stopping statins.", "Garlic lowers blood pressure") != "no")
 
+# Fix 2, review: advice to ask a doctor before stopping is a no only when the sentence says nothing else
+# about stopping. Beside guidance that says to stop, the sentence keeps its plain yes, so a false is refused.
+_F2R_L = verdict.GUIDELINE_LEAD
+for _claim, _says in [
+    ("You should stop taking aspirin before an operation",
+     "aspirin often needs to be stopped before an operation; check with your surgeon or doctor before stopping it."),
+    ("Pregnant women should stop taking ibuprofen after twenty weeks",
+     "ibuprofen should be avoided after twenty weeks of pregnancy; talk to your midwife before stopping any prescribed medicine."),
+    ("You should stop taking statins if you get muscle pain",
+     "muscle pain on statins should be reported, and some people stop or switch; talk to your doctor before stopping."),
+]:
+    t(f"F2 review: guidance that says to stop is not read as a no, and a false is refused: {_claim}",
+      breakdown.stance(_F2R_L + _says, _claim) == "yes"
+      and breakdown.stamp_conflict("false", _F2R_L + _says, "", _claim) is not None)
+t("F2 review: guidance that stopping is fine for some, then asks a doctor, stays mixed as before",
+  breakdown.stance(_F2R_L + "shorter courses are fine for some infections, so talk to your doctor before stopping "
+                   "antibiotics early.", "You can stop taking antibiotics once you feel better") == "mixed")
+t("F2 review: 'before changing' is not advice to keep a medicine",
+  breakdown.stance("Major health guidelines say: talk to your doctor before changing your medicines.",
+                   "You should stop your medicines when you feel better") != "no")
+
 # Fix 3: a "complicated" on evidence too thin to say what it depends on is "Not enough evidence".
 _F3_NO = {"pmid": "f3a", "title": "Garlic for the common cold", "publication_types": ["Systematic Review"],
           "abstract": ("OBJECTIVES: To assess garlic for colds. MAIN RESULTS: One trial of 146 people. "

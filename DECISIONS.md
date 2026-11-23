@@ -4377,7 +4377,14 @@ What was deliberately rejected:
 - Forgo-treatment guidance: "talk to your doctor before stopping" is guidance
   to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
   stop one with a no and the existing forgo rule can stamp it false. It had
-  been read as a yes and thrown away as arguing with itself.
+  been read as a yes and thrown away as arguing with itself. Review on the
+  same day: the advice (`breakdown._asks_before_stopping`) counts as a no
+  only when the rest of the sentence says nothing about stopping. Where it
+  says stopping happens, is fine or is advised ("aspirin often needs to be
+  stopped before an operation"), the sentence keeps its plain stance, not
+  "mixed": a mixed line agrees with a "false" and would let guidance that
+  says to stop stamp a claim to stop false. "before changing" is dropped,
+  and "needs to be stopped" no longer reads as "needs" a treatment.
 - Thin "complicated": becomes "Not enough evidence" (`verdict._too_thin`,
   `evidence.too_thin`) when every relied-on review that concludes says its
   evidence is not enough or thin, or, with no review, it rests on one small,
