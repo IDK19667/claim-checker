@@ -10774,6 +10774,23 @@ if _shutil.which("node"):
     t("R4: every href on both paths starts with http://, https://, / or #",
       not [h for tr in _r4_trees + [_r4_full(j["weighed"] + j["research"]) for j in _r4js_out] for h in _r4_hrefs_ok(tr)],
       [h for tr in _r4_trees for h in _r4_hrefs_ok(tr)][:5])
+# D1: the dated line already ends with its full stop (app._review_line); neither path
+# adds another. On every saved fixture: the server's visible result text has no two
+# full stops in a row, and app.js's own review-line statement, run on that fixture's
+# data, writes exactly the server's line.
+_d1_vis = [re.sub(r"\s+", " ", _htmllib.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"(?s)<(script|style)\b.*?</\1>", " ",
+           p_.split('<main id="track">')[1].split('id="server-result"')[0])))) for p_ in _r4_pages]
+_d1_srv = [_r4_full(p_).byid.get("review-line", "").strip() for p_ in _r4_pages]
+_d1_stmt = [l_ for l_ in _r4js.splitlines() if '$("review-line").textContent' in l_]
+_d1_js = None
+if _shutil.which("node") and len(_d1_stmt) == 1:
+    _d1_js = json.loads(_subprocess.run(["node", "-e", "const D = " + json.dumps(_r4_datas) + "; const out = [];"
+        "for (const data of D) { const el = {}; const $ = () => el;" + _d1_stmt[0] + "; out.push(el.textContent); }"
+        "console.log(JSON.stringify(out));"], capture_output=True, text=True, check=True).stdout)
+t("D1: no result prints two full stops in a row, and the dated line reads the same on both paths, on every fixture",
+  all(_d1_srv) and not [v for v in _d1_vis if re.search(r"\.\s*\.", v)]
+  and all(x_.endswith(".") and not x_.endswith("..") for x_ in _d1_srv) and _d1_js == _d1_srv,
+  ([re.search(r".{30}\.\s*\..{10}", v).group(0) for v in _d1_vis if re.search(r"\.\s*\.", v)][:3], _d1_srv[:2], _d1_js and _d1_js[:2]))
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

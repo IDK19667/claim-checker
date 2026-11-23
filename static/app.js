@@ -607,7 +607,7 @@ function renderResult(data, replay) {
   $("query-what").hidden = !usedQuery;
   $("broadened").textContent = data.search_broadened ? " (the first search found nothing, so it was widened)" : "";
   $("more-link").href = safeHref(data.pubmed_url) || "#";
-  $("review-line").textContent = data.review_line ? `${data.review_line}.` : "";
+  $("review-line").textContent = data.review_line || "";
   $("review-line").hidden = !data.review_line;
   const note = $("cached-note");
   note.hidden = !(data.cached || data.restored);
