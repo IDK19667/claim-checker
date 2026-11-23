@@ -6,7 +6,7 @@
 {%- set bv = breakdown_view(result) if result else None %}
 {%- set stops = desk_stops(result) if result else ["Claim"] %}
 {%- set dl = desk_lines(result) if result else None %}
-{%- set says_lines = ((bv.says if bv else [result.explanation]) | select | list) if result else [] %}
+{%- set says_lines = ((bv.says if bv else [result.explanation]) | reject("none") | map("trim") | select | list) if result else [] %}
 <html lang="en"{% if result %} class="checked" data-screen="result"{% endif %}>
 <head>
   <meta charset="utf-8" />

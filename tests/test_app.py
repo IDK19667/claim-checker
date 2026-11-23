@@ -8594,6 +8594,30 @@ if _shutil.which("node"):
     t("  and a result saved on the device stops marking an off-topic study used before anything reads it",
       _ot_out["d"][0] == [True, False, False, False, False]
       and _ot_out["d"][1] == [s_["cited_in_verdict"] for s_ in _otj["studies"]])
+# C4 (F4): the study-number links and the "says" lines read the same on both sides. Plain
+# digits only ("Study ٣" is text on both), the same word edge ("éStudy 2" is a link on both,
+# "XStudy 2" on neither), and a line of only spaces prints nothing on either side.
+_pr_txt = ["Study ٣ found it", "éStudy 2 found it", "XStudy 2 found it", "_Study 2", "Studies 1, 2 and 3 agree",
+           "study 2 and Study 9", "Study\u00a01 too", "Studies 2 & 3"]
+_pr_py = [str(_dsp.desk_refs(x, 3)) for x in _pr_txt]
+t("C4: the server links only plain digits after an ASCII word edge",
+  'href="#row-' not in _pr_py[0] and 'href="#row-2"' in _pr_py[1] and 'href="#row-' not in _pr_py[2]
+  and 'href="#row-' not in _pr_py[3] and _pr_py[4].count('class="ref"') == 3, _pr_py)
+_pr_tpl = (ROOT / "templates" / "index.html").read_text().split("{%- set says_lines = ")[1].split(" %}")[0]
+_pr_says = lambda r_: appmod.app.jinja_env.from_string("{% set bv = None %}{% set says_lines = " + _pr_tpl
+                                                        + " %}{{ says_lines | tojson }}").render(result=r_)
+t("  a 'says' line of only spaces, or none at all, prints nothing from the template",
+  json.loads(_pr_says({"explanation": "   "})) == [] and json.loads(_pr_says({"explanation": None})) == []
+  and json.loads(_pr_says({"explanation": " Two trials. "})) == ["Two trials."])
+if _shutil.which("node"):
+    _pr_src = (ROOT / "static" / "app.js").read_text()
+    _pr_fn = ("const HTML_ESCAPES" + _pr_src.split("const HTML_ESCAPES")[1].split("\n// ")[0] + "\n"
+              + "const REF_RE" + _pr_src.split("const REF_RE")[1].split("\nfunction deskNamed")[0])
+    _pr_js = json.loads(_subprocess.run(["node", "-e", _pr_fn + ";console.log(JSON.stringify(" + json.dumps(_pr_txt)
+                                         + ".map((x) => deskRefs(x, 3))));"], capture_output=True, text=True, check=True).stdout)
+    t("  and the script links exactly the same numbers in each line", _pr_js == _pr_py, list(zip(_pr_js, _pr_py)))
+    _pr_says_js = _pr_src.split("function saysLines(data) {")[1].split("\n}")[0]
+    t("  the script drops a line of only spaces too", 'String(t || "").trim()' in _pr_says_js)
 _ot_rr = _ot_js[_ot_js.index("function renderResult"):] if _shutil.which("node") else (ROOT / "static" / "app.js").read_text()
 _ot_wh = (ROOT / "static" / "app.js").read_text().split("function weighedHtml(data) {")[1].split("\nfunction ")[0]
 t("  renderResult clears the stale flags first and builds the list from sourceGroups, with the excluded group folded",

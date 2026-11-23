@@ -308,7 +308,9 @@ def rests_by_design(studies) -> list:
     return out
 
 
-_REF_RE = re.compile(r"\b(Stud(?:y|ies))\s+(\d+(?:\s*(?:,\s*and|,|and|&amp;)\s*\d+)*)", re.I)
+# Plain digits and an ASCII word edge, as in the script's /\b...\d/: "Study ٣" is
+# text on both sides and "éStudy 2" a link on both.
+_REF_RE = re.compile(r"(?<![A-Za-z0-9_])(Stud(?:y|ies))\s+([0-9]+(?:\s*(?:,\s*and|,|and|&amp;)\s*[0-9]+)*)", re.I)
 
 
 def desk_refs(text, count) -> Markup:
@@ -325,7 +327,7 @@ def desk_refs(text, count) -> Markup:
                 return (f'<a class="ref" href="#row-{i}" data-n="{i}" '
                         f'aria-label="Study {i}, show it in the list">{i}</a>')
             return d.group(0)
-        return m.group(1) + " " + re.sub(r"\d+", one, m.group(2))
+        return m.group(1) + " " + re.sub(r"[0-9]+", one, m.group(2))
 
     return Markup(_REF_RE.sub(link, safe))
 
@@ -342,7 +344,7 @@ def desk_named(result) -> list:
     out = set()
     for line in lines:
         for m in _REF_RE.finditer(str(escape(line))):
-            out.update(i for i in (int(d) for d in re.findall(r"\d+", m.group(2))) if 1 <= i <= n)
+            out.update(i for i in (int(d) for d in re.findall(r"[0-9]+", m.group(2))) if 1 <= i <= n)
     return sorted(out)
 
 
