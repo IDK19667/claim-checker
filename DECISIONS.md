@@ -4376,10 +4376,11 @@ What was deliberately rejected:
   Review on the same day: a review whose conclusion also reports a result
   (a benefit in children, at high doses, in the short term) is not thin, its
   "not enough" is about one group, dose, duration or side outcome, and the
-  answer can depend on it. A relied-on trial that is neither small, a pilot
-  nor uncontrolled keeps the answer "complicated", unless a relied-on review
-  is newer than the trial and so had it to weigh (`evidence._weighed_by`):
-  the garlic reviews of 2009 to 2014 all weighed the one 2001 trial. The
+  answer can depend on it; a result is read in plain result language, hedged
+  ("may shorten"), comparative ("fewer", "superior") or null ("no effect").
+  A relied-on trial that is neither small, a pilot nor uncontrolled keeps
+  the answer "complicated": trials count as evidence, and a newer review
+  does not show it weighed that trial (so g4-22 is "complicated" again). The
   reason printed follows the count and the kind (not enough, few or small
   studies, the only sized study). "Not enough evidence" over studies it
   relied on gets its own evidence line, "Too little evidence to rate this

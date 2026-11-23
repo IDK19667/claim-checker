@@ -11595,10 +11595,11 @@ for _lab, _st in [
     t(f"F3 review: it depends, so it stays It's complicated: {_lab}",
       not evidence.too_thin(_st, [s["pmid"] for s in _st])
       and verdict._too_thin(_F3_RES([s["pmid"] for s in _st]), _st, "It works")["verdict"] == "complicated")
-_f3_old_trial = [_f3r("d12", "There is insufficient evidence to tell.", year=2014), _f3rct("d13", 146, year=2001)]
-t("F3 review: a trial older than the review that says not enough is one the review had to weigh, so the rule still fires",
-  evidence.too_thin(_f3_old_trial, ["d12", "d13"])
-  and not evidence.too_thin([_f3_old_trial[0], _f3rct("d14", 146, year=2020)], ["d12", "d14"]))
+t("F3 review: a trial neither small, a pilot nor uncontrolled beside the review keeps it complicated, older or newer",
+  not evidence.too_thin([_f3r("d12", "There is insufficient evidence to tell.", year=2014), _f3rct("d13", 146, year=2001)],
+                        ["d12", "d13"])
+  and not evidence.too_thin([_f3r("d12", "There is insufficient evidence to tell.", year=2014),
+                             _f3rct("d14", 146, year=2020)], ["d12", "d14"]))
 _f3_thin_one = {"pmid": "d15", "title": "Cold water and immunity", "publication_types": ["Meta-Analysis"],
                 "abstract": ("Objectives: To pool trials. Results: Few trials. Conclusions: The evidence is limited by "
                              "the small number of studies and small sample sizes.")}
@@ -11621,6 +11622,37 @@ _f3_bd = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown={
 t("F3 review: a breakdown sentence that names the old stamp goes when the answer becomes Not enough evidence",
   "complicated" not in _f3_bd["breakdown"]["strength"] and "more trials" in _f3_bd["breakdown"]["strength"],
   _f3_bd["breakdown"])
+
+# The separate reviewer's second round on thin evidence: True means the rule fires.
+
+def _f3b_rv(pmid, concl, year=2020, title="A review"):
+    return {"pmid": pmid, "title": title, "year": str(year), "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "abstract": f"Objectives: To assess the intervention. Results: Twelve trials with 4,210 participants were included. Conclusions: {concl}"}
+def _f3b_rct(pmid, n, year=2015, title="A trial", extra=""):
+    d = {"pmid": pmid, "title": title, "publication_types": ["Randomized Controlled Trial"],
+         "abstract": f"Methods: We randomised {n} adults to the intervention or placebo. {extra}Results: The primary outcome improved. Conclusions: It helped."}
+    if year is not None:
+        d["year"] = str(year)
+    return d
+
+# want: True = should fire (thin), False = must stay complicated
+_F3B_CASES = [
+ ("dose: 10 mg reduced, 5 mg insufficient", [_f3b_rv("1", "The 10 mg dose reduced pain; evidence for the 5 mg dose is insufficient.")], False),
+ ("hedged result in one group", [_f3b_rv("2", "Zinc may shorten colds in adults, but evidence in children is insufficient.")], False),
+ ("result word outside the list: superior", [_f3b_rv("3", "Acupuncture was superior to sham for migraine, but evidence for tension headache is insufficient.")], False),
+ ("null in one group, unknown in other", [_f3b_rv("4", "Vitamin D had no effect in adults with normal levels; evidence in deficient adults is insufficient.")], False),
+ ("result word outside list: lowered odds -> 'fewer'", [_f3b_rv("5", "Fewer infections occurred in preterm infants, though evidence for term infants is inconclusive.")], False),
+ ("bare not-enough review alone", [_f3b_rv("6", "There is insufficient evidence to tell whether it works.")], True),
+ ("not enough + possible benefit hedged", [_f3b_rv("7", "Evidence is insufficient; results suggest a possible benefit.")], True),
+ ("weighed_by: large trial older than a review of a different question", [_f3b_rv("8", "There is insufficient evidence for children.", 2021, "Probiotics for children"), _f3b_rct("9", 2400, 2012, "Probiotics in adults")], False),
+ ("trial and review same year", [_f3b_rv("10", "There is insufficient evidence to tell.", 2019), _f3b_rct("11", 1800, 2019)], False),
+ ("trial with no year", [_f3b_rv("12", "There is insufficient evidence to tell.", 2019), _f3b_rct("13", 1800, None)], False),
+ ("large maker-funded trial beside not-enough review (newer)", [_f3b_rv("14", "There is insufficient evidence to tell.", 2015), _f3b_rct("15", 1500, 2022, extra="Funded by the manufacturer. ")], False),
+ ("no review, one small pilot trial", [_f3b_rct("16", 24, 2020, extra="This pilot study ")], True),
+]
+for _lab, _st, _want in _F3B_CASES:
+    t(f"F3 review (reviewer, round 2): {'fires' if _want else 'stays complicated'}: {_lab}",
+      bool(evidence.too_thin(_st, [x["pmid"] for x in _st])) == _want)
 
 # Fix 4: the line's strength word is no surer than what a relied-on review concluded.
 t("F4: a review that concludes its evidence is not enough makes the line say low certainty, not strong",

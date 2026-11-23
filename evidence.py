@@ -1991,14 +1991,25 @@ def says_not_enough(study) -> bool:
     return is_review(study) and bool(_NOT_ENOUGH.search(conclusion(study)))
 
 
-# A conclusion clause that reports a result: "reduced falls", "benefit was
-# seen", "improved symptoms". A hedged one ("may reduce") is not counted.
+# A conclusion clause that reports a result, in the plain language results
+# are reported in: a change ("reduced falls", "may shorten colds", "probably
+# reduces"), a comparison ("superior to sham", "fewer infections"), an
+# association, or a plain null ("had no effect in adults", "no difference").
+# A hedged result is still a result. Not a result: a clause that only says
+# the evidence is not enough (_NOT_ENOUGH) or that it is unknown whether
+# something works, or that names a mere possibility (_NO_RESULT).
 _FINDING = re.compile(
     r"\b(?:reduc\w*|lower(?:s|ed|ing)?|improv\w*|increas\w*|rais(?:es|ed|ing)|decreas\w*|"
-    r"shorten\w*|prevent(?:s|ed)?|benefits?|beneficial|effective|helped|eased|relieved|"
-    r"protect(?:s|ed|ive)?|worsen\w*)\b", re.IGNORECASE)
-_HEDGE = re.compile(r"\b(?:may|might|could|possibl\w*|suggest\w*|appear\w*|potential\w*|unclear)\b",
-                    re.IGNORECASE)
+    r"shorten\w*|prevent(?:s|ed|ing)?|benefits?|benefited|beneficial|effective|ineffective|"
+    r"efficacious|helped|eased|relieved|protect(?:s|ed|ive)?|worsen\w*|halved|doubled|"
+    r"superior|inferior|better|worse|outperform\w*|fewer|"
+    r"associated\s+with|linked\s+(?:with|to)|"
+    r"no\s+(?:\w+\s+){0,2}?(?:effects?|differences?|benefits?|changes?|associations?|improvements?|"
+    r"reductions?)|(?:did|does|do)\s+not\s+(?:\w+\s+)?(?:differ|change|affect|work|help)\w*)\b",
+    re.IGNORECASE)
+_NO_RESULT = re.compile(
+    r"\b(?:uncertain|unclear|unknown|not\s+known)\s+(?:whether|if)\b|\binsufficient\s+evidence\s+to\b|"
+    r"\bpossibl[ey]\b|\bpotential(?:ly)?\b", re.IGNORECASE)
 _CLAUSE_TURN = re.compile(r"[.;]\s+|,\s+(?:but|whereas|although|while|though|yet)\s+|\s+but\s+",
                           re.IGNORECASE)
 
@@ -2010,27 +2021,10 @@ def _reports_finding(study) -> bool:
     enough" is then about one group, dose, duration or side outcome, and
     the answer can depend on it."""
     for clause in _CLAUSE_TURN.split(conclusion(study)):
-        if (clause.strip() and not _NOT_ENOUGH.search(clause) and _FINDING.search(clause)
-                and not _HEDGE.search(clause)):
+        if (clause.strip() and not _NOT_ENOUGH.search(clause) and not _NO_RESULT.search(clause)
+                and _FINDING.search(clause)):
             return True
     return False
-
-
-def _weighed_by(trial, reviews) -> bool:
-    """True when a relied-on review is newer than the trial, so the review
-    has had the trial to weigh: its "not enough" already speaks for it. A
-    trial with no year, or newer than every review, is fresh evidence."""
-    try:
-        year = int(str(trial.get("year") or "")[:4])
-    except ValueError:
-        return False
-    years = []
-    for r in reviews:
-        try:
-            years.append(int(str(r.get("year") or "")[:4]))
-        except ValueError:
-            continue
-    return any(y > year for y in years)
 
 
 def too_thin(studies, cited_pmids=()) -> str:
@@ -2041,7 +2035,7 @@ def too_thin(studies, cited_pmids=()) -> str:
     its evidence is not enough, or is held back by few or small studies
     (says_thin), and reports no result of its own (_reports_finding), and
     no relied-on trial that is neither small, a pilot nor uncontrolled
-    stands beside them unless a review had it to weigh (_weighed_by); or
+    stands beside them (trials count as evidence); or
     there is no relied-on review and the one study that says its size or
     design is a small, pilot or uncontrolled trial (the rest say neither).
     Several small trials can show where an effect holds and where it does
@@ -2054,8 +2048,7 @@ def too_thin(studies, cited_pmids=()) -> str:
     if concluded and all((says_not_enough(s) or says_thin(s)) and not _reports_finding(s)
                          for s in concluded):
         solid = [s for s in used if is_trial(s)
-                 and not [c for c in trial_caveats(s) if not c.startswith("funded")]
-                 and not _weighed_by(s, concluded)]
+                 and not [c for c in trial_caveats(s) if not c.startswith("funded")]]
         if solid:
             return ""
         one = len(concluded) == 1
