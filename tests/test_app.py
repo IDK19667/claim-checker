@@ -10573,6 +10573,23 @@ if _shutil.which("node"):
     t("R4b: the href gate passes http, https and site paths and refuses every other scheme",
       _r4out["hrefs"] == ["https://pubmed.ncbi.nlm.nih.gov/1/", "http://x.org/a?b=1", "/?q=a",
                           None, None, None, None, None, None, None], _r4out["hrefs"])
+    # One list of addresses through both gates. A tab, newline, return, other control
+    # character or space inside is refused (the browser would drop a tab and read
+    # "//other.example"), and so are the forms the two sides once read differently.
+    _GATE = [("https://pubmed.ncbi.nlm.nih.gov/1/", True), ("http://x.org/a?b=1", True), ("/?q=a", True),
+             ("/static/desk.css", True), ("https://doi.org/10.1000/xyz", True),
+             ("/\t/other.example", False), ("/\n/other.example", False), ("/\r/other.example", False),
+             ("/ /other.example", False), ("/\x00/other.example", False), ("/\x0b/other.example", False),
+             ("/\x7f/other.example", False), ("https://x.org/a\tb", False), ("https://x.org/a b", False),
+             ("http:example.com", False), ("https:///x", False), ("http://exa mple.com/", False),
+             ("https://\\other.example/", False), ("//other.example/x", False), ("/\\other.example", False),
+             ("javascript:alert(1)", False), ("data:text/html,x", False), ("ftp://x.org/", False), ("", False)]
+    _gate_js = json.loads(_subprocess.run(["node", "-e", _r4fn + "console.log(JSON.stringify(" + json.dumps([a for a, _ in _GATE]) + ".map(safeHref)))"],
+                                          capture_output=True, text=True, check=True).stdout)
+    _gate_py = [_dsc.safe_href(a) for a, _ in _GATE]
+    t("R4b: one list of addresses through both link gates: the same answer on both sides, control characters and spaces refused",
+      [(a, ok) for (a, ok), j, p_ in zip(_GATE, _gate_js, _gate_py) if (j == a) != ok or (p_ == a) != ok or (j is None) != (p_ is None)] == [],
+      [(a, j, p_) for (a, ok), j, p_ in zip(_GATE, _gate_js, _gate_py) if (j == a) != ok or (p_ == a) != ok])
 _r4js = (ROOT / "static" / "app.js").read_text()
 t("R4b: every href the script builds from data goes through the gate",
   not re.findall(r'href="\$\{(?!escapeHtml\((?:exactUrl|widerUrl|href\)|safeHref\())', _r4js)

@@ -122,8 +122,11 @@ function escapeHtml(str) {
 // link is left out.
 function safeHref(url) {
   const raw = String(url == null ? "" : url).trim();
-  if (!raw) return null;
+  // A space or a control character inside is refused: the browser drops a tab or a newline and reads what is left.
+  if (!raw || /[\u0000-\u0020\u007f]/.test(raw)) return null;
   if (raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\")) return raw;
+  // Only the plain form, http:// or https:// and then the host, which both sides read the same way.
+  if (!/^https?:\/\/[^/\\?#]/i.test(raw)) return null;
   try {
     const u = new URL(raw);
     return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;

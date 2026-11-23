@@ -352,10 +352,16 @@ def safe_href(url):
     safeHref is the same; a test runs both on the same addresses."""
     from urllib.parse import urlsplit
     raw = str(url if url is not None else "").strip()
-    if not raw:
+    # A space or a control character inside is refused: the browser drops a
+    # tab or a newline and reads what is left.
+    if not raw or re.search(r"[\x00-\x20\x7f]", raw):
         return None
     if raw.startswith("/") and not raw.startswith("//") and not raw.startswith("/\\"):
         return raw
+    # Only the plain form, http:// or https:// and then the host, which both
+    # sides read the same way.
+    if not re.match(r"(?i)https?://[^/\\?#]", raw):
+        return None
     try:
         parts = urlsplit(raw)
     except ValueError:
