@@ -6574,7 +6574,7 @@ t("  so do the 404 page and the error screen",
   and _tpl.index('<section id="error" hidden>') < _tpl.index('class="nma ask-note">Not medical advice. Ask a doctor')
   < _tpl.index('id="ask-more"'))
 t("  and every result carries the notice in the strip along its top",
-  '<header class="strip" id="strip" role="note"><span class="name">' in _srv and "<b>Not medical advice.</b></header>" in _srv)
+  '<header class="strip" id="strip"><span class="name">' in _srv and "<b>Not medical advice.</b></header>" in _srv)
 
 # 8. scripts/stats.py: read-only, from the table that already exists.
 _sdb = os.path.join(tempfile.mkdtemp(), "s.db")
@@ -7104,7 +7104,7 @@ t("touch: qa.mjs fails any tap target under 44px, and the footer links are 44px 
   and re.search(r"\.foot-links a \{[^}]*min-height: 44px", _css9) is not None
   and all('class="fine foot-links"' in c.get(u).get_data(as_text=True) for u in ("/about", "/privacy"))
   and re.search(r"\.site-links a \{[^}]*min-height: 44px", (ROOT / "static" / "desk.css").read_text()) is not None
-  and '<p class="site-links">' in c.get("/").get_data(as_text=True))
+  and '<nav class="site-links" aria-label="Site">' in c.get("/").get_data(as_text=True))
 _fl = [re.search(r'<p class="fine foot-links">(.*?)</p>', c.get(u).get_data(as_text=True), re.S).group(1) for u in ("/about", "/privacy")]
 t("footer: the separators are CSS on the links, not dots in the text, so none can end or start a wrapped line",
   all("\u00b7" not in x and x.count("<a ") == 4 and x.startswith('<span class="foot-row">') for x in _fl)
@@ -11026,6 +11026,21 @@ console.log(JSON.stringify(out));"""
           and all(r[2] == "id=%s class=c-%s" % (r[0], r[0]) and r[3] == "words " + r[0] for r in _g6_out[s]) for s in _g6_want)
       and 'setH1(section === askSection ? "ask" : result ? "result" : "error");' in _g6_show
       and '$("skip").hidden = !result;' in _g6_show, _g6_out)
+# G7 (A10): the landmarks are back with no visual change. The strip is the banner, the site
+# links are a Site navigation wherever they are drawn, the closing lines of the last stop are
+# a footer landmark, and Still open is a heading whose region is named "Still open".
+_g7_s6 = _g6_res.split('id="s6"')[1].split("</section>")[0]
+t("G7: the strip is a banner with the notice in it, and the site links are a Site navigation on every screen",
+  '<header class="strip" id="strip"><span class="name">' in _g6_res and 'role="note"' not in _g6_res
+  and _g6_home.count('<nav class="site-links" aria-label="Site">') == 2 and _g6_res.count('<nav class="site-links" aria-label="Site">') == 2
+  and "<p class=\"site-links\"" not in _g6_res)
+t("  the last stop's closing lines are a footer landmark holding the notice and the site links",
+  _g6_res.count('role="contentinfo"') == 1
+  and re.search(r'<footer class="closing" role="contentinfo">\s*<p class="legend privacy">.*?<p class="nma">Not medical advice\..*?<nav class="site-links" aria-label="Site">.*?</nav>\s*</footer>', _g7_s6, re.S) is not None)
+t("  Still open is a heading on both paths and its number is not read",
+  '<h2 class="eyebrow" id="h-open"><b aria-hidden="true">' in _g7_s6 and '<h2 class="eyebrow" id="h-open"><b aria-hidden="true">06</b>Still open</h2>' in _g6_home
+  and '$("h-open").innerHTML = `<b aria-hidden="true">${pad2(stops.indexOf("Open") + 1)}</b>Still open`;' in _g6_app
+  and 'aria-labelledby="h-open"' in _g7_s6)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

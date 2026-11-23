@@ -456,7 +456,7 @@ function deskNamed(data) {
 
 const backBtn = '<button class="back" type="button" data-go="1">Back to the short answer</button>';
 const eyebrow = (stops, name, text) =>
-  `<p class="eyebrow"${name === "Open" ? ' id="h-open"' : ""}><b>${pad2(stops.indexOf(name) + 1)}</b>${escapeHtml(text)}</p>`;
+  `<p class="eyebrow"${name === "Open" ? ' id="h-open"' : ""}><b aria-hidden="true">${pad2(stops.indexOf(name) + 1)}</b>${escapeHtml(text)}</p>`;
 
 function studyRowHtml(s, i, key, named) {
   const n = i + 1, d = typeInfo(s.publication_types).label;
@@ -600,7 +600,7 @@ function renderResult(data, replay) {
   $("s5")?.remove();
   $("s6").insertAdjacentHTML("beforebegin", stops45);
   // Stop 6: what is still open, the search, and the ways on.
-  $("h-open").innerHTML = `<b>${pad2(stops.indexOf("Open") + 1)}</b>Still open`;
+  $("h-open").innerHTML = `<b aria-hidden="true">${pad2(stops.indexOf("Open") + 1)}</b>Still open`;
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
   $("query").textContent = usedQuery;

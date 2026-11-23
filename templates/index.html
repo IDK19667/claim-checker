@@ -74,14 +74,14 @@
 {# Skip to the answer: the first stop for a keyboard on a result, shown only while it has focus. Its #stamp works with scripts off; the desk takes it to the Answer stop. #}
 <a class="skip" id="skip" href="#stamp"{% if not result %} hidden{% endif %}>Skip to the answer</a>
 
-<header class="strip" id="strip" role="note"><span class="name"><a class="sw" href="/" aria-label="Evident home">Evident</a> <span class="beta">Beta</span></span><b>Not medical advice.</b></header>
+<header class="strip" id="strip"><span class="name"><a class="sw" href="/" aria-label="Evident home">Evident</a> <span class="beta">Beta</span></span><b>Not medical advice.</b></header>
 
 <div id="stage" aria-hidden="true"><canvas id="gl"></canvas></div>
 
 <nav class="rail" id="rail" aria-label="Where you are"></nav>
 
 {% macro site_links(extra=False) -%}
-<p class="site-links"><a id="{{ 'how-btn' if not extra else 'how-btn-2' }}" class="how-link" href="/method">How it works</a> <a{% if not extra %} id="about-link"{% endif %} href="/about">About</a>{% if extra %} <a href="/method">Methodology</a> <a href="/corrections">Corrections and contact</a>{% endif %} <a href="/privacy">Privacy</a>{% if not extra %} <button class="btn quiet install" id="install-btn" type="button" hidden>Install</button>{% endif %}</p>
+<nav class="site-links" aria-label="Site"><a id="{{ 'how-btn' if not extra else 'how-btn-2' }}" class="how-link" href="/method">How it works</a> <a{% if not extra %} id="about-link"{% endif %} href="/about">About</a>{% if extra %} <a href="/method">Methodology</a> <a href="/corrections">Corrections and contact</a>{% endif %} <a href="/privacy">Privacy</a>{% if not extra %} <button class="btn quiet install" id="install-btn" type="button" hidden>Install</button>{% endif %}</nav>
 {%- endmacro %}
 
 <main id="track">
@@ -251,7 +251,8 @@
      rebuilt identically by renderResult in static/app.js after a live check.
      A stop with nothing real to show is not printed (display.desk_stops). The
      card's words and every line here are the same ink whatever the verdict. #}
-  {% macro eyebrow(name, text) %}<p class="eyebrow"{% if name == "Open" %} id="h-open"{% endif %}><b>{{ "%02d"|format(stops.index(name) + 1) }}</b>{{ text }}</p>{% endmacro %}
+  {# Still open is a heading, so heading navigation reaches it; the stop number is not read, so its region is named "Still open". #}
+  {% macro eyebrow(name, text) %}{% set tag = "h2" if name == "Open" else "p" %}<{{ tag }} class="eyebrow"{% if name == "Open" %} id="h-open"{% endif %}><b aria-hidden="true">{{ "%02d"|format(stops.index(name) + 1) }}</b>{{ text }}</{{ tag }}>{% endmacro %}
   {% macro back() %}<button class="back" type="button" data-go="1">Back to the short answer</button>{% endmacro %}
   <div id="result"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
   <section class="stop" id="s2" data-stop="Answer" aria-labelledby="claim-echo">
@@ -285,7 +286,7 @@
   <section class="stop" id="s3" data-stop="Read" aria-labelledby="h-read">
     <div class="cap right"><div class="inner">
       {{ back() }}
-      {% if result %}{{ eyebrow("Read", "What was read") }}{% else %}<p class="eyebrow"><b>03</b>What was read</p>{% endif %}
+      {% if result %}{{ eyebrow("Read", "What was read") }}{% else %}<p class="eyebrow"><b aria-hidden="true">03</b>What was read</p>{% endif %}
       <h2 class="h2" id="h-read">{% if dl %}{{ dl.read }}{% endif %}</h2>
       <p class="scope" id="scope"><span id="path">{% if dl %}{{ dl.path }}{% endif %}</span></p>
       <p class="legend" id="legend3"{% if not (dl and dl.legend) %} hidden{% endif %}>{% if dl %}{{ dl.legend }}{% endif %}</p>
@@ -386,7 +387,7 @@
   <section class="stop" id="s6" data-stop="Open" aria-labelledby="h-open">
     <div class="cap left"><div class="inner">
       {{ back() }}
-      {% if result %}{{ eyebrow("Open", "Still open") }}{% else %}<p class="eyebrow" id="h-open"><b>06</b>Still open</p>{% endif %}
+      {% if result %}{{ eyebrow("Open", "Still open") }}{% else %}<h2 class="eyebrow" id="h-open"><b aria-hidden="true">06</b>Still open</h2>{% endif %}
       <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
       <details class="said-wrap qwrap" id="qwrap"><summary>Search used</summary>
         <p class="legend query"><span id="query-what"{% if result and not (result.search_query_used or "")|trim %} hidden{% endif %}>Searched PubMed for <code id="query">{% if result %}{{ (result.search_query_used or "")|trim }}{% endif %}</code><span id="broadened">{% if result and result.search_broadened %} (the first search found nothing, so it was widened){% endif %}</span>. </span><a id="more-link" href="{{ (safe_href(result.pubmed_url) or '#') if result else '#' }}" target="_blank" rel="noopener">More on PubMed</a></p>
@@ -420,9 +421,12 @@
         </form>
         <p class="report-done" id="report-done" role="status" hidden></p>
       </div>
+      {# The closing lines after the last stop. The footer sits inside the stop so the desk keeps its look, so its landmark role is written out. #}
+      <footer class="closing" role="contentinfo">
       <p class="legend privacy">Studies from PubMed, U.S. National Library of Medicine. Verdicts written by an AI model that reads the abstracts. {{ privacy_line(provider) }} <a href="/privacy">Privacy details</a></p>
       <p class="nma">Not medical advice. Evident summarizes published research and can be wrong. It does not replace a clinician.</p>
       {{ site_links(True) }}
+      </footer>
     </div></div>
   </section>
   </div>

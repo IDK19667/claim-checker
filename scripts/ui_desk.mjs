@@ -21,6 +21,8 @@
  * 15. On a result the first Tab reaches "Skip to the answer", drawn only then;
  *    Enter takes the reader to the Answer stop with focus on the verdict, in 3D,
  *    in text mode and with scripts off. Every screen has one h1, on both paths.
+ * 16. The strip is the banner, the site links a Site navigation, the last stop's
+ *    closing lines the footer, and Still open a heading and a region of that name.
  */
 import { chromium } from "playwright";
 
@@ -279,6 +281,21 @@ await test("every screen has one h1 on both paths: home, a saved, fresh and no-s
   await page.context().setOffline(false);
   await want("error", "error-title");
 });
+// ---- 16. The landmarks -------------------------------------------------------------------------
+for (const way of ["saved", "fresh"]) {
+  await test(`the landmarks on a ${way} result: one banner with the notice, Site navigation, one footer, Still open as heading and region`, async (page) => {
+    if (way === "saved") { await page.goto(base + "/?q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page); }
+    else { await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await send(page, LIVE);
+      await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(500); }
+    const banner = page.getByRole("banner");
+    const n = { banner: await banner.count(), nav: await page.getByRole("navigation", { name: "Site", exact: true }).count(),
+      foot: await page.getByRole("contentinfo").count(), region: await page.getByRole("region", { name: "Still open", exact: true }).count(),
+      heading: await page.getByRole("heading", { name: "Still open", exact: true }).count() };
+    const notice = n.banner === 1 && /Not medical advice/.test(await banner.innerText());
+    must(notice && n.nav >= 1 && n.foot === 1 && n.region === 1 && n.heading === 1, JSON.stringify({ ...n, notice }));
+  });
+}
+
 await browser.close();
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);
