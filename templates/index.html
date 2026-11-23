@@ -118,6 +118,9 @@
         </form>
       </section>
       <ol class="reading" id="reading" hidden aria-live="polite"></ol>
+      <!-- One Cancel for the whole check, outside the live region, so it keeps
+           focus while lines print and is not read again with each line. -->
+      <p class="cancel-row" id="cancel-row" hidden><button type="button" class="link-btn" id="cancel-live">Cancel</button></p>
       <!-- ===== Error: what went wrong and the way out ===== -->
       <section id="error" hidden>
         <h2 class="error-title" id="error-title" tabindex="-1"></h2>

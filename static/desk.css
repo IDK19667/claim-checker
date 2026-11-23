@@ -484,9 +484,8 @@ html[data-screen="checking"] #ask .wordmark, html[data-screen="checking"] #ask .
 /* the shortest screens: the line the check is on keeps four lines of a long search, so Cancel stays on the screen (the claim itself is in the box above) */
 @media (max-height: 600px) { .reading li.live { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; } }
 .reading li.live::before { width: 7px; height: 7px; top: 10px; border-radius: 50%; background: var(--sage); }
-.reading li.cancel-row { padding-left: 0; }
-.reading li.cancel-row::before { display: none; }
-.reading .link-btn { appearance: none; background: none; border: 0; padding: 0; min-height: 44px; color: var(--on-deep); font: 500 15px/1.3 var(--body); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.cancel-row { margin: 0; padding: 4px 0; }
+.cancel-row .link-btn { appearance: none; background: none; border: 0; padding: 0; min-height: 44px; color: var(--on-deep); font: 500 15px/1.3 var(--body); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
 @keyframes line-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* what went wrong, and the way out */

@@ -10946,6 +10946,16 @@ t("G1: the study sheet's 'used for the verdict' has a class and no inline colour
   '<span class="used">used for the verdict</span>' in _g1_app and "style='color" not in _g1_app and 'style="color' not in _g1_app
   and _g1_rule is not None and "background: var(--deep)" in _g1_css.split("dialog.sheet {")[1].split("}")[0]
   and _g1_ratio(_g1_tok["desk-on"], _g1_tok["desk-deep"]) >= 4.5, round(_g1_ratio(_g1_tok["desk-on"], _g1_tok["desk-deep"]), 2))
+# G2 (A3): one Cancel for the whole check, outside the live region. logLine no longer
+# rebuilds it, so a Cancel that has focus keeps it and is not read again with each line.
+# The browser half is scripts/ui_desk.mjs section 12.
+_g2_tpl = (ROOT / "templates" / "index.html").read_text()
+_g2_app = (ROOT / "static" / "app.js").read_text()
+_g2_log = _g2_app.split("function logLine(text, live) {")[1].split("\n}")[0]
+t("G2: the page has one Cancel for a check, after the live log and outside it, and printing a line never rebuilds it",
+  _g2_tpl.count('id="cancel-live"') == 1 and _g2_tpl.index('<ol class="reading" id="reading" hidden aria-live="polite"></ol>') < _g2_tpl.index('id="cancel-row"')
+  and "cancel" not in _g2_log.replace('$("cancel-row").hidden = false;', "") and "innerHTML" not in _g2_log
+  and _g2_app.count('$("cancel-live").addEventListener("click"') == 1)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

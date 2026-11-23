@@ -653,21 +653,18 @@ function showTyped(typed, reason) {
 
 function logLine(text, live) {
   const log = $("reading");
-  log.querySelector(".cancel-row")?.remove();
   log.querySelectorAll("li.live").forEach((li) => li.classList.remove("live"));
   const li = document.createElement("li");
   li.textContent = text;
   if (live) li.classList.add("live");
   log.appendChild(li);
-  const c = document.createElement("li");
-  c.className = "cancel-row";
-  c.innerHTML = `<button type="button" class="link-btn" id="cancel-live">Cancel</button>`;
-  log.appendChild(c);
-  c.querySelector("button").addEventListener("click", () => { if (controller) controller.abort(); });
+  $("cancel-row").hidden = false;
 }
+$("cancel-live").addEventListener("click", () => { if (controller) controller.abort(); });
 
 function endPending() {
   const log = $("reading"); log.hidden = true; log.innerHTML = "";
+  $("cancel-row").hidden = true;
 }
 
 // What the reader is told while the screen reader's live region says it too.
@@ -774,12 +771,10 @@ function clearSlow() {
 function armWatchdog() {
   clearSlow();
   slowTimer = setTimeout(() => {
-    const log = $("reading");
-    const row = log.querySelector(".cancel-row");
     const li = document.createElement("li");
     li.className = "slow";
     li.textContent = SLOW_TEXT;
-    log.insertBefore(li, row);
+    $("reading").appendChild(li);
     announce(SLOW_TEXT);
   }, SLOW_MS);
   giveUpTimer = setTimeout(() => { gaveUp = true; if (controller) controller.abort(); }, GIVE_UP_MS);

@@ -11,6 +11,8 @@
  * 8. The phone keyboard and the address bar change only the window's height:
  *    the claim box stays on screen, Enter sends, the 3D picture is not
  *    reallocated or reframed, and closing the keyboard returns to the place.
+ * 12. While a check runs there is one Cancel: it keeps focus while lines print,
+ *    sits outside the live log, and pressing it ends the check.
  */
 import { chromium } from "playwright";
 
@@ -18,6 +20,7 @@ const base = process.argv[2]?.startsWith("http") ? process.argv[2] : "http://loc
 const ARGS = ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"];
 const SAVED = ["Creatine improves cognitive performance", "Fish oil lowers blood pressure", "Green tea helps weight loss", "Magnesium improves sleep"];
 const LIVE = "Vitamin D supplements prevent colds";
+const SLOW = "Slow claim for cancel test"; // the fixture server holds this check open until it is cancelled
 const browser = await chromium.launch({ args: ARGS });
 const results = [];
 const must = (c, m) => { if (!c) throw new Error(m); };
@@ -130,6 +133,27 @@ await test("the address bar sliding reallocates nothing and uncovers nothing; a 
     await page.setViewportSize({ width: 844, height: 390 }); await page.waitForTimeout(800);
     const t = await kb(page); must(t.allocs > z.allocs && t.buf !== z.buf, `a turn kept the buffer at ${t.buf}`);
   });
+});
+
+// ---- 12. One Cancel that stays ---------------------------------------------------------------
+await test("while a check prints its lines, the focused Cancel stays the same node with focus, outside the live log, and ends the check", async (page) => {
+  await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
+  await send(page, LIVE);
+  await page.waitForFunction(() => !document.getElementById("cancel-row").hidden, null, { timeout: 15000 });
+  await page.evaluate(() => { window.__cancel = document.getElementById("cancel-live"); window.__cancel.focus(); window.__lines0 = document.querySelectorAll("#reading li").length; });
+  await page.waitForFunction(() => document.querySelectorAll("#reading li").length > window.__lines0 || document.documentElement.classList.contains("checked"), null, { timeout: 15000 });
+  const s = await page.evaluate(() => ({ same: document.getElementById("cancel-live") === window.__cancel, focused: document.activeElement === window.__cancel || document.documentElement.classList.contains("checked"),
+    inLog: !!document.querySelector("#reading #cancel-live"), lines: document.querySelectorAll("#reading li").length, l0: window.__lines0 }));
+  must(s.same && s.focused && !s.inLog, `same node ${s.same}, focus kept ${s.focused}, inside the live log ${s.inLog} (lines ${s.l0} to ${s.lines})`);
+});
+await test("Cancel ends a running check and is put away", async (page) => {
+  await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
+  await send(page, SLOW);
+  await page.waitForFunction(() => !document.getElementById("cancel-row").hidden, null, { timeout: 15000 });
+  await page.click("#cancel-live");
+  await page.waitForFunction(() => !document.getElementById("submit-btn").disabled, null, { timeout: 10000 });
+  const hid = await page.evaluate(() => document.getElementById("cancel-row").hidden);
+  must(hid, "the Cancel row stayed up after the check ended");
 });
 
 await browser.close();
