@@ -920,10 +920,15 @@ def denies_absolute(text: str, claim: str) -> bool:
 
 
 # A sentence that tells people to keep a treatment going: "should keep taking",
-# "continue", "stay on", "need insulin", "must not stop", "cannot replace it".
+# "continue", "stay on", "need insulin", "must not stop", "cannot replace it",
+# or not to stop it on their own: "talk to your doctor before stopping".
 # Its words overlap a claim to stop or replace that treatment, but it answers
 # that claim with a no. "safe to stop" and "no need to" are not in it.
 _KEEPS_TREATMENT = re.compile(
+    r"\b(?:talk|speak|check|consult|ask)\w*\s+(?:\w+\s+){0,4}?(?:doctors?|midwi(?:fe|ves)|"
+    r"pharmacists?|GPs?|nurses?|prescribers?|(?:healthcare|health\s+care)\s+(?:providers?|"
+    r"professionals?|teams?))\s+before\s+(?:stopping|quitting|skipping|coming\s+off|going\s+off|"
+    r"giving\s+up|changing)\b|"
     r"\b(?:keep(?:\s+on)?\s+(?:taking|using|up|it|them)|continu\w*|stay(?:ing)?\s+on|"
     r"remain(?:ing)?\s+on|should\s+(?:take|use))\b|"
     r"(?<!not )(?<!n't )(?<!no )(?<!longer )\bneeds?\b|"

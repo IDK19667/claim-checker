@@ -11545,6 +11545,17 @@ t("F1: the evidence line does not quote the rating of a review that rates anothe
   and "ery low" in evidence.evidence_line("true", [_F1_OFFQ], ["f1a"], "Babies should sleep on their backs",
                                           outcome="(oxygen saturation)", subject=_F1_BACK))
 
+# Fix 2: guidance not to stop a medicine without a doctor is a no to a claim to stop it.
+_F2_CLAIM = "You should stop your prescribed medicines as soon as you find out you're pregnant"
+_F2_LINE = ("Major health guidelines say: you must talk to your doctor before stopping any "
+            "prescribed medicines during pregnancy.")
+t("F2: 'talk to your doctor before stopping' answers a claim to stop a medicine with a no",
+  breakdown.stance(_F2_LINE, _F2_CLAIM) == "no"
+  and breakdown.stamp_conflict("false", _F2_LINE, "", _F2_CLAIM) is None)
+t("F2: guidance that says stopping is fine still argues with a false, and the doctor line means nothing for other claims",
+  breakdown.stance("Major health guidelines say: it is safe to stop most medicines in pregnancy.", _F2_CLAIM) == "yes"
+  and breakdown.stance("Talk to your doctor before stopping statins.", "Garlic lowers blood pressure") != "no")
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

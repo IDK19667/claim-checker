@@ -4354,3 +4354,7 @@ What was deliberately rejected:
   evidence line) only when it rates the claim's question
   (`evidence.rates_question`): not when it rates only other outcomes, each
   with its interval, and not when it compares two forms of the same thing.
+- Forgo-treatment guidance: "talk to your doctor before stopping" is guidance
+  to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
+  stop one with a no and the existing forgo rule can stamp it false. It had
+  been read as a yes and thrown away as arguing with itself.
