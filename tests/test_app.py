@@ -6416,10 +6416,10 @@ for _name, _gv in (("mixed", lambda claim: None),
                    ("supports", lambda claim: {"verdict": "true", "says": "this is advised.", "bodies": ["CDC"]})):
     verdict.guideline_view = _gv
     _o = verdict.follow_guidelines(dict(_fg_insuff), [], "People can safely stop taking statins")
-    t(f"  control: a {_name} view changes nothing for a statins claim"
+    t(f"  control: a {_name} view changes nothing for a statins claim but the doctor line (round 4)"
       if _name == "mixed" else "  control: a supports view leaves an insufficient forgo claim alone",
       _o["verdict"] == "insufficient" and _o["tldr"].startswith(_fg_insuff["tldr"])
-      and (_name == "supports" or _o["tldr"] == _fg_insuff["tldr"]), _o)
+      and (_name == "supports" or _o["tldr"] == _fg_insuff["tldr"] + " " + verdict.FORGO_DOCTOR), _o)
 t("  the predicate catches the plain wordings and not unrelated claims",
   all(verdict.forgoes_treatment(x) for x in ("You can skip chemotherapy", "Use honey instead of antibiotics",
                                              "Asthma patients don't need their inhaler", "Quit taking metformin"))
@@ -10561,7 +10561,7 @@ t("  and the same takeaway where the stamp is Not enough evidence",
   all(_s["tldr"] == _f["tldr"] for _s, _f in list(_g2.values())[1:]),
   {k: (v[0]["tldr"], v[1]["tldr"]) for k, v in _g2.items()})
 t("  and one rule says when guidance alone may rate, for both paths",
-  "guidance_may_rate" in _inspect.getsource(verdict.follow_guidelines)
+  "guidance_may_rate" in _inspect.getsource(verdict._follow_guidelines)
   and "guidance_may_rate" in _inspect.getsource(appmod._nothing_relied)
   and "_nothing_relied" in _inspect.getsource(appmod._check_response))
 # G2b: every list shows the stamp the page shows, by the same decision
@@ -11875,6 +11875,693 @@ fg.models.script = []
 t("speed: a model call that cannot connect is tried three times and ends in the busy answer (502)",
   _sp_evs7 and _sp_evs7[-1] == {"stage": "error", "status": 502, "error": "The AI service is having trouble."},
   _sp_evs7[-1:])
+
+# ---- Q10 F1: the stamp says what the studies it read support ------------------
+# Fix 1 (a review rating another question passed over) was withdrawn on review: every
+# relied-on review counts toward the certainty limit, as on main. Its tests, at the end of
+# this block, now hold that the limit holds.
+
+# Fix 2: guidance not to stop a medicine without a doctor is a no to a claim to stop it.
+_F2_CLAIM = "You should stop your prescribed medicines as soon as you find out you're pregnant"
+_F2_LINE = ("Major health guidelines say: you must talk to your doctor before stopping any "
+            "prescribed medicines during pregnancy.")
+t("F2: 'talk to your doctor before stopping' answers a claim to stop a medicine with a no",
+  breakdown.stance(_F2_LINE, _F2_CLAIM) == "no"
+  and breakdown.stamp_conflict("false", _F2_LINE, "", _F2_CLAIM) is None)
+t("F2: guidance that says stopping is fine still argues with a false, and the doctor line means nothing for other claims",
+  breakdown.stance("Major health guidelines say: it is safe to stop most medicines in pregnancy.", _F2_CLAIM) == "yes"
+  and breakdown.stance("Talk to your doctor before stopping statins.", "Garlic lowers blood pressure") != "no")
+
+# Fix 2, review: advice to ask a doctor before stopping is a no only when the sentence says nothing else
+# about stopping. Round 4 (the orchestrator's rule): beside guidance that says in words to stop, it is mixed.
+_F2R_L = verdict.GUIDELINE_LEAD
+for _claim, _says in [
+    ("You should stop taking aspirin before an operation",
+     "aspirin often needs to be stopped before an operation; check with your surgeon or doctor before stopping it."),
+    ("Pregnant women should stop taking ibuprofen after twenty weeks",
+     "ibuprofen should be avoided after twenty weeks of pregnancy; talk to your midwife before stopping any prescribed medicine."),
+    ("You should stop taking statins if you get muscle pain",
+     "muscle pain on statins should be reported, and some people stop or switch; talk to your doctor before stopping."),
+]:
+    t(f"F2 review, round 4: guidance that says to stop beside 'ask before stopping' is mixed, never a no: {_claim}",
+      breakdown.stance(_F2R_L + _says, _claim) == "mixed")
+t("F2 review, round 4: 'fine' that is not said of stopping, then 'ask before stopping', is a caution: a no",
+  breakdown.stance(_F2R_L + "shorter courses are fine for some infections, so talk to your doctor before stopping "
+                   "antibiotics early.", "You can stop taking antibiotics once you feel better") == "no")
+t("F2 review: 'before changing' is not advice to keep a medicine",
+  breakdown.stance("Major health guidelines say: talk to your doctor before changing your medicines.",
+                   "You should stop your medicines when you feel better") != "no")
+
+# Fix 3: a "complicated" on evidence too thin to say what it depends on is "Not enough evidence".
+_F3_NO = {"pmid": "f3a", "title": "Garlic for the common cold", "publication_types": ["Systematic Review"],
+          "abstract": ("OBJECTIVES: To assess garlic for colds. MAIN RESULTS: One trial of 146 people. "
+                       "CONCLUSIONS: There is insufficient clinical trial evidence regarding the effects of "
+                       "garlic in preventing the common cold.")}
+_F3_YES = {"pmid": "f3b", "title": "Echinacea for colds", "publication_types": ["Meta-Analysis"],
+           "abstract": ("OBJECTIVES: To pool trials. RESULTS: Colds were shorter (WMD -1.4 days). "
+                        "CONCLUSIONS: Published evidence supports echinacea's benefit in decreasing the "
+                        "duration of the common cold.")}
+_F3_TRIAL = {"pmid": "f3c", "publication_types": ["Randomized Controlled Trial"], "title": "Gel for teething",
+             "abstract": "A pilot open-label trial in 27 infants. CONCLUSIONS: The gel eased symptoms."}
+_F3_LABELLED = lambda n: {"pmid": f"f3t{n}", "publication_types": ["Randomized Controlled Trial"],
+                          "title": "Standing desks", "abstract": f"A trial of {20 + n} office workers."}
+_F3_RES = lambda cited: {"verdict": "complicated", "tldr": "Garlic may help, but the evidence is very limited.",
+                         "explanation": "One trial found fewer colds.", "cited_studies": cited}
+_f3_moved = verdict._too_thin(_F3_RES(["f3a"]), [_F3_NO], "Eating garlic every day prevents colds")
+t("F3: a complicated whose reviews all conclude their evidence is not enough becomes Not enough evidence",
+  evidence.says_not_enough(_F3_NO) and _f3_moved["verdict"] == "insufficient"
+  and "too thin to rate" in _f3_moved["explanation"] and _f3_moved["tldr"] == _F3_RES([])["tldr"])
+t("F3: a single small or pilot trial with no review becomes Not enough evidence",
+  verdict._too_thin(_F3_RES(["f3c"]), [_F3_TRIAL], "Teething gels ease a baby's teething pain")["verdict"]
+  == "insufficient")
+t("F3: the rule does not fire on a review that leans yes beside one that says not enough, on several small trials, or on a true",
+  verdict._too_thin(_F3_RES(["f3a", "f3b"]), [_F3_NO, _F3_YES], "Echinacea shortens colds")["verdict"] == "complicated"
+  and verdict._too_thin(_F3_RES(["f3t1", "f3t2", "f3t3"]), [_F3_LABELLED(1), _F3_LABELLED(2), _F3_LABELLED(3)],
+                        "Standing desks reduce back pain")["verdict"] == "complicated"
+  and verdict._too_thin(dict(_F3_RES(["f3a"]), verdict="true"), [_F3_NO], "Garlic prevents colds")["verdict"] == "true")
+
+t("F3: the reason agrees with the count: one review says, two reviews say",
+  "the review behind it says its own" in _f3_moved["explanation"]
+  and "the reviews behind them" not in _f3_moved["explanation"]
+  and "the reviews behind it say their own" in verdict._too_thin(
+      _F3_RES(["f3a", "f3n"]), [_F3_NO, dict(_F3_NO, pmid="f3n")], "Garlic prevents colds")["explanation"])
+
+# Fix 3, review: an answer that depends on group, dose, duration or side outcome stays "It's complicated",
+# and so does one with a trial that is neither small, a pilot nor uncontrolled beside the review.
+def _f3r(pmid, concl, res="Twelve trials with 4,210 participants were included. Results varied.", year=None):
+    return {"pmid": pmid, "title": "A review", "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "year": year, "abstract": f"Objectives: To assess the intervention. Results: {res} Conclusions: {concl}"}
+
+
+def _f3rct(pmid, n, year=None):
+    return {"pmid": pmid, "title": "A trial", "publication_types": ["Randomized Controlled Trial"], "year": year,
+            "abstract": f"Methods: We randomised {n} adults to the intervention or placebo. Results: The primary "
+                        "outcome improved. Conclusions: It helped."}
+
+
+for _lab, _st in [
+    ("benefit in children, insufficient evidence in adults",
+     [_f3r("d1", "Probiotics reduce antibiotic-associated diarrhoea in children. There is insufficient evidence in adults.")]),
+    ("higher doses work, lower doses not established",
+     [_f3r("d2", "Higher doses of vitamin D reduced falls, but a benefit of lower doses has not been established.")]),
+    ("pain reduced, function not shown",
+     [_f3r("d3", "Exercise reduced pain in knee osteoarthritis; an effect on function has not been shown.")]),
+    ("short-term clear, long-term inconclusive",
+     [_f3r("d4", "Short-term benefit was clear, but evidence for long-term outcomes is inconclusive.")]),
+    ("benefit in younger adults, no firm conclusions for older",
+     [_f3r("d5", "Moderate-certainty evidence shows benefit in younger adults; no firm conclusions can be drawn for older adults.")]),
+    ("benefit in severe cases, insufficient for routine use in mild",
+     [_f3r("d6", "Benefit was seen in severe cases, but there is insufficient evidence to recommend routine use in mild cases.")]),
+    ("a review that says not enough beside three trials of 900 to 2400 people",
+     [_f3r("d7", "There is insufficient evidence to tell."), _f3rct("d8", 1200), _f3rct("d9", 900), _f3rct("d10", 2400)]),
+    ("symptoms improved, insufficient evidence on rare harms",
+     [_f3r("d11", "Treatment improved symptoms. There was insufficient evidence on rare harms.")]),
+]:
+    t(f"F3 review: it depends, so it stays It's complicated: {_lab}",
+      not evidence.too_thin(_st, [s["pmid"] for s in _st])
+      and verdict._too_thin(_F3_RES([s["pmid"] for s in _st]), _st, "It works")["verdict"] == "complicated")
+t("F3 review: a trial neither small, a pilot nor uncontrolled beside the review keeps it complicated, older or newer",
+  not evidence.too_thin([_f3r("d12", "There is insufficient evidence to tell.", year=2014), _f3rct("d13", 146, year=2001)],
+                        ["d12", "d13"])
+  and not evidence.too_thin([_f3r("d12", "There is insufficient evidence to tell.", year=2014),
+                             _f3rct("d14", 146, year=2020)], ["d12", "d14"]))
+_f3_thin_one = {"pmid": "d15", "title": "Cold water and immunity", "publication_types": ["Meta-Analysis"],
+                "abstract": ("Objectives: To pool trials. Results: Few trials. Conclusions: The evidence is limited by "
+                             "the small number of studies and small sample sizes.")}
+t("F3 review: each reason says what is true of its check: one review, two reviews, few or small studies, one study",
+  evidence.too_thin([_F3_NO], ["f3a"]) == "the review behind it says its own evidence is not enough to tell"
+  and evidence.too_thin([_F3_NO, dict(_F3_NO, pmid="f3n")], ["f3a", "f3n"])
+  == "the reviews behind it say their own evidence is not enough to tell"
+  and evidence.too_thin([_f3_thin_one], ["d15"]) == "the review behind it says its evidence comes from few or small studies"
+  and evidence.too_thin([_F3_TRIAL], ["f3c"])
+  == "the only study behind it that reports its size or design is small, a pilot or uncontrolled",
+  (evidence.says_thin(_f3_thin_one), evidence.too_thin([_f3_thin_one], ["d15"])))
+t("F3 review: Not enough evidence over studies it relied on has its own line, not the designs' strength",
+  evidence.evidence_line("insufficient", [_F3_NO], ["f3a"], "Garlic prevents colds") == evidence.INSUFFICIENT_LINE
+  and evidence.evidence_line("insufficient", [_F3_NO], [], "Garlic prevents colds") == ""
+  and "Strong" not in _display.confidence_line({"studies": [dict(_F3_NO, cited_in_verdict=True, tier="strong")],
+                                              "evidence_line": evidence.INSUFFICIENT_LINE}))
+_f3_bd = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown={
+    "unknowns": "The verdict is complicated because one trial found fewer colds (Study 1). The review asks for more trials (Study 1).",
+    "evidence": ["One trial found fewer colds (Study 1)."], "says": []}), [_F3_NO], "Garlic prevents colds")
+t("F3 review: a breakdown sentence that names the old stamp goes when the answer becomes Not enough evidence",
+  "complicated" not in _f3_bd["breakdown"]["unknowns"] and "more trials" in _f3_bd["breakdown"]["unknowns"],
+  _f3_bd["breakdown"])
+
+# The separate reviewer's second round on thin evidence: True means the rule fires.
+
+def _f3b_rv(pmid, concl, year=2020, title="A review"):
+    return {"pmid": pmid, "title": title, "year": str(year), "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "abstract": f"Objectives: To assess the intervention. Results: Twelve trials with 4,210 participants were included. Conclusions: {concl}"}
+def _f3b_rct(pmid, n, year=2015, title="A trial", extra=""):
+    d = {"pmid": pmid, "title": title, "publication_types": ["Randomized Controlled Trial"],
+         "abstract": f"Methods: We randomised {n} adults to the intervention or placebo. {extra}Results: The primary outcome improved. Conclusions: It helped."}
+    if year is not None:
+        d["year"] = str(year)
+    return d
+
+# want: True = should fire (thin), False = must stay complicated
+_F3B_CASES = [
+ ("dose: 10 mg reduced, 5 mg insufficient", [_f3b_rv("1", "The 10 mg dose reduced pain; evidence for the 5 mg dose is insufficient.")], False),
+ ("hedged result in one group", [_f3b_rv("2", "Zinc may shorten colds in adults, but evidence in children is insufficient.")], False),
+ ("result word outside the list: superior", [_f3b_rv("3", "Acupuncture was superior to sham for migraine, but evidence for tension headache is insufficient.")], False),
+ ("null in one group, unknown in other", [_f3b_rv("4", "Vitamin D had no effect in adults with normal levels; evidence in deficient adults is insufficient.")], False),
+ ("result word outside list: lowered odds -> 'fewer'", [_f3b_rv("5", "Fewer infections occurred in preterm infants, though evidence for term infants is inconclusive.")], False),
+ ("bare not-enough review alone", [_f3b_rv("6", "There is insufficient evidence to tell whether it works.")], True),
+ ("not enough + possible benefit hedged", [_f3b_rv("7", "Evidence is insufficient; results suggest a possible benefit.")], True),
+ ("weighed_by: large trial older than a review of a different question", [_f3b_rv("8", "There is insufficient evidence for children.", 2021, "Probiotics for children"), _f3b_rct("9", 2400, 2012, "Probiotics in adults")], False),
+ ("trial and review same year", [_f3b_rv("10", "There is insufficient evidence to tell.", 2019), _f3b_rct("11", 1800, 2019)], False),
+ ("trial with no year", [_f3b_rv("12", "There is insufficient evidence to tell.", 2019), _f3b_rct("13", 1800, None)], False),
+ ("large maker-funded trial beside not-enough review (newer)", [_f3b_rv("14", "There is insufficient evidence to tell.", 2015), _f3b_rct("15", 1500, 2022, extra="Funded by the manufacturer. ")], False),
+ ("no review, one small pilot trial", [_f3b_rct("16", 24, 2020, extra="This pilot study ")], True),
+]
+for _lab, _st, _want in _F3B_CASES:
+    t(f"F3 review (reviewer, round 2): {'fires' if _want else 'stays complicated'}: {_lab}",
+      bool(evidence.too_thin(_st, [x["pmid"] for x in _st])) == _want)
+
+_f3_kept = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown={
+    "strength": "The answer is complicated because one trial was small (Study 1).",
+    "applies_to": "Adults with colds (Study 1).",
+    "not_applies_to": "It was not tested in women with a complicated pregnancy (Study 1).",
+    "unknowns": "Colds complicated by asthma were left out (Study 1). It's complicated, as one trial is not enough.",
+    "evidence": ["One trial found fewer colds (Study 1)."], "says": []}), [_F3_NO], "Garlic prevents colds")["breakdown"]
+t("F3 review: only a sentence naming the stamp goes; a complicated pregnancy and colds complicated by asthma stay",
+  _f3_kept["strength"] == "" and "complicated pregnancy" in _f3_kept["not_applies_to"]
+  and "complicated by asthma" in _f3_kept["unknowns"] and "It's complicated" not in _f3_kept["unknowns"], _f3_kept)
+
+# Fix 4: the line's strength word is no surer than what a relied-on review concluded.
+t("F4: a review that concludes its evidence is not enough makes the line say low certainty, not strong",
+  evidence.evidence_line("complicated", [_F3_NO, _F3_YES], ["f3a", "f3b"], "Echinacea shortens colds")
+  .startswith("Low certainty")
+  and evidence.evidence_line("complicated", [_F3_YES], ["f3b"], "Echinacea shortens colds").startswith("Strong"))
+
+# Fix 1, withdrawn: a second review never lifts the limit. Each case below is a low rating that must keep
+# a "true" from standing, alone and beside a review that names the claim's outcome.
+_F1_ORS = "(oral rehydration solution OR ORS)"
+def _f1r(pmid, title, objectives, results, conclusions="The evidence is uncertain."):
+    return {"pmid": pmid, "title": title, "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "abstract": (f"BACKGROUND: Many people ask about this. OBJECTIVES: {objectives} SEARCH METHODS: "
+                         f"We searched CENTRAL, MEDLINE and Embase. MAIN RESULTS: {results} "
+                         f"AUTHORS' CONCLUSIONS: {conclusions}")}
+
+
+def _f1_keeps(s, outcome, subject="", others=(), comparative=False):
+    """True when the low rating of review `s` caps a true and sets the line's floor, beside `others`."""
+    used = [s, *others]
+    pmids = [x["pmid"] for x in used]
+    return (bool(evidence.certainty_cap(used, pmids, comparative, outcome))
+            and evidence.lowest_review_certainty(used, pmids, outcome) in ("low", "very low"))
+
+def _f1_excuser(outcome):
+    term = outcome.strip("()").split(" OR ")[0].strip('"').rstrip("*")
+    return {"pmid": "vx", "title": f"{term} and its causes: a systematic review",
+            "publication_types": ["Systematic Review"],
+            "abstract": f"OBJECTIVES: To review {term}. AUTHORS' CONCLUSIONS: The {term} findings were mixed."}
+
+
+_F1R_BACK = "(low back pain OR back pain OR chronic pain)"
+_F1R_CASES = [
+    ("acupuncture against sham or no treatment",
+     _f1r("r1", "Acupuncture for chronic nonspecific low back pain",
+          "To compare acupuncture with sham acupuncture or no treatment for chronic nonspecific low back pain.",
+          "Acupuncture reduced pain (MD -9.2, 95% CI -13.0 to -5.4; low-certainty evidence)."),
+     _F1R_BACK, "(acupuncture OR acupuncture therapy)"),
+    ("exercise against no exercise",
+     _f1r("r2", "Exercise for depression",
+          "To compare exercise with no exercise for treating depression in adults.",
+          "Exercise reduced symptoms (SMD -0.62, 95% CI -0.81 to -0.42; low-certainty evidence)."),
+     "(depression OR depressive symptoms)", "(exercise OR physical activity)"),
+    ("probiotics against placebo or none",
+     _f1r("r3", "Probiotics for the prevention of antibiotic-associated diarrhoea",
+          "To compare probiotics with placebo or no probiotics for preventing antibiotic-associated diarrhea.",
+          "Probiotics lowered diarrhoea (RR 0.49, 95% CI 0.39 to 0.61; low-certainty evidence)."),
+     "(diarrhea OR diarrhoea OR antibiotic-associated diarrhea)", "(probiotics OR probiotic)"),
+    ("statins against placebo",
+     _f1r("r4", "Statins for the primary prevention of cardiovascular disease",
+          "To compare statins with placebo or usual care for preventing cardiovascular events.",
+          "Statins lowered events (RR 0.75, 95% CI 0.70 to 0.81; low-certainty evidence)."),
+     "(cardiovascular events OR heart attack OR stroke)", "(statins OR statin)"),
+]
+for _lab, _s, _o, _subj in _F1R_CASES:
+    t(f"F1 review: a review of {_lab} rates the claim's own question and its low rating limits the answer",
+      _f1_keeps(_s, _o, _subj) and _f1_keeps(_s, _o, _subj, [_f1_excuser(_o)]))
+_F1R_VITD = {"pmid": "r5", "title": "Vitamin D supplementation for prevention of mortality in adults",
+             "publication_types": ["Systematic Review", "Meta-Analysis"],
+             "abstract": ("OBJECTIVES: To assess vitamin D for preventing mortality in adults. MAIN RESULTS: "
+                          "Vitamin D decreased all-cause mortality (RR 0.94, 95% CI 0.91 to 0.98; low-certainty "
+                          "evidence). Vitamin D increased kidney stones (RR 1.17, 95% CI 1.02 to 1.34; "
+                          "low-certainty evidence). AUTHORS' CONCLUSIONS: Vitamin D may lower mortality.")}
+_F1R_VD = "(vitamin D OR cholecalciferol)"
+t("F1 review: a review rating mortality, read for a claim about death, keeps the limit when it is the only review",
+  _f1_keeps(_F1R_VITD, "(death OR deaths)", _F1R_VD))
+_F1R_FALLS = _f1r("r6", "Vitamin D for falls in older people", "To assess vitamin D for falls.",
+                  "Vitamin D did not reduce falls.", "Vitamin D does not prevent falls.")
+t("F1 review: beside a review that names neither word, the mortality review still limits the answer",
+  _f1_keeps(_F1R_VITD, "(death OR deaths)", _F1R_VD, [_F1R_FALLS]))
+_F1R_SIDS = {"pmid": "r7", "title": "Sleep position and sudden infant death syndrome",
+             "publication_types": ["Systematic Review", "Meta-Analysis"],
+             "abstract": ("OBJECTIVES: To assess sleep position. MAIN RESULTS: Supine sleep lowered sudden infant "
+                          "death (OR 0.48, 95% CI 0.3 to 0.7; low certainty evidence); prone sleep raised it "
+                          "(OR 2.3, 95% CI 1.7 to 3.1; low certainty evidence).")}
+t("F1 review: a review rating sudden infant death, read for a claim about cot death, keeps the limit beside a review on swaddling",
+  _f1_keeps(_F1R_SIDS, "(cot death OR crib death)", "(supine position OR back sleeping)",
+            [_f1r("r8", "Swaddling: a systematic review", "To assess swaddling.", "No pooled result.")]))
+_F1R_BP = _f1r("r9", "Salt reduction for cardiovascular health",
+               "To assess lower salt intake in adults.",
+               "Salt reduction lowered systolic hypertension (MD -4.2, 95% CI -5.2 to -3.2; low certainty "
+               "evidence) and stroke (RR 0.8, 95% CI 0.6 to 1.0; low certainty evidence).")
+t("F1 review: a review rating hypertension, read for a claim about high blood pressure, keeps the limit on its own",
+  _f1_keeps(_F1R_BP, "(high blood pressure OR raised blood pressure)", "(salt OR sodium)"))
+_F1R_DOSE = _f1r("r10", "High dose vitamin D for fractures",
+                 "To compare high-dose vitamin D with low-dose vitamin D for preventing fractures.",
+                 "High-dose lowered fractures (RR 0.9, 95% CI 0.8 to 1.0; low certainty evidence).")
+t("F1 review: a dose comparison that is the only relied-on review keeps the limit",
+  _f1_keeps(_F1R_DOSE, "(fractures OR fracture)", _F1R_VD))
+_F1R_DOSE_PL = dict(_F1R_DOSE, pmid="r11", abstract=_F1R_DOSE["abstract"].replace(
+    "low-dose vitamin D for", "low-dose vitamin D or placebo for"))
+t("F1 review: a dose comparison that also has a placebo arm tests the thing, beside an on-outcome review too",
+  _f1_keeps(_F1R_DOSE_PL, "(fractures OR fracture)", _F1R_VD,
+            [_f1r("r12", "Vitamin D and fractures", "To assess vitamin D.", "Mixed results.",
+                  "Vitamin D alone does not prevent fractures.")]))
+t("F1 review: for a claim that is itself a comparison, a review comparing the two forms is its question",
+  _f1_keeps(_F1R_DOSE, "(fractures OR fracture)", _F1R_VD,
+            [_f1r("r13", "Vitamin D and fractures", "To assess vitamin D.", "Mixed results.",
+                  "Vitamin D alone does not prevent fractures.")], comparative=True))
+_F1R_ONE = _f1r("r14", "Garlic for blood lipids", "To assess garlic.",
+                "Garlic lowered total cholesterol (MD -0.4, 95% CI -0.6 to -0.2). The certainty of the evidence "
+                "was low.")
+t("F1 review: a review with one overall rating keeps the limit beside an on-outcome review",
+  _f1_keeps(_F1R_ONE, "(heart disease OR heart attack)", "(garlic)",
+            [_f1r("r15", "Garlic and heart disease", "To assess garlic.", "Few trials.", "Garlic and heart disease are unclear.")]))
+_F1R_FORMS_A = _f1r("r16", "Polymer-based oral rehydration solution",
+                    "To compare polymer-based oral rehydration solution with glucose-based oral rehydration solution for diarrhoea.",
+                    "Fewer stools (MD -8, 95% CI -13 to -3; low certainty evidence).",
+                    "Polymer ORS may help in diarrhoea.")
+_F1R_FORMS_B = _f1r("r17", "Reduced osmolarity oral rehydration solution for diarrhoea",
+                    "To compare reduced osmolarity oral rehydration solution with standard osmolarity oral rehydration solution for diarrhoea.",
+                    "Fewer infusions (RR 0.6, 95% CI 0.5 to 0.8; low certainty evidence).",
+                    "Reduced osmolarity ORS lowers infusions in diarrhoea.")
+t("F1 review: two reviews that both compare forms of the thing never excuse each other",
+  _f1_keeps(_F1R_FORMS_A, "(diarrhoea OR dehydration)", _F1_ORS, [_F1R_FORMS_B])
+  and _f1_keeps(_F1R_FORMS_B, "(diarrhoea OR dehydration)", _F1_ORS, [_F1R_FORMS_A]))
+t("F1 review: a comparison of the thing against usual care, or a waiting list, is a test of the thing",
+  _f1_keeps(dict(_F1R_FORMS_A, pmid="r18", abstract=_F1R_FORMS_A["abstract"].replace(
+      "with glucose-based oral rehydration solution", "with usual care")), "(diarrhoea OR dehydration)", _F1_ORS,
+      [_F1R_FORMS_B])
+  and _f1_keeps(dict(_F1R_FORMS_A, pmid="r19", abstract=_F1R_FORMS_A["abstract"].replace(
+      "with glucose-based oral rehydration solution", "with a waiting list")), "(diarrhoea OR dehydration)", _F1_ORS,
+      [_F1R_FORMS_B]))
+_F1R_REAL = json.loads((ROOT / "tests" / "certainty_limit_real.json").read_text())["checks"]
+
+
+def _f1_real(claim_start):
+    c = next(c for c in _F1R_REAL if c["claim"].startswith(claim_start))
+    out = c["search_query"].split(" AND ")[1]
+    pmids = [s["pmid"] for s in c["studies"]]
+    return (evidence.certainty_cap(c["studies"], pmids, False, out),
+            evidence.lowest_review_certainty(c["studies"], pmids, out))
+
+
+t("F1 review: on the real back sleeping check the review of positions for breathing trouble still limits a true",
+  bool(_f1_real("Babies should be put")[0]) and _f1_real("Babies should be put")[1] == "very low")
+t("F1 review: on the real ORS check the review of polymer against glucose solution still limits a true",
+  bool(_f1_real("Oral rehydration solution")[0]) and _f1_real("Oral rehydration solution")[1] == "very low")
+t("F1 review: on the real diabetes remission check the umbrella review of diets still sets the floor at very low",
+  _f1_real("Type 2 diabetes")[1] == "very low")
+_F1R_RV = lambda pmid, title, abstract: {"pmid": pmid, "title": title, "abstract": abstract,
+                                         "publication_types": ["Systematic Review", "Meta-Analysis"]}
+# The separate reviewer's cases: (label, comparative, subject, outcome, review). Each is read alone and
+# beside a review whose title names the claim's outcome; every one keeps the limit both ways.
+_F1R_REV = [
+    ("hypertension read as blood pressure", False, "(salt OR sodium)", "(hypertension)",
+     _F1R_RV("v1", "Reduced sodium intake for adults",
+             "Objectives: To assess the effect of reduced sodium intake. Results: Reduced sodium lowered systolic "
+             "blood pressure (MD -3.4 mmHg, 95% CI -4.2 to -2.6; low-certainty evidence) and diastolic blood "
+             "pressure (MD -1.5, 95% CI -2.0 to -1.0; low-certainty evidence). Conclusions: Reducing salt lowers "
+             "blood pressure.")),
+    ("SIDS read as cot death", False, "(supine OR back sleeping)", '("sudden infant death" OR SIDS)',
+     _F1R_RV("v2", "Infant sleeping position and cot death",
+             "Objectives: To assess sleeping position. Results: Supine sleeping reduced cot death (OR 0.48, 95% CI "
+             "0.35 to 0.66; low-certainty evidence) and infant death overall (OR 0.7, 95% CI 0.5 to 0.9; very "
+             "low-certainty evidence). Conclusions: Back sleeping reduces cot death.")),
+    ("mortality read as death", False, "(statin*)", "(mortality)",
+     _F1R_RV("v3", "Statins for primary prevention",
+             "Objectives: To assess statins. Results: Statins reduced all-cause death (RR 0.86, 95% CI 0.79 to "
+             "0.94; low-certainty evidence) and stroke (RR 0.78, 95% CI 0.68 to 0.89; low-certainty evidence). "
+             "Conclusions: Statins reduce death.")),
+    ("exercise against no exercise", False, "(exercise)", "(depression)",
+     _F1R_RV("v5", "Exercise for depression",
+             "Objectives: To compare exercise with no exercise for adults with depression. Results: Exercise reduced "
+             "depressive symptoms (SMD -0.6, 95% CI -0.9 to -0.3; low-certainty evidence). Conclusions: Exercise "
+             "may reduce depression.")),
+    ("aspirin versus no aspirin", False, "(aspirin)", "(stroke)",
+     _F1R_RV("v6", "Aspirin and stroke",
+             "Objective: To compare aspirin versus no aspirin in adults. Results: Aspirin reduced stroke (RR 0.9, "
+             "95% CI 0.8 to 1.0; very low-certainty evidence). Conclusions: Uncertain.")),
+    ("smokers with non-smokers", False, "(smoking OR smokers)", '("lung cancer")',
+     _F1R_RV("v7", "Smoking and lung cancer",
+             "Objectives: To compare smokers with non-smokers in the risk of lung cancer. Results: Smoking raised "
+             "lung cancer risk (RR 9, 95% CI 7 to 12; low-certainty evidence). Conclusions: Smoking raises risk.")),
+    ("vaccine with placebo", False, "(vaccin*)", "(influenza)",
+     _F1R_RV("v8", "Influenza vaccines for adults",
+             "Objectives: To compare vaccine with placebo for influenza. Results: Vaccine reduced influenza (RR 0.4, "
+             "95% CI 0.3 to 0.5; low-certainty evidence).")),
+    ("vitamin D alone, with calcium, and either with placebo", False, '("vitamin D")', "(fracture*)",
+     _F1R_RV("v9", "Vitamin D for fractures",
+             "Objectives: To compare vitamin D alone with vitamin D plus calcium, and either with placebo, for "
+             "fractures. Results: Vitamin D alone did not reduce hip fracture (RR 1.1, 95% CI 0.9 to 1.3; "
+             "low-certainty evidence).")),
+    ("coffee drinkers with people who drink no coffee", False, "(coffee)", "(diabetes)",
+     _F1R_RV("v11", "Coffee and type 2 diabetes",
+             "Background: We compared coffee drinkers with people who drink no coffee. Results: Lower diabetes "
+             "risk (RR 0.7, 95% CI 0.65 to 0.75; very low-certainty evidence).")),
+    ("a rating on the claim's outcome beside a side effect", False, "(zinc)", "(cold*)",
+     _F1R_RV("v12", "Zinc for the common cold",
+             "Objectives: To assess zinc. Results: Zinc shortened colds (MD -2 days, 95% CI -3 to -1; "
+             "low-certainty evidence); adverse events rose (RR 1.4, 95% CI 1.1 to 1.8; moderate-certainty "
+             "evidence).")),
+    ("a comparative claim rated in other words", True, "(butter OR margarine)", '("heart disease")',
+     _F1R_RV("v13", "Butter versus margarine",
+             "Objectives: To compare butter with margarine. Results: Coronary events (RR 1.1, 95% CI 0.9 to 1.3; "
+             "very low-certainty evidence).")),
+    ("one overall rating with no interval", False, "(melatonin)", "(insomnia)",
+     _F1R_RV("v14", "Melatonin for sleep",
+             "Objectives: To assess melatonin. Results: Sleep onset latency fell by 7 minutes. The certainty of "
+             "evidence was low.")),
+]
+
+
+
+for _lab, _comp, _subj, _o, _s in _F1R_REV:
+    t(f"F1 review (reviewer's case): {_lab} keeps the limit alone and beside a review on the outcome",
+      _f1_keeps(_s, _o, _subj, comparative=_comp) and _f1_keeps(_s, _o, _subj, [_f1_excuser(_o)], comparative=_comp))
+_F1R_BF = _F1R_RV("v10", "Breastfeeding and infant infection",
+                  "Objectives: To compare exclusive breastfeeding with partial breastfeeding for infection in infants. "
+                  "Results: Fewer infections (RR 0.7, 95% CI 0.6 to 0.85; low-certainty evidence).")
+t("F1 review: exclusive against partial breastfeeding keeps the limit alone and beside a review on infection",
+  _f1_keeps(_F1R_BF, "(infection*)", "(breastfeed*)")
+  and _f1_keeps(_F1R_BF, "(infection*)", "(breastfeed*)", [_f1_excuser("(infection*)")]))
+
+# The separate reviewer's second round: a second review beside a low rating, in eleven forms. Every
+# one keeps the limit, the positions-for-breathing review included, now that nothing is passed over.
+
+def _f1b_rv(pmid, title, abstract, year=2020):
+    return {"pmid": pmid, "title": title, "abstract": abstract, "year": str(year),
+            "publication_types": ["Systematic Review", "Meta-Analysis"]}
+
+def _f1b_B(pmid, title, concl):
+    return _f1b_rv(pmid, title, f"Objectives: To assess cohorts. Results: Twenty cohorts were pooled. Conclusions: {concl}")
+
+_F1B_LOW2 = lambda a, b: (f"Results: {a} (MD -3.4, 95% CI -4.2 to -2.6; low-certainty evidence); "
+                     f"{b} (MD -1.5, 95% CI -2.0 to -1.0; low-certainty evidence).")
+_F1B_CASES = [
+ # name, comparative, subject, outcome, [studies], expect cap
+ ("own question, other words (salt/BP) + cohort review on hypertension", False, "(sodium reduction)", "(hypertension)",
+  [_f1b_rv("a1", "Lowering dietary salt for adults", "Objectives: To assess cutting salt. " + _F1B_LOW2("systolic blood pressure", "diastolic blood pressure") + " Conclusions: Cutting salt lowers blood pressure."),
+  _f1b_B("b1", "Sodium intake and hypertension in cohorts", "Higher sodium intake was linked with hypertension.")], True),
+ ("own question, mortality vs death, title by drug class", False, "(statin*)", "(death)",
+  [_f1b_rv("a2", "HMG-CoA reductase inhibitors for primary prevention", "Objectives: To assess them. " + _F1B_LOW2("all-cause mortality", "cardiovascular mortality")),
+  _f1b_B("b2", "Statin use and death: cohort studies", "Statin users had lower rates of death.")], True),
+ ("second review names outcome only in passing", False, "(sodium reduction)", "(hypertension)",
+  [_f1b_rv("a3", "Lowering dietary salt for adults", "Objectives: To assess cutting salt. " + _F1B_LOW2("systolic blood pressure", "diastolic blood pressure")),
+  _f1b_B("b3", "Salt substitutes and kidney stones", "Salt substitutes did not change stone risk. Effects on hypertension need study.")], True),
+ ("two off-sign reviews cannot excuse each other", False, "(sodium reduction)", "(hypertension)",
+  [_f1b_rv("a4", "Lowering dietary salt for adults", "Objectives: To assess. " + _F1B_LOW2("systolic blood pressure", "diastolic blood pressure")),
+   _f1b_rv("b4", "Potassium-enriched salt for adults", "Objectives: To assess. " + _F1B_LOW2("systolic pressure", "stroke") + " Conclusions: Hypertension fell.")], True),
+ ("aim: high dose vs low dose (low dose as control)", False, '("vitamin D")', "(falls)",
+  [_f1b_rv("a5", "Vitamin D dosing in older adults", "Objectives: To compare high-dose vitamin D with low-dose vitamin D for falls. Results: Falls (RR 0.9, 95% CI 0.8 to 1.0; low-certainty evidence)."),
+  _f1b_B("b5", "Vitamin D and falls", "Vitamin D was linked with fewer falls.")], True),
+ ("aim: intensive vs minimal exercise", False, "(exercise)", "(depression)",
+  [_f1b_rv("a6", "Exercise for depression", "Objectives: To compare supervised exercise with minimal exercise advice for depression. Results: Symptoms (SMD -0.4, 95% CI -0.7 to -0.1; low-certainty evidence)."),
+  _f1b_B("b6", "Physical activity and depression", "Activity was linked with less depression.")], True),
+ ("aim: standard-dose vs higher-dose statin", False, "(statin*)", "(stroke)",
+  [_f1b_rv("a7", "Statins after stroke", "Objectives: To compare high-intensity statin therapy with standard-dose statin therapy in stroke. Results: Recurrent stroke (RR 0.85, 95% CI 0.7 to 1.0; low-certainty evidence)."),
+  _f1b_B("b7", "Statins and stroke risk", "Statin use was linked with less stroke.")], True),
+ ("aim: counselling vs education only", False, "(counselling OR counseling)", "(smoking cessation)",
+  [_f1b_rv("a8", "Counselling to quit smoking", "Objectives: To compare intensive counselling with brief counselling as education only for smoking cessation. Results: Quit rates (RR 1.2, 95% CI 1.0 to 1.4; very low-certainty evidence)."),
+  _f1b_B("b8", "Behavioural support and smoking cessation", "Counselling was linked with smoking cessation.")], True),
+ ("short subject word: tea matches team", False, "(tea)", '("blood pressure")',
+  [_f1b_rv("a9", "Green tea and blood pressure", "Objectives: To compare a nurse-led team approach with a physician-led team approach to giving tea. Results: Systolic blood pressure (MD -2, 95% CI -3 to -1; low-certainty evidence)."),
+  _f1b_B("b9", "Tea drinking and blood pressure", "Tea was linked with lower blood pressure.")], True),
+ ("short subject word: diet matches dietitian", False, "(diet)", "(weight loss)",
+  [_f1b_rv("a10", "Diets for weight", "Objectives: To compare dietitian-led advice with doctor-led diet advice for weight loss. Results: Weight loss (MD -1.2 kg, 95% CI -2 to -0.4; low-certainty evidence)."),
+  _f1b_B("b10", "Diet and weight loss", "Diets led to weight loss.")], True),
+ ("control: real off-question review (should be passed over)", False, "(back sleeping OR supine)", '("sudden infant death" OR SIDS)',
+  [_f1b_rv("a11", "Positioning for respiratory distress in hospitalised children", "Objectives: To assess positions. " + _F1B_LOW2("oxygen saturation", "respiratory rate")),
+  _f1b_B("b11", "Sleep position and sudden infant death", "Supine sleep lowered sudden infant death.")], False),
+]
+for _lab, _comp, _subj, _o, _st, _want in _F1B_CASES:
+    _p = [s["pmid"] for s in _st]
+    t(f"F1 review (reviewer, round 2): the limit holds: {_lab}",
+      bool(evidence.certainty_cap(_st, _p, _comp, _o))
+      and evidence.lowest_review_certainty(_st, _p, _o) in ("low", "very low"))
+
+# Q10 F1 round 3, rule 2: guidance that says the treatment is not advised, or
+# that people are told to come off it, says stopping is advised, so "ask
+# before stopping" beside it is not a no (it had made these read "no", which
+# would let the forgo rule stamp a claim to stop false).
+for _c, _g in (("You should stop taking ibuprofen in late pregnancy",
+                "ibuprofen is not advised in the third trimester; ask your midwife before stopping any medicine."),
+               ("You should stop taking ibuprofen if you get a stomach ulcer",
+                "ibuprofen can make ulcers worse and people with one are usually told to come off it; "
+                "speak to a pharmacist before stopping any medicine.")):
+    _st = breakdown.stance(verdict.GUIDELINE_LEAD + _g, _c)
+    t(f"F1 round 3, rule 2: guidance advising against the treatment is not a no: {_c}", _st != "no", _st)
+_st = breakdown.stance(verdict.GUIDELINE_LEAD + "talk to a doctor before stopping antidepressants, since coming off "
+                       "them too soon often brings symptoms back.", "You should stop taking antidepressants once you feel better")
+t("F1 round 3, rule 2: control: a warning that coming off brings symptoms back stays a no", _st == "no", _st)
+
+# Q10 F1 round 4, rule 2: guidance says stopping is fine only in words; a
+# caution (do not stop, keep taking, ask before stopping, what stopping
+# risks) is a no; only both together are mixed.
+_SG_NO = [
+ "statins should not be stopped without medical advice.",
+ "do not stop taking it without talking to your doctor.",
+ "keep taking your statin to avoid a raised risk of heart attack.",
+ "people should keep taking statins, which are safe for most people.",
+ "ask your doctor before stopping statins, because stopping suddenly can raise heart risk.",
+ "speak to your doctor before stopping statins, as stopping suddenly can raise heart risk.",
+ "talk to your GP before stopping any prescribed medicine.",
+ "statins must not be stopped without a doctor's advice.",
+ "never stop taking statins on your own.",
+ "continue taking statins even when cholesterol is normal.",
+ "stopping statins is not advised for people with heart disease.",
+ "the risks of stopping statins include a heart attack.",
+ "cholesterol rises again when statins are stopped.",
+ "it is not safe to stop statins without advice.",
+ "there is no need to stop statins because of mild aches.",
+ "you should not stop statins without speaking to your doctor first.",
+ "stay on your statin unless your doctor says otherwise.",
+ "do not stop statins without checking with your pharmacist.",
+]
+_SG_FINE = [
+ "statins can be stopped if side effects are severe.",
+ "it is safe to stop statins at the end of life.",
+ "there is no need to keep taking statins once you are very old.",
+ "statins are not recommended in pregnancy.",
+ "statins are usually not used during pregnancy.",
+ "people with severe muscle damage are told to stop statins.",
+ "statins should be stopped if muscle damage is found.",
+ "statins may be stopped in people near the end of life.",
+ "you can stop statins if they are no longer helping.",
+ "it is fine to stop statins before a planned pregnancy.",
+ "statins are not advised for most people over 85 without heart disease.",
+ "there is no reason to continue statins in the last weeks of life.",
+ "statins need to be stopped if liver tests rise sharply.",
+ "people are advised to stop statins three months before trying for a baby.",
+ "statins can safely be stopped before surgery in most cases.",
+ "you may come off statins if your doctor agrees the risk is low.",
+]
+_SG_MIXED = [
+ "statins can be stopped if side effects are severe, but talk to your doctor before stopping.",
+ "statins are not recommended in pregnancy; ask your midwife before stopping any medicine.",
+ "there is no need to keep taking statins at the end of life; check with your doctor before stopping.",
+ "statins should be stopped if muscle damage is found, but never stop them on your own.",
+ "people are told to stop statins before pregnancy, but stopping suddenly can raise heart risk.",
+ "statins may be stopped near the end of life; otherwise keep taking them.",
+ "it is safe to stop statins in some cases, but do not stop without speaking to your doctor.",
+ "statins are usually not used in pregnancy, so talk to your doctor before stopping them.",
+ "you can stop statins if they cause muscle damage, but continue taking them otherwise.",
+ "statins are not advised for frail elderly people, but ask your GP before stopping.",
+ "statins need to be stopped if liver tests rise, but cholesterol rises again when statins are stopped.",
+ "it is fine to stop statins at the end of life, but the risks of stopping include a heart attack earlier on.",
+ "statins can safely be stopped before surgery, but you should not stop them without advice.",
+ "people with an allergy are advised to stop statins; everyone else should keep taking them.",
+ "statins are not recommended in severe liver disease, but do not stop taking them without talking to your doctor.",
+]
+_SG_IBU = [("You should stop taking ibuprofen in late pregnancy",
+        "ibuprofen is not advised in the third trimester; ask your midwife before stopping any medicine.", "mixed"),
+       ("You should stop taking ibuprofen if you get a stomach ulcer",
+        "ibuprofen can make ulcers worse and people with one are usually told to come off it; speak to a pharmacist before stopping any medicine.", "mixed")]
+for _want, _lst in (("no", _SG_NO), ("yes", _SG_FINE), ("mixed", _SG_MIXED)):
+    _bad = [(g_, breakdown.stance(verdict.GUIDELINE_LEAD + g_, "You can stop taking statins"))
+            for g_ in _lst if breakdown.stance(verdict.GUIDELINE_LEAD + g_, "You can stop taking statins") != _want]
+    t(f"F1 round 4, rule 2: guidance on stopping reads {_want} ({len(_lst)})", len(_lst) >= 15 and not _bad, _bad)
+for _c, _g, _w in _SG_IBU:
+    _st = breakdown.stance(verdict.GUIDELINE_LEAD + _g, _c)
+    t(f"F1 round 4, rule 2: r2b ibuprofen guidance is mixed: {_c}", _st == _w, _st)
+
+# Q10 F1 round 3: a claim to stop a medicine is recognised by general signs:
+# a general word, a class, a generic-name ending (whole word, six letters or
+# more) or a common prescribed name. The cure side is left exactly as it was.
+_FORGO_FIRE = {
+    "general": ["Stop your tablets", "Quit your meds", "Stop your prescription", "Stop the patches your doctor gave you",
+                "Stop insulin injections", "You can stop the capsules once you feel better",
+                "Stop what you were prescribed", "Coming off your prescription meds is safe"],
+    "class": ["Stop taking your blood thinners before surgery", "Give up your blood pressure medication",
+              "Stop your epilepsy medicine", "Stop your thyroid tablets", "Quit your antipsychotics",
+              "Stop beta blockers", "Stop ACE inhibitors", "Stop water tablets", "Stop HRT",
+              "Stop the contraceptive pill", "Stop HIV medicine", "Stop antiretrovirals",
+              "Stop immunosuppressants", "Stop anticoagulants before a flight", "Stop diuretics in summer",
+              "Skip your asthma medication", "Stop your diabetes tablets", "Stop your heart pills",
+              "Stop hormone replacement after five years", "Stop seizure meds once seizures stop"],
+    "ending": ["Stop atorvastatin if your cholesterol is fine", "Coming off lisinopril is safe", "Stop taking losartan",
+               "Quit metoprolol cold turkey", "Stop amlodipine", "Stop omeprazole", "Stop apixaban before dental work",
+               "Stop sitagliptin", "Stop empagliflozin", "Stop semaglutide", "Stop adalimumab", "Stop imatinib",
+               "Stop fluoxetine", "Stop diazepam suddenly", "Stop alprazolam", "Stop amoxicillin early",
+               "Stop erythromycin", "Stop ciprofloxacin", "Stop doxycycline", "Stop fluconazole", "Stop famotidine",
+               "Stop heparin", "Stop hydrochlorothiazide", "Stop furosemide", "Stop sumatriptan", "Stop prednisone",
+               "Stop dexamethasone", "Stop prednisolone"],
+    "name": ["Stop warfarin", "Stop lithium", "Stop levothyroxine", "Quit methotrexate", "Stop isotretinoin",
+             "Stop codeine", "Give up morphine", "Stop tramadol", "Stop gabapentin", "Stop pregabalin", "Stop digoxin",
+             "Stop amiodarone", "Stop allopurinol", "Stop carbamazepine", "Stop lamotrigine", "Stop levetiracetam",
+             "Stop phenytoin", "Stop sertraline", "Stop citalopram", "Stop amitriptyline", "Stop quetiapine",
+             "Stop olanzapine", "Stop risperidone", "Stop methadone", "Stop tamoxifen", "Stop salbutamol",
+             "Replace albuterol with breathing exercises", "Valproate can be stopped in pregnancy, just stop valproate"],
+}
+_FORGO_QUIET = ["stop eating sugar", "quit smoking", "give up alcohol", "skip breakfast", "replace sugar with honey",
+                "go without sleep", "stop drinking coffee in April", "ditch the tartan", "stop being alone",
+                "stop eating bread", "quit sugar", "stop drinking soda", "skip dinner", "replace butter with olive oil",
+                "give up gluten", "stop eating meat", "quit vaping", "stop using your phone at night",
+                "replace coffee with tea", "go without food for a day", "stop running every day", "skip the gym",
+                "give up dairy", "stop eating gelatin", "quit caffeine", "stop drinking milk", "ditch the salt",
+                "replace white rice with brown rice", "stop eating chocolate", "give up red meat", "skip lunch",
+                "stop snacking", "stop sitting all day", "quit your job to reduce stress", "stop worrying",
+                "stop eating late", "give up processed food", "stop eating eggs", "stop eating bananas",
+                "stop drinking juice", "quit sugary cereal", "stop wearing shoes", "stop sleeping on your back"]
+for _kind, _cl in _FORGO_FIRE.items():
+    _miss = [c for c in _cl if verdict.forgoes_treatment(c) != "forgo"]
+    t(f"F1 round 3: a stopping word near a medicine {_kind} is a claim to stop a medicine ({len(_cl)})", not _miss, _miss)
+t("F1 round 3: at least 40 must-fire claims across the four kinds", sum(map(len, _FORGO_FIRE.values())) >= 40)
+_wrong = [c for c in _FORGO_QUIET if verdict.forgoes_treatment(c)]
+t(f"F1 round 3: everyday claims to stop a food, drink or habit are not ({len(_FORGO_QUIET)})",
+  len(_FORGO_QUIET) >= 40 and not _wrong, _wrong)
+# Round 4: a container word or "drugs" is not a medicine by itself, and the
+# medicine has to be the thing stopped (its own clause, not the means).
+_FORGO_OTHER_KIND = [
+    "quit smoking with nicotine patches", "stop taking vitamin D tablets in summer", "stop doing drugs to live longer",
+    "stop taking diet pills", "skip lunch and take your iron tablets", "stop taking fish oil capsules",
+    "Stop taking vitamin B12 injections", "stop taking iron supplements", "stop smoking using nicotine gum",
+    "quit drugs", "stop street drugs", "give up party pills", "stop taking herbal tablets", "stop slimming pills",
+    "stop taking calcium tablets", "stop the fish oil and keep your tablets", "stop taking zinc capsules",
+    "stop taking multivitamin pills", "stop taking probiotic capsules", "stop omega 3 capsules",
+    "quit nicotine patches", "stop illegal drugs", "stop recreational drugs", "stop your magnesium tablets",
+    "stop folic acid tablets in pregnancy", "Stop the nicotine patches", "quit sugar by taking cinnamon capsules",
+    "stop snacking, then take your tablets", "give up coffee but keep your medication",
+]
+_wrong = [c for c in _FORGO_OTHER_KIND if verdict.forgoes_treatment(c) == "forgo"]
+t(f"F1 round 4: a container word beside another kind of product, drugs alone, or a medicine that is the means "
+  f"or in another clause is not a claim to stop a medicine ({len(_FORGO_OTHER_KIND)})", not _wrong, _wrong)
+_FORGO_R4_FIRE = ["stop prescription drugs", "Stop your HIV drugs", "stop using your inhaler", "stop insulin injections",
+                  "stop taking warfarin, and eat garlic", "replace your statins with fish oil",
+                  "stop using your steroid cream once rash clears", "come off the pill to get pregnant", "You can stop the capsules once you feel better"]
+_miss = [c for c in _FORGO_R4_FIRE if verdict.forgoes_treatment(c) != "forgo"]
+t("F1 round 4: still a claim to stop a medicine: prescribing words, the verb 'using', a medicine before 'with'",
+  not _miss, _miss)
+_FORGO_R4_MORE = ["stop taking clopidogrel", "stop clopidogrel after a stent if you feel fine", "stop prasugrel",
+                  "wean off antidepressants slowly", "weaning off steroids is easy", "you can get off insulin with diet",
+                  "getting off blood pressure meds is simple", "stop taking my birth control", "quit birth control pills"]
+_miss = [c for c in _FORGO_R4_MORE if verdict.forgoes_treatment(c) != "forgo"]
+t("F1 round 4: the ending grel, 'wean off' and 'get off', and birth control as a class", not _miss, _miss)
+t("F1 round 4: control: 'get off' and 'wean off' something else, and short -grel words, do not fire",
+  not [c for c in ("get off the sofa", "wean off sugar", "get off your phone", "a regrel event")
+       if verdict.forgoes_treatment(c)])
+t("F1 round 4: 'replacement' is a noun, not a stopping word: a claim about a replacement therapy is not a claim to stop one",
+  not [c for c in ("Hormone replacement therapy increases the risk of breast cancer",
+                   "Nicotine replacement therapy helps people quit smoking",
+                   "Joint replacement surgery is better than physiotherapy") if verdict.forgoes_treatment(c)]
+  and all(verdict.forgoes_treatment(c) == "forgo" for c in ("Replacing insulin with diet works", "replace HRT with herbs",
+                                                            "stop hormone replacement therapy")))
+t("F1 round 3: the cure side is unchanged: a new name does not make a cure claim",
+  verdict.forgoes_treatment("Warfarin cures blood clots") == "" and verdict.forgoes_treatment("Semaglutide treats obesity") == ""
+  and verdict.forgoes_treatment("Ivermectin cures COVID") == "cure")
+
+# Q10 F1 round 4: the doctor line on every path of follow_guidelines for a
+# claim to stop a prescribed medicine, whatever the stamp and the guidance.
+_DL = verdict.FORGO_DOCTOR
+_dl_cx = {"verdict": "complicated", "tldr": "Studies differ on stopping statins.",
+          "explanation": "Two trials differ (Study 1).", "still_open": "Who can stop.",
+          "cited_studies": ["D1"], "breakdown": {"says": ["Two trials differ (Study 1)."]}}
+_dl_saved = verdict.guideline_view
+_dl_paths = []
+verdict.guideline_view = lambda claim: None
+_dl_paths.append(("no guidance asked (not a guidance topic)", verdict.follow_guidelines(dict(_dl_cx), [], "Stop taking clopidogrel")))
+_dl_paths.append(("guidance unclear", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("complicated", "it depends on the person.")
+_dl_paths.append(("guidance agrees with the stamp", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("true", "statins can be stopped at the end of life.")
+_dl_paths.append(("guidance supports: Likely true", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+_dl_paths.append(("guidance added to Not enough evidence", verdict.follow_guidelines(dict(_fg_insuff), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("false", "statins can be stopped at the end of life.")
+_dl_paths.append(("guidance that argues with itself is not used", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("false", "do not stop taking statins without talking to your doctor.")
+_dl_paths.append(("guidance rejects: False", verdict.follow_guidelines(dict(_fg_insuff), [], "You can stop taking statins")))
+verdict.guideline_view = _dl_saved
+for _lab, _o in _dl_paths:
+    t(f"F1 round 4: the doctor line on a claim to stop a medicine, once, on the path: {_lab}",
+      _o["tldr"].count(_DL) == 1 and _o["tldr"].endswith(_DL), (_o["verdict"], _o["tldr"]))
+_dl_nr = appmod._nothing_relied("You can stop taking statins", "true",
+                                    "Major health guidelines say: statins can be stopped. " + _DL, [{"pmid": "x"}])
+t("F1 round 4: a saved answer unseated to Not enough evidence keeps the doctor line once, as a fresh check writes it",
+  _dl_nr[0] == "insufficient" and _dl_nr[1].count(_DL) == 1 and _dl_nr[1].endswith(_DL), _dl_nr)
+t("F1 round 4: the 'Likely true' path keeps its stamp", dict(_dl_paths)["guidance supports: Likely true"]["verdict"] == "true")
+t("F1 round 4: the doctor line never tells anyone to stop, and no other claim gets it",
+  not re.search(r"\bstop (?:taking|your)\b", _DL, re.I)
+  and _DL not in verdict.follow_guidelines(dict(_dl_cx), [], "Garlic lowers blood pressure")["tldr"])
+
+# Q10 F1 round 4, thin evidence: a conclusion is read clause by clause (", and"
+# turns it too), a result in any clause keeps the result, and "uncertain
+# whether", "unclear whether", "too limited to", "too few ... to" say not
+# enough only when no clause states a result (the reviewer's 14 cases).
+def _t14_rv(c):
+    return {"pmid": "t14", "title": "A review", "year": "2021", "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "abstract": f"Objectives: To assess it. Results: Nine trials with 2,300 participants. Conclusions: {c}"}
+_T14 = [("Honey probably reduces cough frequency in children, but the certainty of the evidence is low and more trials are needed.",False),
+("Exercise may shorten the duration of low back pain; evidence on recurrence is insufficient.",False),
+("Melatonin likely improves sleep onset in adults, though evidence in older adults is limited.",False),
+("Probiotics lowered the risk of antibiotic-associated diarrhoea; evidence on the best strain is insufficient.",False),
+("Garlic had little or no effect on blood pressure; whether higher doses help is uncertain.",False),
+("Massage appears to ease pain in the short term, but long-term effects are unclear.",False),
+("Omega-3 made little or no difference to heart deaths, and evidence for stroke is inconclusive.",False),
+("Acupuncture is probably more effective than sham, but the evidence is insufficient to recommend it.",False),
+("It is uncertain whether vitamin C prevents colds because the evidence is of very low certainty.",True),
+("It is unclear whether yoga improves asthma control; more research is needed.",True),
+("There is insufficient evidence to determine whether turmeric reduces joint pain.",True),
+("We are uncertain whether zinc shortens colds, as the evidence is very low certainty.",True),
+("The evidence is too limited to say whether cranberry products prevent urinary infections in men.",True),
+("No conclusions can be drawn about the effect of fasting on cancer outcomes, and the effect is unclear.",True)]
+_t14_bad = [c for c, w in _T14 if bool(evidence.too_thin([_t14_rv(c)], ["t14"])) != w]
+t(f"F1 round 4: thin evidence: a stated result in any clause keeps it, and unsure words say not enough ({len(_T14)})",
+  not _t14_bad, _t14_bad)
+t("F1 round 4: control: 'uncertain whether' beside a stated result does not lower the line's word",
+  not evidence.says_not_enough(_t14_rv("Garlic had little or no effect on blood pressure; whether higher doses help is "
+                                       "uncertain, and it is unclear whether it helps in older adults.")))
+
+# Q10 F1 round 4: a forced Not enough evidence agrees with itself: the
+# breakdown's strength line becomes the rule's own sentence, nothing else moves.
+_r4_bd = {"parts": [{"part": "Garlic prevents colds", "assessment": "One trial (Study 1).", "studies": [1]}],
+          "evidence": ["One trial of 146 people (Study 1)."], "strength": "Evidence is mixed (Study 1).",
+          "applies_to": "Adults (Study 1).", "says": ["One trial of 146 people (Study 1)."]}
+_r4_out = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown=_r4_bd), [_F3_NO], "Eating garlic every day prevents colds")
+_r4_because = "The evidence is too thin to rate, because the review behind it says its own evidence is not enough to tell."
+t("F1 round 4: the forced stamp's strength line is the rule's own sentence, the one ending the explanation",
+  _r4_out["verdict"] == "insufficient" and _r4_out["breakdown"]["strength"] == _r4_because
+  and _r4_out["explanation"].endswith(_r4_because), _r4_out["breakdown"].get("strength"))
+t("F1 round 4: nothing else in the breakdown changes",
+  {k: v for k, v in _r4_out["breakdown"].items() if k != "strength"} == {k: v for k, v in _r4_bd.items() if k != "strength"})
+_r4_keep = verdict._too_thin(dict(_F3_RES(["f3a", "f3b"]), breakdown=_r4_bd), [_F3_NO, _F3_YES], "Echinacea shortens colds")
+t("F1 round 4: control: a complicated the rule leaves keeps its strength line",
+  _r4_keep["verdict"] == "complicated" and _r4_keep["breakdown"]["strength"] == _r4_bd["strength"])
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

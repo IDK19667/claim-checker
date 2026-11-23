@@ -1221,6 +1221,9 @@ def observational_only(studies, cited_pmids=()) -> bool:
     return bool(strong) and all(is_review(s) and design_rank(s) == "weaker" for s in strong)
 
 
+INSUFFICIENT_LINE = "Too little evidence to rate this claim either way"
+
+
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
                   comparative: bool = False, outcome: str = "",
@@ -1239,6 +1242,11 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     that promises one, "against this claim" for any other.
     """
     level = level_word(studies, cited_pmids)
+    # "Not enough evidence" over studies it did rely on (too thin to rate,
+    # or only animal and lab work): the line says so rather than leave the
+    # page to name the studies' designs ("Strong study designs") under it.
+    if level and verdict == "insufficient":
+        return INSUFFICIENT_LINE
     if not level or verdict not in ("true", "false", "complicated"):
         return ""
     # A pooled review is a strong design, but pooling case-control studies
@@ -1260,11 +1268,12 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
         level = "Low certainty"
     # A relied-on review that says its own evidence is held back by few or
-    # small studies has said how sure it is, and the line is no surer. Only
-    # ever lowers: a line already at low or very low stays.
+    # small studies, or concludes it is not enough to tell, has said how sure
+    # it is, and the line is no surer. Only ever lowers: a line already at
+    # low or very low stays.
     cited = set(cited_pmids or ())
     if (line_certainty(level) not in ("low", "very low")
-            and any(says_thin(s) for s in studies or [] if s.get("pmid") in cited)):
+            and any(says_thin(s) or says_not_enough(s) for s in studies or [] if s.get("pmid") in cited)):
         level = "Low certainty"
     # One certainty for the whole page. The line is never surer than the
     # least sure thing the page already says: the lowest rating any review
@@ -1961,6 +1970,118 @@ def says_thin(study) -> bool:
                 and _THIN_REASON.search(sentence) and not _THIN_NOT.search(sentence)):
             return True
     return False
+
+
+# A review that concludes its evidence is not enough to tell: "There is
+# insufficient clinical trial evidence", "have not here been shown to provide
+# benefits", "has not been established". Read in its conclusion only, so a
+# result line about one minor outcome is not taken for the review's answer.
+_NOT_ENOUGH = re.compile(
+    r"\b(?:insufficient|inadequate|not enough|too little|inconclusive)\s+(?:[\w-]+\s+){0,3}?evidence\b"
+    r"|\bevidence\s+(?:[\w-]+\s+){0,4}?(?:is|was|remains|are|were)\s+(?:\w+\s+)?"
+    r"(?:insufficient|inadequate|inconclusive|lacking|not enough)\b"
+    r"|\b(?:have|has)\s+not\s+(?:\w+\s+){0,2}?been\s+(?:shown|established|demonstrated|proven)\b"
+    r"|\bno\s+(?:(?:firm|definitive|reliable|clear)\s+)?conclusions?\s+(?:can|could)\s+be\s+drawn\b"
+    r"|\bunable\s+to\s+draw\s+(?:any\s+)?(?:firm\s+|definitive\s+)?conclusions?\b", re.IGNORECASE)
+
+
+# Words that say not enough only where no clause of the conclusion states a
+# result: "uncertain whether", "unclear whether", "too limited to", "too few
+# trials to". The result check (_reports_finding) always wins over them.
+_UNSURE = re.compile(
+    r"\b(?:uncertain|unclear)\s+(?:whether|if)\b|\btoo\s+(?:limited|sparse|scarce)\s+to\b|"
+    r"\btoo\s+few\s+(?:[\w-]+\s+){0,3}?to\b", re.IGNORECASE)
+
+
+def says_not_enough(study) -> bool:
+    """True when a review's own conclusion says its evidence is not enough
+    to tell (_NOT_ENOUGH), or says it is unsure (_UNSURE) and no clause of
+    it states a result."""
+    if not is_review(study):
+        return False
+    said = conclusion(study)
+    return bool(_NOT_ENOUGH.search(said)
+                or (_UNSURE.search(said) and not _reports_finding(study)))
+
+
+# A conclusion clause that reports a result, in the plain language results
+# are reported in: a change ("reduced falls", "may shorten colds", "probably
+# reduces"), a comparison ("superior to sham", "fewer infections"), an
+# association, or a plain null ("had no effect in adults", "no difference").
+# A hedged result is still a result. Not a result: a clause that only says
+# the evidence is not enough (_NOT_ENOUGH) or that it is unknown whether
+# something works, or that names a mere possibility (_NO_RESULT).
+_FINDING = re.compile(
+    r"\b(?:reduc\w*|lower(?:s|ed|ing)?|improv\w*|increas\w*|rais(?:es|ed|ing)|decreas\w*|"
+    r"shorten\w*|prevent(?:s|ed|ing)?|benefits?|benefited|beneficial|effective|ineffective|"
+    r"efficacious|helped|eased|relieved|protect(?:s|ed|ive)?|worsen\w*|halved|doubled|"
+    r"superior|inferior|better|worse|outperform\w*|fewer|"
+    r"associated\s+with|linked\s+(?:with|to)|"
+    r"no\s+(?:\w+\s+){0,2}?(?:effects?|differences?|benefits?|changes?|associations?|improvements?|"
+    r"reductions?)|(?:did|does|do)\s+not\s+(?:\w+\s+)?(?:differ|change|affect|work|help)\w*)\b",
+    re.IGNORECASE)
+_NO_RESULT = re.compile(
+    r"\b(?:uncertain|unclear|unknown|not\s+known)\s+(?:whether|if)\b|\binsufficient\s+evidence\s+to\b|"
+    r"\bpossibl[ey]\b|\bpotential(?:ly)?\b|\btoo\s+(?:limited|sparse|scarce|few)\b", re.IGNORECASE)
+# A conclusion is read clause by clause: a full stop, ";", ", and", ", but",
+# ", while" and the like turn it, and a result in any clause keeps the result.
+_CLAUSE_TURN = re.compile(r"[.;]\s+|;|,\s+(?:and|but|whereas|although|while|though|yet)\s+|\s+but\s+",
+                          re.IGNORECASE)
+
+
+def _reports_finding(study) -> bool:
+    """True when a review's conclusion reports a result in a clause that
+    does not say the evidence is not enough: "Higher doses reduced falls,
+    but a benefit of lower doses has not been established". Its "not
+    enough" is then about one group, dose, duration or side outcome, and
+    the answer can depend on it."""
+    for clause in _CLAUSE_TURN.split(conclusion(study)):
+        if (clause.strip() and not _NOT_ENOUGH.search(clause) and not _NO_RESULT.search(clause)
+                and _FINDING.search(clause)):
+            return True
+    return False
+
+
+def too_thin(studies, cited_pmids=()) -> str:
+    """
+    Why the evidence a "complicated" rests on is too thin to say what the
+    answer depends on, in words for the reader that are true of this check,
+    or "". Two ways: every relied-on review that states a conclusion says
+    its evidence is not enough, or is held back by few or small studies
+    (says_thin), and reports no result of its own (_reports_finding), and
+    no relied-on trial that is neither small, a pilot nor uncontrolled
+    stands beside them (trials count as evidence); or
+    there is no relied-on review and the one study that says its size or
+    design is a small, pilot or uncontrolled trial (the rest say neither).
+    Several small trials can show where an effect holds and where it does
+    not; one cannot.
+    """
+    cited = set(cited_pmids or ())
+    used = [s for s in studies or [] if s.get("pmid") in cited]
+    reviews = [s for s in used if is_review(s)]
+    concluded = [s for s in reviews if conclusion(s)]
+    if concluded and all((says_not_enough(s) or says_thin(s)) and not _reports_finding(s)
+                         for s in concluded):
+        solid = [s for s in used if is_trial(s)
+                 and not [c for c in trial_caveats(s) if not c.startswith("funded")]]
+        if solid:
+            return ""
+        one = len(concluded) == 1
+        if all(says_not_enough(s) for s in concluded):
+            return ("the review behind it says its own evidence is not enough to tell" if one else
+                    "the reviews behind it say their own evidence is not enough to tell")
+        if not any(says_not_enough(s) for s in concluded):
+            return ("the review behind it says its evidence comes from few or small studies" if one else
+                    "the reviews behind it say their evidence comes from few or small studies")
+        return "the reviews behind it say their evidence is too little, or from too few or small studies, to tell"
+    if reviews:
+        return ""
+    told = [s for s in used if not narrative_review(s)
+            and (sample_size(s) is not None
+                 or any(not t.startswith(IGNORE_PREFIXES) for t in s.get("publication_types") or []))]
+    if len(told) == 1 and trial_caveats(told[0]):
+        return "the only study behind it that reports its size or design is small, a pilot or uncontrolled"
+    return ""
 
 
 CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely explain "

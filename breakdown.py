@@ -922,16 +922,86 @@ def denies_absolute(text: str, claim: str) -> bool:
 # A sentence that tells people to keep a treatment going: "should keep taking",
 # "continue", "stay on", "need insulin", "must not stop", "cannot replace it".
 # Its words overlap a claim to stop or replace that treatment, but it answers
-# that claim with a no. "safe to stop" and "no need to" are not in it.
+# that claim with a no. "safe to stop", "no need to" and "needs to be
+# stopped" are not in it.
 _KEEPS_TREATMENT = re.compile(
     r"\b(?:keep(?:\s+on)?\s+(?:taking|using|up|it|them)|continu\w*|stay(?:ing)?\s+on|"
     r"remain(?:ing)?\s+on|should\s+(?:take|use))\b|"
-    r"(?<!not )(?<!n't )(?<!no )(?<!longer )\bneeds?\b|"
+    r"(?<!not )(?<!n't )(?<!no )(?<!longer )\bneeds?\b"
+    r"(?!\s+to\s+be\s+(?:stopped|paused|held|withheld|discontinued|avoided|switched|changed))|"
     r"\b(?:(?:should|must|do|does|can|could|will)\s*(?:not|n't|never)|don't|never|cannot|can't|"
     r"shouldn't|mustn't)\s+(?:safely\s+)?(?:stop|quit|skip|replace|come\s+off|go\s+off|give\s+up|"
     r"ditch|swap|substitute)\b|"
     r"\bnot\s+(?:safe|advisable|recommended|wise)\s+to\s+(?:stop|quit|skip|replace|come\s+off|"
     r"go\s+off|give\s+up|ditch|swap)\b", re.IGNORECASE)
+
+
+# What guidance says about stopping a treatment, for a claim to stop one.
+# It says stopping is fine only in words (_STOP_FINE): can stop, may be
+# stopped, safe to stop, no need to keep taking, it is not advised or not
+# recommended, people are told to come off it, it should be stopped,
+# paused or switched, it is usually paused, it has been withdrawn. A
+# caution (_STOP_CAUTION, _KEEPS_TREATMENT) never counts as that: not to
+# stop, to keep taking, to ask before stopping, what stopping risks. One
+# kind alone is a no or a yes; both together are mixed.
+_STOP_VERB = r"(?:stop|quit|skip|discontinue|come\s+off|go\s+off|give\s+up|withdraw)"
+_NOT_BEFORE = r"(?<!not )(?<!n't )(?<!never )(?<!cannot )"
+_STOP_FINE = re.compile(
+    r"\b" + _NOT_BEFORE + r"(?:can|may|could)\s+(?:safely\s+|usually\s+|then\s+)?(?:be\s+)?"
+    r"(?:stop(?:ped)?|quit|discontinued?|withdrawn|come\s+off|go\s+off)\b|"
+    r"\b" + _NOT_BEFORE + r"(?:safe|fine|okay|ok|reasonable)\s+to\s+" + _STOP_VERB + r"\b|"
+    r"\bno\s+(?:need|reason)\s+to\s+(?:continue|keep\s+(?:taking|using|on))\b|"
+    r"\b(?:is|are)\s+(?:usually\s+|generally\s+|often\s+)?not\s+(?:advised|recommended|used|given|prescribed)\b|"
+    r"\b(?:told|advised|recommended)\s+to\s+(?:stop|come\s+off|go\s+off)\b|"
+    r"\b(?:should|must|(?<!no )needs?\s+to)\s+(?:be\s+(?:stopped|paused|held|withheld|switched|changed|"
+    r"avoided|withdrawn)|stop|come\s+off|avoid|switch|move\s+to)\b|"
+    r"\b(?:is|are)\s+(?:usually\s+|often\s+|generally\s+|commonly\s+|sometimes\s+)?"
+    r"(?:paused|stopped|held|withheld|switched)\b|\bhas\s+been\s+withdrawn\b|"
+    r"\bsome\s+(?:people\s+)?(?:stop|switch)\b|"
+    r"(?:^|:\s*)(?:stop|quit|come\s+off)\s+(?:taking|using)?", re.IGNORECASE)
+_STOP_CAUTION = re.compile(
+    r"\b(?:talk|speak|check|consult|ask)\w*\s+(?:\w+\s+){0,5}?before\s+(?:stopping|quitting|skipping|"
+    r"coming\s+off|going\s+off|giving\s+up)\b|"
+    r"\bwithout\s+(?:first\s+)?(?:talking|speaking|checking|asking)\b|"
+    r"\b(?:should|must|can)\s*(?:not|n't)\s+be\s+(?:stopped|discontinued|withdrawn)\b|"
+    r"\bno\s+need\s+to\s+" + _STOP_VERB + r"\b|"
+    r"\b(?:risks?|dangers?|harms?)\s+of\s+(?:stopping|coming\s+off|quitting)\b|"
+    r"\b(?:stopping|coming\s+off|quitting|withdrawing)\b[^.;]{0,60}?\b(?:can|may|might|could|will|often|"
+    r"usually)\s+(?:\w+\s+){0,2}?(?:raise|increase|cause|lead|bring|make|trigger|worsen|return)\w*\b|"
+    r"\b(?:rise|rises|return|returns|come\s+back|comes\s+back|worsen|worsens|flare)\w*\s+(?:again\s+)?"
+    r"(?:when|if|after|once)\s+(?:\w+\s+){0,3}?(?:stopped|stopping)\b", re.IGNORECASE)
+_STOP_WORD_NEAR = re.compile(r"\b(?:stop\w*|quit\w*|skip\w*|discontinu\w*|coming\s+off|going\s+off|"
+                             r"giving\s+up|withdraw\w*)\b(?:\W+\w+){0,4}\W*$", re.IGNORECASE)
+
+
+def _stopping_guidance(text: str, claim: str) -> str | None:
+    """For a claim to stop a treatment: "no", "yes" or "mixed" when the
+    first sentence of `text` says whether stopping is fine (see above),
+    otherwise None and the sentence is read as it plainly stands."""
+    import verdict  # late: verdict imports this module
+    if verdict.forgoes_treatment(claim) != "forgo":
+        return None
+    first = (sentences(text or "") or [""])[0]
+
+    def blank(text, m):
+        return text[:m.start()] + " " * (m.end() - m.start()) + text[m.end():]
+
+    fine = caution = False
+    masked = first
+    for m in _STOP_CAUTION.finditer(first):  # first, so "rises when it is stopped" stays a caution
+        caution = True
+        masked = blank(masked, m)
+    for m in _STOP_FINE.finditer(masked):
+        if "not" in m.group(0).lower().split() and _STOP_WORD_NEAR.search(masked[:m.start()]):
+            caution = True  # "stopping it is not advised" is about stopping
+        else:
+            fine = True
+        masked = blank(masked, m)
+    if _KEEPS_TREATMENT.search(masked):
+        caution = True
+    if fine and caution:
+        return "mixed"
+    return "no" if caution else ("yes" if fine else None)
 
 
 def _keeps_treatment(text: str, claim: str) -> bool:
@@ -950,8 +1020,9 @@ def stance(text: str, claim: str) -> str:
     "mixed". Only the first sentence is read: the takeaway is one sentence,
     and an explanation's first sentence is where it states its answer.
     """
-    if _keeps_treatment(text, claim):
-        return "no"
+    guided = _stopping_guidance(text, claim)
+    if guided:
+        return guided
     said = _plain_stance(text, claim)
     if said in ("yes", "no") and claim_denies(claim):
         return "no" if said == "yes" else "yes"

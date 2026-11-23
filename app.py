@@ -1074,7 +1074,10 @@ def _nothing_relied(claim, verdict_value, tldr, studies=None):
     if guided and verdict.guidance_may_rate(claim, verdict_value):
         return verdict_value, tldr, False
     lead = verdict.UNTESTED_TLDR if studies else verdict.NO_STUDIES_TLDR
-    return "insufficient", (verdict.unrated_guidance_tldr(tldr, lead) if guided else lead), True
+    out = verdict.unrated_guidance_tldr(tldr, lead) if guided else lead
+    if verdict.forgoes_treatment(claim) == "forgo":  # as a fresh check writes it
+        out = f"{out} {verdict.FORGO_DOCTOR}"
+    return "insufficient", out, True
 
 
 def _listed(v: dict) -> dict:

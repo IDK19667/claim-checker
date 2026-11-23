@@ -4464,3 +4464,73 @@ What was deliberately rejected:
   bill.
 - 2026-09-14 Verdict integrity rules: citations map to the studies the
   model was shown; an uncited true/false is forced to "complicated".
+
+## 2026-11-23: Q10 F1, the stamp says what the studies it read support
+
+- Certainty limit: withdrawn after two reviews. Passing over a relied-on
+  review lifts a caution, and every proof tried (a sign on the review, an
+  excusing review on the outcome, loose outcome words) was beaten by built
+  cases: a cohort review naming the outcome, a mention in passing, a drug
+  class title, weaker-form controls, "tea" in "team". No recorded check is
+  made right by it in a replay (g1-09 and n-02 only through a live call, and
+  g1-09's excusing review rates nothing), so every relied-on review counts
+  toward the limit and the line's floor, as on main.
+- Forgo-treatment guidance: "talk to your doctor before stopping" is guidance
+  to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
+  stop one with a no and the existing forgo rule can stamp it false. It had
+  been read as a yes and thrown away as arguing with itself. Review on the
+  same day: the advice (`breakdown._asks_before_stopping`) counts as a no
+  only when the rest of the sentence says nothing about stopping. Where it
+  says stopping happens, is fine or is advised ("aspirin often needs to be
+  stopped before an operation"), the sentence keeps its plain stance, not
+  "mixed": a mixed line agrees with a "false" and would let guidance that
+  says to stop stamp a claim to stop false. "before changing" is dropped,
+  and "needs to be stopped" no longer reads as "needs" a treatment.
+  Round 4 (`breakdown._stopping_guidance`): guidance says stopping is fine
+  only in words (can stop, safe to stop, not advised, should be stopped or
+  paused); a caution (do not stop, keep taking, ask before stopping, what
+  stopping risks) is a no; only both together are mixed.
+  Round 4: a claim to stop a prescribed medicine carries the doctor line on
+  every path (`verdict.follow_guidelines`, and a saved answer unseated by
+  `app._nothing_relied`), whatever the stamp and whatever the guidance said.
+  The replay showed "Hormone replacement therapy increases ..." read as a
+  claim to stop: "replace" is now a verb only, never "replacement".
+  Round 3: a claim to stop a medicine is recognised by general signs, a
+  stopping word near a general word (tablets, meds, prescribed), a class, a
+  generic-name ending of six letters or more, or a common prescribed name
+  (`verdict._forgoes_medicine`); the cure side is unchanged.
+  Round 4: a tablet, capsule, pill, injection or patch beside a vitamin,
+  mineral, supplement, herbal, diet, nicotine or recreational word is not a
+  medicine; "drugs" counts only as prescription or class drugs; and the
+  medicine must be what is stopped, in its clause and not after "with".
+  Also: the ending "grel", "wean off" and "get off", and "birth control".
+- Thin "complicated": becomes "Not enough evidence" (`verdict._too_thin`,
+  `evidence.too_thin`) when every relied-on review that concludes says its
+  evidence is not enough or thin, or, with no review, it rests on one small,
+  pilot or uncontrolled study. Runs after the faithfulness check: no new call.
+  Review on the same day: a review whose conclusion also reports a result
+  (a benefit in children, at high doses, in the short term) is not thin, its
+  "not enough" is about one group, dose, duration or side outcome, and the
+  answer can depend on it; a result is read in plain result language, hedged
+  ("may shorten"), comparative ("fewer", "superior") or null ("no effect").
+  A relied-on trial that is neither small, a pilot nor uncontrolled keeps
+  the answer "complicated": trials count as evidence, and a newer review
+  does not show it weighed that trial (so g4-22 is "complicated" again). The
+  reason printed follows the count and the kind (not enough, few or small
+  studies, the only sized study). "Not enough evidence" over studies it
+  relied on gets its own evidence line, "Too little evidence to rate this
+  claim either way", where the page had printed "Strong study designs.";
+  and a breakdown sentence naming the old stamp goes (only the stamp: "a
+  complicated pregnancy" stays).
+  Round 4: ", and" turns a conclusion's clause like ", but" and ";", and a
+  result in any clause keeps the result; "uncertain whether", "unclear
+  whether", "too limited to" and "too few ... to" say not enough only when no
+  clause of that conclusion states a result.
+  Round 4: when the rule changes the stamp, the breakdown's strength line
+  becomes the rule's own sentence (as in the explanation): g1-33 said
+  "Evidence is mixed" under "Not enough evidence". Template and app.js both
+  print `breakdown.strength`, so no front-end change.
+- Evidence line: a relied-on review whose conclusion says its evidence is not
+  enough (`evidence.says_not_enough`) lowers the strength word to "Low
+  certainty", as `says_thin` already did. "Strong evidence" had come from the
+  review's design alone.
