@@ -364,7 +364,12 @@
     }
   }
   function clearStudy() { if (!openN) return; var b = rowBtn(openN); if (b) b.setAttribute("aria-pressed", "false"); openN = 0; wake(); }
-  addEventListener("keydown", function (e) { if (e.key === "Escape") { clearStudy(); closeMenu(); } });
+  addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var wasOpen = !menu.hidden;
+    clearStudy(); closeMenu();
+    if (wasOpen) where.focus({ preventScroll: true });   // Escape in the place menu: back to the button that opened it
+  });
 
   // ---- wayfinding follows the page ----------------------------------------------------
   var pulsed = false, arriveT = 0, pulseTimer = 0;

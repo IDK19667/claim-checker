@@ -492,6 +492,7 @@ html[data-screen="checking"] #ask .wordmark, html[data-screen="checking"] #ask .
 #error { margin-top: 8px; }
 .error-title { font-family: var(--display); font-weight: 600; font-size: clamp(30px, 3.4vw, 44px); letter-spacing: -0.03em; line-height: 1.04; margin: 0; color: var(--on-deep); }
 .error-title:focus { outline: none; }
+#stamp:focus { outline: none; } /* focus lands on the verdict when the answer arrives; it is not a control */
 .error-msg { margin: 14px 0 0; font-size: 17px; color: var(--on-deep); max-width: 30em; }
 .error-claim { margin: 10px 0 0; font-size: 15px; color: var(--on-deep-2); }
 .error-claim:empty { display: none; }

@@ -13,6 +13,9 @@
  *    reallocated or reframed, and closing the keyboard returns to the place.
  * 12. While a check runs there is one Cancel: it keeps focus while lines print,
  *    sits outside the live log, and pressing it ends the check.
+ * 13. Focus after a check: a keyboard check lands on the verdict, Tab goes on
+ *    from the answer and not back to the claim box, Enter does not send again;
+ *    an error lands on its title; Escape in the place menu returns to its button.
  */
 import { chromium } from "playwright";
 
@@ -154,6 +157,43 @@ await test("Cancel ends a running check and is put away", async (page) => {
   await page.waitForFunction(() => !document.getElementById("submit-btn").disabled, null, { timeout: 10000 });
   const hid = await page.evaluate(() => document.getElementById("cancel-row").hidden);
   must(hid, "the Cancel row stayed up after the check ended");
+});
+
+// ---- 13. Focus after a check ---------------------------------------------------------------
+for (const path of ["/", "/?nogl=1"]) {
+  await test(`a keyboard check lands focus on the verdict, Tab goes forward from it, Enter does not send again, ${path === "/" ? "3D" : "text mode"}`, async (page) => {
+    let checks = 0; page.on("request", (r) => { if (r.url().includes("/api/check")) checks++; });
+    await page.goto(base + path, { waitUntil: "load" }); await ready(page);
+    await page.click("#claim-input"); await page.keyboard.type(LIVE); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 });
+    await page.waitForTimeout(400);
+    const f = await page.evaluate(() => document.activeElement && document.activeElement.id);
+    must(f === "stamp", `focus is on #${f}`);
+    const n = checks;
+    await page.keyboard.press("Enter"); await page.waitForTimeout(800);
+    must(checks === n, `Enter on the answer sent ${checks - n} more check(s)`);
+    await page.keyboard.press("Tab");
+    const t = await page.evaluate(() => { const a = document.activeElement; return { id: a.id, cls: a.className, inAsk: !!a.closest("#ask"), inChecker: !!a.closest("form.ask") }; });
+    must(!t.inAsk && !t.inChecker, `the first Tab went back to the claim box area (${t.id || t.cls})`);
+  });
+}
+await test("an error lands focus on its title", async (page) => {
+  await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
+  await page.context().setOffline(true);
+  await page.click("#claim-input"); await page.keyboard.type(LIVE); await page.keyboard.press("Enter");
+  await page.waitForFunction(() => !document.getElementById("error").hidden, null, { timeout: 10000 });
+  const f = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  await page.context().setOffline(false);
+  must(f === "error-title", `focus is on #${f}`);
+});
+await test("Escape in the place menu returns focus to the place button", async (page) => {
+  await page.goto(base + "/?nogl=1&q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page);
+  await page.evaluate(() => window.__evident.goto(3)); await page.waitForTimeout(800);
+  await page.focus("#where"); await page.keyboard.press("Enter"); await page.waitForTimeout(200);
+  const open = await page.evaluate(() => !document.getElementById("menu").hidden);
+  await page.keyboard.press("Escape"); await page.waitForTimeout(200);
+  const s = await page.evaluate(() => ({ hidden: document.getElementById("menu").hidden, f: document.activeElement && document.activeElement.id }));
+  must(open && s.hidden && s.f === "where", `menu opened ${open}, closed ${s.hidden}, focus on #${s.f}`);
 });
 
 await browser.close();

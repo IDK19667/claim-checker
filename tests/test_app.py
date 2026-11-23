@@ -2232,7 +2232,7 @@ t("  the assessment is plain text: no oval, no ring, no pen drawn round it on th
   'class="ring"' not in _ord and 'class="vwrap"' not in _ord and ".ring" not in _css + _dkc
   and ".vwrap" not in _css + _dkc and "fitRing" not in (ROOT / "static" / "app.js").read_text())
 t("  the verdict is on the card and how sure is the labelled line under it",
-  '<h2 class="v" id="stamp">It' in _ord and '<p class="sure-label">How sure</p><p class="sure" id="confidence">' in re.sub(r">\s+<", "><", _ord)
+  '<h2 class="v" id="stamp" tabindex="-1">It' in _ord and '<p class="sure-label">How sure</p><p class="sure" id="confidence">' in re.sub(r">\s+<", "><", _ord)
   and _at('id="tldr"') < _at('id="confidence"') < _at('id="doctor-line"') < _at("What the research says"))
 _conf_txt = re.search(r'<p class="sure" id="confidence">([^<]+)</p>', _ord).group(1)
 t("  the confidence is the sentence the check worded: on the answer, and again only as the head of 'How sure, and why'",
@@ -10956,6 +10956,20 @@ t("G2: the page has one Cancel for a check, after the live log and outside it, a
   _g2_tpl.count('id="cancel-live"') == 1 and _g2_tpl.index('<ol class="reading" id="reading" hidden aria-live="polite"></ol>') < _g2_tpl.index('id="cancel-row"')
   and "cancel" not in _g2_log.replace('$("cancel-row").hidden = false;', "") and "innerHTML" not in _g2_log
   and _g2_app.count('$("cancel-live").addEventListener("click"') == 1)
+# G3 (A4, A6, D4): focus is never left on nothing. The answer takes focus when it arrives
+# and focus is lost or still in the claim box; an error takes it on its title; Escape in the
+# place menu gives it back to the place button. The browser half is ui_desk.mjs section 13.
+_g3_app = (ROOT / "static" / "app.js").read_text()
+_g3_lf = _g3_app.split("function landFocus(to) {")[1].split("\n}")[0]
+t("G3: when the answer arrives, focus moves to the verdict unless the reader holds a control still on the page",
+  "landFocus($(\"stamp\"));" in _g3_app.split("renderResult(final.result);")[1].split("remember(final.result)")[0]
+  and "a === document.body" in _g3_lf and "!a.isConnected" in _g3_lf and "a.disabled" in _g3_lf and "a === input" in _g3_lf
+  and "preventScroll: true" in _g3_lf
+  and 'id="stamp" tabindex="-1"' in (ROOT / "templates" / "index.html").read_text()
+  and "#stamp:focus { outline: none; }" in (ROOT / "static" / "desk.css").read_text())
+t("  an error moves focus to its title, and Escape in the place menu returns it to the place button",
+  '$("error-title").focus({ preventScroll: true });' in _g3_app.split("function renderError(")[1].split("\n}")[0]
+  and "if (wasOpen) where.focus({ preventScroll: true });" in (ROOT / "static" / "desk.js").read_text())
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

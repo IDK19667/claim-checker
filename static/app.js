@@ -712,6 +712,17 @@ function errorActions(kind, wayOut) {
 }
 // The draft stays in the field on every failure. Retry and Edit both start
 // from it, so nothing has to be typed again.
+// Focus is never left on nothing. When an answer arrives and focus is on the
+// page, on a control that is gone, disabled or not drawn, or still in the claim
+// box or button that sent the check, it goes to `to` (no scroll, no ring); a
+// reader holding any other control keeps it.
+function landFocus(to) {
+  const a = document.activeElement;
+  const lost = !a || a === document.body || !a.isConnected || a.disabled || !a.getClientRects().length
+    || a === input || a === submitBtn;
+  if (lost && to) to.focus({ preventScroll: true });
+}
+
 function renderError(kind, message, retryAfter, wayOut) {
   // Same night ground, same way out. Only what the screen says changes.
   const k = ERROR_KINDS[kind] || ERROR_KINDS.provider;
@@ -747,6 +758,7 @@ function renderError(kind, message, retryAfter, wayOut) {
     back.disabled = false;
   }
   show(errorSection);
+  $("error-title").focus({ preventScroll: true });
 }
 
 // ---- Checking (streamed, with a plain-JSON fallback) -----------------------
@@ -897,6 +909,7 @@ async function check(claim) {
       // server": that sends the reader to check their wifi over our bug.
       try {
         renderResult(final.result);
+        landFocus($("stamp"));
         remember(final.result);
         announce(`Verdict: ${VERDICT_LABELS[final.result.verdict] || final.result.verdict}. ${final.result.tldr || ""}`);
       } catch (err) {

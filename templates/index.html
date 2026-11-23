@@ -256,7 +256,7 @@
     <div class="vcard" id="vcard">
       <p class="lbl">The claim you checked</p>
       <h1 class="q claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h1>
-      <h2 class="v" id="stamp">{% if result %}{{ labels[result.verdict] }}{% endif %}</h2>
+      <h2 class="v" id="stamp" tabindex="-1">{% if result %}{{ labels[result.verdict] }}{% endif %}</h2>
       <p class="t" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
     </div>
     <div class="cap right bottom" id="cap-answer"><div class="inner">
