@@ -11382,7 +11382,7 @@ t("  the server prints one h1: the headline at home, the claim on a result",
   _g6_h1(_g6_home) == ['<h1 class="h1" id="ask-heading">'] and _g6_h1(_g6_res) == ['<h1 class="q claim-echo" id="claim-echo">']
   and '<h2 class="q claim-echo" id="claim-echo">' in _g6_home, (_g6_h1(_g6_home), _g6_h1(_g6_res)))
 _g6_app = (ROOT / "static" / "app.js").read_text()
-_g6_show = _g6_app.split("function show(section) {")[1].split("\n}")[0]
+_g6_show = _g6_app.split("function show(section, keepPlace) {")[1].split("\n}")[0]
 if _shutil.which("node"):
     # setH1 on a small recording page: each screen leaves exactly one h1, the right one, and every attribute and word.
     _g6_fn = "function setH1" + _g6_app.split("function setH1")[1].split("\n}")[0] + "\n}"

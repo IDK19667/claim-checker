@@ -192,7 +192,8 @@ document.addEventListener("click", (e) => {
 // One page, three views. On a result <html> carries `checked`, and the desk's
 // stops after the first are shown; at home and on an error only stop 1 is.
 // The claim box, the error and the home panel are all in stop 1.
-function show(section) {
+// keepPlace: the reader is changing the claim as the answer lands, so the page stays where they are
+function show(section, keepPlace) {
   const result = section === resultSection;
   root.classList.toggle("checked", result);
   root.classList.toggle("has-cue", result);
@@ -204,7 +205,7 @@ function show(section) {
   askMore.hidden = section !== askSection;
   if (trustSection) trustSection.hidden = section !== askSection;
   if (!result) tellDesk("desk:home", {});
-  window.scrollTo(0, 0);
+  if (!keepPlace) window.scrollTo(0, 0);
 }
 
 // One h1 on every screen, as the server prints it: the headline at home, the
@@ -633,7 +634,7 @@ function renderResult(data, replay, keepTyped) {
   resetReport();
   setTitle(data);
   screenState.settle("result");
-  show(resultSection);
+  show(resultSection, !!keepTyped);
   tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay, typing: !!keepTyped });
 }
 

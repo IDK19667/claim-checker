@@ -292,6 +292,15 @@ await test("M1: a single space typed during a check counts as changing the claim
   const s = await j1Look(page);
   must(s.stamp && s.f === "claim-input" && s.value === GATED + " " && s.stop === 1, `focus on #${s.f}, the box holds "${s.value}", stop ${s.stop}`);
 });
+await test("L1: an answer that lands while the reader types leaves a scrolled page where it is", async (page) => {
+  await j1Start(page);
+  await page.focus("#claim-input"); await page.press("#claim-input", "End"); await page.keyboard.type(" today");
+  await page.evaluate(() => window.scrollTo({ top: 40, behavior: "instant" })); await page.waitForTimeout(300);
+  const y0 = await page.evaluate(() => Math.round(scrollY));
+  await j1Land(page);
+  const s = await j1Look(page);
+  must(y0 > 0 && s.f === "claim-input" && s.y === y0, `scrollY ${y0} became ${s.y} (focus on #${s.f})`);
+}, { w: 390, h: 480 });
 await test("an error lands focus on its title", async (page) => {
   await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
   await page.context().setOffline(true);
