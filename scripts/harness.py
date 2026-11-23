@@ -36,7 +36,13 @@ the key, a request header or the prompt. The same lines are kept in
 `quota_seen`, and the ones for the current check in snapshot()["quota"].
 
 latency=True: a replay hit sleeps the recorded milliseconds, so two versions
-of the code can be timed against each other without spending quota.
+of the code can be timed against each other without spending quota. A
+replayed PubMed request also keeps NCBI's spacing of starts first (at least
+pubmed.MIN_INTERVAL apart, process-wide, released before the sleep), because
+the real `_paced_get` it stands in for does: without it, searches run side by
+side would all start at once and time faster than PubMed allows. A recorded
+time already holds whatever spacing wait the recording met, so a replay
+reads a little slow, on both sides of a comparison alike.
 
 The numbers are process-wide (one lock), so read them for one check at a
 time: reset, run the check, snapshot. Calls the engine makes from its own
@@ -231,6 +237,8 @@ class Harness:
         self.quota_seen = []    # every 429 since install, never reset
         self.quota_log = pathlib.Path(quota_log) if quota_log else None
         self._orig_gemini = self._orig_paced = None
+        self._pace = threading.Lock()   # PubMed's spacing of starts, latency mode only
+        self._last_start = 0.0
 
     # ---- numbers ------------------------------------------------------
     def reset(self):
@@ -281,6 +289,18 @@ class Harness:
     def _sleep_recorded(self, rec):
         if self.latency:
             time.sleep((rec.get("ms") or 0) / 1000)
+
+    def _space_start(self):
+        """In latency mode, wait for PubMed's turn as pubmed._paced_get does:
+        starts at least pubmed.MIN_INTERVAL apart across every thread."""
+        if not self.latency:
+            return
+        import pubmed
+        with self._pace:
+            wait = pubmed.MIN_INTERVAL - (time.monotonic() - self._last_start)
+            if wait > 0:
+                time.sleep(wait)
+            self._last_start = time.monotonic()
 
     # ---- model ----------------------------------------------------------
     def _generate(self, call, real, kw):
@@ -362,6 +382,7 @@ class Harness:
         self._add(pubmed_requests=1)
         rec = self._serve("pubmed", key)
         if rec is not None:
+            self._space_start()
             self._sleep_recorded(rec)
             self._add(pubmed_replayed=1, pubmed_ms=rec.get("ms") or 0)
             return load_pubmed_response(rec["response"], req)

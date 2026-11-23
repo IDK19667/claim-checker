@@ -11490,6 +11490,73 @@ t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4
   not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],
   [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s])
 
+# ---- check speed (q10 5a): the replay tools that prove a faster check says the same ----
+import threading as _sp_threading  # noqa: E402
+import importlib.util as _sp_imp  # noqa: E402
+sys.path.insert(0, str(ROOT / "scripts"))
+import harness as _sp_harness  # noqa: E402
+_sp_spec = _sp_imp.spec_from_file_location("replay_compare", ROOT / "scripts" / "replay_compare.py")
+_sp_rc = _sp_imp.module_from_spec(_sp_spec)
+_sp_spec.loader.exec_module(_sp_rc)
+_sp_dir = pathlib.Path(tempfile.mkdtemp(prefix="speed-"))
+
+
+def _sp_write(name, rows):
+    d = _sp_dir / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "results.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return str(d)
+
+
+def _sp_row(i, verdict_="true", t0=1.0, pubmed_n=5):
+    return {"id": i, "http_status": 200, "status": 200, "verdict": verdict_,
+            "response": {"verdict": verdict_, "tldr": "x"}, "wall": t0 + 0.1,
+            "events": [{"stage": "search", "t": 0.0, "took": 0.0},
+                       {"stage": "done", "t": t0, "took": t0}],
+            "harness": {"model_calls": 3, "model_tries": 3, "pubmed_requests": pubmed_n, "misses": []}}
+
+
+_sp_a = _sp_write("a", [_sp_row("1"), _sp_row("2")])
+_sp_b = _sp_write("b", [_sp_row("1", t0=0.5), _sp_row("2", t0=0.4)])
+_sp_c = _sp_write("c", [_sp_row("1", "false"), _sp_row("2", pubmed_n=6)])
+_sp_code, _sp_text = _sp_rc.report(_sp_a, _sp_b, quiet=True)
+t("speed: replay_compare counts results the same apart from their timing fields as identical",
+  _sp_code == 0 and "identical apart from timing: 2 of 2" in _sp_text
+  and "done at median 1.00s" in _sp_text and "done at median 0.45s" in _sp_text, _sp_text)
+_sp_code, _sp_text = _sp_rc.report(_sp_a, _sp_c, quiet=True)
+t("  and names a changed answer's keys and a claim whose request counts differ, and fails",
+  _sp_code == 1 and "identical apart from timing: 1 of 2" in _sp_text
+  and "response.verdict" in _sp_text and "claims whose request counts differ: 1" in _sp_text, _sp_text)
+
+# Latency replay keeps PubMed's spacing of starts, so searches run side by
+# side cannot time faster than NCBI allows.
+_sp_store = _sp_dir / "store"
+_sp_keys = []
+for _i in range(4):
+    _req = _sp_harness.pubmed_request("esearch.fcgi", {"term": f"q{_i}"})
+    _k = _sp_harness.key_of(_req)
+    _sp_harness.Store(_sp_store).put("pubmed", _k, {
+        "kind": "pubmed", "key": _k, "request": _req, "ms": 50,
+        "response": {"status_code": 200, "encoding": "utf-8", "content_type": "application/json",
+                     "text": "{}"}})
+_sp_min, _sp_starts = pubmed.MIN_INTERVAL, []
+pubmed.MIN_INTERVAL = 0.1
+_sp_h = _sp_harness.install("replay", str(_sp_store), latency=True)
+_sp_real_space = _sp_h._space_start
+_sp_h._space_start = lambda: (_sp_real_space(), _sp_starts.append(_time.monotonic()))
+_sp_threads = [_sp_threading.Thread(target=pubmed._paced_get, args=("esearch.fcgi", {"term": f"q{_i}"}))
+               for _i in range(4)]
+for _th in _sp_threads:
+    _th.start()
+for _th in _sp_threads:
+    _th.join()
+_sp_h.uninstall()
+pubmed.MIN_INTERVAL = _sp_min
+_sp_starts.sort()
+t("  a latency replay spaces PubMed starts across threads as _paced_get does, and misses nothing",
+  len(_sp_starts) == 4 and min(b - a for a, b in zip(_sp_starts, _sp_starts[1:])) >= 0.095
+  and not _sp_h.misses and _sp_h.snapshot()["pubmed_replayed"] == 4, (_sp_starts, _sp_h.misses))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
