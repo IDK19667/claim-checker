@@ -192,6 +192,46 @@ ENTRIES = [
      "source": ("NHS: Diarrhoea and vomiting", "https://www.nhs.uk/conditions/diarrhoea-and-vomiting/"),
      "quote": "a child under 5 years has signs of dehydration, such as fewer wet nappies"},
 
+    # ---- babies under 12 months ------------------------------------------------
+    {"id": "honey-under-1", "topic": "Honey and babies", "rank": 1,
+     "when": [HONEY, CHILD + "|" + COUGH],
+     "trigger": "honey, with a child or baby, or with a cough, cold or sore throat",
+     "line": "Do not give honey to babies under 1 year old.",
+     "source": ("NHS: Foods to avoid giving babies and young children",
+                "https://www.nhs.uk/conditions/baby/weaning-and-feeding/foods-to-avoid-giving-babies-and-young-children/"),
+     "quote": "Do not give your child honey until they're over 1 year old."},
+    {"id": "baby-safe-sleep", "topic": "How a baby sleeps", "rank": 1,
+     "when": [BABY, SLEEP],
+     "trigger": "a baby or infant, and sleep, a cot, bed sharing or SIDS",
+     "line": "Always put a baby to sleep on their back, with their feet at the foot of the cot, "
+             "to lower the risk of sudden infant death syndrome.",
+     "source": ("NHS: Reduce the risk of sudden infant death syndrome",
+                "https://www.nhs.uk/baby/caring-for-a-newborn/reduce-the-risk-of-sudden-infant-death-syndrome/"),
+     "quote": "always place your baby on their back to sleep"},
+    {"id": "baby-cows-milk", "topic": "Cows' milk for babies", "rank": 2,
+     "when": [BABY + "|" + _w(r"first year", r"before 12 months", r"before (?:1|one) year"), COWS_MILK],
+     "trigger": "a baby, or the first 12 months, and cows' or whole milk",
+     "line": "Cows' milk should not be a baby's main drink until they are 12 months old.",
+     "source": ("NHS: Drinks and cups for babies and young children",
+                "https://www.nhs.uk/conditions/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/"),
+     "quote": "Cows' milk should not be given as a main drink to babies until they're 12 months old"},
+    {"id": "baby-water", "topic": "Water for young babies", "rank": 2,
+     "when": [BABY, WATER], "unless": [SALT_WATER],
+     "trigger": "a baby or infant, and water (not salt water, a water birth or waters breaking)",
+     "line": "Fully breastfed babies do not need water until they start solid foods; formula fed babies "
+             "under 6 months may need small sips of cooled boiled water in hot weather.",
+     "source": ("NHS: Drinks and cups for babies and young children",
+                "https://www.nhs.uk/conditions/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/"),
+     "quote": "Fully breastfed babies do not need any water until they've started eating solid foods."},
+    {"id": "baby-vitamin-d", "topic": "Vitamin D for babies", "rank": 2,
+     "when": [BABY + "|" + _w(r"breastfed", r"breast ?feed\w*", r"formula"), VITAMIN_D],
+     "over": ["vitamin-d-limit", "breastfeeding-medicines"],
+     "trigger": "a baby, breastfeeding or formula, and vitamin D",
+     "line": "Babies from birth to 1 year should have a daily vitamin D supplement, unless they drink "
+             "500ml or more of infant formula a day.",
+     "source": ("NHS: Vitamin D", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/"),
+     "quote": "babies from birth to 1 year of age should have a daily supplement"},
+
 ]
 
 for _e in ENTRIES:

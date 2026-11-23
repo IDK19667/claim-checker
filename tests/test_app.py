@@ -11505,6 +11505,11 @@ import safety_lines as _sl  # noqa: E402
 _SL_PROBES = {
     "baby-fever": ("Paracetamol brings down a fever in babies", "A fever helps adults fight infection"),
     "child-dehydration": ("Flat cola helps toddlers with vomiting", "Coffee causes dehydration in adults"),
+    "honey-under-1": ("Honey soothes a cough", "Manuka honey heals wounds"),
+    "baby-safe-sleep": ("Babies sleep better on their tummy", "Sleeping on your side reduces snoring"),
+    "baby-cows-milk": ("Whole milk is fine for a 9 month old baby", "Cows' milk strengthens adult bones"),
+    "baby-water": ("Newborns need water when it is hot", "Babies love salt water swims"),
+    "baby-vitamin-d": ("Infants need vitamin D drops", "Vitamin D prevents colds in adults"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
@@ -11528,6 +11533,11 @@ t("F2: ids are unique, and no line tells anyone to stop a medicine or gives a ch
   and not [e_["id"] for e_ in _sl.ENTRIES if re.search(r"\b(?:child|baby|babies|infant)", e_["line"], re.I)
            and re.search(r"\b\d+ ?(?:mg|micrograms?|ml)\b", e_["line"], re.I)
            and e_["id"] != "baby-vitamin-d"])
+t("F2: the one baby line with a number gives a formula volume, not a dose",
+  "500ml or more of infant formula" in _sl.BY_ID["baby-vitamin-d"]["line"]
+  and not re.search(r"\bmicrograms?\b|\bIU\b", _sl.BY_ID["baby-vitamin-d"]["line"]))
+t("F2: a more particular entry replaces the general one it covers (vitamin D for babies)",
+  [e_["id"] for e_ in _sl.match("Breastfed babies need vitamin D")] == ["baby-vitamin-d"])
 _sl_many = "Aspirin, honey and cough syrup are fine for a baby with a fever and diarrhoea"
 t("F2: at most two lines on one answer, the most serious first",
   len(_sl.match(_sl_many)) == 2 and all(e_["rank"] == 1 for e_ in _sl.match(_sl_many)),
