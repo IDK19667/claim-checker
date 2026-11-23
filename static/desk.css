@@ -605,6 +605,7 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 .sheet-title:focus { outline: none; }
 .sheet-src { margin: 0 0 16px; font-size: 15px; color: var(--on-deep-2); }
 .sheet-body .meta { margin: 8px 0 0; font: 500 13px/1.4 var(--mono); color: var(--on-deep-2); }
+.sheet-body .meta .used { color: var(--on-deep); }
 .sheet-section { margin-top: 22px; }
 .sheet-section p { margin: 0; font-size: 17px; line-height: 1.6; }
 .sheet .section-label { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-deep-2); margin: 0 0 6px; }

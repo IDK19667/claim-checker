@@ -1567,7 +1567,7 @@ function openStudy(i) {
   const s = currentResult && currentResult.studies[i];
   if (!s) return;
   const ti = typeInfo(s.publication_types);
-  $("sheet-meta").innerHTML = `${escapeHtml(ti.label)}${s.year ? " · " + escapeHtml(s.year) : ""}${s.cited_in_verdict ? " · <span style='color:var(--ink)'>used for the verdict</span>" : ""}${s.off_topic ? " · off topic: " + escapeHtml(s.off_topic) : ""}`;
+  $("sheet-meta").innerHTML = `${escapeHtml(ti.label)}${s.year ? " · " + escapeHtml(s.year) : ""}${s.cited_in_verdict ? ' · <span class="used">used for the verdict</span>' : ""}${s.off_topic ? " · off topic: " + escapeHtml(s.off_topic) : ""}`;
   $("sheet-title").textContent = s.title;
   $("sheet-src").textContent = [s.journal, `PMID ${s.pmid}`].filter(Boolean).join(" · ");
   const tc = $("sheet-type");

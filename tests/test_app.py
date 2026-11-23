@@ -10927,6 +10927,25 @@ t("  desk.js sets no 'gliding' class, and no stylesheet the front loads reads on
 t("  KIND_LABELS, the '.panel #overlap' rule and typedNote are gone; kindOf and KIND_FROM_TIER stay and are used",
   "KIND_LABELS" not in _c9_app and "#overlap" not in _c9_css and "function typedNote(" not in _c9_app
   and "const KIND_FROM_TIER" in _c9_app and _c9_app.count("kindOf(") >= 1 and "function typedNoteParts(" in _c9_app)
+# G1 (A9): "used for the verdict" in the study sheet was drawn in the ink colour on the night
+# ground (1.03 to 1). It takes a class, the stylesheet colours it with a token for words on
+# night, and the pair reads at 4.5 to 1 or better. No markup the script writes carries an
+# inline colour.
+_g1_app = (ROOT / "static" / "app.js").read_text()
+_g1_css = (ROOT / "static" / "desk.css").read_text()
+_g1_tok = dict(re.findall(r"--(desk-[a-z0-9-]+):\s*(#[0-9a-f]{6})", _g1_css))
+def _g1_lum(h):
+    c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+def _g1_ratio(a, b):
+    x, y = sorted((_g1_lum(a), _g1_lum(b)))
+    return (y + 0.05) / (x + 0.05)
+_g1_rule = re.search(r"\.sheet-body \.meta \.used \{ color: var\(--on-deep\); \}", _g1_css)
+t("G1: the study sheet's 'used for the verdict' has a class and no inline colour, and reads at 4.5 to 1 or better on the sheet's ground",
+  '<span class="used">used for the verdict</span>' in _g1_app and "style='color" not in _g1_app and 'style="color' not in _g1_app
+  and _g1_rule is not None and "background: var(--deep)" in _g1_css.split("dialog.sheet {")[1].split("}")[0]
+  and _g1_ratio(_g1_tok["desk-on"], _g1_tok["desk-deep"]) >= 4.5, round(_g1_ratio(_g1_tok["desk-on"], _g1_tok["desk-deep"]), 2))
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)
