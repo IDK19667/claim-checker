@@ -1825,6 +1825,15 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
 THIN_TLDR = "The studies found are too few or too small to say whether this is true."
 
 
+# A sentence that names the "It's complicated" stamp itself.
+_NAMES_COMPLICATED = re.compile(
+    r"\b(?:verdict|answer|rating|stamp|result|claim|picture|evidence|question)\s+(?:is|was|remains|seems)\s+"
+    r"(?:rated\s+|stamped\s+)?[\"\u201c\u2018']?(?:it[\u2019']?s\s+)?complicated\b(?!\s+by)"
+    r"|\bit[\u2019']?s\s+complicated\b(?!\s+by)|\bit\s+is\s+complicated\b(?!\s+by)"
+    r"|\b(?:rated|stamped|marked)\s+[\"\u201c\u2018']?(?:it[\u2019']?s\s+)?complicated\b"
+    r"|[\"\u201c\u2018]complicated[\"\u201d\u2019]", re.IGNORECASE)
+
+
 def _too_thin(result: dict, studies: list[dict], claim: str) -> dict:
     """
     "It's complicated" says the answer depends on who, how much or which
@@ -1846,7 +1855,9 @@ def _too_thin(result: dict, studies: list[dict], claim: str) -> dict:
                    + f" The evidence is too thin to rate, because {why}.").strip()
     # A breakdown sentence that names the old stamp ("The verdict is
     # complicated because ...") would argue with the new one, so it goes.
-    named = re.compile(r"\bcomplicated\b", re.IGNORECASE)
+    # Only the stamp: "a complicated pregnancy" and "colds complicated by
+    # asthma" are the studies' own words and stay.
+    named = _NAMES_COMPLICATED
     bd = breakdown.map_prose(result.get("breakdown"), lambda t: " ".join(
         x for x in breakdown.sentences(t or "") if not named.search(x)))
     return {**result, "verdict": "insufficient", "tldr": tldr, "explanation": explanation,

@@ -11654,6 +11654,16 @@ for _lab, _st, _want in _F3B_CASES:
     t(f"F3 review (reviewer, round 2): {'fires' if _want else 'stays complicated'}: {_lab}",
       bool(evidence.too_thin(_st, [x["pmid"] for x in _st])) == _want)
 
+_f3_kept = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown={
+    "strength": "The answer is complicated because one trial was small (Study 1).",
+    "applies_to": "Adults with colds (Study 1).",
+    "not_applies_to": "It was not tested in women with a complicated pregnancy (Study 1).",
+    "unknowns": "Colds complicated by asthma were left out (Study 1). It's complicated, as one trial is not enough.",
+    "evidence": ["One trial found fewer colds (Study 1)."], "says": []}), [_F3_NO], "Garlic prevents colds")["breakdown"]
+t("F3 review: only a sentence naming the stamp goes; a complicated pregnancy and colds complicated by asthma stay",
+  _f3_kept["strength"] == "" and "complicated pregnancy" in _f3_kept["not_applies_to"]
+  and "complicated by asthma" in _f3_kept["unknowns"] and "It's complicated" not in _f3_kept["unknowns"], _f3_kept)
+
 # Fix 4: the line's strength word is no surer than what a relied-on review concluded.
 t("F4: a review that concludes its evidence is not enough makes the line say low certainty, not strong",
   evidence.evidence_line("complicated", [_F3_NO, _F3_YES], ["f3a", "f3b"], "Echinacea shortens colds")

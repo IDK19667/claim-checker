@@ -4385,7 +4385,8 @@ What was deliberately rejected:
   studies, the only sized study). "Not enough evidence" over studies it
   relied on gets its own evidence line, "Too little evidence to rate this
   claim either way", where the page had printed "Strong study designs.";
-  and a breakdown sentence naming the old "complicated" goes.
+  and a breakdown sentence naming the old stamp goes (only the stamp: "a
+  complicated pregnancy" stays).
 - Evidence line: a relied-on review whose conclusion says its evidence is not
   enough (`evidence.says_not_enough`) lowers the strength word to "Low
   certainty", as `says_thin` already did. "Strong evidence" had come from the
