@@ -10895,6 +10895,24 @@ t("  scripts off, the stop reads the explanation, then the template's line, and 
   and _htmllib.unescape(_d2_nothing).find(_R4_ROWS[_d2_i]["explanation"].strip()[:40]) < _d2_nothing.find('id="no-evidence"')
   and _htmllib.unescape(_d2_nothing).find(_R4_ROWS[_d2_i]["explanation"].strip()[:40]) >= 0
   and '<aside class="nosteps" id="next-steps" hidden>' in _d2_pg)
+# C6 (F3): renderResult builds the Weighed and Research stops before it removes the ones
+# there. A study the answer did not rely on with its publication types saved as a string
+# makes weighedHtml throw; the stops already on the page must still be standing.
+_c6_i = next((i for i, r in enumerate(_R4_ROWS) if len(r["studies"]) > 1), None)
+_c6_out = None
+if _shutil.which("node") and _c6_i is not None:
+    _c6_d = json.loads(json.dumps(_r4_datas[_c6_i]))
+    _c6_k = next(k for k, s_ in enumerate(_c6_d["studies"]) if not s_.get("cited_in_verdict"))
+    _c6_d["studies"][_c6_k]["publication_types"] = "Randomized Controlled Trial"
+    _c6_h = (_D2_HARNESS.replace('if (k === "insertAdjacentHTML")', 'if (k === "remove") return () => { store.removed = true; }; if (k === "insertAdjacentHTML")')
+             .replace('"\\n;renderResult(__d, false);"', '"\\n;try { renderResult(__d, false); } catch (e) { globalThis.__threw = String(e); }"')
+             .replace("const out = {};", "const out = { __threw: ctx.__threw || null };")
+             .replace("out[id] = { hidden:", "out[id] = { removed: !!r.store.removed, hidden:"))
+    _c6_out = json.loads(_subprocess.run(["node", "-e", _c6_h, str(ROOT / "static" / "app.js")], input=json.dumps(_c6_d),
+                                         capture_output=True, text=True, check=True).stdout)
+t("C6: when building the Weighed stop throws, the Weighed and Research stops already on the page are not removed",
+  _c6_out is not None and _c6_out["__threw"] and not (_c6_out.get("s4") or {}).get("removed")
+  and not (_c6_out.get("s5") or {}).get("removed"), _c6_out and {k: _c6_out.get(k) for k in ("__threw", "s4", "s5")})
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

@@ -606,9 +606,11 @@ function renderResult(data, replay) {
   $("nosteps-head").hidden = $("nosteps-why").hidden = steps;
   if (steps) $("no-evidence").hidden = true;
   // Stops 4 and 5 are there only when they have something real to show.
+  // Build first, then swap: a throw while building leaves the stops already there standing.
+  const stops45 = weighedHtml(data) + researchHtml(data);
   $("s4")?.remove();
   $("s5")?.remove();
-  $("s6").insertAdjacentHTML("beforebegin", weighedHtml(data) + researchHtml(data));
+  $("s6").insertAdjacentHTML("beforebegin", stops45);
   // Stop 6: what is still open, the search, and the ways on.
   $("h-open").innerHTML = `<b>${pad2(stops.indexOf("Open") + 1)}</b>Still open`;
   $("still-open").hidden = !data.still_open;
