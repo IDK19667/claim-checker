@@ -2157,6 +2157,36 @@ t("  the browser draws the same quotes, never linking inside them",
 # glide for anyone who asked for less motion. The desk front moved it from
 # app.js (nudgeToAnswer) to desk.js (glideToAnswer), on the desk:result event.
 _deskjs = (ROOT / "static" / "desk.js").read_text() if (ROOT / "static" / "desk.js").exists() else ""
+# Every string desk.js can put on the page or paint on the card comes from a
+# literal in its code (or from the page, which the dash tests above read). So
+# read its code with the comments taken out: no em or en dash, typed or spelled
+# as an escape, an entity or a character code, in any string, template or name.
+def _js_code_only(src):
+    out, i, n = [], 0, len(src)
+    while i < n:
+        ch = src[i]
+        if src.startswith("//", i):
+            i = src.find("\n", i) if src.find("\n", i) >= 0 else n
+        elif src.startswith("/*", i):
+            i = src.find("*/", i + 2) + 2 if src.find("*/", i + 2) >= 0 else n
+        elif ch in "'\"`":
+            j = i + 1
+            while j < n and src[j] != ch:
+                j += 2 if src[j] == "\\" else 1
+            out.append(src[i:j + 1])
+            i = j + 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+_dk_code = _js_code_only(_deskjs)
+_dk_dash = re.findall(r"[–—]|\\u\{?0*201[34]\}?|\\x[0-9a-f]{0,2}201[34]|&[mn]dash;|&#(?:821[12]|x201[34]);"
+                      r"|fromCharCode\(\s*(?:821[12]|0x201[34])\s*\)|fromCodePoint\(\s*(?:821[12]|0x201[34])\s*\)",
+                      _dk_code, re.I)
+t("no string desk.js writes or paints carries an em or en dash, typed or spelled as an escape, entity or code",
+  all(w in _dk_code for w in ("Keep reading", "function glideToAnswer", "fillText")) and not _dk_dash, _dk_dash[:5])
 _nudge = _deskjs[_deskjs.find("function glideToAnswer"):]
 # desk.js is one closure, so its functions end at a two-space brace.
 _nudge = _nudge[:_nudge.find("\n  }\n")]
