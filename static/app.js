@@ -630,7 +630,7 @@ function renderResult(data, replay, keepTyped) {
   setTitle(data);
   screenState.settle("result");
   show(resultSection);
-  tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay });
+  tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay, typing: !!keepTyped });
 }
 
 // While a check runs the claim stays in its box and the work prints under it,

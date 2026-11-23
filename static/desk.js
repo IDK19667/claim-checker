@@ -5,7 +5,7 @@
    are the ones the page prints, the sheets and the card are drawn from the
    result on the page, and the three fixes E1 to E3 (keepDown, nextWords).
    app.js renders every word; this file lays the page out and moves it. It
-   listens for two events from app.js: desk:result ({ data, fresh }) and
+   listens for two events from app.js: desk:result ({ data, fresh, replay, typing }) and
    desk:home. */
 (function () {
   "use strict";
@@ -196,10 +196,12 @@
     }
     wake();
   }
+  // A reader changing the words in the claim box is moving: the answer is laid out where they are, as a replay keeps
+  // the place, with no jump to the answer and no glide.
   document.addEventListener("desk:result", function (e) {
-    var detail = e.detail || {};
-    load(detail.data, !!detail.fresh, !!detail.replay);
-    if (detail.fresh) glideToAnswer();
+    var detail = e.detail || {}, typing = !!detail.typing;
+    load(detail.data, !!detail.fresh && !typing, !!detail.replay || typing);
+    if (detail.fresh && !typing) glideToAnswer();
   });
   // during a check: at "found N", N blank sheets stand in the stack (3D only; text mode has no sheets)
   var onStage = function () {};

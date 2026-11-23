@@ -2191,14 +2191,14 @@ _nudge = _deskjs[_deskjs.find("function glideToAnswer"):]
 # desk.js is one closure, so its functions end at a two-space brace.
 _nudge = _nudge[:_nudge.find("\n  }\n")]
 t("after a check the page moves to the answer, once",
-  _deskjs.count("glideToAnswer(") == 2 and "if (detail.fresh) glideToAnswer(" in _deskjs
-  and "nudgeToAnswer" not in _js and 'tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay })' in _js)
+  _deskjs.count("glideToAnswer(") == 2 and "if (detail.fresh && !typing) glideToAnswer(" in _deskjs
+  and "nudgeToAnswer" not in _js and 'tellDesk("desk:result", { data, fresh: !replay && !data.cached && !data.restored, replay: !!replay, typing: !!keepTyped })' in _js)
 # R5: Back and Forward show the same result again without a second glide, and the
 # place the browser restores (Back, Forward, a reload) is kept, not cut to stop 2.
 _pop = _js[_js.find('window.addEventListener("popstate"'):][:300]
 t("R5: Forward to a result shows it again as a replay, never a second glide",
   "renderResult(currentResult, true)" in _pop and "function renderResult(data, replay, keepTyped)" in _js
-  and "load(detail.data, !!detail.fresh, !!detail.replay)" in _deskjs and "else if (replay) adoptScroll(" in _deskjs)
+  and "load(detail.data, !!detail.fresh && !typing, !!detail.replay || typing)" in _deskjs and "else if (replay) adoptScroll(" in _deskjs)
 t("  a reload or Back/Forward into the page keeps the place the browser restores",
   'navEntry.type === "reload" || navEntry.type === "back_forward"' in _deskjs
   and "if (checked && restoring) adoptScroll(" in _deskjs

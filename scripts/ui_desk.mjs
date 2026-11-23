@@ -217,27 +217,54 @@ for (const path of ["/", "/?nogl=1"]) {
   });
 }
 // J1: a reader changing the words in the claim box while a check runs keeps focus, caret and
-// words when the answer lands; the answer is still drawn and announced. Words left as sent
-// (focus still in the box) land on the verdict as before. The gated claim holds the check open.
+// words when the answer lands, and the view stays where it is: no jump to the answer and no
+// glide (a reader typing is moving); the answer is still drawn and announced. This holds for a
+// fresh answer and for a cached one. Words left as sent (focus still in the box) land on the
+// verdict and glide to the answer as before. The gated claim holds a fresh check open; a cached
+// one is held by delaying the request in the browser.
 const GATED = "Gated claim for stage test";
 const release = async (...gates) => { for (const g of gates) await fetch(`${base}/__fixture/release/${g}`); };
-for (const [path, typed] of [["/", true], ["/?nogl=1", true], ["/?nogl=1", false]]) {
-  await test(`${typed ? "words typed during a check keep focus in the claim box when the answer lands" : "words left as sent land focus on the verdict"}, ${path === "/" ? "3D" : "text mode"}`, async (page) => {
-    await page.goto(base + path, { waitUntil: "load" }); await ready(page);
+const J1_NAME = { typed: "words typed during a check keep focus, caret and place when the answer lands",
+  sent: "words left as sent land focus on the verdict and glide to the answer",
+  cached: "words typed while a cached answer comes back keep focus, caret and place" };
+for (const [path, kind] of [["/", "typed"], ["/?nogl=1", "typed"], ["/", "sent"], ["/?nogl=1", "sent"], ["/?nogl=1", "cached"]]) {
+  await test(`${J1_NAME[kind]}, ${path === "/" ? "3D" : "text mode"}`, async (page) => {
+    const typed = kind !== "sent";
+    let hold = null, bodies = [];
+    if (kind === "cached") {
+      // run the claim once to the end, so the fixture has it cached, then open the page afresh
+      await release("query", "found", "done");
+      await page.goto(base + path, { waitUntil: "load" }); await ready(page);
+      await send(page, GATED);
+      await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 });
+      let open; hold = new Promise((r) => { open = r; }); hold.open = open;
+      await page.route((u) => u.pathname.startsWith("/api/check"), async (route) => { await hold; await route.continue(); });
+      page.on("response", (r) => { if (new URL(r.url()).pathname.startsWith("/api/check")) bodies.push(r.text().catch(() => "")); });
+    }
+    await page.goto(base + path, { waitUntil: "load" }); await ready(page); await page.waitForTimeout(600);
     await send(page, GATED);
     await page.waitForFunction(() => document.getElementById("submit-btn").disabled, null, { timeout: 15000 });
-    await release("query");
+    if (kind !== "cached") await release("query");
     await page.focus("#claim-input");
     if (typed) { await page.press("#claim-input", "End"); await page.keyboard.type(" today"); }
-    await release("found", "done");
+    const y0 = await page.evaluate(() => scrollY);
+    if (kind === "cached") hold.open(); else await release("found", "done");
     await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 });
-    await page.waitForTimeout(600);
-    const s = await page.evaluate(() => { const a = document.activeElement, i = document.getElementById("claim-input");
-      return { f: a && a.id, value: i.value, caret: i.selectionStart, stamp: document.getElementById("stamp").textContent.trim(),
+    if (typed) await page.waitForTimeout(path === "/" ? 8000 : 3000);
+    else await page.waitForFunction(() => window.__evident.stats().stop === 2, null, { timeout: 45000 }).catch(() => {});
+    const look = () => page.evaluate(() => { const a = document.activeElement, i = document.getElementById("claim-input"), r = i.getBoundingClientRect();
+      return { f: a && a.id, value: i.value, caret: i.selectionStart, stop: window.__evident.stats().stop, y: Math.round(scrollY),
+        top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, stamp: document.getElementById("stamp").textContent.trim(),
         echo: document.getElementById("claim-echo").textContent, said: document.getElementById("announce").textContent }; });
+    const s = await look();
     must(s.stamp && s.echo.includes(GATED) && /^Verdict: /.test(s.said), `the answer was not drawn and announced (verdict "${s.stamp}", claim "${s.echo}", said "${s.said}")`);
-    if (typed) must(s.f === "claim-input" && s.value === GATED + " today" && s.caret === s.value.length, `focus on #${s.f}, the box holds "${s.value}" with the caret at ${s.caret}`);
-    else must(s.f === "stamp", `focus is on #${s.f}`);
+    if (kind === "cached") { const t = (await Promise.all(bodies)).join(""); must(/"cached":\s*true/.test(t), "the second check did not come back cached"); }
+    if (!typed) { must(s.f === "stamp" && s.stop === 2, `focus is on #${s.f} at stop ${s.stop}`); return; }
+    must(s.f === "claim-input" && s.value === GATED + " today" && s.caret === s.value.length, `focus on #${s.f}, the box holds "${s.value}" with the caret at ${s.caret}`);
+    must(s.stop === 1 && s.y === Math.round(y0) && s.top >= 0 && s.bottom <= s.vh, `the view moved: stop ${s.stop}, scrollY ${Math.round(y0)} to ${s.y}, the box at ${s.top}..${s.bottom} of ${s.vh}`);
+    await page.keyboard.type(" now"); await page.waitForTimeout(path === "/" ? 3000 : 800);
+    const z = await look();
+    must(z.f === "claim-input" && z.value === GATED + " today now" && z.stop === 1, `after one more word: focus on #${z.f}, the box holds "${z.value}", stop ${z.stop}`);
   });
 }
 await test("an error lands focus on its title", async (page) => {
