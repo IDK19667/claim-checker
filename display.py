@@ -241,15 +241,13 @@ def desk_stops(result) -> list:
 def desk_lines(result) -> dict:
     """The desk front's counted sentences, each worded from the record's own
     study list and nothing else: the Read stop's heading and line, the key to
-    the desk, the line under the short answer, and what the verdict rests on.
+    the desk, and what the verdict rests on.
     static/app.js deskLines is the same; a test runs both on the same records."""
     studies = (result or {}).get("studies") or []
     g = source_groups(studies)
     n, r, b, o, x = len(studies), len(g["cited"]), len(g["back"]), len(g["others"]), len(g["excluded"])
-    stops = desk_stops(result)
     if not n:
-        return {"read": "No studies read.", "path": "", "legend": "",
-                "below": "Below: the search that ran, and what is still open.", "rests": ""}
+        return {"read": "No studies read.", "path": "", "legend": "", "rests": ""}
     path = _join_and([f"{r} relied on" if r else "None relied on",
                       f"{b} background only" if b else "",
                       f"{o} read and not relied on" if o else "",
@@ -264,8 +262,6 @@ def desk_lines(result) -> dict:
             ", with " + _join_and(rest) if rest else "") + "."
     else:
         legend = "In the light: " + _join_and(rest) + ". None was relied on."
-    below = ("Below: what was read, the " + _count(n, "study", "studies")
-             + (", the full answer," if "Research" in stops else ",") + " and what is still open.")
     more = []
     if o + b:
         more.append(f"{o + b} more {'was' if o + b == 1 else 'were'} read and not relied on")
@@ -274,7 +270,7 @@ def desk_lines(result) -> dict:
     tail = _join_and(more)
     rests = f"Rests on {_count(r, 'study', 'studies')}." + (" " + tail[:1].upper() + tail[1:] + "." if tail else "")
     return {"read": _count(n, "study", "studies") + " read.", "path": path, "legend": legend,
-            "below": below, "rests": rests}
+            "rests": rests}
 
 
 def _plural_design(label: str) -> str:

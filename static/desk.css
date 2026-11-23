@@ -85,7 +85,11 @@
   --strip: 32px;
   --bar: 0px;
   --bar-space: calc(84px + env(safe-area-inset-bottom, 0px));
+  --cue-row: 52px;              /* the cue row and the gap under it (44 + 8); 56 on phones */
 }
+/* on a result the bottom block is two rows (the cue row on top of the bar row): everything laid out against the bar
+   uses the whole block, and keeps it when the cue row goes at the end of the last stop, so no stop moves */
+html.checked { --bar-space: calc(84px + var(--cue-row) + env(safe-area-inset-bottom, 0px)); }
 /* hidden means hidden, whatever display a class gives (a study's Details fold
    is the one exception: on a wide screen it is always open) */
 [hidden]:not(.more):not(.rows) { display: none !important; }
@@ -260,10 +264,17 @@ html.kbd .bar { visibility: hidden; }
 .next { justify-self: end; appearance: none; min-height: 48px; padding: 0 16px 0 18px; border-radius: 3px; border: 1px solid var(--paper); background: var(--paper); color: var(--ink); font: 600 16px/1.2 var(--body); cursor: pointer; display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
 .next:hover { border-color: var(--desk-white); text-decoration: underline; text-underline-offset: 4px; }
 .next svg { width: 14px; height: 14px; flex: none; }
-.next.pulse { animation: pulse 1.1s ease-in-out 1; }
-@keyframes pulse { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.07); } }
 .next.last svg { transform: rotate(180deg); }
-@media (prefers-reduced-motion: reduce) { .next.pulse { animation: none; } }
+/* the cue row: the bar's Next, as wide as the bar row and on top of it, saying to scroll */
+html.has-cue .bar > .prev, html.has-cue .bar > .where, html.has-cue .bar > .next { grid-row: 2; }
+.bar > .cue { grid-column: 1 / -1; grid-row: 1; appearance: none; width: 100%; min-height: 44px; padding: 0 16px; border-radius: 3px; border: 1px solid var(--paper); background: var(--paper); color: var(--ink); font: 600 17px/1.2 var(--body); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+.bar > .cue:hover { border-color: var(--desk-white); text-decoration: underline; text-underline-offset: 4px; }
+.bar > .cue svg { width: 20px; height: 20px; flex: none; }
+.bar > .cue:focus-visible { outline-color: var(--deep); }
+.bar > .cue.dip svg { animation: dip 600ms ease-in-out 2; }
+@keyframes dip { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }
+html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bottom, 0px)); }
 .where { justify-self: center; appearance: none; min-height: 48px; padding: 0 12px; border-radius: 3px; border: 1px solid var(--desk-edge); background: var(--panel); color: var(--on-deep-2); font: 500 13px/1 var(--mono); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; }
 .where:hover { color: var(--on-deep); }
 .menu { position: fixed; z-index: 13; left: 50%; transform: translateX(-50%); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); background: var(--deep); border: 1px solid var(--deep-line); border-radius: 3px; padding: 6px; display: grid; min-width: 210px; }
@@ -298,7 +309,6 @@ html.kbd .bar { visibility: hidden; }
 /* the rest of the answer sits on a calm, solid dark ground */
 .has-gl #cap-answer .inner, .has-gl #s3 .inner, .has-gl #s6 .inner { background: var(--deep); border-radius: 3px; padding: 24px 26px 26px; }
 .has-gl #cap-answer .inner::before, .has-gl #s3 .inner::before, .has-gl #s6 .inner::before { display: none; }
-.below { font-size: 17px; color: var(--on-deep-2); margin: 16px 0 0; max-width: 26em; }
 @media (min-width: 761px) {
   /* the panel adds its padding outside the original text column, so words keep their width and place */
   .has-gl #s3 .inner { width: min(572px, 100%); }
@@ -310,6 +320,8 @@ html.kbd .bar { visibility: hidden; }
 }
 
 @media (max-width: 760px) {
+  :root { --cue-row: 56px; }
+  .bar > .cue { min-height: 48px; font-size: 16px; }
   .where { padding: 0 10px; }
   .next { padding: 0 12px 0 14px; font-size: 15px; gap: 8px; }
   .prev { padding: 0 10px 0 8px; }
@@ -360,20 +372,18 @@ html.kbd .bar { visibility: hidden; }
   .has-gl .stop.long { padding-top: calc(var(--strip) + 42vh); padding-top: calc(var(--strip) + 42svh); }
   .has-gl #cap-answer .inner { width: 100%; }
 }
-/* short phones: the main button and the "Below:" line come up to the first screen; the doctor line and "Check another claim" follow just below it */
+/* short phones: the main button comes up to the first screen; the doctor line and "Check another claim" follow just below it */
 @media (max-width: 760px) and (max-height: 700px) {
   .has-gl #cap-answer .inner { display: flex; flex-direction: column; align-items: flex-start; }
   .has-gl #cap-answer .two { display: contents; }
   .has-gl #cap-answer .sure-label { order: 1; } .has-gl #cap-answer .sure { order: 2; }
   .has-gl #how-answer { order: 3; margin-top: 14px; }
-  .has-gl #below { order: 4; }
   .has-gl #cap-answer .doctor { order: 5; align-self: stretch; }
   .has-gl #cap-answer [data-again] { order: 6; margin-top: 8px; }
 }
-/* the shortest phones: the button and "Below:" first, how sure right after them */
+/* the shortest phones: the button first, how sure right after it */
 @media (max-width: 760px) and (max-height: 600px) {
   .has-gl #how-answer { order: 1; margin-top: 0; }
-  .has-gl #below { order: 2; }
   .has-gl #cap-answer .sure-label { order: 3; margin-top: 18px; }
   .has-gl #cap-answer .sure { order: 4; }
 }
@@ -420,7 +430,7 @@ html.kbd .bar { visibility: hidden; }
 .no-gl #s2 .cap, html:not(.js) #s2 .cap { margin-bottom: auto; }
 
 @media (prefers-reduced-motion: reduce) {
-  .next svg, .next.pulse { animation: none; }
+  .next svg { animation: none; }
 }
 
 /* ===== The site's own pieces, in the desk's grammar ===== */

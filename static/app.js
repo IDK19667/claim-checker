@@ -195,6 +195,7 @@ document.addEventListener("click", (e) => {
 function show(section) {
   const result = section === resultSection;
   root.classList.toggle("checked", result);
+  root.classList.toggle("has-cue", result);
   setH1(section === askSection ? "ask" : result ? "result" : "error");
   $("skip").hidden = !result;
   // A result keeps the claim box: it is stop 1, the claim as typed, ready to edit.
@@ -399,7 +400,7 @@ function deskLines(data) {
   const studies = data.studies || [];
   const g = sourceGroups(studies);
   const n = studies.length, r = g.cited.length, b = g.back.length, o = g.others.length, x = g.excluded.length;
-  if (!n) return { read: "No studies read.", path: "", legend: "", below: "Below: the search that ran, and what is still open.", rests: "" };
+  if (!n) return { read: "No studies read.", path: "", legend: "", rests: "" };
   const path = joinAnd([r ? `${r} relied on` : "None relied on", b ? `${b} background only` : "",
                         o ? `${o} read and not relied on` : "", x ? `${x} set aside as off topic` : ""]) + ".";
   const rest = [];
@@ -408,14 +409,12 @@ function deskLines(data) {
   const legend = r
     ? `In the light: the ${plural(r, "paper", "papers")} the answer relies on` + (rest.length ? ", with " + joinAnd(rest) : "") + "."
     : "In the light: " + joinAnd(rest) + ". None was relied on.";
-  const below = "Below: what was read, the " + plural(n, "study", "studies")
-    + (deskStops(data).includes("Research") ? ", the full answer," : ",") + " and what is still open.";
   const more = [];
   if (o + b) more.push(`${o + b} more ${o + b === 1 ? "was" : "were"} read and not relied on`);
   if (x) more.push(`${x} ${x === 1 ? "was" : "were"} set aside as off topic`);
   const tail = joinAnd(more);
   const rests = `Rests on ${plural(r, "study", "studies")}.` + (tail ? " " + tail.slice(0, 1).toUpperCase() + tail.slice(1) + "." : "");
-  return { read: plural(n, "study", "studies") + " read.", path, legend, below, rests };
+  return { read: plural(n, "study", "studies") + " read.", path, legend, rests };
 }
 // The plural of a lower-case design label; display._plural_design is the same.
 function pluralDesign(label) {
@@ -576,7 +575,9 @@ function renderResult(data, replay, keepTyped) {
   showTyped(data.typed, data.typed_reason);
   $("confidence").textContent = confidenceLine(data);
   $("doctor-line").hidden = false;
-  $("below").textContent = dl.below;
+  // the cue row on top of the bar, as the server prints it on the Answer stop; desk.js names it for each stop after
+  $("cue-label").textContent = "Scroll down: what was read";
+  $("cue").hidden = false;
   resultSection.dataset.verdict = data.verdict;
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
   // Stop 3: what was read.

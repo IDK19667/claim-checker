@@ -25,6 +25,10 @@
  *    in text mode and with scripts off. Every screen has one h1, on both paths.
  * 16. The strip is the banner, the site links a Site navigation, the last stop's
  *    closing lines the footer, and Still open a heading and a region of that name.
+ * 17. The cue row on top of the bar row: in view, as wide, sizes and contrast, its
+ *    words from Next's state, a click moves as Next does, gone at the end; the
+ *    chevron dips once and never under reduced motion; in 3D a wheel or a drag from
+ *    the Answer lands on Read, and text mode scrolls freely with the words following.
  */
 import { chromium } from "playwright";
 
@@ -38,8 +42,8 @@ const browser = await chromium.launch({ args: ARGS });
 const results = [];
 const must = (c, m) => { if (!c) throw new Error(m); };
 
-async function test(name, fn, { w = 390, h = 844, reduce = false } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: reduce ? "reduce" : "no-preference", serviceWorkers: "block" });
+async function test(name, fn, { w = 390, h = 844, reduce = false, touch = false } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: reduce ? "reduce" : "no-preference", serviceWorkers: "block", hasTouch: touch });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -377,6 +381,134 @@ for (const way of ["saved", "fresh"]) {
     const notice = n.banner === 1 && /Not medical advice/.test(await banner.innerText());
     must(notice && n.nav >= 1 && n.foot === 1 && n.region === 1 && n.heading === 1, JSON.stringify({ ...n, notice }));
   });
+}
+
+// ---- 17. The cue row: the bottom block's top row says to scroll ----------------------------------
+// On a result the bottom controls are two rows: the cue row (one wide button) on top of the bar row.
+// At every size, in 3D and text mode: the cue row is in the viewport, directly on top of the bar row
+// and as wide as it; 44 px tall or more (48 on phones), words 16 px or more at 7:1 or more, a focus
+// ring; out of the tab order and not read (Next, first in the bar, names the same place). Its words
+// come from the same state as Next's: the next stop by name ("Scroll down: what was read"), what is
+// left of a long stop with the same count ("Scroll down: 11 more studies"), and at the end of the
+// last stop it is gone and the block is one row. Stop 2 still sits above the block wherever it did
+// before the cue (the dim "Below:" sentence is gone). A click moves exactly as Next does.
+const cueLook = (page) => page.evaluate(() => {
+  const r = (id) => document.getElementById(id).getBoundingClientRect(), cue = document.getElementById("cue"), c = r("cue"), p = r("prev"), n = r("next"), b = r("bar");
+  const bg = (e) => { for (let x = e; x; x = x.parentElement) { const v = getComputedStyle(x).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(v)) return v; } return "rgb(0, 0, 0)"; };
+  const lab = document.getElementById("cue-label"), cs = getComputedStyle(lab);
+  return { hidden: cue.hidden || getComputedStyle(cue).display === "none", words: lab.textContent, next: document.getElementById("next-label").textContent,
+    stop: window.__evident.stats().stop, c: { t: c.top, b: c.bottom, l: c.left, r: c.right, h: c.height }, row: { t: Math.min(p.top, n.top), l: p.left, r: n.right },
+    bar: { t: b.top, h: b.height }, vh: innerHeight, vw: innerWidth, size: parseFloat(cs.fontSize), fg: cs.color, bg: bg(lab),
+    ariaHidden: cue.getAttribute("aria-hidden"), tab: cue.tabIndex, svg: cue.querySelector("svg").getBoundingClientRect().width,
+    one: document.documentElement.classList.contains("has-cue") };
+});
+const cueFor = (next, stop) => {
+  const m = next.match(/^Keep reading(?:: (\d+) more)?/);
+  if (m) return "Scroll down: " + (m[1] ? m[1] + " more " + (m[1] === "1" ? "study" : "studies") : "more of this part");
+  if (stop === 1) return "Scroll down: your answer";
+  return next.replace(/^Next: /, "Scroll down: ");
+};
+const FITS2 = new Set(["390x844 3d", "390x844 text", "768x1024 3d", "768x1024 text", "1440x900 3d", "1440x900 text", "1440x700 3d"]);
+for (const [w, h] of [[320, 568], [390, 844], [768, 1024], [1440, 900], [1440, 700]]) {
+  for (const mode of ["3d", "text"]) {
+    await test(`the cue row sits on the bar row, as wide, says what Next says and moves as Next does, ${w}x${h} ${mode}`, async (page) => {
+      const wait = mode === "3d" ? 3500 : 1500;
+      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}${mode === "text" ? "&nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
+      must((await page.evaluate(() => window.__evident.stats().mode)) === mode, "wrong mode");
+      await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(wait);
+      const s = await cueLook(page);
+      must(!s.hidden && s.one, "no cue row on the Answer stop");
+      must(s.c.t >= 0 && s.c.b <= s.vh && s.c.t >= s.bar.t - 0.5, `the cue row is not inside the block in view: ${Math.round(s.c.t)}..${Math.round(s.c.b)}, block top ${Math.round(s.bar.t)}`);
+      must(s.c.b <= s.row.t && s.row.t - s.c.b <= 12, `the cue row is not directly on top of the bar row (${Math.round(s.c.b)} vs ${Math.round(s.row.t)})`);
+      must(Math.abs(s.c.l - s.row.l) < 1 && Math.abs(s.c.r - s.row.r) < 1, `the cue row is ${Math.round(s.c.l)}..${Math.round(s.c.r)}, the bar row ${Math.round(s.row.l)}..${Math.round(s.row.r)}`);
+      must(s.c.h >= (w <= 760 ? 48 : 44) - 0.5 && s.size >= 16 && s.svg >= 20, `height ${s.c.h}, words ${s.size}px, chevron ${s.svg}px`);
+      must(ratio([s.fg, s.bg]) >= 7, `the cue's words read at ${ratio([s.fg, s.bg]).toFixed(2)}:1`);
+      must(s.ariaHidden === "true" && s.tab === -1, `the cue is read or tabbed to (aria-hidden ${s.ariaHidden}, tabIndex ${s.tab})`);
+      const ring = await page.evaluate(() => { const c = document.getElementById("cue"); c.focus({ focusVisible: true }); const o = getComputedStyle(c); const r = [o.outlineStyle, parseFloat(o.outlineWidth)]; c.blur(); return r; });
+      must(ring[0] !== "none" && ring[1] >= 2, `no focus ring (${ring.join(" ")})`);
+      must(s.words === cueFor(s.next, 2), `on the Answer the cue says "${s.words}", Next says "${s.next}"`);
+      must(FITS2.has(`${w}x${h} ${mode}`) ? /^Next: /.test(s.next) : true, `the Answer stop no longer fits above the block: Next says "${s.next}"`);
+      must(!(await page.evaluate(() => !!document.getElementById("below"))), "the dim Below: line is still there");
+      // a click moves as Next does: where Next keeps reading, further down the Answer; where it names Read, onto Read
+      let a = s;
+      for (let i = 0; i < 6 && a.stop === 2; i++) {
+        const keep = /^Keep reading/.test(a.next), y0 = await page.evaluate(() => scrollY);
+        await page.click("#cue"); await page.waitForTimeout(wait + 500);
+        const was = a; a = await cueLook(page); const y1 = await page.evaluate(() => scrollY);
+        must(keep ? a.stop === 2 && y1 > y0 : a.stop === 3, `a click with Next saying "${was.next}" went to stop ${a.stop} (${y0} to ${y1})`);
+        must(a.words === cueFor(a.next, a.stop), `after a click: stop ${a.stop}, cue "${a.words}", Next "${a.next}"`);
+      }
+      must(a.stop === 3, `the cue never reached the Read stop (stop ${a.stop})`);
+      must(await page.evaluate(() => document.activeElement.id !== "cue"), "a click left focus on the cue");
+      // Weighed at its top: more of the same stop, with the bar's count
+      await page.evaluate(() => window.__evident.goto(4)); await page.waitForTimeout(wait);
+      const k = await cueLook(page);
+      must(/^Keep reading/.test(k.next) && k.words === cueFor(k.next, 4) && !k.hidden, `on Weighed the cue says "${k.words}", Next says "${k.next}"`);
+      const y4 = await page.evaluate(() => scrollY);
+      await page.click("#cue"); await page.waitForTimeout(wait + 500);
+      const k2 = await cueLook(page), y5 = await page.evaluate(() => scrollY);
+      must(k2.stop === 4 && y5 > y4, `the cue on Weighed did not keep reading inside it (stop ${k2.stop}, ${y4} to ${y5})`);
+      // the end of the last stop: no cue, one row
+      await page.evaluate(() => window.__evident.goto(6)); await page.waitForTimeout(wait);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })); await page.waitForTimeout(1500);
+      const e = await cueLook(page);
+      must(e.hidden && !e.one && e.next === "Back to the start" && e.bar.h < 90, `at the end: cue hidden ${e.hidden}, Next "${e.next}", block ${Math.round(e.bar.h)} px`);
+    }, { w, h });
+  }
+}
+// the dip: once, about 3 seconds after an answer the reader just ran lands and nothing was touched;
+// never under reduced motion, never on a saved or shared answer, and any input before it cancels it
+const dips = (page) => page.evaluate(() => window.__dips || 0);
+const dipInit = (page) => page.addInitScript(() => { window.__dips = 0; document.addEventListener("animationstart", (e) => { if (e.animationName === "dip") window.__dips++; }, true); });
+for (const [what, opts] of [["after a check the reader just ran, once", {}], ["never under reduced motion", { reduce: true }], ["never on a shared answer", {}], ["not after a key press", {}]]) {
+  for (const path of ["/", "/?nogl=1"]) {
+    await test(`the cue's chevron dips ${what}, ${path === "/" ? "3D" : "text mode"}`, async (page) => {
+      await dipInit(page);
+      const shared = what.includes("shared");
+      if (shared) { await page.goto(base + path + (path === "/" ? "?" : "&") + "q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page); }
+      else {
+        await page.goto(base + path, { waitUntil: "load" }); await ready(page); await send(page, LIVE);
+        await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 });
+        if (what.includes("key")) { await page.waitForTimeout(1000); await page.keyboard.press("Shift"); }
+      }
+      await page.waitForTimeout(path === "/" ? 12000 : 5000);
+      const n1 = await dips(page); await page.waitForTimeout(3000); const n2 = await dips(page);
+      const want = what.startsWith("after") ? 1 : 0;
+      must(n1 === want && n2 === want, `the chevron dipped ${n1} then ${n2} times, wanted ${want}`);
+    }, opts);
+  }
+}
+// scrolling does what the cue says. In 3D a wheel step or a touch drag from the Answer lands on the
+// Read stop. Text mode is a freely scrolling page: there the cue's click lands on the next stop, and
+// after a free scroll into the Read stop the bar's label and the cue's words follow
+for (const [w, h] of [[390, 844], [1440, 900]]) {
+  for (const how of ["wheel", "touch"]) {
+    await test(`in 3D a ${how} from the Answer lands on the Read stop, ${w}x${h}`, async (page, ctx) => {
+      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+      await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(3000);
+      if (how === "wheel") { await page.mouse.move(w / 2, h / 2); await page.mouse.wheel(0, 100); }
+      else { const c = await ctx.newCDPSession(page); await c.send("Input.synthesizeScrollGesture", { x: Math.round(w / 2), y: Math.round(h / 2), yDistance: -150, gestureSourceType: "touch", speed: 600 }); }
+      await page.waitForTimeout(6000);
+      const s = await page.evaluate(() => { const t = document.querySelectorAll("main .stop")[2]; return { stop: window.__evident.stats().stop, y: Math.round(scrollY), top: Math.round(t.getBoundingClientRect().top + scrollY) }; });
+      must(s.stop === 3 && Math.abs(s.y - s.top) <= 1, `stop ${s.stop}, scrollY ${s.y}, the Read stop's top ${s.top}`);
+    }, { w, h, touch: how === "touch" });
+  }
+  await test(`in text mode the cue lands on the next stop, and a free scroll into it carries the bar and the cue along, ${w}x${h}`, async (page) => {
+    await page.goto(`${base}/?nogl=1&q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(1000);
+    await page.click("#cue"); await page.waitForTimeout(1500);
+    const a = await page.evaluate(() => { const t = document.querySelectorAll("main .stop")[2]; return { stop: window.__evident.stats().stop, y: Math.round(scrollY), top: Math.round(t.getBoundingClientRect().top + scrollY) }; });
+    must(a.stop === 3 && Math.abs(a.y - a.top) <= 1, `after the cue: stop ${a.stop}, scrollY ${a.y}, the Read stop's top ${a.top}`);
+    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(1000);
+    const d = await page.evaluate(() => { const t = document.querySelectorAll("main .stop")[2]; return Math.round(t.getBoundingClientRect().top) + 40; });
+    await page.mouse.move(w / 2, h / 2);
+    for (let left = d; left > 0; left -= 100) { await page.mouse.wheel(0, Math.min(100, left)); await page.waitForTimeout(60); }
+    await page.waitForTimeout(1500);
+    const b = await cueLook(page), y = await page.evaluate(() => scrollY);
+    must(b.stop === 3 && b.words === cueFor(b.next, 3) && /^Next: /.test(b.next), `after a free scroll: stop ${b.stop}, Next "${b.next}", cue "${b.words}"`);
+    await page.waitForTimeout(1000);
+    must(Math.abs((await page.evaluate(() => scrollY)) - y) < 1, "text mode settled the page after a free scroll");
+  }, { w, h });
 }
 
 await browser.close();

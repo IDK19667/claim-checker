@@ -7,7 +7,7 @@
 {%- set stops = desk_stops(result) if result else ["Claim"] %}
 {%- set dl = desk_lines(result) if result else None %}
 {%- set says_lines = ((bv.says if bv else [result.explanation]) | reject("none") | map("trim") | select | list) if result else [] %}
-<html lang="en"{% if result %} class="checked" data-screen="result"{% endif %}>
+<html lang="en"{% if result %} class="checked has-cue" data-screen="result"{% endif %}>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
@@ -279,7 +279,6 @@
         <button class="btn" type="button" id="how-answer">See how we got this answer</button>
         <button class="btn quiet" type="button" id="back-btn" data-again>Check another claim</button>
       </div>
-      <p class="below" id="below">{% if dl %}{{ dl.below }}{% endif %}</p>
     </div></div>
   </section>
 
@@ -437,6 +436,8 @@
   <button class="next" type="button" id="next"><span id="next-label">Next</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
   <button class="prev" type="button" id="prev" aria-label="Back one stop"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2.5L4.5 7 9 11.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="lab">Back</span></button>
   <button class="where" type="button" id="where" aria-haspopup="true" aria-expanded="false" aria-controls="menu"></button>
+  <!-- The cue row, drawn on top of the bar row: a wider target for the same press as Next, in words that say to scroll. Next carries the same destination for keyboards and screen readers, so this one is out of the tab order and not read. desk.js names it from the same state as Next (cueWords). -->
+  <button class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"{% if not result %} hidden{% endif %}><span id="cue-label">{% if result %}Scroll down: what was read{% endif %}</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 </div>
 <div class="menu" id="menu" hidden></div>
 

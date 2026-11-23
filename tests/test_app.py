@@ -10818,6 +10818,23 @@ t("CLAUDE.md and AGENTS.md describe the desk: desk.css and desk.js named, the ol
   and "desk.css" in _ag.split("## Styling rules")[1].split("## How to prompt")[0] and "pen ring" not in _ag
   and "static/desk.css static/desk.js" in _ag and "static/desk.css static/desk.js" in _cl_design)
 
+_cue_tpl = (ROOT / "templates" / "index.html").read_text()
+_cue_js = (ROOT / "static" / "desk.js").read_text()
+_cue_css = (ROOT / "static" / "desk.css").read_text()
+t("the cue row: one wide button in the bar that does what Next does, out of the tab order and not read; the dim Below: line is gone",
+  'class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"' in _cue_tpl
+  and _cue_tpl.index('id="cue"') > _cue_tpl.index('id="where"') and _cue_tpl.index('id="cue"') < _cue_tpl.index('id="menu"')
+  and 'cueBtn.addEventListener("click", function () { nextBtn.click(); })' in _cue_js
+  and "function cueWords(k, keep, left, short)" in _cue_js and "cueWords(k, keep, left, short)" in _cue_js.split("function nextWords")[1]
+  and "Below:" not in _cue_tpl and "Below:" not in (ROOT / "static" / "app.js").read_text()
+  and "Below:" not in (ROOT / "display.py").read_text() and 'id="below"' not in _cue_tpl)
+t("the cue row's chevron dips once and never under reduced motion; Next no longer pulses; the docs say so",
+  "@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }" in _cue_css
+  and "animation: dip 600ms ease-in-out 2" in _cue_css and "pulse" not in _cue_css and "pulse" not in _cue_js
+  and "if (reduce.matches || cueBtn.hidden" in _cue_js and "if (detail.fresh && !typing) armDip();" in _cue_js.split('addEventListener("desk:result"')[1].split("});")[0]
+  and "The cue's chevron dips once" in (ROOT / "DESIGN.md").read_text() and "chevron dips once" in _cl_design
+  and "Next pulses once" not in _cl_design)
+
 _dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
 t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",
   "The first screen holds the claim box on a short laptop" in _dec and "DESIGN.md was replaced on purpose" in _dec)
@@ -10831,7 +10848,7 @@ for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
 _linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
 t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
   all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
-  and 'const CACHE = "evident-v119";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+  and 'const CACHE = "evident-v120";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
 
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
@@ -11058,7 +11075,9 @@ if _shutil.which("node"):
       and _r4js_out[0]["stops"] == ["Claim", "Answer", "Read", "Weighed", "Research", "Open"],
       [j["stops"] for j in _r4js_out])
     t("R4: stops 2 and 3 carry the same lines on both paths",
-      all(_tr.byid.get("below", "").strip() == _js_["lines"]["below"] and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
+      all("below" not in _tr.byid and "below" not in _js_["lines"]
+          and _tr.byid.get("cue-label", "").strip() == "Scroll down: what was read"
+          and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
           and _tr.byid.get("path", "").strip() == _js_["lines"]["path"] and _tr.byid.get("legend3", "").strip() == _js_["lines"]["legend"]
           for _tr, _js_ in zip(_r4_trees, _r4js_out)),
       [(_tr.byid.get("h-read"), _js_["lines"]["read"]) for _tr, _js_ in zip(_r4_trees, _r4js_out)])

@@ -82,7 +82,10 @@ build step is a feature: anyone can read the shipped file.
   the reader just ran, cancelled by any input, a cut under reduced
   motion. Don't add another. A press of Next, Back, the rail or the menu
   glides to its stop; a live check stands its blank sheets on the desk
-  and prints the reading log; Next pulses once. No entrances on every
+  and prints the reading log. The one deliberate exception beside the
+  glide: the cue row's chevron dips once, about 3 seconds after an answer
+  the reader just ran lands, cancelled by any input, never under reduced
+  motion, never on a saved or shared answer. No entrances on every
   section, no animated backgrounds, no cursor effects, no scroll
   hijacking. Respect `prefers-reduced-motion`.
 - Cards are not a default container. Group with rules, space and the
