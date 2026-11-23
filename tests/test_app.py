@@ -10836,8 +10836,18 @@ t("the cue row's chevron dips once and never under reduced motion; Next no longe
   "@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }" in _cue_css
   and "animation: dip 600ms ease-in-out 2" in _cue_css and "pulse" not in _cue_css and "pulse" not in _cue_js
   and "if (reduce.matches || cueBtn.hidden" in _cue_js and "if (detail.fresh && !typing) armDip();" in _cue_js.split('addEventListener("desk:result"')[1].split("});")[0]
-  and "The cue's chevron dips once" in (ROOT / "DESIGN.md").read_text() and "chevron dips once" in _cl_design
+  and "The cue's chevron moves one time only, as two short dips" in (ROOT / "DESIGN.md").read_text()
+  and "chevron moves one time only, as two short dips" in _cl_design
   and "Next pulses once" not in _cl_design)
+# the dip is said one way everywhere: one time only, as two short dips; never "dips once" beside "twice"
+_dip_docs = [(ROOT / "DESIGN.md").read_text(), (ROOT / "CLAUDE.md").read_text(), _cue_js]
+t("the docs and the code say the chevron's movement one way: one time only, as two short dips",
+  not [d for d in _dip_docs if "dips once" in d or "(600ms, twice)" in d or "twice, 600 ms" in d]
+  and all("one time only, as two short dips" in d for d in _dip_docs))
+_cue_design = (ROOT / "DESIGN.md").read_text().split("- **The cue row**")[1].split("\n- **")[0]
+t("DESIGN.md's cue paragraph says Next goes quiet beside the cue and how wide the cue is on a wide screen",
+  "quiet partner" in _cue_design and "drawn exactly as Back" in _cue_design and "no\n  wider than 480px" in _cue_design
+  and "centred in the block" in _cue_design and "accessible name" in _cue_design)
 
 _dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
 t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",

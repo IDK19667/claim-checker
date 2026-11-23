@@ -516,7 +516,7 @@
     }
   }
   // once, after an answer the reader just ran: if they have done nothing for 3 seconds since it landed, the cue's
-  // chevron dips (twice, 600 ms each). Any touch, wheel, press or key before then cancels it for good. Never under
+  // chevron moves one time only, as two short dips of 600 ms. Any touch, wheel, press or key before then cancels it for good. Never under
   // reduced motion, never on a saved, shared or replayed answer
   var dipT = 0, dipOff = null;
   function armDip() {
