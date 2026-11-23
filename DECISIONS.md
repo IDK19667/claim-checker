@@ -4407,6 +4407,10 @@ What was deliberately rejected:
   result in any clause keeps the result; "uncertain whether", "unclear
   whether", "too limited to" and "too few ... to" say not enough only when no
   clause of that conclusion states a result.
+  Round 4: when the rule changes the stamp, the breakdown's strength line
+  becomes the rule's own sentence (as in the explanation): g1-33 said
+  "Evidence is mixed" under "Not enough evidence". Template and app.js both
+  print `breakdown.strength`, so no front-end change.
 - Evidence line: a relied-on review whose conclusion says its evidence is not
   enough (`evidence.says_not_enough`) lowers the strength word to "Low
   certainty", as `says_thin` already did. "Strong evidence" had come from the

@@ -11616,10 +11616,10 @@ t("F3 review: Not enough evidence over studies it relied on has its own line, no
   and "Strong" not in _display.confidence_line({"studies": [dict(_F3_NO, cited_in_verdict=True, tier="strong")],
                                               "evidence_line": evidence.INSUFFICIENT_LINE}))
 _f3_bd = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown={
-    "strength": "The verdict is complicated because one trial found fewer colds (Study 1). The review asks for more trials (Study 1).",
+    "unknowns": "The verdict is complicated because one trial found fewer colds (Study 1). The review asks for more trials (Study 1).",
     "evidence": ["One trial found fewer colds (Study 1)."], "says": []}), [_F3_NO], "Garlic prevents colds")
 t("F3 review: a breakdown sentence that names the old stamp goes when the answer becomes Not enough evidence",
-  "complicated" not in _f3_bd["breakdown"]["strength"] and "more trials" in _f3_bd["breakdown"]["strength"],
+  "complicated" not in _f3_bd["breakdown"]["unknowns"] and "more trials" in _f3_bd["breakdown"]["unknowns"],
   _f3_bd["breakdown"])
 
 # The separate reviewer's second round on thin evidence: True means the rule fires.
@@ -12154,6 +12154,22 @@ t(f"F1 round 4: thin evidence: a stated result in any clause keeps it, and unsur
 t("F1 round 4: control: 'uncertain whether' beside a stated result does not lower the line's word",
   not evidence.says_not_enough(_t14_rv("Garlic had little or no effect on blood pressure; whether higher doses help is "
                                        "uncertain, and it is unclear whether it helps in older adults.")))
+
+# Q10 F1 round 4: a forced Not enough evidence agrees with itself: the
+# breakdown's strength line becomes the rule's own sentence, nothing else moves.
+_r4_bd = {"parts": [{"part": "Garlic prevents colds", "assessment": "One trial (Study 1).", "studies": [1]}],
+          "evidence": ["One trial of 146 people (Study 1)."], "strength": "Evidence is mixed (Study 1).",
+          "applies_to": "Adults (Study 1).", "says": ["One trial of 146 people (Study 1)."]}
+_r4_out = verdict._too_thin(dict(_F3_RES(["f3a"]), breakdown=_r4_bd), [_F3_NO], "Eating garlic every day prevents colds")
+_r4_because = "The evidence is too thin to rate, because the review behind it says its own evidence is not enough to tell."
+t("F1 round 4: the forced stamp's strength line is the rule's own sentence, the one ending the explanation",
+  _r4_out["verdict"] == "insufficient" and _r4_out["breakdown"]["strength"] == _r4_because
+  and _r4_out["explanation"].endswith(_r4_because), _r4_out["breakdown"].get("strength"))
+t("F1 round 4: nothing else in the breakdown changes",
+  {k: v for k, v in _r4_out["breakdown"].items() if k != "strength"} == {k: v for k, v in _r4_bd.items() if k != "strength"})
+_r4_keep = verdict._too_thin(dict(_F3_RES(["f3a", "f3b"]), breakdown=_r4_bd), [_F3_NO, _F3_YES], "Echinacea shortens colds")
+t("F1 round 4: control: a complicated the rule leaves keeps its strength line",
+  _r4_keep["verdict"] == "complicated" and _r4_keep["breakdown"]["strength"] == _r4_bd["strength"])
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

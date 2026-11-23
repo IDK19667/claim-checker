@@ -1930,8 +1930,8 @@ def _too_thin(result: dict, studies: list[dict], claim: str) -> dict:
     tldr = result.get("tldr") or ""
     if not tldr or breakdown.stamp_conflict("insufficient", tldr, "", claim):
         tldr = THIN_TLDR
-    explanation = (str(result.get("explanation") or "").rstrip()
-                   + f" The evidence is too thin to rate, because {why}.").strip()
+    because = f"The evidence is too thin to rate, because {why}."
+    explanation = (str(result.get("explanation") or "").rstrip() + " " + because).strip()
     # A breakdown sentence that names the old stamp ("The verdict is
     # complicated because ...") would argue with the new one, so it goes.
     # Only the stamp: "a complicated pregnancy" and "colds complicated by
@@ -1939,6 +1939,10 @@ def _too_thin(result: dict, studies: list[dict], claim: str) -> dict:
     named = _NAMES_COMPLICATED
     bd = breakdown.map_prose(result.get("breakdown"), lambda t: " ".join(
         x for x in breakdown.sentences(t or "") if not named.search(x)))
+    # The strength line said why the old stamp; the rule's own sentence
+    # says why this one. Nothing else in the breakdown changes.
+    if isinstance(bd, dict) and bd.get("strength"):
+        bd = {**bd, "strength": because}
     return {**result, "verdict": "insufficient", "tldr": tldr, "explanation": explanation,
             "breakdown": bd}
 
