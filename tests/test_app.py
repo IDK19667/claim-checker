@@ -2159,7 +2159,12 @@ t("  the browser draws the same quotes, never linking inside them",
 # never against a reader who is already scrolling, and a jump rather than a
 # glide for anyone who asked for less motion. The desk front moved it from
 # app.js (nudgeToAnswer) to desk.js (glideToAnswer), on the desk:result event.
-_deskjs = (ROOT / "static" / "desk.js").read_text() if (ROOT / "static" / "desk.js").exists() else ""
+# The 3D scene lives in desk3d.js (it loads with three.js, not with the first
+# screen) and reaches desk.js's names through a bridge, as O.name. The checks
+# on the desk's code read both files, the scene's with the bridge prefix off.
+_desk3d_src = (ROOT / "static" / "desk3d.js").read_text() if (ROOT / "static" / "desk3d.js").exists() else ""
+_deskjs = __import__("re").sub(r"(?<![\w$.])O\.", "", _desk3d_src) + "\n" + (
+    (ROOT / "static" / "desk.js").read_text() if (ROOT / "static" / "desk.js").exists() else "")
 # Every string desk.js can put on the page or paint on the card comes from a
 # literal in its code (or from the page, which the dash tests above read). So
 # read its code with the comments taken out: no em or en dash, typed or spelled
@@ -11496,8 +11501,8 @@ else:
     t("K2: splitSentences returns exactly what the old lookbehind regex returned (node is needed and was not found)", False)
 t("L5: the K2 comparison records a visible failure when node is missing, never a silent skip",
   "_k2_diff[:3])\nelse:\n    # L5" in (ROOT / "tests" / "test_app.py").read_text())
-_k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "sw.js")}
-t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
+_k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "desk3d.js", "sw.js")}
+t("K2: app.js, desk.js, desk3d.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
   not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],
   [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s])
 
@@ -11585,6 +11590,21 @@ t("WOOD: the desk loads the 1024 by 2048 WebP (under 200 KB), not the 679 KB JPE
 _wd_r = c.get("/static/desk/wood-1024x2048.webp")
 t("WOOD: the WebP is served as image/webp", _wd_r.status_code == 200 and _wd_r.headers.get("Content-Type") == "image/webp",
   _wd_r.headers.get("Content-Type"))
+
+_d3_desk = (ROOT / "static/desk.js").read_text()
+_d3_scene = (ROOT / "static/desk3d.js").read_text()
+_d3_html = c.get("/").get_data(as_text=True)
+t("DESK3D: the scene's code is its own file, named to desk.js by the page (stamped) and fetched with three.js at the load event",
+  'data-scene="/static/desk3d.js?v=' in _d3_html and "new T.WebGLRenderer" in _d3_scene and "new T.WebGLRenderer" not in _d3_desk
+  and _d3_scene.startswith("/*") and "window.__evidentDesk3d = function (O) {" in _d3_scene
+  and "sceneP = loadScene(); loadLib(1);" in _d3_desk and "sceneP.then(function (ok) { if (ok) waitFonts(); else fallback(); });" in _d3_desk
+  and 'window.__evidentDesk3d(O3);' in _d3_desk)
+_d3_names = set(re.findall(r"(?<![\w$.])O\.([A-Za-z_$][\w$]*)", _d3_scene.split('"use strict";', 1)[-1]))
+_d3_bridge = set(re.findall(r"get ([A-Za-z_$][\w$]*)\(\) \{ return \1; \}, set \1\(v\) \{ \1 = v; \}", _d3_desk))
+t("DESK3D: every desk.js name the scene uses has its accessor on the bridge, and the bridge has no other",
+  _d3_names and _d3_names == _d3_bridge, sorted(_d3_names ^ _d3_bridge))
+_d3_gz = len(__import__("gzip").compress(_d3_desk.encode(), 6))
+t("DESK3D: desk.js, which the first screen needs, is under 20 KB gzipped", _d3_gz < 20 * 1024, _d3_gz)
 
 # ---- HOME LISTS: the home page's lists are kept in memory for a short while ----
 _hl_calls = {"recent": 0, "example": 0, "fail": False}

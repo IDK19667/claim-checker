@@ -4,6 +4,28 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): The 3D scene's code arrives with three.js, not with the first screen
+
+The first visit fetched about 214 KB before any 3D file, over the 200 KB
+budget, and desk.js was 37 KB of it although two thirds of it (its
+`start()`: the renderer, camera, sheets, lamp, wood, frame loop) only
+runs once three.js is in. That code is now `static/desk3d.js`, fetched
+at the load event beside three.js and the wood, only where the desk is
+drawn (never on Save-Data, 2G, `?nogl` or without WebGL). desk.js drops
+to about 17 KB as sent and the first load to about 195 KB.
+
+- No bundler: the move was mechanical (`start()`'s body, unchanged, with
+  every desk.js name it uses written `O.name`). `O3` in desk.js has one
+  get/set accessor per name, so reading or setting `O.name` reads or
+  sets desk.js's own variable, as the closure did. A test holds the
+  bridge and the names the scene uses equal.
+- If desk3d.js cannot load, the page goes to text mode, as when three.js
+  cannot.
+- The wood went from a 679 KB JPEG to a 190 KB WebP at 1024 by 2048: the
+  grain runs along the picture's width, so the detail is in its height
+  and only the width was halved. Safari before 14 cannot read WebP; the
+  desk then draws its plain wood colour, as on any failed load.
+
 ## 2026-11-23 (q10): The service worker installs less, and the home page has a time limit
 
 SHELL held 20 addresses: four other pages, `style.css` (not used by the

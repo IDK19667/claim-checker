@@ -19,7 +19,7 @@ change), `DECISIONS.md` (why things are the way they are), `README.md`
 | Verdict | `verdict.py` | provider abstraction, JSON schema, prose gate |
 | Storage | `db.py`, SQLite | verdict cache, anonymous check log, feedback |
 | Cards | `og.py`, Pillow | 1200x630 link previews |
-| Front end | `templates/`, `static/app.js`, `static/desk.css`, `static/desk.js`, `static/style.css` | no framework, no bundler; three.js is the one vendored file |
+| Front end | `templates/`, `static/app.js`, `static/desk.css`, `static/desk.js`, `static/desk3d.js`, `static/style.css` | no framework, no bundler; three.js is the one vendored file |
 | Offline | `static/sw.js`, `static/manifest.webmanifest` | home page network first with a 2.5 s limit once a copy is kept; stamped files and fonts cache first |
 
 Ask before adding a dependency, and say what it buys. The absence of a
@@ -56,7 +56,9 @@ build step is a feature: anyone can read the shipped file.
   world; a redesign replaces `DESIGN.md` on purpose, never by drift.
 - The front page is the lamp-lit desk: `templates/index.html`,
   `static/desk.css` and `static/desk.js`, with three.js in
-  `static/vendor/`. Every other page
+  `static/vendor/`. The 3D scene itself is `static/desk3d.js`, fetched
+  with three.js at the load event, never with the first screen; it
+  reaches `desk.js`'s names through the `O3` bridge (one accessor each). Every other page
   (about, how it works, corrections, privacy, the 404, stats) keeps
   `static/style.css`. The front must work as text, without WebGL and
   without scripts.

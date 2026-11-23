@@ -43,7 +43,7 @@ db.py             verdict cache, anonymous check log, feedback
 og.py             link-preview cards (Pillow, server-side)
 ratelimit.py      in-memory sliding windows
 templates/        index.html (the desk front), info.html, privacy.html, stats.html, 404.html
-static/           desk.css + desk.js (the front), app.js, style.css (the other pages),
+static/           desk.css + desk.js (the front), desk3d.js (its 3D scene, loaded with three.js), app.js, style.css (the other pages),
                   sw.js, manifest, vendor/ (three.js), desk/ (the wood), icons/, fonts/
 tests/            test_app.py, fake provider, no network
 scripts/          live_batch.py, real claims against a real key

@@ -34,7 +34,7 @@ const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.a
 const base = process.argv[2]?.startsWith("http") ? process.argv[2] : "http://127.0.0.1:5652";
 const logPath = arg("--log");
 const live = arg("--live");
-const THREE_D = /\/static\/vendor\/three|\/static\/desk\/wood/;
+const THREE_D = /\/static\/vendor\/three|\/static\/desk\/wood|\/static\/desk3d\.js/;
 const kb = (b) => (b / 1024).toFixed(1);
 
 const browser = await chromium.launch();
