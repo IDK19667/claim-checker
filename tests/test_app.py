@@ -6393,10 +6393,10 @@ for _name, _gv in (("mixed", lambda claim: None),
                    ("supports", lambda claim: {"verdict": "true", "says": "this is advised.", "bodies": ["CDC"]})):
     verdict.guideline_view = _gv
     _o = verdict.follow_guidelines(dict(_fg_insuff), [], "People can safely stop taking statins")
-    t(f"  control: a {_name} view changes nothing for a statins claim"
+    t(f"  control: a {_name} view changes nothing for a statins claim but the doctor line (round 4)"
       if _name == "mixed" else "  control: a supports view leaves an insufficient forgo claim alone",
       _o["verdict"] == "insufficient" and _o["tldr"].startswith(_fg_insuff["tldr"])
-      and (_name == "supports" or _o["tldr"] == _fg_insuff["tldr"]), _o)
+      and (_name == "supports" or _o["tldr"] == _fg_insuff["tldr"] + " " + verdict.FORGO_DOCTOR), _o)
 t("  the predicate catches the plain wordings and not unrelated claims",
   all(verdict.forgoes_treatment(x) for x in ("You can skip chemotherapy", "Use honey instead of antibiotics",
                                              "Asthma patients don't need their inhaler", "Quit taking metformin"))
@@ -10538,7 +10538,7 @@ t("  and the same takeaway where the stamp is Not enough evidence",
   all(_s["tldr"] == _f["tldr"] for _s, _f in list(_g2.values())[1:]),
   {k: (v[0]["tldr"], v[1]["tldr"]) for k, v in _g2.items()})
 t("  and one rule says when guidance alone may rate, for both paths",
-  "guidance_may_rate" in _inspect.getsource(verdict.follow_guidelines)
+  "guidance_may_rate" in _inspect.getsource(verdict._follow_guidelines)
   and "guidance_may_rate" in _inspect.getsource(appmod._nothing_relied)
   and "_nothing_relied" in _inspect.getsource(appmod._check_response))
 # G2b: every list shows the stamp the page shows, by the same decision
@@ -12093,6 +12093,39 @@ t("F1 round 4: control: 'get off' and 'wean off' something else, and short -grel
 t("F1 round 3: the cure side is unchanged: a new name does not make a cure claim",
   verdict.forgoes_treatment("Warfarin cures blood clots") == "" and verdict.forgoes_treatment("Semaglutide treats obesity") == ""
   and verdict.forgoes_treatment("Ivermectin cures COVID") == "cure")
+
+# Q10 F1 round 4: the doctor line on every path of follow_guidelines for a
+# claim to stop a prescribed medicine, whatever the stamp and the guidance.
+_DL = verdict.FORGO_DOCTOR
+_dl_cx = {"verdict": "complicated", "tldr": "Studies differ on stopping statins.",
+          "explanation": "Two trials differ (Study 1).", "still_open": "Who can stop.",
+          "cited_studies": ["D1"], "breakdown": {"says": ["Two trials differ (Study 1)."]}}
+_dl_saved = verdict.guideline_view
+_dl_paths = []
+verdict.guideline_view = lambda claim: None
+_dl_paths.append(("no guidance asked (not a guidance topic)", verdict.follow_guidelines(dict(_dl_cx), [], "Stop taking clopidogrel")))
+_dl_paths.append(("guidance unclear", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("complicated", "it depends on the person.")
+_dl_paths.append(("guidance agrees with the stamp", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("true", "statins can be stopped at the end of life.")
+_dl_paths.append(("guidance supports: Likely true", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+_dl_paths.append(("guidance added to Not enough evidence", verdict.follow_guidelines(dict(_fg_insuff), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("false", "statins can be stopped at the end of life.")
+_dl_paths.append(("guidance that argues with itself is not used", verdict.follow_guidelines(dict(_dl_cx), [], "You can stop taking statins")))
+verdict.guideline_view = _guide("false", "do not stop taking statins without talking to your doctor.")
+_dl_paths.append(("guidance rejects: False", verdict.follow_guidelines(dict(_fg_insuff), [], "You can stop taking statins")))
+verdict.guideline_view = _dl_saved
+for _lab, _o in _dl_paths:
+    t(f"F1 round 4: the doctor line on a claim to stop a medicine, once, on the path: {_lab}",
+      _o["tldr"].count(_DL) == 1 and _o["tldr"].endswith(_DL), (_o["verdict"], _o["tldr"]))
+_dl_nr = appmod._nothing_relied("You can stop taking statins", "true",
+                                    "Major health guidelines say: statins can be stopped. " + _DL, [{"pmid": "x"}])
+t("F1 round 4: a saved answer unseated to Not enough evidence keeps the doctor line once, as a fresh check writes it",
+  _dl_nr[0] == "insufficient" and _dl_nr[1].count(_DL) == 1 and _dl_nr[1].endswith(_DL), _dl_nr)
+t("F1 round 4: the 'Likely true' path keeps its stamp", dict(_dl_paths)["guidance supports: Likely true"]["verdict"] == "true")
+t("F1 round 4: the doctor line never tells anyone to stop, and no other claim gets it",
+  not re.search(r"\bstop (?:taking|your)\b", _DL, re.I)
+  and _DL not in verdict.follow_guidelines(dict(_dl_cx), [], "Garlic lowers blood pressure")["tldr"])
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

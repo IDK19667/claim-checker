@@ -4373,6 +4373,9 @@ What was deliberately rejected:
   only in words (can stop, safe to stop, not advised, should be stopped or
   paused); a caution (do not stop, keep taking, ask before stopping, what
   stopping risks) is a no; only both together are mixed.
+  Round 4: a claim to stop a prescribed medicine carries the doctor line on
+  every path (`verdict.follow_guidelines`, and a saved answer unseated by
+  `app._nothing_relied`), whatever the stamp and whatever the guidance said.
   Round 3: a claim to stop a medicine is recognised by general signs, a
   stopping word near a general word (tablets, meds, prescribed), a class, a
   generic-name ending of six letters or more, or a common prescribed name

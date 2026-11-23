@@ -990,6 +990,18 @@ def unrated_guidance_tldr(tldr: str, lead: str = "") -> str:
 
 
 def follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
+    """_follow_guidelines, then the doctor line on a claim to stop a
+    prescribed medicine, whatever the stamp and whatever the guidance said
+    (agrees, unclear, supports, none asked). The line never says to stop."""
+    out = _follow_guidelines(result, studies, claim)
+    tldr = str(out.get("tldr") or "").strip()
+    if tldr and out.get("verdict") and forgoes_treatment(claim) == "forgo" \
+            and FORGO_DOCTOR not in tldr:
+        out = {**out, "tldr": f"{tldr} {FORGO_DOCTOR}"}
+    return out
+
+
+def _follow_guidelines(result: dict, studies: list[dict], claim: str) -> dict:
     """
     The last word on a high-stakes claim. When the major health bodies give
     plain guidance and the verdict says otherwise, the verdict follows the
