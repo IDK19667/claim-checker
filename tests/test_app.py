@@ -11510,6 +11510,14 @@ _SL_PROBES = {
     "baby-cows-milk": ("Whole milk is fine for a 9 month old baby", "Cows' milk strengthens adult bones"),
     "baby-water": ("Newborns need water when it is hot", "Babies love salt water swims"),
     "baby-vitamin-d": ("Infants need vitamin D drops", "Vitamin D prevents colds in adults"),
+    "child-iron-overdose": ("Iron supplements boost energy", "Cast iron pans add iron to food"),
+    "child-aspirin": ("Aspirin is good for a child with a fever", "Daily baby aspirin prevents heart attacks"),
+    "child-cough-cold-medicine": ("Cough syrup helps kids sleep with a cold", "Cough syrup helps adults sleep"),
+    "child-decongestant": ("Nasal sprays help children breathe at night", "Decongestants raise blood pressure in adults"),
+    "child-ibuprofen-chickenpox": ("Ibuprofen eases chickenpox itching", "Ibuprofen eases period pain"),
+    "child-teething-gel": ("Amber necklaces ease teething", "Teeth whitening damages enamel"),
+    "child-salt-gargle": ("Gargling with salt water kills throat germs", "Gargling mouthwash freshens breath"),
+    "child-ear-infection": ("Garlic oil cures ear infections in toddlers", "Ear infections are common in swimmers"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))

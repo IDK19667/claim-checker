@@ -232,6 +232,66 @@ ENTRIES = [
      "source": ("NHS: Vitamin D", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/"),
      "quote": "babies from birth to 1 year of age should have a daily supplement"},
 
+    # ---- children ----------------------------------------------------------------
+    {"id": "child-iron-overdose", "topic": "Iron tablets and children", "rank": 1,
+     "when": [IRON],
+     "trigger": "iron tablets, supplements or drops, or taking iron",
+     "line": "Keep iron tablets out of sight and reach of children, as an overdose may be fatal.",
+     "source": ("NHS: How and when to take ferrous sulfate",
+                "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/"),
+     "quote": "Keep ferrous sulfate out of sight and reach of children, as an overdose may be fatal."},
+    {"id": "child-aspirin", "topic": "Aspirin and children", "rank": 1,
+     "when": [ASPIRIN, CHILD + "|" + _w(r"reye'?s", r"under 16")], "strip": [ADULT_ASPIRIN],
+     "trigger": "aspirin with a child, teenager or baby (\"baby aspirin\" and \"low dose aspirin\" do not count)",
+     "line": "Do not give aspirin to children aged 15 or under: it can cause an uncommon but serious "
+             "condition called Reye's syndrome.",
+     "source": ("NHS: Aspirin for pain relief", "https://www.nhs.uk/medicines/aspirin-for-pain-relief/"),
+     "quote": "Do not give aspirin to children aged 15 years or under because it can cause a serious "
+              "condition called Reye's syndrome"},
+    {"id": "child-cough-cold-medicine", "topic": "Cough and cold medicines for young children", "rank": 1,
+     "when": [CHILD, COUGH_MEDICINE],
+     "trigger": "a child or baby, and a cough or cold medicine or syrup",
+     "line": "Over the counter cough and cold medicines are not recommended for children under 2; "
+             "for an older child, check the age on the label first.",
+     "source": ("FDA: Should you give kids medicine for coughs and colds?",
+                "https://www.fda.gov/consumers/consumer-updates/should-you-give-kids-medicine-coughs-and-colds"),
+     "quote": "The FDA doesn't recommend OTC medicines for cough and cold symptoms in children younger than 2."},
+    {"id": "child-decongestant", "topic": "Decongestants for children", "rank": 2,
+     "when": [CHILD, DECONGESTANT], "over": ["child-cough-cold-medicine"],
+     "trigger": "a child or baby, and a decongestant or nasal spray",
+     "line": "Not all decongestants are suitable for children: check the leaflet before giving one to "
+             "a child, and ask a pharmacist if you are not sure.",
+     "source": ("NHS: Decongestants", "https://www.nhs.uk/conditions/decongestants/"),
+     "quote": "Check the leaflet that comes with the medicine before giving a decongestant to a child"},
+    {"id": "child-ibuprofen-chickenpox", "topic": "Ibuprofen and chickenpox", "rank": 1,
+     "when": [CHICKENPOX, NSAID],
+     "trigger": "chickenpox, and ibuprofen, anti-inflammatories or painkillers",
+     "line": "Do not use ibuprofen for chickenpox unless a doctor tells you to, as it may cause serious "
+             "skin infections.",
+     "source": ("NHS: Chickenpox", "https://www.nhs.uk/conditions/chickenpox/"),
+     "quote": "do not use ibuprofen unless you're told to by a doctor, as it may cause serious skin infections"},
+    {"id": "child-teething-gel", "topic": "Teething gels", "rank": 2,
+     "when": [_w(r"teething")],
+     "trigger": "teething",
+     "line": "For a teething baby, use only a gel made for young children: general oral pain relief "
+             "gels are not suitable for children.",
+     "source": ("NHS: Tips for helping your teething baby",
+                "https://www.nhs.uk/baby/babys-development/teething/tips-for-helping-your-teething-baby/"),
+     "quote": "General oral pain relief gels are not suitable for children."},
+    {"id": "child-salt-gargle", "topic": "Gargling salt water", "rank": 2,
+     "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt")],
+     "trigger": "gargling, with salt or salt water",
+     "line": "Gargling with warm salty water is not for children: they should not try it.",
+     "source": ("NHS: Sore throat", "https://www.nhs.uk/conditions/sore-throat/"),
+     "quote": "gargle with warm, salty water (children should not try this)"},
+    {"id": "child-ear-infection", "topic": "Ear infections in children", "rank": 2,
+     "when": [CHILD, EAR_INFECTION],
+     "trigger": "a child or baby, and an ear infection or earache",
+     "line": "A baby under 12 months who may have an ear infection should see a GP; for an older child, "
+             "a pharmacist can help first.",
+     "source": ("NHS: Ear infections", "https://www.nhs.uk/conditions/ear-infections/"),
+     "quote": "your child is under 12 months old and you think they have an ear infection"},
+
 ]
 
 for _e in ENTRIES:
