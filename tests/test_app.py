@@ -10976,6 +10976,56 @@ t("  an error moves focus to its title, and Escape in the place menu returns it 
 t("G4: the root's scroll padding is the strip's height at the top and the bar's space at the foot",
   "html { scroll-padding-top: calc(var(--strip) + 8px); scroll-padding-bottom: calc(var(--bar-space) + 8px); }"
   in (ROOT / "static" / "desk.css").read_text())
+# G6 (A5, A10): on a result the first stop for a keyboard is "Skip to the answer", in the
+# server's HTML so it works with scripts off; home has it hidden. One h1 on every screen on
+# both paths: the headline at home, the claim on a result, the error title on an error
+# (app.js setH1 swaps the other two to h2). The browser half is ui_desk.mjs section 15.
+_g6_home = c.get("/").get_data(as_text=True)
+_g6_res = c.get("/?q=" + urllib.parse.quote(_RW_SAVED)).get_data(as_text=True)
+_g6_body = lambda h: h.split("<body>")[1]
+_g6_first = lambda h: re.search(r"<(a|button|input|textarea|select)\b[^>]*>", _g6_body(h)).group(0)
+t("G6: a result's first control is the skip link to the verdict, and home's is hidden",
+  _g6_first(_g6_res) == '<a class="skip" id="skip" href="#stamp">' and '>Skip to the answer</a>' in _g6_res
+  and '<a class="skip" id="skip" href="#stamp" hidden>' in _g6_home and 'id="stamp" tabindex="-1"' in _g6_res,
+  _g6_first(_g6_res))
+_g6_css = (ROOT / "static" / "desk.css").read_text()
+_g6_sk = _g6_css.split(".skip { ")[1].split("}")[0]
+t("  it is drawn only while it has focus, on the night ground with 3px corners, and the desk takes it to the Answer stop",
+  "background: var(--deep)" in _g6_sk and "border-radius: 3px" in _g6_sk and ".skip:not(:focus) {" in _g6_css
+  and "clip: rect(0 0 0 0)" in _g6_css.split(".skip:not(:focus) {")[1].split("}")[0]
+  and 'skip.addEventListener("click", function (e) { e.preventDefault(); closeMenu(); jump(1); byId("stamp").focus({ preventScroll: true }); });'
+  in (ROOT / "static" / "desk.js").read_text())
+_g6_h1 = lambda h: re.findall(r"<h1\b[^>]*>", h)
+t("  the server prints one h1: the headline at home, the claim on a result",
+  _g6_h1(_g6_home) == ['<h1 class="h1" id="ask-heading">'] and _g6_h1(_g6_res) == ['<h1 class="q claim-echo" id="claim-echo">']
+  and '<h2 class="q claim-echo" id="claim-echo">' in _g6_home, (_g6_h1(_g6_home), _g6_h1(_g6_res)))
+_g6_app = (ROOT / "static" / "app.js").read_text()
+_g6_show = _g6_app.split("function show(section) {")[1].split("\n}")[0]
+if _shutil.which("node"):
+    # setH1 on a small recording page: each screen leaves exactly one h1, the right one, and every attribute and word.
+    _g6_fn = "function setH1" + _g6_app.split("function setH1")[1].split("\n}")[0] + "\n}"
+    _g6_js = r"""
+class El { constructor(tag) { this.tagName = tag; this.attributes = []; this.childNodes = []; }
+  setAttribute(n, v) { this.attributes = this.attributes.filter((a) => a.name !== n).concat([{ name: n, value: v }]); }
+  append(...k) { this.childNodes.push(...k); }
+  replaceWith(n) { byId[this.attributes.find((a) => a.name === "id").value] = n; } }
+const byId = {};
+for (const [id, tag] of [["ask-heading", "H1"], ["claim-echo", "H2"], ["error-title", "H2"]]) {
+  const e = new El(tag); e.setAttribute("id", id); e.setAttribute("class", "c-" + id); e.append("words " + id); byId[id] = e; }
+const document = { createElement: (t) => new El(t) };
+const $ = (id) => byId[id];
+""" + _g6_fn + r"""
+const out = {};
+for (const s of ["result", "error", "ask"]) { setH1(s);
+  out[s] = Object.keys(byId).map((k) => [k, byId[k].tagName, byId[k].attributes.map((a) => a.name + "=" + a.value).join(" "), byId[k].childNodes.join("")]); }
+console.log(JSON.stringify(out));"""
+    _g6_out = json.loads(_subprocess.run(["node", "-e", _g6_js], capture_output=True, text=True, check=True).stdout)
+    _g6_want = {"result": "claim-echo", "error": "error-title", "ask": "ask-heading"}
+    t("  the script keeps the same rule on every screen: one h1, with its id, class and words kept",
+      all([r[0] for r in _g6_out[s] if r[1] == "H1"] == [_g6_want[s]]
+          and all(r[2] == "id=%s class=c-%s" % (r[0], r[0]) and r[3] == "words " + r[0] for r in _g6_out[s]) for s in _g6_want)
+      and 'setH1(section === askSection ? "ask" : result ? "result" : "error");' in _g6_show
+      and '$("skip").hidden = !result;' in _g6_show, _g6_out)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)

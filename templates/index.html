@@ -71,6 +71,9 @@
     </defs>
   </svg>
 
+{# Skip to the answer: the first stop for a keyboard on a result, shown only while it has focus. Its #stamp works with scripts off; the desk takes it to the Answer stop. #}
+<a class="skip" id="skip" href="#stamp"{% if not result %} hidden{% endif %}>Skip to the answer</a>
+
 <header class="strip" id="strip" role="note"><span class="name"><a class="sw" href="/" aria-label="Evident home">Evident</a> <span class="beta">Beta</span></span><b>Not medical advice.</b></header>
 
 <div id="stage" aria-hidden="true"><canvas id="gl"></canvas></div>
@@ -86,7 +89,7 @@
     <div class="cap right"><div class="inner">
       <section id="ask" aria-labelledby="ask-heading"{% if result %} hidden{% endif %}>
         <p class="wordmark">Evident</p>
-        {% if result %}<h2 class="h1" id="ask-heading">Heard a health claim?</h2>{% else %}<h1 id="ask-heading">Heard a health claim?</h1>{% endif %}
+        {% if result %}<h2 class="h1" id="ask-heading">Heard a health claim?</h2>{% else %}<h1 class="h1" id="ask-heading">Heard a health claim?</h1>{% endif %}
         <p class="lede">Check it against the research. Paste it in: we read the studies on PubMed and weigh how strong they are.</p>
         <form class="ask" id="claim-form" novalidate>
           <label class="field-title" for="claim-input">Health claim to check</label>
@@ -255,7 +258,8 @@
     <p class="layer" id="short-label">The short answer</p>
     <div class="vcard" id="vcard">
       <p class="lbl">The claim you checked</p>
-      <h1 class="q claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</h1>
+      {# One h1 per screen: the claim on a result; at home it is an h2 in the hidden stops. app.js setH1 keeps the same rule. #}
+      <{{ "h1" if result else "h2" }} class="q claim-echo" id="claim-echo">{% if result %}{{ result.claim }}{% endif %}</{{ "h1" if result else "h2" }}>
       <h2 class="v" id="stamp" tabindex="-1">{% if result %}{{ labels[result.verdict] }}{% endif %}</h2>
       <p class="t" id="tldr">{% if result %}{{ result.tldr }}{% endif %}</p>
     </div>

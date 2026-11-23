@@ -195,6 +195,8 @@ document.addEventListener("click", (e) => {
 function show(section) {
   const result = section === resultSection;
   root.classList.toggle("checked", result);
+  setH1(section === askSection ? "ask" : result ? "result" : "error");
+  $("skip").hidden = !result;
   // A result keeps the claim box: it is stop 1, the claim as typed, ready to edit.
   askSection.hidden = !(section === askSection || result);
   errorSection.hidden = section !== errorSection;
@@ -202,6 +204,20 @@ function show(section) {
   if (trustSection) trustSection.hidden = section !== askSection;
   if (!result) tellDesk("desk:home", {});
   window.scrollTo(0, 0);
+}
+
+// One h1 on every screen, as the server prints it: the headline at home, the
+// claim on a result, the error title on an error; the other two are h2. The
+// element is swapped with its attributes and words, so every id still holds.
+function setH1(screen) {
+  for (const [id, on] of [["ask-heading", screen === "ask"], ["claim-echo", screen === "result"], ["error-title", screen === "error"]]) {
+    const el = $(id), tag = on ? "H1" : "H2";
+    if (el.tagName === tag) continue;
+    const n = document.createElement(tag);
+    for (const a of el.attributes) n.setAttribute(a.name, a.value);
+    n.append(...el.childNodes);
+    el.replaceWith(n);
+  }
 }
 
 function setStatus(text) {

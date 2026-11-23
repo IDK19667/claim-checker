@@ -153,6 +153,10 @@
   nextBtn.addEventListener("click", function () { closeMenu(); if (!onePress(nextBtn)) return; if (keepDown()) return; jump(curStop >= LAST ? 0 : curStop + 1); });
   prevBtn.addEventListener("click", function () { closeMenu(); if (!onePress(prevBtn)) return; if (keepUp()) return; if (curStop > 0) jump(curStop - 1); });
   function jump(k) { clearStudy(); go(k); }
+  // Skip to the answer (results only): the Answer stop, with focus on the verdict and no second scroll.
+  // With scripts off the link's own #stamp does the same.
+  var skip = byId("skip");
+  if (skip) skip.addEventListener("click", function (e) { e.preventDefault(); closeMenu(); jump(1); byId("stamp").focus({ preventScroll: true }); });
 
   // ---- after a check the reader just ran: one glide to the answer, once ----------------
   // Never on a saved result (that opens on the answer), never against a reader who is

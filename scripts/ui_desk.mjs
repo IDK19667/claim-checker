@@ -18,6 +18,9 @@
  *    an error lands on its title; Escape in the place menu returns to its button.
  * 14. Every control Tab reaches on a result is fully clear of the strip and the
  *    bar, at 390 and 1440, in 3D and text mode.
+ * 15. On a result the first Tab reaches "Skip to the answer", drawn only then;
+ *    Enter takes the reader to the Answer stop with focus on the verdict, in 3D,
+ *    in text mode and with scripts off. Every screen has one h1, on both paths.
  */
 import { chromium } from "playwright";
 
@@ -208,7 +211,8 @@ for (const [w, h] of [[390, 844], [1440, 900]]) for (const path of ["/", "/?nogl
       await page.keyboard.press("Tab"); await page.waitForTimeout(120);
       const r = await page.evaluate(() => {
         const a = document.activeElement; if (!a || a === document.body) return null;
-        if (a.closest(".strip, .bar, #menu, dialog")) return { skip: true };
+        // the skip link is drawn over the strip on purpose, above it, while it has focus
+        if (a.closest(".strip, .bar, #menu, dialog, .skip")) return { skip: true };
         const b = a.getBoundingClientRect(); if (!b.width || !b.height) return { skip: true };
         const strip = document.querySelector(".strip").getBoundingClientRect().bottom;
         const bar = document.querySelector(".bar"); const barTop = bar && getComputedStyle(bar).visibility !== "hidden" && bar.getBoundingClientRect().height ? bar.getBoundingClientRect().top : innerHeight;
@@ -222,6 +226,59 @@ for (const [w, h] of [[390, 844], [1440, 900]]) for (const path of ["/", "/?nogl
   }, { w, h });
 }
 
+// ---- 15. Skip to the answer, one h1 ------------------------------------------------------------
+const focusInfo = (page) => page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect();
+  return { id: a.id, w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight }; });
+for (const path of ["/?", "/?nogl=1&"]) {
+  await test(`on a result the first Tab is "Skip to the answer", shown then, and Enter lands on the verdict at the Answer stop, ${path === "/?" ? "3D" : "text mode"}`, async (page) => {
+    await page.goto(base + path + "q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page);
+    const before = await page.evaluate(() => { const r = document.getElementById("skip").getBoundingClientRect(); return r.width * r.height; });
+    must(before <= 1, `the skip link is drawn before it has focus (${before} px²)`);
+    await page.evaluate(() => window.__evident.goto(4)); await page.waitForTimeout(1500);
+    await page.keyboard.press("Tab");
+    const s = await focusInfo(page);
+    must(s.id === "skip" && s.w > 60 && s.h >= 44 && s.top >= 0, `first Tab: #${s.id} ${s.w}x${s.h} at ${s.top}`);
+    await page.keyboard.press("Enter"); await page.waitForTimeout(2500);
+    const v = await focusInfo(page), stop = await page.evaluate(() => window.__evident.stats().stop);
+    must(v.id === "stamp" && stop === 2 && v.top >= 0 && v.bottom <= v.vh, `after Enter: focus #${v.id}, stop ${stop}, verdict at ${v.top}..${v.bottom} of ${v.vh}`);
+  });
+}
+{
+  // scripts off: the link's own #stamp moves focus to the verdict
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, javaScriptEnabled: false, serviceWorkers: "block" });
+  const page = await ctx.newPage(); const name = "with scripts off the skip link still moves focus to the verdict";
+  try {
+    await fetch(base + "/__fixture/reset");
+    await page.goto(base + "/?q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" });
+    await page.keyboard.press("Tab");
+    const a = await page.evaluate(() => document.activeElement.id);
+    await page.keyboard.press("Enter"); await page.waitForTimeout(400);
+    const b = await page.evaluate(() => document.activeElement.id);
+    must(a === "skip" && b === "stamp", `first Tab #${a}, after Enter #${b}`);
+    results.push(true); console.log(`PASS ${name}`);
+  } catch (e) { results.push(false); console.log(`FAIL ${name}\n     ${String(e.message || e).split("\n")[0]}`); }
+  await ctx.close();
+}
+const h1s = (page) => page.evaluate(() => [...document.querySelectorAll("h1")].map((e) => e.id));
+await test("every screen has one h1 on both paths: home, a saved, fresh and no-studies result, an error, home again", async (page) => {
+  const seen = [];
+  const want = async (where, id) => { const h = await h1s(page); seen.push(`${where}: ${h.join(",")}`); must(h.length === 1 && h[0] === id, seen.join(" | ")); };
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await want("home", "ask-heading");
+  await send(page, LIVE); await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 });
+  await want("fresh", "claim-echo");
+  must(!(await page.evaluate(() => document.getElementById("skip").hidden)), "a fresh result has no skip link");
+  await page.goBack(); await page.waitForFunction(() => !document.documentElement.classList.contains("checked"), null, { timeout: 10000 });
+  await want("home again", "ask-heading");
+  must(await page.evaluate(() => document.getElementById("skip").hidden), "home shows the skip link");
+  await send(page, "Copper bracelets ease arthritis pain"); await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 });
+  await want("no studies", "claim-echo");
+  await page.goto(base + "/?q=" + encodeURIComponent(SAVED[0]), { waitUntil: "load" }); await ready(page); await want("saved", "claim-echo");
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
+  await page.context().setOffline(true);
+  await send(page, LIVE); await page.waitForFunction(() => !document.getElementById("error").hidden, null, { timeout: 10000 });
+  await page.context().setOffline(false);
+  await want("error", "error-title");
+});
 await browser.close();
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);
