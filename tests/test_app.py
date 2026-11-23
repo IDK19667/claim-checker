@@ -2658,6 +2658,25 @@ t("the rows are in the order of the list, numbered the same way",
 t("each row names its design, and its group says whether the verdict used it",
   '<span class="num">1</span><span class="design">Meta-Analysis</span>' in _ord
   and _ord.index('id="grp-relied"') < _ord.index('id="row-1"'))
+# Which group each row really sits in, read off the page, against what the
+# verdict used: study 1 in "Read, not relied on" fails, and so does any row
+# filed under the wrong head or saying the wrong status. Two records: this one
+# (every study used) and the streamed claim (only study 2 used).
+def _grp_audit(page):
+    grp = {int(n): key for key, body in re.findall(r'<ul class="rows" id="grp-(\w+)"[^>]*>(.*?)</ul>', page, re.S)
+           for n in re.findall(r'<li class="row" id="row-(\d+)"', body)}
+    status = dict((int(n), st) for n, st in re.findall(r'id="more-(\d+)" hidden><p class="status( no)?"', page))
+    used = [s_["cited_in_verdict"] for s_ in json.loads(re.search(
+        r'<script id="server-result" type="application/json"[^>]*>(.*?)</script>', page, re.S).group(1))["studies"]]
+    ok = len(grp) == len(used) == len(status) and all(
+        (grp[i + 1] == "relied") == u and (status[i + 1] == "") == u for i, u in enumerate(used))
+    return ok, grp, used
+
+
+_ga1, _ga2 = _grp_audit(_ord), _grp_audit(c.get("/?q=streamed%20claim").data.decode())
+t("  study 1 sits inside the relied-on group, every relied-on row is one the verdict used, and no other row is",
+  _ga1[0] and _ga1[1].get(1) == "relied" and _ga2[0] and _ga2[2] == [False, True, False] and _ga2[1].get(2) == "relied",
+  (_ga1, _ga2))
 t("each row names itself for a screen reader and says what it does",
   re.search(r'aria-label="Study 1, Meta-Analysis: [^"]+\. Lift its sheet"', _ord) is not None)
 _row_tpl = _tpl[_tpl.index("{% macro row("):]
