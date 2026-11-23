@@ -528,6 +528,14 @@ ENTRIES = [
                 "https://www.nhs.uk/conditions/complementary-and-alternative-medicine/"),
      "quote": "do not stop taking any prescribed medicine without first talking to your doctor"},
 
+    # ---- a test result read at home ---------------------------------------------
+    {"id": "psa-result", "topic": "A raised PSA result", "rank": 3, "when": [PSA],
+     "trigger": "a PSA or prostate specific antigen test",
+     "line": "A high PSA does not on its own mean cancer, and a raised level usually leads to another "
+             "PSA test, so follow it up with a GP.",
+     "source": ("NHS: PSA testing", "https://www.nhs.uk/conditions/prostate-cancer/psa-testing/"),
+     "quote": "If you have a raised PSA level, you may then be offered another PSA test to check if your "
+              "levels are still high."},
 ]
 
 for _e in ENTRIES:

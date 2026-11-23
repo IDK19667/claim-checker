@@ -11548,6 +11548,7 @@ _SL_PROBES = {
     "vitamin-d-limit": ("High dose vitamin D prevents depression", "Sunlight improves mood"),
     "cancer-remedies": ("Turmeric shrinks tumours", "Smoking causes lung cancer"),
     "stop-in-place-of-treatment": ("Homeopathy can replace antibiotics", "Hormone replacement therapy causes breast cancer"),
+    "psa-result": ("A normal PSA rules out prostate cancer", "Prostate cancer is common in older men"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
