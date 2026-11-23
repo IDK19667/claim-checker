@@ -151,6 +151,7 @@ def fake_get(url, params=None, timeout=None):
 
 
 pubmed.requests = pytypes.SimpleNamespace(get=fake_get, RequestException=requests.RequestException)
+pubmed._http = pytypes.SimpleNamespace(get=fake_get)   # the shared session pubmed sends through
 
 client = appmod.app.test_client()
 CLAIM = "Coffee lowers sleep quality"
@@ -237,8 +238,8 @@ class Refuse:
 
 
 verdict._gemini_client = Refuse()
-real_get = pubmed.requests.get
-pubmed.requests.get = lambda *a, **k: (_ for _ in ()).throw(AssertionError("replay reached PubMed"))
+real_get = pubmed._http.get
+pubmed._http.get = lambda *a, **k: (_ for _ in ()).throw(AssertionError("replay reached PubMed"))
 h = harness.install("replay", str(STORE))
 fake.models.calls = 0; PUBMED_CALLS.clear(); h.reset()
 evs = check()
@@ -285,7 +286,7 @@ t("latency: a replay hit sleeps the recorded milliseconds", time.perf_counter() 
 
 # ---- fill: only the missing call goes out -------------------------------------------
 verdict._gemini_client = fake
-pubmed.requests.get = real_get
+pubmed._http.get = real_get
 gone = saved_model[-1]
 gone.unlink()
 h = harness.install("fill", str(STORE))

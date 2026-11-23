@@ -14,6 +14,7 @@ is what lets the verdict step weigh a large human trial more heavily
 than a small preliminary study.
 """
 
+import http.cookiejar
 import os
 import re
 import threading
@@ -59,6 +60,22 @@ def _ahead(fn, *args, **kwargs):
     return _SEARCHES.submit(fn, *args, **kwargs)
 
 
+def _new_session() -> requests.Session:
+    """One connection pool for every E-utilities request, shared by every
+    thread: requests.get opened a new connection, and a new TLS handshake,
+    for each call. Room for every search worker and request thread at once.
+    Cookies are refused, so each request carries exactly what requests.get
+    sent: nothing from an earlier answer rides along."""
+    s = requests.Session()
+    s.cookies.set_policy(http.cookiejar.DefaultCookiePolicy(allowed_domains=[]))
+    adapter = requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=32)
+    s.mount("https://", adapter)
+    return s
+
+
+_http = _new_session()
+
+
 def _paced_get(endpoint: str, params: dict):
     global _last_call
     with _pace:
@@ -66,7 +83,7 @@ def _paced_get(endpoint: str, params: dict):
         if wait > 0:
             time.sleep(wait)
         _last_call = time.monotonic()
-    return requests.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
+    return _http.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
 
 
 def _get(endpoint: str, params: dict):

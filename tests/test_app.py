@@ -235,10 +235,10 @@ class _R:
     def raise_for_status(self):
         if self.status_code >= 400:
             raise requests.HTTPError(str(self.status_code))
-_real_get, _real_retry = pubmed.requests.get, pubmed.RETRY_AFTER
+_real_retry = pubmed.RETRY_AFTER
 pubmed.RETRY_AFTER = 0
 _codes = [429, 200]
-pubmed.requests.get = lambda *a, **k: _R(_codes.pop(0))
+pubmed._http.get = lambda *a, **k: _R(_codes.pop(0))
 t("pubmed: a call NCBI turns away (429) is asked once more", pubmed._get("esearch.fcgi", {}).status_code == 200)
 _codes = [503, 503]
 try:
@@ -246,7 +246,8 @@ try:
 except requests.HTTPError:
     _gave_up = True
 t("  and a second refusal still fails, into the check's defined PubMed error", _gave_up and not _codes)
-pubmed.requests.get, pubmed.RETRY_AFTER = _real_get, _real_retry
+pubmed.RETRY_AFTER = _real_retry
+del pubmed._http.get
 
 
 def DIR(answer):
@@ -11675,8 +11676,7 @@ def _sp_serial_merged(q):
 
 
 _sp_q4 = "(knuckle cracking OR joint cracking) AND (arthritis OR joint degeneration)"
-_sp_prev_get = pubmed.requests.get
-pubmed.requests.get = _sp_transport
+pubmed._http.get = _sp_transport
 pubmed.MIN_INTERVAL = 0.1
 try:
     _t0 = _time.monotonic()
@@ -11706,7 +11706,7 @@ try:
         pubmed.fetch_details = _sp_prev_fetch
     _sp_sur_starts = sorted(_sp_starts4)
 finally:
-    pubmed.requests.get = _sp_prev_get
+    del pubmed._http.get
     pubmed.MIN_INTERVAL = _sp_min
 _sp_gap = lambda xs: min((b - a for a, b in zip(xs, xs[1:])), default=1)  # noqa: E731
 t("speed: the searches of one pass merge into the list the one-after-another order gave",
@@ -11787,6 +11787,21 @@ t("  and they are read, after the save as before, when it rests on none and next
   _sp_reads == [True] and _sp_d8.get("next_steps") and _sp_saved8, (_sp_reads, _sp_d8.get("next_steps")))
 pubmed.search_and_fetch = _sp_prev_saf
 fg.models.script = []
+
+# Task 6: one shared connection pool for PubMed, safe across threads, no cookies kept.
+t("speed: PubMed requests share one session whose pool holds every worker, and it keeps no cookies",
+  isinstance(pubmed._http, requests.Session)
+  and pubmed._http.get_adapter(pubmed.EUTILS_BASE)._pool_maxsize >= 24
+  and pubmed._http.cookies.get_policy().allowed_domains() == ()
+  and pubmed._new_session() is not pubmed._http, pubmed._http.get_adapter(pubmed.EUTILS_BASE)._pool_maxsize)
+_sp_calls6 = []
+pubmed._http.get = lambda url, params=None, timeout=None: _sp_calls6.append((url, params, timeout)) or _SpR("x")
+try:
+    pubmed._paced_get("esearch.fcgi", {"term": "x"})
+finally:
+    del pubmed._http.get
+t("  and _paced_get sends through it with the same URL, parameters and time limit",
+  _sp_calls6 == [(pubmed.EUTILS_BASE + "/esearch.fcgi", {"term": "x"}, pubmed.TIMEOUT)], _sp_calls6)
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
