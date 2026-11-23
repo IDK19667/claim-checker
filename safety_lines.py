@@ -394,6 +394,16 @@ ENTRIES = [
      "quote": "Tell your midwife, doctor or pharmacist if you're using herbal, homeopathic or aromatherapy "
               "remedies or therapies."},
 
+    # ---- breastfeeding -----------------------------------------------------------
+    {"id": "breastfeeding-medicines", "topic": "Medicines while breastfeeding", "rank": 2,
+     "when": [BREASTFEEDING, MEDICINE + "|" + ALCOHOL],
+     "trigger": "breastfeeding, and any medicine, supplement or herbal remedy",
+     "line": "If you are breastfeeding, check with a GP, midwife, health visitor or pharmacist before "
+             "taking a medicine or herbal remedy.",
+     "source": ("NHS: Medicines and breastfeeding",
+                "https://www.nhs.uk/conditions/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/medicines/"),
+     "quote": "Always check with a GP, your midwife, health visitor or a pharmacist, who can advise you."},
+
 ]
 
 for _e in ENTRIES:

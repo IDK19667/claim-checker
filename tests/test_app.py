@@ -11531,6 +11531,7 @@ _SL_PROBES = {
     "pregnancy-exercise": ("Running while pregnant causes miscarriage", "Running damages your knees"),
     "pregnancy-folic-acid": ("Folate prevents spina bifida", "Folic acid prevents heart disease in men"),
     "pregnancy-medicines": ("Paracetamol in pregnancy causes ADHD", "The pill prevents pregnancy"),
+    "breastfeeding-medicines": ("Antihistamines are safe while breastfeeding", "Breastfeeding lowers breast cancer risk"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
