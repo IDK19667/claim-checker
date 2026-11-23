@@ -11491,72 +11491,9 @@ t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4
   [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s])
 
 # ---- Q10 F1: the stamp says what the studies it read support ------------------
-# Fix 1: a review's own certainty rating caps a "true" only when it rates the
-# claim's question (evidence.rates_question).
-_F1_SIDS = "(sudden infant death syndrome OR SIDS OR infant mortality)"
-_F1_BACK = "(supine position OR back sleeping OR infant sleep position)"
-_F1_OFFQ = {"pmid": "f1a", "title": "Positioning for acute respiratory distress in hospitalised infants",
-            "publication_types": ["Systematic Review"],
-            "abstract": ("BACKGROUND: Prone positioning is linked with sudden infant death syndrome (SIDS). "
-                         "OBJECTIVES: To assess body positions in children with respiratory distress. "
-                         "MAIN RESULTS: There was no conclusive result in oxygen saturation (MD 0.40, 95% CI "
-                         "-1.22 to 2.66; 1 trial, 30 participants; very low certainty evidence); or lung "
-                         "function (MD 28.16, 95% CI -9.92 to 66.24; 2 trials; very low certainty evidence). "
-                         "AUTHORS' CONCLUSIONS: Due to the risk of SIDS, positions need care.")}
-_F1_ON = {"pmid": "f1b", "title": "Sleep position and sudden infant death: a meta-analysis",
-          "publication_types": ["Meta-Analysis"],
-          "abstract": ("OBJECTIVES: To assess sleep position and SIDS. RESULTS: Supine sleep lowered SIDS "
-                       "(OR 0.48, 95% CI 0.3 to 0.7; low certainty evidence).")}
-_F1_BLANKET = {"pmid": "f1c", "title": "Does ashwagandha ease anxiety and stress? A meta-analysis",
-               "publication_types": ["Meta-Analysis"],
-               "abstract": ("We pooled 12 trials of ashwagandha on anxiety and stress. Ashwagandha reduced "
-                            "anxiety (SMD -1.55, 95% CI -2.37 to -0.72). Finally, we identified that the "
-                            "certainty of the evidence was low for both outcomes.")}
-_F1_SIDSREV = {"pmid": "f1s", "title": "Risk factors for sudden infant death syndrome: an umbrella review",
-               "publication_types": ["Systematic Review"],
-               "abstract": "We pooled meta-analyses of sudden infant death syndrome. Supine sleep was protective."}
-t("F1: a review that rates only other outcomes, each with its interval, beside a review on the claim's outcome, does not rate the claim's question",
-  not evidence.rates_question(_F1_OFFQ, _F1_SIDS, _F1_BACK, others=[_F1_OFFQ, _F1_SIDSREV])
-  and evidence.certainty_cap([_F1_OFFQ, _F1_SIDSREV], ["f1a", "f1s"], False, _F1_SIDS, _F1_BACK) is None)
-t("F1: the same review is never passed over when it is the only relied-on review",
-  evidence.rates_question(_F1_OFFQ, _F1_SIDS, _F1_BACK)
-  and bool(evidence.certainty_cap([_F1_OFFQ], ["f1a"], False, _F1_SIDS, _F1_BACK)))
-t("F1: a review that rates the claim's own outcome by name still caps a true (the rule must not fire)",
-  evidence.rates_question(_F1_ON, _F1_SIDS, _F1_BACK)
-  and bool(evidence.certainty_cap([_F1_ON], ["f1b"], False, _F1_SIDS, _F1_BACK)))
-t("F1: one overall rating that names no outcome still counts, as does an off-outcome review listed after an on-question one",
-  evidence.rates_question(_F1_BLANKET, "(stress OR anxiety)", "(ashwagandha)")
-  and bool(evidence.certainty_cap([_F1_BLANKET], ["f1c"], False, "(stress OR anxiety)", "(ashwagandha)"))
-  and bool(evidence.certainty_cap([_F1_OFFQ, _F1_ON], ["f1a", "f1b"], False, _F1_SIDS, _F1_BACK)))
-_F1_ORS = "(oral rehydration solution OR ORS)"
-_F1_H2H = {"pmid": "f1d", "title": "Polymer-based oral rehydration solution for acute diarrhoea",
-           "publication_types": ["Systematic Review"],
-           "abstract": ("BACKGROUND: Diarrhoea causes dehydration. OBJECTIVES: To compare polymer-based oral "
-                        "rehydration solution with glucose-based oral rehydration solution for treating acute "
-                        "diarrhoea. MAIN RESULTS: Polymer ORS may shorten diarrhoea (MD -8 hours, 95% CI -13 to "
-                        "-3; very low certainty evidence).")}
-_F1_VSNONE = dict(_F1_H2H, pmid="f1e", abstract=_F1_H2H["abstract"].replace(
-    "glucose-based oral rehydration solution", "intravenous fluids"))
-_F1_ORSREV = {"pmid": "f1o", "title": "Oral rehydration solution for acute diarrhoea in children",
-              "publication_types": ["Systematic Review"],
-              "abstract": "We pooled trials. CONCLUSIONS: Oral rehydration solution treats dehydration from diarrhoea."}
-t("F1: a review comparing two forms of the claim's own treatment, beside one on the claim's outcome, does not rate whether the treatment works",
-  not evidence.rates_question(_F1_H2H, "(dehydration OR diarrhoea)", _F1_ORS, others=[_F1_ORSREV])
-  and evidence.certainty_cap([_F1_H2H, _F1_ORSREV], ["f1d", "f1o"], False, "(dehydration OR diarrhoea)", _F1_ORS)
-  is None
-  and bool(evidence.certainty_cap([_F1_H2H], ["f1d"], False, "(dehydration OR diarrhoea)", _F1_ORS)))
-t("F1: the same review still rates a comparative claim, and one against another treatment still rates (must not fire)",
-  evidence.rates_question(_F1_H2H, "(dehydration OR diarrhoea)", _F1_ORS, comparative=True)
-  and evidence.rates_question(_F1_VSNONE, "(dehydration OR diarrhoea)", _F1_ORS)
-  and bool(evidence.certainty_cap([_F1_VSNONE], ["f1e"], False, "(dehydration OR diarrhoea)", _F1_ORS))
-  and bool(evidence.certainty_cap([_F1_H2H], ["f1d"], False, "(dehydration OR diarrhoea)")))
-t("F1: the evidence line does not quote the rating of a review that rates another question",
-  "ery low" not in evidence.evidence_line("true", [_F1_OFFQ, _F1_SIDSREV], ["f1a", "f1s"],
-                                          "Babies should sleep on their backs", outcome=_F1_SIDS, subject=_F1_BACK)
-  and "ery low" in evidence.evidence_line("true", [_F1_OFFQ], ["f1a"], "Babies should sleep on their backs",
-                                          outcome=_F1_SIDS, subject=_F1_BACK)
-  and "ery low" in evidence.evidence_line("true", [_F1_OFFQ], ["f1a"], "Babies should sleep on their backs",
-                                          outcome="(oxygen saturation)", subject=_F1_BACK))
+# Fix 1 (a review rating another question passed over) was withdrawn on review: every
+# relied-on review counts toward the certainty limit, as on main. Its tests, at the end of
+# this block, now hold that the limit holds.
 
 # Fix 2: guidance not to stop a medicine without a doctor is a no to a claim to stop it.
 _F2_CLAIM = "You should stop your prescribed medicines as soon as you find out you're pregnant"
@@ -11691,9 +11628,9 @@ t("F4: a review that concludes its evidence is not enough makes the line say low
   .startswith("Low certainty")
   and evidence.evidence_line("complicated", [_F3_YES], ["f3b"], "Echinacea shortens colds").startswith("Strong"))
 
-# Fix 1, review: a review is passed over only on positive proof, on two counts
-# (evidence.rates_question): a sign on the review itself, and another relied-on
-# review, showing no such sign, that speaks to the claim's outcome.
+# Fix 1, withdrawn: a second review never lifts the limit. Each case below is a low rating that must keep
+# a "true" from standing, alone and beside a review that names the claim's outcome.
+_F1_ORS = "(oral rehydration solution OR ORS)"
 def _f1r(pmid, title, objectives, results, conclusions="The evidence is uncertain."):
     return {"pmid": pmid, "title": title, "publication_types": ["Systematic Review", "Meta-Analysis"],
             "abstract": (f"BACKGROUND: Many people ask about this. OBJECTIVES: {objectives} SEARCH METHODS: "
@@ -11701,10 +11638,18 @@ def _f1r(pmid, title, objectives, results, conclusions="The evidence is uncertai
                          f"AUTHORS' CONCLUSIONS: {conclusions}")}
 
 
-def _f1_keeps(s, outcome, subject, others=(), comparative=False):
+def _f1_keeps(s, outcome, subject="", others=(), comparative=False):
+    """True when the low rating of review `s` caps a true and sets the line's floor, beside `others`."""
     used = [s, *others]
-    return (evidence.rates_question(s, outcome, subject, comparative, used)
-            and bool(evidence.certainty_cap(used, [x["pmid"] for x in used], comparative, outcome, subject)))
+    pmids = [x["pmid"] for x in used]
+    return (bool(evidence.certainty_cap(used, pmids, comparative, outcome))
+            and evidence.lowest_review_certainty(used, pmids, outcome) in ("low", "very low"))
+
+def _f1_excuser(outcome):
+    term = outcome.strip("()").split(" OR ")[0].strip('"').rstrip("*")
+    return {"pmid": "vx", "title": f"{term} and its causes: a systematic review",
+            "publication_types": ["Systematic Review"],
+            "abstract": f"OBJECTIVES: To review {term}. AUTHORS' CONCLUSIONS: The {term} findings were mixed."}
 
 
 _F1R_BACK = "(low back pain OR back pain OR chronic pain)"
@@ -11732,7 +11677,7 @@ _F1R_CASES = [
 ]
 for _lab, _s, _o, _subj in _F1R_CASES:
     t(f"F1 review: a review of {_lab} rates the claim's own question and its low rating limits the answer",
-      evidence.rates_question(_s, _o, _subj, False) and _f1_keeps(_s, _o, _subj))
+      _f1_keeps(_s, _o, _subj) and _f1_keeps(_s, _o, _subj, [_f1_excuser(_o)]))
 _F1R_VITD = {"pmid": "r5", "title": "Vitamin D supplementation for prevention of mortality in adults",
              "publication_types": ["Systematic Review", "Meta-Analysis"],
              "abstract": ("OBJECTIVES: To assess vitamin D for preventing mortality in adults. MAIN RESULTS: "
@@ -11741,7 +11686,7 @@ _F1R_VITD = {"pmid": "r5", "title": "Vitamin D supplementation for prevention of
                           "low-certainty evidence). AUTHORS' CONCLUSIONS: Vitamin D may lower mortality.")}
 _F1R_VD = "(vitamin D OR cholecalciferol)"
 t("F1 review: a review rating mortality, read for a claim about death, keeps the limit when it is the only review",
-  evidence.rates_question(_F1R_VITD, "(death OR deaths)", _F1R_VD, False) and _f1_keeps(_F1R_VITD, "(death OR deaths)", _F1R_VD))
+  _f1_keeps(_F1R_VITD, "(death OR deaths)", _F1R_VD))
 _F1R_FALLS = _f1r("r6", "Vitamin D for falls in older people", "To assess vitamin D for falls.",
                   "Vitamin D did not reduce falls.", "Vitamin D does not prevent falls.")
 t("F1 review: beside a review that names neither word, the mortality review still limits the answer",
@@ -11799,26 +11744,23 @@ t("F1 review: a comparison of the thing against usual care, or a waiting list, i
   and _f1_keeps(dict(_F1R_FORMS_A, pmid="r19", abstract=_F1R_FORMS_A["abstract"].replace(
       "with glucose-based oral rehydration solution", "with a waiting list")), "(diarrhoea OR dehydration)", _F1_ORS,
       [_F1R_FORMS_B]))
-_F1R_REAL = json.loads((ROOT / "tests" / "rates_question_real.json").read_text())["checks"]
+_F1R_REAL = json.loads((ROOT / "tests" / "certainty_limit_real.json").read_text())["checks"]
 
 
-def _f1_real(claim_start, pmid):
+def _f1_real(claim_start):
     c = next(c for c in _F1R_REAL if c["claim"].startswith(claim_start))
-    subj, out = c["search_query"].split(" AND ")[:2]
-    s = next(s for s in c["studies"] if s["pmid"] == pmid)
-    return (evidence.rates_question(s, out, subj, False, c["studies"]),
-            evidence.rates_question(s, out, subj, False, [s]))
+    out = c["search_query"].split(" AND ")[1]
+    pmids = [s["pmid"] for s in c["studies"]]
+    return (evidence.certainty_cap(c["studies"], pmids, False, out),
+            evidence.lowest_review_certainty(c["studies"], pmids, out))
 
 
-t("F1 review: the real review of body position for breathing trouble is still passed over for the back sleeping claim, and not on its own",
-  _f1_real("Babies should be put", "35661343") == (False, True))
-t("F1 review: the real review of polymer against glucose rehydration solution is still passed over for the ORS claim, and not on its own",
-  _f1_real("Oral rehydration solution", "27959472") == (False, True))
-
-_F1R_G401 = next(c for c in _F1R_REAL if c["claim"].startswith("Type 2 diabetes"))
-t("F1 review: the real umbrella review of diets that rates remission in other words still counts for the remission claim",
-  evidence.rates_question(next(s for s in _F1R_G401["studies"] if s["pmid"] == "34796367"),
-                          *reversed(_F1R_G401["search_query"].split(" AND ")[:2]), False, _F1R_G401["studies"]))
+t("F1 review: on the real back sleeping check the review of positions for breathing trouble still limits a true",
+  bool(_f1_real("Babies should be put")[0]) and _f1_real("Babies should be put")[1] == "very low")
+t("F1 review: on the real ORS check the review of polymer against glucose solution still limits a true",
+  bool(_f1_real("Oral rehydration solution")[0]) and _f1_real("Oral rehydration solution")[1] == "very low")
+t("F1 review: on the real diabetes remission check the umbrella review of diets still sets the floor at very low",
+  _f1_real("Type 2 diabetes")[1] == "very low")
 _F1R_RV = lambda pmid, title, abstract: {"pmid": pmid, "title": title, "abstract": abstract,
                                          "publication_types": ["Systematic Review", "Meta-Analysis"]}
 # The separate reviewer's cases: (label, comparative, subject, outcome, review). Each is read alone and
@@ -11882,12 +11824,6 @@ _F1R_REV = [
 ]
 
 
-def _f1_excuser(outcome):
-    term = outcome.strip("()").split(" OR ")[0].strip('"').rstrip("*")
-    return {"pmid": "vx", "title": f"{term} and its causes: a systematic review",
-            "publication_types": ["Systematic Review"],
-            "abstract": f"OBJECTIVES: To review {term}. AUTHORS' CONCLUSIONS: The {term} findings were mixed."}
-
 
 for _lab, _comp, _subj, _o, _s in _F1R_REV:
     t(f"F1 review (reviewer's case): {_lab} keeps the limit alone and beside a review on the outcome",
@@ -11895,9 +11831,63 @@ for _lab, _comp, _subj, _o, _s in _F1R_REV:
 _F1R_BF = _F1R_RV("v10", "Breastfeeding and infant infection",
                   "Objectives: To compare exclusive breastfeeding with partial breastfeeding for infection in infants. "
                   "Results: Fewer infections (RR 0.7, 95% CI 0.6 to 0.85; low-certainty evidence).")
-t("F1 review: exclusive against partial breastfeeding asks how much, not whether: it counts alone, and is passed over only beside a review on infection",
+t("F1 review: exclusive against partial breastfeeding keeps the limit alone and beside a review on infection",
   _f1_keeps(_F1R_BF, "(infection*)", "(breastfeed*)")
-  and not evidence.rates_question(_F1R_BF, "(infection*)", "(breastfeed*)", False, [_F1R_BF, _f1_excuser("(infection*)")]))
+  and _f1_keeps(_F1R_BF, "(infection*)", "(breastfeed*)", [_f1_excuser("(infection*)")]))
+
+# The separate reviewer's second round: a second review beside a low rating, in eleven forms. Every
+# one keeps the limit, the positions-for-breathing review included, now that nothing is passed over.
+
+def _f1b_rv(pmid, title, abstract, year=2020):
+    return {"pmid": pmid, "title": title, "abstract": abstract, "year": str(year),
+            "publication_types": ["Systematic Review", "Meta-Analysis"]}
+
+def _f1b_B(pmid, title, concl):
+    return _f1b_rv(pmid, title, f"Objectives: To assess cohorts. Results: Twenty cohorts were pooled. Conclusions: {concl}")
+
+_F1B_LOW2 = lambda a, b: (f"Results: {a} (MD -3.4, 95% CI -4.2 to -2.6; low-certainty evidence); "
+                     f"{b} (MD -1.5, 95% CI -2.0 to -1.0; low-certainty evidence).")
+_F1B_CASES = [
+ # name, comparative, subject, outcome, [studies], expect cap
+ ("own question, other words (salt/BP) + cohort review on hypertension", False, "(sodium reduction)", "(hypertension)",
+  [_f1b_rv("a1", "Lowering dietary salt for adults", "Objectives: To assess cutting salt. " + _F1B_LOW2("systolic blood pressure", "diastolic blood pressure") + " Conclusions: Cutting salt lowers blood pressure."),
+  _f1b_B("b1", "Sodium intake and hypertension in cohorts", "Higher sodium intake was linked with hypertension.")], True),
+ ("own question, mortality vs death, title by drug class", False, "(statin*)", "(death)",
+  [_f1b_rv("a2", "HMG-CoA reductase inhibitors for primary prevention", "Objectives: To assess them. " + _F1B_LOW2("all-cause mortality", "cardiovascular mortality")),
+  _f1b_B("b2", "Statin use and death: cohort studies", "Statin users had lower rates of death.")], True),
+ ("second review names outcome only in passing", False, "(sodium reduction)", "(hypertension)",
+  [_f1b_rv("a3", "Lowering dietary salt for adults", "Objectives: To assess cutting salt. " + _F1B_LOW2("systolic blood pressure", "diastolic blood pressure")),
+  _f1b_B("b3", "Salt substitutes and kidney stones", "Salt substitutes did not change stone risk. Effects on hypertension need study.")], True),
+ ("two off-sign reviews cannot excuse each other", False, "(sodium reduction)", "(hypertension)",
+  [_f1b_rv("a4", "Lowering dietary salt for adults", "Objectives: To assess. " + _F1B_LOW2("systolic blood pressure", "diastolic blood pressure")),
+   _f1b_rv("b4", "Potassium-enriched salt for adults", "Objectives: To assess. " + _F1B_LOW2("systolic pressure", "stroke") + " Conclusions: Hypertension fell.")], True),
+ ("aim: high dose vs low dose (low dose as control)", False, '("vitamin D")', "(falls)",
+  [_f1b_rv("a5", "Vitamin D dosing in older adults", "Objectives: To compare high-dose vitamin D with low-dose vitamin D for falls. Results: Falls (RR 0.9, 95% CI 0.8 to 1.0; low-certainty evidence)."),
+  _f1b_B("b5", "Vitamin D and falls", "Vitamin D was linked with fewer falls.")], True),
+ ("aim: intensive vs minimal exercise", False, "(exercise)", "(depression)",
+  [_f1b_rv("a6", "Exercise for depression", "Objectives: To compare supervised exercise with minimal exercise advice for depression. Results: Symptoms (SMD -0.4, 95% CI -0.7 to -0.1; low-certainty evidence)."),
+  _f1b_B("b6", "Physical activity and depression", "Activity was linked with less depression.")], True),
+ ("aim: standard-dose vs higher-dose statin", False, "(statin*)", "(stroke)",
+  [_f1b_rv("a7", "Statins after stroke", "Objectives: To compare high-intensity statin therapy with standard-dose statin therapy in stroke. Results: Recurrent stroke (RR 0.85, 95% CI 0.7 to 1.0; low-certainty evidence)."),
+  _f1b_B("b7", "Statins and stroke risk", "Statin use was linked with less stroke.")], True),
+ ("aim: counselling vs education only", False, "(counselling OR counseling)", "(smoking cessation)",
+  [_f1b_rv("a8", "Counselling to quit smoking", "Objectives: To compare intensive counselling with brief counselling as education only for smoking cessation. Results: Quit rates (RR 1.2, 95% CI 1.0 to 1.4; very low-certainty evidence)."),
+  _f1b_B("b8", "Behavioural support and smoking cessation", "Counselling was linked with smoking cessation.")], True),
+ ("short subject word: tea matches team", False, "(tea)", '("blood pressure")',
+  [_f1b_rv("a9", "Green tea and blood pressure", "Objectives: To compare a nurse-led team approach with a physician-led team approach to giving tea. Results: Systolic blood pressure (MD -2, 95% CI -3 to -1; low-certainty evidence)."),
+  _f1b_B("b9", "Tea drinking and blood pressure", "Tea was linked with lower blood pressure.")], True),
+ ("short subject word: diet matches dietitian", False, "(diet)", "(weight loss)",
+  [_f1b_rv("a10", "Diets for weight", "Objectives: To compare dietitian-led advice with doctor-led diet advice for weight loss. Results: Weight loss (MD -1.2 kg, 95% CI -2 to -0.4; low-certainty evidence)."),
+  _f1b_B("b10", "Diet and weight loss", "Diets led to weight loss.")], True),
+ ("control: real off-question review (should be passed over)", False, "(back sleeping OR supine)", '("sudden infant death" OR SIDS)',
+  [_f1b_rv("a11", "Positioning for respiratory distress in hospitalised children", "Objectives: To assess positions. " + _F1B_LOW2("oxygen saturation", "respiratory rate")),
+  _f1b_B("b11", "Sleep position and sudden infant death", "Supine sleep lowered sudden infant death.")], False),
+]
+for _lab, _comp, _subj, _o, _st, _want in _F1B_CASES:
+    _p = [s["pmid"] for s in _st]
+    t(f"F1 review (reviewer, round 2): the limit holds: {_lab}",
+      bool(evidence.certainty_cap(_st, _p, _comp, _o))
+      and evidence.lowest_review_certainty(_st, _p, _o) in ("low", "very low"))
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

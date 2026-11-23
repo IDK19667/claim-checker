@@ -4350,30 +4350,14 @@ What was deliberately rejected:
 
 ## 2026-11-23: Q10 F1, the stamp says what the studies it read support
 
-- Certainty limit: a review's own rating lowers a "true" (and sets the
-  evidence line) only when it rates the claim's question
-  (`evidence.rates_question`): not when it rates only other outcomes, each
-  with its interval, and not when it compares two forms of the same thing.
-  Review on the same day: passing a review over lifts a caution, so it needs
-  positive proof on two counts. The review shows a sign on its own (at least
-  two findings rated with intervals, none naming the outcome; or an aim that
-  compares two qualified forms of the subject, neither side a control: a
-  comparison with no treatment, sham, placebo or usual care is the test of
-  the thing), and another relied-on review that shows no such sign names the
-  claim's outcome in its title or conclusion. A lone review always counts,
-  and two reviews never excuse each other. The same test decides both the
-  limit on a "true" and the evidence line's floor: a passed-over review's
-  rating neither caps the answer nor lowers the line. The sign on the
-  review reads the outcome loosely (endings, and any distinctive word of a
-  term, so "remissions" counts for "type 2 diabetes remission", while words
-  for who was studied do not), and a review titled for the claim's own
-  subject never shows the ratings sign, since its several outcomes are the
-  claim's in other words (blood pressure for hypertension). The excusing
-  review is read strictly, a whole term. Exclusive against partial
-  breastfeeding, like polymer against glucose ORS, asks how much or which
-  form, not whether: passed over only beside a review on the outcome. The
-  model's per-study direction was weighed and not used: it read both
-  passed-over reviews (g1-09, n-02) as "for", so it cannot tell them apart.
+- Certainty limit: withdrawn after two reviews. Passing over a relied-on
+  review lifts a caution, and every proof tried (a sign on the review, an
+  excusing review on the outcome, loose outcome words) was beaten by built
+  cases: a cohort review naming the outcome, a mention in passing, a drug
+  class title, weaker-form controls, "tea" in "team". No recorded check is
+  made right by it in a replay (g1-09 and n-02 only through a live call, and
+  g1-09's excusing review rates nothing), so every relied-on review counts
+  toward the limit and the line's floor, as on main.
 - Forgo-treatment guidance: "talk to your doctor before stopping" is guidance
   to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
   stop one with a no and the existing forgo rule can stamp it false. It had
