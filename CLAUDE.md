@@ -20,7 +20,7 @@ change), `DECISIONS.md` (why things are the way they are), `README.md`
 | Storage | `db.py`, SQLite | verdict cache, anonymous check log, feedback |
 | Cards | `og.py`, Pillow | 1200x630 link previews |
 | Front end | `templates/`, `static/app.js`, `static/desk.css`, `static/desk.js`, `static/style.css` | no framework, no bundler; three.js is the one vendored file |
-| Offline | `static/sw.js`, `static/manifest.webmanifest` | network-first shell, cache-first fonts |
+| Offline | `static/sw.js`, `static/manifest.webmanifest` | home page network first with a 2.5 s limit once a copy is kept; stamped files and fonts cache first |
 
 Ask before adding a dependency, and say what it buys. The absence of a
 build step is a feature: anyone can read the shipped file.
@@ -125,8 +125,12 @@ build step is a feature: anyone can read the shipped file.
   costs free-tier quota). Re-run after any prompt change and read the
   `open` lines, not just the verdicts. Score it with
   `scripts/regression.py` (the 21 claims in `tests/regression_claims.json`).
-- Service worker: bump `CACHE` in `static/sw.js` when shell files change,
-  and add new shell files to `SHELL`.
+- Service worker: bump `CACHE` in `static/sw.js` when shell files change.
+  `SHELL` holds only what the home page needs to paint offline (the
+  page, `desk.css`, `app.js`, `desk.js`, its four faces); everything else
+  is kept when first used. The home page is network first, but once a
+  copy is kept a network that has not answered in 2.5 s gets the copy
+  shown, and its late answer refreshes the copy for next time.
 - Static addresses: print them with `url_for('static', ...)` (or as a
   `"/static/..."` string in `sw.js` or the manifest), never by hand, so
   they carry `?v=` and the file's hash and can be kept a year. A file a

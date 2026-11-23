@@ -10858,15 +10858,20 @@ t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESI
 
 _sw3 = (ROOT / "static" / "sw.js").read_text()
 _shell3 = _sw3.split("const SHELL")[1].split("];")[0]
-_linked3 = set()
-for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
-    _src3 = (ROOT / "templates" / _f3).read_text()
-    _linked3 |= {"/static/" + x for x in re.findall(r"url_for\('static', filename='([^']+)'\)", _src3)
-                 if not x.startswith(("vendor/", "desk/"))}  # the 3D files are handed to desk.js, never shell
-_linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
-t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
-  all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
-  and 'const CACHE = "evident-v121";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+_idx3 = (ROOT / "templates" / "index.html").read_text()
+_paint3 = {"/"} | {"/static/" + x for x in re.findall(r"""<(?:link rel="stylesheet"|script) (?:href|src)="\{\{ url_for\('static', filename='([^']+)'\) \}\}""", _idx3)}
+_paint3 |= set(re.findall(r'url\("(/static/fonts/[^"]+)"\)', (ROOT / "static" / "desk.css").read_text()))
+_shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
+t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
+  "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
+  _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
+  and 'const CACHE = "evident-v122";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
+  "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
+  and 'cache.put("/", res.clone())' in _sw3)
+t("a result address (/?q=) is network first with the home page as its offline fallback, and is never kept in its place",
+  'CLAIM_ARGS = ["q", "text", "title"]' in _sw3
+  and 'event.respondWith(fetch(req).catch(() => caches.open(CACHE).then((c) => c.match("/")).then((r) => r || Response.error())));' in _sw3)
 
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the

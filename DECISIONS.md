@@ -4,6 +4,38 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): The service worker installs less, and the home page has a time limit
+
+SHELL held 20 addresses: four other pages, `style.css` (not used by the
+home page), a fifth font, five icons and the manifest, all fetched at
+the load event of a first visit, the same moment the 3D files start.
+Now it holds only what the home page needs to paint offline: `/`,
+`desk.css`, `app.js`, `desk.js` and the four faces `desk.css` names.
+Those static files are stamped and kept a year, so after a first visit
+installing them costs no download; the second copy of `/` (about 9 KB)
+is the one cost left. The other pages are kept under their own address
+once visited, and stamped files and fonts once used.
+
+The home page was network first, so on a slow or sleeping server a
+returning reader saw nothing until the network answered (a free Render
+instance can take 30 s to wake). Now, once a copy of the home page is
+kept, a network that has not answered in 2.5 s gets the copy shown, and
+its answer, when it comes, is kept for next time. 2.5 s because the home
+page is about 9 KB and a sound server delivers it well inside that on
+slow 4G (150 ms round trip, 1.6 Mbps), while a reader waiting on a blank
+screen past about three seconds starts to leave. With a fast server the
+fresh page is shown exactly as before; a first visit, with nothing kept,
+waits as before.
+
+- A result address (`/?q=`, or a share's `?text=`/`?title=`) stays
+  network first with the kept home page as its offline fallback, but is
+  no longer stored as `/`: it was, so the next offline home visit opened
+  the last result. With a time limit on `/` that would have shown a stale
+  result as the home page.
+- What this costs: an address never visited is not there offline (the
+  other pages were precached before). The home page, the one a reader
+  opens offline, is.
+
 ## 2026-11-23 (q10): Static files carry their hash and are kept a year
 
 Every static file was sent `no-cache`, so a returning reader asked again

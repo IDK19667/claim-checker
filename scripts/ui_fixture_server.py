@@ -182,6 +182,23 @@ def _release(name):
     return "ok"
 
 
+# A slow or sleeping server, for the service worker's time limit on the home
+# page: /__fixture/hold/10 makes every request for "/" wait 10 s until reset.
+hold = {"s": 0.0}
+
+
+@appmod.app.route("/__fixture/hold/<secs>")
+def _hold(secs):
+    hold["s"] = float(secs)
+    return "ok"
+
+
+@appmod.app.before_request
+def _held():
+    if hold["s"] and appmod.request.path == "/":
+        time.sleep(hold["s"])
+
+
 @appmod.app.route("/__fixture/reset")
 def _reset():
     for g in gates.values():
@@ -191,6 +208,7 @@ def _reset():
     with db.get_conn() as conn:
         for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE, DECLINED, CUT):
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
+    hold["s"] = 0.0
     appmod._drop_home_lists()  # those rows went without a save, so the home page's copy goes too
     return "ok"
 
