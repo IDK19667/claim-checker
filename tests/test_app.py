@@ -10888,6 +10888,10 @@ t("offline, /checks (with its claim) and /flight are sent on to the home page by
   'const MOVED = { "/checks": true, "/flight": false };' in _sw3 and "Response.redirect(to, 301)" in _sw3
   and c.get("/checks?q=x").headers.get("Location", "").endswith("/?q=x") and c.get("/flight").headers.get("Location", "").endswith("/"))
 
+_oldsw = (ROOT / "scripts/fixtures/sw-f10ef54.js").read_text()
+t("the update path's fixture keeps the live worker (f10ef54): cache evident-v118 and its 20-address SHELL",
+  'const CACHE = "evident-v118";' in _oldsw and len(re.findall(r'^  "/', _oldsw.split("const SHELL = [", 1)[1].split("];", 1)[0], re.M)) == 20)
+
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
 # markup they build is parsed back here: every attribute is one the template

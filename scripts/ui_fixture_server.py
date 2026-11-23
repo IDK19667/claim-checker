@@ -203,16 +203,15 @@ def _status(code):
 
 # The live site's service worker, for the update path: /__fixture/oldsw/1
 # makes /sw.js answer the worker of commit f10ef54 (cache "evident-v118"),
-# read from git, until reset or /__fixture/oldsw/0.
-OLD_SW = "f10ef54"
+# kept as scripts/fixtures/sw-f10ef54.js (an export has no git), until reset
+# or /__fixture/oldsw/0.
+OLD_SW = ROOT / "scripts" / "fixtures" / "sw-f10ef54.js"
 
 
 @appmod.app.route("/__fixture/oldsw/<int:on>")
 def _oldsw(on):
     if on and "old_sw" not in hold:
-        import subprocess
-        hold["old_sw"] = subprocess.run(["git", "-C", str(ROOT), "show", OLD_SW + ":static/sw.js"],
-                                        capture_output=True, text=True, check=True).stdout
+        hold["old_sw"] = OLD_SW.read_text()
     hold["oldsw"] = on
     return "ok"
 
