@@ -35,17 +35,24 @@ def _w(*alts: str) -> str:
 
 
 # Word groups, each with its everyday synonyms.
-PREGNANT = _w(r"pregnan\w*", r"expecting a baby", r"mums? to be", r"moms? to be", r"mothers? to be",
-              r"expectant mothers?", r"trying to conceive", r"trying for a baby", r"trimesters?",
-              r"antenatal", r"prenatal", r"gestation(?:al)?", r"baby bump")
+PREGNANT = _w(r"pregnan\w*", r"pregant\w*", r"expecting (?:a baby|twins|mothers?|moms?|mums?|parents?)",
+              r"(?:when|while|whilst|if) (?:\w+ ){0,2}expecting(?! (?:a|an|the|my|your|our) (?!baby\b)\w+)",
+              r"mums? to be", r"moms? to be", r"mothers? to be", r"expectant (?:mothers?|moms?|mums?|parents?)",
+              r"trying to conceive", r"trying for a baby", r"trimesters?", r"antenatal", r"prenatal",
+              r"gestation(?:al)?", r"baby bump", r"miscarr\w*", r"stillbirths?",
+              r"(?:in|into|during|induc\w*|early|preterm|premature|bring(?:s|ing)? on|start(?:s|ing)?) labou?r",
+              r"labou?r (?:pains?|inductions?|and (?:birth|delivery))")
 # Words that say the claim is not about being pregnant: a test for it,
 # preventing it, or getting over it.
 NOT_PREGNANT = _w(r"pregnancy tests?", r"contracepti\w*", r"birth control", r"prevents? pregnancy",
                   r"preventing pregnancy", r"avoid(?:s|ing)? pregnancy", r"unplanned pregnanc\w*",
                   r"morning after", r"after pregnancy", r"postnatal", r"postpartum")
-BABY = _w(r"bab(?:y|ies)(?! aspirin)(?! boomers?)", r"infants?", r"newborns?", r"neonat\w*",
-          r"under (?:12|twelve) months", r"under (?:1|one) years?", r"months? old", r"weeks? old")
-CHILD = _w(r"child(?:ren)?", r"kids?", r"toddlers?", r"bab(?:y|ies)(?! aspirin)(?! boomers?)",
+BABY = _w(r"bab(?:y|ys|ies)(?! aspirin)(?! boomers?)", r"infants?", r"newborns?", r"neonat\w*",
+          r"under (?:12|twelve) months", r"under (?:1|one) years?", r"months? old", r"weeks? old",
+          r"cribs?", r"cots?(?! death)", r"cot bumpers?", r"moses baskets?")
+# An age under 18 counts: "my 10 year old", "aged 6".
+CHILD = _w(r"child(?:ren)?", r"kids?", r"toddlers?", r"bab(?:y|ys|ies)(?! aspirin)(?! boomers?)",
+           r"(?:[1-9]|1[0-7]) (?:years?|yrs?) olds?", r"aged (?:[1-9]|1[0-7])(?! ?\d)",
            r"infants?", r"newborns?", r"p(?:a)?ediatric", r"teen(?:ager)?s?", r"adolescents?",
            r"young people", r"youngsters?", r"school ?children", r"pupils?", r"under (?:5|6|12|16)s?",
            r"(?:boys|girls) and (?:girls|boys)")
@@ -56,12 +63,43 @@ MEDICINE = _w(r"medicines?", r"medications?", r"meds", r"drugs?", r"tablets?", r
               r"aspirin", r"codeine", r"antibiotics?", r"antihistamines?", r"antidepressants?",
               r"supplements?", r"vitamins?", r"multivitamins?", r"minerals?", r"herbal", r"herbs?",
               r"remed(?:y|ies)", r"probiotics?", r"melatonin", r"cbd", r"cannabis", r"homeopath\w*",
-              r"aromatherapy", r"essential oils?", r"prescri\w*", r"iron", r"fish oil", r"omega 3s?",
+              r"aromatherapy", r"essential oils?", r"prescri\w*", r"fish oil", r"omega 3s?",
+              r"iron (?:tablets?|supplements?|pills?|drops?|capsules?)",
               r"omega-3s?", r"echinacea", r"ginseng", r"turmeric", r"ginger (?:capsules?|supplements?)")
 STOPPING = _w(r"stop\w*", r"quit\w*", r"skip\w*", r"com(?:e|ing) off", r"go(?:ing)? off",
               r"giv(?:e|ing) up", r"ditch\w*", r"replac\w*", r"instead of", r"in place of",
               r"rather than", r"swap\w*", r"without", r"no need", r"(?:do(?:es)?n'?t|do(?:es)? not) need",
               r"no longer need\w*", r"not needed", r"unnecessary", r"cut(?:ting)? out", r"wean\w*")
+# Treatments a doctor gives: a claim that one of these treats a condition is
+# not a remedy offered in place of treatment.
+CONVENTIONAL = _w(r"medicines?", r"medications?", r"meds", r"drugs?", r"prescri\w*", r"antibiotics?",
+                  r"antivirals?", r"antiretrovirals?", r"statins?", r"insulin", r"metformin", r"chemo\w*",
+                  r"radiotherapy", r"radiation", r"surgery", r"vaccin\w*", r"immunotherapy", r"inhalers?",
+                  r"antidepressants?", r"steroids?", r"levothyroxine", r"transplants?", r"dialysis")
+TREATMENT = _w(r"medicines?", r"medications?", r"meds", r"drugs?", r"tablets?", r"pills?", r"prescri\w*",
+               r"treatments?", r"therap(?:y|ies)", r"insulin", r"metformin", r"chemo\w*", r"inhalers?",
+               r"antibiotics?", r"antiretrovirals?", r"statins?", r"antidepressants?", r"radiotherapy",
+               r"surgery", r"doctors?")
+# Doing "without" these is doing without treatment; "resolved without
+# treatment" is not.
+MEDICINE_ONLY = _w(r"medicines?", r"medications?", r"meds", r"drugs?", r"tablets?", r"pills?", r"prescri\w*",
+                   r"insulin", r"metformin", r"chemo\w*", r"inhalers?", r"antibiotics?", r"antiretrovirals?",
+                   r"statins?", r"antidepressants?")
+# Said to take the place of treatment: in place of it, stopping it, or doing
+# without it. A treatment word must follow, so "better than placebo" or
+# "instead of formula" is not one.
+INSTEAD = (_w(r"instead of", r"in place of", r"rather than", r"replac\w*", r"no need for", r"better than",
+              r"alternatives? to", r"ditch\w*", r"stop\w*", r"quit\w*", r"com(?:e|es|ing) off",
+              r"giv(?:e|es|ing) up", r"skip\w*", r"wean\w*")
+           + r".{0,40}?" + TREATMENT
+           + r"|" + _w(r"without") + r" (?:\w+ ){0,2}?" + MEDICINE_ONLY
+           + r"|" + _w(r"(?:do(?:es)?n'?t|do(?:es)? not|no longer|never) needs?") + r".{0,20}?" + TREATMENT)
+# Said to cure or treat a condition.
+CURE_TREAT = _w(r"cur(?:e|es|ed|ing)", r"curable", r"treat(?:s|ed|ing)?", r"treatment for", r"heal(?:s|ed|ing)?",
+                r"revers(?:e|es|ed|ing)", r"beats?", r"eliminat\w+", r"get(?:s)? rid of", r"kills?", r"fights?",
+                r"shrinks?", r"lower(?:s|ing)? (?:your |their )?blood (?:sugar|glucose)",
+                r"controls? (?:your |their )?(?:blood sugar|blood glucose|diabetes)")
+CURE = _w(r"cur(?:e|es|ed|ing)", r"curable", r"cure for")
 TREATS = _w(r"cur(?:e|es|ed|ing)", r"treat(?:s|ed|ing|ment)?", r"heal(?:s|ed|ing)?", r"reverse[sd]?",
             r"revers(?:es|ing)", r"remission", r"lowers?", r"lowering", r"control(?:s|led|ling)?",
             r"manag(?:e|es|ed|ing)", r"fights?", r"kills?", r"shrinks?", r"beats?", r"get rid of")
@@ -74,7 +112,8 @@ REMEDY = _w(r"herbal", r"herbs?", r"natural(?:ly)?", r"remed(?:y|ies)", r"supple
 SERIOUS = _w(r"cancers?", r"tumou?rs?", r"diabet\w*", r"hiv", r"aids", r"asthma", r"epilep\w*",
              r"seizures?", r"heart disease", r"heart failure", r"high blood pressure", r"hypertension",
              r"infections?", r"sepsis", r"pneumonia", r"tuberculosis", r"malaria", r"depression",
-             r"schizophreni\w*", r"bipolar", r"multiple sclerosis", r"arthritis", r"thyroid")
+             r"schizophreni\w*", r"bipolar", r"multiple sclerosis", r"arthritis", r"thyroid", r"covid\w*",
+             r"coronavirus")
 
 STATIN = _w(r"statins?", r"atorvastatin", r"simvastatin", r"rosuvastatin", r"pravastatin",
             r"cholesterol lowering (?:medicines?|drugs?|tablets?|pills?)",
@@ -130,7 +169,14 @@ CHICKENPOX = _w(r"chicken ?pox", r"varicella")
 NSAID = _w(r"ibuprofen", r"nsaids?", r"anti ?inflammator\w*", r"anti-inflammator\w*", r"naproxen",
            r"painkillers?", r"pain ?relief", r"fever reducers?")
 ASPIRIN = _w(r"aspirin")
-TEETHING = _w(r"teeth\w*", r"teething gels?")
+TEETHING = _w(r"teething")
+TEETHING_REMEDY = _w(r"gels?", r"numb\w*", r"benzocaine", r"lidocaine", r"lignocaine", r"pain ?relief",
+                     r"painkill\w*", r"medicines?", r"powders?", r"granules?", r"paracetamol", r"ibuprofen")
+CHILD_SICK = _w(r"diarrh\w*", r"vomit\w*", r"being sick", r"throwing up", r"throw(?:s)? up", r"gastroenteritis",
+                r"stomach bugs?", r"tummy bugs?", r"norovirus")
+# A claim that names adults and no child, baby or young age.
+ADULTS_ONLY = (r"^(?!.*\b(?:child|kid|bab|toddler|infant|newborn|month|year old|years old|aged \d))"
+               r".*\badults?\b")
 CANCER = _w(r"cancers?", r"tumou?rs?", r"leuka?emia", r"lymphoma", r"melanoma", r"chemo\w*",
             r"radiotherapy", r"oncolog\w*")
 # Words that make a cancer claim one about treating it, not about its causes.
@@ -167,15 +213,6 @@ FOLIC = _w(r"folic acid", r"folate", r"neural tube", r"spina bifida")
 VITAMIN_A_PREG = VITAMIN_A + r"|" + _w(r"multivitamins?")
 
 
-# Said to take the place of treatment: in place of it, stopping it, or
-# treating a serious condition.
-REPLACES_TREATMENT = (_w(r"instead of", r"in place of", r"rather than", r"replac\w*", r"better than",
-                         r"no need for", r"(?:do(?:es)?n't|do(?:es)? not) need")
-                      + r"|(?:" + STOPPING + r").{0,40}(?:" + MEDICINE + "|" + _w(r"treatments?", r"therap(?:y|ies)",
-                                                                                  r"insulin", r"chemo\w*") + r")"
-                      + r"|(?:" + TREATS + r").{0,60}(?:" + SERIOUS + r")")
-
-
 # Each entry. `when`: every pattern must match; `unless`: none may; `over`:
 # entries this one makes redundant when both fire; `rank`: 1 is the most
 # serious. `url` is the page the line rests on, `page` its main heading, and
@@ -190,18 +227,17 @@ ENTRIES = [
      "page": "High temperature (fever) in children",
      "quote": "is under 3 months old and has a temperature of 38C or higher, or you think they have a high temperature"},
     {"id": "child-dehydration", "topic": "Dehydration in a young child", "rank": 1,
-     "when": [CHILD, TUMMY_BUG],
-     "trigger": "a child or baby, and diarrhoea, vomiting, dehydration or rehydration",
+     "when": [CHILD, CHILD_SICK], "unless": [_w(r"vaccin\w*", r"immuni[sz]\w*")],
+     "trigger": "a child or baby who has diarrhoea or is being sick (not a vaccine claim)",
      "line": "A child under 5 with diarrhoea or vomiting who shows signs of dehydration, such as fewer "
              "wet nappies (diapers), needs urgent medical advice.",
      "url": "https://www.nhs.uk/symptoms/diarrhoea-and-vomiting/",
      "page": "Diarrhoea and vomiting",
      "quote": "a child under 5 years has signs of dehydration, such as fewer wet nappies"},
-
     # ---- babies under 12 months ------------------------------------------------
     {"id": "honey-under-1", "topic": "Honey and babies", "rank": 1,
-     "when": [HONEY, CHILD + "|" + COUGH],
-     "trigger": "honey, with a child or baby, or with a cough, cold or sore throat",
+     "when": [HONEY, CHILD + "|" + COUGH], "unless": [ADULTS_ONLY],
+     "trigger": "honey, with a child or baby, or with a cough, cold or sore throat (not a claim about adults only)",
      "line": "Do not give honey to babies under 1 year old.",
      "url": "https://www.nhs.uk/baby/weaning-and-feeding/foods-to-avoid-giving-babies-and-young-children/",
      "page": "Foods to avoid giving babies and young children",
@@ -283,16 +319,16 @@ ENTRIES = [
      "page": "Chickenpox",
      "quote": "do not use ibuprofen unless you're told to by a doctor, as it may cause serious skin infections"},
     {"id": "child-teething-gel", "topic": "Teething gels", "rank": 2,
-     "when": [_w(r"teething")],
-     "trigger": "teething",
+     "when": [TEETHING, TEETHING_REMEDY],
+     "trigger": "teething, with a gel, numbing or pain relief medicine",
      "line": "For a teething baby, use only a gel made for young children: general oral pain relief "
              "gels are not suitable for children.",
      "url": "https://www.nhs.uk/baby/babys-development/teething/tips-for-helping-your-teething-baby/",
      "page": "Tips for helping your teething baby",
      "quote": "General oral pain relief gels are not suitable for children."},
     {"id": "child-salt-gargle", "topic": "Gargling salt water", "rank": 2,
-     "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt")],
-     "trigger": "gargling, with salt or salt water",
+     "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt"), CHILD],
+     "trigger": "gargling with salt or salt water, with a child",
      "line": "Gargling with warm salty water is not for children: they should not try it.",
      "url": "https://www.nhs.uk/symptoms/sore-throat/",
      "page": "Sore throat",
@@ -496,8 +532,10 @@ ENTRIES = [
      "page": "Epilepsy",
      "quote": "Do not change your dose or stop taking your medicine without talking to your specialist."},
     {"id": "diabetes-medicine", "topic": "Diabetes medicines", "rank": 1,
-     "when": [DIABETES_MEDICINE + "|" + DIABETES, DIABETES_MEDICINE + "|" + TREATS + "|" + REMEDY], "over": ["stop-in-place-of-treatment"],
-     "trigger": "a diabetes medicine by name, or diabetes or blood sugar with a treatment, remedy or food",
+     "when": [DIABETES_MEDICINE + "|" + DIABETES, DIABETES_MEDICINE + "|" + CURE + "|" + INSTEAD],
+     "over": ["stop-in-place-of-treatment"],
+     "trigger": "a diabetes medicine by name, or diabetes with a cure or with stopping, replacing or doing "
+                "without the medicine",
      "line": "If you take medicine for diabetes, keep taking it as prescribed: if you stop, your blood "
              "sugar may start to rise again.",
      "url": "https://www.nhs.uk/medicines/metformin/",
@@ -513,20 +551,23 @@ ENTRIES = [
     {"id": "asthma-inhaler", "topic": "Asthma inhalers", "rank": 1,
      "when": [INHALER + "|" + ASTHMA, INHALER + "|" + STOPPING + "|" + TREATS + "|" + REMEDY + "|" + MEDICINE],
      "trigger": "an inhaler, or asthma with a treatment, a remedy or doing without",
-     "line": "Use asthma inhalers as your care team recommends: a preventer inhaler is for every day, "
-             "to help prevent symptoms.",
+     "line": "If you have asthma, use your inhalers as your care team explains: they will tell you how and "
+             "when to use each one.",
      "url": "https://www.nhs.uk/conditions/asthma/",
      "page": "Asthma",
-     "quote": "a preventer inhaler to use every day to help prevent symptoms"},
-    {"id": "antibiotics", "topic": "Antibiotics", "rank": 3, "when": [ANTIBIOTIC],
-     "trigger": "antibiotics",
-     "line": "If you are prescribed antibiotics, take them as directed on the packet or the leaflet "
-             "that comes with them.",
+     "quote": "Your care team will explain how and when to use your medicines"},
+    {"id": "antibiotics", "topic": "Antibiotics", "rank": 3,
+     "when": [ANTIBIOTIC, _w(r"left ?overs?", r"left over", r"old", r"spare", r"sav(?:e|es|ed|ing)", r"keep(?:ing)?",
+                            r"shar(?:e|es|ed|ing)", r"borrow\w*", r"friends?", r"family", r"someone else'?s?",
+                            r"stop\w*", r"quit\w*", r"finish\w*", r"course", r"feel(?:ing)? better",
+                            r"without (?:a )?prescription", r"over the counter", r"online")],
+     "trigger": "antibiotics, with stopping early, finishing the course, leftovers, saving or sharing them, or "
+                "getting them without a prescription",
+     "line": "Only take antibiotics prescribed for you, never borrowed from someone else, and take them as "
+             "directed on the packet or leaflet.",
      "url": "https://www.nhs.uk/medicines/antibiotics/",
      "page": "Antibiotics",
-     "quote": "Take antibiotics as directed on the packet or the patient information leaflet that comes "
-              "with the medicine."},
-
+     "quote": "Only ever take antibiotics prescribed for you – never \"borrow\" them from a friend or family member."},
     # ---- supplements and foods with known interactions or overdose risks ---------
     {"id": "st-johns-wort", "topic": "St John's wort", "rank": 1, "when": [ST_JOHNS],
      "trigger": "St John's wort",
@@ -555,8 +596,9 @@ ENTRIES = [
      "quote": "Foods high in vitamin K ... can affect how warfarin works. You can still eat these foods, but "
               "talk to your warfarin clinic for advice."},
     {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
-     "unless": [_w(r"creams?", r"serums?", r"topical", r"skin ?care", r"wrinkles?", r"acne", r"face")],
-     "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not skin creams)",
+     "unless": [_w(r"creams?", r"serums?", r"topical\w*", r"skin ?care", r"lotions?", r"gels?", r"ointments?",
+                   r"moisturi[sz]\w*", r"on (?:the|your) (?:skin|face)", r"appl(?:y|ied|ying)")],
+     "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not creams, serums or anything put on the skin)",
      "line": "Having more than 1.5mg of vitamin A a day over many years may affect your bones; if you "
              "eat liver every week, do not take vitamin A supplements.",
      "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-a/",
@@ -580,16 +622,17 @@ ENTRIES = [
      "page": "Cancer Alternative Therapies",
      "quote": "Your provider can help you make sure that everything you're using for your cancer care works well together."},
     {"id": "stop-in-place-of-treatment", "topic": "A remedy in place of prescribed treatment", "rank": 1,
-     "when": [REMEDY + "|" + _w(r"lifestyle", r"therap(?:y|ies)"), REPLACES_TREATMENT],
-     "unless": [_w(r"(?:hormone|nicotine|joint|hip|knee|meal) replacement\w*", r"replacement therap(?:y|ies)")],
-     "trigger": "a remedy, supplement, food or therapy said to replace treatment, or to treat a serious "
-                "condition such as cancer, diabetes or HIV",
+     "when": [SERIOUS + "|" + INSTEAD, CURE_TREAT + "|" + INSTEAD],
+     "unless": [_w(r"(?:hormone|nicotine|joint|hip|knee|meal|enzyme) replacement\w*", r"replacement therap(?:y|ies)"),
+                r"^(?!.*(?:" + INSTEAD + r")).*(?:" + CONVENTIONAL + r")"],
+     "trigger": "anything said to cure or treat a serious condition such as cancer, diabetes, HIV or an infection, "
+                "or to replace, or let you stop or do without, a treatment (not a claim about a medical treatment "
+                "itself, or hormone replacement)",
      "line": "If you take a prescribed medicine, do not stop it without first talking to your doctor, "
              "whatever else you try.",
      "url": "https://www.nhs.uk/tests-and-treatments/herbal-medicines-and-complementary-therapies/",
      "page": "Herbal medicines and complementary therapies",
      "quote": "do not stop taking any prescribed medicine without first talking to your doctor"},
-
     # ---- a test result read at home ---------------------------------------------
     {"id": "psa-result", "topic": "A raised PSA result", "rank": 3, "when": [PSA, PSA_CONTEXT],
      "trigger": "a PSA or prostate specific antigen test, level or result (not PSA meaning an announcement)",

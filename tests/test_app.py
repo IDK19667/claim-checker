@@ -11507,8 +11507,8 @@ _SL_PROBES = {
     "child-decongestant": ("Nasal sprays help children breathe at night", "Nasal sprays help children with an ear infection"),
     "ear-infection-decongestant": ("Decongestants clear ear infections faster", "Decongestants clear a blocked nose"),
     "child-ibuprofen-chickenpox": ("Ibuprofen eases chickenpox itching", "Ibuprofen eases period pain"),
-    "child-teething-gel": ("Amber necklaces ease teething", "Teeth whitening damages enamel"),
-    "child-salt-gargle": ("Gargling with salt water kills throat germs", "Gargling mouthwash freshens breath"),
+    "child-teething-gel": ("Teething gel is safe for babies", "Amber necklaces ease teething pain"),
+    "child-salt-gargle": ("Kids should gargle salt water for a sore throat", "Gargling with salt water kills throat germs"),
     "child-ear-infection": ("Garlic oil cures ear infections in toddlers", "Ear infections are common in swimmers"),
     "pregnancy-stop-medicine": ("Pregnant women should come off their antidepressants", "Pregnancy tests work best in the morning"),
     "pregnancy-epilepsy": ("Epilepsy medicine is dangerous in pregnancy", "Epilepsy is linked to flashing lights"),
@@ -11532,10 +11532,10 @@ _SL_PROBES = {
     "warfarin": ("Warfarin causes bruising", "Apixaban causes bruising"),
     "blood-thinners": ("Blood thinners are dangerous after 80", "Warfarin causes bruising"),
     "epilepsy-medicine": ("The ketogenic diet reduces seizures in epilepsy", "Seizures can follow a head injury"),
-    "diabetes-medicine": ("Bitter melon lowers blood sugar", "Sugar causes type 1 diabetes"),
+    "diabetes-medicine": ("Cinnamon cures type 2 diabetes", "A high sugar diet causes diabetes"),
     "thyroid-medicine": ("Levothyroxine causes weight loss", "Thyroid cancer is rising in women"),
     "asthma-inhaler": ("Salt caves cure asthma", "Air pollution causes asthma"),
-    "antibiotics": ("Antibiotics cure the flu", "Probiotics improve gut health"),
+    "antibiotics": ("You can stop antibiotics when you feel better", "Antibiotics cure the flu"),
     "st-johns-wort": ("St John's wort treats depression", "John's diet works"),
     "grapefruit": ("Grapefruit burns belly fat", "Oranges prevent colds"),
     "warfarin-vitamin-k": ("Vitamin K strengthens bones", "Vitamin C prevents colds"),
@@ -11545,11 +11545,97 @@ _SL_PROBES = {
     "stop-in-place-of-treatment": ("Homeopathy can replace antibiotics", "Hormone replacement therapy causes breast cancer"),
     "psa-result": ("A normal PSA rules out prostate cancer", "PSA: drink more water in a heatwave"),
 }
+# Every exclusion has a claim that its rule fires on but for that exclusion alone.
+_SL_EXCL = {
+    ("child-dehydration", 0): "The rotavirus vaccine prevents vomiting and diarrhoea in babies",
+    ("honey-under-1", 0): "Honey soothes a cough in adults",
+    ("baby-water", 0): "Saline water drops help a baby's blocked nose",
+    ("child-decongestant", 0): "Nasal sprays help children with an ear infection",
+    ("pregnancy-stop-medicine", 0): "You can stop your medicine after pregnancy",
+    ("pregnancy-epilepsy", 0): "Epilepsy medicine can make contraception fail to prevent pregnancy",
+    ("pregnancy-alcohol", 0): "Alcohol is fine again after pregnancy",
+    ("pregnancy-vitamin-a", 0): "Retinol is fine again after pregnancy",
+    ("pregnancy-liver", 0): "Eating liver is fine again after pregnancy",
+    ("pregnancy-caffeine", 0): "Coffee is fine again after pregnancy",
+    ("pregnancy-caffeine", 1): "Raspberry leaf tea is fine in pregnancy",
+    ("pregnancy-raw-fish", 0): "Sushi is fine again after pregnancy",
+    ("pregnancy-fish", 0): "Tuna is fine again after pregnancy",
+    ("pregnancy-soft-cheese", 0): "Brie is fine again after pregnancy",
+    ("pregnancy-raw-meat", 0): "Rare steak is fine again after pregnancy",
+    ("pregnancy-herbal-tea", 0): "Chamomile tea helps you sleep after pregnancy",
+    ("pregnancy-exercise", 0): "Exercise helps you recover after pregnancy",
+    ("pregnancy-folic-acid", 0): "Folic acid is not needed after pregnancy",
+    ("pregnancy-medicines", 0): "The pill prevents pregnancy",
+    ("vitamin-a-limit", 0): "Retinol serum clears acne",
+    ("stop-in-place-of-treatment", 0): "Hormone replacement therapy causes breast cancer",
+    ("stop-in-place-of-treatment", 1): "Antibiotics cure bacterial infections",
+}
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
 _sl_bad = [(i_, y_, n_) for i_, (y_, n_) in _SL_PROBES.items() if i_ in _sl.BY_ID
            and not (_sl._fires(_sl.BY_ID[i_], _sl.normalise(y_)) and not _sl._fires(_sl.BY_ID[i_], _sl.normalise(n_)))]
 t("F2: each entry fires on its claim and stays silent on its near miss", not _sl_bad, _sl_bad[:5])
+_sl_xbad = []
+for (i_, k_), c_ in _SL_EXCL.items():
+    e_ = _sl.BY_ID.get(i_)
+    tx_ = _sl.normalise(c_)
+    if (not e_ or _sl._fires(e_, tx_) or not all(p_.search(tx_) for p_ in e_["_when"])
+            or any(p_.search(tx_) for j_, p_ in enumerate(e_["_unless"]) if j_ != k_)):
+        _sl_xbad.append((i_, k_))
+t("F2: every exclusion has a claim here that it alone silences, so taking it out would be noticed",
+  not _sl_xbad and set(_SL_EXCL) == {(e_["id"], k_) for e_ in _sl.ENTRIES for k_ in range(len(e_["_unless"]))},
+  (_sl_xbad, sorted({(e_["id"], k_) for e_ in _sl.ENTRIES for k_ in range(len(e_["_unless"]))} ^ set(_SL_EXCL))))
+def _sl_ids(c_):
+    return [e_["id"] for e_ in _sl.match(c_)]
+t("F2: pregnancy words include expecting, labour and miscarriage, and a parcel or labour costs are not pregnancy",
+  "pregnancy-herbal-tea" in _sl_ids("Herbal teas are fine when your expecting")
+  and "pregnancy-herbal-tea" in _sl_ids("Raspberry leaf tea induces labour")
+  and "pregnancy-caffeine" in _sl_ids("Coffee causes miscarriage")
+  and _sl_ids("Green tea helps when you are expecting a parcel to arrive") == []
+  and _sl_ids("Herbal tea companies say labour costs are rising") == [])
+t("F2: an age under 18, 'babys' and a crib count as a child or baby; an adult's age does not",
+  "child-aspirin" in _sl_ids("Giving aspirin to my 10 year old for a fever")
+  and "child-decongestant" in _sl_ids("Decongestants help my 3-year-old's stuffy nose")
+  and "baby-safe-sleep" in _sl_ids("Bumpers in the crib prevent injury")
+  and "honey-under-1" in _sl_ids("Honey is fine for a babys cold")
+  and "child-aspirin" not in _sl_ids("Aspirin helps my 40 year old husband's headaches"))
+t("F2: triggers stay on the point: no iron line on liver in pregnancy, no gel line on necklaces, no child line on adult gargling",
+  "pregnancy-medicines" not in _sl_ids("Eating liver while pregnant is good for iron")
+  and _sl_ids("Amber teething necklaces reduce teething pain") == []
+  and _sl_ids("Gargling with salt water kills throat germs") == []
+  and _sl_ids("Honey is better than cough syrup for adults") == []
+  and _sl_ids("Dehydration causes headaches in kids") == []
+  and _sl_ids("A high sugar diet causes diabetes") == []
+  and _sl_ids("Type 2 diabetes can go into remission with lifestyle changes") == []
+  and _sl_ids("Antibiotics speed up recovery from most sore throats") == []
+  and "preventer" not in _sl.BY_ID["asthma-inhaler"]["line"])
+t("F2: oral vitamin A for acne gets the vitamin A line; a cream does not",
+  "vitamin-a-limit" in _sl_ids("Taking 50000 IU vitamin A for acne") and _sl_ids("Retinol cream reduces wrinkles") == [])
+t("F2: a remedy said to cure a serious condition gets the line whatever it is called; a medical treatment does not",
+  all("stop-in-place-of-treatment" in _sl_ids(c_) for c_ in
+      ("Colloidal silver cures infections", "Ivermectin cures COVID-19", "Herbs can cure HIV without medication",
+       "Beetroot juice can replace blood pressure medication", "Cinnamon lowers blood sugar in people with diabetes"))
+  and _sl_ids("Antibiotics cure bacterial infections") == []
+  and _sl_ids("Side effects were mild and resolved without treatment.") == []
+  and _sl_ids("Antidepressants are no better than placebo") == ["antidepressants"])
+t("F2: antibiotics get a line only on stopping, leftovers, saving or sharing",
+  "antibiotics" in _sl_ids("You should stop antibiotics when you feel better")
+  and "antibiotics" in _sl_ids("It is fine to take leftover antibiotics from a friend")
+  and _sl_ids("Antibiotics cure the flu") == [])
+import time as _sl_time  # noqa: E402
+_sl_slow = []
+for _sl_b in ("a" * 2000, "pregnant " + "x " * 995, "stop " * 400, "instead of " * 182, "without " * 250,
+              "when " * 399 + "expecting", "cure " * 399 + "cancer", "aged 1" * 333, "1 year old " * 181,
+              "replace " * 249 + "medicine", "adults " * 285, "baby " * 400, "psa " * 500, "honey " * 333):
+    _sl_c = _sl_b[:2000]
+    _sl_best = 1e9
+    for _ in range(3):
+        _sl_t0 = _sl_time.perf_counter()
+        _sl.match(_sl_c)
+        _sl_best = min(_sl_best, _sl_time.perf_counter() - _sl_t0)
+    if _sl_best >= 0.05:
+        _sl_slow.append((_sl_b[:12], round(_sl_best * 1000)))
+t("F2: a 2,000-character claim built to make the rules backtrack is matched in under 50 ms", not _sl_slow, _sl_slow)
 _sl_hosts = ("nhs.uk", "cdc.gov", "who.int", "medlineplus.gov", "fda.gov", "nice.org.uk", "cochranelibrary.com")
 from urllib.parse import urlparse as _sl_up, quote as _sl_q  # noqa: E402
 _sl_shape = [e_["id"] for e_ in _sl.ENTRIES
