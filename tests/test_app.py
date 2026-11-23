@@ -11733,6 +11733,90 @@ t("F1 review: the real review of body position for breathing trouble is still pa
 t("F1 review: the real review of polymer against glucose rehydration solution is still passed over for the ORS claim, and not on its own",
   _f1_real("Oral rehydration solution", "27959472") == (False, True))
 
+_F1R_G401 = next(c for c in _F1R_REAL if c["claim"].startswith("Type 2 diabetes"))
+t("F1 review: the real umbrella review of diets that rates remission in other words still counts for the remission claim",
+  evidence.rates_question(next(s for s in _F1R_G401["studies"] if s["pmid"] == "34796367"),
+                          *reversed(_F1R_G401["search_query"].split(" AND ")[:2]), False, _F1R_G401["studies"]))
+_F1R_RV = lambda pmid, title, abstract: {"pmid": pmid, "title": title, "abstract": abstract,
+                                         "publication_types": ["Systematic Review", "Meta-Analysis"]}
+# The separate reviewer's cases: (label, comparative, subject, outcome, review). Each is read alone and
+# beside a review whose title names the claim's outcome; every one keeps the limit both ways.
+_F1R_REV = [
+    ("hypertension read as blood pressure", False, "(salt OR sodium)", "(hypertension)",
+     _F1R_RV("v1", "Reduced sodium intake for adults",
+             "Objectives: To assess the effect of reduced sodium intake. Results: Reduced sodium lowered systolic "
+             "blood pressure (MD -3.4 mmHg, 95% CI -4.2 to -2.6; low-certainty evidence) and diastolic blood "
+             "pressure (MD -1.5, 95% CI -2.0 to -1.0; low-certainty evidence). Conclusions: Reducing salt lowers "
+             "blood pressure.")),
+    ("SIDS read as cot death", False, "(supine OR back sleeping)", '("sudden infant death" OR SIDS)',
+     _F1R_RV("v2", "Infant sleeping position and cot death",
+             "Objectives: To assess sleeping position. Results: Supine sleeping reduced cot death (OR 0.48, 95% CI "
+             "0.35 to 0.66; low-certainty evidence) and infant death overall (OR 0.7, 95% CI 0.5 to 0.9; very "
+             "low-certainty evidence). Conclusions: Back sleeping reduces cot death.")),
+    ("mortality read as death", False, "(statin*)", "(mortality)",
+     _F1R_RV("v3", "Statins for primary prevention",
+             "Objectives: To assess statins. Results: Statins reduced all-cause death (RR 0.86, 95% CI 0.79 to "
+             "0.94; low-certainty evidence) and stroke (RR 0.78, 95% CI 0.68 to 0.89; low-certainty evidence). "
+             "Conclusions: Statins reduce death.")),
+    ("exercise against no exercise", False, "(exercise)", "(depression)",
+     _F1R_RV("v5", "Exercise for depression",
+             "Objectives: To compare exercise with no exercise for adults with depression. Results: Exercise reduced "
+             "depressive symptoms (SMD -0.6, 95% CI -0.9 to -0.3; low-certainty evidence). Conclusions: Exercise "
+             "may reduce depression.")),
+    ("aspirin versus no aspirin", False, "(aspirin)", "(stroke)",
+     _F1R_RV("v6", "Aspirin and stroke",
+             "Objective: To compare aspirin versus no aspirin in adults. Results: Aspirin reduced stroke (RR 0.9, "
+             "95% CI 0.8 to 1.0; very low-certainty evidence). Conclusions: Uncertain.")),
+    ("smokers with non-smokers", False, "(smoking OR smokers)", '("lung cancer")',
+     _F1R_RV("v7", "Smoking and lung cancer",
+             "Objectives: To compare smokers with non-smokers in the risk of lung cancer. Results: Smoking raised "
+             "lung cancer risk (RR 9, 95% CI 7 to 12; low-certainty evidence). Conclusions: Smoking raises risk.")),
+    ("vaccine with placebo", False, "(vaccin*)", "(influenza)",
+     _F1R_RV("v8", "Influenza vaccines for adults",
+             "Objectives: To compare vaccine with placebo for influenza. Results: Vaccine reduced influenza (RR 0.4, "
+             "95% CI 0.3 to 0.5; low-certainty evidence).")),
+    ("vitamin D alone, with calcium, and either with placebo", False, '("vitamin D")', "(fracture*)",
+     _F1R_RV("v9", "Vitamin D for fractures",
+             "Objectives: To compare vitamin D alone with vitamin D plus calcium, and either with placebo, for "
+             "fractures. Results: Vitamin D alone did not reduce hip fracture (RR 1.1, 95% CI 0.9 to 1.3; "
+             "low-certainty evidence).")),
+    ("coffee drinkers with people who drink no coffee", False, "(coffee)", "(diabetes)",
+     _F1R_RV("v11", "Coffee and type 2 diabetes",
+             "Background: We compared coffee drinkers with people who drink no coffee. Results: Lower diabetes "
+             "risk (RR 0.7, 95% CI 0.65 to 0.75; very low-certainty evidence).")),
+    ("a rating on the claim's outcome beside a side effect", False, "(zinc)", "(cold*)",
+     _F1R_RV("v12", "Zinc for the common cold",
+             "Objectives: To assess zinc. Results: Zinc shortened colds (MD -2 days, 95% CI -3 to -1; "
+             "low-certainty evidence); adverse events rose (RR 1.4, 95% CI 1.1 to 1.8; moderate-certainty "
+             "evidence).")),
+    ("a comparative claim rated in other words", True, "(butter OR margarine)", '("heart disease")',
+     _F1R_RV("v13", "Butter versus margarine",
+             "Objectives: To compare butter with margarine. Results: Coronary events (RR 1.1, 95% CI 0.9 to 1.3; "
+             "very low-certainty evidence).")),
+    ("one overall rating with no interval", False, "(melatonin)", "(insomnia)",
+     _F1R_RV("v14", "Melatonin for sleep",
+             "Objectives: To assess melatonin. Results: Sleep onset latency fell by 7 minutes. The certainty of "
+             "evidence was low.")),
+]
+
+
+def _f1_excuser(outcome):
+    term = outcome.strip("()").split(" OR ")[0].strip('"').rstrip("*")
+    return {"pmid": "vx", "title": f"{term} and its causes: a systematic review",
+            "publication_types": ["Systematic Review"],
+            "abstract": f"OBJECTIVES: To review {term}. AUTHORS' CONCLUSIONS: The {term} findings were mixed."}
+
+
+for _lab, _comp, _subj, _o, _s in _F1R_REV:
+    t(f"F1 review (reviewer's case): {_lab} keeps the limit alone and beside a review on the outcome",
+      _f1_keeps(_s, _o, _subj, comparative=_comp) and _f1_keeps(_s, _o, _subj, [_f1_excuser(_o)], comparative=_comp))
+_F1R_BF = _F1R_RV("v10", "Breastfeeding and infant infection",
+                  "Objectives: To compare exclusive breastfeeding with partial breastfeeding for infection in infants. "
+                  "Results: Fewer infections (RR 0.7, 95% CI 0.6 to 0.85; low-certainty evidence).")
+t("F1 review: exclusive against partial breastfeeding asks how much, not whether: it counts alone, and is passed over only beside a review on infection",
+  _f1_keeps(_F1R_BF, "(infection*)", "(breastfeed*)")
+  and not evidence.rates_question(_F1R_BF, "(infection*)", "(breastfeed*)", False, [_F1R_BF, _f1_excuser("(infection*)")]))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))

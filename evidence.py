@@ -1771,7 +1771,8 @@ def _group_patterns(group: str) -> list:
 # stand-in for it. A comparison with a control is the test of whether the
 # thing works: the claim's own question, never another one.
 _CONTROL_SIDE = re.compile(
-    r"(?i)\b(?:no|not|without|sham|placebos?|dummy|inactive|controls?|untreated|"
+    r"(?i)\b(?:no|not|never|without|sham|placebos?|dummy|inactive|controls?|untreated|"
+    r"unexposed|unvaccinated|abstain\w*|abstainers?|nonusers?|non[\s-]?\w+|"
     r"usual\s+care|standard\s+care|routine\s+care|waiting[\s-]+lists?|wait[\s-]+lists?|"
     r"no\s+treatment|nothing|none)\b")
 # Words that carry no qualifier of their own on a side of a comparison.
@@ -1811,20 +1812,55 @@ def _forms_aim(study, subject: str) -> bool:
     return False
 
 
-def _rates_other_outcomes(study, outcome: str) -> bool:
-    """True when the review rates at least two findings one by one, each
-    with its interval, and not one of those ratings, nor its title, names
-    the claim's outcome (a review of body position for breathing trouble in
-    hospital, read for a claim about cot death)."""
-    named = _group_patterns(outcome)
+# Words of an outcome term that say who was studied, or that any outcome
+# might carry: they do not show that a finding is about the claim's outcome.
+_NOT_OUTCOME_WORDS = {
+    "infant", "infants", "baby", "babies", "child", "children", "adult", "adults", "women",
+    "woman", "men", "people", "patients", "older", "elderly", "pregnant", "pregnancy",
+    "newborn", "newborns", "neonatal", "adolescents", "girls", "boys",
+    "syndrome", "disease", "diseases", "disorder", "disorders", "risk", "rate", "rates",
+    "level", "levels", "symptom", "symptoms", "condition", "type", "total", "overall",
+    "cause", "acute", "chronic", "severe", "health", "outcome", "outcomes", "events",
+    "event", "incidence", "prevalence"}
+
+
+def _loose_outcome_patterns(outcome: str) -> list:
+    """The claim's outcome read loosely: each whole term with its endings,
+    and each distinctive word of a term on its own ("remission" from "type 2
+    diabetes remission"), leaving out the words that say who was studied
+    or that any outcome carries (_NOT_OUTCOME_WORDS)."""
+    out = list(_group_patterns(outcome))
+    for term in re.split(r"\s+OR\s+", (outcome or "").strip().strip("()")):
+        for w in re.findall(r"[A-Za-z][A-Za-z'-]+", re.sub(r"\[[^\]]*\]", "", term)):
+            w = w.strip("'-")
+            if (len(w) >= 4 or w.isupper()) and w.lower() not in _NOT_OUTCOME_WORDS:
+                p = _term_pattern(w)
+                if p:
+                    out.append(p)
+    return out
+
+
+def _rates_other_outcomes(study, outcome: str, subject: str = "") -> bool:
+    """True when a review about something else rates its findings one by
+    one and none of them is the claim's outcome: at least two findings
+    rated, each with its interval; not one of those rated findings, nor the
+    title, names the claim's outcome even loosely (_loose_outcome_patterns);
+    and the title does not name the claim's subject either. A review titled
+    for the claim's own subject that rates several outcomes is read as
+    rating the claim's question under other words (blood pressure for
+    hypertension, mortality for death). The case: a review of body position
+    for breathing trouble in hospital, read for a claim about cot death."""
+    named = _loose_outcome_patterns(outcome)
     if not named:
         return False
-    every, on_outcome = _ratings(study, outcome)
-    if not every or on_outcome:
+    title = str(study.get("title") or "")
+    if any(p.search(title) for p in named):
         return False
-    if any(p.search(str(study.get("title") or "")) for p in named):
+    if any(p.search(title) for p in _group_patterns(subject)):
         return False
     rated = [c for c in _clauses(_text(study)) if any(True for _ in rated_matches(c))]
+    if any(p.search(c) for c in rated for p in named):
+        return False
     return sum(1 for c in rated if _INTERVAL.search(c)) >= 2
 
 
@@ -1832,14 +1868,15 @@ def _off_question(study, outcome: str, subject: str, comparative: bool) -> bool:
     """A sign, on the review alone, that its ratings are about another
     question: _rates_other_outcomes, or, for a claim that a thing works
     rather than one that compares two, _forms_aim."""
-    if outcome and _rates_other_outcomes(study, outcome):
+    if outcome and _rates_other_outcomes(study, outcome, subject):
         return True
     return bool(subject) and not comparative and _forms_aim(study, subject)
 
 
 def _speaks_to(study, outcome: str) -> bool:
-    """True when a review names the claim's outcome in its title or its
-    conclusion."""
+    """True when a review names the claim's outcome, as a whole term, in its
+    title or its conclusion. Strict on purpose: a review that excuses
+    another lifts a caution, so it must plainly be about the outcome."""
     named = _group_patterns(outcome)
     text = f"{study.get('title') or ''} {conclusion(study)}"
     return any(p.search(text) for p in named)

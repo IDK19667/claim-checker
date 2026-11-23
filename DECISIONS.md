@@ -4361,7 +4361,19 @@ What was deliberately rejected:
   comparison with no treatment, sham, placebo or usual care is the test of
   the thing), and another relied-on review that shows no such sign names the
   claim's outcome in its title or conclusion. A lone review always counts,
-  and two reviews never excuse each other.
+  and two reviews never excuse each other. The same test decides both the
+  limit on a "true" and the evidence line's floor: a passed-over review's
+  rating neither caps the answer nor lowers the line. The sign on the
+  review reads the outcome loosely (endings, and any distinctive word of a
+  term, so "remissions" counts for "type 2 diabetes remission", while words
+  for who was studied do not), and a review titled for the claim's own
+  subject never shows the ratings sign, since its several outcomes are the
+  claim's in other words (blood pressure for hypertension). The excusing
+  review is read strictly, a whole term. Exclusive against partial
+  breastfeeding, like polymer against glucose ORS, asks how much or which
+  form, not whether: passed over only beside a review on the outcome. The
+  model's per-study direction was weighed and not used: it read both
+  passed-over reviews (g1-09, n-02) as "for", so it cannot tell them apart.
 - Forgo-treatment guidance: "talk to your doctor before stopping" is guidance
   to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
   stop one with a no and the existing forgo rule can stamp it false. It had
