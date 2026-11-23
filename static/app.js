@@ -236,6 +236,8 @@ let currentResult = null;
 // Set by any input in the claim box after a check is sent, and cleared when the box is given a claim: the reader has
 // changed the words, even by a space or a word typed and rubbed out, so an answer landing then draws around them.
 let editedSinceSend = false;
+// The reader is dictating into the box (focus is on the mic button meanwhile): that counts as changing the words.
+let dictating = false;
 let userTapped = false;
 window.addEventListener("pointerdown", () => { userTapped = true; }, { once: true, passive: true });
 
@@ -940,7 +942,7 @@ async function check(claim) {
       try {
         // The words in the claim box changed while the check ran: the reader is
         // typing, so the answer is drawn and announced around them.
-        const typing = document.activeElement === input && editedSinceSend;
+        const typing = (document.activeElement === input || dictating) && editedSinceSend;
         renderResult(final.result, false, typing);
         landFocus($("stamp"), typing);
         remember(final.result);
@@ -1718,9 +1720,10 @@ if (SR) {
     rec.lang = navigator.language || "en-US";
     rec.interimResults = true;
     mic.classList.add("listening");
-    rec.onresult = (e) => { input.value = Array.from(e.results).map((r) => r[0].transcript).join(""); };
-    rec.onend = () => { mic.classList.remove("listening"); rec = null; if (input.value.trim()) input.focus(); };
-    rec.onerror = () => { mic.classList.remove("listening"); rec = null; };
+    dictating = true;
+    rec.onresult = (e) => { input.value = Array.from(e.results).map((r) => r[0].transcript).join(""); editedSinceSend = true; clearBtn.hidden = !input.value; };
+    rec.onend = () => { mic.classList.remove("listening"); rec = null; dictating = false; if (input.value.trim()) input.focus(); };
+    rec.onerror = () => { mic.classList.remove("listening"); rec = null; dictating = false; };
     rec.start();
   });
 }

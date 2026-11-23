@@ -313,6 +313,14 @@ await test("L2: words kept from a check survive Back then Forward, and Edit clai
   const b = await j1Look(page);
   must(b.value === GATED + " today" && b.f === "claim-input", `after Edit claim the box holds "${b.value}", focus on #${b.f}`);
 });
+await test("L3: words dictated during a check count as changing the claim and stay when the answer lands", async (page) => {
+  await j1Start(page, { dictate: true });
+  await page.click("#mic-btn");
+  await page.evaluate((t) => window.__rec.onresult({ results: [[{ transcript: t }]] }), GATED + " today");
+  await j1Land(page);
+  const s = await j1Look(page);
+  must(s.stamp && s.value === GATED + " today" && s.stop === 1, `while dictating the box holds "${s.value}", stop ${s.stop}, focus on #${s.f}`);
+});
 await test("an error lands focus on its title", async (page) => {
   await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
   await page.context().setOffline(true);
