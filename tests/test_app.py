@@ -10824,7 +10824,7 @@ for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
 _linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
 t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
   all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
-  and 'const CACHE = "evident-v118";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+  and 'const CACHE = "evident-v119";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
 
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
@@ -11404,6 +11404,41 @@ _r4_disp = (ROOT / "display.py").read_text()
 t("R4: the template never marks a value safe, and the one Markup on the server wraps text escaped first (desk_refs)",
   "|safe" not in _r4_tpl.replace(" ", "") and _r4_disp.count("Markup(") == 1
   and 'safe = str(escape(text or ""))' in _r4_disp.split("def desk_refs")[1].split("return Markup(")[0])
+
+# ---- K2: no regex lookbehind in a shipped script ------------------------------
+# Safari before 16.4 cannot parse (?<= or (?<!, and one in app.js stops the whole
+# script there. splitSentences now splits without one; the old regex is kept here
+# as the reference, and the new function must return exactly what it returned.
+_K2_OLD = r'''const oldSplit = (text) =>
+  String(text || "").trim().split(/(?<=[.!?])\s+(?=[A-Z0-9\u201c"(])/).map((x) => x.trim()).filter(Boolean);
+'''
+_K2_CASES = [
+    "", "   ", None, "One sentence.", "One sentence", "First. Second. Third.",
+    "It works. 3.5 times more. Then it stops.", "Use e.g. this one. And that.",
+    "Is it true? Yes! Maybe.", "Odd?!  Next one.", "She said \"no.\" Then left.",
+    "He wrote. “Quoted start.” Done.", "A claim. (In brackets.) After.",
+    "No space.After stop. Next.", "Several.     Spaces here.", "Line one.\nLine two.",
+    "Tab.\tAfter tab.", "Ends. 42 people took part.", "Ends. 2024 was the year.",
+    "Lower. not a split here.", "Version 1.2.3 Released. Good.",
+    "Dr. Smith said so. Mr. Jones too.", "Done. ‘single curly’ not split.",
+    "Mixed!? (Bracket.) “Quote.” 7 more.", "Wait...  Then go.",
+    "Trailing space. ", "  Leading. Space.", "Stop. Nbsp space. End.",
+    "Q? \"Straight quote.\" A.", "Ellipsis. . . Then on.", "x. . Y", "?! A", "a.\n\n\nB. C",
+]
+if _shutil.which("node"):
+    _k2_js = (ROOT / "static" / "app.js").read_text()
+    _k2_fn = _k2_js[_k2_js.index("const splitSentences"):_k2_js.index("const sentenceKey")]
+    _k2_out = json.loads(_subprocess.run(
+        ["node", "-e", _K2_OLD + _k2_fn + "const C = " + json.dumps(_K2_CASES) + ";"
+         "console.log(JSON.stringify(C.map((c) => [oldSplit(c), splitSentences(c)])));"],
+        capture_output=True, text=True, check=True).stdout)
+    _k2_diff = [(c, o, n) for c, (o, n) in zip(_K2_CASES, _k2_out) if o != n]
+    t("K2: splitSentences returns exactly what the old lookbehind regex returned, on %d strings" % len(_K2_CASES),
+      len(_K2_CASES) >= 25 and not _k2_diff and any(len(o) > 2 for o, _ in _k2_out), _k2_diff[:3])
+_k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "sw.js")}
+t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
+  not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],
+  [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s])
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

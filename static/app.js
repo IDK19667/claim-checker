@@ -272,8 +272,14 @@ function fmtDate(iso) {
 // same records. "What the research says" is picked from the same paragraphs
 // the breakdown prints, so the breakdown loses every sentence already shown.
 const WHO_LABEL = "Who was studied: ";
-const splitSentences = (text) =>
-  String(text || "").trim().split(/(?<=[.!?])\s+(?=[A-Z0-9\u201c"(])/).map((x) => x.trim()).filter(Boolean);
+// No lookbehind: Safari before 16.4 cannot parse one. The stop is captured and
+// put back on the end of the sentence it closes.
+const splitSentences = (text) => {
+  const parts = String(text || "").trim().split(/([.!?])\s+(?=[A-Z0-9\u201c"(])/);
+  const out = [];
+  for (let i = 0; i < parts.length; i += 2) out.push(parts[i] + (parts[i + 1] || ""));
+  return out.map((x) => x.trim()).filter(Boolean);
+};
 const sentenceKey = (x) => x.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 80);
 function unseen(text, seen) {
   const out = [];
