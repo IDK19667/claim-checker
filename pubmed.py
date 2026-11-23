@@ -19,6 +19,7 @@ import re
 import threading
 import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -45,6 +46,17 @@ RETRY_AFTER = 1.5
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 _last_call = 0.0
 _pace = threading.Lock()
+# The searches of one pass do not wait for each other: each still takes its
+# turn at _pace (starts MIN_INTERVAL apart, across every thread and check),
+# and the lock is let go before the request is sent, so they are in flight
+# side by side. No task here waits on another task, so the pool cannot
+# deadlock however many checks share it.
+_SEARCHES = ThreadPoolExecutor(max_workers=16, thread_name_prefix="pubmed")
+
+
+def _ahead(fn, *args, **kwargs):
+    """fn(*args, **kwargs) started on the search pool; .result() collects it."""
+    return _SEARCHES.submit(fn, *args, **kwargs)
 
 
 def _paced_get(endpoint: str, params: dict):
@@ -229,9 +241,12 @@ def search_and_fetch(query: str, max_results: int = 8,
     the thing claimed and the nearest evidence is worth showing, labelled.
     """
     keep = INDIRECT_SLOTS if surrogate else 0
+    # The surrogate search needs only the query and the surrogate: it runs
+    # beside the others, and its ids are added after theirs as before.
+    indirect = _ahead(search_surrogate, query, surrogate, max_results=keep + 1) if surrogate else None
     pmids = search_merged(query, max_results=max_results)[:max_results * 2]
     if surrogate:
-        for pmid in search_surrogate(query, surrogate, max_results=keep + 1):
+        for pmid in indirect.result():
             if pmid not in pmids:
                 pmids.append(pmid)
     return prioritise(usable(fetch_details(pmids)), query, surrogate)[:max_results]
@@ -458,13 +473,20 @@ def search_merged(query: str, max_results: int = 8) -> list[str]:
     """
     want = max_results * 2
     asked = review_query(query)
-    reviews = search_pubmed(asked, max_results=REVIEW_SLOTS) if asked else []
-    best = search_pubmed(best_evidence_query(query), max_results=want)
+    phrased = phrase_query(query)
+    # The four are independent, so they are asked side by side (each still
+    # waits its turn to start) and collected in this order, which is the
+    # order they were asked in before and the order a failure surfaces in.
+    reviews = _ahead(search_pubmed, asked, max_results=REVIEW_SLOTS) if asked else None
+    best = _ahead(search_pubmed, best_evidence_query(query), max_results=want)
     # The phrase search sits between the two: it can only find papers that
     # name a term as written, so what it finds is about the claim.
-    phrased = phrase_query(query)
-    exact = search_phrases(phrased, max_results=max_results) if phrased else []
-    general = search_pubmed(query, max_results=want)
+    exact = _ahead(search_phrases, phrased, max_results=max_results) if phrased else None
+    general = _ahead(search_pubmed, query, max_results=want)
+    reviews = reviews.result() if reviews else []
+    best = best.result()
+    exact = exact.result() if exact else []
+    general = general.result()
     return list(dict.fromkeys(reviews[:REVIEW_SLOTS] + best[:max_results] + exact
                               + best[max_results:] + general))[:want]
 

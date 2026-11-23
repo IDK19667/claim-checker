@@ -222,6 +222,7 @@ verdict._gemini_client = fg
 STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", "year": "2020",
             "publication_types": ["Journal Article"], "authors": ["A B"], "data_banks": None, "url": f"u{i}"}
            for i in range(1, 4)]
+_SP_REAL_SAF = pubmed.search_and_fetch  # the real one, for the check-speed tests at the end
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # The guideline check is one more call on high-stakes claims. It is tested
 # on its own near the end, and stays out of every scripted check until then.
@@ -1419,9 +1420,11 @@ _merged = pubmed.search_merged("q", max_results=8)
 pubmed.search_pubmed = _real_search
 t("  strong designs take the front of the merged list, with no duplicates",
   _merged == ["MAIN", "REVIEW1", "REVIEW2", "POPULAR", "TAIL"], _merged)
-t("  and every search really ran, the review search first, then the filtered one",
-  len(_seen) == 3 and _seen[0] == "(q) AND (systematic review OR meta-analysis)"
-  and "[pt]" in _seen[1] and "[pt]" not in _seen[2], _seen)
+# The searches run side by side now, so the order they start in is not
+# fixed; the order their results are merged in is (the line above).
+t("  and every search really ran: the review search, the filtered one and the plain one",
+  len(_seen) == 3 and "(q) AND (systematic review OR meta-analysis)" in _seen
+  and sum("[pt]" in q_ for q_ in _seen) == 1 and "q" in _seen, _seen)
 
 # Round 3, rule 6. The main review on a topic is found with the claim's own
 # words alone, not with every synonym ORed in.
@@ -11622,6 +11625,102 @@ except ValueError:
     _sp_raised = True
 t("  an error the view does not catch itself is raised where the view is used, as in line",
   _sp_raised)
+
+# Task 4: the searches of one pass are in flight side by side, starts
+# still MIN_INTERVAL apart across every thread, merged in today's order.
+_sp_min = pubmed.MIN_INTERVAL
+_sp_starts4 = []
+_sp_lock4 = _sp_threading.Lock()
+
+
+class _SpR:
+    status_code = 200
+
+    def __init__(self, term): self.term = term
+
+    def raise_for_status(self): pass
+
+    def json(self):
+        t_ = self.term
+        if t_.endswith("(systematic review OR meta-analysis)"):
+            ids = ["REV1", "REV2"]
+        elif "[pt]" in t_:
+            ids = [f"PT{i}" for i in range(16)]
+        elif '"' in t_:
+            ids = ["PHR1", "PT3"]
+        elif "DHT" in t_:
+            ids = ["SUR1", "GEN0"]
+        else:
+            ids = [f"GEN{i}" for i in range(16)]
+        return {"esearchresult": {"idlist": ids}}
+
+
+def _sp_transport(url, params=None, timeout=None):
+    with _sp_lock4:
+        _sp_starts4.append(_time.monotonic())
+    _time.sleep(0.2)
+    return _SpR(params["term"])
+
+
+def _sp_serial_merged(q):
+    """search_merged as it was: one search after another."""
+    want = 16
+    asked = pubmed.review_query(q)
+    reviews = pubmed.search_pubmed(asked, max_results=pubmed.REVIEW_SLOTS) if asked else []
+    best = pubmed.search_pubmed(pubmed.best_evidence_query(q), max_results=want)
+    phrased = pubmed.phrase_query(q)
+    exact = pubmed.search_phrases(phrased, max_results=8) if phrased else []
+    general = pubmed.search_pubmed(q, max_results=want)
+    return list(dict.fromkeys(reviews[:pubmed.REVIEW_SLOTS] + best[:8] + exact + best[8:] + general))[:want]
+
+
+_sp_q4 = "(knuckle cracking OR joint cracking) AND (arthritis OR joint degeneration)"
+_sp_prev_get = pubmed.requests.get
+pubmed.requests.get = _sp_transport
+pubmed.MIN_INTERVAL = 0.1
+try:
+    _t0 = _time.monotonic()
+    _sp_side = pubmed.search_merged(_sp_q4, max_results=8)
+    _sp_side_s = _time.monotonic() - _t0
+    _sp_one = sorted(_sp_starts4)
+    del _sp_starts4[:]
+    _t0 = _time.monotonic()
+    _sp_line = _sp_serial_merged(_sp_q4)
+    _sp_line_s = _time.monotonic() - _t0
+    del _sp_starts4[:]
+    _sp_two = [None, None]
+    _sp_runs = [_sp_threading.Thread(target=lambda i=i: _sp_two.__setitem__(i, pubmed.search_merged(_sp_q4, 8)))
+                for i in range(2)]
+    for _th in _sp_runs:
+        _th.start()
+    for _th in _sp_runs:
+        _th.join()
+    _sp_both = sorted(_sp_starts4)
+    del _sp_starts4[:]
+    _sp_fetched = []
+    _sp_prev_fetch = pubmed.fetch_details
+    pubmed.fetch_details = lambda ids: _sp_fetched.append(list(ids)) or []
+    try:
+        _SP_REAL_SAF(_sp_q4, max_results=8, surrogate="DHT OR dihydrotestosterone")
+    finally:
+        pubmed.fetch_details = _sp_prev_fetch
+    _sp_sur_starts = sorted(_sp_starts4)
+finally:
+    pubmed.requests.get = _sp_prev_get
+    pubmed.MIN_INTERVAL = _sp_min
+_sp_gap = lambda xs: min((b - a for a, b in zip(xs, xs[1:])), default=1)  # noqa: E731
+t("speed: the searches of one pass merge into the list the one-after-another order gave",
+  _sp_side == _sp_line and len(_sp_side) == 16 and _sp_side[:2] == ["REV1", "REV2"], (_sp_side, _sp_line))
+t("  no two PubMed starts closer than MIN_INTERVAL, in one check and with two checks at once",
+  len(_sp_one) == 4 and _sp_gap(_sp_one) >= 0.095 and len(_sp_both) == 8 and _sp_gap(_sp_both) >= 0.095,
+  (_sp_one, _sp_both))
+t("  the two checks at once each get the same list",
+  _sp_two[0] == _sp_two[1] == _sp_line, _sp_two)
+t("  the surrogate search runs beside them and its new ids still come after theirs, then one fetch",
+  _sp_fetched == [_sp_line + [i_ for i_ in ("SUR1", "GEN0") if i_ not in _sp_line]] and len(_sp_sur_starts) == 5 and _sp_gap(_sp_sur_starts) >= 0.095,
+  (_sp_fetched, _sp_sur_starts))
+t("  and the pass is faster than one search after another",
+  _sp_side_s < _sp_line_s - 0.2, (_sp_side_s, _sp_line_s))
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
