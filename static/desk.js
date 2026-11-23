@@ -659,7 +659,8 @@
     window.scrollTo({ top: Math.max(0, Math.round(window.scrollY + r.top - stripH - Math.max(8, (room - r.height) / 2))), behavior: "instant" });
   }
   function keyboardMoved() {
-    if (!kbd || !coarse.matches) return false;
+    if (!kbd) return false;
+    if (!coarse.matches) { kbd = null; root.classList.remove("kbd"); return false; }
     if (innerWidth !== kbd.w) { kbd = null; root.classList.remove("kbd"); return false; }
     if (innerHeight < kbd.h - 1) { kbd.shrunk = true; root.classList.toggle("kbd", isField(document.activeElement)); showField(); adoptScroll(400); return true; }
     root.classList.remove("kbd");

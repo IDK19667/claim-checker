@@ -2373,8 +2373,12 @@ t("  closing the keyboard returns to the place, unless a check came in between; 
 t("J2: a change of height counts as the keyboard only on a touch screen",
   'var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };' in _deskjs
   and "if (!isField(e.target) || !coarse.matches) return;" in _deskjs
-  and _kbd.startswith("function keyboardMoved() {\n    if (!kbd || !coarse.matches) return false;")
+  and _kbd.startswith("function keyboardMoved() {\n    if (!kbd) return false;\n    if (!coarse.matches) {")
   and "a desktop window dragged shorter keeps the bar" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
+# L4: on a screen with no touch, the kept keyboard state is dropped, class and all, so a
+# window that later turns touch (or a stale kbd class) cannot leave the bar hidden.
+t("L4: a change of height on a desktop clears the kept keyboard state and the kbd class",
+  'if (!coarse.matches) { kbd = null; root.classList.remove("kbd"); return false; }' in _kbd)
 t("  and the browser check is in scripts/ui_desk.mjs: 500, 420 and 340 high, Enter sends, the bar slides, a turn",
   all(x in (ROOT / "scripts" / "ui_desk.mjs").read_text() for x in ("[500, 420, 340]", 'page.keyboard.press("Enter")', "reallocations over eight slides", "a turn kept the buffer")))
 t("desk.js writes no markup from strings and sets no inline handler or style attribute from data",
