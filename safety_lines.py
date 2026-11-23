@@ -292,6 +292,108 @@ ENTRIES = [
      "source": ("NHS: Ear infections", "https://www.nhs.uk/conditions/ear-infections/"),
      "quote": "your child is under 12 months old and you think they have an ear infection"},
 
+    # ---- pregnancy -----------------------------------------------------------------
+    {"id": "pregnancy-stop-medicine", "topic": "Stopping a prescribed medicine in pregnancy", "rank": 1,
+     "when": [PREGNANT, MEDICINE, STOPPING], "unless": [NOT_PREGNANT], "hazard": "stop-medicine",
+     "over": ["pregnancy-medicines", "stop-in-place-of-treatment"],
+     "trigger": "pregnancy, a medicine, and stopping, skipping or doing without it",
+     "line": "In pregnancy, never stop a medicine prescribed to keep you healthy without talking to "
+             "your doctor first: stopping could harm you and your baby.",
+     "source": ("NHS: Medicines in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/medicines/"),
+     "quote": "Stopping taking your medicine could be harmful to both you and your baby."},
+    {"id": "pregnancy-epilepsy", "topic": "Epilepsy medicine in pregnancy", "rank": 1,
+     "when": [PREGNANT, EPILEPSY], "unless": [NOT_PREGNANT],
+     "over": ["epilepsy-medicine", "pregnancy-medicines", "pregnancy-stop-medicine"],
+     "trigger": "pregnancy and epilepsy or an epilepsy medicine",
+     "line": "If you take epilepsy medicine and are pregnant, keep taking it, and speak to your "
+             "specialist team straight away.",
+     "source": ("NHS: Epilepsy treatment", "https://www.nhs.uk/conditions/epilepsy/treatment/"),
+     "quote": "keep taking your medicine but speak to your specialist team straight away"},
+    {"id": "pregnancy-alcohol", "topic": "Alcohol in pregnancy", "rank": 1,
+     "when": [PREGNANT, ALCOHOL], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy or trying for a baby, and alcohol, wine, beer or drinking",
+     "line": "If you are pregnant or planning a pregnancy, the advice is not to drink alcohol.",
+     "source": ("NHS: Drinking alcohol while pregnant",
+                "https://www.nhs.uk/pregnancy/keeping-well/drinking-alcohol-while-pregnant/"),
+     "quote": "It's recommended that if you're pregnant or planning to become pregnant you should not drink alcohol."},
+    {"id": "pregnancy-vitamin-a", "topic": "Vitamin A supplements in pregnancy", "rank": 1,
+     "when": [PREGNANT, VITAMIN_A_PREG], "unless": [NOT_PREGNANT],
+     "over": ["vitamin-a-limit", "pregnancy-medicines"],
+     "trigger": "pregnancy, and vitamin A, retinol, cod or fish liver oil, or multivitamins",
+     "line": "In pregnancy, do not take cod liver oil or supplements containing vitamin A, sometimes "
+             "called retinol.",
+     "source": ("NHS: Pregnancy vitamins and supplements",
+                "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/"),
+     "quote": "Do not take cod liver oil or supplements containing vitamin A (sometimes called retinol) "
+              "when you're pregnant."},
+    {"id": "pregnancy-liver", "topic": "Liver in pregnancy", "rank": 1,
+     "when": [PREGNANT, LIVER], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and liver or liver products (not liver disease or liver tests)",
+     "line": "In pregnancy, avoid liver and liver products: they are high in vitamin A, which can be "
+             "harmful to your baby.",
+     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "quote": "Liver and foods containing liver have high levels of vitamin A, which can be harmful to your baby."},
+    {"id": "pregnancy-caffeine", "topic": "Caffeine in pregnancy", "rank": 2,
+     "when": [PREGNANT, CAFFEINE], "unless": [NOT_PREGNANT, HERBAL_TEA],
+     "trigger": "pregnancy, and caffeine, coffee, tea, cola or energy drinks (not herbal tea)",
+     "line": "In pregnancy, have no more than 200mg of caffeine a day: it is in coffee, tea, cola, "
+             "energy drinks and chocolate.",
+     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "quote": "you should not have more than 200mg of caffeine a day"},
+    {"id": "pregnancy-fish", "topic": "Fish in pregnancy", "rank": 2,
+     "when": [PREGNANT, FISH], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and fish, seafood, shellfish, tuna, sushi or mercury (not fish oil)",
+     "line": "In pregnancy, avoid shark, swordfish, marlin and raw shellfish, and eat no more than 2 "
+             "portions of oily fish and 4 cans of tuna a week.",
+     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "quote": "tuna – you should not eat more than 4 cans or 2 tuna steaks a week"},
+    {"id": "pregnancy-soft-cheese", "topic": "Unpasteurised dairy in pregnancy", "rank": 2,
+     "when": [PREGNANT, SOFT_CHEESE], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and cheese, unpasteurised or raw milk, or listeria",
+     "line": "In pregnancy, avoid unpasteurised milk and some soft cheeses, which may contain listeria "
+             "bacteria.",
+     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "quote": "Unpasteurised or soft ripened dairy foods may contain listeria bacteria, which can cause listeriosis."},
+    {"id": "pregnancy-raw-meat", "topic": "Raw and cured meat in pregnancy", "rank": 2,
+     "when": [PREGNANT, MEAT], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and meat, steak, cured or deli meats, or toxoplasmosis",
+     "line": "In pregnancy, avoid raw, undercooked or cured meat: it carries a small risk of "
+             "toxoplasmosis, which can cause miscarriage.",
+     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "quote": "There's a small risk of getting toxoplasmosis if you eat raw, undercooked or cured meat, "
+              "which can cause miscarriage."},
+    {"id": "pregnancy-herbal-tea", "topic": "Herbal tea in pregnancy", "rank": 2,
+     "when": [PREGNANT, HERBAL_TEA], "unless": [NOT_PREGNANT], "over": ["pregnancy-medicines"],
+     "trigger": "pregnancy, and herbal, fruit or liquorice tea",
+     "line": "In pregnancy, drink no more than 4 cups of herbal tea a day, and avoid teas containing "
+             "liquorice root.",
+     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "quote": "avoid drinking more than 4 cups of herbal tea a day, and avoid teas containing liquorice root"},
+    {"id": "pregnancy-exercise", "topic": "Exercise in pregnancy", "rank": 2,
+     "when": [PREGNANT, EXERCISE], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and exercise, sport, the gym, swimming, diving or being active",
+     "line": "In pregnancy, do not scuba dive, and avoid sports where there is a risk of falling or "
+             "bumping your tummy.",
+     "source": ("NHS: Exercise in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/exercise/"),
+     "quote": "do not do sports or activities where there's a risk of falling or bumping your tummy, "
+              "like hockey, rugby or mountain biking"},
+    {"id": "pregnancy-folic-acid", "topic": "Folic acid before and in pregnancy", "rank": 3,
+     "when": [PREGNANT + "|" + _w(r"neural tube", r"spina bifida", r"conceiv\w*", r"conception"), FOLIC], "unless": [NOT_PREGNANT], "over": ["pregnancy-medicines"],
+     "trigger": "folic acid or folate, with pregnancy, conceiving, neural tube defects or spina bifida",
+     "line": "Take 400 micrograms of folic acid a day while trying to get pregnant and for the first "
+             "12 weeks of pregnancy.",
+     "source": ("NHS: Pregnancy vitamins and supplements",
+                "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/"),
+     "quote": "Take folic acid for the first 12 weeks of pregnancy."},
+    {"id": "pregnancy-medicines", "topic": "Medicines, supplements and remedies in pregnancy", "rank": 2,
+     "when": [PREGNANT, MEDICINE], "unless": [NOT_PREGNANT],
+     "trigger": "pregnancy, and any medicine, supplement, vitamin or herbal remedy",
+     "line": "If you are pregnant, check with your doctor, midwife or pharmacist before taking any "
+             "medicine, and tell them about any herbal remedies.",
+     "source": ("NHS: Medicines in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/medicines/"),
+     "quote": "Tell your midwife, doctor or pharmacist if you're using herbal, homeopathic or aromatherapy "
+              "remedies or therapies."},
+
 ]
 
 for _e in ENTRIES:

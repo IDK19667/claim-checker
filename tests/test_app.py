@@ -11518,6 +11518,19 @@ _SL_PROBES = {
     "child-teething-gel": ("Amber necklaces ease teething", "Teeth whitening damages enamel"),
     "child-salt-gargle": ("Gargling with salt water kills throat germs", "Gargling mouthwash freshens breath"),
     "child-ear-infection": ("Garlic oil cures ear infections in toddlers", "Ear infections are common in swimmers"),
+    "pregnancy-stop-medicine": ("Pregnant women should come off their antidepressants", "Pregnancy tests work best in the morning"),
+    "pregnancy-epilepsy": ("Epilepsy medicine is dangerous in pregnancy", "Epilepsy is linked to flashing lights"),
+    "pregnancy-alcohol": ("A glass of wine is fine while pregnant", "Red wine is good for the heart"),
+    "pregnancy-vitamin-a": ("Cod liver oil is good for pregnant women", "Taking a vitamin a day keeps doctors away while pregnant"),
+    "pregnancy-liver": ("Eating liver in pregnancy is safe", "Pregnancy raises the risk of liver disease"),
+    "pregnancy-caffeine": ("Two coffees a day are fine during pregnancy", "Raspberry leaf tea eases labour in pregnancy"),
+    "pregnancy-fish": ("Sushi is safe in pregnancy", "Fish oil in pregnancy boosts baby brains"),
+    "pregnancy-soft-cheese": ("Brie is safe to eat while pregnant", "Cheese causes nightmares"),
+    "pregnancy-raw-meat": ("Rare steak is fine when you are pregnant", "Red meat raises bowel cancer risk"),
+    "pregnancy-herbal-tea": ("Chamomile tea calms nerves in pregnancy", "Chamomile tea helps adults sleep"),
+    "pregnancy-exercise": ("Running while pregnant causes miscarriage", "Running damages your knees"),
+    "pregnancy-folic-acid": ("Folate prevents spina bifida", "Folic acid prevents heart disease in men"),
+    "pregnancy-medicines": ("Paracetamol in pregnancy causes ADHD", "The pill prevents pregnancy"),
 }
 t("F2: every library entry has a firing claim and a near miss here, and every probe names an entry",
   set(_SL_PROBES) == set(_sl.BY_ID), sorted(set(_SL_PROBES) ^ set(_sl.BY_ID)))
@@ -11550,6 +11563,8 @@ _sl_many = "Aspirin, honey and cough syrup are fine for a baby with a fever and 
 t("F2: at most two lines on one answer, the most serious first",
   len(_sl.match(_sl_many)) == 2 and all(e_["rank"] == 1 for e_ in _sl.match(_sl_many)),
   [e_["id"] for e_ in _sl.match(_sl_many)])
+t("F2: a more particular entry replaces the general one it covers (epilepsy medicine in pregnancy)",
+  [e_["id"] for e_ in _sl.match("Epilepsy medicine is dangerous in pregnancy")] == ["pregnancy-epilepsy"])
 _sl_fc = "Paracetamol brings down a fever in babies"
 _sl_hl = _sl.BY_ID["baby-fever"]["line"]
 _sl_e1 = _sl.attach(_sl_fc, "Short.", "Because.")
