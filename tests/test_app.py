@@ -86,15 +86,6 @@ def t(label, cond, extra=""):
     print(f"{'PASS' if cond else 'FAIL'} {label} {extra if not cond else ''}")
 
 
-def _no_safety(text):
-    """An explanation without the fixed safety lines (safety_lines.py), for
-    checks on what the gates left of the model's and code's own prose."""
-    import safety_lines
-    for line in safety_lines.LINES:
-        text = str(text or "").replace(" " + line, "").replace(line, "")
-    return str(text or "").strip()
-
-
 try:
     requests.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi", timeout=1)
     _net_refused = False
@@ -6085,15 +6076,15 @@ t("guidance prose: under an answer the guidance rule set, no line says the claim
   and _gu_none["verdict"] == "false" and not _UNRATED.search(_gu_seen(_gu_none)),
   (_gu_seen(_gu), _gu_seen(_gu_none)))
 t("  what the studies did and did not test stays, and the fixed line says what the answer rests on",
-  _no_safety(_gu["explanation"]) == ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually "
+  _gu["explanation"] == ("Antibiotics should not be used for the common cold (Study 1). Recovery is usually "
                          "spontaneous (Study 2). Nothing here tests this claim in people, only opinion pieces. "
                          + verdict.GUIDANCE_RESTS)
-  and _no_safety(_gu_none["explanation"]) == "None of the studies found directly test this claim. " + verdict.GUIDANCE_RESTS
+  and _gu_none["explanation"] == "None of the studies found directly test this claim. " + verdict.GUIDANCE_RESTS
   and verdict.GUIDANCE_RESTS == "This answer rests on what major health guidelines say, not on these studies."
   and "No trial here tests the claim (Study 2)." in " ".join(_gu["breakdown"]["evidence"])
   and _gu["still_open"] == "Whether a trial would settle it.", (_gu["explanation"], _gu["breakdown"], _gu["still_open"]))
 t("  and an answer the guidance rule did not set keeps its own words",
-  _gu_plain["verdict"] == "insufficient" and _no_safety(_gu_plain["explanation"]).endswith("enough evidence to rate it.")
+  _gu_plain["verdict"] == "insufficient" and _gu_plain["explanation"].endswith("enough evidence to rate it.")
   and verdict.GUIDANCE_RESTS not in _gu_seen(_gu_plain), _gu_plain["explanation"])
 db.put_cached_verdict("People with type 1 diabetes can replace insulin with a strict diet",
                       "(diet) AND (type 1 diabetes)", "false",
@@ -6133,7 +6124,7 @@ pubmed.search_and_fetch = _h6_search
 t("H6: a guidance answer relying on no study, plain and streamed, keeps no sentence citing a paper",
   all(r_.get("verdict") == "false" and r_.get("evidence_line") == verdict.GUIDANCE_LINE
       and not any(s_["cited_in_verdict"] for s_ in r_["studies"])
-      and not breakdown.refs(r_["explanation"], 2) and _no_safety(r_["explanation"]).endswith(verdict.GUIDANCE_RESTS)
+      and not breakdown.refs(r_["explanation"], 2) and r_["explanation"].endswith(verdict.GUIDANCE_RESTS)
       for r_ in _h6_runs), [(r_.get("verdict"), r_.get("explanation")) for r_ in _h6_runs])
 # The live shapes, each as the page gets it.
 _H6_OFF = dict(_study("H6O", "Antibiotic resistance in farm animals", types=["Review"]),
@@ -6163,12 +6154,12 @@ with appmod.app.test_request_context("/"):
                                       "insufficient", verdict.UNTESTED_TLDR, _H6_OILS, [],
                                       [dict(s) for s in _H6_ST], "http://x", still_open="Whether oils help in people.")
 t("H6: the live antibiotics shape keeps only code's own sentences about the papers",
-  _no_safety(_h6_cold["explanation"]) == ("Nothing here tests this claim in people, only opinion pieces and papers that test "
+  _h6_cold["explanation"] == ("Nothing here tests this claim in people, only opinion pieces and papers that test "
                               "nothing in people. " + verdict.GUIDANCE_RESTS), _h6_cold["explanation"])
 t("  a guidance answer that relies on studies keeps every sentence",
   _h6_milk["evidence_line"] == verdict.GUIDANCE_LINE and _h6_milk["explanation"] == _H6_MILK, _h6_milk["explanation"])
 t("  and a Not enough evidence answer keeps its sentence describing the background papers",
-  _h6_oils["verdict"] == "insufficient" and _no_safety(_h6_oils["explanation"]) == _H6_OILS, _h6_oils["explanation"])
+  _h6_oils["verdict"] == "insufficient" and _h6_oils["explanation"] == _H6_OILS, _h6_oils["explanation"])
 # J2: the folded sections of that answer cite no study for a finding either.
 _J2_BD = {"parts": [{"part": "Antibiotics cure colds", "assessment": "Antibiotics should not be used (Study 2).",
                      "studies": [2]},
@@ -11561,11 +11552,18 @@ _sl_shape = [e_["id"] for e_ in _sl.ENTRIES
              if len(e_["line"].split()) > 30 or len(e_["quote"].split()) > 30
              or "\u2014" in e_["line"] or "\u2013" in e_["line"] or " - " in e_["line"]
              or not e_["line"].endswith(".") or e_["line"].count(". ") or not e_.get("topic")
-             or not e_.get("trigger") or not e_.get("checked")
-             or not any((_sl_up(e_["source"][1]).hostname or "").endswith(h_) for h_ in _sl_hosts)
-             or not _sl_up(e_["source"][1]).scheme == "https"]
-t("F2: every line is one sentence of 30 words or fewer with no dash, quoted from an allowed host",
+             or not e_.get("trigger") or not e_.get("checked") or not e_.get("page")
+             or "\u2014" in e_["page"] or "\u2013" in e_["page"]
+             or not any((_sl_up(e_["url"]).hostname or "").endswith(h_) for h_ in _sl_hosts)
+             or not _sl_up(e_["url"]).scheme == "https"]
+t("F2: every line is one sentence of 30 words or fewer with no dash, quoted from a named page on an allowed host",
   not _sl_shape, _sl_shape)
+t("F2: the organisation comes from one fixed table of hosts, and an entry on any other host has none",
+  all(e_["org"] == _sl.ORGS[next(h_ for h_ in _sl.ORGS if (_sl_up(e_["url"]).hostname or "").endswith(h_))]
+      for e_ in _sl.ENTRIES)
+  and _sl.org_for("https://www.nhs.uk/x/") == "NHS" and _sl.org_for("https://medlineplus.gov/x") == "MedlinePlus"
+  and _sl.org_for("https://example.com/nhs.uk") is None and _sl.org_for("https://fakenhs.uk/") is None
+  and set(_sl.ORGS) == set(_sl_hosts))
 t("F2: ids are unique, and no line tells anyone to stop a medicine or gives a child a dose",
   len(_sl.BY_ID) == len(_sl.ENTRIES)
   and not [e_["id"] for e_ in _sl.ENTRIES if re.search(r"^(?:stop|quit)\b", e_["line"], re.I)]
@@ -11573,7 +11571,7 @@ t("F2: ids are unique, and no line tells anyone to stop a medicine or gives a ch
            and re.search(r"\b\d+ ?(?:mg|micrograms?|ml)\b", e_["line"], re.I)
            and e_["id"] != "baby-vitamin-d"])
 t("F2: the one baby line with a number gives a formula volume, not a dose",
-  "500ml or more of infant formula" in _sl.BY_ID["baby-vitamin-d"]["line"]
+  "500ml" in _sl.BY_ID["baby-vitamin-d"]["line"] and "infant formula" in _sl.BY_ID["baby-vitamin-d"]["line"]
   and not re.search(r"\bmicrograms?\b|\bIU\b", _sl.BY_ID["baby-vitamin-d"]["line"]))
 t("F2: a more particular entry replaces the general one it covers (vitamin D for babies)",
   [e_["id"] for e_ in _sl.match("Breastfed babies need vitamin D")] == ["baby-vitamin-d"])
@@ -11583,55 +11581,62 @@ t("F2: at most two lines on one answer, the most serious first",
   [e_["id"] for e_ in _sl.match(_sl_many)])
 t("F2: a more particular entry replaces the general one it covers (epilepsy medicine in pregnancy)",
   [e_["id"] for e_ in _sl.match("Epilepsy medicine is dangerous in pregnancy")] == ["pregnancy-epilepsy"])
-t("F2: no stop-medicine line when the guard's own stop-medicine sentence is already on the answer",
-  _sl.lines_for("Statins cause memory loss", "x. " + verdict.FORGO_DOCTOR) == []
-  and _sl.lines_for("Statins cause memory loss") == [_sl.BY_ID["statins"]["line"]])
+t("F2: a sourced line is given whenever its rule fires: the module reads only the claim and imports nothing of the app",
+  _sl.lines_for("Statins cause memory loss") == [_sl.BY_ID["statins"]["line"]]
+  and not re.search(r"^\s*(?:import|from)\s+(?:verdict|app|db|breakdown|evidence|pubmed)\b",
+                    open(os.path.join(os.path.dirname(os.path.abspath(_sl.__file__)), "safety_lines.py")).read(), re.M))
 _sl_fc = "Paracetamol brings down a fever in babies"
-_sl_hl = _sl.BY_ID["baby-fever"]["line"]
-_sl_e1 = _sl.attach(_sl_fc, "Short.", "Because.")
-t("F2: the line lands once at the end of the explanation, and attaching twice changes nothing",
-  _sl_e1 == "Because. " + _sl_hl and _sl.attach(_sl_fc, "Short.", _sl_e1) == _sl_e1, _sl_e1)
-t("F2: a line the short answer already carries is not added, and a claim no rule fires on is left as it was",
-  _sl.attach(_sl_fc, "Short. " + _sl_hl, "Because.") == "Because."
-  and _sl.attach("Exercise lowers the risk of depression", "S.", "E.") == "E."
-  and _sl.attach(_sl_fc, "S.", "") == _sl_hl)
-# The four stamps, and every field but the reasoning, are the same with and without the library.
-_sl_real_attach = _sl.attach
+_sl_item = {k_: _sl.BY_ID["baby-fever"][k_] for k_ in ("line", "org", "page", "url")}
+t("F2: the field holds the line, the organisation, the page's heading and its address, and is empty when nothing fires",
+  _sl.safety(_sl_fc)[0] == _sl_item and all(set(i_) == {"line", "org", "page", "url"} for i_ in _sl.safety(_sl_many))
+  and 1 <= len(_sl.safety(_sl_many)) <= 2 and _sl.safety("Exercise lowers the risk of depression") == [])
+# The four stamps, and every field, are the same with and without the library, but for `safety` alone.
+_sl_real_safety = _sl.safety
 _sl_st = [_study("SL1", "Paracetamol and fever in infants", abstract="Paracetamol lowered fever.",
                  types=["Randomized Controlled Trial"])]
 _sl_diff = []
 for _sl_v in ("true", "false", "complicated", "insufficient"):
     _sl_args = (_sl_fc, "paracetamol AND fever AND infant", _sl_v, "Short take.", "Because.",
                 ["SL1"] if _sl_v != "insufficient" else [], [dict(s_) for s_ in _sl_st], "http://x")
-    _sl.attach = lambda c_, t_, e_: e_
+    _sl.safety = lambda c_: []
     try:
         _sl_off = appmod._check_response(*_sl_args, still_open="Open.")
     finally:
-        _sl.attach = _sl_real_attach
+        _sl.safety = _sl_real_safety
     _sl_on = appmod._check_response(*_sl_args, still_open="Open.")
-    if ({k_: v_ for k_, v_ in _sl_off.items() if k_ not in ("explanation", "breakdown")}
-            != {k_: v_ for k_, v_ in _sl_on.items() if k_ not in ("explanation", "breakdown")}
-            or _sl_on["explanation"] != (_sl_off["explanation"] + " " + _sl_hl).strip()):
+    if ("safety" in _sl_off or {k_: v_ for k_, v_ in _sl_on.items() if k_ != "safety"} != _sl_off
+            or _sl_on.get("safety") != _sl.safety(_sl_fc) or _sl_on["explanation"] != "Because."):
         _sl_diff.append(_sl_v)
-t("F2: on all four stamps the library changes only the reasoning: stamp, short answer, citations and still open stay",
+t("F2: on all four stamps the library adds only the safety field: explanation, stamp, short answer, citations stay",
   not _sl_diff, _sl_diff)
-# A saved answer gets the same line as a fresh one, once, on both routes and the result page.
+t("F2: an answer no rule fires on carries no safety key at all",
+  "safety" not in appmod._check_response("Exercise lowers the risk of depression", "exercise AND depression",
+                                         "true", "S.", "E.", ["SL1"], [dict(s_) for s_ in _sl_st], "http://x"))
+# A saved answer carries the same list as a fresh one on every route, and the page hands it to the script.
 fg.models.script = [Resp("statins AND memory"), Resp(VJ("complicated", [1, 2]))]
 _sl_claim = "Statins cause memory loss in older adults"
 _sl_fresh = P(_sl_claim, ip="6.6.1.1").get_json()
 _sl_saved = P(_sl_claim, ip="6.6.1.2").get_json()
 _sl_r, _sl_evs = stream(_sl_claim, ip="6.6.1.3")
 _sl_sd = next((e_["result"] for e_ in _sl_evs if e_.get("stage") == "done"), {})
-_sl_page = _htmllib.unescape(c.get("/?q=" + _sl_q(_sl_claim)).data.decode())
-_sl_line = _sl.BY_ID["statins"]["line"]
-t("F2: a saved answer gets the same safety line as a fresh one, once, on /api/check, the stream and /?q=",
-  not _sl_fresh.get("cached") and _sl_saved.get("cached") and _sl_sd.get("cached")
-  and _sl_fresh["explanation"].count(_sl_line) == 1 and _sl_saved["explanation"] == _sl_fresh["explanation"]
-  and _sl_sd["explanation"] == _sl_fresh["explanation"] and _sl_page.count(_sl_line) >= 1
-  and _sl_saved["verdict"] == _sl_fresh["verdict"] and _sl_saved["tldr"] == _sl_fresh["tldr"],
-  (_sl_fresh.get("cached"), _sl_saved.get("cached"), _sl_fresh.get("explanation"), _sl_saved.get("explanation")))
-t("F2: the line is never stored: the saved record holds the model's explanation without it",
-  _sl_line not in ((db.get_cached_verdict(_sl_claim, 1e6) or {}).get("explanation") or _sl_line))
+_sl_html = c.get("/?q=" + _sl_q(_sl_claim)).data.decode()
+_sl_m = re.search(r'<script id="server-result" type="application/json"[^>]*>(.*?)</script>', _sl_html, re.S)
+_sl_pg = json.loads(_sl_m.group(1)) if _sl_m else {}
+_sl_want = _sl.safety(_sl_claim)
+t("F2: a fresh answer carries the safety list",
+  not _sl_fresh.get("cached") and _sl_want and _sl_fresh.get("safety") == _sl_want
+  and _sl_want[0]["line"] == _sl.BY_ID["statins"]["line"], _sl_fresh.get("safety"))
+t("F2: a saved answer carries the same safety list as the fresh one",
+  _sl_saved.get("cached") and _sl_saved.get("safety") == _sl_fresh.get("safety")
+  and _sl_saved["explanation"] == _sl_fresh["explanation"], _sl_saved.get("safety"))
+t("F2: the stream route carries the same safety list", _sl_sd.get("cached") and _sl_sd.get("safety") == _sl_want,
+  _sl_sd.get("safety"))
+t("F2: the page a shared link renders hands the script the same safety list", _sl_pg.get("safety") == _sl_want,
+  _sl_pg.get("safety"))
+t("F2: no safety line is in the explanation, and none is stored",
+  not any(ln_ in (_sl_fresh.get("explanation") or "") for ln_ in _sl.LINES)
+  and "safety" not in (db.get_cached_verdict(_sl_claim, 1e6) or {"safety": 1})
+  and not any(ln_ in ((db.get_cached_verdict(_sl_claim, 1e6) or {}).get("explanation") or "") for ln_ in _sl.LINES))
 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],

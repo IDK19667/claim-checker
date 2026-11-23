@@ -9,16 +9,19 @@ code, never from the model, so the same claim always gets the same line.
 Each entry names its hazard, the rule that fires it on the claim's words,
 the one sentence the reader sees, and the health-authority page and sentence
 that support it (opened on the date in `checked`). A line never changes a
-stamp, a citation or what the answer says about the studies: it is added to
-the reasoning on the way out (app._check_response), on every route, for a
-saved answer and a fresh one alike, and it is never stored.
+stamp, a citation or what the answer says about the studies: it travels in
+the response's own `safety` field, added on the way out
+(app._check_response), on every route, for a saved answer and a fresh one
+alike, and it is never stored. This module imports nothing from the rest of
+the app.
 
 To add an entry: write the line for everyone who asks about the hazard (not
 for one claim), open the source page and copy its sentence into `quote`, and
-add a claim it fires on and a near miss it must stay silent on to the safety
-block in tests/test_app.py.
+record the page's main heading in `page`, and add a claim it fires on and a
+near miss it must stay silent on to the safety block in tests/test_app.py.
 """
 import re
+from urllib.parse import urlparse
 
 MAX_LINES = 2
 CHECKED = "2026-11-23"
@@ -129,8 +132,6 @@ CHICKENPOX = _w(r"chicken ?pox", r"varicella")
 NSAID = _w(r"ibuprofen", r"nsaids?", r"anti ?inflammator\w*", r"anti-inflammator\w*", r"naproxen",
            r"painkillers?", r"pain ?relief", r"fever reducers?")
 ASPIRIN = _w(r"aspirin")
-ADULT_ASPIRIN = _w(r"baby aspirin", r"low ?dose aspirin", r"low-dose aspirin", r"daily aspirin",
-                   r"aspirin a day")
 TEETHING = _w(r"teeth\w*", r"teething gels?")
 CANCER = _w(r"cancers?", r"tumou?rs?", r"leuka?emia", r"lymphoma", r"melanoma", r"chemo\w*",
             r"radiotherapy", r"oncolog\w*")
@@ -173,23 +174,25 @@ REPLACES_TREATMENT = (_w(r"instead of", r"in place of", r"rather than", r"replac
 
 
 # Each entry. `when`: every pattern must match; `unless`: none may; `over`:
-# entries this one makes redundant when both fire; `hazard`: entries with the
-# same hazard as an existing guard sentence stay silent when that sentence
-# is already on the answer. `rank`: 1 is the most serious.
+# entries this one makes redundant when both fire; `rank`: 1 is the most
+# serious. `url` is the page the line rests on, `page` its main heading, and
+# `quote` its own words, opened on the date in CHECKED.
 ENTRIES = [
     # ---- danger signs that need care today -------------------------------------
     {"id": "baby-fever", "topic": "A fever in a baby under 3 months", "rank": 1,
      "when": [BABY, FEVER],
      "trigger": "a baby, infant or newborn, and a fever or temperature",
      "line": "A baby under 3 months with a temperature of 38C or higher needs urgent medical advice.",
-     "source": ("NHS: Fever in children", "https://www.nhs.uk/conditions/fever-in-children/"),
+     "url": "https://www.nhs.uk/symptoms/fever-in-children/",
+     "page": "High temperature (fever) in children",
      "quote": "is under 3 months old and has a temperature of 38C or higher, or you think they have a high temperature"},
     {"id": "child-dehydration", "topic": "Dehydration in a young child", "rank": 1,
      "when": [CHILD, TUMMY_BUG],
      "trigger": "a child or baby, and diarrhoea, vomiting, dehydration or rehydration",
      "line": "A child under 5 with diarrhoea or vomiting who shows signs of dehydration, such as fewer "
              "wet nappies, needs urgent medical advice.",
-     "source": ("NHS: Diarrhoea and vomiting", "https://www.nhs.uk/conditions/diarrhoea-and-vomiting/"),
+     "url": "https://www.nhs.uk/symptoms/diarrhoea-and-vomiting/",
+     "page": "Diarrhoea and vomiting",
      "quote": "a child under 5 years has signs of dehydration, such as fewer wet nappies"},
 
     # ---- babies under 12 months ------------------------------------------------
@@ -197,31 +200,31 @@ ENTRIES = [
      "when": [HONEY, CHILD + "|" + COUGH],
      "trigger": "honey, with a child or baby, or with a cough, cold or sore throat",
      "line": "Do not give honey to babies under 1 year old.",
-     "source": ("NHS: Foods to avoid giving babies and young children",
-                "https://www.nhs.uk/conditions/baby/weaning-and-feeding/foods-to-avoid-giving-babies-and-young-children/"),
+     "url": "https://www.nhs.uk/baby/weaning-and-feeding/foods-to-avoid-giving-babies-and-young-children/",
+     "page": "Foods to avoid giving babies and young children",
      "quote": "Do not give your child honey until they're over 1 year old."},
     {"id": "baby-safe-sleep", "topic": "How a baby sleeps", "rank": 1,
      "when": [BABY, SLEEP],
      "trigger": "a baby or infant, and sleep, a cot, bed sharing or SIDS",
      "line": "Always put a baby to sleep on their back, with their feet at the foot of the cot, "
              "to lower the risk of sudden infant death syndrome.",
-     "source": ("NHS: Reduce the risk of sudden infant death syndrome",
-                "https://www.nhs.uk/baby/caring-for-a-newborn/reduce-the-risk-of-sudden-infant-death-syndrome/"),
+     "url": "https://www.nhs.uk/baby/caring-for-a-newborn/sudden-infant-death-syndrome-sids/",
+     "page": "Sudden infant death syndrome (SIDS)",
      "quote": "always place your baby on their back to sleep"},
     {"id": "baby-cows-milk", "topic": "Cows' milk for babies", "rank": 2,
      "when": [BABY + "|" + _w(r"first year", r"before 12 months", r"before (?:1|one) year"), COWS_MILK],
      "trigger": "a baby, or the first 12 months, and cows' or whole milk",
      "line": "Cows' milk should not be a baby's main drink until they are 12 months old.",
-     "source": ("NHS: Drinks and cups for babies and young children",
-                "https://www.nhs.uk/conditions/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/"),
+     "url": "https://www.nhs.uk/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/",
+     "page": "Drinks and cups for babies and young children",
      "quote": "Cows' milk should not be given as a main drink to babies until they're 12 months old"},
     {"id": "baby-water", "topic": "Water for young babies", "rank": 2,
      "when": [BABY, WATER], "unless": [SALT_WATER],
      "trigger": "a baby or infant, and water (not salt water, a water birth or waters breaking)",
      "line": "Fully breastfed babies do not need water until they start solid foods; formula fed babies "
              "under 6 months may need small sips of cooled boiled water in hot weather.",
-     "source": ("NHS: Drinks and cups for babies and young children",
-                "https://www.nhs.uk/conditions/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/"),
+     "url": "https://www.nhs.uk/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/",
+     "page": "Drinks and cups for babies and young children",
      "quote": "Fully breastfed babies do not need any water until they've started eating solid foods."},
     {"id": "baby-vitamin-d", "topic": "Vitamin D for babies", "rank": 2,
      "when": [BABY + "|" + _w(r"breastfed", r"breast ?feed\w*", r"formula"), VITAMIN_D],
@@ -229,7 +232,8 @@ ENTRIES = [
      "trigger": "a baby, breastfeeding or formula, and vitamin D",
      "line": "Babies from birth to 1 year should have a daily vitamin D supplement, unless they drink "
              "500ml or more of infant formula a day.",
-     "source": ("NHS: Vitamin D", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/"),
+     "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/",
+     "page": "Vitamin D",
      "quote": "babies from birth to 1 year of age should have a daily supplement"},
 
     # ---- children ----------------------------------------------------------------
@@ -237,15 +241,16 @@ ENTRIES = [
      "when": [IRON],
      "trigger": "iron tablets, supplements or drops, or taking iron",
      "line": "Keep iron tablets out of sight and reach of children, as an overdose may be fatal.",
-     "source": ("NHS: How and when to take ferrous sulfate",
-                "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/"),
+     "url": "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/",
+     "page": "How and when to take ferrous sulfate",
      "quote": "Keep ferrous sulfate out of sight and reach of children, as an overdose may be fatal."},
     {"id": "child-aspirin", "topic": "Aspirin and children", "rank": 1,
-     "when": [ASPIRIN, CHILD + "|" + _w(r"reye'?s", r"under 16")], "strip": [ADULT_ASPIRIN],
+     "when": [ASPIRIN, CHILD + "|" + _w(r"reye'?s", r"under 16")],
      "trigger": "aspirin with a child, teenager or baby (\"baby aspirin\" and \"low dose aspirin\" do not count)",
      "line": "Do not give aspirin to children aged 15 or under: it can cause an uncommon but serious "
              "condition called Reye's syndrome.",
-     "source": ("NHS: Aspirin for pain relief", "https://www.nhs.uk/medicines/aspirin-for-pain-relief/"),
+     "url": "https://www.nhs.uk/medicines/aspirin/",
+     "page": "Aspirin",
      "quote": "Do not give aspirin to children aged 15 years or under because it can cause a serious "
               "condition called Reye's syndrome"},
     {"id": "child-cough-cold-medicine", "topic": "Cough and cold medicines for young children", "rank": 1,
@@ -253,53 +258,58 @@ ENTRIES = [
      "trigger": "a child or baby, and a cough or cold medicine or syrup",
      "line": "Over the counter cough and cold medicines are not recommended for children under 2; "
              "for an older child, check the age on the label first.",
-     "source": ("FDA: Should you give kids medicine for coughs and colds?",
-                "https://www.fda.gov/consumers/consumer-updates/should-you-give-kids-medicine-coughs-and-colds"),
+     "url": "https://www.fda.gov/consumers/consumer-updates/should-you-give-kids-medicine-coughs-and-colds",
+     "page": "Should You Give Kids Medicine for Coughs and Colds?",
      "quote": "The FDA doesn't recommend OTC medicines for cough and cold symptoms in children younger than 2."},
     {"id": "child-decongestant", "topic": "Decongestants for children", "rank": 2,
      "when": [CHILD, DECONGESTANT], "over": ["child-cough-cold-medicine"],
      "trigger": "a child or baby, and a decongestant or nasal spray",
      "line": "Not all decongestants are suitable for children: check the leaflet before giving one to "
              "a child, and ask a pharmacist if you are not sure.",
-     "source": ("NHS: Decongestants", "https://www.nhs.uk/conditions/decongestants/"),
+     "url": "https://www.nhs.uk/medicines/decongestants/",
+     "page": "Decongestants",
      "quote": "Check the leaflet that comes with the medicine before giving a decongestant to a child"},
     {"id": "child-ibuprofen-chickenpox", "topic": "Ibuprofen and chickenpox", "rank": 1,
      "when": [CHICKENPOX, NSAID],
      "trigger": "chickenpox, and ibuprofen, anti-inflammatories or painkillers",
      "line": "Do not use ibuprofen for chickenpox unless a doctor tells you to, as it may cause serious "
              "skin infections.",
-     "source": ("NHS: Chickenpox", "https://www.nhs.uk/conditions/chickenpox/"),
+     "url": "https://www.nhs.uk/conditions/chickenpox/",
+     "page": "Chickenpox",
      "quote": "do not use ibuprofen unless you're told to by a doctor, as it may cause serious skin infections"},
     {"id": "child-teething-gel", "topic": "Teething gels", "rank": 2,
      "when": [_w(r"teething")],
      "trigger": "teething",
      "line": "For a teething baby, use only a gel made for young children: general oral pain relief "
              "gels are not suitable for children.",
-     "source": ("NHS: Tips for helping your teething baby",
-                "https://www.nhs.uk/baby/babys-development/teething/tips-for-helping-your-teething-baby/"),
+     "url": "https://www.nhs.uk/baby/babys-development/teething/tips-for-helping-your-teething-baby/",
+     "page": "Tips for helping your teething baby",
      "quote": "General oral pain relief gels are not suitable for children."},
     {"id": "child-salt-gargle", "topic": "Gargling salt water", "rank": 2,
      "when": [_w(r"gargl\w*"), SALT_WATER + "|" + _w(r"salt")],
      "trigger": "gargling, with salt or salt water",
      "line": "Gargling with warm salty water is not for children: they should not try it.",
-     "source": ("NHS: Sore throat", "https://www.nhs.uk/conditions/sore-throat/"),
+     "url": "https://www.nhs.uk/symptoms/sore-throat/",
+     "page": "Sore throat",
      "quote": "gargle with warm, salty water (children should not try this)"},
     {"id": "child-ear-infection", "topic": "Ear infections in children", "rank": 2,
      "when": [CHILD, EAR_INFECTION],
      "trigger": "a child or baby, and an ear infection or earache",
      "line": "A baby under 12 months who may have an ear infection should see a GP; for an older child, "
              "a pharmacist can help first.",
-     "source": ("NHS: Ear infections", "https://www.nhs.uk/conditions/ear-infections/"),
+     "url": "https://www.nhs.uk/conditions/ear-infections/",
+     "page": "Ear infections",
      "quote": "your child is under 12 months old and you think they have an ear infection"},
 
     # ---- pregnancy -----------------------------------------------------------------
     {"id": "pregnancy-stop-medicine", "topic": "Stopping a prescribed medicine in pregnancy", "rank": 1,
-     "when": [PREGNANT, MEDICINE, STOPPING], "unless": [NOT_PREGNANT], "hazard": "stop-medicine",
+     "when": [PREGNANT, MEDICINE, STOPPING], "unless": [NOT_PREGNANT],
      "over": ["pregnancy-medicines", "stop-in-place-of-treatment"],
      "trigger": "pregnancy, a medicine, and stopping, skipping or doing without it",
      "line": "In pregnancy, never stop a medicine prescribed to keep you healthy without talking to "
              "your doctor first: stopping could harm you and your baby.",
-     "source": ("NHS: Medicines in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/medicines/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/medicines/",
+     "page": "Medicines in pregnancy",
      "quote": "Stopping taking your medicine could be harmful to both you and your baby."},
     {"id": "pregnancy-epilepsy", "topic": "Epilepsy medicine in pregnancy", "rank": 1,
      "when": [PREGNANT, EPILEPSY], "unless": [NOT_PREGNANT],
@@ -307,14 +317,15 @@ ENTRIES = [
      "trigger": "pregnancy and epilepsy or an epilepsy medicine",
      "line": "If you take epilepsy medicine and are pregnant, keep taking it, and speak to your "
              "specialist team straight away.",
-     "source": ("NHS: Epilepsy treatment", "https://www.nhs.uk/conditions/epilepsy/treatment/"),
+     "url": "https://www.nhs.uk/conditions/epilepsy/",
+     "page": "Epilepsy",
      "quote": "keep taking your medicine but speak to your specialist team straight away"},
     {"id": "pregnancy-alcohol", "topic": "Alcohol in pregnancy", "rank": 1,
      "when": [PREGNANT, ALCOHOL], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy or trying for a baby, and alcohol, wine, beer or drinking",
      "line": "If you are pregnant or planning a pregnancy, the advice is not to drink alcohol.",
-     "source": ("NHS: Drinking alcohol while pregnant",
-                "https://www.nhs.uk/pregnancy/keeping-well/drinking-alcohol-while-pregnant/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/drinking-alcohol-while-pregnant/",
+     "page": "Drinking alcohol while pregnant",
      "quote": "It's recommended that if you're pregnant or planning to become pregnant you should not drink alcohol."},
     {"id": "pregnancy-vitamin-a", "topic": "Vitamin A supplements in pregnancy", "rank": 1,
      "when": [PREGNANT, VITAMIN_A_PREG], "unless": [NOT_PREGNANT],
@@ -322,8 +333,8 @@ ENTRIES = [
      "trigger": "pregnancy, and vitamin A, retinol, cod or fish liver oil, or multivitamins",
      "line": "In pregnancy, do not take cod liver oil or supplements containing vitamin A, sometimes "
              "called retinol.",
-     "source": ("NHS: Pregnancy vitamins and supplements",
-                "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/",
+     "page": "Pregnancy vitamins and supplements",
      "quote": "Do not take cod liver oil or supplements containing vitamin A (sometimes called retinol) "
               "when you're pregnant."},
     {"id": "pregnancy-liver", "topic": "Liver in pregnancy", "rank": 1,
@@ -331,35 +342,40 @@ ENTRIES = [
      "trigger": "pregnancy, and liver or liver products (not liver disease or liver tests)",
      "line": "In pregnancy, avoid liver and liver products: they are high in vitamin A, which can be "
              "harmful to your baby.",
-     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
      "quote": "Liver and foods containing liver have high levels of vitamin A, which can be harmful to your baby."},
     {"id": "pregnancy-caffeine", "topic": "Caffeine in pregnancy", "rank": 2,
      "when": [PREGNANT, CAFFEINE], "unless": [NOT_PREGNANT, HERBAL_TEA],
      "trigger": "pregnancy, and caffeine, coffee, tea, cola or energy drinks (not herbal tea)",
      "line": "In pregnancy, have no more than 200mg of caffeine a day: it is in coffee, tea, cola, "
              "energy drinks and chocolate.",
-     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
      "quote": "you should not have more than 200mg of caffeine a day"},
     {"id": "pregnancy-fish", "topic": "Fish in pregnancy", "rank": 2,
      "when": [PREGNANT, FISH], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and fish, seafood, shellfish, tuna, sushi or mercury (not fish oil)",
      "line": "In pregnancy, avoid shark, swordfish, marlin and raw shellfish, and eat no more than 2 "
              "portions of oily fish and 4 cans of tuna a week.",
-     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
      "quote": "tuna – you should not eat more than 4 cans or 2 tuna steaks a week"},
     {"id": "pregnancy-soft-cheese", "topic": "Unpasteurised dairy in pregnancy", "rank": 2,
      "when": [PREGNANT, SOFT_CHEESE], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and cheese, unpasteurised or raw milk, or listeria",
      "line": "In pregnancy, avoid unpasteurised milk and some soft cheeses, which may contain listeria "
              "bacteria.",
-     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
      "quote": "Unpasteurised or soft ripened dairy foods may contain listeria bacteria, which can cause listeriosis."},
     {"id": "pregnancy-raw-meat", "topic": "Raw and cured meat in pregnancy", "rank": 2,
      "when": [PREGNANT, MEAT], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and meat, steak, cured or deli meats, or toxoplasmosis",
      "line": "In pregnancy, avoid raw, undercooked or cured meat: it carries a small risk of "
              "toxoplasmosis, which can cause miscarriage.",
-     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
      "quote": "There's a small risk of getting toxoplasmosis if you eat raw, undercooked or cured meat, "
               "which can cause miscarriage."},
     {"id": "pregnancy-herbal-tea", "topic": "Herbal tea in pregnancy", "rank": 2,
@@ -367,14 +383,16 @@ ENTRIES = [
      "trigger": "pregnancy, and herbal, fruit or liquorice tea",
      "line": "In pregnancy, drink no more than 4 cups of herbal tea a day, and avoid teas containing "
              "liquorice root.",
-     "source": ("NHS: Foods to avoid in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/foods-to-avoid/",
+     "page": "Foods to avoid in pregnancy",
      "quote": "avoid drinking more than 4 cups of herbal tea a day, and avoid teas containing liquorice root"},
     {"id": "pregnancy-exercise", "topic": "Exercise in pregnancy", "rank": 2,
      "when": [PREGNANT, EXERCISE], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and exercise, sport, the gym, swimming, diving or being active",
      "line": "In pregnancy, do not scuba dive, and avoid sports where there is a risk of falling or "
              "bumping your tummy.",
-     "source": ("NHS: Exercise in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/exercise/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/exercise/",
+     "page": "Exercise in pregnancy",
      "quote": "do not do sports or activities where there's a risk of falling or bumping your tummy, "
               "like hockey, rugby or mountain biking"},
     {"id": "pregnancy-folic-acid", "topic": "Folic acid before and in pregnancy", "rank": 3,
@@ -382,15 +400,16 @@ ENTRIES = [
      "trigger": "folic acid or folate, with pregnancy, conceiving, neural tube defects or spina bifida",
      "line": "Take 400 micrograms of folic acid a day while trying to get pregnant and for the first "
              "12 weeks of pregnancy.",
-     "source": ("NHS: Pregnancy vitamins and supplements",
-                "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/pregnancy-vitamins-and-supplements/",
+     "page": "Pregnancy vitamins and supplements",
      "quote": "Take folic acid for the first 12 weeks of pregnancy."},
     {"id": "pregnancy-medicines", "topic": "Medicines, supplements and remedies in pregnancy", "rank": 2,
      "when": [PREGNANT, MEDICINE], "unless": [NOT_PREGNANT],
      "trigger": "pregnancy, and any medicine, supplement, vitamin or herbal remedy",
      "line": "If you are pregnant, check with your doctor, midwife or pharmacist before taking any "
              "medicine, and tell them about any herbal remedies.",
-     "source": ("NHS: Medicines in pregnancy", "https://www.nhs.uk/pregnancy/keeping-well/medicines/"),
+     "url": "https://www.nhs.uk/pregnancy/keeping-well/medicines/",
+     "page": "Medicines in pregnancy",
      "quote": "Tell your midwife, doctor or pharmacist if you're using herbal, homeopathic or aromatherapy "
               "remedies or therapies."},
 
@@ -400,72 +419,73 @@ ENTRIES = [
      "trigger": "breastfeeding, and any medicine, supplement or herbal remedy",
      "line": "If you are breastfeeding, check with a GP, midwife, health visitor or pharmacist before "
              "taking a medicine or herbal remedy.",
-     "source": ("NHS: Medicines and breastfeeding",
-                "https://www.nhs.uk/conditions/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/medicines/"),
+     "url": "https://www.nhs.uk/baby/breastfeeding-and-bottle-feeding/breastfeeding-and-lifestyle/medicines/",
+     "page": "Breastfeeding and medicines",
      "quote": "Always check with a GP, your midwife, health visitor or a pharmacist, who can advise you."},
 
     # ---- prescribed medicines a reader might stop or swap ------------------------
-    {"id": "statins", "topic": "Statins", "rank": 1, "when": [STATIN], "hazard": "stop-medicine",
+    {"id": "statins", "topic": "Statins", "rank": 1, "when": [STATIN],
      "trigger": "statins, by name or as cholesterol lowering medicine",
      "line": "If you take a statin, talk to a doctor or pharmacist before stopping it.",
-     "source": ("NHS: Statins", "https://www.nhs.uk/conditions/statins/"),
+     "url": "https://www.nhs.uk/medicines/statins/",
+     "page": "Statins",
      "quote": "Talk to a doctor or pharmacist before stopping."},
     {"id": "antidepressants", "topic": "Antidepressants", "rank": 1, "when": [ANTIDEPRESSANT],
-     "hazard": "stop-medicine",
      "trigger": "antidepressants, by class or name",
      "line": "Do not stop taking an antidepressant suddenly or without talking to your doctor first.",
-     "source": ("NHS: Antidepressants",
-                "https://www.nhs.uk/mental-health/talking-therapies-medicine-treatments/medicines-and-psychiatry/antidepressants/overview/"),
+     "url": "https://www.nhs.uk/medicines/antidepressants/",
+     "page": "Antidepressants",
      "quote": "Do not stop taking an antidepressant suddenly or without talking to your doctor first."},
     {"id": "blood-pressure-medicine", "topic": "Blood pressure medicines", "rank": 1, "when": [BP_MEDICINE],
-     "hazard": "stop-medicine",
      "trigger": "blood pressure medicine, by class or name",
      "line": "Do not stop a blood pressure medicine unless a doctor tells you to: stopping some, such "
              "as amlodipine, suddenly can be dangerous.",
-     "source": ("NHS: Amlodipine", "https://www.nhs.uk/medicines/amlodipine/"),
+     "url": "https://www.nhs.uk/medicines/amlodipine/",
+     "page": "Amlodipine",
      "quote": "Do not stop taking amlodipine unless a doctor tells you to. Stopping suddenly can be dangerous."},
     {"id": "warfarin", "topic": "Warfarin and blood thinners", "rank": 1, "when": [WARFARIN],
-     "hazard": "stop-medicine",
      "trigger": "warfarin, blood thinners or anticoagulants",
      "line": "If you take warfarin, do not stop it unless your doctor tells you to, and tell them about "
              "any herbal remedy, vitamin or supplement.",
-     "source": ("NHS: Warfarin", "https://www.nhs.uk/medicines/warfarin/"),
+     "url": "https://www.nhs.uk/medicines/warfarin/",
+     "page": "Warfarin",
      "quote": "Do not stop taking warfarin unless your doctor tells you to."},
     {"id": "epilepsy-medicine", "topic": "Epilepsy medicines", "rank": 1, "when": [EPILEPSY],
-     "hazard": "stop-medicine",
      "trigger": "epilepsy, anticonvulsants or an epilepsy medicine by name",
      "line": "If you take epilepsy medicine, do not change the dose or stop it without talking to "
              "your specialist.",
-     "source": ("NHS: Epilepsy treatment", "https://www.nhs.uk/conditions/epilepsy/treatment/"),
+     "url": "https://www.nhs.uk/conditions/epilepsy/",
+     "page": "Epilepsy",
      "quote": "Do not change your dose or stop taking your medicine without talking to your specialist."},
     {"id": "diabetes-medicine", "topic": "Diabetes medicines", "rank": 1,
-     "when": [DIABETES_MEDICINE + "|" + DIABETES, DIABETES_MEDICINE + "|" + TREATS + "|" + REMEDY],
-     "hazard": "stop-medicine", "over": ["stop-in-place-of-treatment"],
+     "when": [DIABETES_MEDICINE + "|" + DIABETES, DIABETES_MEDICINE + "|" + TREATS + "|" + REMEDY], "over": ["stop-in-place-of-treatment"],
      "trigger": "a diabetes medicine by name, or diabetes or blood sugar with a treatment, remedy or food",
      "line": "If you take medicine for diabetes, keep taking it as prescribed: if you stop, your blood "
              "sugar may start to rise again.",
-     "source": ("NHS: Metformin", "https://www.nhs.uk/medicines/metformin/"),
+     "url": "https://www.nhs.uk/medicines/metformin/",
+     "page": "Metformin",
      "quote": "It's important to keep taking your medicine. If you stop, your blood sugar level may start to rise again."},
     {"id": "thyroid-medicine", "topic": "Thyroid medicine", "rank": 2, "when": [THYROID],
-     "hazard": "stop-medicine",
      "trigger": "levothyroxine, thyroid medicine or an underactive thyroid",
      "line": "If you take levothyroxine, keep taking it unless you are advised to stop; some "
              "supplements, such as iron and calcium, may not mix well with it.",
-     "source": ("NHS: Levothyroxine", "https://www.nhs.uk/medicines/levothyroxine/"),
+     "url": "https://www.nhs.uk/medicines/levothyroxine/",
+     "page": "Levothyroxine",
      "quote": "Keep taking your medicine unless you're advised to stop."},
     {"id": "asthma-inhaler", "topic": "Asthma inhalers", "rank": 1,
      "when": [INHALER + "|" + ASTHMA, INHALER + "|" + STOPPING + "|" + TREATS + "|" + REMEDY + "|" + MEDICINE],
-     "hazard": "stop-medicine",
      "trigger": "an inhaler, or asthma with a treatment, a remedy or doing without",
      "line": "Use asthma inhalers as your care team recommends: a preventer inhaler is for every day, "
              "to help prevent symptoms.",
-     "source": ("NHS: Asthma treatment", "https://www.nhs.uk/conditions/asthma/treatment/"),
+     "url": "https://www.nhs.uk/conditions/asthma/",
+     "page": "Asthma",
      "quote": "a preventer inhaler to use every day to help prevent symptoms"},
     {"id": "antibiotics", "topic": "Antibiotics", "rank": 3, "when": [ANTIBIOTIC],
      "trigger": "antibiotics",
      "line": "If you are prescribed antibiotics, take them as directed on the packet or the leaflet "
              "that comes with them.",
-     "source": ("NHS: Antibiotics", "https://www.nhs.uk/conditions/antibiotics/"),
+     "url": "https://www.nhs.uk/medicines/antibiotics/",
+     "page": "Antibiotics",
      "quote": "Take antibiotics as directed on the packet or the patient information leaflet that comes "
               "with the medicine."},
 
@@ -474,15 +494,15 @@ ENTRIES = [
      "trigger": "St John's wort",
      "line": "St John's wort can interact with other medicines, and it can make the contraceptive pill "
              "less effective.",
-     "source": ("NHS: Depression in adults, treatment",
-                "https://www.nhs.uk/mental-health/conditions/depression-in-adults/treatment/"),
+     "url": "https://www.nhs.uk/mental-health/conditions/depression-in-adults/treatment/",
+     "page": "Depression in adults: treatment",
      "quote": "Also, St John's wort can interact with the contraceptive pill, reducing its effectiveness."},
     {"id": "grapefruit", "topic": "Grapefruit and medicines", "rank": 2, "when": [GRAPEFRUIT],
      "trigger": "grapefruit or grapefruit juice",
      "line": "Grapefruit and grapefruit juice can affect how some medicines work; ask a doctor or "
              "pharmacist whether it interacts with yours.",
-     "source": ("FDA: Grapefruit juice and some drugs don't mix",
-                "https://www.fda.gov/consumers/consumer-updates/grapefruit-juice-and-some-drugs-dont-mix"),
+     "url": "https://www.fda.gov/consumers/consumer-updates/grapefruit-juice-and-some-drugs-dont-mix",
+     "page": "Grapefruit Juice and Some Drugs Don't Mix",
      "quote": "Grapefruit juice and grapefruit can affect the way your medicines work, and that food and "
               "drug interaction can be a concern."},
     {"id": "warfarin-vitamin-k", "topic": "Vitamin K foods and warfarin", "rank": 2,
@@ -491,7 +511,8 @@ ENTRIES = [
      "trigger": "vitamin K, or warfarin with food, diet, greens or cranberry",
      "line": "If you take warfarin, foods high in vitamin K, such as green leafy vegetables, can affect "
              "how it works; talk to your doctor before big changes to your diet.",
-     "source": ("NHS: Warfarin", "https://www.nhs.uk/medicines/warfarin/"),
+     "url": "https://www.nhs.uk/medicines/warfarin/",
+     "page": "Warfarin",
      "quote": "Foods high in vitamin K, such as broccoli, spinach and other green leafy vegetables, can "
               "affect how warfarin works."},
     {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
@@ -499,13 +520,15 @@ ENTRIES = [
      "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not skin creams)",
      "line": "Having more than 1.5mg of vitamin A a day over many years may affect your bones; if you "
              "eat liver every week, do not take vitamin A supplements.",
-     "source": ("NHS: Vitamin A", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-a/"),
+     "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-a/",
+     "page": "Vitamin A",
      "quote": "having more than an average of 1.5 mg (1,500 µg) a day of vitamin A over many years may affect your bones"},
     {"id": "vitamin-d-limit", "topic": "Too much vitamin D", "rank": 2, "when": [VITAMIN_D],
      "trigger": "vitamin D",
      "line": "Adults should not take more than 100 micrograms (4,000 IU) of vitamin D a day, as it "
              "could be harmful.",
-     "source": ("NHS: Vitamin D", "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/"),
+     "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/",
+     "page": "Vitamin D",
      "quote": "Do not take more than 100 micrograms (4,000 IU) of vitamin D a day as it could be harmful."},
 
     # ---- a remedy offered in place of treatment ----------------------------------
@@ -514,18 +537,18 @@ ENTRIES = [
      "trigger": "cancer or chemotherapy, with a cure, treatment, remedy, supplement or alternative",
      "line": "If you have cancer, talk to your care team about any remedy or supplement you use, so "
              "they can check it works well with your treatment.",
-     "source": ("MedlinePlus: Cancer alternative therapies", "https://medlineplus.gov/canceralternativetherapies.html"),
+     "url": "https://medlineplus.gov/canceralternativetherapies.html",
+     "page": "Cancer Alternative Therapies",
      "quote": "Your provider can help you make sure that everything you're using for your cancer care works well together."},
     {"id": "stop-in-place-of-treatment", "topic": "A remedy in place of prescribed treatment", "rank": 1,
      "when": [REMEDY + "|" + _w(r"lifestyle", r"therap(?:y|ies)"), REPLACES_TREATMENT],
      "unless": [_w(r"(?:hormone|nicotine|joint|hip|knee|meal) replacement\w*", r"replacement therap(?:y|ies)")],
-     "hazard": "stop-medicine",
      "trigger": "a remedy, supplement, food or therapy said to replace treatment, or to treat a serious "
                 "condition such as cancer, diabetes or HIV",
      "line": "If you take a prescribed medicine, do not stop it without first talking to your doctor, "
              "whatever else you try.",
-     "source": ("NHS: Complementary and alternative medicine",
-                "https://www.nhs.uk/conditions/complementary-and-alternative-medicine/"),
+     "url": "https://www.nhs.uk/tests-and-treatments/herbal-medicines-and-complementary-therapies/",
+     "page": "Herbal medicines and complementary therapies",
      "quote": "do not stop taking any prescribed medicine without first talking to your doctor"},
 
     # ---- a test result read at home ---------------------------------------------
@@ -533,16 +556,35 @@ ENTRIES = [
      "trigger": "a PSA or prostate specific antigen test",
      "line": "A high PSA does not on its own mean cancer, and a raised level usually leads to another "
              "PSA test, so follow it up with a GP.",
-     "source": ("NHS: PSA testing", "https://www.nhs.uk/conditions/prostate-cancer/psa-testing/"),
+     "url": "https://www.nhs.uk/tests-and-treatments/psa-test/",
+     "page": "PSA test",
      "quote": "If you have a raised PSA level, you may then be offered another PSA test to check if your "
               "levels are still high."},
 ]
 
+# The health authority behind each allowed host, as the reader sees it.
+ORGS = {
+    "nhs.uk": "NHS",
+    "fda.gov": "FDA",
+    "medlineplus.gov": "MedlinePlus",
+    "cdc.gov": "CDC",
+    "who.int": "WHO",
+    "nice.org.uk": "NICE",
+    "cochranelibrary.com": "Cochrane",
+}
+
+
+def org_for(url: str) -> str | None:
+    """The organisation for an allowed host, or None for any other host."""
+    host = urlparse(url).hostname or ""
+    return next((name for h, name in ORGS.items() if host == h or host.endswith("." + h)), None)
+
+
 for _e in ENTRIES:
     _e["checked"] = CHECKED
+    _e["org"] = org_for(_e["url"])
     _e["_when"] = [re.compile(p, _FLAGS) for p in _e["when"]]
     _e["_unless"] = [re.compile(p, _FLAGS) for p in _e.get("unless", ())]
-    _e["_strip"] = [re.compile(p, _FLAGS) for p in _e.get("strip", ())]
 BY_ID = {e["id"]: e for e in ENTRIES}
 LINES = frozenset(e["line"] for e in ENTRIES)
 
@@ -550,51 +592,38 @@ LINES = frozenset(e["line"] for e in ENTRIES)
 def normalise(claim: str) -> str:
     """The claim as the rules read it: straight quotes, hyphens as spaces
     between words, one space, lower case."""
-    text = str(claim or "").replace("’", "'").replace("‘", "'")
-    text = re.sub(r"(?<=\w)[-‐‑](?=\w)", " ", text)
+    text = str(claim or "").replace("\u2019", "'").replace("\u2018", "'")
+    text = re.sub(r"(?<=\w)[-\u2010\u2011](?=\w)", " ", text)
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
 def _fires(entry: dict, text: str) -> bool:
-    for pattern in entry["_strip"]:
-        text = pattern.sub(" ", text)
     return (all(p.search(text) for p in entry["_when"])
             and not any(p.search(text) for p in entry["_unless"]))
 
 
-def _said(hazard: str, shown: str) -> bool:
-    """An existing guard sentence about this hazard is already on the answer."""
-    if hazard == "stop-medicine":
-        import verdict  # the guard's own sentences, so they cannot drift apart
-        return verdict.FORGO_DOCTOR in shown or "Stopping a prescribed medicine" in shown
-    return False
-
-
-def match(claim: str, shown: str = "") -> list[dict]:
+def match(claim: str) -> list[dict]:
     """The entries for this claim, most serious first, at most MAX_LINES.
-    `shown` is the text already on the answer: an entry whose hazard an
-    existing guard sentence covers there stays silent."""
+    A sourced line is given whenever its rule fires, even if the answer
+    says something like it already: a caution said twice costs less than
+    one that is missing."""
     text = normalise(claim)
     hits = [e for e in ENTRIES if _fires(e, text)]
     covered = {o for e in hits for o in e.get("over", ())}
-    hits = [e for e in hits if e["id"] not in covered
-            and not (e.get("hazard") and _said(e["hazard"], shown))]
+    hits = [e for e in hits if e["id"] not in covered]
     hits.sort(key=lambda e: e["rank"])  # stable: library order breaks ties
     return hits[:MAX_LINES]
 
 
-def lines_for(claim: str, shown: str = "") -> list[str]:
-    return [e["line"] for e in match(claim, shown)]
+def lines_for(claim: str) -> list[str]:
+    return [e["line"] for e in match(claim)]
 
 
-def attach(claim: str, tldr: str, explanation: str) -> str:
+def safety(claim: str) -> list[dict]:
     """
-    The explanation with this claim's safety lines added once, at its end,
-    where the harm guard's sentence goes. Nothing else changes, and a line
-    already on the answer (in the short answer or the explanation) is not
-    added again.
+    The response's `safety` field: 1 or 2 items, most serious first, each
+    the line and where it comes from. Empty when no rule fires, and then
+    the response carries no `safety` key at all.
     """
-    explanation = str(explanation or "")
-    shown = f"{tldr or ''} {explanation}"
-    new = [ln for ln in lines_for(claim, shown) if ln not in shown]
-    return " ".join([explanation.strip()] + new).strip() if new else explanation
+    return [{"line": e["line"], "org": e["org"], "page": e["page"], "url": e["url"]}
+            for e in match(claim)]
