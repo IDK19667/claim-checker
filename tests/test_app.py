@@ -10980,6 +10980,96 @@ if _shutil.which("node"):
     t("R4: every href on both paths starts with http://, https://, / or #",
       not [h for tr in _r4_trees + [_r4_full(j["weighed"] + j["research"]) for j in _r4js_out] for h in _r4_hrefs_ok(tr)],
       [h for tr in _r4_trees for h in _r4_hrefs_ok(tr)][:5])
+    # The script path, every stop: renderResult runs in node against a page
+    # that records each write (textContent, value, innerHTML, inserted HTML,
+    # the title). The hostile claim, answer and still open must read back as
+    # the stored words on stops 1, 2 and 6; every piece of HTML it writes, on
+    # any stop, must parse back to the same elements as its plain twin, with
+    # no on* handler; and the hostile title reads back as text in stop 4.
+    _R4_DOM = r"""
+const fs = require("fs"), vm = require("vm");
+const nop = new Proxy(function () {}, {
+  get(t, k) {
+    if (k === Symbol.iterator) return function* () {};
+    if (k === Symbol.toPrimitive) return () => "";
+    if (k === "then") return undefined;
+    if (k === "length") return 0;
+    return nop;
+  },
+  apply() { return nop; }, construct() { return nop; }, set() { return true; }, has() { return true; },
+});
+const rec = {}, html = [];
+function el(key) {
+  const r = rec[key] = rec[key] || {};
+  return new Proxy(function () {}, {
+    get(t, k) {
+      if (k in r) return r[k];
+      if (k === "textContent" || k === "value" || k === "innerHTML") return "";
+      if (k === "insertAdjacentHTML") return (pos, h) => { html.push([key, String(h)]); };
+      if (k === "append") return (...xs) => { r.appended = (r.appended || "") + xs.map((x) => typeof x === "string" ? x : (x && x.__text) || "").join(""); };
+      if (k === "querySelector") return (sel) => el(key + " " + sel);
+      if (k === "querySelectorAll") return () => [];
+      if (k === "__text") return r.textContent || "";
+      if (k === Symbol.toPrimitive) return () => "";
+      if (k === "then") return undefined;
+      return nop;
+    },
+    set(t, k, v) { r[k] = v; if (k === "innerHTML") html.push([key, String(v)]); return true; },
+    apply() { return nop; },
+  });
+}
+const doc = new Proxy({}, {
+  get(t, k) {
+    if (k === "getElementById") return (id) => id === "server-result" ? null : el("#" + id);
+    if (k === "createElement") return (tag) => el("new " + tag + " " + Math.random());
+    if (k === "querySelector") return (sel) => el(sel);
+    if (k === "querySelectorAll") return () => [];
+    if (k === "title") return rec.title || "";
+    return nop;
+  },
+  set(t, k, v) { rec[k] = v; return true; },
+});
+const ctx = { console, URL, URLSearchParams, JSON, Math, Date, Intl, Set, Map, Promise, setTimeout() {}, clearTimeout() {},
+  document: doc, navigator: nop, localStorage: nop, sessionStorage: nop, history: nop,
+  location: { search: "", pathname: "/", href: "http://localhost/" }, matchMedia: () => nop, requestAnimationFrame() {},
+  fetch: () => new Promise(() => {}), CustomEvent: function () {}, visualViewport: nop, addEventListener() {}, dispatchEvent() {},
+  IntersectionObserver: nop, ResizeObserver: nop, getComputedStyle: () => nop, scrollTo() {}, innerWidth: 390, innerHeight: 844 };
+ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;
+vm.createContext(ctx);
+ctx.__d = JSON.parse(fs.readFileSync(0, "utf8"));
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + "\n;renderResult(__d);", ctx);
+const text = {};
+for (const [k, r] of Object.entries(rec)) if (r && typeof r === "object") text[k] = { t: r.textContent, v: r.value, a: r.appended };
+process.stdout.write(JSON.stringify({ text, html, title: rec.title || "" }));
+"""
+    _r4_dom = lambda d_: json.loads(_subprocess.run(["node", "-e", _R4_DOM, str(ROOT / "static" / "app.js")],
+                                                   input=json.dumps(d_), capture_output=True, text=True, check=True).stdout)
+    _r4d_h, _r4d_p = _r4_dom(_r4_datas[-1]), _r4_dom(_r4_twin_data)
+    _r4d_t = lambda k: (_r4d_h["text"].get(k) or {})
+    _r4d_trees = [_r4_full(h_) for _, h_ in _r4d_h["html"]]
+    _r4d_stops = {k for k, _ in _r4d_h["html"]}
+    _r4d_sig_h = {x for tr in _r4d_trees for x in _r4_sig(tr.els)}
+    _r4d_sig_p = {x for _, h_ in _r4d_p["html"] for x in _r4_sig(_r4_full(h_).els)}
+    _r4d_ttl = [x for tr in _r4d_trees for x in _r4_ttl(tr)]
+    _r4d_bad = {
+        "stop 1 claim box": _r4d_t("#claim-input").get("v") == _R4_HOST["claim"],
+        "stop 2 claim": _r4d_t("#claim-echo").get("t") == _R4_HOST["claim"],
+        "stop 2 answer": _r4d_t("#tldr").get("t") == _R4_HOST["tldr"],
+        "stop 3 lines": all(isinstance(_r4d_t(k).get("t"), str) and _r4d_t(k).get("t")
+                            for k in ("#h-read", "#path")),
+        "stops 4 and 5 written": "#s6" in _r4d_stops and any('id="s4"' in h_ for _, h_ in _r4d_h["html"])
+                                 and any('id="s5"' in h_ for _, h_ in _r4d_h["html"]),
+        "stop 4 title": _r4d_ttl[:1] == [_R4_HOST["studies"][0]["title"]],
+        "stop 6 still open": _r4d_t("#still-open-text").get("t") == _R4_HOST["still_open"],
+        "every HTML write: no element or attribute the twin lacks": not (_r4d_sig_h - _r4d_sig_p),
+        "every HTML write: no on* handler": not [n for tr in _r4d_trees for _, _, ns in tr.els for n in ns if n.startswith("on")],
+        "the claim never reaches HTML unescaped": not any(_R4_HOST["claim"] in h_ or _R4_HOST["tldr"] in h_
+                                                         or _R4_HOST["still_open"] in h_ for _, h_ in _r4d_h["html"]),
+    }
+    t("R4: on the script path every stop reads the hostile words back as stored, and no HTML it writes adds an element, "
+      "an attribute or a handler",
+      all(_r4d_bad.values()), ([k for k, v in _r4d_bad.items() if not v], sorted(_r4d_sig_h - _r4d_sig_p)[:4],
+                               _r4d_t("#claim-echo"), _r4d_t("#tldr")))
 # D1: the dated line already ends with its full stop (app._review_line); neither path
 # adds another. On every saved fixture: the server's visible result text has no two
 # full stops in a row, and app.js's own review-line statement, run on that fixture's
