@@ -1981,14 +1981,27 @@ _NOT_ENOUGH = re.compile(
     r"|\bevidence\s+(?:[\w-]+\s+){0,4}?(?:is|was|remains|are|were)\s+(?:\w+\s+)?"
     r"(?:insufficient|inadequate|inconclusive|lacking|not enough)\b"
     r"|\b(?:have|has)\s+not\s+(?:\w+\s+){0,2}?been\s+(?:shown|established|demonstrated|proven)\b"
-    r"|\bno\s+(?:firm|definitive|reliable|clear)\s+conclusions?\s+(?:can|could)\s+be\s+drawn\b"
+    r"|\bno\s+(?:(?:firm|definitive|reliable|clear)\s+)?conclusions?\s+(?:can|could)\s+be\s+drawn\b"
     r"|\bunable\s+to\s+draw\s+(?:any\s+)?(?:firm\s+|definitive\s+)?conclusions?\b", re.IGNORECASE)
+
+
+# Words that say not enough only where no clause of the conclusion states a
+# result: "uncertain whether", "unclear whether", "too limited to", "too few
+# trials to". The result check (_reports_finding) always wins over them.
+_UNSURE = re.compile(
+    r"\b(?:uncertain|unclear)\s+(?:whether|if)\b|\btoo\s+(?:limited|sparse|scarce)\s+to\b|"
+    r"\btoo\s+few\s+(?:[\w-]+\s+){0,3}?to\b", re.IGNORECASE)
 
 
 def says_not_enough(study) -> bool:
     """True when a review's own conclusion says its evidence is not enough
-    to tell (_NOT_ENOUGH)."""
-    return is_review(study) and bool(_NOT_ENOUGH.search(conclusion(study)))
+    to tell (_NOT_ENOUGH), or says it is unsure (_UNSURE) and no clause of
+    it states a result."""
+    if not is_review(study):
+        return False
+    said = conclusion(study)
+    return bool(_NOT_ENOUGH.search(said)
+                or (_UNSURE.search(said) and not _reports_finding(study)))
 
 
 # A conclusion clause that reports a result, in the plain language results
@@ -2009,8 +2022,10 @@ _FINDING = re.compile(
     re.IGNORECASE)
 _NO_RESULT = re.compile(
     r"\b(?:uncertain|unclear|unknown|not\s+known)\s+(?:whether|if)\b|\binsufficient\s+evidence\s+to\b|"
-    r"\bpossibl[ey]\b|\bpotential(?:ly)?\b", re.IGNORECASE)
-_CLAUSE_TURN = re.compile(r"[.;]\s+|,\s+(?:but|whereas|although|while|though|yet)\s+|\s+but\s+",
+    r"\bpossibl[ey]\b|\bpotential(?:ly)?\b|\btoo\s+(?:limited|sparse|scarce|few)\b", re.IGNORECASE)
+# A conclusion is read clause by clause: a full stop, ";", ", and", ", but",
+# ", while" and the like turn it, and a result in any clause keeps the result.
+_CLAUSE_TURN = re.compile(r"[.;]\s+|;|,\s+(?:and|but|whereas|although|while|though|yet)\s+|\s+but\s+",
                           re.IGNORECASE)
 
 

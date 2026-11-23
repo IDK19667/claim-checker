@@ -4403,6 +4403,10 @@ What was deliberately rejected:
   claim either way", where the page had printed "Strong study designs.";
   and a breakdown sentence naming the old stamp goes (only the stamp: "a
   complicated pregnancy" stays).
+  Round 4: ", and" turns a conclusion's clause like ", but" and ";", and a
+  result in any clause keeps the result; "uncertain whether", "unclear
+  whether", "too limited to" and "too few ... to" say not enough only when no
+  clause of that conclusion states a result.
 - Evidence line: a relied-on review whose conclusion says its evidence is not
   enough (`evidence.says_not_enough`) lowers the strength word to "Low
   certainty", as `says_thin` already did. "Strong evidence" had come from the

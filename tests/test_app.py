@@ -12127,6 +12127,34 @@ t("F1 round 4: the doctor line never tells anyone to stop, and no other claim ge
   not re.search(r"\bstop (?:taking|your)\b", _DL, re.I)
   and _DL not in verdict.follow_guidelines(dict(_dl_cx), [], "Garlic lowers blood pressure")["tldr"])
 
+# Q10 F1 round 4, thin evidence: a conclusion is read clause by clause (", and"
+# turns it too), a result in any clause keeps the result, and "uncertain
+# whether", "unclear whether", "too limited to", "too few ... to" say not
+# enough only when no clause states a result (the reviewer's 14 cases).
+def _t14_rv(c):
+    return {"pmid": "t14", "title": "A review", "year": "2021", "publication_types": ["Systematic Review", "Meta-Analysis"],
+            "abstract": f"Objectives: To assess it. Results: Nine trials with 2,300 participants. Conclusions: {c}"}
+_T14 = [("Honey probably reduces cough frequency in children, but the certainty of the evidence is low and more trials are needed.",False),
+("Exercise may shorten the duration of low back pain; evidence on recurrence is insufficient.",False),
+("Melatonin likely improves sleep onset in adults, though evidence in older adults is limited.",False),
+("Probiotics lowered the risk of antibiotic-associated diarrhoea; evidence on the best strain is insufficient.",False),
+("Garlic had little or no effect on blood pressure; whether higher doses help is uncertain.",False),
+("Massage appears to ease pain in the short term, but long-term effects are unclear.",False),
+("Omega-3 made little or no difference to heart deaths, and evidence for stroke is inconclusive.",False),
+("Acupuncture is probably more effective than sham, but the evidence is insufficient to recommend it.",False),
+("It is uncertain whether vitamin C prevents colds because the evidence is of very low certainty.",True),
+("It is unclear whether yoga improves asthma control; more research is needed.",True),
+("There is insufficient evidence to determine whether turmeric reduces joint pain.",True),
+("We are uncertain whether zinc shortens colds, as the evidence is very low certainty.",True),
+("The evidence is too limited to say whether cranberry products prevent urinary infections in men.",True),
+("No conclusions can be drawn about the effect of fasting on cancer outcomes, and the effect is unclear.",True)]
+_t14_bad = [c for c, w in _T14 if bool(evidence.too_thin([_t14_rv(c)], ["t14"])) != w]
+t(f"F1 round 4: thin evidence: a stated result in any clause keeps it, and unsure words say not enough ({len(_T14)})",
+  not _t14_bad, _t14_bad)
+t("F1 round 4: control: 'uncertain whether' beside a stated result does not lower the line's word",
+  not evidence.says_not_enough(_t14_rv("Garlic had little or no effect on blood pressure; whether higher doses help is "
+                                       "uncertain, and it is unclear whether it helps in older adults.")))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
