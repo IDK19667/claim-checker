@@ -717,10 +717,11 @@ ENTRIES = [
               "911), or the local poison control center"},
     {"id": "vitamin-a-limit", "topic": "Too much vitamin A", "rank": 2, "when": [VITAMIN_A],
      "unless": [_w(r"creams?", r"serums?", r"topical\w*", r"skin ?care", r"lotions?", r"gels?", r"ointments?",
-                   r"moisturi[sz]\w*", r"on (?:the|your) (?:skin|face)", r"appl(?:y|ied|ying)")],
-     "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not creams, serums or anything put on the skin)",
-     "line": "Having more than 1.5mg of vitamin A a day over many years may affect your bones; if you "
-             "eat liver every week, do not take vitamin A supplements.",
+                   r"moisturi[sz]\w*", r"on (?:the|your) (?:skin|face)", r"appl(?:y|ied|ying)"), CHILD],
+     "trigger": "vitamin A, retinol or fish liver oil taken by mouth (not creams, serums or anything put on the "
+                "skin, and not for a baby or child: the amount is the adult one)",
+     "line": "Adults: more than 1.5mg of vitamin A a day over many years may affect your bones, and if you eat "
+             "liver every week, do not take vitamin A supplements.",
      "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-a/",
      "page": "Vitamin A",
      "quote": "having more than an average of 1.5 mg (1,500 µg) a day of vitamin A over many years may affect your bones"},

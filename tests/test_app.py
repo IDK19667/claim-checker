@@ -11577,6 +11577,7 @@ _SL_EXCL = {
     ("pregnancy-folic-acid", 0): "Folic acid is not needed after pregnancy",
     ("pregnancy-medicines", 0): "The pill prevents pregnancy",
     ("vitamin-a-limit", 0): "Retinol serum clears acne",
+    ("vitamin-a-limit", 1): "Cod liver oil is good for kids",
     ("stop-in-place-of-treatment", 0): "Hormone replacement therapy causes breast cancer",
     ("stop-in-place-of-treatment", 1): "Antibiotics cure bacterial infections",
     ("pregnancy-sleep-side", 0): "Sleeping on your side is best after pregnancy",
@@ -11622,6 +11623,10 @@ t("F2: triggers stay on the point: no iron line on liver in pregnancy, no gel li
   and _sl_ids("Type 2 diabetes can go into remission with lifestyle changes") == []
   and _sl_ids("Antibiotics speed up recovery from most sore throats") == []
   and "preventer" not in _sl.BY_ID["asthma-inhaler"]["line"])
+t("F2: the vitamin A line names adults and is silent on a baby or child, whose amount differs",
+  _sl.BY_ID["vitamin-a-limit"]["line"].startswith("Adults")
+  and _sl_ids("Cod liver oil is good for kids") == [] and _sl_ids("Vitamin A drops for toddlers prevent measles") == []
+  and "vitamin-a-limit" in _sl_ids("Cod liver oil is good for your joints"))
 t("F2: oral vitamin A for acne gets the vitamin A line; a cream does not",
   "vitamin-a-limit" in _sl_ids("Taking 50000 IU vitamin A for acne") and _sl_ids("Retinol cream reduces wrinkles") == [])
 t("F2: a remedy said to cure a serious condition gets the line whatever it is called; a medical treatment does not",
