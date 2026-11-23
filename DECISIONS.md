@@ -4,6 +4,24 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): A check does its waiting side by side
+
+The searches of one pass, the surrogate search and the guidance check
+run side by side and are collected in a fixed order, and an answer is
+saved after it is sent. No answer moved: 81 recorded checks replay byte
+for byte with the network refused, with the same number of model and
+PubMed requests, and the median fresh check goes from about 8.7 s to
+about 7.9 s. Three costs are accepted on purpose, each only after
+something has already failed (a separate review found them): the
+guidance call starts before the verdict call returns, so a check whose
+verdict call fails has spent one call more; a model call is retried on
+any transport error, a lost reply included, because a second try costs
+one call where the reader's own retry costs the whole check again; one
+failed PubMed search no longer stops the three beside it. `verdict.py`
+and `pubmed.py` are part of the method stamp, so after a deploy each
+saved answer is made again once when it is next asked for: deploy
+engine changes together, not one by one.
+
 ## 2026-11-22 (q10): Scoring runs are recorded and replayed
 
 The free model quota is small and a gold set is 120 claims, so fixes are
