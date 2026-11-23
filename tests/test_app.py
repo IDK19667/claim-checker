@@ -2040,6 +2040,40 @@ _desk_css = (ROOT / "static" / "desk.css").read_text()
 t("nothing in the breakdown is a card, and nothing in it is colour coded",
   "data-verdict" not in _desk_css
   and not re.search(r"\.said-wrap[^{]*\{[^}]*(border-radius|background)", _desk_css))
+# No part of the Research stop is a card: every class, id and element inside
+# #research (and its heading), against every rule in the stylesheet the result
+# page loads. A card is a filled box (a background with corners, any border or a
+# shadow), a shadow, or a fully bordered box with corners. The panel the reading
+# sits on is the ground, not a part, and is left to the decision that keeps it.
+_r5 = _tpl[_tpl.index('<div id="research">'):]
+_r5 = _r5[:_r5.index("</section>")]
+_r5_cls = {c_ for v_ in re.findall(r'class="([^"]+)"', _r5) for c_ in re.sub(r"\{[%{].*?[%}]\}", " ", v_).split()}
+_r5_ids = set(re.findall(r'id="([\w-]+)"', _r5)) | {"research", "h-research"}
+_r5_tags = set(re.findall(r"<([a-z][a-z0-9]*)", _r5)) - {"div"}
+_r5_scope = _r5_cls | _r5_ids | {"s5", "read-panel"}
+_r5_cards = []
+for _sel, _body in re.findall(r"([^{}@]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", _desk_css, flags=re.S)):
+    _pr = {k.strip().lower(): v.strip() for k, v in re.findall(r"([\w-]+)\s*:\s*([^;]+)", _body)}
+    _rad = any(k.endswith("radius") and not re.fullmatch(r"0(px)?", v) for k, v in _pr.items())
+    _bg = any(k in ("background", "background-color") and v not in ("none", "transparent", "inherit", "unset", "initial")
+              for k, v in _pr.items())
+    _bd = _pr.get("border", "none") not in ("0", "none", "0 none")
+    _sh = _pr.get("box-shadow", "none") != "none"
+    _bds = any(re.fullmatch(r"border(-(top|right|bottom|left))?", k) and v not in ("0", "none") for k, v in _pr.items())
+    for _s in _sel.split(","):
+        _s = _s.strip()
+        _last = re.split(r"[\s>+~]+", _s)[-1]
+        _pseudo = "::" in _last
+        if not ((_bg and (_rad or _bds or _sh)) or _sh or (_rad and _bd and not _pseudo)):
+            continue
+        _lt = set(re.findall(r"[.#]([\w-]+)", _last))
+        _tag = re.match(r"[a-z][a-z0-9]*", _last)
+        _anc = set(re.findall(r"[.#]([\w-]+)", _s)) - _lt
+        if (_lt & (_r5_cls | _r5_ids)) or (not _lt and _tag and _tag.group(0) in _r5_tags and (not _anc or _anc & _r5_scope)):
+            _r5_cards.append(_s)
+t("  no part of the Research stop is a card: no rule boxes a class, id or element inside it",
+  not _r5_cards and {"said-wrap", "says-p", "rests", "who"} <= _r5_cls and {"details", "summary", "blockquote"} <= _r5_tags,
+  _r5_cards)
 
 # ---- what each study concluded, in its authors' words ----------------------------
 #
