@@ -12090,6 +12090,12 @@ t("F1 round 4: the ending grel, 'wean off' and 'get off', and birth control as a
 t("F1 round 4: control: 'get off' and 'wean off' something else, and short -grel words, do not fire",
   not [c for c in ("get off the sofa", "wean off sugar", "get off your phone", "a regrel event")
        if verdict.forgoes_treatment(c)])
+t("F1 round 4: 'replacement' is a noun, not a stopping word: a claim about a replacement therapy is not a claim to stop one",
+  not [c for c in ("Hormone replacement therapy increases the risk of breast cancer",
+                   "Nicotine replacement therapy helps people quit smoking",
+                   "Joint replacement surgery is better than physiotherapy") if verdict.forgoes_treatment(c)]
+  and all(verdict.forgoes_treatment(c) == "forgo" for c in ("Replacing insulin with diet works", "replace HRT with herbs",
+                                                            "stop hormone replacement therapy")))
 t("F1 round 3: the cure side is unchanged: a new name does not make a cure claim",
   verdict.forgoes_treatment("Warfarin cures blood clots") == "" and verdict.forgoes_treatment("Semaglutide treats obesity") == ""
   and verdict.forgoes_treatment("Ivermectin cures COVID") == "cure")

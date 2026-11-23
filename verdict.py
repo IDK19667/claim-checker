@@ -678,7 +678,7 @@ _GUIDELINE_TOPIC = re.compile(
     r")\b", re.IGNORECASE)
 # "Stopping treatment": going without a therapy or a dose, by any name.
 _STOPPING_TREATMENT = re.compile(
-    r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
+    r"\b(?:stop\w*|quit\w*|skip\w*|replac(?:e|es|ed|ing)|instead of|com(?:e|ing) off|go(?:ing)? off|"
     r"giv(?:e|ing) up|ditch\w*)\b.{0,40}\b(?:treatments?|therap(?:y|ies)|doses?)\b",
     re.IGNORECASE)
 # The medicine group of _GUIDELINE_TOPIC, by name, plus inhalers.
@@ -722,7 +722,7 @@ _NOT_MEDICINE = re.compile(
     r"folic|folate|B12|supplements?|herbal|herbs?|fish\s+oil|cod\s+liver|omega|probiotics?|diet|"
     r"dietary|slimming|nicotine|recreational|street|illegal|party)\b", re.IGNORECASE)
 _FORGO_WORD = re.compile(
-    r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
+    r"\b(?:stop\w*|quit\w*|skip\w*|replac(?:e|es|ed|ing)|instead of|com(?:e|ing) off|go(?:ing)? off|"
     r"get(?:ting)? off|wean\w* off|go(?:ing)? without|giv(?:e|ing) up|ditch\w*|"
     r"(?:do(?:es)?n[’']?t|do(?:es)? not|no longer) need)\b", re.IGNORECASE)
 # Where the thing stopped ends: a clause break, or "with", "by", "using",

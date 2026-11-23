@@ -4376,6 +4376,8 @@ What was deliberately rejected:
   Round 4: a claim to stop a prescribed medicine carries the doctor line on
   every path (`verdict.follow_guidelines`, and a saved answer unseated by
   `app._nothing_relied`), whatever the stamp and whatever the guidance said.
+  The replay showed "Hormone replacement therapy increases ..." read as a
+  claim to stop: "replace" is now a verb only, never "replacement".
   Round 3: a claim to stop a medicine is recognised by general signs, a
   stopping word near a general word (tablets, meds, prescribed), a class, a
   generic-name ending of six letters or more, or a common prescribed name
