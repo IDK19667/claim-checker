@@ -11578,6 +11578,8 @@ _SL_EXCL = {
     ("pregnancy-medicines", 0): "The pill prevents pregnancy",
     ("vitamin-a-limit", 0): "Retinol serum clears acne",
     ("vitamin-a-limit", 1): "Cod liver oil is good for kids",
+    ("vitamin-d-limit", 0): "Vitamin D supplements help children's bones",
+    ("stop-in-place-of-treatment", 2): "Chemotherapy works better than surgery",
     ("stop-in-place-of-treatment", 0): "Hormone replacement therapy causes breast cancer",
     ("stop-in-place-of-treatment", 1): "Antibiotics cure bacterial infections",
     ("pregnancy-sleep-side", 0): "Sleeping on your side is best after pregnancy",
@@ -11627,6 +11629,35 @@ t("F2: the vitamin A line names adults and is silent on a baby or child, whose a
   _sl.BY_ID["vitamin-a-limit"]["line"].startswith("Adults")
   and _sl_ids("Cod liver oil is good for kids") == [] and _sl_ids("Vitamin A drops for toddlers prevent measles") == []
   and "vitamin-a-limit" in _sl_ids("Cod liver oil is good for your joints"))
+t("F2: a crib or cot counts only beside a sleep or baby word, so a crib sheet or a camp cot gets no line",
+  _sl_ids("A crib sheet helps nurses revise for exams") == []
+  and _sl_ids("A camp cot is comfier than an air bed when sleeping outdoors") == []
+  and "baby-safe-sleep" in _sl_ids("Cot death is rarer than it was")
+  and "baby-safe-sleep" in _sl_ids("Your newborn should sleep in a crib in your room")
+  and "baby-safe-sleep" in _sl_ids("Cot bumpers are safe")
+  and "baby-safe-sleep" in _sl_ids("Bumper pads make a cot safer"))
+t("F2: pupils are not a child word (they are also the eye's)",
+  _sl_ids("Aspirin makes your pupils smaller") == [] and "child-aspirin" in _sl_ids("Aspirin is safe for kids"))
+t("F2: the vitamin D line fires on taking it, not on lacking it, and never beside a baby or child",
+  _sl_ids("Vitamin D deficiency causes depression") == []
+  and _sl_ids("Low vitamin D is linked to MS") == []
+  and _sl_ids("Vitamin D drops help my 10 year old sleep") == []
+  and "vitamin-d-limit" in _sl_ids("High dose vitamin D prevents covid")
+  and "vitamin-d-limit" in _sl_ids("Taking vitamin D every day prevents colds"))
+t("F2: the iron line fires on iron tablets or supplements at any age, never on iron in food or iron levels",
+  "child-iron-overdose" in _sl_ids("Iron supplements cause constipation in women")
+  and "child-iron-overdose" in _sl_ids("Ferrous sulfate treats anaemia")
+  and _sl_ids("Iron rich foods raise iron levels") == []
+  and _sl_ids("Spinach is full of iron") == []
+  and _sl_ids("Taking iron rich foods prevents anaemia") == []
+  and _sl_ids("Low iron levels cause tiredness") == [])
+t("F2: one medical treatment said to work better than another is not a claim to replace treatment",
+  _sl_ids("Chemotherapy works better than surgery") == []
+  and "stop-in-place-of-treatment" in _sl_ids("Turmeric works better than chemotherapy")
+  and "stop-in-place-of-treatment" in _sl_ids("Homeopathy is better than antibiotics for infections"))
+t("F2: statins, antidepressants and epilepsy medicine keep a line on any claim about them (the reader may stop)",
+  _sl_ids("Statins lower cholesterol") == ["statins"] and _sl_ids("SSRIs cause weight gain") == ["antidepressants"]
+  and _sl_ids("Epilepsy is more common in men") == ["epilepsy-medicine"])
 t("F2: oral vitamin A for acne gets the vitamin A line; a cream does not",
   "vitamin-a-limit" in _sl_ids("Taking 50000 IU vitamin A for acne") and _sl_ids("Retinol cream reduces wrinkles") == [])
 t("F2: a remedy said to cure a serious condition gets the line whatever it is called; a medical treatment does not",

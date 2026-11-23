@@ -47,14 +47,17 @@ PREGNANT = _w(r"pregnan\w*", r"pregant\w*", r"expecting (?:a baby|twins|mothers?
 NOT_PREGNANT = _w(r"pregnancy tests?", r"contracepti\w*", r"birth control", r"prevents? pregnancy",
                   r"preventing pregnancy", r"avoid(?:s|ing)? pregnancy", r"unplanned pregnanc\w*",
                   r"morning after", r"after pregnancy", r"postnatal", r"postpartum")
+# A crib or cot is not a baby word on its own ("crib sheet", a camp cot); its
+# bumpers, a cot or crib death and a travel cot are.
+BABY_OBJECT = _w(r"(?:cot|crib) bumpers?", r"bumper pads?", r"bumpers? (?:in|on|for) (?:the|a|your) (?:cot|crib)s?",
+                 r"(?:cot|crib) deaths?", r"travel cots?", r"moses baskets?", r"sids", r"sudden infant death")
 BABY = _w(r"bab(?:y|ys|ies)(?! aspirin)(?! boomers?)", r"infants?", r"newborns?", r"neonat\w*",
-          r"under (?:12|twelve) months", r"under (?:1|one) years?", r"months? old", r"weeks? old",
-          r"cribs?", r"cots?(?! death)", r"cot bumpers?", r"moses baskets?")
+          r"under (?:12|twelve) months", r"under (?:1|one) years?", r"months? old", r"weeks? old") + "|" + BABY_OBJECT
 # An age under 18 counts: "my 10 year old", "aged 6".
 CHILD = _w(r"child(?:ren)?", r"kids?", r"toddlers?", r"bab(?:y|ys|ies)(?! aspirin)(?! boomers?)",
            r"(?:[1-9]|1[0-7]) (?:years?|yrs?) olds?", r"aged (?:[1-9]|1[0-7])(?! ?\d)",
            r"infants?", r"newborns?", r"p(?:a)?ediatric", r"teen(?:ager)?s?", r"adolescents?",
-           r"young people", r"youngsters?", r"school ?children", r"pupils?", r"under (?:5|6|12|16)s?",
+           r"young people", r"youngsters?", r"school ?children", r"under (?:5|6|12|16)s?",
            r"(?:boys|girls) and (?:girls|boys)")
 BREASTFEEDING = _w(r"breast ?feed\w*", r"breast-feed\w*", r"breastfed", r"nursing mothers?",
                    r"lactat\w*", r"while nursing")
@@ -136,11 +139,15 @@ THYROID = _w(r"levothyroxine", r"thyroxine", r"thyroid (?:medicines?|medications
 INHALER = _w(r"inhalers?", r"preventers?", r"puffers?", r"steroid inhalers?")
 ASTHMA = _w(r"asthma\w*")
 ANTIBIOTIC = _w(r"antibiotics?", r"amoxicillin", r"penicillin", r"antibiotic course")
-IRON = _w(r"iron (?:tablets?|supplements?|pills?|drops?|capsules?|infusions?)", r"ferrous \w+",
-          r"taking iron", r"take iron", r"iron for", r"iron treats?", r"iron helps?", r"oral iron")
+IRON = _w(r"iron (?:tablets?|supplements?|supplementation|pills?|drops?|capsules?|syrups?)", r"ferrous \w+",
+          r"tak(?:e|es|ing) iron(?! rich)(?! levels?)", r"oral iron")
 VITAMIN_A = _w(r"vitamin a(?! (?:day|week|month|night|morning|year))", r"retinol", r"cod liver oil",
                r"fish liver oil", r"beta.carotene")
 VITAMIN_D = _w(r"vitamin d\d?", r"vit d", r"cholecalciferol", r"colecalciferol", r"vitamin d3")
+# Words that make a vitamin D claim one about taking it, not about lacking it.
+TAKING_D = _w(r"supplement\w*", r"tablets?", r"pills?", r"capsules?", r"drops?", r"sprays?", r"gumm(?:y|ies)",
+              r"doses?", r"dosage", r"dosing", r"high dose", r"megados\w*", r"iu", r"micrograms?", r"mcg",
+              r"tak(?:e|es|ing|en)", r"took", r"extra", r"more (?:\w+ )?vitamin d\d?", r"injections?")
 GRAPEFRUIT = _w(r"grapefruits?", r"grapefruit juice")
 ST_JOHNS = r"\bst\.? ?john'?s ?wort\b|\bhypericum\b"
 VITAMIN_K = _w(r"vitamin k\d?", r"vit k", r"green leafy vegetables?", r"leafy greens?", r"kale", r"spinach",
@@ -158,8 +165,11 @@ COWS_MILK = _w(r"cows?'? ?milk", r"cow's milk", r"whole milk", r"full fat milk",
                r"dairy milk", r"milk as (?:a|their|the) (?:main )?drink")
 WATER = _w(r"water(?! birth)(?!s break)")
 SALT_WATER = _w(r"salt water", r"salty water", r"saltwater", r"saline")
-SLEEP = _w(r"sleep\w*", r"slept", r"cots?", r"cribs?", r"bed ?shar\w*", r"co ?sleep\w*", r"co-sleep\w*",
-           r"sids", r"cot death", r"sudden infant death", r"naps?", r"swaddl\w*", r"moses baskets?")
+_SLEEP_WORD = r"(?:sleep\w*|slept|naps?|nap time|bed ?time|night ?time|overnight|bab(?:y|ys|ies)|infants?|newborns?)"
+SLEEP = (_w(r"sleep\w*", r"slept", r"bed ?shar\w*", r"co ?sleep\w*", r"co-sleep\w*", r"naps?", r"swaddl\w*")
+         + "|" + BABY_OBJECT
+         + r"|\b" + _SLEEP_WORD + r"\b(?: \w+){0,3}? (?:cot|crib)s?\b"
+         + r"|\b(?:cot|crib)s?\b(?: \w+){0,3}? " + _SLEEP_WORD + r"\b")
 FEVER = _w(r"fevers?", r"feverish", r"high temperatures?", r"temperatures?", r"febrile")
 TUMMY_BUG = _w(r"diarrh\w*", r"vomit\w*", r"being sick", r"dehydrat\w*", r"gastroenteritis",
                r"stomach bugs?", r"tummy bugs?", r"rehydration", r"norovirus", r"rotavirus")
@@ -334,7 +344,7 @@ ENTRIES = [
     # ---- children ----------------------------------------------------------------
     {"id": "child-iron-overdose", "topic": "Iron tablets and children", "rank": 1,
      "when": [IRON],
-     "trigger": "iron tablets, supplements or drops, or taking iron",
+     "trigger": "iron tablets, supplements or drops, or taking iron, at any age (not iron in food or iron levels)",
      "line": "Keep iron tablets out of sight and reach of children, as an overdose may be fatal.",
      "url": "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/",
      "page": "How and when to take ferrous sulfate",
@@ -725,8 +735,10 @@ ENTRIES = [
      "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-a/",
      "page": "Vitamin A",
      "quote": "having more than an average of 1.5 mg (1,500 µg) a day of vitamin A over many years may affect your bones"},
-    {"id": "vitamin-d-limit", "topic": "Too much vitamin D", "rank": 2, "when": [VITAMIN_D],
-     "trigger": "vitamin D",
+    {"id": "vitamin-d-limit", "topic": "Too much vitamin D", "rank": 2, "when": [VITAMIN_D, TAKING_D],
+     "unless": [CHILD],
+     "trigger": "taking vitamin D: supplements, tablets, drops or a dose (not a claim about lacking it, and not for "
+                "a baby or child: the amount is the adult one)",
      "line": "Adults should not take more than 100 micrograms (4,000 IU) of vitamin D a day, as it "
              "could be harmful.",
      "url": "https://www.nhs.uk/conditions/vitamins-and-minerals/vitamin-d/",
@@ -745,10 +757,14 @@ ENTRIES = [
     {"id": "stop-in-place-of-treatment", "topic": "A remedy in place of prescribed treatment", "rank": 1,
      "when": [SERIOUS + "|" + INSTEAD, CURE_TREAT + "|" + INSTEAD],
      "unless": [_w(r"(?:hormone|nicotine|joint|hip|knee|meal|enzyme) replacement\w*", r"replacement therap(?:y|ies)"),
-                r"^(?!.*(?:" + INSTEAD + r")).*(?:" + CONVENTIONAL + r")"],
+                r"^(?!.*(?:" + INSTEAD + r")).*(?:" + CONVENTIONAL + r")",
+                r"^(?!.*" + _w(r"instead of", r"in place of", r"rather than", r"replac\w*", r"no need",
+                               r"alternatives? to", r"ditch\w*", r"stop\w*", r"quit\w*", r"without",
+                               r"giv(?:e|es|ing) up", r"skip\w*", r"wean\w*", r"com(?:e|es|ing) off") + r")"
+                + r".*(?:" + CONVENTIONAL + r").{0,40}?\bbetter than\b.{0,40}?(?:" + TREATMENT + r")"],
      "trigger": "anything said to cure or treat a serious condition such as cancer, diabetes, HIV or an infection, "
                 "or to replace, or let you stop or do without, a treatment (not a claim about a medical treatment "
-                "itself, or hormone replacement)",
+                "itself, one medical treatment compared with another, or hormone replacement)",
      "line": "If you take a prescribed medicine, do not stop it without first talking to your doctor, "
              "whatever else you try.",
      "url": "https://www.nhs.uk/tests-and-treatments/herbal-medicines-and-complementary-therapies/",
