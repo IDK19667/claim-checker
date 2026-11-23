@@ -31,6 +31,7 @@ const ARGS = ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-g
 const SAVED = ["Creatine improves cognitive performance", "Fish oil lowers blood pressure", "Green tea helps weight loss", "Magnesium improves sleep"];
 const LIVE = "Vitamin D supplements prevent colds";
 const SLOW = "Slow claim for cancel test"; // the fixture server holds this check open until it is cancelled
+const UNSEEN = "Zinc lozenges shorten colds"; // never checked by any test here: offline, a claim this browser has checked before shows its saved copy, not the error
 const browser = await chromium.launch({ args: ARGS });
 const results = [];
 const must = (c, m) => { if (!c) throw new Error(m); };
@@ -277,7 +278,7 @@ await test("every screen has one h1 on both paths: home, a saved, fresh and no-s
   await page.goto(base + "/?q=" + encodeURIComponent(SAVED[0]), { waitUntil: "load" }); await ready(page); await want("saved", "claim-echo");
   await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
   await page.context().setOffline(true);
-  await send(page, LIVE); await page.waitForFunction(() => !document.getElementById("error").hidden, null, { timeout: 10000 });
+  await send(page, UNSEEN); await page.waitForFunction(() => !document.getElementById("error").hidden, null, { timeout: 10000 });
   await page.context().setOffline(false);
   await want("error", "error-title");
 });
