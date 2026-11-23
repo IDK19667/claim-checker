@@ -4347,3 +4347,10 @@ What was deliberately rejected:
   bill.
 - 2026-09-14 Verdict integrity rules: citations map to the studies the
   model was shown; an uncited true/false is forced to "complicated".
+
+## 2026-11-23: Q10 F1, the stamp says what the studies it read support
+
+- Certainty limit: a review's own rating lowers a "true" (and sets the
+  evidence line) only when it rates the claim's question
+  (`evidence.rates_question`): not when it rates only other outcomes, each
+  with its interval, and not when it compares two forms of the same thing.

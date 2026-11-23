@@ -922,7 +922,7 @@ def _readings(studies, cited, search_query) -> list[set]:
     return [set(cited), set(cited) | aside] if cited and aside else [set(cited)]
 
 
-def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool:
+def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="", subject="") -> bool:
     """Whether a "true" has to be shown as "complicated": exactly the cap a
     fresh check gets in verdict.py (the lead review, read strictly, rates
     itself low or very low, or only small and pilot trials), and nothing
@@ -933,7 +933,7 @@ def _capped_true(verdict_value, claim, studies, cited, outcome, tldr="") -> bool
     if verdict_value != "true" or not cited or _from_guidance(tldr, claim):
         return False
     comparative = bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or ""))
-    return bool(evidence.certainty_cap(studies, cited, comparative, outcome))
+    return bool(evidence.certainty_cap(studies, cited, comparative, outcome, subject))
 
 
 def _nothing_relied(claim, verdict_value, tldr, studies=None):
@@ -970,7 +970,8 @@ def _listed(v: dict) -> dict:
                 return dict(v, verdict=stamp, **({"tldr": tldr} if "tldr" in v else {}))
     outcome = _outcome_group(v.get("search_query"))
     try:
-        if any(_capped_true(v["verdict"], v["claim_text"], v["studies"], used, outcome, v.get("tldr"))
+        if any(_capped_true(v["verdict"], v["claim_text"], v["studies"], used, outcome, v.get("tldr"),
+                            _subject_group(v.get("search_query")))
                for used in _readings(v["studies"], cited, v.get("search_query"))):
             return dict(v, verdict="complicated")
     except Exception:  # noqa: BLE001
@@ -1079,7 +1080,8 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
             stamp, studies, used, claim, sized,
             breakdown_mod.absolute_claim(claim),
             bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
-            outcome, stated=stated, withheld=withheld) for used in readings]
+            outcome, stated=stated, withheld=withheld,
+            subject=_subject_group(search_query)) for used in readings]
         sure = lambda line: (evidence._rank(evidence.line_certainty(line))
                              if evidence.line_certainty(line) else len(evidence.CERTAINTY_LEVELS))
         return min(lines, key=sure)
@@ -1090,7 +1092,8 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # only small and pilot trials) is not shown as likely true, and nor is a
     # "true" over a line that says low certainty. A check cached before the
     # cap existed, or before its line was scoped, gets it here.
-    if any(_capped_true(verdict_value, claim, studies, used, outcome, tldr) for used in readings):
+    if any(_capped_true(verdict_value, claim, studies, used, outcome, tldr, _subject_group(search_query))
+           for used in readings):
         verdict_value = "complicated"
         if not re.search(r"\bcertainty\b[^.]*\blow\b", tldr or "", re.IGNORECASE):
             leaned = f"{(tldr or '').rstrip().rstrip('.')}, but the certainty of that evidence is low."
@@ -1191,6 +1194,12 @@ def _review_line(cached_at, studies, cited) -> str:
     if len(years) == 1:
         return f"{line}, from studies published in {years[0]}."
     return f"{line}, from studies published {years[0]} to {years[-1]}."
+
+
+def _subject_group(search_query) -> str:
+    """The query's subject group, the first of its ANDed groups, or ""."""
+    groups = pubmed.split_and(search_query or "")
+    return groups[0] if groups else ""
 
 
 def _outcome_group(search_query) -> str:

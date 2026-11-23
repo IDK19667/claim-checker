@@ -2531,7 +2531,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     forced_low = ""
     if not forced and verdict == "true":
         forced_low = next((cap for c in _with_aside(cited_pmids, aside) if (cap := evidence.certainty_cap(
-            studies, c, bool(breakdown._COMPARATIVE_CLAIM.search(claim)), outcome))), "")
+            studies, c, bool(breakdown._COMPARATIVE_CLAIM.search(claim)), outcome, subject))), "")
         if forced_low:
             verdict = "complicated"
             explanation = (explanation.rstrip() + f" The certainty of this evidence is "

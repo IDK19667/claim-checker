@@ -1224,7 +1224,8 @@ def observational_only(studies, cited_pmids=()) -> bool:
 def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
                   effect_label: str | None = None, absolute: str = "",
                   comparative: bool = False, outcome: str = "",
-                  stated: str | None = None, withheld: bool = False) -> str:
+                  stated: str | None = None, withheld: bool = False,
+                  subject: str = "") -> str:
     """
     What the evidence used shows about the claim, as one short line with no
     full stop, or "" when nothing was used (the page says "no direct
@@ -1250,11 +1251,12 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # A lead review that rates its own evidence says how sure it is in its
     # own words, and those words replace the one read off the designs: a
     # meta-analysis of low-certainty evidence is not "strong evidence".
-    lead = lead_certainty(studies, cited_pmids, outcome)
+    lead = lead_certainty(studies, cited_pmids, outcome, subject=subject, comparative=comparative)
     if lead:
-        span = certainty_range(lead_review(studies, cited_pmids, outcome), outcome) or lead
+        span = certainty_range(lead_review(studies, cited_pmids, outcome, subject, comparative),
+                               outcome) or lead
         level = f"{span.capitalize()} certainty"
-    cap = certainty_cap(studies, cited_pmids, comparative, outcome)
+    cap = certainty_cap(studies, cited_pmids, comparative, outcome, subject)
     # A review that puts the link down to other factors weakens the case for
     # the claim, not the case against it.
     if cap and lead != "very low" and not (verdict == "false" and cap == CONFOUNDED_REASON):
@@ -1275,7 +1277,7 @@ def evidence_line(verdict: str, studies, cited_pmids=(), claim: str = "",
     # "certainty" wording. The prose may only lower it, and in the line's own
     # design words: "low certainty" is a review's phrase, never the model's.
     # A floor equal to the level changes nothing.
-    floor = lowest_review_certainty(studies, cited_pmids, outcome)
+    floor = lowest_review_certainty(studies, cited_pmids, outcome, subject, comparative)
     now = line_certainty(level)
     if floor and now and _rank(floor) < _rank(now):
         level = f"{floor.capitalize()} certainty"
@@ -1735,16 +1737,80 @@ def certainty_on_outcome(study, outcome: str = "") -> bool:
     return is_review(study) and bool(_ratings(study, outcome)[1])
 
 
-def lead_review(studies, cited_pmids=(), outcome: str = ""):
+# A review's stated aim that sets two things against each other: "To
+# compare polymer-based ORS with glucose-based ORS for treating diarrhoea".
+_COMPARE_AIM = re.compile(
+    r"(?i)\bcompar\w*\s+(?:the\s+\w+\s+of\s+)?(.{3,160}?)\s+(?:with|versus|vs\.?|to|against)\s+"
+    r"(.{3,160}?)(?=\s+(?:for|in|among|on|during)\s|[;.]|$)")
+
+
+def _stated_aims(study) -> list[str]:
+    """The aim of a structured abstract: its objectives section, and any
+    background sentence that states the aim. Empty when it has no headings."""
+    text = " ".join(str((study or {}).get("abstract") or "").split())
+    heads = list(_ANY_HEAD.finditer(text))
+    out = []
+    for i, m in enumerate(heads):
+        body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        name = re.sub(r"^\(\d\)\s*", "", m.group().strip()).rstrip(":").strip()
+        if _AIM_HEAD.match(name):
+            out.append(body)
+        elif _BACKGROUND_HEAD.match(name):
+            out += [sent for sent in _SENTENCE.split(body) if _AIM_SENTENCE.search(sent)]
+    return out
+
+
+def _group_patterns(group: str) -> list:
+    terms = [t for t in re.split(r"\s+OR\s+", (group or "").strip().strip("()"))
+             if len(t.strip(' "()')) > 2]
+    return [p for p in (_term_pattern(t) for t in terms) if p]
+
+
+def rates_question(study, outcome: str = "", subject: str = "",
+                   comparative: bool = False) -> bool:
+    """
+    Whether a review's own certainty ratings are about the claim's question.
+    False only on a positive sign that they rate another one: it rates its
+    findings one by one, each with its interval, and not one of them, nor its
+    title, names the claim's outcome (a review of body position for breathing
+    trouble in hospital, read for a claim about cot death); or, for a claim
+    that a thing works rather than one that compares two, its stated aim is
+    to compare two forms of that same thing (two kinds of rehydration
+    solution, read for a claim that rehydration solution works). True
+    otherwise, a single overall rating included, since a missing word proves
+    nothing.
+    """
+    every, on_outcome = _ratings(study, outcome)
+    if every and not on_outcome and outcome:
+        named = _group_patterns(outcome)
+        rated = [c for c in _clauses(_text(study)) if any(True for _ in rated_matches(c))]
+        if (named and not any(p.search(str(study.get("title") or "")) for p in named)
+                and any(_INTERVAL.search(c) for c in rated)):
+            return False
+    if subject and not comparative:
+        things = _group_patterns(subject)
+        for aim in _stated_aims(study):
+            for m in _COMPARE_AIM.finditer(aim):
+                if (any(p.search(m.group(1)) for p in things)
+                        and any(p.search(m.group(2)) for p in things)):
+                    return False
+    return True
+
+
+def lead_review(studies, cited_pmids=(), outcome: str = "", subject: str = "",
+                comparative: bool = False):
     """The first review used for the verdict that rates its own evidence
-    at all, in the order the studies were ranked, or None."""
+    at all, in the order the studies were ranked, or None. A review whose
+    ratings are about another question (rates_question) is passed over."""
     cited = set(cited_pmids or ())
     return next((s for s in studies or []
-                 if s.get("pmid") in cited and review_certainty(s, outcome)), None)
+                 if s.get("pmid") in cited and review_certainty(s, outcome)
+                 and rates_question(s, outcome, subject, comparative)), None)
 
 
 def lead_certainty(studies, cited_pmids=(), outcome: str = "",
-                   strict: bool = False) -> str | None:
+                   strict: bool = False, subject: str = "",
+                   comparative: bool = False) -> str | None:
     """
     The certainty the lead review states: the first review used for the
     verdict that rates its own evidence at all, in the order the studies
@@ -1752,7 +1818,7 @@ def lead_certainty(studies, cited_pmids=(), outcome: str = "",
     """
     # A strict reading the lead review cannot give is not handed to the next
     # review down.
-    lead = lead_review(studies, cited_pmids, outcome)
+    lead = lead_review(studies, cited_pmids, outcome, subject, comparative)
     return review_certainty(lead, outcome, strict) if lead else None
 
 
@@ -1782,11 +1848,14 @@ _NEGATED_STATED = re.compile(
     re.IGNORECASE)
 
 
-def lowest_review_certainty(studies, cited_pmids=(), outcome: str = "") -> str | None:
+def lowest_review_certainty(studies, cited_pmids=(), outcome: str = "", subject: str = "",
+                            comparative: bool = False) -> str | None:
     """The lowest rating any review the verdict relied on gives its own
-    evidence on this outcome (review_certainty), or None when none rates it."""
+    evidence on this outcome (review_certainty), or None when none rates it.
+    A review whose ratings are about another question (rates_question) gives none."""
     cited = set(cited_pmids or ())
-    levels = [review_certainty(s, outcome) for s in studies or [] if s.get("pmid") in cited]
+    levels = [review_certainty(s, outcome) for s in studies or [] if s.get("pmid") in cited
+              and rates_question(s, outcome, subject, comparative)]
     levels = [x for x in levels if x]
     return min(levels, key=_rank) if levels else None
 
@@ -1968,7 +2037,7 @@ CONFOUNDED_REASON = ("the main review says lifestyle and other factors likely ex
 
 
 def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
-                  outcome: str = "") -> str | None:
+                  outcome: str = "", subject: str = "") -> str | None:
     """
     Why the evidence behind a "true" cannot carry it, in words for the
     reader, or None when it can. Two ways to fail: the lead review rates its
@@ -1985,7 +2054,8 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
     if reviews:
         if any(confounded(s) for s in reviews):
             return CONFOUNDED_REASON
-        lead = lead_certainty(studies, cited_pmids, outcome, strict=True)
+        lead = lead_certainty(studies, cited_pmids, outcome, strict=True, subject=subject,
+                              comparative=comparative)
         if lead in ("low", "very low"):
             return f"the review behind it rates the certainty of its own evidence as {lead}"
         return None

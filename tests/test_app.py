@@ -11490,6 +11490,61 @@ t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4
   not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],
   [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s])
 
+# ---- Q10 F1: the stamp says what the studies it read support ------------------
+# Fix 1: a review's own certainty rating caps a "true" only when it rates the
+# claim's question (evidence.rates_question).
+_F1_SIDS = "(sudden infant death syndrome OR SIDS OR infant mortality)"
+_F1_BACK = "(supine position OR back sleeping OR infant sleep position)"
+_F1_OFFQ = {"pmid": "f1a", "title": "Positioning for acute respiratory distress in hospitalised infants",
+            "publication_types": ["Systematic Review"],
+            "abstract": ("BACKGROUND: Prone positioning is linked with sudden infant death syndrome (SIDS). "
+                         "OBJECTIVES: To assess body positions in children with respiratory distress. "
+                         "MAIN RESULTS: There was no conclusive result in oxygen saturation (MD 0.40, 95% CI "
+                         "-1.22 to 2.66; 1 trial, 30 participants; very low certainty evidence); or lung "
+                         "function (MD 28.16, 95% CI -9.92 to 66.24; 2 trials; very low certainty evidence). "
+                         "AUTHORS' CONCLUSIONS: Due to the risk of SIDS, positions need care.")}
+_F1_ON = {"pmid": "f1b", "title": "Sleep position and sudden infant death: a meta-analysis",
+          "publication_types": ["Meta-Analysis"],
+          "abstract": ("OBJECTIVES: To assess sleep position and SIDS. RESULTS: Supine sleep lowered SIDS "
+                       "(OR 0.48, 95% CI 0.3 to 0.7; low certainty evidence).")}
+_F1_BLANKET = {"pmid": "f1c", "title": "Does ashwagandha ease anxiety and stress? A meta-analysis",
+               "publication_types": ["Meta-Analysis"],
+               "abstract": ("We pooled 12 trials of ashwagandha on anxiety and stress. Ashwagandha reduced "
+                            "anxiety (SMD -1.55, 95% CI -2.37 to -0.72). Finally, we identified that the "
+                            "certainty of the evidence was low for both outcomes.")}
+t("F1: a review that rates only other outcomes, each with its interval, does not rate the claim's question",
+  not evidence.rates_question(_F1_OFFQ, _F1_SIDS, _F1_BACK)
+  and evidence.certainty_cap([_F1_OFFQ], ["f1a"], False, _F1_SIDS, _F1_BACK) is None)
+t("F1: a review that rates the claim's own outcome by name still caps a true (the rule must not fire)",
+  evidence.rates_question(_F1_ON, _F1_SIDS, _F1_BACK)
+  and bool(evidence.certainty_cap([_F1_ON], ["f1b"], False, _F1_SIDS, _F1_BACK)))
+t("F1: one overall rating that names no outcome still counts, as does an off-outcome review listed after an on-question one",
+  evidence.rates_question(_F1_BLANKET, "(stress OR anxiety)", "(ashwagandha)")
+  and bool(evidence.certainty_cap([_F1_BLANKET], ["f1c"], False, "(stress OR anxiety)", "(ashwagandha)"))
+  and bool(evidence.certainty_cap([_F1_OFFQ, _F1_ON], ["f1a", "f1b"], False, _F1_SIDS, _F1_BACK)))
+_F1_ORS = "(oral rehydration solution OR ORS)"
+_F1_H2H = {"pmid": "f1d", "title": "Polymer-based oral rehydration solution for acute diarrhoea",
+           "publication_types": ["Systematic Review"],
+           "abstract": ("BACKGROUND: Diarrhoea causes dehydration. OBJECTIVES: To compare polymer-based oral "
+                        "rehydration solution with glucose-based oral rehydration solution for treating acute "
+                        "diarrhoea. MAIN RESULTS: Polymer ORS may shorten diarrhoea (MD -8 hours, 95% CI -13 to "
+                        "-3; very low certainty evidence).")}
+_F1_VSNONE = dict(_F1_H2H, pmid="f1e", abstract=_F1_H2H["abstract"].replace(
+    "glucose-based oral rehydration solution", "intravenous fluids"))
+t("F1: a review comparing two forms of the claim's own treatment does not rate whether the treatment works",
+  not evidence.rates_question(_F1_H2H, "(dehydration OR diarrhoea)", _F1_ORS)
+  and evidence.certainty_cap([_F1_H2H], ["f1d"], False, "(dehydration OR diarrhoea)", _F1_ORS) is None)
+t("F1: the same review still rates a comparative claim, and one against another treatment still rates (must not fire)",
+  evidence.rates_question(_F1_H2H, "(dehydration OR diarrhoea)", _F1_ORS, comparative=True)
+  and evidence.rates_question(_F1_VSNONE, "(dehydration OR diarrhoea)", _F1_ORS)
+  and bool(evidence.certainty_cap([_F1_VSNONE], ["f1e"], False, "(dehydration OR diarrhoea)", _F1_ORS))
+  and bool(evidence.certainty_cap([_F1_H2H], ["f1d"], False, "(dehydration OR diarrhoea)")))
+t("F1: the evidence line does not quote the rating of a review that rates another question",
+  "ery low" not in evidence.evidence_line("true", [_F1_OFFQ], ["f1a"], "Babies should sleep on their backs",
+                                          outcome=_F1_SIDS, subject=_F1_BACK)
+  and "ery low" in evidence.evidence_line("true", [_F1_OFFQ], ["f1a"], "Babies should sleep on their backs",
+                                          outcome="(oxygen saturation)", subject=_F1_BACK))
+
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
