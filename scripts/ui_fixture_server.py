@@ -182,6 +182,52 @@ def _release(name):
     return "ok"
 
 
+# A slow or sleeping server, for the service worker's time limit on the home
+# page: /__fixture/hold/10 makes every request for "/" wait 10 s until reset.
+hold = {"s": 0.0, "status": 0}
+
+
+@appmod.app.route("/__fixture/hold/<secs>")
+def _hold(secs):
+    hold["s"] = float(secs)
+    return "ok"
+
+
+# A server that answers the home page badly: /__fixture/status/503 makes "/"
+# answer 503 (or 429, ...) until reset; /__fixture/status/0 ends it.
+@appmod.app.route("/__fixture/status/<int:code>")
+def _status(code):
+    hold["status"] = code
+    return "ok"
+
+
+# The live site's service worker, for the update path: /__fixture/oldsw/1
+# makes /sw.js answer the worker of commit f10ef54 (cache "evident-v118"),
+# kept as scripts/fixtures/sw-f10ef54.js (an export has no git), until reset
+# or /__fixture/oldsw/0.
+OLD_SW = ROOT / "scripts" / "fixtures" / "sw-f10ef54.js"
+
+
+@appmod.app.route("/__fixture/oldsw/<int:on>")
+def _oldsw(on):
+    if on and "old_sw" not in hold:
+        hold["old_sw"] = OLD_SW.read_text()
+    hold["oldsw"] = on
+    return "ok"
+
+
+@appmod.app.before_request
+def _held():
+    if hold.get("oldsw") and appmod.request.path == "/sw.js":
+        return appmod.Response(hold["old_sw"], mimetype="text/javascript", headers={"Cache-Control": "no-cache"})
+    if hold["s"] and appmod.request.path == "/":
+        time.sleep(hold["s"])
+    if hold["status"] and appmod.request.path == "/":
+        # a 403 stands for a Cloudflare challenge: a page the reader has to see
+        body = "Challenge page: pass this check to go on" if hold["status"] == 403 else "Waking up"
+        return appmod.Response(body, status=hold["status"], mimetype="text/plain")
+
+
 @appmod.app.route("/__fixture/reset")
 def _reset():
     for g in gates.values():
@@ -191,6 +237,10 @@ def _reset():
     with db.get_conn() as conn:
         for claim in (GATED, SLOW, DOWN, BUSY, PUBMED, NONE, LIVE, DECLINED, CUT):
             conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(claim),))
+    hold["s"] = 0.0
+    hold["status"] = 0
+    hold["oldsw"] = 0
+    appmod._drop_home_lists()  # those rows went without a save, so the home page's copy goes too
     return "ok"
 
 

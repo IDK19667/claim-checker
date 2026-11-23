@@ -23,6 +23,9 @@ import dotenv  # noqa: E402
 dotenv.load_dotenv = lambda *a, **k: None  # keep the developer's .env out of the tests
 
 import app as appmod  # noqa: E402
+# Most tests change the database between two home visits; the 60 second
+# copy of the home lists is tested on its own (HOME LISTS, near the end).
+appmod.HOME_LIST_SECONDS = 0
 import og  # noqa: E402
 import db  # noqa: E402
 db.COUNT_FLUSH_SECONDS = 0  # no background writer in tests; they call db.flush_counts()
@@ -2171,7 +2174,12 @@ t("  the browser draws the same quotes, never linking inside them",
 # never against a reader who is already scrolling, and a jump rather than a
 # glide for anyone who asked for less motion. The desk front moved it from
 # app.js (nudgeToAnswer) to desk.js (glideToAnswer), on the desk:result event.
-_deskjs = (ROOT / "static" / "desk.js").read_text() if (ROOT / "static" / "desk.js").exists() else ""
+# The 3D scene lives in desk3d.js (it loads with three.js, not with the first
+# screen) and reaches desk.js's names through a bridge, as O.name. The checks
+# on the desk's code read both files, the scene's with the bridge prefix off.
+_desk3d_src = (ROOT / "static" / "desk3d.js").read_text() if (ROOT / "static" / "desk3d.js").exists() else ""
+_deskjs = __import__("re").sub(r"(?<![\w$.])O\.", "", _desk3d_src) + "\n" + (
+    (ROOT / "static" / "desk.js").read_text() if (ROOT / "static" / "desk.js").exists() else "")
 # Every string desk.js can put on the page or paint on the card comes from a
 # literal in its code (or from the page, which the dash tests above read). So
 # read its code with the comments taken out: no em or en dash, typed or spelled
@@ -10786,6 +10794,8 @@ _DESK_FILES = {
     "static/fonts/woff2/bricolagegrotesque-opsz12-96-200-800.woff2": "85f55a58a31e61a2e19e8bb25fed503181bf2a6b4cab76c589992cfaac377447",
     "static/fonts/woff2/ibmplexmono-400.woff2": "52de70091213c9eab340e2a7ac59e7b6b2b94e089bf69ef38479b22cfde4274c",
     "static/desk/wood-2048.jpg": "4ba81eb4121b389335273240bd7ecd5702e5b878fa3240342e485c8a26621cb2",
+    # the same picture, 1024 wide by 2048 tall, WebP quality 80 (Pillow, method 6): what the desk loads
+    "static/desk/wood-1024x2048.webp": "dff261ea0884030d052610617667e015e3c55051c070b205a17bc7a88024757e",
 }
 _dk_bad = {f: _dk_hash.sha256((ROOT / f).read_bytes()).hexdigest() for f in _DESK_FILES
            if not (ROOT / f).exists() or _dk_hash.sha256((ROOT / f).read_bytes()).hexdigest() != _DESK_FILES[f]}
@@ -10870,14 +10880,33 @@ t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESI
 
 _sw3 = (ROOT / "static" / "sw.js").read_text()
 _shell3 = _sw3.split("const SHELL")[1].split("];")[0]
-_linked3 = set()
-for _f3 in ("index.html", "info.html", "privacy.html", "404.html"):
-    _src3 = (ROOT / "templates" / _f3).read_text()
-    _linked3 |= {"/static/" + x for x in re.findall(r"url_for\('static', filename='([^']+)'\)", _src3)}
-_linked3 |= set(re.findall(r'"(/static/icons/[^"]+)"', (ROOT / "static" / "manifest.webmanifest").read_text()))
-t("the service worker's SHELL holds every file a page links, so the shell opens offline; three.js and the wood are left to the network (Save-Data never downloads them)",
-  all(f'"{x}"' in _shell3 for x in _linked3) and "three-r128" not in _shell3 and "wood-2048" not in _shell3
-  and 'const CACHE = "evident-v120";' in _sw3, sorted(x for x in _linked3 if f'"{x}"' not in _shell3))
+_idx3 = (ROOT / "templates" / "index.html").read_text()
+_paint3 = {"/"} | {"/static/" + x for x in re.findall(r"""<(?:link rel="stylesheet"|script) (?:href|src)="\{\{ url_for\('static', filename='([^']+)'\) \}\}""", _idx3)}
+_paint3 |= set(re.findall(r'url\("(/static/fonts/[^"]+)"\)', (ROOT / "static" / "desk.css").read_text()))
+_shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
+t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
+  "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
+  _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
+  and 'const CACHE = "evident-v122";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
+  "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
+  and 'cache.put("/", res.clone())' in _sw3)
+_hs3 = _sw3.split("async function homeShell", 1)[1].split("\n}\n", 1)[0]
+t("with a kept copy, only a home answer of a 5xx or a 429 shows the copy, any other answer (a 403 challenge) reaches the reader, and only a good page is stored",
+  'return res && !(res.status >= 500 || res.status === 429) ? res : kept;' in _hs3
+  and "res.ok ||" not in _hs3.split("Promise.race", 1)[1]
+  and 'if (res.ok) return cache.put("/", res.clone())' in _hs3, _hs3[-300:])
+t("a result address (/?q=) is network first with the home page as its offline fallback, and is never kept in its place",
+  'CLAIM_ARGS = ["q", "text", "title"]' in _sw3
+  and 'event.respondWith(fetch(req).catch(() => caches.open(CACHE).then((c) => c.match("/")).then((r) => r || Response.error())));' in _sw3)
+
+t("offline, /checks (with its claim) and /flight are sent on to the home page by the worker, as the server does, never shown under their own address",
+  'const MOVED = { "/checks": true, "/flight": false };' in _sw3 and "Response.redirect(to, 301)" in _sw3
+  and c.get("/checks?q=x").headers.get("Location", "").endswith("/?q=x") and c.get("/flight").headers.get("Location", "").endswith("/"))
+
+_oldsw = (ROOT / "scripts/fixtures/sw-f10ef54.js").read_text()
+t("the update path's fixture keeps the live worker (f10ef54): cache evident-v118 and its 20-address SHELL",
+  'const CACHE = "evident-v118";' in _oldsw and len(re.findall(r'^  "/', _oldsw.split("const SHELL = [", 1)[1].split("];", 1)[0], re.M)) == 20)
 
 # ---- R4b: text inside an attribute cannot end it ------------------------------
 # The script's own escaper and href gate run in node on hostile values, and the
@@ -11500,8 +11529,8 @@ else:
     t("K2: splitSentences returns exactly what the old lookbehind regex returned (node is needed and was not found)", False)
 t("L5: the K2 comparison records a visible failure when node is missing, never a silent skip",
   "_k2_diff[:3])\nelse:\n    # L5" in (ROOT / "tests" / "test_app.py").read_text())
-_k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "sw.js")}
-t("K2: app.js, desk.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
+_k2_files = {f: (ROOT / "static" / f).read_text() for f in ("app.js", "desk.js", "desk3d.js", "sw.js")}
+t("K2: app.js, desk.js, desk3d.js and sw.js hold no regex lookbehind, so Safari before 16.4 can parse them",
   not [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s],
   [f for f, s in _k2_files.items() if "(?<=" in s or "(?<!" in s])
 
@@ -11850,6 +11879,183 @@ t("speed: a model call that cannot connect is tried three times and ends in the 
 t("no response in this run ever carried a study both cited in the answer and off topic",
   _PAYLOADS and not [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]],
   (len(_PAYLOADS), [p_["pmid"] for p_ in _PAYLOADS if p_["cited_in_verdict"] and p_["off_topic"]][:10]))
+
+# ---- STAMPS: static addresses carry the file's hash, and a stamped file is kept a year ----
+import hashlib as _st_hash  # noqa: E402
+import re as _st_re  # noqa: E402
+
+
+def _st_of(path):
+    return _st_hash.sha256((ROOT / path.lstrip("/")).read_bytes()).hexdigest()[:10]
+
+
+_st_home = c.get("/").get_data(as_text=True)
+_st_res = c.get("/?q=" + urllib.parse.quote("mRNA vaccines change DNA")).get_data(as_text=True)
+_st_addr = set(_st_re.findall(r'(?:src|href|data-lib|data-wood)="(/static/[^"]+)"', _st_home + _st_res))
+_st_bad = [a for a in _st_addr if not a.startswith("/static/fonts/")
+           and not _st_re.fullmatch(r"/static/[^?]+\?v=" + _st_of(a.split("?")[0]), a)]
+t("STAMPS: every static address the home and a result page print (but fonts) ends in ?v= and its file's hash",
+  len(_st_addr) >= 8 and not _st_bad and any("three-r128" in a for a in _st_addr) and any("/static/desk/wood" in a for a in _st_addr),
+  (_st_bad, sorted(_st_addr)))
+t("STAMPS: font preloads stay unstamped, so they match the address the CSS asks for",
+  all("?" not in a for a in _st_addr if a.startswith("/static/fonts/")) and any(a.startswith("/static/fonts/") for a in _st_addr))
+for _st_page in ("/about", "/privacy", "/method", "/no-such-page"):
+    _st_p = c.get(_st_page).get_data(as_text=True)
+    _st_pa = _st_re.findall(r'(?:src|href)="(/static/(?!fonts/)[^"]+)"', _st_p)
+    t(f"STAMPS: {_st_page} prints its static addresses stamped", _st_pa and all("?v=" in a for a in _st_pa), _st_pa)
+_st_js = "/static/app.js?v=" + _st_of("/static/app.js")
+_st_r = c.get(_st_js)
+t("STAMPS: a static file asked for with the right stamp is kept for a year",
+  _st_r.status_code == 200 and _st_r.headers.get("Cache-Control") == "public, max-age=31536000, immutable", dict(_st_r.headers))
+for _st_u in ("/static/app.js", "/static/app.js?v=0000000000", "/static/app.js?v="):
+    _st_r = c.get(_st_u)
+    t(f"STAMPS: {_st_u} (no stamp or a wrong one) is served as before, revalidated each time",
+      _st_r.status_code == 200 and "immutable" not in (_st_r.headers.get("Cache-Control") or "")
+      and "no-cache" in (_st_r.headers.get("Cache-Control") or ""), dict(_st_r.headers))
+_st_r = c.get("/static/fonts/woff2/instrumentsans-normal-400-600.woff2")
+t("STAMPS: font files are kept a year as they are (a changed font gets a new file name)",
+  _st_r.status_code == 200 and _st_r.headers.get("Cache-Control") == "public, max-age=31536000, immutable")
+t("STAMPS: a missing static file is still a 404 and carries no long cache",
+  c.get("/static/nope.js?v=0000000000").status_code == 404
+  and "immutable" not in (c.get("/static/nope.js?v=0000000000").headers.get("Cache-Control") or ""))
+_st_sw = c.get("/sw.js")
+_st_swt = _st_sw.get_data(as_text=True)
+_st_shell = _st_re.findall(r'"(/static/[^"]+)"', _st_swt.split("const SHELL")[1].split("];")[0])
+t("STAMPS: /sw.js is still no-cache, and every non-font static file in its SHELL is stamped with its hash",
+  "no-cache" in _st_sw.headers.get("Cache-Control", "") and "immutable" not in _st_sw.headers.get("Cache-Control", "")
+  and _st_shell and all(a.startswith("/static/fonts/") and "?" not in a
+                        or a == a.split("?")[0] + "?v=" + _st_of(a.split("?")[0]) for a in _st_shell), _st_shell)
+t("STAMPS: /sw.js answers a matching If-None-Match with a 304",
+  c.get("/sw.js", headers={"If-None-Match": _st_sw.headers.get("ETag", "")}).status_code == 304, _st_sw.headers.get("ETag"))
+_st_mf = c.get("/manifest.webmanifest")
+_st_icons = [i["src"] for i in json.loads(_st_mf.get_data(as_text=True))["icons"]]
+t("STAMPS: the manifest is still no-cache and its icons are stamped",
+  "no-cache" in _st_mf.headers.get("Cache-Control", "") and _st_mf.headers.get("Content-Type", "").startswith("application/manifest+json")
+  and all(i == i.split("?")[0] + "?v=" + _st_of(i.split("?")[0]) for i in _st_icons), _st_icons)
+_st_dir = pathlib.Path(tempfile.mkdtemp())
+(_st_dir / "x.css").write_text("a{}")
+_st_real = appmod.app.static_folder
+appmod.app.static_folder = str(_st_dir)
+try:
+    _st_a = appmod.static_stamp("x.css")
+    (_st_dir / "x.css").write_text("b{color:red}")
+    _st_b = appmod.static_stamp("x.css")
+finally:
+    appmod.app.static_folder = _st_real
+t("STAMPS: a file changed on disk gets a new stamp", _st_a and _st_b and _st_a != _st_b
+  and _st_b == _st_hash.sha256(b"b{color:red}").hexdigest()[:10], (_st_a, _st_b))
+t("STAMPS: desk.js takes the 3D addresses from the page, and keeps the stamp on its one retry",
+  "glEl.dataset.lib" in (ROOT / "static/desk.js").read_text() and "glEl.dataset.wood" in (ROOT / "static/desk.js").read_text()
+  and '(LIB.indexOf("?") < 0 ? "?" : "&") + "retry=1"' in (ROOT / "static/desk.js").read_text())
+_st_swsrc = (ROOT / "static/sw.js").read_text()
+t("STAMPS: the service worker serves a stamped static address from its cache first and keeps one copy per path",
+  'url.searchParams.has("v")' in _st_swsrc and "dropOlderStamps" in _st_swsrc)
+
+_wd_html = c.get("/").get_data(as_text=True)
+_wd_size = (ROOT / "static/desk/wood-1024x2048.webp").stat().st_size
+t("WOOD: the desk loads the 1024 by 2048 WebP (under 200 KB), not the 679 KB JPEG, and desk.js's own fallback names it too",
+  'data-wood="/static/desk/wood-1024x2048.webp?v=' in _wd_html and "wood-2048.jpg" not in _wd_html and _wd_size < 200 * 1024
+  and '"/static/desk/wood-1024x2048.webp"' in (ROOT / "static/desk.js").read_text()
+  and "wood-2048.jpg" not in (ROOT / "static/desk.js").read_text(), _wd_size)
+_wd_r = c.get("/static/desk/wood-1024x2048.webp")
+t("WOOD: the WebP is served as image/webp", _wd_r.status_code == 200 and _wd_r.headers.get("Content-Type") == "image/webp",
+  _wd_r.headers.get("Content-Type"))
+
+_d3_desk = (ROOT / "static/desk.js").read_text()
+_d3_scene = (ROOT / "static/desk3d.js").read_text()
+_d3_html = c.get("/").get_data(as_text=True)
+t("DESK3D: the scene's code is its own file, named to desk.js by the page (stamped) and fetched with three.js at the load event",
+  'data-scene="/static/desk3d.js?v=' in _d3_html and "new T.WebGLRenderer" in _d3_scene and "new T.WebGLRenderer" not in _d3_desk
+  and _d3_scene.startswith("/*") and "window.__evidentDesk3d = function (O) {" in _d3_scene
+  and "sceneP = loadScene(); loadLib(1);" in _d3_desk and "sceneP.then(function (ok) { if (ok) waitFonts(); else fallback(); });" in _d3_desk
+  and 'window.__evidentDesk3d(O3);' in _d3_desk)
+_d3_names = set(re.findall(r"(?<![\w$.])O\.([A-Za-z_$][\w$]*)", _d3_scene.split('"use strict";', 1)[-1]))
+_d3_bridge = set(re.findall(r"get ([A-Za-z_$][\w$]*)\(\) \{ return \1; \}, set \1\(v\) \{ \1 = v; \}", _d3_desk))
+t("DESK3D: every desk.js name the scene uses has its accessor on the bridge, and the bridge has no other",
+  _d3_names and _d3_names == _d3_bridge, sorted(_d3_names ^ _d3_bridge))
+_d3_gz = len(__import__("gzip").compress(_d3_desk.encode(), 6))
+t("DESK3D: desk.js, which the first screen needs, is under 20 KB gzipped", _d3_gz < 20 * 1024, _d3_gz)
+_wu = _d3_scene.split("function warmStep()", 1)[-1].split("O.onCheck", 1)[0]
+t("WARM: the scene compiles its programs and sends its textures ahead of the press, one piece per idle slice, only once an answer is readable",
+  "if (readyDone) warmSoon();" in _d3_scene and "renderer.compile(scene, camera)" in _wu and "renderer.initTexture(t)" in _wu
+  and "idle(warmStep);" in _wu and "warmLater(300)" in _wu and "O.checked" in _d3_scene.split("function warmSoon()", 1)[-1].split("\n", 1)[0])
+_wb = _d3_scene.split("function warmBusy()", 1)[-1].split("\n", 1)[0]
+t("WARM: it waits while the scene moves or the reader types, scrolls, touches or presses",
+  all(k in _wb for k in ("looping", "O.tween", "O.touching", "O.pressing", "O.lastScrollAt", "inputAt")), _wb)
+t("WARM: a texture whose picture is not complete is left to its first drawing (no console warning)",
+  "im.complete !== false" in _wu and "t.version > 0" in _wu)
+
+# ---- HOME LISTS: the home page's lists are kept in memory for a short while ----
+_hl_calls = {"recent": 0, "example": 0, "fail": False}
+_hl_real_rv, _hl_real_key = db.recent_verdicts, db.get_cached_by_key
+
+
+def _hl_rv(limit=12):
+    _hl_calls["recent"] += 1
+    if _hl_calls["fail"]:
+        raise sqlite3.OperationalError("database is locked")
+    return _hl_real_rv(limit)
+
+
+def _hl_key(key, *a, **k):
+    if key == db.normalize_claim(appmod.EXAMPLE_CLAIM):
+        _hl_calls["example"] += 1
+        if _hl_calls["fail"]:
+            raise sqlite3.OperationalError("database is locked")
+    return _hl_real_key(key, *a, **k)
+
+
+import sqlite3  # noqa: E402
+_hl_clock = [1000.0]
+_hl_real_mono = appmod.time.monotonic
+appmod.time = types.SimpleNamespace(**{k: getattr(__import__("time"), k) for k in dir(__import__("time")) if not k.startswith("_")})
+appmod.time.monotonic = lambda: _hl_clock[0]
+db.recent_verdicts, db.get_cached_by_key = _hl_rv, _hl_key
+appmod.HOME_LIST_SECONDS = 60
+appmod._drop_home_lists()
+try:
+    db.put_cached_verdict("Home list claim one", "q", "complicated", "x", ["P1"], STUDIES,
+                          tldr="Mixed.", still_open="Dose.")
+    _hl_a = c.get("/").get_data(as_text=True)
+    _hl_first = dict(_hl_calls)
+    _hl_clock[0] += 30
+    _hl_b = c.get("/").get_data(as_text=True)
+    t("HOME LISTS: two home visits inside the window read the database once, and the page is the same",
+      _hl_first["recent"] >= 1 and _hl_first["example"] == 1 and _hl_calls["recent"] == _hl_first["recent"]
+      and _hl_calls["example"] == 1 and _hl_a.count("Home list claim one") == _hl_b.count("Home list claim one") > 0,
+      (_hl_first, dict(_hl_calls)))
+    _hl_clock[0] += 31
+    c.get("/")
+    t("HOME LISTS: after the window the next home visit reads again",
+      _hl_calls["recent"] == 2 * _hl_first["recent"] and _hl_calls["example"] == 2, dict(_hl_calls))
+    _hl_clock[0] += 61
+    _hl_calls["fail"] = True
+    _hl_r = c.get("/")
+    _hl_calls["fail"] = False
+    t("HOME LISTS: a refresh that fails serves the last good list, with a 200",
+      _hl_r.status_code == 200 and "Home list claim one" in _hl_r.get_data(as_text=True)
+      and _hl_calls["recent"] > 2 * _hl_first["recent"], dict(_hl_calls))
+    _hl_n = _hl_calls["recent"]
+    db.put_cached_verdict("Home list claim two", "q", "complicated", "x", ["P1"], STUDIES,
+                          tldr="Mixed.", still_open="Dose.")
+    _hl_c = c.get("/").get_data(as_text=True)
+    t("HOME LISTS: a check saved in this process drops the copy, so the next visit lists it",
+      _hl_calls["recent"] > _hl_n and "Home list claim two" in _hl_c, dict(_hl_calls))
+    _hl_n = _hl_calls["recent"]
+    _hl_q = c.get("/?q=" + urllib.parse.quote("Home list claim two"))
+    t("HOME LISTS: a result page still reads its own verdict fresh",
+      _hl_q.status_code == 200 and "server-result" in _hl_q.get_data(as_text=True), _hl_q.status_code)
+    appmod._drop_home_lists()
+    _hl_calls["fail"] = True
+    _hl_r = c.get("/")
+    _hl_calls["fail"] = False
+    t("HOME LISTS: with no good copy yet, a failed read still renders the home page (empty list, as before)",
+      _hl_r.status_code == 200, _hl_r.status_code)
+finally:
+    db.recent_verdicts, db.get_cached_by_key = _hl_real_rv, _hl_real_key
+    appmod.time = __import__("time")
+    appmod.HOME_LIST_SECONDS = 0
+    appmod._drop_home_lists()
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

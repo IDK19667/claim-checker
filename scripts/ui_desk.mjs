@@ -25,6 +25,23 @@
  *    in text mode and with scripts off. Every screen has one h1, on both paths.
  * 16. The strip is the banner, the site links a Site navigation, the last stop's
  *    closing lines the footer, and Still open a heading and a region of that name.
+ * 18. The service worker: a returning visit to a held server (10 s) paints the
+ *    kept home page within about 3 s and the late answer refreshes the copy; with
+ *    a fast server the fresh page arrives; a first visit waits for the network;
+ *    offline, the home page paints from the copy with its stylesheet and scripts;
+ *    with a copy kept, a home answer of 503 or 429 shows the copy and is never
+ *    stored, while a first visit gets the server's answer as before.
+ * 19. The warm-up: on a saved answer in 3D the scene's programs and textures are
+ *    sent to the GPU ahead of the press, after the answer is readable; the first
+ *    Next then compiles no program and sends no texture it already had; a press
+ *    before the warm-up is done still lands on the next stop; the home page has
+ *    no warm-up.
+ * 20. The update path: a browser holding the live site's worker (static/sw.js at
+ *    f10ef54, cache "evident-v118", served by the fixture from git) visits this
+ *    build: no console error, no failed request, the new worker takes over, the
+ *    old cache is gone, every shell file is in the new cache under its stamped
+ *    address, and offline the home page paints; a kept copy and a server taking
+ *    4 s: the copy paints at about 2.5 s and the fresh page is stored.
  * 17. The cue row on top of the bar row: in view, as wide, sizes and contrast, its
  *    words from Next's state, a click moves as Next does, gone at the end; the
  *    chevron dips once and never under reduced motion; in 3D a wheel or a drag from
@@ -42,8 +59,9 @@ const browser = await chromium.launch({ args: ARGS });
 const results = [];
 const must = (c, m) => { if (!c) throw new Error(m); };
 
-async function test(name, fn, { w = 390, h = 844, reduce = false, touch = false } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: reduce ? "reduce" : "no-preference", serviceWorkers: "block", hasTouch: touch });
+async function test(name, fn, { w = 390, h = 844, reduce = false, touch = false, sw = false } = {}) {
+  if (process.env.UI_ONLY && !name.startsWith(process.env.UI_ONLY)) return;  // UI_ONLY=18: run only the checks whose name starts so
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: reduce ? "reduce" : "no-preference", serviceWorkers: sw ? "allow" : "block", hasTouch: touch });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -614,6 +632,222 @@ for (const [w, h] of [[390, 844], [1440, 900]]) {
     must(Math.abs((await page.evaluate(() => scrollY)) - y) < 1, "text mode settled the page after a free scroll");
   }, { w, h });
 }
+
+// ---- 18. the service worker's shell: a time limit on the home page, and offline first paint ----
+// waitForFunction takes an async predicate's promise as truthy at once: poll from here instead
+const until = async (page, fn, ms = 30000) => {
+  for (const t0 = Date.now(); Date.now() - t0 < ms; await page.waitForTimeout(250)) if (await page.evaluate(fn).catch(() => false)) return true;
+  return false;
+};
+const swReady = async (page) => {
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await until(page, async () => !!(await caches.keys()).length && !!(await (await caches.open((await caches.keys())[0])).match("/")), 20000);
+  await page.waitForTimeout(500);
+};
+const painted = (page) => page.evaluate(() => {
+  const el = document.getElementById("claim-input"); if (!el) return false;
+  const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+});
+await test("18: a returning visit to a server held 10 s paints the kept home page within about 3 s, and the late answer refreshes the copy", async (page) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload(); await page.waitForTimeout(500);  // now controlled
+  must(await page.evaluate(() => !!navigator.serviceWorker.controller), "the page is not controlled by the service worker");
+  const keptNonce = () => page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); const r = await c.match("/"); return r ? ((await r.text()).match(/nonce="([^"]+)"/) || [])[1] : null; });
+  const mark = await keptNonce();
+  must((await fetch(base + "/__fixture/hold/10")).ok, "the fixture server cannot hold");
+  // timed from the navigation's own start (unloading the 3D page before it is not the server's wait)
+  await page.addInitScript(() => { const look = () => { const el = document.getElementById("claim-input");
+    if (el && el.getBoundingClientRect().height > 0) window.__boxAt = performance.now(); else requestAnimationFrame(look); }; requestAnimationFrame(look); });
+  await page.goto(base + "/", { waitUntil: "commit", timeout: 20000 });
+  await page.waitForFunction(() => window.__boxAt, null, { timeout: 8000 });
+  const ms = Math.round(await page.evaluate(() => window.__boxAt));
+  const shown = await page.evaluate(() => document.querySelector("script[nonce]").nonce);
+  must(ms < 3500, `the kept page painted ${ms} ms after the navigation started`);
+  must(shown === mark, "the page shown is not the kept copy (was the server held?)");
+  await page.waitForTimeout(11000);
+  await fetch(base + "/__fixture/hold/0");
+  const fresh = await keptNonce();
+  must(mark && fresh && fresh !== mark, `the kept copy was not refreshed by the late answer (${mark} then ${fresh})`);
+}, { sw: true });
+await test("18: with a fast server a returning visit gets the fresh page from the network", async (page) => {
+  const seen = [];
+  page.on("response", (r) => { if (r.request().isNavigationRequest()) seen.push(r.headers()["content-security-policy"] || ""); });
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload(); await page.waitForTimeout(500);
+  await page.reload();
+  must(await painted(page), "the claim box is not painted");
+  // each fresh page carries a new CSP nonce, so three different nonces mean three answers from the server
+  const nonces = new Set(seen.map((h) => (h.match(/nonce-([^']+)/) || [])[1]).filter(Boolean));
+  must(nonces.size === 3, `navigations answered: ${seen.length}, distinct nonces: ${nonces.size}`);
+}, { sw: true });
+await test("18: a first visit with nothing kept waits for a held server, as before", async (page) => {
+  must((await fetch(base + "/__fixture/hold/4")).ok, "the fixture server cannot hold");
+  const t0 = Date.now();
+  await page.goto(base + "/", { timeout: 20000 });
+  const ms = Date.now() - t0;
+  await fetch(base + "/__fixture/hold/0");
+  must(ms >= 3900 && await painted(page), `a first visit took ${ms} ms`);
+}, { sw: true });
+await test("18: offline, the home page paints from the copy with its stylesheet, scripts and faces", async (page, ctx) => {
+  await page.goto(base + "/"); await swReady(page);
+  await ctx.setOffline(true);
+  await page.reload({ waitUntil: "load" });
+  const look = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return { box: !!document.getElementById("claim-input"), css: [...document.styleSheets].some((s) => /desk\.css/.test(s.href || "")),
+             ran: !!window.__evident, faces: [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family) };
+  });
+  await ctx.setOffline(false);
+  must(look.box && look.css && look.ran, `offline: ${JSON.stringify(look)}`);
+  must(look.faces.some((f) => /Instrument/.test(f)), `offline faces loaded: ${look.faces.join(", ")}`);
+}, { sw: true });
+await test("18: with a kept copy, a home answer of 503 or 429 shows the copy, and the bad answer is never stored", async (page) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload({ waitUntil: "load" });
+  must(await page.evaluate(() => !!navigator.serviceWorker.controller), "the page is not controlled by the service worker");
+  const keptNonce = () => page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); const r = await c.match("/"); return r ? ((await r.text()).match(/nonce="([^"]+)"/) || [])[1] : null; });
+  const mark = await keptNonce();
+  for (const code of [503, 429]) {
+    must((await fetch(base + "/__fixture/status/" + code)).ok, "the fixture server cannot answer " + code);
+    const r = await page.reload({ waitUntil: "load" });
+    const shown = await page.evaluate(() => { const s = document.querySelector("script[nonce]"); return s ? s.nonce : null; });
+    must(r.status() === 200 && await painted(page) && shown === mark, `${code}: status ${r.status()}, the kept copy shown: ${shown === mark}`);
+    must((await keptNonce()) === mark, `${code}: the copy was replaced`);
+  }
+  await fetch(base + "/__fixture/status/0");
+}, { sw: true });
+await test("18: with a kept copy, a home answer of 403 (a challenge) reaches the reader as sent and is never stored", async (page, ctx) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload({ waitUntil: "load" });
+  must(await page.evaluate(() => !!navigator.serviceWorker.controller), "the page is not controlled by the service worker");
+  const keptNonce = () => page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); const r = await c.match("/"); return r ? ((await r.text()).match(/nonce="([^"]+)"/) || [])[1] : null; });
+  const mark = await keptNonce();
+  must((await fetch(base + "/__fixture/status/403")).ok, "the fixture server cannot answer 403");
+  const r = await page.reload({ waitUntil: "load" });
+  const text = await page.evaluate(() => document.body ? document.body.innerText : "");
+  await fetch(base + "/__fixture/status/0");
+  must(r.status() === 403 && /Challenge page/.test(text) && !(await painted(page)), `403: status ${r.status()}, on screen: ${JSON.stringify(text.slice(0, 80))}`);
+  must((await keptNonce()) === mark, "403: the challenge replaced the kept copy");
+  await page.reload({ waitUntil: "load" });
+  const fresh = await page.evaluate(() => { const s = document.querySelector("script[nonce]"); return s ? s.nonce : null; });
+  must(await painted(page) && fresh && fresh !== mark, `healthy again: the fresh page was not shown (${mark} then ${fresh})`);
+  const good = await keptNonce();
+  await ctx.setOffline(true);
+  await page.reload({ waitUntil: "load" });
+  const off = await page.evaluate(() => { const s = document.querySelector("script[nonce]"); return s ? s.nonce : null; });
+  await ctx.setOffline(false);
+  must(await painted(page) && off === good, `offline: the kept copy was not shown (${good} then ${off})`);
+}, { sw: true });
+await test("18: a first visit with nothing kept still gets the server's answer, as before", async (page) => {
+  must((await fetch(base + "/__fixture/status/503")).ok, "the fixture server cannot answer 503");
+  const r = await page.goto(base + "/");
+  await fetch(base + "/__fixture/status/0");
+  must(r.status() === 503, `a first visit got ${r.status()}`);
+}, { sw: true });
+
+await test("18: offline, /checks with a claim and /flight are sent on to the home page under its own address", async (page, ctx) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload({ waitUntil: "load" });
+  await ctx.setOffline(true);
+  const seen = [];
+  for (const [from, to] of [["/checks?q=zinc", "/?q=zinc"], ["/flight", "/"]]) {
+    await page.goto(base + from, { waitUntil: "load" }).catch(() => {});
+    // the claim's address then behaves as /?q= does offline (the page reads it); the page and its notice are there
+    seen.push([from, page.url().replace(base, ""), await page.evaluate(() => /Not medical advice/.test(document.body.innerText)).catch(() => false)]);
+  }
+  await ctx.setOffline(false);
+  must(seen[0][1] === "/?q=zinc" && seen[1][1] === "/" && seen.every((x) => x[2]), JSON.stringify(seen));
+}, { sw: true });
+
+// ---- 19. the warm-up: the first Next pays for no compile and no upload ----
+const warmed = (page) => page.waitForFunction(() => window.__evd && window.__evd.warmed && window.__evd.warmed(), null, { timeout: 30000, polling: 100 }).then(() => true, () => false);
+await test("19: on a saved answer the warm-up finishes after the answer is readable, and the first Next compiles and sends nothing new", async (page) => {
+  await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  must(await warmed(page), "the warm-up never finished");
+  const before = await page.evaluate(() => { const r = window.__evd.renderer; return { p: r.info.programs.length, t: r.info.memory.textures, stop: window.__evident.stats().stop }; });
+  await page.evaluate(() => { const r = window.__evd.renderer, gl = r.getContext(); window.__up = 0; const o = gl.texImage2D.bind(gl); gl.texImage2D = function (...a) { window.__up++; return o(...a); }; });
+  await page.click("#next"); await page.waitForTimeout(2500);
+  const after = await page.evaluate(() => ({ p: window.__evd.renderer.info.programs.length, up: window.__up, stop: window.__evident.stats().stop }));
+  must(after.stop === before.stop + 1, `stop ${before.stop} to ${after.stop}`);
+  must(after.p === before.p, `programs ${before.p} to ${after.p}`);
+  // the lifted top sheet's large face is painted on the way (hiRes): at most that one is new
+  must(after.up <= 1, `textures sent after the press: ${after.up}`);
+});
+await test("19: a press before the warm-up is done still lands on the next stop", async (page) => {
+  await page.goto(`${base}/?q=${encodeURIComponent(SAVED[1])}`, { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  const s0 = await page.evaluate(() => window.__evident.stats().stop);
+  await page.click("#next");
+  await page.waitForFunction((s) => window.__evident.stats().stop === s + 1 && !window.__evident.stats().looping, s0, { timeout: 15000 });
+  must(await warmed(page), "the warm-up did not finish after the press");
+});
+await test("19: the home page has no warm-up", async (page) => {
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  await page.waitForTimeout(1500);
+  must(await page.evaluate(() => !window.__evd.warmed()), "the home page warmed up");
+});
+
+// ---- 20. the update path: from the live site's worker (f10ef54, cache evident-v118) to this build ----
+await test("20: a browser holding the live worker and its cache moves to this build: no error, no failed request, old cache gone, shell stamped, offline paints", async (page, ctx) => {
+  const bad = [];
+  page.on("requestfailed", (r) => bad.push("failed " + r.url().replace(base, "")));
+  page.on("response", (r) => { if (r.status() >= 400) bad.push(r.status() + " " + r.url().replace(base, "")); });
+  must((await fetch(base + "/__fixture/oldsw/1")).ok, "the fixture server cannot serve the old worker");
+  await page.goto(base + "/", { waitUntil: "load" });
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  must(await until(page, async () => (await caches.keys()).join() === "evident-v118" && (await (await caches.open("evident-v118")).keys()).length >= 20), "the old worker did not fill evident-v118");
+  await page.reload({ waitUntil: "load" });
+  must(await until(page, () => !!navigator.serviceWorker.controller, 10000), "the old worker does not control the page");
+  // the new build: /sw.js now answers this build's worker; the page registers it on load
+  await fetch(base + "/__fixture/oldsw/0");
+  bad.length = 0;
+  await page.reload({ waitUntil: "load" });
+  must(await painted(page), "the new build did not paint under the old worker");
+  await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v122" && r && r.active && r.active.state === "activated"; });
+  const st = await page.evaluate(async () => {
+    const keys = await caches.keys();
+    const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
+    const shell = JSON.parse(src.match(/const SHELL = (\[[\s\S]*?\]);/)[1].replace(/,\s*\]/, "]"));
+    const c = await caches.open(keys[0]);
+    const missing = [];
+    for (const u of shell) if (!(await c.match(u))) missing.push(u);
+    const stamped = shell.filter((u) => u.startsWith("/static/") && !u.startsWith("/static/fonts/")).every((u) => /\?v=[0-9a-f]{10}$/.test(u));
+    const reg = await navigator.serviceWorker.getRegistration();
+    return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
+  });
+  must(st.keys.join() === "evident-v122", `caches: ${st.keys.join()}`);
+  must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
+  must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
+  must(!bad.length, `requests: ${bad.join(" | ")}`);
+  // later, with the network off, the home page paints from the new cache
+  await page.reload({ waitUntil: "load" });
+  await ctx.setOffline(true);
+  await page.reload({ waitUntil: "load" });
+  const ok = await painted(page);
+  await ctx.setOffline(false);
+  must(ok, "offline, the home page did not paint");
+}, { sw: true });
+await test("20: a kept copy and a server taking 4 s: the copy paints at about 2.5 s and the fresh page is stored for next time", async (page) => {
+  await page.goto(base + "/"); await swReady(page);
+  await page.reload(); await page.waitForTimeout(500);
+  const keptNonce = () => page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); const r = await c.match("/"); return r ? ((await r.text()).match(/nonce="([^"]+)"/) || [])[1] : null; });
+  const mark = await keptNonce();
+  must((await fetch(base + "/__fixture/hold/4")).ok, "the fixture server cannot hold");
+  await page.addInitScript(() => { const look = () => { const el = document.getElementById("claim-input");
+    if (el && el.getBoundingClientRect().height > 0) window.__boxAt = performance.now(); else requestAnimationFrame(look); }; requestAnimationFrame(look); });
+  await page.goto(base + "/", { waitUntil: "commit", timeout: 20000 });
+  await page.waitForFunction(() => window.__boxAt, null, { timeout: 8000 });
+  const ms = Math.round(await page.evaluate(() => window.__boxAt));
+  const shown = await page.evaluate(() => document.querySelector("script[nonce]").nonce);
+  must(ms >= 2300 && ms < 3500 && shown === mark, `the kept copy painted at ${ms} ms (kept copy: ${shown === mark})`);
+  await page.waitForTimeout(3000);
+  await fetch(base + "/__fixture/hold/0");
+  const fresh = await keptNonce();
+  must(fresh && fresh !== mark, `the fresh page was not stored (${mark} then ${fresh})`);
+}, { sw: true });
 
 await browser.close();
 const passed = results.filter(Boolean).length;

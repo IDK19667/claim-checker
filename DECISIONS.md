@@ -22,6 +22,105 @@ and `pubmed.py` are part of the method stamp, so after a deploy each
 saved answer is made again once when it is next asked for: deploy
 engine changes together, not one by one.
 
+## 2026-11-23 (q10): The scene warms up before the first press of Next
+
+On a saved answer the first Next in 3D stalled for 2.2 s on the phone
+profile (3.4 s at 1440x900): the first frame of the move compiled two
+programs and sent about 21 textures (the sheets' faces) to the GPU, about
+500 ms of main-thread work at 4 times CPU slowdown before any drawing.
+Now, once an answer is readable and the picture is still, the scene
+compiles its programs (`renderer.compile`) and sends each texture
+(`renderer.initTexture`) one piece per idle slice: never mid-move, never
+while the reader types, scrolls, touches or presses. The longest piece
+measured is 65 ms; the first frame of the move now runs about 40 ms of
+script. A press before the warm-up ends behaves as before. Nothing drawn
+changes, and the home page has no warm-up. What remains on this machine
+is software drawing (SwiftShader, no GPU) at about a second a frame; the
+under-three-frames rule turns the later moves into cuts, and is left as
+it is.
+
+## 2026-11-23 (q10): The 3D scene's code arrives with three.js, not with the first screen
+
+The first visit fetched about 214 KB before any 3D file, over the 200 KB
+budget, and desk.js was 37 KB of it although two thirds of it (its
+`start()`: the renderer, camera, sheets, lamp, wood, frame loop) only
+runs once three.js is in. That code is now `static/desk3d.js`, fetched
+at the load event beside three.js and the wood, only where the desk is
+drawn (never on Save-Data, 2G, `?nogl` or without WebGL). desk.js drops
+to about 17 KB as sent and the first load to about 195 KB.
+
+- No bundler: the move was mechanical (`start()`'s body, unchanged, with
+  every desk.js name it uses written `O.name`). `O3` in desk.js has one
+  get/set accessor per name, so reading or setting `O.name` reads or
+  sets desk.js's own variable, as the closure did. A test holds the
+  bridge and the names the scene uses equal.
+- If desk3d.js cannot load, the page goes to text mode, as when three.js
+  cannot.
+- The wood went from a 679 KB JPEG to a 190 KB WebP at 1024 by 2048: the
+  grain runs along the picture's width, so the detail is in its height
+  and only the width was halved. Safari before 14 cannot read WebP; the
+  desk then draws its plain wood colour, as on any failed load.
+
+## 2026-11-23 (q10): The service worker installs less, and the home page has a time limit
+
+SHELL held 20 addresses: four other pages, `style.css` (not used by the
+home page), a fifth font, five icons and the manifest, all fetched at
+the load event of a first visit, the same moment the 3D files start.
+Now it holds only what the home page needs to paint offline: `/`,
+`desk.css`, `app.js`, `desk.js` and the four faces `desk.css` names.
+Those static files are stamped and kept a year, so after a first visit
+installing them costs no download; the second copy of `/` (about 9 KB)
+is the one cost left. The other pages are kept under their own address
+once visited, and stamped files and fonts once used.
+
+The home page was network first, so on a slow or sleeping server a
+returning reader saw nothing until the network answered (a free Render
+instance can take 30 s to wake). Now, once a copy of the home page is
+kept, a network that has not answered in 2.5 s gets the copy shown, and
+its answer, when it comes, is kept for next time. 2.5 s because the home
+page is about 9 KB and a sound server delivers it well inside that on
+slow 4G (150 ms round trip, 1.6 Mbps), while a reader waiting on a blank
+screen past about three seconds starts to leave. With a fast server the
+fresh page is shown exactly as before; a first visit, with nothing kept,
+waits as before. Only a 5xx or a 429 is hidden behind the kept copy: a 403 (a Cloudflare challenge) or any other answer reaches the reader as sent, or they could never pass the challenge.
+
+- A result address (`/?q=`, or a share's `?text=`/`?title=`) stays
+  network first with the kept home page as its offline fallback, but is
+  no longer stored as `/`: it was, so the next offline home visit opened
+  the last result. With a time limit on `/` that would have shown a stale
+  result as the home page.
+- What this costs: an address never visited is not there offline (the
+  other pages were precached before). The home page, the one a reader
+  opens offline, is.
+
+## 2026-11-23 (q10): Static files carry their hash and are kept a year
+
+Every static file was sent `no-cache`, so a returning reader asked again
+for each one (a 304 at best) and the service worker, network first, went
+to the network too. Now every static address a page prints ends in
+`?v=` and the first 10 hex digits of the file's sha256 (`url_for` adds
+it; `/sw.js` and the manifest have their `"/static/..."` strings stamped
+as they are served). A request with the right stamp is answered
+`public, max-age=31536000, immutable`; without one, or with a wrong one,
+it is served as before. `/sw.js` and the manifest stay `no-cache`.
+
+- Fonts are named in CSS and cannot be stamped without a build step.
+  Their files never change, so `/static/fonts/` is kept a year as it is
+  and a changed font gets a new file name. Their preloads stay
+  unstamped, or the preload and the CSS would be two addresses and the
+  font would download twice.
+- The two 3D files are handed to `desk.js` through `data-lib` and
+  `data-wood` on the canvas, not an inline script, so the CSP stays.
+- The service worker matches stamped addresses exactly: a stamped static
+  request is served cache first (a stored copy is that version, never a
+  stale one), and when a new stamp of a path is stored the older ones
+  are dropped. Unstamped static requests are network first, as before.
+  Offline first paint holds because the cached home page names the
+  stamped addresses its own deploy precached.
+- A stamp is worked out the first time an address is printed and again
+  when the file's size or modification time changes, so a file edited in
+  development gets a new address without a restart.
+
 ## 2026-11-22 (q10): Scoring runs are recorded and replayed
 
 The free model quota is small and a gold set is 120 claims, so fixes are

@@ -19,8 +19,8 @@ change), `DECISIONS.md` (why things are the way they are), `README.md`
 | Verdict | `verdict.py` | provider abstraction, JSON schema, prose gate |
 | Storage | `db.py`, SQLite | verdict cache, anonymous check log, feedback |
 | Cards | `og.py`, Pillow | 1200x630 link previews |
-| Front end | `templates/`, `static/app.js`, `static/desk.css`, `static/desk.js`, `static/style.css` | no framework, no bundler; three.js is the one vendored file |
-| Offline | `static/sw.js`, `static/manifest.webmanifest` | network-first shell, cache-first fonts |
+| Front end | `templates/`, `static/app.js`, `static/desk.css`, `static/desk.js`, `static/desk3d.js`, `static/style.css` | no framework, no bundler; three.js is the one vendored file |
+| Offline | `static/sw.js`, `static/manifest.webmanifest` | home page network first with a 2.5 s limit once a copy is kept; stamped files and fonts cache first |
 
 Ask before adding a dependency, and say what it buys. The absence of a
 build step is a feature: anyone can read the shipped file.
@@ -56,7 +56,9 @@ build step is a feature: anyone can read the shipped file.
   world; a redesign replaces `DESIGN.md` on purpose, never by drift.
 - The front page is the lamp-lit desk: `templates/index.html`,
   `static/desk.css` and `static/desk.js`, with three.js in
-  `static/vendor/`. Every other page
+  `static/vendor/`. The 3D scene itself is `static/desk3d.js`, fetched
+  with three.js at the load event, never with the first screen; it
+  reaches `desk.js`'s names through the `O3` bridge (one accessor each). Every other page
   (about, how it works, corrections, privacy, the 404, stats) keeps
   `static/style.css`. The front must work as text, without WebGL and
   without scripts.
@@ -109,6 +111,9 @@ build step is a feature: anyone can read the shipped file.
 - Fonts are self-hosted in `static/fonts/woff2/`. Don't reintroduce a
   Google Fonts link: it costs a third-party connection and breaks
   offline first paint.
+  Font files are kept a year by the browser (they cannot carry a stamp,
+  CSS names them), so a changed font gets a new file name, never new
+  bytes under the old one.
 
 ## Working rules (code)
 
@@ -122,8 +127,16 @@ build step is a feature: anyone can read the shipped file.
   costs free-tier quota). Re-run after any prompt change and read the
   `open` lines, not just the verdicts. Score it with
   `scripts/regression.py` (the 21 claims in `tests/regression_claims.json`).
-- Service worker: bump `CACHE` in `static/sw.js` when shell files change,
-  and add new shell files to `SHELL`.
+- Service worker: bump `CACHE` in `static/sw.js` when shell files change.
+  `SHELL` holds only what the home page needs to paint offline (the
+  page, `desk.css`, `app.js`, `desk.js`, its four faces); everything else
+  is kept when first used. The home page is network first, but once a
+  copy is kept a network that has not answered in 2.5 s gets the copy
+  shown, and its late answer refreshes the copy for next time.
+- Static addresses: print them with `url_for('static', ...)` (or as a
+  `"/static/..."` string in `sw.js` or the manifest), never by hand, so
+  they carry `?v=` and the file's hash and can be kept a year. A file a
+  script loads is handed to it through the page (a `data-` attribute).
 - A result page is server-rendered: the verdict, the reasoning and the
   studies are in the HTML, with ClaimReview markup, before any JavaScript
   runs. Keep it that way. If you change how a result looks, change both

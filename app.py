@@ -8,6 +8,8 @@ import os
 import re
 import secrets
 import subprocess
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
@@ -20,6 +22,7 @@ load_dotenv()  # must run before verdict.py reads the provider keys
 import requests
 from flask import (Flask, abort, Response, g, make_response, jsonify, redirect, render_template, request,
                    send_from_directory)
+from werkzeug.security import safe_join
 
 import breakdown as breakdown_mod
 import display
@@ -185,6 +188,73 @@ def _compress(response: Response) -> Response:
 db.init_db()
 
 
+# Static files carry a stamp: every static address a page prints ends in
+# ?v= and the first 10 hex digits of the file's sha256 (url_for adds it), and
+# a request with the right stamp may be kept for a year, because a changed
+# file gets a new address. Without a stamp, or with a wrong one, a file is
+# served as before (no-cache, revalidated). Fonts are named in CSS, which
+# cannot be stamped without a build step; their files never change (a
+# changed font gets a new file name), so /static/fonts/ is long-cached as it
+# is and never stamped (a stamped preload would not match the CSS address
+# and the font would download twice). A stamp is worked out the first time
+# an address is printed and again when the file changes on disk.
+LONG_CACHE = "public, max-age=31536000, immutable"
+_stamps: dict = {}
+
+
+def static_stamp(filename: str) -> str | None:
+    """First 10 hex digits of the static file's sha256, or None if there is no such file."""
+    path = safe_join(app.static_folder, filename)
+    try:
+        st = os.stat(path) if path else None
+    except OSError:
+        st = None
+    if st is None or not os.path.isfile(path):
+        return None
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _stamps.get(filename)
+    if hit and hit[0] == key:
+        return hit[1]
+    with open(path, "rb") as f:
+        stamp = hashlib.sha256(f.read()).hexdigest()[:10]
+    _stamps[filename] = (key, stamp)
+    return stamp
+
+
+def _stampable(filename: str) -> bool:
+    return not filename.startswith("fonts/")
+
+
+@app.url_defaults
+def _stamp_static(endpoint, values) -> None:
+    if endpoint == "static" and "v" not in values and _stampable(values.get("filename", "")):
+        stamp = static_stamp(values.get("filename", ""))
+        if stamp:
+            values["v"] = stamp
+
+
+_STATIC_IN_TEXT = re.compile(r'"/static/([^"?#]+)"')
+
+
+def stamped_text(text: str) -> str:
+    """Every "/static/..." string in a served text file (the manifest, sw.js) with its stamp."""
+    def one(m):
+        name = m.group(1)
+        stamp = static_stamp(name) if _stampable(name) else None
+        return f'"/static/{name}?v={stamp}"' if stamp else m.group(0)
+    return _STATIC_IN_TEXT.sub(one, text)
+
+
+@app.after_request
+def _static_cache(response: Response) -> Response:
+    if request.endpoint != "static" or response.status_code not in (200, 304):
+        return response
+    name = (request.view_args or {}).get("filename", "")
+    if not _stampable(name) or (request.args.get("v") and request.args.get("v") == static_stamp(name)):
+        response.headers["Cache-Control"] = LONG_CACHE
+    return response
+
+
 # ---------------------------------------------------------------------
 # Pages & PWA assets
 # ---------------------------------------------------------------------
@@ -317,6 +387,46 @@ def _latest(n: int) -> list[dict]:
         limit *= 2
 
 
+# The home page's two lists (the latest answers and the trust example) are
+# kept in this process's memory for HOME_LIST_SECONDS, so a plain home visit
+# inside that window makes no database round trip (on the live site each one
+# is a request to the remote database). A save in this process drops the
+# copy (db.after_save), so the reader who just checked sees their answer. A
+# refresh that fails serves the last good copy and never raises to the reader.
+HOME_LIST_SECONDS = float(os.environ.get("HOME_LIST_SECONDS", "60"))
+_home_lists: dict = {}
+_home_lock = threading.Lock()
+
+
+def _home_list(name: str, fetch):
+    """fetch()'s value, from memory while it is younger than HOME_LIST_SECONDS."""
+    now = time.monotonic()
+    with _home_lock:
+        hit = _home_lists.get(name)
+    if hit and now - hit[0] < HOME_LIST_SECONDS:
+        return hit[1]
+    try:
+        value = fetch()
+    except Exception:  # noqa: BLE001
+        if hit:
+            app.logger.warning("Home list %s could not be refreshed; serving the last good copy", name)
+            return hit[1]
+        raise
+    # A remote store that failed answers from the local file instead (db._routed),
+    # which is no refresh: keep the last good copy then.
+    if hit and db.store_status() == "turso-failing":
+        return hit[1]
+    with _home_lock:
+        _home_lists[name] = (time.monotonic(), value)
+    return value
+
+
+@db.after_save
+def _drop_home_lists() -> None:
+    with _home_lock:
+        _home_lists.clear()
+
+
 def _one_per_question(rows: list[dict]) -> list[dict]:
     """
     Each question once, newest first. Rows whose db.claim_fold keys are equal
@@ -343,7 +453,7 @@ def _trust_example():
     it rather than with an invented example.
     """
     try:
-        row = db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM))
+        row = _home_list("example", lambda: db.get_cached_by_key(db.normalize_claim(EXAMPLE_CLAIM)))
         if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
                 or not row["tldr"].strip() or not row["still_open"].strip():
             return None
@@ -408,7 +518,7 @@ def _render_home():
     # recent verdicts with the evidence behind each. Best-effort; an empty
     # database must still render a usable page.
     try:
-        latest = _list_entries(_latest(10))
+        latest = _home_list("latest", lambda: _list_entries(_latest(10)))
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page's latest checks: %s", e)
         latest = []
@@ -770,18 +880,24 @@ def og_image(key):
 
 @app.route("/manifest.webmanifest")
 def manifest():
-    resp = send_from_directory(app.static_folder, "manifest.webmanifest")
-    resp.headers["Content-Type"] = "application/manifest+json"
+    resp = _stamped_file("manifest.webmanifest", "application/manifest+json")
     return resp
+
+
+def _stamped_file(name: str, mimetype: str) -> Response:
+    """A static text file with its static addresses stamped, revalidated as before (ETag)."""
+    with open(os.path.join(app.static_folder, name), encoding="utf-8") as f:
+        body = stamped_text(f.read())
+    resp = Response(body, mimetype=mimetype)
+    resp.set_etag(hashlib.sha256(body.encode("utf-8")).hexdigest()[:16])
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
 
 
 @app.route("/sw.js")
 def service_worker():
     # Served from the root so its scope covers the whole app.
-    resp = send_from_directory(app.static_folder, "sw.js")
-    resp.headers["Content-Type"] = "application/javascript"
-    resp.headers["Cache-Control"] = "no-cache"
-    return resp
+    return _stamped_file("sw.js", "application/javascript")
 
 
 def _deployed_commit():
