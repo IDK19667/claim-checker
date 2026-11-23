@@ -4377,6 +4377,7 @@ What was deliberately rejected:
   mineral, supplement, herbal, diet, nicotine or recreational word is not a
   medicine; "drugs" counts only as prescription or class drugs; and the
   medicine must be what is stopped, in its clause and not after "with".
+  Also: the ending "grel", "wean off" and "get off", and "birth control".
 - Thin "complicated": becomes "Not enough evidence" (`verdict._too_thin`,
   `evidence.too_thin`) when every relied-on review that concludes says its
   evidence is not enough or thin, or, with no review, it rests on one small,

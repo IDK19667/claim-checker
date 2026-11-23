@@ -700,11 +700,11 @@ _MEDICINE_CLASS = (
     r"(?:medicines?|medications?|tablets?|pills?|meds|drugs?)|"
     r"antipsychotics?|beta[\s-]?blockers?|ACE\s+inhibitors?|water\s+tablets?|diuretics?|"
     r"immunosuppressants?|HRT|hormone\s+replacement|contraceptive\s+pills?|the\s+pill|"
-    r"antiretrovirals?")
+    r"birth\s+control|antiretrovirals?")
 _MEDICINE_ENDING = (
     r"(?=[a-z]{6,}s?\b)[a-z]*(?:statin|pril|sartan|olol|dipine|prazole|xaban|gliptin|gliflozin|"
     r"glutide|mab|nib|oxetine|azepam|zolam|cillin|mycin|floxacin|cycline|azole|tidine|parin|"
-    r"thiazide|semide|triptan|isone|asone|olone)s?")
+    r"thiazide|semide|triptan|isone|asone|olone|grel)s?")
 _MEDICINE_NAMED = (
     r"warfarin|valproate|lithium|levothyroxine|methotrexate|isotretinoin|codeine|morphine|tramadol|"
     r"gabapentin|pregabalin|digoxin|amiodarone|allopurinol|carbamazepine|lamotrigine|levetiracetam|"
@@ -723,7 +723,7 @@ _NOT_MEDICINE = re.compile(
     r"dietary|slimming|nicotine|recreational|street|illegal|party)\b", re.IGNORECASE)
 _FORGO_WORD = re.compile(
     r"\b(?:stop\w*|quit\w*|skip\w*|replac\w*|instead of|com(?:e|ing) off|go(?:ing)? off|"
-    r"go(?:ing)? without|giv(?:e|ing) up|ditch\w*|"
+    r"get(?:ting)? off|wean\w* off|go(?:ing)? without|giv(?:e|ing) up|ditch\w*|"
     r"(?:do(?:es)?n[’']?t|do(?:es)? not|no longer) need)\b", re.IGNORECASE)
 # Where the thing stopped ends: a clause break, or "with", "by", "using",
 # after which a medicine is the means ("quit smoking with nicotine patches").

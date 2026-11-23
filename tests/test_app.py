@@ -12013,6 +12013,14 @@ _FORGO_R4_FIRE = ["stop prescription drugs", "Stop your HIV drugs", "stop using 
 _miss = [c for c in _FORGO_R4_FIRE if verdict.forgoes_treatment(c) != "forgo"]
 t("F1 round 4: still a claim to stop a medicine: prescribing words, the verb 'using', a medicine before 'with'",
   not _miss, _miss)
+_FORGO_R4_MORE = ["stop taking clopidogrel", "stop clopidogrel after a stent if you feel fine", "stop prasugrel",
+                  "wean off antidepressants slowly", "weaning off steroids is easy", "you can get off insulin with diet",
+                  "getting off blood pressure meds is simple", "stop taking my birth control", "quit birth control pills"]
+_miss = [c for c in _FORGO_R4_MORE if verdict.forgoes_treatment(c) != "forgo"]
+t("F1 round 4: the ending grel, 'wean off' and 'get off', and birth control as a class", not _miss, _miss)
+t("F1 round 4: control: 'get off' and 'wean off' something else, and short -grel words, do not fire",
+  not [c for c in ("get off the sofa", "wean off sugar", "get off your phone", "a regrel event")
+       if verdict.forgoes_treatment(c)])
 t("F1 round 3: the cure side is unchanged: a new name does not make a cure claim",
   verdict.forgoes_treatment("Warfarin cures blood clots") == "" and verdict.forgoes_treatment("Semaglutide treats obesity") == ""
   and verdict.forgoes_treatment("Ivermectin cures COVID") == "cure")
