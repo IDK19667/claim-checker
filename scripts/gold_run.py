@@ -29,7 +29,11 @@ the quota (see harness.quota_info), and summary.json lists each quota seen
 Any other 429 waits 2 minutes and tries the claim again, twice. A third in
 a row is taken as the daily quota: one line starting QUOTA, what is done is
 kept, exit code 3; --resume carries on. A replay miss is printed (MISS, the
-call kind and key) and the run exits with code 4.
+call kind and key) and the run exits with code 5.
+
+--max-calls N: before each claim, if this run has made N live model calls
+(tries included; replay hits never count), print one line starting BUDGET,
+write summary.json and exit with code 4. --resume carries on.
 
 Safety: before the engine is imported the Turso settings and the Anthropic
 and Mistral keys are set empty, LLM_PROVIDER=gemini, the verdict cache is off
@@ -63,6 +67,8 @@ def parse(argv):
     p.add_argument("--resume", action="store_true")
     p.add_argument("--quiet-claims", action="store_true")
     p.add_argument("--env-file")
+    p.add_argument("--max-calls", type=int,
+                   help="stop before a claim once this many live model calls (tries included) were made")
     a = p.parse_args(argv)
     if a.gap is None:
         a.gap = 0.0 if a.mode == "replay" else 30.0
@@ -264,9 +270,15 @@ def main(argv=None):
           f"{f', {len(done_ids)} already done' if done_ids else ''}", flush=True)
 
     client = appmod.app.test_client()
-    quota = False
+    quota = budget = False
     with results.open("a", encoding="utf-8") as fh:
         for k, item in enumerate(items):
+            spent = h.totals()["model_live"]
+            if a.max_calls is not None and spent >= a.max_calls:
+                budget = True
+                print(f"BUDGET: {spent} live model calls made, the limit is {a.max_calls}; stopping before "
+                      f"{item['id']}. {k} claims written this run; carry on with --resume.", flush=True)
+                break
             rec, quota, words = run_one(client, db, db_path, h, item, a.mode)
             if quota:
                 why = "the daily limit" if "per day" in words else "three rate limits in a row"
@@ -288,6 +300,8 @@ def main(argv=None):
     lines = [json.loads(l) for l in results.read_text().splitlines() if l.strip()]
     summary = summarize(lines)
     summary.update({"mode": a.mode, "model": verdict.model_name(), "quota_stop": quota,
+                    "budget_stop": budget, "max_calls": a.max_calls,
+                    "live_model_calls_this_run": h.totals()["model_live"],
                     "quota_seen": quota_seen(out / "quota.jsonl")})
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(f"{summary['answered']}/{summary['claims']} answered, {summary['errors']} errors, "
@@ -295,8 +309,10 @@ def main(argv=None):
     h.uninstall()
     if quota:
         return 3
-    if h.misses:
+    if budget:
         return 4
+    if h.misses:
+        return 5
     return 0
 
 

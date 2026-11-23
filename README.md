@@ -235,8 +235,11 @@ the calls, tokens and milliseconds the check used.
 ```
 
 A replay that meets a call it has no answer for stops with `MISS` and
-exit code 4; use `--mode fill` to make just those calls. A third rate
-limit in a row prints `QUOTA` and exits 3; `--resume` carries on. Use
+exit code 5; use `--mode fill` to make just those calls. A third rate
+limit in a row prints `QUOTA` and exits 3; `--resume` carries on. `--max-calls N` stops cleanly with `BUDGET` and
+exit code 4 once a run has made N live model calls (tries count, replay
+hits do not), leaving a reserve of the daily allowance for the live site;
+`--resume` carries on there too. Use
 `--quiet-claims` on a sealed set. Tests: `.venv/bin/python tests/test_harness.py`.
 
 ## Not medical advice

@@ -391,8 +391,8 @@ t("runner: --resume skips ids already written",
 p3 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_run.py"), str(claims_file), "--mode", "replay",
                      "--store", str(WORK / "empty"), "--out", str(WORK / "run3"), "--quiet-claims"],
                     env=env, capture_output=True, text=True, timeout=300)
-t("runner: a replay miss prints MISS with the kind and key and exits 4",
-  p3.returncode == 4 and "MISS x-01 model key " in p3.stdout, (p3.returncode, p3.stdout[-300:]))
+t("runner: a replay miss prints MISS with the kind and key and exits 5",
+  p3.returncode == 5 and "MISS x-01 model key " in p3.stdout, (p3.returncode, p3.stdout[-300:]))
 p4 = subprocess.run([sys.executable, str(ROOT / "scripts" / "gold_run.py"), str(claims_file), "--mode", "replay",
                      "--store", str(STORE), "--out", str(WORK / "run4")],
                     env={**env, "DB_PATH": str(WORK / "elsewhere.db")}, capture_output=True, text=True, timeout=300)
@@ -402,6 +402,33 @@ reg = harness.load_claims(ROOT / "tests" / "regression_claims.json")
 saf = harness.load_claims(ROOT / "tests" / "safety_claims.json")
 t("claims loader reads the regression and safety shapes",
   reg[0]["id"] == "1" and reg[0]["reference"] and saf[0]["safety"]["harmful_if"] == ["false", "insufficient", "complicated"])
+
+# ---- a budget of live model calls ----------------------------------------------------
+import contextlib  # noqa: E402
+import io  # noqa: E402
+bclaims = WORK / "bclaims.json"
+bclaims.write_text(json.dumps([{"id": "b-01", "claim": CLAIM, "reference": "true"},
+                               {"id": "b-02", "claim": "Tea lowers sleep quality", "reference": "true"}]))
+bout = WORK / "brun"
+bout.mkdir()
+os.environ["DB_PATH"] = str(bout / "b.db"); db.DB_PATH = os.environ["DB_PATH"]
+verdict._gemini_client = fake; fake.models.calls = 0
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    code = gold_run.main([str(bclaims), "--mode", "record", "--store", str(WORK / "bstore"), "--out", str(bout),
+                          "--gap", "0", "--max-calls", "1", "--quiet-claims"])
+blines = (bout / "results.jsonl").read_text().splitlines()
+bsum = json.loads((bout / "summary.json").read_text())
+t("budget: stops before the next claim once live calls reach the limit, BUDGET line, exit 4",
+  code == 4 and len(blines) == 1 and "\nBUDGET: 2 live model calls" in "\n" + buf.getvalue()
+  and bsum["budget_stop"] is True and bsum["live_model_calls_this_run"] == 2, (code, buf.getvalue()[-300:]))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    code = gold_run.main([str(bclaims), "--mode", "fill", "--store", str(WORK / "bstore"), "--out", str(bout),
+                          "--gap", "0", "--max-calls", "10", "--resume", "--quiet-claims"])
+t("budget: --resume carries on from there", code == 0 and len((bout / "results.jsonl").read_text().splitlines()) == 2,
+  (code, buf.getvalue()[-300:]))
+os.environ["DB_PATH"] = str(DB_FILE); db.DB_PATH = str(DB_FILE)
 
 # ---- the scorer's arithmetic -----------------------------------------------------------
 import gold_score  # noqa: E402

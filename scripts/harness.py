@@ -225,6 +225,7 @@ class Harness:
         self.mode, self.latency = mode, latency
         self.store = Store(store) if store else None
         self._lock = threading.Lock()
+        self._total = dict(_ZERO)   # since install, never reset
         self.reset()
         self.misses = []        # every miss since install, never reset
         self.quota_seen = []    # every 429 since install, never reset
@@ -246,10 +247,16 @@ class Harness:
         out["model_ms"] = int(out["model_ms"]); out["pubmed_ms"] = int(out["pubmed_ms"])
         return out
 
+    def totals(self) -> dict:
+        """The same numbers since install, across every check and retry."""
+        with self._lock:
+            return dict(self._total)
+
     def _add(self, **kv):
         with self._lock:
             for k, v in kv.items():
                 self._n[k] += v
+                self._total[k] += v
 
     def _miss(self, kind, key, detail):
         m = {"kind": kind, "key": key, "detail": detail}
@@ -284,6 +291,7 @@ class Harness:
         with self._lock:
             call["tries"] += 1
             self._n["model_tries"] += 1
+            self._total["model_tries"] += 1
         rec = self._serve("model", key)
         if rec is not None:
             self._sleep_recorded(rec)
