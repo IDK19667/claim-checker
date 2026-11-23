@@ -4354,6 +4354,14 @@ What was deliberately rejected:
   evidence line) only when it rates the claim's question
   (`evidence.rates_question`): not when it rates only other outcomes, each
   with its interval, and not when it compares two forms of the same thing.
+  Review on the same day: passing a review over lifts a caution, so it needs
+  positive proof on two counts. The review shows a sign on its own (at least
+  two findings rated with intervals, none naming the outcome; or an aim that
+  compares two qualified forms of the subject, neither side a control: a
+  comparison with no treatment, sham, placebo or usual care is the test of
+  the thing), and another relied-on review that shows no such sign names the
+  claim's outcome in its title or conclusion. A lone review always counts,
+  and two reviews never excuse each other.
 - Forgo-treatment guidance: "talk to your doctor before stopping" is guidance
   to keep a treatment (`breakdown._KEEPS_TREATMENT`), so it answers a claim to
   stop one with a no and the existing forgo rule can stamp it false. It had

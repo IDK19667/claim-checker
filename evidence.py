@@ -1767,46 +1767,118 @@ def _group_patterns(group: str) -> list:
     return [p for p in (_term_pattern(t) for t in terms) if p]
 
 
+# One side of a stated comparison that is the absence of the thing, or a
+# stand-in for it. A comparison with a control is the test of whether the
+# thing works: the claim's own question, never another one.
+_CONTROL_SIDE = re.compile(
+    r"(?i)\b(?:no|not|without|sham|placebos?|dummy|inactive|controls?|untreated|"
+    r"usual\s+care|standard\s+care|routine\s+care|waiting[\s-]+lists?|wait[\s-]+lists?|"
+    r"no\s+treatment|nothing|none)\b")
+# Words that carry no qualifier of their own on a side of a comparison.
+_SIDE_FILLER = {"a", "an", "the", "of", "or", "and", "any", "other", "with", "form",
+                "forms", "type", "types", "kind", "kinds", "based"}
+
+
+def _qualifier(side: str, things) -> str:
+    """What a side of a comparison says besides the claim's subject: the
+    "polymer-based" of "polymer-based oral rehydration solution". Empty
+    when the side is the bare thing."""
+    rest = re.sub(r"\([^)]*\)", " ", side)
+    for p in things:
+        rest = p.sub(" ", rest)
+    words = [w for w in re.findall(r"[a-z0-9]+", rest.lower()) if w not in _SIDE_FILLER]
+    return " ".join(words)
+
+
+def _forms_aim(study, subject: str) -> bool:
+    """True when the review's stated aim compares two forms of the claim's
+    subject: the subject named on both sides, each side with its own
+    qualifier, the two qualifiers different, and neither side the absence
+    of the thing or a stand-in for it (_CONTROL_SIDE)."""
+    things = _group_patterns(subject)
+    if not things:
+        return False
+    for aim in _stated_aims(study):
+        for m in _COMPARE_AIM.finditer(aim):
+            a, b = m.group(1), m.group(2)
+            if _CONTROL_SIDE.search(a) or _CONTROL_SIDE.search(b):
+                continue
+            if not (any(p.search(a) for p in things) and any(p.search(b) for p in things)):
+                continue
+            qa, qb = _qualifier(a, things), _qualifier(b, things)
+            if qa and qb and qa != qb:
+                return True
+    return False
+
+
+def _rates_other_outcomes(study, outcome: str) -> bool:
+    """True when the review rates at least two findings one by one, each
+    with its interval, and not one of those ratings, nor its title, names
+    the claim's outcome (a review of body position for breathing trouble in
+    hospital, read for a claim about cot death)."""
+    named = _group_patterns(outcome)
+    if not named:
+        return False
+    every, on_outcome = _ratings(study, outcome)
+    if not every or on_outcome:
+        return False
+    if any(p.search(str(study.get("title") or "")) for p in named):
+        return False
+    rated = [c for c in _clauses(_text(study)) if any(True for _ in rated_matches(c))]
+    return sum(1 for c in rated if _INTERVAL.search(c)) >= 2
+
+
+def _off_question(study, outcome: str, subject: str, comparative: bool) -> bool:
+    """A sign, on the review alone, that its ratings are about another
+    question: _rates_other_outcomes, or, for a claim that a thing works
+    rather than one that compares two, _forms_aim."""
+    if outcome and _rates_other_outcomes(study, outcome):
+        return True
+    return bool(subject) and not comparative and _forms_aim(study, subject)
+
+
+def _speaks_to(study, outcome: str) -> bool:
+    """True when a review names the claim's outcome in its title or its
+    conclusion."""
+    named = _group_patterns(outcome)
+    text = f"{study.get('title') or ''} {conclusion(study)}"
+    return any(p.search(text) for p in named)
+
+
 def rates_question(study, outcome: str = "", subject: str = "",
-                   comparative: bool = False) -> bool:
+                   comparative: bool = False, others=()) -> bool:
     """
     Whether a review's own certainty ratings are about the claim's question.
-    False only on a positive sign that they rate another one: it rates its
-    findings one by one, each with its interval, and not one of them, nor its
-    title, names the claim's outcome (a review of body position for breathing
-    trouble in hospital, read for a claim about cot death); or, for a claim
-    that a thing works rather than one that compares two, its stated aim is
-    to compare two forms of that same thing (two kinds of rehydration
-    solution, read for a claim that rehydration solution works). True
-    otherwise, a single overall rating included, since a missing word proves
-    nothing.
+    In doubt it counts, and its rating limits the answer. It is passed over
+    (False) only on positive proof, on two counts at once. First, a sign on
+    the review itself (_off_question): it rates several findings, each with
+    its interval, and none of them nor its title names the claim's outcome;
+    or its aim compares two forms of the claim's subject with no control on
+    either side. Second, the answer does not rest on it: at least one other
+    relied-on review (`others`), itself showing no such sign, names the
+    claim's outcome in its title or conclusion. A passed-over review is
+    never the only relied-on review that speaks to the claim, and two
+    reviews never excuse each other. A missing word proves nothing, so the
+    second count is what keeps the first honest.
     """
-    every, on_outcome = _ratings(study, outcome)
-    if every and not on_outcome and outcome:
-        named = _group_patterns(outcome)
-        rated = [c for c in _clauses(_text(study)) if any(True for _ in rated_matches(c))]
-        if (named and not any(p.search(str(study.get("title") or "")) for p in named)
-                and any(_INTERVAL.search(c) for c in rated)):
-            return False
-    if subject and not comparative:
-        things = _group_patterns(subject)
-        for aim in _stated_aims(study):
-            for m in _COMPARE_AIM.finditer(aim):
-                if (any(p.search(m.group(1)) for p in things)
-                        and any(p.search(m.group(2)) for p in things)):
-                    return False
-    return True
+    if not is_review(study) or not _off_question(study, outcome, subject, comparative):
+        return True
+    return not any(
+        o is not study and o.get("pmid") != study.get("pmid") and is_review(o)
+        and not _off_question(o, outcome, subject, comparative) and _speaks_to(o, outcome)
+        for o in others or ())
 
 
 def lead_review(studies, cited_pmids=(), outcome: str = "", subject: str = "",
                 comparative: bool = False):
     """The first review used for the verdict that rates its own evidence
     at all, in the order the studies were ranked, or None. A review whose
-    ratings are about another question (rates_question) is passed over."""
+    ratings are about another question (rates_question, read against the
+    other relied-on studies) is passed over."""
     cited = set(cited_pmids or ())
-    return next((s for s in studies or []
-                 if s.get("pmid") in cited and review_certainty(s, outcome)
-                 and rates_question(s, outcome, subject, comparative)), None)
+    used = [s for s in studies or [] if s.get("pmid") in cited]
+    return next((s for s in used if review_certainty(s, outcome)
+                 and rates_question(s, outcome, subject, comparative, used)), None)
 
 
 def lead_certainty(studies, cited_pmids=(), outcome: str = "",
@@ -1855,8 +1927,9 @@ def lowest_review_certainty(studies, cited_pmids=(), outcome: str = "", subject:
     evidence on this outcome (review_certainty), or None when none rates it.
     A review whose ratings are about another question (rates_question) gives none."""
     cited = set(cited_pmids or ())
-    levels = [review_certainty(s, outcome) for s in studies or [] if s.get("pmid") in cited
-              and rates_question(s, outcome, subject, comparative)]
+    used = [s for s in studies or [] if s.get("pmid") in cited]
+    levels = [review_certainty(s, outcome) for s in used
+              if rates_question(s, outcome, subject, comparative, used)]
     levels = [x for x in levels if x]
     return min(levels, key=_rank) if levels else None
 
