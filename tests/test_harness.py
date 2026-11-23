@@ -296,6 +296,42 @@ t("fill: exactly the missing call goes out and is saved", fake.models.calls == 1
   and fill_snap["saved"] == 1 and gone.exists() and not PUBMED_CALLS, (fake.models.calls, fill_snap))
 t("fill: the answer is still the recorded one", canon(evs[-1].get("result")) == canon(RECORDED))
 
+# ---- a 429 says which quota it hit ---------------------------------------------------
+QLOG = WORK / "quota.jsonl"
+h = harness.install("record", str(WORK / "qstore"), quota_log=str(QLOG))
+DAILY = {"error": {"code": 429, "message": "You exceeded your current quota.", "status": "RESOURCE_EXHAUSTED",
+                   "details": [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [
+                       {"quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                        "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                        "quotaDimensions": {"location": "global", "model": "m"}, "quotaValue": "20"}]},
+                               {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "41s"}]}}
+fake.models.fail_next = [errors.ClientError(429, DAILY), errors.ClientError(429, {})]
+for _ in range(2):
+    try:
+        verdict._gemini().models.generate_content(model="m", contents="SECRET PROMPT TEXT", config={})
+    except errors.ClientError:
+        pass
+qlines = [json.loads(l) for l in QLOG.read_text().splitlines()] if QLOG.exists() else []
+t("429: each try writes one quota line", len(qlines) == 2 and len(h.quota_seen) == 2, qlines)
+if len(qlines) == 2:
+    q0, q1 = qlines
+    t("429: the line names the kind, the quota id, the limit and the retry delay",
+      q0["kind"] == "day" and q0["status"] == 429 and q0["model"] == "m" and q0["retry_delay"] == "41s"
+      and q0["quotas"][0]["quotaValue"] == "20" and "PerDay" in q0["quotas"][0]["quotaId"]
+      and q0["message"].startswith("You exceeded"), q0)
+    t("429: an error that carries nothing still writes what there is",
+      q1["status"] == 429 and q1["kind"] is None and "quotas" not in q1 and q1["time"], q1)
+    t("429: no prompt and no key in the log", "SECRET PROMPT" not in QLOG.read_text()
+      and os.environ["GEMINI_API_KEY"] not in QLOG.read_text())
+import gold_run  # noqa: E402
+t("429: the runner says per day and the limit", gold_run.quota_words(qlines[:1]) == "per day, limit 20, retry after 41s"
+  and gold_run.quota_words(qlines[1:]) == "" and gold_run.quota_words([]) == "", gold_run.quota_words(qlines[:1]))
+seen = gold_run.quota_seen(QLOG)
+t("429: summary lists each quota seen", {(r["kind"], r["limit"]) for r in seen} == {("day", "20"), (None, None)}, seen)
+minute = harness.quota_info(errors.ClientError(429, {"error": {"details": [{"violations": [
+    {"quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "quotaValue": "15"}]}]}}))
+t("429: a per-minute quota reads as minute", minute["kind"] == "minute", minute)
+
 # ---- two threads at once lose nothing -----------------------------------------------
 TSTORE = WORK / "tstore"
 h = harness.install("record", str(TSTORE))

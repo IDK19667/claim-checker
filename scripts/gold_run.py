@@ -23,8 +23,11 @@ Each claim runs on a fresh scratch database (DB_PATH, a file under DIR,
 emptied before every claim), so its answer does not depend on which claims
 ran before it, and --only and --resume give the answers a full run gives.
 
-A 429 from the provider waits 2 minutes and tries the claim again, twice. A
-third in a row is the daily quota: one line starting QUOTA, what is done is
+Every 429 try is logged to DIR/quota.jsonl with what its body says about
+the quota (see harness.quota_info), and summary.json lists each quota seen
+(quota_seen). A 429 that names the daily limit stops at once with QUOTA.
+Any other 429 waits 2 minutes and tries the claim again, twice. A third in
+a row is taken as the daily quota: one line starting QUOTA, what is done is
 kept, exit code 3; --resume carries on. A replay miss is printed (MISS, the
 call kind and key) and the run exits with code 4.
 
@@ -116,8 +119,26 @@ def read_stream(resp, t0):
     return events
 
 
+def quota_words(seen: list) -> str:
+    """'per day, limit 20' from the 429s of one try, or '' when they say nothing."""
+    if not seen:
+        return ""
+    last = seen[-1]
+    qs = last.get("quotas") or []
+    pick = next((q for q in qs if q.get("kind") == last.get("kind")), qs[0] if qs else {})
+    bits = []
+    if last.get("kind") in ("day", "minute"):
+        bits.append(f"per {last['kind']}")
+    if pick.get("quotaValue") is not None:
+        bits.append(f"limit {pick['quotaValue']}")
+    if last.get("retry_delay"):
+        bits.append(f"retry after {last['retry_delay']}")
+    return ", ".join(bits)
+
+
 def run_one(client, db, db_path, h, item, mode):
-    """One claim, with the 429 waits. Returns (record, quota_hit)."""
+    """One claim, with the 429 waits. Returns (record, quota_hit, what the
+    last 429 said). A 429 that names the daily limit stops at once."""
     limited = 0
     while True:
         fresh_db(db, db_path)
@@ -128,12 +149,16 @@ def run_one(client, db, db_path, h, item, mode):
         wall = round(time.perf_counter() - t0, 3)
         final = events[-1] if events else {"stage": "error", "status": None, "error": "no events"}
         if final.get("stage") == "error" and final.get("status") == 429 and mode != "replay":
-            if limited < QUOTA_RETRIES:
+            seen = h.snapshot()["quota"]
+            words = quota_words(seen)
+            daily = any(q.get("kind") == "day" for q in seen)
+            if limited < QUOTA_RETRIES and not daily:
                 limited += 1
-                print(f"    429, waiting {QUOTA_WAIT // 60} minutes ({limited})", flush=True)
+                print(f"    429{' (' + words + ')' if words else ''}, waiting {QUOTA_WAIT // 60} minutes "
+                      f"({limited})", flush=True)
                 time.sleep(QUOTA_WAIT)
                 continue
-            return None, True
+            return None, True, words
         break
     done = final.get("stage") == "done"
     result = final.get("result") if done else {k: v for k, v in final.items() if k != "t"}
@@ -147,7 +172,7 @@ def run_one(client, db, db_path, h, item, mode):
     return {"id": item["id"], "claim": item["claim"], "http_status": resp.status_code,
             "status": 200 if done else final.get("status"), "verdict": shown,
             "response": result, "events": timeline, "harness": h.snapshot(),
-            "wall": wall, "tries_429": limited, "mode": mode}, False
+            "wall": wall, "tries_429": limited, "mode": mode}, False, ""
 
 
 def _spread(xs):
@@ -156,6 +181,25 @@ def _spread(xs):
         return None
     return {"median": round(statistics.median(xs), 3), "min": round(min(xs), 3),
             "max": round(max(xs), 3), "n": len(xs)}
+
+
+def quota_seen(path: pathlib.Path) -> list:
+    """Each distinct quota the run's 429s named, with how often."""
+    out = {}
+    if not path.exists():
+        return []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        info = json.loads(line)
+        qs = info.get("quotas") or [{}]
+        for q in qs:
+            k = (q.get("kind") or info.get("kind"), q.get("quotaId"), q.get("quotaValue"))
+            row = out.setdefault(k, {"kind": k[0], "quota_id": k[1], "limit": k[2], "count": 0,
+                                     "model": info.get("model"), "last": None})
+            row["count"] += 1
+            row["last"] = info.get("time")
+    return list(out.values())
 
 
 def summarize(lines: list[dict]) -> dict:
@@ -214,7 +258,8 @@ def main(argv=None):
     import app as appmod
     import verdict
     appmod.app.logger.setLevel(logging.ERROR)
-    h = harness.install(a.mode, a.store or str(out / "store"), latency=a.latency)
+    h = harness.install(a.mode, a.store or str(out / "store"), latency=a.latency,
+                        quota_log=str(out / "quota.jsonl"))
     print(f"model {verdict.model_name()}, mode {a.mode}, {len(items)} claims"
           f"{f', {len(done_ids)} already done' if done_ids else ''}", flush=True)
 
@@ -222,9 +267,10 @@ def main(argv=None):
     quota = False
     with results.open("a", encoding="utf-8") as fh:
         for k, item in enumerate(items):
-            rec, quota = run_one(client, db, db_path, h, item, a.mode)
+            rec, quota, words = run_one(client, db, db_path, h, item, a.mode)
             if quota:
-                print(f"QUOTA: three rate limits in a row at {item['id']}; stopping. "
+                why = "the daily limit" if "per day" in words else "three rate limits in a row"
+                print(f"QUOTA: {why} at {item['id']}{' (' + words + ')' if words else ''}; stopping. "
                       f"{k} claims written this run; carry on with --resume.", flush=True)
                 break
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n"); fh.flush()
@@ -241,7 +287,8 @@ def main(argv=None):
 
     lines = [json.loads(l) for l in results.read_text().splitlines() if l.strip()]
     summary = summarize(lines)
-    summary.update({"mode": a.mode, "model": verdict.model_name(), "quota_stop": quota})
+    summary.update({"mode": a.mode, "model": verdict.model_name(), "quota_stop": quota,
+                    "quota_seen": quota_seen(out / "quota.jsonl")})
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(f"{summary['answered']}/{summary['claims']} answered, {summary['errors']} errors, "
           f"wall median {summary['wall']['median'] if summary['wall'] else '-'}s", flush=True)

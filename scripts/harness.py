@@ -29,6 +29,12 @@ mime type and the rest). A PubMed request: the endpoint and its parameters
 without `tool` and `email`. One JSON file per key under STORE/model/ and
 STORE/pubmed/, written atomically, so two threads can save at once.
 
+quota_log=PATH: every try of a live model call that fails with 429 adds one
+JSON line there: the time, the model, the status, and what the error says
+about the quota (metric, id, limit, retry delay, a short message). Never
+the key, a request header or the prompt. The same lines are kept in
+`quota_seen`, and the ones for the current check in snapshot()["quota"].
+
 latency=True: a replay hit sleeps the recorded milliseconds, so two versions
 of the code can be timed against each other without spending quota.
 
@@ -57,6 +63,51 @@ class ReplayMiss(Exception):
     def __init__(self, kind, key, detail=""):
         super().__init__(f"replay miss: {kind} call, key {key}{' (' + detail + ')' if detail else ''}")
         self.kind, self.key, self.detail = kind, key, detail
+
+
+def quota_info(e, model=None) -> dict:
+    """What a 429 from the provider says about the quota it hit. Read from
+    google.genai's APIError: `details` holds the response body, shaped like
+    {"error": {"code", "message", "status", "details": [QuotaFailure with
+    violations (quotaMetric, quotaId, quotaValue, quotaDimensions),
+    RetryInfo with retryDelay, ...]}}. Anything missing is left out; a body
+    of another shape gives just the time, model and status."""
+    info = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "model": model,
+            "status": getattr(e, "code", None)}
+    body = getattr(e, "details", None)
+    err = body.get("error", body) if isinstance(body, dict) else {}
+    err = err if isinstance(err, dict) else {}
+    msg = getattr(e, "message", None) or err.get("message")
+    if msg:
+        info["message"] = str(msg)[:300]
+    if err.get("status"):
+        info["error_status"] = err["status"]
+    quotas = []
+    for d in err.get("details") or []:
+        if not isinstance(d, dict):
+            continue
+        if d.get("retryDelay"):
+            info["retry_delay"] = d["retryDelay"]
+        for v in d.get("violations") or []:
+            if isinstance(v, dict) and (v.get("quotaId") or v.get("quotaMetric")):
+                q = {k: v[k] for k in ("quotaMetric", "quotaId", "quotaValue", "quotaDimensions") if k in v}
+                q["kind"] = quota_kind(q)
+                quotas.append(q)
+    if quotas:
+        info["quotas"] = quotas
+    kinds = {q["kind"] for q in quotas}
+    info["kind"] = "day" if "day" in kinds else ("minute" if "minute" in kinds else
+                                                  (sorted(kinds)[0] if kinds else None))
+    return info
+
+
+def quota_kind(q: dict):
+    text = f"{q.get('quotaId', '')} {q.get('quotaMetric', '')}".lower()
+    if "perday" in text or "per_day" in text or "daily" in text:
+        return "day"
+    if "perminute" in text or "per_minute" in text:
+        return "minute"
+    return "other" if text.strip() else None
 
 
 def canonical(obj) -> str:
@@ -166,7 +217,7 @@ _ZERO = {"model_calls": 0, "model_tries": 0, "model_live": 0, "model_replayed": 
 
 
 class Harness:
-    def __init__(self, mode, store, latency=False):
+    def __init__(self, mode, store, latency=False, quota_log=None):
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
         if mode != "live" and not store:
@@ -176,6 +227,8 @@ class Harness:
         self._lock = threading.Lock()
         self.reset()
         self.misses = []        # every miss since install, never reset
+        self.quota_seen = []    # every 429 since install, never reset
+        self.quota_log = pathlib.Path(quota_log) if quota_log else None
         self._orig_gemini = self._orig_paced = None
 
     # ---- numbers ------------------------------------------------------
@@ -183,11 +236,13 @@ class Harness:
         with self._lock:
             self._n = dict(_ZERO)
             self._check_misses = []
+            self._check_quota = []
 
     def snapshot(self) -> dict:
         with self._lock:
             out = dict(self._n)
             out["misses"] = list(self._check_misses)
+            out["quota"] = list(self._check_quota)
         out["model_ms"] = int(out["model_ms"]); out["pubmed_ms"] = int(out["pubmed_ms"])
         return out
 
@@ -207,6 +262,14 @@ class Harness:
         if self.mode in ("replay", "fill"):
             return self.store.get(kind, key)
         return None
+
+    def _quota(self, info):
+        with self._lock:
+            self.quota_seen.append(info); self._check_quota.append(info)
+            if self.quota_log:
+                self.quota_log.parent.mkdir(parents=True, exist_ok=True)
+                with self.quota_log.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(info, ensure_ascii=False) + "\n")
 
     def _sleep_recorded(self, rec):
         if self.latency:
@@ -233,6 +296,10 @@ class Harness:
         t0 = time.perf_counter()
         try:
             resp = real().models.generate_content(**kw)
+        except Exception as e:
+            if getattr(e, "code", None) == 429:
+                self._quota(quota_info(e, req["model"]))
+            raise
         finally:
             ms = (time.perf_counter() - t0) * 1000
             self._add(model_ms=ms, model_live=1)
@@ -325,13 +392,13 @@ class Harness:
 _active = None
 
 
-def install(mode, store=None, latency=False) -> Harness:
+def install(mode, store=None, latency=False, quota_log=None) -> Harness:
     """Wrap the engine's model calls and PubMed requests. One at a time:
     a second install first removes the one before."""
     global _active
     if _active is not None:
         _active.uninstall()
-    h = Harness(mode, store, latency)
+    h = Harness(mode, store, latency, quota_log)
     h._install()
     _active = h
     return h
