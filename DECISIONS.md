@@ -46,6 +46,61 @@ version"). It came in as `static/desk.css` and `static/desk.js` beside
   `scripts/qa.mjs` was rewritten for the desk the same day, and
   `style.css` lost the rules only the old front used (every other page
   checked to render the same, style by style and picture by picture).
+- **No sticky share bar; Share, Copy link and Edit claim are on the last
+  stop.** The old front kept a share bar stuck to the bottom of a phone's
+  screen and Edit claim under the claim that was checked. The owner's
+  sample has neither: its bottom bar is the way through the stops, and
+  the three controls sit together on the last stop ("Open"), after what
+  is still open, where a reader who has read the answer acts on it. The
+  desk follows the sample, and a test holds each control in its new
+  place.
+- **Where the outside files came from.** three.js r128 is
+  `https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js`,
+  the same bytes as npm `three@0.128.0/build/three.min.js`, kept as
+  `static/vendor/three-r128.min.js` (603,445 bytes, sha256
+  9274bbce...1c2ce2) under the MIT licence, whose text is beside it in
+  `static/vendor/three-r128.LICENSE.txt`. The two front fonts are Google
+  Fonts' latin subsets under the SIL Open Font Licence, whose texts are
+  in `static/fonts/`: Bricolage Grotesque (optical size 12 to 96, weight
+  200 to 800) and IBM Plex Mono 400. The wood is the picture named above.
+  A test pins each file by its bytes.
+- **Three test hooks ship, and reach only the visitor's own page.**
+  `window.__evident` lets the browser tests wait for the desk, read its
+  frame count and move to a stop; `window.__evd` lets them open a sheet
+  and read the 3D scene; `?shots` keeps the last drawn frame so a
+  screenshot can read it. None sends anything or changes what a visitor
+  sees, and `?shots` draws no frames at rest (a browser check counts
+  them).
+- **The pictures Share makes and the link preview keep the earlier
+  card** (the night card with the shelf) until the owner asks for them
+  to be redrawn in the desk's look.
+- **A stream that breaks half way falls back to a plain check,** which
+  is a second check. Older than the desk, and the requests the page
+  makes were not to be touched in this work.
+- **Share waits for the card picture before it opens the phone's share
+  sheet.** Some iPhones may refuse a share sheet opened that long after
+  the tap; older than the desk, and kept as it is.
+- **Keyboard and screen-reader readers.** A result starts with a "Skip
+  to the answer" link, shown only while it has focus, in the server's
+  HTML so it works with scripts off; it stays the first Tab on a saved
+  result opened from its address, so focus is not moved to the verdict
+  on that load (a check the reader just ran does move it there). Every
+  screen has one h1. The closing lines after the last stop are the
+  footer landmark by an explicit role, inside the page's main column, so
+  nothing moves on screen; the site links are a "Site" navigation both
+  on the first stop and in that footer. The stop numbers are hidden from
+  screen readers, so "Still open" is read as itself. The example chips
+  are drawn on a result, so they are not hidden there. The arrow-key
+  walk along the old study chart is gone with the chart. Not done now,
+  listed for the owner: a 195px-wide window, text that grows with a
+  larger browser font (sizes in rem), control edges under 3 to 1, and
+  forced colours.
+- **Still open from the fix list of 22 November, for the next window:**
+  C3 (a cited retracted study is relied on in the script), F2 (stored
+  data of the wrong shape), F4 with D8 (long words at 320 and a line cut
+  by the strip), F5 (a saved claim and Back), D3 with D6 (the Answer
+  panel on short phones, the empty band on Weighed), and all of the
+  second tier: G5, C8, F3, C7, F6, F7, F8, D5, D7, D9, G8, F9.
 
 ## 2026-11-22 (release): The reasoning cites only studies the answer stands on
 
