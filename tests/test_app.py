@@ -13682,6 +13682,26 @@ try:
 finally:
     pubmed.retracted_among, _e_ev.retraction_lookup_ids = _m5_real
 
+# Brief E2 repair, M2: a reference list is never stored or sent.
+assert db._turso_config() is None
+_m2_st = [_e_study("92", _E_REV, references=[str(9200 + i) for i in range(40)],
+                   cites_retracted=[{"pmid": "9201", "title": None, "trial": False}])]
+appmod._save_and_log("Stored without a reference list", "(x) AND (y)",
+                     {"verdict": "complicated", "explanation": "E.", "cited_studies": ["92"], "tldr": "T.",
+                      "still_open": "O.", "breakdown": None}, _m2_st)
+with db.get_conn() as _m2_c:
+    _m2_rows = [r[0] for r in _m2_c.execute("SELECT studies_json FROM verdict_cache WHERE studies_json LIKE '%9201%'")]
+    _m2_rows += [r[0] for r in _m2_c.execute("SELECT studies_json FROM checks WHERE studies_json LIKE '%9201%'")]
+t("BRIEF E2r M2: both tables store the flag and the caution's source, never the reference list",
+  len(_m2_rows) >= 2 and all("references" not in json.loads(r)[0] and json.loads(r)[0]["cites_retracted"]
+                             for r in _m2_rows) and "references" in _m2_st[0], _m2_rows[:1])
+with appmod.app.test_request_context("/"):
+    _m2_out = appmod._check_response("x", "(x) AND (y)", "complicated", "T.", "E.", ["92"], _m2_st, "http://x",
+                                     still_open="O.")
+t("BRIEF E2r M2: the browser payload has no reference list and keeps cites_retracted and caution",
+  "references" not in json.dumps(_m2_out) and _m2_out["studies"][0]["cites_retracted"]
+  and _m2_out["studies"][0]["caution"])
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

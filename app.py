@@ -1472,7 +1472,7 @@ def _outcome_group(search_query) -> str:
 def _log_check_safe(claim, verdict_value, explanation, studies, cached=False):
     """Logging is a side effect; it must never sink a check the user waited for."""
     try:
-        db.log_check(claim, verdict_value, explanation, studies, cached=cached)
+        db.log_check(claim, verdict_value, explanation, _without_references(studies), cached=cached)
     except sqlite3.Error as e:
         app.logger.warning("Could not log check: %s", e)
 
@@ -1722,9 +1722,18 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             _save_and_log(claim, query_used, *kept)
 
 
+def _without_references(studies):
+    """The studies as they are stored: a review's reference list (up to
+    hundreds of ids) is read once, for the retraction check, and never
+    stored or sent. Its result, cites_retracted, is kept."""
+    return [{k: v for k, v in s.items() if k != "references"} if isinstance(s, dict) else s
+            for s in studies or []]
+
+
 def _save_and_log(claim, query_used, result, studies):
     """Save a fresh answer and log the check. A write that fails is logged
     and never reaches the reader, who may already have the answer."""
+    studies = _without_references(studies)
     try:
         db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
                               result["cited_studies"], studies, tldr=result["tldr"],
