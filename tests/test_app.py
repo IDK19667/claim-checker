@@ -2051,7 +2051,7 @@ _heads = lambda src: set(re.findall(r"<h3[^>]*>([A-Z][^<{$]+)</h3>", src)) | set
 t("the server and the browser render the same breakdown headings",
   _heads(_res_tpl) == _heads(_res_js) and len(_heads(_res_tpl)) >= 5, sorted(_heads(_res_tpl) ^ _heads(_res_js)))
 t("the browser's renderer runs every sentence through the same ref linking",
-  'p("part-take", x.assessment)' in _res_js and "deskRefs(text, n)" in _res_js and "deskRefs(bv.effect_size, n)" in _res_js
+  'p("part-take", x.assessment)' in _res_js and "deskRefs(text, n)" in _res_js and "deskRefs(eff, n)" in _res_js and "effectOnce(bv.effect_size, data.effect_line)" in _res_js
   and "desk_refs(p.assessment, n_st)" in _res_tpl)
 # Nothing that holds reading is boxed, and nothing in it is colour coded.
 _desk_css = (ROOT / "static" / "desk.css").read_text()
@@ -2462,21 +2462,22 @@ _ord = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
 # with a second render in which the engine's per-study fields (contribution, caution, indirect) are sent.
 _nav_ord_early = _ord
 _nav_streamed_early = c.get("/?q=streamed%20claim").data.decode()
-_nav_orig_sp = appmod._study_payload
+# (after q10-evid the engine's own per-study fields come from _study_extra, laid over the payload, so that is patched)
+_nav_orig_sp = appmod._study_extra
 _nav_seen = []
 def _nav_sp(s_, cited_):
     out = _nav_orig_sp(s_, cited_)
-    _nav_seen.append(out.get("pmid"))
-    k = out.get("pmid")
+    _nav_seen.append(s_.get("pmid"))
+    k = s_.get("pmid")
     if k == "D1": out["contribution"] = "Test line: the one trial that measured colds directly."
     if k == "D2": out["caution"] = "Test caution: a small trial."
-    if k == "D2": out["indirect"], out["indirect_why"] = True, "Test reason: it measured blood levels, not colds."
+    if k == "D2": out["indirect"], out["indirect_reason"] = True, "Test reason: it measured blood levels, not colds."
     return out
-appmod._study_payload = _nav_sp
+appmod._study_extra = _nav_sp
 try:
     _nav_lines = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
 finally:
-    appmod._study_payload = _nav_orig_sp
+    appmod._study_extra = _nav_orig_sp
 
 
 def _at(needle):
@@ -5636,8 +5637,8 @@ t("  a pointer left with nothing above it, after a later step, is taken out",
                                "evidence": ["LDL fell by 0.19 mmol/L (Study 1)."]})["effect_size"]
   == breakdown.EFFECT_SIZE_ABOVE)
 t("  and the page prints no effect row when there is no line",
-  '{% if bv.effect_size %}<p class="effect">' in (ROOT / "templates" / "index.html").read_text()
-  and '(bv.effect_size ? `<p class="effect">' in (ROOT / "static" / "app.js").read_text())
+  '{% if eff.t %}<p class="effect">' in (ROOT / "templates" / "index.html").read_text()
+  and '(eff ? `<p class="effect">' in (ROOT / "static" / "app.js").read_text())
 
 # All of it, through a real check.
 _LENT_CLAIM = "Lentils lower LDL cholesterol"
@@ -13398,6 +13399,35 @@ t("step 2: no Indirect label on the page (the engine sends none); both renderers
   _ind_kind == [0, 0, 0] and "Indirect" not in re.sub(r"<[^>]+>", " ", _ind_page) and len(_ind_rows) == 3
   and "s.indirect_reason || s.indirect_why" in _ind_js and "s.indirect && iwhy ?" in _ind_js
   and "(s.indirect_reason or s.indirect_why or \"\")|trim" in _ind_html and "{% if s.indirect and iwhy %}" in _ind_html, _ind_kind)
+
+# ---- q10-rel step 2: the effect-size sentence is printed once (owner: "remove the repeated 22 mg/dL sentence") ----
+# The second statement under How sure quotes it ("What the studies did find: ..."), so the "How big the effect is"
+# line of What the evidence shows leaves it out, and goes when nothing is left. A saved answer without the
+# statement prints the line as before. The same rule is renderResult's effectOnce (checked in the browser).
+_eo_rec = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+_eo_cited = [s["pmid"] for s in _eo_rec["studies"] if s.get("cited_in_verdict")]
+db.put_cached_verdict(_eo_rec["claim"], _eo_rec["search_query_used"], _eo_rec["verdict"], _eo_rec["explanation"],
+                      _eo_cited, _eo_rec["studies"], tldr=_eo_rec["tldr"], still_open=_eo_rec["still_open"],
+                      breakdown=_eo_rec["breakdown"])
+_EO_S = "Fasting blood sugar fell by about 22 mg per dL"
+def _eo_text(page):
+    page = re.sub(r"<(script|style)\b.*?</\1>", " ", page, flags=re.S)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", page))
+_eo_page = c.get("/?q=" + _eo_rec["claim"].replace(" ", "+")).data.decode()
+_eo_t = _eo_text(_eo_page)
+t("step 2: with the second statement on the page, the effect-size sentence is printed once and the effect line is gone",
+  _eo_t.count(_EO_S) == 1 and "What the studies did find: " + _EO_S in _eo_t and "How big the effect is" not in _eo_t,
+  (_eo_t.count(_EO_S), "What the studies did find" in _eo_t))
+_eo_true = dict(_eo_rec, claim="Apple cider vinegar lowers fasting blood sugar", verdict="true")
+db.put_cached_verdict(_eo_true["claim"], "q", "true", _eo_rec["explanation"], _eo_cited, _eo_rec["studies"],
+                      tldr=_eo_rec["tldr"], still_open=_eo_rec["still_open"], breakdown=_eo_rec["breakdown"])
+_eo_t2 = _eo_text(c.get("/?q=" + _eo_true["claim"].replace(" ", "+")).data.decode())
+t("step 2: a saved answer without the second statement prints the How big the effect is line as before, once",
+  "What the studies did find" not in _eo_t2 and "How big the effect is. " + _EO_S in _eo_t2 and _eo_t2.count(_EO_S) == 1,
+  (_eo_t2.count(_EO_S), "What the studies did find" in _eo_t2))
+_eo_js = (ROOT / "static" / "app.js").read_text()
+t("step 2: renderResult uses the same rule (effectOnce on the effect size and the second statement)",
+  "const eff = effectOnce(bv.effect_size, data.effect_line);" in _eo_js and "function effectOnce(eff, line)" in _eo_js)
 
 # ---------------------------------------------------------------------------
 # Brief E: a review citing a retracted paper, no bare strength word,

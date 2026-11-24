@@ -313,15 +313,16 @@
   {# A study row. Under its title, two actions on every width: Read abstract opens the abstract in place (a
      disclosure that works with scripts off), Open PubMed opens its page in a new tab. Lifting its sheet on the desk
      (pressing the title) is an extra, never the way to the source. renderResult's studyRowHtml is the same. #}
-  {# Under each study, one labelled line: what it adds. The engine's own contribution when it sends one; otherwise the
-     reason a study set aside or kept as background was not counted (study_why, so a retraction says so), else the
+  {# Under each study, one labelled line: what it adds. For a study set aside or kept as background, the reason it was
+     not counted (study_why, so a retraction says so, and the words match its group); else the engine's own
+     contribution when it sends one; else the
      study's own conclusion from the breakdown, else its design and who was studied. Never an
      empty label. Then its caution, and "Indirect context" with the reason (indirect_reason) when it only bears on the claim
      indirectly; never the label without a reason.
      renderResult's studyLines is the same. #}
   {% macro study_lines(s, n, d) %}{% set said = namespace(t="") %}{% if bv and bv.concluded %}{% for c in bv.concluded %}{% if c.n == n and not said.t %}{% set said.t = (c.said or "")|trim %}{% endif %}{% endfor %}{% endif %}
-    {%- if (s.contribution or "")|trim %}{% set text = s.contribution|trim %}
-    {%- elif s.off_topic or (s.background and not s.cited_in_verdict) %}{% set text = study_why(s) %}
+    {%- if s.off_topic or (s.background and not s.cited_in_verdict) %}{% set text = study_why(s) %}
+    {%- elif (s.contribution or "")|trim %}{% set text = s.contribution|trim %}
     {%- elif said.t %}{% set text = said.t %}
     {%- else %}{% set text = d[0] ~ "." ~ ((" Studied in: " ~ s.population ~ ".") if s.population else "") %}{% endif -%}
     <p class="contrib"><b class="lbl">What this study contributes</b> {{ text }}</p>{% if (s.caution or "")|trim %}<p class="caution">{{ s.caution|trim }}</p>{% endif %}{% set iwhy = (s.indirect_reason or s.indirect_why or "")|trim %}{% if s.indirect and iwhy %}<p class="indirect"><b class="lbl">Indirect context</b> {{ iwhy }}</p>{% endif %}{% endmacro %}
@@ -372,8 +373,13 @@
           {%- if bv.parts %}
           <details class="said-wrap" data-fold><summary>The claim, part by part ({{ bv.parts | length }})</summary>{% for p in bv.parts %}<p class="intro part-claim">{{ p.part }}</p><p class="part-take">{{ desk_refs(p.assessment, n_st) }}</p>{% endfor %}</details>
           {%- endif %}
-          {%- if bv.evidence or bv.effect_size %}
-          <details class="said-wrap" data-fold><summary>What the evidence shows ({{ (bv.evidence | length) + (1 if bv.effect_size else 0) }} {{ "point" if (bv.evidence | length) + (1 if bv.effect_size else 0) == 1 else "points" }})</summary><ul class="ev">{% for para in bv.evidence %}<li>{{ desk_refs(para, n_st) }}</li>{% endfor %}</ul>{% if bv.effect_size %}<p class="effect"><b>How big the effect is.</b> <span>{{ desk_refs(bv.effect_size, n_st) }}</span></p>{% endif %}</details>
+          {#- The effect size is printed once: a sentence the second statement (result.effect_line, under How sure)
+              already quotes is left out here, and the line goes when nothing is left. A saved answer without the
+              statement prints it as before. renderResult's effectOnce is the same. #}
+          {%- set eff = namespace(t=bv.effect_size or "") %}
+          {%- if eff.t and result.effect_line %}{% set eff.t = "" %}{% for u in bv.effect_size.split(". ") %}{% set k = u | trim %}{% if k and (k | trim('.')) not in result.effect_line %}{% set eff.t = eff.t ~ (" " if eff.t else "") ~ k ~ ("" if k[-1:] in ".?!" else ".") %}{% endif %}{% endfor %}{% endif %}
+          {%- if bv.evidence or eff.t %}
+          <details class="said-wrap" data-fold><summary>What the evidence shows ({{ (bv.evidence | length) + (1 if eff.t else 0) }} {{ "point" if (bv.evidence | length) + (1 if eff.t else 0) == 1 else "points" }})</summary><ul class="ev">{% for para in bv.evidence %}<li>{{ desk_refs(para, n_st) }}</li>{% endfor %}</ul>{% if eff.t %}<p class="effect"><b>How big the effect is.</b> <span>{{ desk_refs(eff.t, n_st) }}</span></p>{% endif %}</details>
           {%- endif %}
           {%- endif %}
           <h3>How sure, and why</h3>

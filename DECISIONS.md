@@ -4,6 +4,27 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel step 2): The effect-size sentence is printed once
+
+The owner asked to remove the repeated 22 mg/dL sentence. The second statement under How sure
+(`effect_line`, "What the studies did find: ...") quotes the effect-size sentence, and "What the
+evidence shows" printed it again as "How big the effect is". Where the statement is present, the
+page leaves out of that line each sentence the statement already holds, and drops the line when
+nothing is left; a saved answer without the statement prints the line as before. Front end only,
+the same rule in the Jinja and in renderResult (`effectOnce`); the shared text prints neither.
+
+## 2026-11-24 (q10-rel step 2): Joining q10-evid's study fields to q10-rel's rows
+
+- The rows keep q10-rel's markup, which already prints `contribution` and `caution`. The engine's
+  reason field is `indirect_reason`; both renderers read it (and the old `indirect_why`), and print
+  "Indirect context" only with a reason. This release sends `indirect` false for every study, so
+  no Indirect label shows anywhere, and the fixture server no longer passes one through.
+- For a study set aside or kept as background, the row's line is the page's own reason
+  (`study_why`, the words of its group, so a retraction says so), not the engine's "Set aside: ..."
+  contribution; every other study shows the engine's contribution.
+- The fixture server saves the recorded vinegar answer with study 1 flagged as a review citing a
+  retracted trial, so the browser checks see the two statements and a real caution.
+
 ## 2026-11-24 (q10-rel): Check 21 reads the verdict's time in the page
 
 Check 21 keeps its limit (4 canvases) and its meaning, but now times "on screen" with its own

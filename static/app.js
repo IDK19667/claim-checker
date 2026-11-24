@@ -473,15 +473,25 @@ const plainDashes = (t) => String(t).replace(/[\u2013\u2014]/g, "-");
 const eyebrow = (stops, name, text) =>
   `<p class="eyebrow" id="e-${name.toLowerCase()}">${escapeHtml(text)}</p>`;
 
-// Under each study, one labelled line: what it adds (templates/index.html study_lines is the same). The engine's own
-// contribution; else, for a study set aside or kept as background, why it was not counted (studyWhy); else the study's
+// Under each study, one labelled line: what it adds (templates/index.html study_lines is the same). For a study set
+// aside or kept as background, why it was not counted (studyWhy, the words of its group); else the engine's own
+// contribution; else the study's
 // own conclusion from the breakdown; else its design and who was studied. Never an empty label. Then its caution,
 // and Indirect context with its reason.
+// The effect size line without the sentences the second statement (effect_line) already quotes, or "" when
+// none is left. Without a statement it is the line as it was. The Jinja in "What the evidence shows" is the same.
+function effectOnce(eff, line) {
+  eff = String(eff || ""); line = String(line || "");
+  if (!eff || !line) return eff;
+  return eff.split(". ").map((u) => u.trim()).filter((u) => u && !line.includes(u.replace(/\.+$/, "")))
+    .map((u) => (/[.?!]$/.test(u) ? u : u + ".")).join(" ");
+}
+
 function studyLines(s, n, bv) {
   const said = bv && bv.concluded ? String((bv.concluded.find((c) => Number(c.n) === n) || {}).said || "").trim() : "";
   let text;
-  if (String(s.contribution || "").trim()) text = String(s.contribution).trim();
-  else if (s.off_topic || (s.background && !s.cited_in_verdict)) text = studyWhy(s);
+  if (s.off_topic || (s.background && !s.cited_in_verdict)) text = studyWhy(s);
+  else if (String(s.contribution || "").trim()) text = String(s.contribution).trim();
   else if (said) text = said;
   else text = typeInfo(s.publication_types).label + "." + (s.population ? ` Studied in: ${s.population}.` : "");
   const caution = String(s.caution || "").trim(), iwhy = String(s.indirect_reason || s.indirect_why || "").trim();
@@ -551,11 +561,13 @@ function researchHtml(data) {
       h += `<details class="said-wrap" data-fold><summary>The claim, part by part (${bv.parts.length})</summary>`
         + bv.parts.map((x) => `<p class="intro part-claim">${escapeHtml(x.part)}</p>${p("part-take", x.assessment)}`).join("") + "</details>";
     }
-    const pts = bv.evidence.length + (bv.effect_size ? 1 : 0);
+    // the effect size once: what the second statement already quotes is left out (the Jinja is the same)
+    const eff = effectOnce(bv.effect_size, data.effect_line);
+    const pts = bv.evidence.length + (eff ? 1 : 0);
     if (pts) {
       h += `<details class="said-wrap" data-fold><summary>What the evidence shows (${pts} ${pts === 1 ? "point" : "points"})</summary>`
         + `<ul class="ev">${bv.evidence.map((x) => `<li>${deskRefs(x, n)}</li>`).join("")}</ul>`
-        + (bv.effect_size ? `<p class="effect"><b>How big the effect is.</b> <span>${deskRefs(bv.effect_size, n)}</span></p>` : "")
+        + (eff ? `<p class="effect"><b>How big the effect is.</b> <span>${deskRefs(eff, n)}</span></p>` : "")
         + "</details>";
     }
   }
