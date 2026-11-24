@@ -15309,6 +15309,15 @@ t("3: with no time zone database: a fixed UTC minus 8, one logged warning, no cr
   (_sf_days, _sf_logs))
 t("3: ClaimReview's machine dates stay ISO", _sf_re.search(r'"datePublished":\s*"2026-11-24"', _sf_h) is not None)
 _sf_drop(_SF_EVE)
+# --- 4: the footer links /method once, as Methodology; the first stop keeps How it works ---
+for _u in ("/", "/?q=" + urllib.parse.quote("Vaccines cause autism")):
+    _sf_f = _sf_re.search(r'<footer class="closing".*?</footer>', c.get(_u).get_data(as_text=True), _sf_re.S)
+    _sf_f = _sf_f.group(0) if _sf_f else ""
+    t(f"4: {_u[:12]} footer: one link to /method, named Methodology, and no How it works",
+      _sf_f.count('href="/method"') == 1 and 'href="/method">Methodology</a>' in _sf_f and "How it works" not in _sf_f
+      and "how-btn-2" not in _sf_f, _sf_f[-400:])
+_sf_home = c.get("/").get_data(as_text=True)
+t("4: the first stop keeps How it works (id how-btn, to /method)", 'id="how-btn" class="how-link" href="/method">How it works</a>' in _sf_home)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])

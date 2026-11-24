@@ -81,7 +81,7 @@
 <nav class="rail" id="rail" aria-label="Where you are"></nav>
 
 {% macro site_links(extra=False) -%}
-<nav class="site-links" aria-label="Site"><a id="{{ 'how-btn' if not extra else 'how-btn-2' }}" class="how-link" href="/method">How it works</a> <a{% if not extra %} id="about-link"{% endif %} href="/about">About</a>{% if extra %} <a href="/method">Methodology</a> <a href="/corrections">Corrections and contact</a>{% endif %} <a href="/privacy">Privacy</a>{% if not extra %} <button class="btn quiet install" id="install-btn" type="button" hidden>Install</button>{% endif %}</nav>
+<nav class="site-links" aria-label="Site">{% if not extra %}<a id="how-btn" class="how-link" href="/method">How it works</a> {% endif %}<a{% if not extra %} id="about-link"{% endif %} href="/about">About</a>{% if extra %} <a href="/method">Methodology</a> <a href="/corrections">Corrections and contact</a>{% endif %} <a href="/privacy">Privacy</a>{% if not extra %} <button class="btn quiet install" id="install-btn" type="button" hidden>Install</button>{% endif %}</nav>
 {%- endmacro %}
 
 <main id="track">

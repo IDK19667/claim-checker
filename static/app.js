@@ -1788,9 +1788,7 @@ for (const d of document.querySelectorAll("dialog.sheet")) {
 }
 // How it works is a link to /method, so it works with no script at all; with
 // one it opens the same words in a sheet over the page instead.
-for (const id of ["how-btn", "how-btn-2"]) {
-  $(id)?.addEventListener("click", (e) => { e.preventDefault(); openSheet($("how-sheet"), $("how-title")); });
-}
+$("how-btn")?.addEventListener("click", (e) => { e.preventDefault(); openSheet($("how-sheet"), $("how-title")); });
 $("meter").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
 
 // ---- Voice input (where the browser has it) --------------------------------
