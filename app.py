@@ -943,9 +943,10 @@ def _client_ip() -> str:
 
 
 def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
-    """E5: one sentence for "What this study contributes". Never empty for a
-    study relied on: its authors' conclusion cut to a sentence, else its
-    design and who it was run in."""
+    """E5: one sentence for "What this study contributes": its authors'
+    conclusion cut to a sentence, else its design and who it was run in.
+    Empty when the record gives nothing beyond the design's name ("A study.",
+    "A meta-analysis." carry nothing: brief E3 N12)."""
     why_aside = s.get("off_topic") or evidence.withdrawn(s) or (
         evidence.background_why(s) if s.get("background") else "")
     if why_aside and not relied:
@@ -959,8 +960,9 @@ def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
     design = (evidence.strongest_label(s.get("publication_types")) or "study").lower()
     who = evidence.population(s)
     a = "An" if design[:1] in "aeiou" else "A"
-    # Never a population the record does not give.
-    return f"{a} {design} in {who}." if who else f"{a} {design}."
+    # Never a population the record does not give, and never the design's
+    # name alone.
+    return f"{a} {design} in {who}." if who else ""
 
 
 def _study_extra(s: dict, cited: set, indirect: dict | None = None) -> dict:

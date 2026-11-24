@@ -13247,8 +13247,14 @@ t("BRIEF E4 vinegar: the recorded pair says about 22 mg per dL once in 'says', a
 t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
   _e_s1["indirect"] == "Measures body weight, not blood sugar control"
   and _e_s1["contribution"] == "Indirect context: measures body weight, not blood sugar control.", _e_s1)
-t("BRIEF E5: every relied-on study has a contribution, and every study has the three fields",
-  all(s["contribution"] for s in _e_out["studies"] if s["cited_in_verdict"])
+# Brief E3 N12 replaced "every relied-on study has a contribution": one is
+# empty when its record gives nothing beyond the design's name.
+_e_bare = _e_re.compile(r"^(?:A|An) [a-z -]+\.$")
+t("BRIEF E3 N12: a relied-on study has a contribution unless its record gives only its design, never a bare "
+  "design name, and every study has the three fields",
+  all(s["contribution"] or not (_e_ev.conclusion(r) or _e_ev.population(r))
+      for s, r in zip(_e_out["studies"], _e_vin["studies"]) if s["cited_in_verdict"])
+  and not any(_e_bare.match(s["contribution"] or "") for s in _e_out["studies"])
   and all({"contribution", "caution", "indirect"} <= set(s) for s in _e_out["studies"]))
 t("BRIEF E5: a study set aside says why",
   _e_out["studies"][3]["contribution"] == "Set aside: retracted by the journal.", _e_out["studies"][3]["contribution"])
@@ -13539,8 +13545,14 @@ t("BRIEF E3 N1: the explanation sentence names one flagged review, or each of tw
   and _m4_ex1.endswith("Study 1 cites a study that was later retracted, so treat its results with caution."),
   (_m4_ex, _m4_ex1))
 _m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True, None)
-t("BRIEF E2r m3: a contribution never states a population the record does not give",
-  "general population" not in _m3_c and _m3_c == "A randomized controlled trial.", _m3_c)
+# Brief E3 N12 replaced 'is "A randomized controlled trial."': a record with
+# nothing beyond its design now has no contribution at all.
+t("BRIEF E3 N12: a contribution never states a population the record does not give, nor the design's name alone",
+  _m3_c == "", _m3_c)
+_n12_who = appmod._contribution(_e_study("73", _E_RCT, title="A trial in older adults",
+                                         abstract="We randomized 300 older adults with knee pain."), True, None)
+t("BRIEF E3 N12: a record that names who was studied still says so", _n12_who.endswith(".") and " in " in _n12_who,
+  _n12_who)
 
 # Brief E2 repair, B4: indirect is marked only between recognised outcome
 # families. The reviewer's 20 direct tests (worded with synonyms) are never
