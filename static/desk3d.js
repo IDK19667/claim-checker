@@ -379,11 +379,24 @@ window.__evidentDesk3d = function (O) {
     var cardSide = new T.MeshStandardMaterial({ color: 0xe6dcc6, roughness: 0.9 });
     var cbMap = tex(cBlank), cvMap = cbMap, csMap = cbMap, cardPainted = false;
     // the large faces are painted only when the check runs: the standing face, then the printed verdict
-    function paintCardFaces() {
+    // later: a result landing on a desk already drawing paints the large plain standing face in its own task after the
+    // answer is on screen (it is only seen once the card has settled, under the HTML words; until then the card stands
+    // with its printed face)
+    var standGen = 0;
+    function paintCardFaces(later) {
       if (cardPainted) return; cardPainted = true;
-      var cStand = cnv(CW * 1.6, CH * 1.6); paintCard(cStand, false, 1.6); csMap = tex(cStand);
       paintVerdictFace();
-      vMat.map = csMap; vMat.emissiveMap = csMap; vMat.needsUpdate = true;
+      var gen = ++standGen;
+      // the plain face carries no words of the result: painted once, kept for every answer after
+      function stand() {
+        if (gen !== standGen || !cardPainted || csMap !== cbMap) return;
+        var cStand = cnv(CW * 1.6, CH * 1.6); paintCard(cStand, false, 1.6); var old = csMap; csMap = tex(cStand);
+        if (vMat.map === old) { vMat.map = csMap; vMat.emissiveMap = csMap; }
+        O.wake();
+      }
+      if (later) setTimeout(stand, 0); else stand();
+      if (!later) { vMat.map = csMap; vMat.emissiveMap = csMap; }
+      vMat.needsUpdate = true;
     }
     // the printed faces use the page's web fonts; one painted before they arrived is painted again when they do
     var cvFontOk = false;
@@ -967,7 +980,7 @@ window.__evidentDesk3d = function (O) {
       proj: function (x, y, z) { var v = new T.Vector3(x, y, z).project(camera); return [Math.round((v.x * 0.5 + 0.5) * W), Math.round((-v.y * 0.5 + 0.5) * H)]; }
     };
     // ---- lazy painting: the sheets' own faces after the first frame, a few at a time; the card on check ----
-    var lazyQ = null;
+    var lazyQ = null, bigTop = false;
     function paintOne(o, big) {
       if (o.painted && !big) return; o.painted = true;
       var k = big ? 1 : 0.5, c = cnv(SW * k, SH * k); paintSheet(c, o.s, o.seed, k);
@@ -975,17 +988,26 @@ window.__evidentDesk3d = function (O) {
       if (hiSlot === o) o.lowMap = t; else { f.map = t; f.emissiveMap = t; f.needsUpdate = true; }
     }
     function paintLazy() {
-      if (lazyQ) return;
+      if (lazyQ && lazyQ.gen === sheetGen) return;
       var gen = sheetGen;
-      lazyQ = sheets.slice().sort(function (a, b) { return b.rest.y - a.rest.y; });
+      var q = lazyQ = sheets.slice().sort(function (a, b) { return b.rest.y - a.rest.y; });
+      q.gen = gen;
       (function step() {
+        if (lazyQ !== q) return;
         if (gen !== sheetGen) { lazyQ = null; return; }
         var t0 = performance.now();
         var seen = false;
-        while (lazyQ.length && performance.now() - t0 < 12) { var o = lazyQ.shift(); paintOne(o); seen = seen || o.mesh.visible; }
+        while (lazyQ.length && performance.now() - t0 < 12) {
+          var o = lazyQ.shift(), big = bigTop && o === sheets[sheets.length - 1];
+          if (big) { bigTop = false; o.painted = false; }
+          paintOne(o, big); seen = seen || o.mesh.visible;
+        }
         // a sheet out of sight needs no new frame
         if (seen) O.wake();
-        if (lazyQ.length) setTimeout(step, 16); else lazyQ = null;
+        if (lazyQ.length) { setTimeout(step, 16); return; }
+        lazyQ = null;
+        // faces painted after the warm-up went through are sent too
+        if (warmGen === gen) { warmGen = -1; warmSoon(); }
       })();
     }
     // ---- the warm-up: the first press of Next pays for no compile and no upload ----------
@@ -1028,7 +1050,13 @@ window.__evidentDesk3d = function (O) {
     }
     O.onCheck = function () {
       casters = null; shadowDirty = true;
-      paintCardFaces();
+      // a result landing on a desk already drawing (a check just run, an answer picked): the sheets' faces are painted
+      // a few at a time after the answer is on screen (paintLazy, the top of the stack first and at full size), and
+      // the standing face in a task of its own, so the answer is never held behind them. The page as it arrives
+      // paints them all before its first frame, as before
+      var later = frames > 0;
+      paintCardFaces(later);
+      if (later) { bigTop = true; O.wake(); return; }
       sheets.forEach(function (o) { paintOne(o); });
       // the top of the stack is seen close at the reading: its face at full size
       if (sheets.length) paintOne(sheets[sheets.length - 1], true);

@@ -934,6 +934,29 @@ await snappy("21: on the phone the first Next after a fresh answer starts moving
   must(r.moves >= 4, `the move was a cut (${r.moves} changes)`);
 });
 
+await snappy("21: on the phone a fresh answer is on screen within 2.5 s of arriving, before the desk paints its sheets", async (page) => {
+  await page.addInitScript(() => {
+    // every canvas the page makes, when (each sheet face and card face is one)
+    window.__cv = []; const ce = Document.prototype.createElement; Document.prototype.createElement = function (t, ...a) { if (String(t).toLowerCase() === "canvas") window.__cv.push(performance.now()); return ce.call(this, t, ...a); };
+    const rd = ReadableStreamDefaultReader.prototype.read, dec = new TextDecoder();
+    ReadableStreamDefaultReader.prototype.read = function () { return rd.call(this).then((r) => { if (r && r.value && !window.__arrived) { try { if (/"stage":\s*"done"/.test(dec.decode(r.value, { stream: true }))) window.__arrived = performance.now(); } catch (e) {} } return r; }); };
+  });
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  await page.fill("#claim-input", LIVE); await page.tap("#submit-btn");
+  await page.waitForFunction(() => window.__arrived > 0, null, { timeout: 60000, polling: 20 });
+  const shown = await page.evaluate(() => new Promise((res) => {
+    const look = () => { const s = document.getElementById("stamp"), r = s && s.getBoundingClientRect(); if (document.documentElement.classList.contains("checked") && s.textContent.trim() && r.height > 0 && r.bottom > 0 && r.top < innerHeight) requestAnimationFrame(() => res(performance.now() - window.__arrived)); else requestAnimationFrame(look); };
+    look();
+  }));
+  must(shown <= 2500, `the answer reached the screen ${Math.round(shown)} ms after it arrived`);
+  // the new result's faces are painted after it is on screen, a few at a time, not in one task as it lands
+  const r = await page.evaluate((sh) => ({ before: window.__cv.filter((t) => t > window.__arrived && t <= window.__arrived + sh).length, sheets: (() => { let n = 0; window.__evd.scene.traverse((o) => { if (o.isMesh && o.userData.face) n++; }); return n; })() }), shown);
+  // the card's two printed faces, and at most the first lazy step's sheets (on 05ec98e: every sheet, the top one again
+  // at full size, and both standing faces)
+  must(r.before <= 4 && r.before < r.sheets + 4, `${r.before} canvases painted before the answer was on screen (${r.sheets} sheets)`);
+});
+
 await snappy("21: once warmed, the first Next after a fresh answer sends no card face to the GPU", async (page) => {
   if (!(await fresh3d(page))) return;
   must(await warmed(page), "the warm-up never finished");
