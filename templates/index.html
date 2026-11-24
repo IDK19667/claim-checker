@@ -238,7 +238,7 @@
               <p class="proof-claim">“{{ example.claim }}”</p>
               <p class="proof-verdict">{{ labels.get(example.verdict, example.verdict) }}</p>
               <p class="proof-tldr">{{ example.tldr }}</p>
-              <p class="proof-meta">Checked {{ example.checked }}. {{ example.read }} studies read.</p>
+              <p class="proof-meta">Checked <time datetime="{{ example.checked_iso }}">{{ example.checked }}</time>. {{ example.read }} studies read.</p>
             </div>
             <p class="trust-links"><a class="btn ghost" href="{{ example.href }}">Read the whole check</a></p>
           </div>
@@ -411,7 +411,7 @@
         <p class="legend query"><span id="query-what"{% if result and not (result.search_query_used or "")|trim %} hidden{% endif %}>Searched PubMed for <code id="query">{% if result %}{{ (result.search_query_used or "")|trim }}{% endif %}</code><span id="broadened">{% if result and result.search_broadened %} (the first search found nothing, so it was widened){% endif %}</span>. </span><a id="more-link" href="{{ (safe_href(result.pubmed_url) or '#') if result else '#' }}" target="_blank" rel="noopener">More on PubMed</a></p>
       </details>
       {# When the check ran and the years of the studies it relied on, worded once in app.py (_review_line). #}
-      <p class="legend checked" id="review-line"{% if not result or not result.review_line %} hidden{% endif %}>{% if result %}{{ result.review_line }}{% endif %}</p>
+      <p class="legend checked" id="review-line"{% if not result or not result.review_line %} hidden{% endif %}>{% if result %}{{ result.review_line | with_time(result.review_when) }}{% endif %}</p>
       <p class="legend" id="cached-note" hidden></p>
       <div class="two">
         <button class="btn" id="share-btn" type="button">Share this verdict</button>

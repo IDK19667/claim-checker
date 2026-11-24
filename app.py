@@ -111,6 +111,7 @@ app.jinja_env.globals["safe_href"] = display.safe_href
 app.jinja_env.globals["typed_note"] = display.typed_note
 app.jinja_env.globals["typed_note_parts"] = display.typed_note_parts
 app.jinja_env.filters["sentence_case"] = display.sentence_case
+app.jinja_env.filters["with_time"] = display.with_time
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
 # full: the claim text is kept, nothing that identifies the person is, and
@@ -561,7 +562,9 @@ def _trust_example():
         if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
                 or not row["tldr"].strip() or not row["still_open"].strip():
             return None
-        d = datetime.fromisoformat(str(row["cached_at"]))
+        d = display.as_instant(row["cached_at"])
+        if d is None:
+            raise ValueError("unreadable date")
         v = _list_entries([{"claim_text": row["claim_text"], "search_query": row["search_query"],
                             "verdict": row["verdict"], "tldr": row["tldr"], "still_open": row["still_open"],
                             "created_at": row["cached_at"], "studies": row["studies"],
@@ -570,7 +573,7 @@ def _trust_example():
         app.logger.warning("Could not build the trust example: %s", e)
         return None
     return {"claim": v["claim_text"], "verdict": v["verdict"], "tldr": v["tldr"],
-            "checked": f"{d.day} {d.strftime('%B %Y')}", "read": v["evidence"]["read"],
+            "checked": display.home_day(d), "checked_iso": d.isoformat(), "read": v["evidence"]["read"],
             "href": "/?q=" + quote(v["claim_text"])}
 
 
@@ -1549,6 +1552,9 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # day than cached_at (the last re-check). Otherwise null.
         "first_checked_at": _original_check_date(claim, cached_at) if cached_at else None,
         "review_line": _review_line(cached_at, studies, cited),
+        # The instant behind the line's day: the page wraps the day in <time>
+        # and the script prints the reader's own day from it.
+        "review_when": _review_when(cached_at),
         "share_url": f"{base_url}/?q={quote(claim)}",
         "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(search_query or claim)}",
         # Counts the reader can check us on, computed from PubMed's own
@@ -1572,16 +1578,23 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     return response
 
 
+def _review_instant(cached_at) -> datetime:
+    """When the check ran: the saved date, or now for a check that just ran."""
+    return (display.as_instant(cached_at) if cached_at else None) or datetime.now(timezone.utc)
+
+
+def _review_when(cached_at) -> dict:
+    when = _review_instant(cached_at)
+    return {"iso": when.isoformat(), "day": display.home_day(when)}
+
+
 def _review_line(cached_at, studies, cited) -> str:
     """The dated line under the verdict: when the check ran, and the years of
     the studies it relied on. "Checked 14 November 2026, from studies
     published 2019 to 2025." Built here once, so the page a shared link
-    renders and a streamed check say the same thing."""
-    try:
-        when = datetime.fromisoformat(cached_at) if cached_at else datetime.now(timezone.utc)
-    except (TypeError, ValueError):
-        when = datetime.now(timezone.utc)
-    line = f"Checked {when.day} {when.strftime('%B %Y')}"
+    renders and a streamed check say the same thing. The day is the home
+    zone's (display.home_day); the script prints the reader's own."""
+    line = f"Checked {display.home_day(_review_instant(cached_at))}"
     used = [s for s in studies or [] if s.get("pmid") in cited]
     years = sorted({int(y) for y in (str(s.get("year") or "")[:4] for s in used) if y.isdigit()})
     if not years:

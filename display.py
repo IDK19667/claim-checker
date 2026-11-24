@@ -377,6 +377,60 @@ def safe_href(url):
     return raw if parts.scheme.lower() in ("http", "https") and parts.netloc else None
 
 
+# ---- Dates a reader sees ----------------------------------------------------
+# One rule: the server prints a day in the site's home zone, inside a <time>
+# holding the exact instant; the script rewrites each <time> to the reader's
+# own day. With scripts off the day is the home zone's, never UTC's.
+HOME_ZONE = "America/Los_Angeles"
+_home_tz_memo: list = []
+
+
+def home_tz():
+    """The home zone, or a fixed UTC minus 8 (one logged warning) when the
+    time zone database is missing. Never raises."""
+    if not _home_tz_memo:
+        from datetime import timedelta, timezone
+        try:
+            from zoneinfo import ZoneInfo
+            _home_tz_memo.append(ZoneInfo(HOME_ZONE))
+        except Exception:  # noqa: BLE001 - no tz database: a fixed offset, never a crash
+            import logging
+            logging.getLogger(__name__).warning("Time zone %s is missing; dates use UTC minus 8", HOME_ZONE)
+            _home_tz_memo.append(timezone(timedelta(hours=-8), "UTC-8"))
+    return _home_tz_memo[0]
+
+
+def as_instant(value):
+    """An aware datetime from a saved ISO date (a date without a zone is UTC), or None."""
+    from datetime import datetime, timezone
+    if isinstance(value, datetime):
+        d = value
+    else:
+        try:
+            d = datetime.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def home_day(instant) -> str:
+    """"23 November 2026": the instant's day in the home zone."""
+    d = as_instant(instant).astimezone(home_tz())
+    return f"{d.day} {d.strftime('%B %Y')}"
+
+
+def with_time(line, when) -> Markup:
+    """A line holding a day, with that day wrapped in <time datetime> so the
+    script can print the reader's own day. `when` is {"iso", "day"}."""
+    line = str(line or "")
+    day = (when or {}).get("day") or ""
+    if not day or day not in line:
+        return escape(line)
+    i = line.index(day)
+    return Markup("{}<time datetime=\"{}\">{}</time>{}").format(
+        line[:i], (when or {}).get("iso") or "", day, line[i + len(day):])
+
+
 def sentence_case(text) -> str:
     """
     A listed claim as a list shows it: the first letter raised only when the

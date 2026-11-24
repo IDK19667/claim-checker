@@ -15256,6 +15256,59 @@ _sf_p = _sf_paths("turmeric")
 for _u in ("/", "404", "/api/trending", "/api/suggest"):
     t(f"2: {_u} shows one of the two wordings, the newest", (_SF_D2 in _sf_p[_u]) and (_SF_D1 not in _sf_p[_u]), _u)
 _sf_drop(_SF_D1, _SF_D2)
+# --- 3: every date a reader sees: the home zone's day on the server, the reader's day in the script ---
+_SF_EVE = "Turmeric eased arthritis pain in the evening"
+_sf_seed(_SF_EVE)
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", ("2026-11-24T03:30:00+00:00", db.normalize_claim(_SF_EVE)))
+_sf_h = c.get("/?q=" + urllib.parse.quote(_SF_EVE)).get_data(as_text=True)
+_sf_rl = _sf_re.search(r'id="review-line"[^>]*>(.*?)</p>', _sf_h, _sf_re.S).group(1)
+t("3: saved 19:30 Pacific on 23 November (03:30 UTC on the 24th): the result page says 23 November, in a <time> holding the instant",
+  'Checked <time datetime="2026-11-24T03:30:00+00:00">23 November 2026</time>' in _sf_rl, _sf_rl)
+with appmod.app.test_request_context("/"):
+    _sf_r = appmod._check_response(_SF_EVE, "q", "complicated", "Mixed.", "x (Study 1).", ["SF1"], _SF_ST, "http://x",
+                                   cached_at="2026-11-24T03:30:00+00:00", still_open="Whether it lasts.")
+t("3: the script gets the same day and the instant (review_when)",
+  _sf_r["review_when"] == {"iso": "2026-11-24T03:30:00+00:00", "day": "23 November 2026"} and "23 November 2026" in _sf_r["review_line"], _sf_r.get("review_when"))
+_sf_ex = db.normalize_claim(appmod.EXAMPLE_CLAIM)
+with db.get_conn() as _conn:
+    _sf_had = _conn.execute("SELECT created_at FROM verdict_cache WHERE claim_key = ?", (_sf_ex,)).fetchone()
+if not _sf_had:
+    db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "vinegar AND diabetes", "insufficient", "x (Study 1).", ["SF1"],
+                          [dict(_SF_ST[0], title="Vinegar and diabetes")], tldr="Unproven.", still_open="Whether it lasts.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", ("2026-11-24T03:30:00+00:00", _sf_ex))
+appmod._drop_home_lists()
+_sf_pm = _sf_re.search(r'class="proof-meta">(.*?)</p>', c.get("/").get_data(as_text=True), _sf_re.S)
+t("3: the trust example's date is the home zone's day, in a <time> holding the instant",
+  _sf_pm and 'Checked <time datetime="2026-11-24T03:30:00+00:00">23 November 2026</time>.' in _sf_pm.group(1), _sf_pm and _sf_pm.group(1))
+with db.get_conn() as _conn:
+    if _sf_had:
+        _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", (_sf_had[0], _sf_ex))
+    else:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (_sf_ex,))
+appmod._drop_home_lists()
+import zoneinfo as _sf_zi
+_sf_logs = []
+class _SFH(logging.Handler):
+    def emit(self, rec): _sf_logs.append(rec.getMessage())
+_sf_hd = _SFH(); logging.getLogger("display").addHandler(_sf_hd)
+_sf_real = _sf_zi.ZoneInfo
+def _sf_nozone(*a, **k): raise _sf_zi.ZoneInfoNotFoundError("no tz database")
+_sf_zi.ZoneInfo = _sf_nozone
+display._home_tz_memo.clear()
+try:
+    _sf_days = [display.home_day("2026-11-24T03:30:00+00:00"), display.home_day("2026-11-24T07:59:00+00:00"),
+                display.home_day("2026-11-24T08:00:00+00:00")]
+finally:
+    _sf_zi.ZoneInfo = _sf_real
+    display._home_tz_memo.clear()
+    logging.getLogger("display").removeHandler(_sf_hd)
+t("3: with no time zone database: a fixed UTC minus 8, one logged warning, no crash",
+  _sf_days == ["23 November 2026", "23 November 2026", "24 November 2026"] and len([m for m in _sf_logs if "UTC minus 8" in m]) == 1,
+  (_sf_days, _sf_logs))
+t("3: ClaimReview's machine dates stay ISO", _sf_re.search(r'"datePublished":\s*"2026-11-24"', _sf_h) is not None)
+_sf_drop(_SF_EVE)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
