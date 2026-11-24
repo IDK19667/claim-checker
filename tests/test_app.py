@@ -13706,6 +13706,32 @@ t("BRIEF E2r M2: the browser payload has no reference list and keeps cites_retra
 t("BRIEF E2r M6: one id cap, 600, used by both modules",
   pubmed.RETRACTION_LOOKUP_MAX == _e_ev.RETRACTION_LOOKUP_MAX == 600)
 
+# Brief E2 repair, null figures: the E4 code once defined a second
+# module-level _FIGURE in breakdown.py, which replaced the one the null
+# reading uses, so an OR of 0.99 (0.92 to 1.06) was read as "a small
+# effect". A module never binds the same top-level name twice.
+import ast as _ast_nf, breakdown
+_nf_twice = {}
+for _nf_f in ("breakdown.py", "evidence.py", "verdict.py", "app.py", "pubmed.py", "db.py"):
+    _nf_seen = {}
+    for _nf_n in _ast_nf.parse((ROOT / _nf_f).read_text()).body:
+        _nf_names = ([x.id for t_ in _nf_n.targets for x in _ast_nf.walk(t_) if isinstance(x, _ast_nf.Name)]
+                     if isinstance(_nf_n, _ast_nf.Assign) else
+                     [_nf_n.name] if isinstance(_nf_n, (_ast_nf.FunctionDef, _ast_nf.ClassDef)) else [])
+        for _nf_x in _nf_names:
+            _nf_seen[_nf_x] = _nf_seen.get(_nf_x, 0) + 1
+    _nf_twice.update({f"{_nf_f}:{k}": v for k, v in _nf_seen.items() if v > 1 and k.isupper() is False and k.startswith("_") and k[1:2].isupper()})
+t("BRIEF E2r null: no module binds a top-level constant twice (one shadowed the null reading)", not _nf_twice, _nf_twice)
+_nf_bd = {"says": ["The odds ratio was 0.99 (Study 1)."],
+          "evidence": ["The odds ratio was 0.99 (Study 1). That is no clear difference between the groups, "
+                       "because the result was not statistically significant (Study 1)."],
+          "effect_size": "The odds ratio was 0.99 (Study 1). That is about 1% lower odds (Study 1)."}
+_nf_x, _nf_out = breakdown.one_figure_once("", json.loads(json.dumps(_nf_bd)), 1)
+t("BRIEF E2r null: a repeat whose translation says it was not significant stays, with its translation",
+  _nf_out["evidence"] == _nf_bd["evidence"], _nf_out["evidence"])
+t("BRIEF E2r null: a plain repeat still goes with its 'That is' translation",
+  "0.99" not in (_nf_out["effect_size"] or "") or _nf_out["effect_size"] == _nf_bd["effect_size"], _nf_out["effect_size"])
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

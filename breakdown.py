@@ -4095,7 +4095,7 @@ def cited_pmids(bd: dict, studies: list[dict]) -> list[str]:
 # "That is ..." sentence stays or goes with the sentence before it.
 # ---------------------------------------------------------------------
 
-_FIGURE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)*)\s*(%|[A-Za-z]+)?")
+_E4_FIGURE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)*)\s*(%|[A-Za-z]+)?")
 # The figure lists, in the order the page prints them (display.breakdown_view).
 FIGURE_ORDER = ("says", "evidence", "effect_size")
 _SAME_WORD = {w: "fell" for w in ("fell", "dropped", "decreased", "declined", "lowered", "reduced",
@@ -4113,7 +4113,7 @@ def figures_of(sentence: str, count: int) -> set:
     cites = frozenset(refs(sentence, count))
     text = _REF.sub(" ", sentence or "")
     out = set()
-    for m in _FIGURE.finditer(text):
+    for m in _E4_FIGURE.finditer(text):
         number = m.group(1).replace(",", "")
         unit = (m.group(2) or "").lower()
         unit = {"percent": "%", "per": ""}.get(unit, unit)
@@ -4126,6 +4126,13 @@ def content_words(sentence: str) -> set:
     the verbs of a fall, or of a rise, read as one."""
     text = _REF.sub(" ", str(sentence or "")).lower()
     return {_SAME_WORD.get(w, w) for w in _WORD.findall(text) if w not in _STOP_WORDS}
+
+
+# A sentence that says whether a result was statistically significant or
+# clear is never dropped as a repeat (nor the figure it belongs to).
+_STATES_SIGNIFICANCE = re.compile(
+    r"\b(?:statistically significant|not significant|significan(?:t|tly|ce)|no clear|clear (?:difference|effect)|"
+    r"confidence interval|p\s*[<=>])", re.IGNORECASE)
 
 
 def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:
@@ -4149,17 +4156,20 @@ def one_figure_once(explanation: str, bd, count: int):
     explanation leads when the breakdown has no "says" (the page prints it
     there); beside a "says" it is read within itself only."""
     def keep(text, kept):
-        parts = sentences(text or "")
-        out, dropped = [], False
-        for s in parts:
-            if s.startswith("That "):
-                # A translation goes with a dropped figure, and stays with a kept one.
-                if not dropped:
-                    out.append(s)
-                continue
-            dropped = _says_nothing_new(s, kept + out, count)
-            if not dropped:
-                out.append(s)
+        # A sentence and the "That ..." translations after it are one unit:
+        # they stay or go together, and a unit that says whether a result
+        # was significant or clear always stays.
+        units = []
+        for s in sentences(text or ""):
+            if s.startswith("That ") and units:
+                units[-1].append(s)
+            else:
+                units.append([s])
+        out = []
+        for unit in units:
+            if (any(_STATES_SIGNIFICANCE.search(s) for s in unit)
+                    or not _says_nothing_new(unit[0], kept + out, count)):
+                out.extend(unit)
         kept.extend(out)
         return " ".join(out)
 
