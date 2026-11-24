@@ -473,17 +473,19 @@ function studyRowHtml(s, i, key, named) {
   const n = i + 1, d = typeInfo(s.publication_types).label;
   const title = String(s.title || "");
   const href = safeHref(s.url);
-  const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "")
-    + (href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="Study ${n} on PubMed, opens in a new tab">PubMed ${escapeHtml(s.pmid)}</a>` : `PubMed ${escapeHtml(s.pmid)}`);
+  const abs = String(s.abstract || "").trim();
+  const go = `<button type="button" class="act quiet study-go" aria-label="How often study ${n} is cited, and the studies next to it">Citations and related studies</button>`;
+  const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "") + `PubMed ${escapeHtml(s.pmid)}`;
   return `<li class="row" id="row-${n}" data-n="${n}" data-i="${i}">`
     + `<button class="row-head" type="button" aria-pressed="false" aria-label="Study ${n}, ${escapeHtml(d)}: ${escapeHtml(title.replace(/\n/g, " ").replace(/^\.+|\.+$/g, ""))}. Lift its sheet">`
     + `<span class="num">${n}</span><span class="design">${escapeHtml(d)}</span><span class="ttl">${escapeHtml(title)}</span></button>`
-    + `<div class="body"><p class="src">${src}</p>`
-    + `<button class="row-more" type="button" aria-expanded="false" aria-controls="more-${n}" aria-label="Details for study ${n}">Details</button>`
-    + `<div class="more" id="more-${n}" hidden><p class="status${key !== "relied" ? " no" : ""}">${VERDICT_SETS[key]}</p>`
-    + (named.includes(n) ? '<p class="named">The answer names it</p>' : "")
-    + `<p class="note why">${escapeHtml(studyWhy(s))}</p>`
-    + `<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">Deep dive</button></div></div></li>`;
+    + `<div class="body"><p class="src">${src}</p><div class="acts">`
+    + (abs
+      ? `<details class="abs" id="abs-${n}"><summary class="act"><span class="shut">Read abstract</span><span class="open">Hide abstract</span><span class="sr-only"> of study ${n}</span></summary>`
+        + `<div class="abs-body"><p class="abs-text">${escapeHtml(abs)}</p>${go}</div></details>`
+      : `<p class="noabs">No abstract on PubMed</p>${go}`)
+    + (href ? `<a class="act pm" href="${escapeHtml(href)}" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study ${n}, opens in a new tab</span></a>` : "")
+    + `</div></div></li>`;
 }
 
 // Stop 4, Weighed: every study as a row, in its group; the first group open.
@@ -503,7 +505,7 @@ function weighedHtml(data) {
   return `<section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort"><div class="cap left"><div class="inner wide">`
     + `<div class="panel list" id="list-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Weighed", "Weighed, not counted")}`
     + `<h2 id="h-sort">Which studies the answer rests on</h2>`
-    + `<p class="intro">Pick a study to lift its sheet. Tap a sheet on the desk to find it here. Details open its abstract, how often it has been cited and the studies next to it.</p>`
+    + `<p class="intro">Each study has its abstract and its PubMed page.</p>`
     + `<div id="rows">${rows}</div></div></div></div></section>`;
 }
 

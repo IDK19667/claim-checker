@@ -72,9 +72,8 @@
   // ---- stop 4: the rows, their groups and their details (markup from app.js or Jinja) ----
   function grpBtn(key) { return document.querySelector('.grp-btn[aria-controls="grp-' + key + '"]'); }
   function rowBtn(n) { return document.querySelector("#row-" + n + " .row-head"); }
-  function moreBtn(n) { return document.querySelector("#row-" + n + " .row-more:not(.study-go)"); }
-  function setGroup(key, open) { var b = grpBtn(key); if (!b) return; b.setAttribute("aria-expanded", String(open)); byId(b.getAttribute("aria-controls")).hidden = !open; }
-  function setMore(n, open) { var b = moreBtn(n); if (!b) return; b.setAttribute("aria-expanded", String(open)); b.textContent = open ? "Hide details" : "Details"; byId(b.getAttribute("aria-controls")).hidden = !open; }
+  // a study picked from the prose or its title opens its abstract in place (the row's Read abstract disclosure)
+  function setMore(n, open) { var d = byId("abs-" + n); if (d && open) d.open = true; }
   var track = byId("track");
   track.addEventListener("click", function (e) {
     var t = e.target;
@@ -82,8 +81,6 @@
     if (g) { setGroup(g.getAttribute("aria-controls").replace(/^grp-/, ""), g.getAttribute("aria-expanded") !== "true"); layoutChanged(); return; }
     var h = t.closest(".row-head");
     if (h) { var n = +h.closest(".row").dataset.n; if (openN === n) clearStudy(); else selectStudy(n, { from: "row" }); return; }
-    var m = t.closest(".row-more");
-    if (m && !m.classList.contains("study-go")) { var k = +m.closest(".row").dataset.n; setMore(k, m.getAttribute("aria-expanded") !== "true"); layoutChanged(); return; }
     var a = t.closest("a.ref");
     if (a) { e.preventDefault(); selectStudy(+a.dataset.n, { from: "ref" }); return; }
     var go = t.closest("[data-go]");

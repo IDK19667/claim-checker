@@ -1988,10 +1988,10 @@ t("  it says how many studies it rests on",
 # A list item with role="button" around a PubMed link is a control inside a
 # control, which screen readers cannot reach cleanly (axe: serious).
 t("  each study opens from a real button, not a list item playing one",
-  '<button type="button" class="row-more study-go" aria-label="Deep dive on study 1">' in _html
+  '<button type="button" class="act quiet study-go" aria-label="How often study 1 is cited, and the studies next to it">' in _html
   and '<button class="row-head" type="button" aria-pressed="false" aria-label="Study 1,' in _html
   and 'role="button"' not in _html.split('id="rows"', 1)[-1].split("</section>", 1)[0]
-  and '<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">'
+  and 'class="act quiet study-go" aria-label="How often study ${n} is cited, and the studies next to it"'
       in (ROOT / "static" / "app.js").read_text())
 t("  what was gated out is not in the page either",
   "47%" not in _html and "cites nothing" not in _html and "wards off" not in _html)
@@ -2823,11 +2823,9 @@ t("each row names its design, and its group says whether the verdict used it",
 def _grp_audit(page):
     grp = {int(n): key for key, body in re.findall(r'<ul class="rows" id="grp-(\w+)"[^>]*>(.*?)</ul>', page, re.S)
            for n in re.findall(r'<li class="row" id="row-(\d+)"', body)}
-    status = dict((int(n), st) for n, st in re.findall(r'id="more-(\d+)" hidden><p class="status( no)?"', page))
     used = [s_["cited_in_verdict"] for s_ in json.loads(re.search(
         r'<script id="server-result" type="application/json"[^>]*>(.*?)</script>', page, re.S).group(1))["studies"]]
-    ok = len(grp) == len(used) == len(status) and all(
-        (grp[i + 1] == "relied") == u and (status[i + 1] == "") == u for i, u in enumerate(used))
+    ok = len(grp) == len(used) and all((grp[i + 1] == "relied") == u for i, u in enumerate(used))
     return ok, grp, used
 
 
@@ -2844,8 +2842,9 @@ _row_js = _row_js[:_row_js.index("\n}\n")]
 t("the server and the browser draw the same row",
   all(piece in _row_tpl and piece in _row_js
       for piece in ('<li class="row" id="row-', '<button class="row-head" type="button" aria-pressed="false"',
-                    '<span class="design">', '<p class="src">', 'aria-controls="more-', "Lift its sheet",
-                    "The answer names it", '<p class="note why">', "Deep dive on study")))
+                    '<span class="design">', '<p class="src">', '<details class="abs" id="abs-', "Lift its sheet",
+                    "Read abstract", "Hide abstract", "No abstract on PubMed", '<a class="act pm" href="',
+                    'target="_blank" rel="noopener">Open PubMed', "opens in a new tab", "Citations and related studies")))
 t("  and the chart's code is gone from the page and the script",
   "barcol" not in _ord and "function renderChart" not in _js and "fitSpines" not in _js
   and 'id="chart-sec"' not in _tpl)
@@ -11699,6 +11698,35 @@ finally:
     appmod.time = __import__("time")
     appmod.HOME_LIST_SECONDS = 0
     appmod._drop_home_lists()
+
+# ---- q10-nav, point 1: every study shows Read abstract and Open PubMed ------------------------
+# On every row, server rendered (so phone, desktop, 3D, text mode and scripts off all get it):
+# a Read abstract disclosure (or "No abstract on PubMed"), and an Open PubMed link in a new tab
+# that says so to screen readers. No visible text says "Details"; the lift instruction is gone.
+def _nav_rows(page):
+    return re.findall(r'<li class="row" id="row-\d+".*?</li>', page, re.S)
+_nav_pages = [_ord, c.get("/?q=streamed%20claim").data.decode()]
+_nav_bad = []
+for _np in _nav_pages:
+    for _r in _nav_rows(_np):
+        _has_abs = re.search(r'<details class="abs" id="abs-\d+"><summary class="act"><span class="shut">Read abstract</span>', _r)
+        _no_abs = '<p class="noabs">No abstract on PubMed</p>' in _r
+        _pm = re.search(r'<a class="act pm" href="https://[^"]+" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study \d+, opens in a new tab</span></a>', _r)
+        if not ((_has_abs or _no_abs) and _pm and "<summary" not in _r.split('class="abs-body"')[-1]):
+            _nav_bad.append(_r[:160])
+t("NAV 1: every study row has Read abstract (or says there is none) and Open PubMed in a new tab",
+  all(_nav_rows(p_) for p_ in _nav_pages) and not _nav_bad, _nav_bad[:2])
+t("NAV 1: the abstract is in the row itself, with the citations and related studies inside the opened part",
+  re.search(r'<div class="abs-body"><p class="abs-text">[^<]+</p><button type="button" class="act quiet study-go"', _ord) is not None)
+_nav_vis = [re.sub(r"<[^>]+>", " ", re.sub(r"<script.*?</script>|<style.*?</style>", "", p_, flags=re.S)) for p_ in _nav_pages]
+t("NAV 1: no visible text says Details, and the lift instruction is gone from both renderers",
+  not any(re.search(r"\bDetails\b", v) for v in _nav_vis)
+  and all("Pick a study to lift its sheet" not in x for x in (_tpl, _js, (ROOT / "templates" / "index.html").read_text(), (ROOT / "static" / "app.js").read_text()))
+  and "Each study has its abstract and its PubMed page." in _ord)
+_nav_css = (ROOT / "static" / "desk.css").read_text()
+t("NAV 1: the actions are 44px targets on every width and never hidden on a wide screen",
+  ".row .act { appearance: none; box-sizing: border-box; min-height: 44px;" in _nav_css
+  and ".row-more { display: none; }" not in _nav_css and ".row .noabs { display: inline-flex; align-items: center; min-height: 44px;" in _nav_css)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

@@ -33,9 +33,10 @@
       "Journal Article"
      ],
      "authors": [],
-     "abstract": "",
+     "abstract": "BACKGROUND: Fixture text, invented for the layout tests. Creatine is a common supplement.\nMETHODS: Pooled analysis of randomized trials in adults.\nRESULTS: Memory scores rose a little with creatine.\nCONCLUSIONS: Creatine may help memory a little.",
      "data_banks": null,
-     "url": "https://pubmed.ncbi.nlm.nih.gov/35984306/"
+     "url": "https://pubmed.ncbi.nlm.nih.gov/35984306/",
+     "contribution": "Fixture: the largest pooled estimate of the effect on memory."
     },
     {
      "pmid": "39070254",
@@ -47,9 +48,10 @@
       "Systematic Review"
      ],
      "authors": [],
-     "abstract": "",
+     "abstract": "Fixture text, invented for the layout tests. A trial of creatine and attention in young adults found no clear change in reaction time.",
      "data_banks": null,
-     "url": "https://pubmed.ncbi.nlm.nih.gov/39070254/"
+     "url": "https://pubmed.ncbi.nlm.nih.gov/39070254/",
+     "caution": "Fixture: a small trial, so one result can swing the estimate."
     },
     {
      "pmid": "29704637",
@@ -61,7 +63,7 @@
       "Systematic Review"
      ],
      "authors": [],
-     "abstract": "",
+     "abstract": "Fixture text, invented for the layout tests. A review of creatine in older adults.",
      "data_banks": null,
      "url": "https://pubmed.ncbi.nlm.nih.gov/29704637/"
     },
@@ -78,7 +80,9 @@
      "abstract": "",
      "data_banks": null,
      "url": "https://pubmed.ncbi.nlm.nih.gov/40755023/",
-     "population": "athletes"
+     "population": "athletes",
+     "indirect": true,
+     "indirect_why": "Fixture: it measured brain energy, not thinking itself."
     },
     {
      "pmid": "40971619",

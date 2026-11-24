@@ -215,7 +215,19 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .row-more { appearance: none; background: none; border: 1px solid var(--desk-edge-2); border-radius: 3px; min-height: 44px; padding: 0 14px; margin: 2px 0 4px; color: var(--on-deep); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 .row .more { padding-top: 4px; }
 .row .named { font-family: var(--mono); font-size: 13px !important; color: var(--sage) !important; margin: 0 0 4px !important; }
-@media (min-width: 700px) { .row-more { display: none; } .row .more[hidden] { display: block; } }
+/* a study's two actions, on every width: Read abstract (a disclosure, open in place) and Open PubMed (a new tab) */
+.row .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 2px 0 2px; }
+.row .act { appearance: none; box-sizing: border-box; min-height: 44px; display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid var(--desk-edge-2); border-radius: 3px; background: none; color: var(--on-deep); font: 500 15px/1.2 var(--body); cursor: pointer; text-decoration: none; }
+.row .act:hover { border-color: var(--desk-edge-3); text-decoration: underline; text-underline-offset: 3px; }
+.row .act.quiet { border: 0; padding: 0; color: var(--on-deep-2); text-decoration: underline; text-underline-offset: 3px; }
+.row .act.quiet:hover { color: var(--on-deep); }
+.row .abs > summary { list-style: none; width: max-content; }
+.row .abs > summary::-webkit-details-marker { display: none; }
+.row .abs[open] { flex: 1 0 100%; }
+.row .abs[open] .shut, .row .abs:not([open]) .open { display: none; }
+.row .abs-body { padding: 12px 0 2px; }
+.row .abs-text { white-space: pre-line; font-size: 16px !important; line-height: 1.55 !important; color: var(--on-deep-2) !important; margin: 0 0 6px !important; max-width: 40em; }
+.row .noabs { display: inline-flex; align-items: center; min-height: 44px; margin: 0 !important; font: 500 13px/1.2 var(--mono) !important; color: var(--on-deep-2) !important; }
 .said-wrap summary { cursor: pointer; min-height: 48px; display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-deep); margin: 30px 0 10px; padding-top: 14px; border-top: 1px solid var(--deep-line); list-style: none; }
 .said-wrap summary::-webkit-details-marker { display: none; }
 .said-wrap + .said-wrap summary { margin-top: 0; }
@@ -352,6 +364,7 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
   .row .body { padding-left: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; }
   .row .body .src { flex: 1 1 180px; }
   .row .body .row-more { flex: none; margin: 0; }
+  .row .body .acts { flex: 1 0 100%; }
   .row .body .more { flex: 1 0 100%; }
   .row-head { grid-template-columns: 34px 1fr; }
   .h2.mid { font-size: 34px; }
@@ -657,7 +670,7 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 
 /* no scripts: every group and every fold is open, and the controls that only scripts can work are not shown */
 html:not(.js) .rows[hidden] { display: block; }
-html:not(.js) .grp-btn::after, html:not(.js) .row-more, html:not(.js) .back, html:not(.js) .bar, html:not(.js) .rail,
+html:not(.js) .grp-btn::after, html:not(.js) .row-more, html:not(.js) .study-go, html:not(.js) .back, html:not(.js) .bar, html:not(.js) .rail,
 html:not(.js) #how-answer, html:not(.js) #back-btn, html:not(.js) .sure-more, html:not(.js) #s6 .two, html:not(.js) .feedback, html:not(.js) .report { display: none !important; }
 html:not(.js) .stop { min-height: 0; }
 html:not(.js).checked #s1 { display: none; }
