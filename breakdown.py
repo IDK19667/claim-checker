@@ -4153,12 +4153,14 @@ def _in_order(part: list, whole: list) -> bool:
 
 
 # A sentence that says whether a result was statistically significant,
-# clear or uncertain is never dropped as a repeat (nor the figure it belongs
-# to). The one recogniser for both rules (brief E4 D2).
+# clear or uncertain, or how certain the evidence is, is never dropped as a
+# repeat (nor the figure it belongs to). The one recogniser for both rules
+# (brief E4 D2); certainty, chance, "inconclusive" and "no difference" joined
+# it in brief E5 F1. Every use only ever keeps more sentences.
 _STATES_SIGNIFICANCE = re.compile(
     r"\b(?:statistically significant|not significant|significan(?:t|tly|ce)|no clear|clear (?:difference|effect)|"
     r"confidence intervals?|cross(?:ed|es|ing)? (?:zero|one|the line of no effect)|p[ -]?values?|p\s*[<=>]|"
-    r"uncertain\w*|imprecis\w*)", re.IGNORECASE)
+    r"uncertain\w*|imprecis\w*|certainty|due to chance|inconclusive|no differences?)", re.IGNORECASE)
 
 
 def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:
@@ -4244,8 +4246,10 @@ def one_figure_once(explanation: str, bd, count: int):
 # The earlier sentence goes instead (brief E3 follow-up). When a later
 # sentence is a repeat by the rule above but removing it would empty its list
 # or field, the earlier one goes, if: it is in a different figure list that
-# keeps another sentence; it is not tied to a significance sentence or a
-# "That ..." translation right after it (brief E4 D2: then both stay); it
+# keeps another sentence; it is not tied to a "That ..." translation right
+# after it, and no sentence in its list about the same studies (or none)
+# says whether a result was significant or how certain it is (brief E4 D2,
+# E5 F1: then both stay); it
 # cites the same studies; and all it carries is in
 # the later sentence, in the same order, these generic words counting as
 # nothing. No other word may join this list: no named population, outcome,
@@ -4303,6 +4307,30 @@ def _figure_bound(sentence: str, after: str, count: int) -> bool:
     return after.startswith("That ") or bool(_STATES_SIGNIFICANCE.search(after))
 
 
+def _figure_held(items: list, i: int, j: int, units: list, count: int) -> bool:
+    """Whether the earlier unit j of item i must stay where it is (brief E5
+    F1): it is tied by _figure_bound, or any other sentence in the same list,
+    before or after it and at any distance, says whether a result was
+    significant or how certain the evidence is, and cites at least one study
+    the earlier sentence cites or no study at all."""
+    sentence = units[j][0]
+    if _figure_bound(sentence, _next_sentence(items, i, j, units), count):
+        return True
+    cites = frozenset(refs(sentence, count))
+    for k, it in enumerate(items):
+        if not isinstance(it, str):
+            continue
+        for m, unit in enumerate(_units(it)):
+            if (k, m) == (i, j):
+                continue
+            for x in unit:
+                if _STATES_SIGNIFICANCE.search(x):
+                    other = frozenset(refs(x, count))
+                    if not other or other & cites:
+                        return True
+    return False
+
+
 def _same_words(a: str, b: str) -> bool:
     """Whether two sentences are the same letters and digits. The page prints
     such a copy once already (display.unseen), in the earlier block, so the
@@ -4351,7 +4379,7 @@ def _drop_earlier(bd: dict, forced: list, count: int) -> dict:
                         units = _units(it)
                         for j, earlier in enumerate(units):
                             text = " ".join(earlier)
-                            if (len(earlier) > 1 or _figure_bound(earlier[0], _next_sentence(items, i, j, units), count)
+                            if (len(earlier) > 1 or _figure_held(items, i, j, units, count)
                                     or HARM.search(text) or _HARM_WORDS.search(text)
                                     or _SAFETY.search(text) or _same_words(earlier[0], later[0])
                                     or not _says_nothing_new(later[0], [earlier[0]], count)

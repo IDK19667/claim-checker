@@ -14505,6 +14505,59 @@ _d5_one = [_d5_ev.claim_statement(v, _d5_line, [_d5_rev], {"1"}, _d5_cure, basis
 t("BRIEF E4 D5: statement 1 ends with exactly one full stop, with the certainty or the basis",
   all(x.endswith(".") and not x.endswith("..") for x in _d5_one), _d5_one)
 
+# ---------------------------------------------------------------------
+# BRIEF E5 F1: a figure stays where its significance or certainty is said.
+# The follow-up rule never removes the earlier sentence when any other
+# sentence in the same list, at any distance, before or after it, says
+# whether a result was significant or how certain it is, and cites a study
+# the figure cites or none. The fourth reviewer's shapes (review4 d2_sig).
+# ---------------------------------------------------------------------
+import breakdown as _f5_bd  # noqa: E402
+_F5_W = "Weight fell by about 2 kg (Study 1)."
+_F5_WL = "Weight fell by 2 kg (Study 1)."
+_F5_O2 = "HbA1c fell by 0.5 points (Study 2)."
+
+
+def _f5_run(ev):
+    out = _f5_bd.one_figure_once("", {"says": [], "evidence": list(ev), "effect_size": _F5_WL}, 2)[1]
+    return out, out["evidence"] == list(ev) and out["effect_size"] == _F5_WL
+
+
+_F5_SHAPES = {
+    "certainty sentence": [_F5_W, "The certainty of this evidence was low (Study 1).", _F5_O2],
+    "low-certainty evidence": [_F5_W, "This is low-certainty evidence (Study 1).", _F5_O2],
+    "significance two sentences later": [_F5_W, "Participants were adults aged 40 (Study 1).",
+                                         "The difference was not statistically significant (Study 1).", _F5_O2],
+    "significance after a sentence about another study": [_F5_W, _F5_O2,
+                                                          "The difference was not significant (Study 1)."],
+    "significance before the figure": ["The difference was not significant (Study 1).", _F5_W, _F5_O2],
+    "superset citation": [_F5_W, "Neither difference was statistically significant (Studies 1 and 2).", _F5_O2],
+    "could be due to chance": [_F5_W, "This could be due to chance (Study 1).", _F5_O2],
+    "inconclusive": [_F5_W, "The results were inconclusive (Study 1).", _F5_O2],
+    "no difference from placebo": [_F5_W, "There was no difference from placebo (Study 1).", _F5_O2],
+    "same item, significance two sentences later": [
+        _F5_W + " It was run in adults (Study 1). The difference was not statistically significant (Study 1).", _F5_O2],
+}
+_f5_res = {k: _f5_run(v) for k, v in _F5_SHAPES.items()}
+for _f5_name, (_f5_out, _f5_ok) in _f5_res.items():
+    t(f"BRIEF E5 F1: {_f5_name}: the figure stays in the evidence list and no sentence is lost",
+      _f5_ok, _f5_out)
+t("BRIEF E5 F1: one recogniser: certainty, chance, 'inconclusive', 'no difference' and 'did not reach "
+  "significance' read as significance wording",
+  all(_f5_bd._STATES_SIGNIFICANCE.search(x) for x in (
+      "The certainty of this evidence was low.", "This is low-certainty evidence.", "Low certainty.",
+      "This could be due to chance.", "The results were inconclusive.", "There was no difference from placebo.",
+      "The difference did not reach significance.")))
+_f5_ctl, _ = _f5_run([_F5_W, _F5_O2])
+t("BRIEF E5 F1 control: a list with no significance or certainty sentence still loses its earlier repeat",
+  _f5_ctl["evidence"] == [_F5_O2] and _f5_ctl["effect_size"] == _F5_WL, _f5_ctl)
+_f5_oth, _ = _f5_run([_F5_W, "The difference was not significant (Study 2).", _F5_O2])
+t("BRIEF E5 F1 control: a significance sentence citing only another study does not hold the figure",
+  _f5_oth["evidence"] == ["The difference was not significant (Study 2).", _F5_O2], _f5_oth)
+_f5_far, _ = _f5_run([_F5_W, _F5_O2, "The results were inconclusive (Study 2)."])
+t("BRIEF E5 F1 control: a certainty sentence about another study, later in the list, does not hold it either",
+  _f5_far["evidence"] == [_F5_O2, "The results were inconclusive (Study 2)."], _f5_far)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
