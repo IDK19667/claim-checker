@@ -3052,8 +3052,12 @@ _LINE_SIZE = re.compile(r"\ba (small|moderate|large) effect\b")
 _LINE_NARROW = re.compile(r", but only in (.+)$")
 
 
-def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: str = "") -> str:
-    """Statement 1, from the old line (`line`, which every cap still reads)."""
+def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: str = "",
+                    basis_only: bool = False) -> str:
+    """Statement 1, from the old line (`line`, which every cap still reads).
+    It ends with the basis, never "Certainty: X", when `basis_only`: the
+    second statement shows (certainty is said once, there) or a flagged
+    review lowered the level (no review states that certainty)."""
     if not line or line == INSUFFICIENT_LINE or verdict not in CLAIM_PHRASES:
         return line
     phrase = CLAIM_PHRASES[verdict]
@@ -3073,7 +3077,7 @@ def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: 
         phrase += f", which were only in {narrow.group(1)}"
     head = line.lower()
     span = re.match(r"^((?:very low|low|moderate|high)(?: to (?:very low|low|moderate|high))?) certainty\b", head)
-    basis = (f"Certainty: {span.group(1)}" if span
+    basis = (f"Certainty: {span.group(1)}" if span and not basis_only
              else f"Based on {design_kind(studies, cited_pmids)}")
     return f"{claim_label(absolute)}: {phrase}. {basis}"
 
@@ -3099,23 +3103,56 @@ def stated_grades(studies, cited_pmids=(), outcome: str = "") -> list[str]:
     return sorted(levels, key=_rank)
 
 
+FLAGGED_ONLY_CLAUSE = "This comes from a review that cites a retracted study, so treat it with caution."
+# The verdicts statement 2 may show under: never "true", never "insufficient".
+STATEMENT_TWO_VERDICTS = ("false", "complicated")
+
+
+def human_evidence(study) -> bool:
+    """A study in people for statement 2, the flag ignored (gate reader):
+    never an animal or lab study, never a case report or opinion piece."""
+    return (isinstance(study, dict) and not preclinical(study)
+            and gate_tier(study) in ("strong", "moderate") and in_people(study))
+
+
 def effect_statement(verdict: str, absolute: str, effect_sentence: str, studies,
-                     cited_pmids=(), outcome: str = "") -> str:
+                     cited_pmids=(), outcome: str = "", cites=()) -> str:
     """Statement 2, or "": what the studies found that is not the claim
-    itself, for a claim promising something absolute not rated true."""
+    itself, for a claim promising something absolute rated false or
+    complicated. `effect_sentence` is the sentence chosen for it (app.py,
+    already tidied) and `cites` the study numbers it cites; it shows only
+    when one of them is a relied-on study in people."""
     sentence = str(effect_sentence or "").strip()
-    if not absolute or verdict == "true" or not sentence:
+    if not absolute or verdict not in STATEMENT_TWO_VERDICTS or not sentence:
         return ""
-    grades = stated_grades(studies, cited_pmids, outcome)
-    if len(grades) == 1:
-        sure = f"Certainty: {grades[0]}, as the review rates it"
-    elif grades:
-        sure = f"Certainty varies by outcome, {grades[0]} to {grades[-1]}, as the reviews rate it"
+    studies = list(studies or [])
+    cited_pmids = set(cited_pmids or ())
+    used = [studies[n - 1] for n in cites or () if 0 < n <= len(studies)
+            and studies[n - 1].get("pmid") in cited_pmids]
+    if not any(human_evidence(s) for s in used):
+        return ""
+    if all(demoted(s) for s in used):
+        sure = FLAGGED_ONLY_CLAUSE
     else:
-        sure = UNGRADED
-    # The sentence unchanged, save one closing full stop the statement adds back.
-    said = sentence[:-1] if sentence.endswith(".") else sentence
-    return f"What the studies did find: {said}. {sure}"
+        # A flagged review's own grade never vouches for a finding.
+        clean = [s.get("pmid") for s in studies if s.get("pmid") in cited_pmids and not demoted(s)]
+        grades = stated_grades(studies, clean, outcome)
+        if len(grades) == 1:
+            sure = f"Certainty: {grades[0]}, as the review rates it"
+        elif grades:
+            sure = f"Certainty varies by outcome, {grades[0]} to {grades[-1]}, as the reviews rate it"
+        else:
+            sure = UNGRADED
+    # A clean join whatever the sentence ends with: one full stop, never
+    # "..", never "?." or "!.".
+    said = re.sub(r"\s*\.+$", "", sentence)
+    joined = f"{said} " if said.endswith(("?", "!")) else f"{said}. "
+    return f"What the studies did find: {joined}{sure}"
+
+
+def names_family(text: str, family: str) -> bool:
+    """Whether text names a stem of the outcome family called `family`."""
+    return any(name == family and rx.search(str(text or "")) for name, rx in _FAMILY_RE)
 
 
 # ---------------------------------------------------------------------------

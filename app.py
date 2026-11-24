@@ -1196,6 +1196,33 @@ def _retracted_review_rules(explanation, breakdown, studies, cited):
     return explanation, breakdown
 
 
+def _statement_two(verdict_value, absolute, breakdown, studies, cited, outcome, queries) -> str:
+    """Statement 2 (evidence.effect_statement), or "". Its sentence is the
+    first effect sentence citing a relied-on study in people (the flag
+    ignored), preferring one that names the claim's outcome family when that
+    family is recognised; a sentence travels with its "That ..." translation,
+    and is tidied like any model prose."""
+    text = breakdown.get("effect_size") if isinstance(breakdown, dict) else ""
+    if not absolute or verdict_value not in evidence.STATEMENT_TWO_VERDICTS or not isinstance(text, str):
+        return ""
+    count = len(studies or [])
+    units = []
+    for x in breakdown_mod.sentences(text):
+        if x.startswith("That ") and units:
+            units[-1] = f"{units[-1]} {x}"
+        else:
+            units.append(x)
+    good = [u for u in units
+            if any(studies[n - 1].get("pmid") in cited and evidence.human_evidence(studies[n - 1])
+                   for n in breakdown_mod.refs(u, count))]
+    if not good:
+        return ""
+    family = evidence.outcome_families(evidence.claim_outcome_terms(queries))
+    pick = next((u for u in good if len(family) == 1 and evidence.names_family(u, family[0])), good[0])
+    return evidence.effect_statement(verdict_value, absolute, verdict.tidy_prose(pick, 4000), studies, cited,
+                                     outcome, cites=breakdown_mod.refs(pick, count))
+
+
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None, typed_reason=None):
@@ -1291,9 +1318,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     if withheld:
         breakdown = breakdown_mod.unsized(breakdown)
 
-    def line_for(stamp):
+    def line_for(stamp, pool=None):
+        pool = studies if pool is None else pool
         lines = [evidence.evidence_line(
-            stamp, studies, used, claim, sized,
+            stamp, pool, used, claim, sized,
             breakdown_mod.absolute_claim(claim),
             bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
             outcome, stated=stated, withheld=withheld) for used in readings]
@@ -1351,10 +1379,18 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     if evidence_line == verdict.GUIDANCE_LINE:
         shown_line, effect_line = evidence_line, ""
     else:
-        shown_line = evidence.claim_statement(verdict_value, evidence_line, studies, cited, absolute)
-        effect_line = evidence.effect_statement(
-            verdict_value, absolute, (breakdown or {}).get("effect_size") if isinstance(breakdown, dict) else "",
-            studies, cited, outcome)
+        effect_line = _statement_two(verdict_value, absolute, breakdown, studies, cited, outcome, queries)
+        # Certainty is said once: beside a second statement, or when a flagged
+        # review lowered the level (no review states that certainty), the
+        # first statement ends with its basis (brief E3 N2, N9).
+        flag_lowered = False
+        if any(evidence.cited_retracted(s) for s in studies or []):
+            plain = [{k: v for k, v in s.items() if k != "cites_retracted"} for s in studies]
+            rank = lambda line: (evidence._rank(evidence.line_certainty(line))
+                                 if evidence.line_certainty(line) else len(evidence.CERTAINTY_LEVELS))
+            flag_lowered = rank(evidence_line) < rank(line_for(verdict_value, plain))
+        shown_line = evidence.claim_statement(verdict_value, evidence_line, studies, cited, absolute,
+                                              basis_only=bool(effect_line) or flag_lowered)
     # One figure, once (E4): within everything a reader sees, a sentence
     # that only repeats figures already given goes. Code only.
     explanation, breakdown = breakdown_mod.one_figure_once(explanation, breakdown, len(studies or []))

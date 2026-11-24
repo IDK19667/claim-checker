@@ -13278,7 +13278,7 @@ t("BRIEF E2: a certainty the line carried is kept, in words that are not a stren
   _e_ev.claim_statement("true", "Low certainty evidence for this claim", _e_rcts, ["50"], "")
   == "The claim: Supported only by limited studies. Certainty: low")
 t("BRIEF E2: an effect sentence outside the closed pattern is printed as the model said it",
-  _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", [], [])
+  _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", _e_rcts, ["50", "51"], cites=[2])
   == "What the studies did find: Vinegar lowered glucose (Study 2). The abstracts we read do not rate how certain this is")
 t("BRIEF E2: no second statement for a claim rated true, or one promising nothing absolute",
   _e_ev.effect_statement("true", "cure", "Glucose fell.", [], []) == ""
@@ -13466,6 +13466,7 @@ t("BRIEF E2r B1: the note to the model says a harm or a doubt from a flagged rev
 # Brief E2 repair, B3 and M3: the second statement has no parsed form. Every
 # sentence the reviewer tried passes through unchanged, so nothing about the
 # control group or a second outcome can be lost or reversed.
+# Since brief E3 N2 statement 2 needs a cited study in people: the inputs say so.
 _r3_cure = _e_bd.absolute_claim("Cinnamon cures diabetes")
 _r3_said = ["Symptoms fell with placebo, not with cinnamon (Study 1).",
             "Fasting glucose dropped in the control group only (Study 1).",
@@ -13475,21 +13476,21 @@ _r3_said = ["Symptoms fell with placebo, not with cinnamon (Study 1).",
             "Insulin resistance declined only in the placebo group (Study 1).",
             "Adverse events increased with cinnamon (Study 1).", "Weight rose less than with placebo (Study 1)"]
 _r3_rev = {"pmid": "1", "title": "Cinnamon and glycaemia: a meta-analysis", "publication_types": ["Meta-Analysis"],
-           "abstract": "Conclusion: cinnamon lowered HbA1c."}
-_r3_bad = [x for x in _r3_said if _e_ev.effect_statement("false", _r3_cure, x, [_r3_rev], ["1"], "")
+           "abstract": "Trials in 600 adults. Conclusion: cinnamon lowered HbA1c."}
+_r3_bad = [x for x in _r3_said if _e_ev.effect_statement("false", _r3_cure, x, [_r3_rev], ["1"], "", cites=[1])
            != f"What the studies did find: {x.rstrip('.')}. The abstracts we read do not rate how certain this is"]
 t("BRIEF E2r B3/M3: statement 2 prints the sentence unchanged, with no reading of its verbs", not _r3_bad, _r3_bad)
-_r3_g1 = dict(_r3_rev, abstract="Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c.")
-_r3_g2 = dict(_r3_rev, pmid="2", abstract="Low certainty evidence. Conclusion: cinnamon lowered HbA1c.")
+_r3_g1 = dict(_r3_rev, abstract="Trials in 600 adults. Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c.")
+_r3_g2 = dict(_r3_rev, pmid="2", abstract="Trials in 600 adults. Low certainty evidence. Conclusion: cinnamon lowered HbA1c.")
 t("BRIEF E2r B3: one stated grade reads 'as the review rates it'",
-  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "")
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1])
   == "What the studies did find: HbA1c fell (Study 1). Certainty: moderate, as the review rates it",
-  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], ""))
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1]))
 t("BRIEF E2r B3: several grades read 'varies by outcome, lowest to highest, as the reviews rate it'",
-  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2], ["1", "2"], "")
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2], ["1", "2"], "", cites=[1])
   == "What the studies did find: HbA1c fell (Study 1). Certainty varies by outcome, low to moderate, "
   "as the reviews rate it", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2],
-                                                   ["1", "2"], ""))
+                                                   ["1", "2"], "", cites=[1]))
 
 # Brief E2 repair, m1 and m2: statement 1 is never surer than the old line.
 _m1_table = {"Strong evidence for this claim": "Supported by the studies reviewed",
@@ -13905,6 +13906,122 @@ while _e3_prop_n < 320 and _e3_i < 3000:
 t(f"BRIEF E3 N1: over {_e3_prop_n} seeded cases with a flagged review, no sentence present with the flags off is "
   "missing with them on, in the explanation or any list", _e3_prop_n >= 300 and not _e3_prop_bad,
   (_e3_prop_n, _e3_prop_bad[:3]))
+
+# N2: the second statement shows only for an absolute claim rated false or
+# complicated, over a sentence citing a relied-on study in people.
+_e3_mice = _e3_mk("710001", ["Journal Article"], "Curcumin shrinks tumours in mice",
+                  "Mice with xenograft tumours were given curcumin for 4 weeks. RESULTS: Tumour volume fell by 40% "
+                  "compared with control. CONCLUSIONS: Curcumin slowed tumour growth in mice.")
+_e3_pilot = _e3_mk("720001", _E3_RCT, "Garlic and blood pressure: a pilot randomized trial",
+                   "In this pilot randomized trial of 18 adults, systolic pressure fell by 6 mmHg. CONCLUSIONS: Larger "
+                   "trials are needed; evidence is insufficient.")
+_e3_st2_bad = []
+for _e3_claim, _e3_q, _e3_st, _e3_es in (
+        ("Turmeric cures cancer", "(turmeric OR curcumin) AND (cancer OR tumour)", _e3_mice,
+         "Tumour volume fell by 40% in mice given curcumin (Study 1)."),
+        ("Garlic cures high blood pressure", "(garlic) AND (hypertension OR blood pressure)", _e3_pilot,
+         "Systolic pressure fell by 6 mmHg in a small pilot trial (Study 1).")):
+    _e3_r = _e3_fresh(_e3_claim, _e3_q, [_e3_st], "complicated", ["for"], _e3_es,
+                      {"evidence": [_e3_es], "effect_size": _e3_es}, tldr="The studies point both ways.")
+    if _e3_r["verdict"] != "insufficient" or _e3_r["effect_line"]:
+        _e3_st2_bad.append((_e3_claim, _e3_r["verdict"], _e3_r["effect_line"]))
+t("BRIEF E3 N2: the reviewer's turmeric (mice) and garlic (pilot) answers, rated 'Not enough evidence', have no "
+  "second statement", not _e3_st2_bad, _e3_st2_bad)
+
+_e3_trial = _e3_mk("730001", _E3_RCT, "Vinegar and glucose: a randomized trial",
+                   "We randomized 120 adults with type 2 diabetes. RESULTS: Weight fell by 2 kg and fasting glucose fell "
+                   "by 0.5 mmol/L. CONCLUSIONS: Vinegar lowered glucose a little.")
+_e3_ma_low = _e3_mk("730002", _E3_MA, "Vinegar and glycaemic control: a meta-analysis",
+                    "We pooled 9 trials in 900 adults with type 2 diabetes. RESULTS: HbA1c fell by 0.2 points (low certainty evidence). CONCLUSIONS: Vinegar "
+                    "may lower HbA1c slightly.")
+_e3_ma_mod = _e3_mk("730003", _E3_MA, "Vinegar and fasting glucose: a meta-analysis",
+                    "We pooled 12 trials in 1400 adults with type 2 diabetes. RESULTS: Fasting glucose fell by 0.4 mmol/L (moderate certainty evidence). "
+                    "CONCLUSIONS: Vinegar lowers fasting glucose a little.")
+_e3_case_rep = _e3_mk("730004", ["Case Reports"], "Vinegar and glucose in one patient: a case report",
+                      "A woman with diabetes drank vinegar daily. Her glucose fell by 1 mmol/L.")
+_E3_Q = ["(vinegar) AND (diabetes OR glucose)"]
+
+
+def _e3_two(verdict_value, effect_size, studies, absolute="a cure", cited=None, queries=_E3_Q):
+    cited = {s["pmid"] for s in studies} if cited is None else cited
+    return appmod._statement_two(verdict_value, absolute, {"effect_size": effect_size}, studies, cited, "", queries)
+
+
+_e3_es1 = "Weight fell by 2 kg (Study 1). Fasting glucose fell by 0.5 mmol/L (Study 1)."
+t("BRIEF E3 N2: never under 'true' or 'Not enough evidence', and never for a claim that is not absolute",
+  all(not _e3_two(v, _e3_es1, [_e3_trial]) for v in ("true", "insufficient"))
+  and not _e3_two("false", _e3_es1, [_e3_trial], absolute="") and _e3_two("false", _e3_es1, [_e3_trial])
+  and _e3_two("complicated", _e3_es1, [_e3_trial]))
+t("BRIEF E3 N2: never over a sentence resting only on animal or lab studies, or only on case reports",
+  not _e3_two("false", "Tumour volume fell by 40% in mice (Study 1).", [_e3_mice])
+  and not _e3_two("false", "Glucose fell by 1 mmol/L (Study 1).", [_e3_case_rep]))
+t("BRIEF E3 N2: never over a sentence citing only studies not relied on",
+  not _e3_two("false", _e3_es1, [_e3_trial], cited=set()))
+t("BRIEF E3 N2: the first sentence naming the claim's outcome family is quoted",
+  _e3_two("false", _e3_es1, [_e3_trial]).startswith("What the studies did find: Fasting glucose fell by 0.5 mmol/L"),
+  _e3_two("false", _e3_es1, [_e3_trial]))
+t("BRIEF E3 N2: with no family recognised, the first sentence in people is quoted",
+  _e3_two("false", _e3_es1, [_e3_trial], queries=["(vinegar)"]).startswith("What the studies did find: Weight fell"))
+_e3_mixed = "Tumour volume fell by 40% in mice (Study 2). Weight fell by 2 kg (Study 1)."
+t("BRIEF E3 N2: a sentence resting only on an animal study is passed over for one in people",
+  _e3_two("false", _e3_mixed, [_e3_trial, _e3_mice], queries=["(x)"]).startswith("What the studies did find: Weight"))
+_e3_flagged_low = {**_e3_ma_low, "cites_retracted": list(_E3_FLAG)}
+_e3_only_flag = _e3_two("false", "HbA1c fell by 0.2 points (Study 1).", [_e3_flagged_low])
+t("BRIEF E3 N2: a sentence citing only flagged reviews says so and relays no grade",
+  _e3_only_flag == "What the studies did find: HbA1c fell by 0.2 points (Study 1). This comes from a review that "
+  "cites a retracted study, so treat it with caution.", _e3_only_flag)
+_e3_both = _e3_two("false", "Fasting glucose fell (Studies 1 and 2).", [_e3_flagged_low, _e3_ma_mod])
+t("BRIEF E3 N2: beside a clean review, only the clean review's grade counts",
+  _e3_both.endswith("Certainty: moderate, as the review rates it"), _e3_both)
+t("BRIEF E3 N2: unflagged, both grades count as before",
+  _e3_two("false", "Fasting glucose fell (Studies 1 and 2).", [_e3_ma_low, _e3_ma_mod]).endswith(
+      "Certainty varies by outcome, low to moderate, as the reviews rate it"))
+# Certainty is said once: beside a second statement the first ends with its basis.
+_e3_line = "Moderate certainty evidence against this claim"
+t("BRIEF E3 N2: the first statement ends with the basis when asked, with 'Certainty:' otherwise",
+  _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure", basis_only=True)
+  == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews"
+  and _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure").endswith("Certainty: moderate"))
+_e3_vg = _e3_fresh("Vinegar cures diabetes", _E3_Q[0], [_e3_ma_mod, _e3_trial], "false", ["against", "against"],
+                   "Fasting glucose fell by 0.4 mmol/L, a small change (Study 1).",
+                   {"evidence": ["Fasting glucose fell by 0.4 mmol/L (Study 1)."],
+                    "effect_size": "Fasting glucose fell by 0.4 mmol/L (Study 1)."},
+                   tldr="Vinegar does not cure diabetes.")
+t("BRIEF E3 N2: end to end, with a second statement certainty is said once, in it",
+  _e3_vg["effect_line"] and "Certainty" not in _e3_vg["evidence_line"]
+  and (_e3_vg["evidence_line"] + _e3_vg["effect_line"]).count("ertainty") <= 1, (_e3_vg["evidence_line"], _e3_vg["effect_line"]))
+
+# N8: a clean join whatever the sentence ends with, and no dash reaches the page.
+_e3_joins = {}
+for _e3_es in ("Did glucose fall? Not clearly (Study 1)?", "Glucose fell in some people (Study 1)!",
+               "Glucose fell by 0.5 mmol/L (Study 1)..", "Glucose fell by 0.5 mmol/L (Study 1)...",
+               "Glucose fell by 0.5 mmol/L (Study 1)", "Glucose fell — by a third (Study 1).",
+               "Glucose fell by 0.3 – 0.5 mmol/L (Study 1)."):
+    _e3_joins[_e3_es] = _e3_two("false", _e3_es, [_e3_trial])
+_e3_join_bad = {k: v for k, v in _e3_joins.items()
+                if not v or _e3_re.search(r"\.\.|[?!]\.|[–—]|\.\s*\.", v)
+                or not v.endswith("The abstracts we read do not rate how certain this is")}
+t("BRIEF E3 N8: a sentence ending in '?', '!', '..' or '...' joins cleanly, and no dash reaches the statement",
+  not _e3_join_bad, _e3_join_bad)
+t("BRIEF E3 N8: a sentence ending '!' keeps its mark and gets no full stop after it",
+  "people (Study 1)! The abstracts" in _e3_joins["Glucose fell in some people (Study 1)!"])
+
+# N9: when a flag lowered the level, the first statement ends with the basis
+# naming the flagged review, never a "Certainty: X" no review states. The
+# reviewer's ginkgo input.
+_e3_gma = _e3_mk("610001", _E3_MA, "Ginkgo biloba and memory in older adults: a meta-analysis of randomized trials",
+                 "We pooled 14 randomized controlled trials (n=3100). RESULTS: Memory scores did not differ (SMD 0.03, "
+                 "95% CI -0.08 to 0.14). CONCLUSIONS: Ginkgo did not improve memory.")
+_e3_gco = _e3_mk("610002", ["Journal Article", "Observational Study"], "Ginkgo use and memory in older adults: a prospective cohort study",
+                 "In a prospective cohort of 4000 older adults, ginkgo users had better memory scores. CONCLUSIONS: Ginkgo "
+                 "use was associated with better memory.")
+_e3_gk = _e3_fresh("Ginkgo improves memory in older adults", "(ginkgo) AND (memory OR cognition)", [_e3_gma, _e3_gco],
+                   "true", ["against", "for"], "Trials found no memory benefit (Study 1), while a cohort found better "
+                   "memory (Study 2).", flag=(0,), tldr="The studies show it helps.")
+t("BRIEF E3 N9: ginkgo, a flag that lowered the level leaves the basis naming the flagged review, not 'Certainty: low'",
+  "Certainty" not in _e3_gk["evidence_line"]
+  and _e3_gk["evidence_line"].endswith("Based on a review that cites a retracted study, and human studies"),
+  _e3_gk["evidence_line"])
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
