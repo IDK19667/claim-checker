@@ -253,7 +253,6 @@
      card's words and every line here are the same ink whatever the verdict. #}
   {# Still open is a heading, so heading navigation reaches it; the stop number is not read, so its region is named "Still open". #}
   {% macro eyebrow(name, text) %}{% set tag = "h2" if name == "Open" else "p" %}<{{ tag }} class="eyebrow"{% if name == "Open" %} id="h-open"{% endif %}><b aria-hidden="true">{{ "%02d"|format(stops.index(name) + 1) }}</b>{{ text }}</{{ tag }}>{% endmacro %}
-  {% macro back() %}<button class="back" type="button" data-go="1">Back to the short answer</button>{% endmacro %}
   <div id="result"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
   <section class="stop" id="s2" data-stop="Answer" aria-labelledby="claim-echo">
     <p class="layer" id="short-label">The short answer</p>
@@ -275,16 +274,15 @@
       <p class="sure" id="confidence">{% if result %}{{ confidence_line(result) }}{% endif %}</p>
       <p class="sure-more"><button type="button" class="btn quiet" id="meter">What does this mean?</button></p>
       <p class="doctor" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
+      {# The one button on the Answer: it goes to the studies. Check another claim is in the section picker and at the end of the page. #}
       <div class="two">
-        <button class="btn" type="button" id="how-answer">See how we got this answer</button>
-        <button class="btn quiet" type="button" id="back-btn" data-again>Check another claim</button>
+        <button class="btn" type="button" id="how-answer">View evidence</button>
       </div>
     </div></div>
   </section>
 
   <section class="stop" id="s3" data-stop="Read" aria-labelledby="h-read">
     <div class="cap right"><div class="inner">
-      {{ back() }}
       {% if result %}{{ eyebrow("Read", "What was read") }}{% else %}<p class="eyebrow"><b aria-hidden="true">03</b>What was read</p>{% endif %}
       <h2 class="h2" id="h-read">{% if dl %}{{ dl.read }}{% endif %}</h2>
       <p class="scope" id="scope"><span id="path">{% if dl %}{{ dl.path }}{% endif %}</span></p>
@@ -319,7 +317,6 @@
   <section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort">
     <div class="cap left"><div class="inner wide">
       <div class="panel list" id="list-panel" tabindex="-1">
-        {{ back() }}
         {{ eyebrow("Weighed", "Weighed, not counted") }}
         <h2 id="h-sort">Which studies the answer rests on</h2>
         <p class="intro">Each study has its abstract and its PubMed page.</p>
@@ -342,7 +339,6 @@
   <section class="stop long" id="s5" data-stop="Research" aria-labelledby="h-research">
     <div class="cap left"><div class="inner wider">
       <div class="panel read" id="read-panel" tabindex="-1">
-        {{ back() }}
         {{ eyebrow("Research", "The thorough answer") }}
         <h2 id="h-research">What the research says</h2>
         {%- set n_st = result.studies|length %}
@@ -388,7 +384,6 @@
 
   <section class="stop" id="s6" data-stop="Open" aria-labelledby="h-open">
     <div class="cap left"><div class="inner">
-      {{ back() }}
       {% if result %}{{ eyebrow("Open", "Still open") }}{% else %}<h2 class="eyebrow" id="h-open"><b aria-hidden="true">06</b>Still open</h2>{% endif %}
       <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
       <details class="said-wrap qwrap" id="qwrap"><summary>Search used</summary>
@@ -434,13 +429,10 @@
   </div>
 </main>
 
+{# The section picker: on a phone (or a tall screen) the one control in the foot bar; on a wide screen the rail at the
+   right edge is the picker and this bar is not drawn. It names the section in view and opens the list of the four. #}
 <div class="bar" id="bar">
-  <!-- Next comes first in the tab order and Back right after it, so Shift+Tab from Back reaches Next without leaving the bar; the grid still places Back, place, Next left to right. -->
-  <button class="next" type="button" id="next"><span id="next-label">Next</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
-  <button class="prev" type="button" id="prev" aria-label="Back one stop"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2.5L4.5 7 9 11.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="lab">Back</span></button>
-  <button class="where" type="button" id="where" aria-haspopup="true" aria-expanded="false" aria-controls="menu"></button>
-  <!-- The cue row, drawn on top of the bar row: a wider target for the same press as Next, in words that say to scroll. Next carries the same destination for keyboards and screen readers, so this one is out of the tab order and not read. desk.js names it from the same state as Next (cueWords). -->
-  <button class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"{% if not result %} hidden{% endif %}><span id="cue-label">{% if result %}Scroll down: what was read{% endif %}</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+  <button class="where" type="button" id="where" aria-haspopup="true" aria-expanded="false" aria-controls="menu" aria-label="Sections. You are in Answer. Choose a section"><span class="where-k" aria-hidden="true">Section</span><span id="where-name">Answer</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 9l4.5-4.5L11.5 9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 </div>
 <div class="menu" id="menu" hidden></div>
 

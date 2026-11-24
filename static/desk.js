@@ -22,6 +22,10 @@
     Research: ["Next: what the research says", "Next: the research"],
     Open: ["Next: what is still open", "Next: still open"]
   };
+  // the four sections a reader moves between, by what they hold. The page keeps its six stops for the camera;
+  // the picker, the rail and every name a reader sees use these
+  var SEC = { Claim: "Answer", Answer: "Answer", Read: "Studies", Weighed: "Studies", Research: "Explanation", Open: "Limitations" };
+  var SECS = [];   // [{ name, stop }] the sections this result has, each with the first stop it starts on
   // each stop's camera framing and lamp aim in the sample's six (KEYS, AIMS, EXPO below)
   var CAM = { Claim: 0, Answer: 1, Read: 2, Weighed: 3, Research: 4, Open: 5 };
   var STOPS = [], sections = [], NS = 1, LAST = 0, WEIGH = -1;
@@ -102,61 +106,47 @@
     layoutChanged();
   }, true);
 
-  // ---- wayfinding: rail, place menu, Back and Next ------------------------
-  var rail = byId("rail"), menu = byId("menu"), where = byId("where");
-  var nextBtn = byId("next"), nextLabel = byId("next-label"), prevBtn = byId("prev");
-  // the cue row on top of the bar: one wide button that does what Next does, in words that say to scroll (cueWords)
-  var cueBtn = byId("cue"), cueLabel = byId("cue-label");
-  var railBtns = [], menuBtns = [], ro = null;
+  // ---- wayfinding: three ways to move. Normal scrolling, one section picker (the rail on a wide screen, the one
+  // button in the foot bar on a phone), and View evidence on the Answer. No Back, no Next, no cue
+  var rail = byId("rail"), menu = byId("menu"), where = byId("where"), whereName = byId("where-name");
+  var railBtns = [], menuBtns = [], ro = null, curSec = -1;
+  function again() { var b = document.querySelector("#s6 [data-again]"); if (b) b.click(); }
   function readStops() {
     checked = root.classList.contains("checked");
     sections = [].slice.call(document.querySelectorAll(".stop[data-stop]")).filter(function (s) { return checked || s.id === "s1"; });
-    STOPS = sections.map(function (s, i) {
-      var nx = sections[i + 1], w = nx ? NEXT[nx.dataset.stop] : ["Back to the start"];
-      return { name: s.dataset.stop, next: w[0], short: w[1], cam: CAM[s.dataset.stop] };
-    });
+    STOPS = sections.map(function (s) { return { name: s.dataset.stop, cam: CAM[s.dataset.stop] }; });
     NS = STOPS.length; LAST = NS - 1;
     WEIGH = STOPS.map(function (s) { return s.name; }).indexOf("Weighed");
     if (curStop > LAST) curStop = LAST;
-    rail.textContent = ""; menu.textContent = ""; railBtns = []; menuBtns = [];
+    SECS = [];
     STOPS.forEach(function (s, i) {
-      var b = el("button"); b.type = "button"; b.appendChild(el("span", "", s.name)); b.setAttribute("aria-label", (i + 1) + " of " + NS + ": " + s.name);
-      b.addEventListener("click", function () { jump(i); }); rail.appendChild(b); railBtns.push(b);
-      var m = el("button", "", (i + 1) + ". " + s.name); m.type = "button";
-      m.addEventListener("click", function () { closeMenu(); jump(i); where.focus({ preventScroll: true }); }); menu.appendChild(m); menuBtns.push(m);
+      if (s.name === "Claim") return;
+      var nm = SEC[s.name]; if (!SECS.length || SECS[SECS.length - 1].name !== nm) SECS.push({ name: nm, stop: i });
     });
-    // the site's own pages, from every stop
+    rail.textContent = ""; menu.textContent = ""; railBtns = []; menuBtns = []; curSec = -1;
+    SECS.forEach(function (c, i) {
+      var b = el("button"); b.type = "button"; b.appendChild(el("span", "", c.name)); b.setAttribute("aria-label", "Go to " + c.name);
+      b.addEventListener("click", function () { jump(c.stop); }); rail.appendChild(b); railBtns.push(b);
+      var m = el("button", "", c.name); m.type = "button";
+      m.addEventListener("click", function () { closeMenu(); jump(c.stop); where.focus({ preventScroll: true }); }); menu.appendChild(m); menuBtns.push(m);
+    });
+    // Check another claim, from anywhere: the same press as the one at the end of the page
+    if (checked) {
+      var ra = el("button", "rail-again"); ra.type = "button"; ra.appendChild(el("span", "", "Check another claim"));
+      ra.addEventListener("click", again); rail.appendChild(ra);
+      var ma = el("button", "menu-again", "Check another claim"); ma.type = "button";
+      ma.addEventListener("click", function () { closeMenu(); again(); }); menu.appendChild(ma);
+    }
+    // the site's own pages, from every section
     var links = el("p", "menu-links");
     [["How it works", "/method"], ["About", "/about"], ["Privacy", "/privacy"]].forEach(function (l) { var a = el("a", "", l[0]); a.href = l[1]; links.appendChild(a); });
     menu.appendChild(links);
     if (ro) { ro.disconnect(); sections.forEach(function (s) { ro.observe(s); }); ro.observe(track); }
-    where.textContent = ""; wayKey = "";
   }
   function closeMenu() { menu.hidden = true; where.setAttribute("aria-expanded", "false"); }
-  where.addEventListener("click", function () { var o = menu.hidden; menu.hidden = !o; where.setAttribute("aria-expanded", String(o)); if (o && menuBtns[curStop]) menuBtns[curStop].focus(); });
-  // a second press of the same button within 400 ms is the same press (a double tap or double click moves one stop)
-  // timed from when the finger, button or key went down (the input's own time stamp), not from when a busy page got to the click
-  var lastPressBtn = null, lastPressAt = -1e9;
-  [nextBtn, prevBtn].forEach(function (b) {
-    b.addEventListener("pointerdown", function (e) { b._downAt = e.timeStamp; });
-    b.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") b._downAt = e.timeStamp; });
-    b.addEventListener("blur", function () { b._downAt = undefined; });
-  });
-  function onePress(b) {
-    var now = performance.now(), t = b._downAt !== undefined && b._downAt <= now ? b._downAt : now;
-    b._downAt = undefined;
-    var same = b === lastPressBtn && t - lastPressAt < 400; lastPressBtn = b; lastPressAt = t; return !same;
-  }
-  // curStop is already the stop a glide is headed to, so Next and Back count from where the reader is going
-  // on a stop whose words run on below the bar, Next keeps reading one screen down and Back reads one screen up
-  nextBtn.addEventListener("click", function () { closeMenu(); if (!onePress(nextBtn)) return; if (keepDown()) return; jump(curStop >= LAST ? 0 : curStop + 1); });
-  // the cue is a second, larger target for the same press: a pointer or a finger. It is out of the tab order and hidden
-  // from screen readers, which have Next, first in the bar, with the same destination; a press never leaves focus on it
-  if (cueBtn) {
-    cueBtn.addEventListener("mousedown", function (e) { e.preventDefault(); });
-    cueBtn.addEventListener("click", function () { nextBtn.click(); });
-  }
-  prevBtn.addEventListener("click", function () { closeMenu(); if (!onePress(prevBtn)) return; if (keepUp()) return; if (curStop > 0) jump(curStop - 1); });
+  where.addEventListener("click", function () { var o = menu.hidden; menu.hidden = !o; where.setAttribute("aria-expanded", String(o)); if (o && menuBtns[curSec]) menuBtns[curSec].focus(); });
+  // a press anywhere outside the open list closes it
+  addEventListener("pointerdown", function (e) { if (!menu.hidden && !menu.contains(e.target) && !where.contains(e.target)) closeMenu(); }, { passive: true });
   function jump(k) { clearStudy(); go(k); }
   // Skip to the answer (results only): the Answer stop, with focus on the verdict and no second scroll.
   // With scripts off the link's own #stamp does the same.
@@ -206,15 +196,13 @@
   document.addEventListener("desk:result", function (e) {
     var detail = e.detail || {}, typing = !!detail.typing;
     load(detail.data, !!detail.fresh && !typing, !!detail.replay || typing);
-    if (cueBtn) cueBtn.classList.remove("dip");
     if (detail.fresh && !typing) glideToAnswer();
-    if (detail.fresh && !typing) armDip(); else if (dipOff) dipOff();
   });
   // during a check: at "found N", N blank sheets stand in the stack (3D only; text mode has no sheets)
   var onStage = function () {};
   document.addEventListener("desk:stage", function (e) { var d = e.detail || {}; if (d.stage === "found") onStage(Math.max(0, Math.min(40, +d.count || 0))); });
   document.addEventListener("desk:home", function () {
-    endTween(); clearStudy(); closeMenu(); if (dipOff) dipOff();
+    endTween(); clearStudy(); closeMenu();
     readStops(); onHome(); layout(); updateWay(); wake();
   });
   // ---- the page's shape: stop tops, where the camera holds, and the fold on small screens ----
@@ -244,6 +232,9 @@
       // (the site's claim box, its form and the error are wrappers: their own blocks are what is seen)
       (function add(list) { [].forEach.call(list, function (c) { if (getComputedStyle(c).display === "contents" || c.id === "ask" || c.id === "error" || c.id === "claim-form") add(c.children); else kids.push(c); }); })(inner.children);
       [].forEach.call(s.querySelectorAll("[data-pushed]"), function (c) { c.style.marginTop = ""; delete c.dataset.pushed; });
+      // on a result nothing is pushed below the fold any more: with no Next to say "keep reading", a block cut by the
+      // screen's foot is what tells the reader there is more, so the words run on as they are
+      if (checked) return;
       // a block not shown has no place in the column, so it never takes the fold
       kids = kids.filter(function (c) { return c.getBoundingClientRect().height > 0; });
       kids.sort(function (a, b) { return a.getBoundingClientRect().top - b.getBoundingClientRect().top; });
@@ -385,26 +376,23 @@
   });
 
   // ---- wayfinding follows the page ----------------------------------------------------
+  // the section in view: the picker names it, the rail and the list mark it
   function updateWay() {
-    var P = rawProgress(), now = performance.now();
+    var P = rawProgress();
     var cur = navTo >= 0 ? navTo : Math.max(0, Math.min(LAST, Math.round(P)));
-    if (cur !== curStop || !where.textContent) {
-      curStop = cur;
-      railBtns.forEach(function (b, i) { if (i === cur) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
-      menuBtns.forEach(function (b, i) { if (i === cur) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
-      where.textContent = (innerWidth < 430 ? (cur + 1) + " of " + NS : (cur + 1) + " of " + NS + ": " + STOPS[cur].name);
-      where.setAttribute("aria-label", "Stop " + (cur + 1) + " of " + NS + ": " + STOPS[cur].name + ". Choose a stop");
-      prevBtn.setAttribute("aria-disabled", String(cur === 0));
-      if (cur !== WEIGH && !tween) clearStudy();
+    var sec = 0; for (var i = 0; i < SECS.length; i++) if (SECS[i].stop <= cur) sec = i;
+    if (cur !== curStop && cur !== WEIGH && !tween) clearStudy();
+    curStop = cur;
+    if (sec !== curSec && SECS.length) {
+      curSec = sec;
+      railBtns.forEach(function (b, i) { if (i === sec) b.setAttribute("aria-current", "location"); else b.removeAttribute("aria-current"); });
+      menuBtns.forEach(function (b, i) { if (i === sec) b.setAttribute("aria-current", "location"); else b.removeAttribute("aria-current"); });
+      whereName.textContent = SECS[sec].name;
+      where.setAttribute("aria-label", "Sections. You are in " + SECS[sec].name + ". Choose a section");
     }
-    // the Next label: at once for a press (named for where it lands), otherwise once the page is at rest, so it never flickers
-    if (tween) { if (navTo >= 0 && curGlide) nextWords(navTo, Math.round(curGlide.at())); }
-    else armWords();
+    if (!tween) armWords();
   }
-  // ---- Next never skips what the reader has not seen ------------------------------------
-  // a stop whose last line of text is more than 2 px below the bar's top edge reads "Keep reading": a press moves down
-  // inside it (keepDown) and never past the stop's last line; once that line is above the bar, Next names the next
-  // stop. Back mirrors it, a screen at a time, up to the stop's top
+  // ---- what a reader can see, for keeping their place when the page changes height ----------------
   var barEl = document.getElementById("bar");
   var wayKey = "", wordsT = 0;
   // what a reader can see: laid out, and not inside a closed fold (Chrome still gives those a box)
@@ -444,99 +432,13 @@
   function contentBottom(k) { var ls = textLines(k), b = -1e9; for (var i = 0; i < ls.length; i++) if (ls[i].bottom > b) b = ls[i].bottom; return b; }
   function barTop() { var r = barEl.getBoundingClientRect(); return r.height ? r.top : innerHeight; }
   function pageStep() { return Math.max(120, Math.round(barTop() - stripH - 64)); }
-  // E2: any line of the stop still under the bar is more to read; the label never says Next while a line is hidden
-  function moreBelow(k, y) { return checked && contentBottom(k) - (y + barTop()) > 2; }
-  // E2/E4: the place where the stop's last line of text sits 2 px above the bar
-  function readEnd(k) {
-    var max = Math.max(0, root.scrollHeight - innerHeight), lim = k < LAST ? anchors[k + 1] - 1 : max;
-    return Math.min(max, lim, Math.ceil(contentBottom(k) - barTop() + 2));
-  }
-  function baseY() { return tween && curGlide ? Math.round(curGlide.at()) : window.scrollY; }
-  // E1: L, the last line of text wholly in view between the top strip and the bar, as the page is at y
-  function lastLineIn(k, y, bt) {
-    var best = null;
-    textLines(k).forEach(function (l) { if (l.top >= y + stripH - 0.5 && l.bottom <= bt + 0.5 && (!best || l.bottom > best.bottom)) best = l; });
-    return best;
-  }
-  // a press inside a long stop: E1 before E2. After the press L is still wholly in view below the strip (E1's limit,
-  // L just under the strip); within that limit the press goes exactly far enough to bring the stop's last line of text
-  // above the bar (E2), and no further. With no whole line in view (one block taller than the screen) it moves a screen
-  function keepDown() {
-    var k = curStop, y = baseY(); if (!moreBelow(k, y)) return false;
-    var bt = y + barTop(), to = readEnd(k), L = lastLineIn(k, y, bt);
-    var lim = L ? Math.floor(L.top - stripH - 2) : y + pageStep();
-    if (lim - y < 2) lim = y + pageStep();
-    to = Math.min(to, lim);
-    if (to - y < 2) return false;
-    goingTo = k; scrollToY(to); return true;
-  }
-  function keepUp() {
-    var k = curStop, y = baseY(); if (!checked || y - anchors[k] <= 40) return false;
-    goingTo = k; scrollToY(Math.max(anchors[k], y - pageStep())); return true;
-  }
-  // E3: in Weighed, the study rows not yet wholly seen with the page at y (a row in a closed group is not counted)
-  function rowsLeft(k, y) {
-    if (k !== WEIGH) return 0;
-    var bt = y + barTop(), sy = window.scrollY, n = 0;
-    [].forEach.call(sections[k].querySelectorAll(".row"), function (r) { var q = r.getBoundingClientRect(); if (q.height > 2 && shown(r) && q.bottom + sy > bt + 1) n++; });
-    return n;
-  }
-  function keepWords(n, short) {
-    if (!n) return "Keep reading";
-    return "Keep reading: " + n + " more" + (short ? "" : n === 1 ? " study" : " studies");
-  }
-  // the cue row's words, from the same state as Next's: the next stop by its plain name, or what is left of this one
-  // with the same count; null at the end of the last stop, where there is nothing below
-  function cueWords(k, keep, left, short) {
-    if (keep) return "Scroll down: " + (left ? left + " more " + (left === 1 ? "study" : "studies") : "more of this part");
-    if (k >= LAST) return null;
-    var nx = STOPS[k + 1].name;
-    return "Scroll down: " + (nx === "Answer" ? "your answer" : ((short && STOPS[k].short) || STOPS[k].next).replace(/^Next: /, ""));
-  }
-  function nextWords(k, y) {
-    var keep = moreBelow(k, y), up = checked && y - anchors[k] > 40, short = innerWidth <= 420, left = keep ? rowsLeft(k, y) : 0;
-    var key = k + (keep ? "k" + left : "n") + (up ? "u" : "") + (short ? "s" : "") + NS;
-    if (key === wayKey) return; wayKey = key;
-    // while the cue row shows, Next is its quiet partner: the bare verb on screen, the full words as its name
-    var cw = cueBtn && checked ? cueWords(k, keep, left, short) : null;
-    if (keep) { nextLabel.textContent = cw ? "Keep reading" : keepWords(left, short); nextBtn.setAttribute("aria-label", left ? keepWords(left, false) : "Keep reading: more of " + STOPS[k].name + " below"); nextBtn.classList.remove("last"); }
-    else {
-      var nw = (short && STOPS[k].short) || STOPS[k].next;
-      nextLabel.textContent = cw ? "Next" : nw;
-      if (cw) nextBtn.setAttribute("aria-label", nw); else nextBtn.removeAttribute("aria-label");
-      nextBtn.classList.toggle("last", k === LAST);
-    }
-    prevBtn.setAttribute("aria-label", up ? "Back: up one screen in " + STOPS[k].name : "Back one stop");
-    if (cueBtn) {
-      if (cw) cueLabel.textContent = cw;
-      cueBtn.hidden = !cw; root.classList.toggle("has-cue", !!cw);
-    }
-  }
-  // once, after an answer the reader just ran: if they have done nothing for 3 seconds since it landed, the cue's
-  // chevron moves one time only, as two short dips of 600 ms. Any touch, wheel, press or key before then cancels it for good. Never under
-  // reduced motion, never on a saved, shared or replayed answer
-  var dipT = 0, dipOff = null;
-  function armDip() {
-    if (dipOff) dipOff();
-    if (!cueBtn || reduce.matches) return;
-    var evs = ["wheel", "touchstart", "pointerdown", "keydown"];
-    function cancel() { clearTimeout(dipT); dipT = 0; off(); }
-    function off() { evs.forEach(function (ev) { removeEventListener(ev, cancel, true); }); dipOff = null; }
-    evs.forEach(function (ev) { addEventListener(ev, cancel, { capture: true, passive: true }); });
-    dipOff = cancel;
-    function fire() {
-      if (tween || document.visibilityState === "hidden") { dipT = setTimeout(fire, 300); return; }
-      off(); dipT = 0;
-      if (reduce.matches || cueBtn.hidden || root.classList.contains("kbd")) return;
-      cueBtn.classList.remove("dip"); void cueBtn.offsetWidth; cueBtn.classList.add("dip");
-    }
-    dipT = setTimeout(fire, 3000);
-  }
+  // kept for the scene, which calls it after a cut: there are no Next words any more, only the place to note
+  function nextWords() {}
   function armWords() { clearTimeout(wordsT); wordsT = setTimeout(restWords, 150); }
   function restWords() {
     wordsT = 0;
     if (tween || performance.now() - lastScrollAt < 140) { if (!tween) armWords(); return; }
-    nextWords(curStop, window.scrollY); noteRest();
+    noteRest();
   }
 
   // ---- a page at rest keeps its stop when the page above it changes height ---------------
@@ -579,13 +481,8 @@
   }, { passive: true });
   var lastMoveAt = -1e9, lastScrollAt = -1e9, handT = 0;
 
-  // ---- the page comes to rest on a stop, never halfway between two (with the desk) ----------------
-  // 160 ms after the scroll stops, with no finger or button down and no glide running:
-  // - a glide that was cut short (a touch, a reflow) is finished, unless the reader's own move since ran 12 px or more;
-  // - a page left between two stops glides to a stop's top in the direction of the reader's last move once that move
-  //   ran 12 px or more (one arrow press, a small deliberate wheel or swipe); a smaller nudge goes back to the stop
-  //   the page rested on before it. Weighed and Research scroll freely inside themselves: a page inside a long stop,
-  //   or just past its end while its last words clear the bar, stays.
+  // ---- scrolling is the reader's own: the page never settles itself onto a stop ----------------
+  // 160 ms after the scroll stops the place is noted, nothing more: no snap, no finishing a glide the reader cut short.
   var settleT = 0, restY = 0, touching = false, pressing = false, NUDGE = 12;
   function armSettle() { clearTimeout(settleT); settleT = setTimeout(settleStop, 160); }
   addEventListener("touchstart", function () { touching = true; clearTimeout(settleT); }, { passive: true });
@@ -596,39 +493,7 @@
   var tabbedAt = -1e9;
   addEventListener("keydown", function (e) { if (e.key === "Tab") tabbedAt = performance.now(); });
   var settleGlide = false;
-  function settleStop() {
-    settleT = 0;
-    if (!checked || tween || touching || pressing || keyboardOpen()) return;
-    if (performance.now() - tabbedAt < 1200) { glideLeft = null; restY = window.scrollY; runLen = 0; return; }
-    if (glideLeft) {
-      var g = glideLeft; glideLeft = null;
-      var gd = g.at() > window.scrollY ? 1 : -1;
-      // no move of its own, or a move the same way: the glide finishes; a move of 12 px or more the other way keeps the reader's place
-      if ((runLen < NUDGE || runDir === gd) && !offScreenFocus(g.at() - window.scrollY)) { goingTo = g.nav; settleGlide = true; scrollToY(g.at, function () { restY = window.scrollY; }); return; }
-    }
-    if (!scene3d) return;
-    // the page is where a press sent it: the settle never moves it off that stop
-    if (landY >= 0 && Math.abs(window.scrollY - landY) < 2) { restY = window.scrollY; runLen = 0; return; }
-    measure();
-    var y = window.scrollY, k = -1;
-    for (var i = 0; i < LAST; i++) if (y > holds[i] + 1 && y < anchors[i + 1] - 1) { k = i; break; }
-    if (k >= 0 && sections[k].classList.contains("long") && y - holds[k] < innerHeight * 0.3) {
-      // a reader resting just past a long stop's end keeps that place; a tiny nudge from it goes back to it
-      if (runLen > 0 && runLen < NUDGE && Math.abs(y - restY) >= 2 && Math.abs(y - restY) < NUDGE) { runLen = 0; settleGlide = true; var back = restY; scrollToY(back, function () { restY = window.scrollY; }); return; }
-      restY = y; runLen = 0; return;
-    }
-    if (k < 0) { restY = y; runLen = 0; return; }
-    // onward in the direction the reader last moved, once that move ran 12 px or more (one arrow press, a small
-    // deliberate wheel or swipe); a smaller nudge goes back to the stop the page rested on before it
-    var up = holds[k], down = anchors[k + 1], to;
-    if (runLen >= NUDGE) to = runDir > 0 ? down : up;
-    else to = Math.abs(restY - up) <= Math.abs(restY - down) ? up : down;
-    if (offScreenFocus(to - y)) { restY = y; runLen = 0; return; }
-    runLen = 0; settleGlide = true;
-    // the target is read live, so a page that grows above it mid-glide still lands on the true top or end
-    var goDown = to === down;
-    scrollToY(function () { return goDown ? liveTop(k + 1) : liveHold(k); }, function () { restY = window.scrollY; });
-  }
+  function settleStop() { settleT = 0; glideLeft = null; restY = window.scrollY; runLen = 0; }
   function liveTop(i) { return Math.min(Math.max(0, root.scrollHeight - innerHeight), Math.round(sections[i].getBoundingClientRect().top + window.scrollY)); }
   function liveHold(i) { return Math.min(Math.max(0, root.scrollHeight - innerHeight), liveTop(i) + Math.max(0, Math.round(sections[i].offsetHeight - innerHeight))); }
   // a control the reader moved to by keyboard is never carried off the screen

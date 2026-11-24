@@ -465,7 +465,6 @@ function deskNamed(data) {
   return [...out].sort((a, b) => a - b);
 }
 
-const backBtn = '<button class="back" type="button" data-go="1">Back to the short answer</button>';
 const eyebrow = (stops, name, text) =>
   `<p class="eyebrow"${name === "Open" ? ' id="h-open"' : ""}><b aria-hidden="true">${pad2(stops.indexOf(name) + 1)}</b>${escapeHtml(text)}</p>`;
 
@@ -503,7 +502,7 @@ function weighedHtml(data) {
     `<h3 class="grp-h"><button class="grp-btn" type="button" aria-label="${escapeHtml(title)} (${idx.length})" aria-controls="grp-${key}" aria-expanded="${gi === 0}">${escapeHtml(title)} (${idx.length})</button></h3>`
     + `<ul class="rows" id="grp-${key}"${gi ? " hidden" : ""}>${idx.map((i) => studyRowHtml(studies[i], i, key, named)).join("")}</ul>`).join("");
   return `<section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort"><div class="cap left"><div class="inner wide">`
-    + `<div class="panel list" id="list-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Weighed", "Weighed, not counted")}`
+    + `<div class="panel list" id="list-panel" tabindex="-1">${eyebrow(stops, "Weighed", "Weighed, not counted")}`
     + `<h2 id="h-sort">Which studies the answer rests on</h2>`
     + `<p class="intro">Each study has its abstract and its PubMed page.</p>`
     + `<div id="rows">${rows}</div></div></div></div></section>`;
@@ -556,7 +555,7 @@ function researchHtml(data) {
   if (rb.length) h += `<ul class="rests">${rb.map((d) => `<li><b>${d.count}</b><span>${deskRefs(`${d.label} (${d.refs})`, n)}</span></li>`).join("")}</ul>`;
   if (bv) h += '<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them.</p>';
   return `<section class="stop long" id="s5" data-stop="Research" aria-labelledby="h-research"><div class="cap left"><div class="inner wider">`
-    + `<div class="panel read" id="read-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Research", "The thorough answer")}`
+    + `<div class="panel read" id="read-panel" tabindex="-1">${eyebrow(stops, "Research", "The thorough answer")}`
     + `<h2 id="h-research">What the research says</h2><div id="research">${h}</div></div></div></div></section>`;
 }
 
@@ -583,9 +582,6 @@ function renderResult(data, replay, keepTyped) {
   showTyped(data.typed, data.typed_reason);
   $("confidence").textContent = confidenceLine(data);
   $("doctor-line").hidden = false;
-  // the cue row on top of the bar, as the server prints it on the Answer stop; desk.js names it for each stop after
-  $("cue-label").textContent = "Scroll down: what was read";
-  $("cue").hidden = false;
   resultSection.dataset.verdict = data.verdict;
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
   // Stop 3: what was read.
