@@ -3558,7 +3558,7 @@ with appmod.app.test_request_context("/"):
                                  "true", "Creatine raises strength.", "Strength rose (Study 1).", ["SA1"],
                                  [dict(_SA_TRIAL), dict(_SA_REVIEW)], "http://x", still_open="Doses.")
 t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
-  _sa["evidence_line"].endswith("Certainty: very low") and _sa["verdict"] == "complicated",
+  _sa["evidence_line"].endswith("Certainty: very low.") and _sa["verdict"] == "complicated",
   (_sa["verdict"], _sa["evidence_line"]))
 # A saved answer that relied on a study the current code sets aside was written
 # with that study in view, and code cannot tell which of its sentences lean
@@ -4877,7 +4877,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews.", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -7853,7 +7853,7 @@ _f9line = (_f9a.get_json() or {}).get("evidence_line", "")
 _f9h = c.get("/", query_string={"q": _f9c}).get_data(as_text=True)
 t("fix 9: get_cached_by_key returns the stored search query", _f9k and _f9k["search_query"] == _GIN_Q)
 t("fix 9: the streamed check reads the review on the claim's outcome (moderate, not the lowest)",
-  _f9line.endswith("Certainty: moderate"), _f9line)
+  _f9line.endswith("Certainty: moderate."), _f9line)
 t("fix 9: the shared link prints the same evidence line as the streamed check",
   _f9line and _f9line in _f9h and "Low certainty evidence" not in _f9h)
 
@@ -7924,7 +7924,7 @@ try:
 finally:
     appmod.og.render_card = _xcard
 t("extra: a cached 'true' over a low-rated lead review is shown as complicated, with the low line",
-  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").endswith("Certainty: low")
+  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").endswith("Certainty: low.")
   and "certainty of that evidence is low" in (_xa.get("tldr") or ""), (_xa.get("verdict"), _xa.get("evidence_line"), _xa.get("tldr")))
 t("extra: the shared page, its markup and its card never say Likely true over that line",
   not _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">" + appmod.VERDICT_LABELS["true"], _xh)
@@ -9832,9 +9832,9 @@ _el_off = _el("Cold showers boost immunity", _EL_Q, "complicated",
 _el_on = _el("Cold showers boost immunity", _EL_Q, "complicated",
              _el_bd("Immune function rose with an effect size of 1.03 (Study 1).", _EL_LARGE))
 t("effect line: a figure whose sentence names another outcome gives the evidence line no size",
-  _el_off == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews", _el_off)
+  _el_off == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews.", _el_off)
 t("  and a figure whose sentence names the claim's outcome keeps it",
-  _el_on == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews", _el_on)
+  _el_on == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews.", _el_on)
 # ---- final fix F8: the effect box follows the line's size gate ---------------
 # Live: cold showers showed "a large effect" for a figure about inflammation.
 # When line_label withholds the size from the line, code writes no size word
@@ -10058,18 +10058,18 @@ _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
                tldr="No, it does not cure it.")
 t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
-  _el_cure == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews", _el_cure)
+  _el_cure == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews.", _el_cure)
 _el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
               _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
                      dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
 t("  and a short name in the outcome group (ASD) does not make the outcome unreadable",
-  _el_asd == "The claim: Not supported by the studies reviewed, which found no clear effect. Based on pooled reviews", _el_asd)
+  _el_asd == "The claim: Not supported by the studies reviewed, which found no clear effect. Based on pooled reviews.", _el_asd)
 _el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
               _el_bd("Deaths were lower with a relative risk of 0.83 (Study 1).",
                      {"figure": "relative risk 0.83", "label": "small", "plain": "about 17% lower risk"}),
               tldr="Yes, coffee drinkers lived longer.")
 t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
-  _el_gen == "The claim: Supported by the studies reviewed. Based on pooled reviews", _el_gen)
+  _el_gen == "The claim: Supported by the studies reviewed. Based on pooled reviews.", _el_gen)
 
 # ---- The evidence line sizes only a figure that moves the way the claim says ----
 # Live run: "Smoking causes lung cancer" (True) read "a moderate effect", from
@@ -10095,9 +10095,9 @@ _ed_up = _ed("Smoking causes lung cancer", _ED_Q,
              "Current smokers had a relative risk of 4.21 for lung cancer (Study 1).",
              {"figure": "relative risk 4.21", "label": "large", "plain": "about 321% higher risk"})
 t("effect direction: a claim that something raises a risk, answered True, is not sized by a figure of lower risk",
-  _ed_down == "The claim: Supported by the studies reviewed. Based on pooled reviews", _ed_down)
+  _ed_down == "The claim: Supported by the studies reviewed. Based on pooled reviews.", _ed_down)
 t("  and a figure of higher risk under it keeps its size",
-  _ed_up == "The claim: Supported by the studies reviewed, a large effect. Based on pooled reviews", _ed_up)
+  _ed_up == "The claim: Supported by the studies reviewed, a large effect. Based on pooled reviews.", _ed_up)
 _ed_mirror = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
                  "The depression odds ratio was 0.83 (Study 1).",
                  {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% lower odds"})
@@ -10105,8 +10105,8 @@ _ed_mirror_up = _ed("Exercise lowers the risk of depression", "(exercise) AND (d
                     "The depression odds ratio was 0.83 (Study 1).",
                     {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% higher odds"})
 t("  and the mirror case: a lowers claim keeps a figure of lower odds and loses one of higher odds",
-  _ed_mirror == "The claim: Supported by the studies reviewed, a small effect. Based on pooled reviews"
-  and _ed_mirror_up == "The claim: Supported by the studies reviewed. Based on pooled reviews", (_ed_mirror, _ed_mirror_up))
+  _ed_mirror == "The claim: Supported by the studies reviewed, a small effect. Based on pooled reviews."
+  and _ed_mirror_up == "The claim: Supported by the studies reviewed. Based on pooled reviews.", (_ed_mirror, _ed_mirror_up))
 t("  and a claim that says no direction ('improves'), or a figure that says none, gives no size",
   breakdown.claim_direction("Creatine improves memory") is None
   and breakdown.claim_direction("Smoking does not cause lung cancer") is None
@@ -10222,12 +10222,12 @@ def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd
 t("meet: the thin review is one code sets aside, and it says its evidence is thin",
   evidence.measured_outcome(_TR_THIN, _hair_out, "", "(creatine)") is False and evidence.says_thin(_TR_THIN))
 t("meet: a thin review among the put-back studies lowers the line shown",
-  _tr_line([_TR_REV]).endswith("Certainty: moderate") and _tr_line([_TR_REV, _TR_THIN]).endswith("Certainty: low"),
+  _tr_line([_TR_REV]).endswith("Certainty: moderate.") and _tr_line([_TR_REV, _TR_THIN]).endswith("Certainty: low."),
   (_tr_line([_TR_REV]), _tr_line([_TR_REV, _TR_THIN])))
 _TR_BD = {"effect": {"label": "large", "effect_size": "Inflammation rose with an effect size of 1.03 (Study 1)."}}
 t("meet: a size about another outcome is withheld in both readings, and the less sure line still shows",
   "large" not in _tr_line([_TR_REV], bd=_TR_BD) and "large" not in _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)
-  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).endswith("Certainty: low"),
+  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).endswith("Certainty: low."),
   (_tr_line([_TR_REV], bd=_TR_BD), _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)))
 _TR_G = verdict.GUIDELINE_LEAD + "creatine is fine for most adults."
 # A guidance-set answer is one on a claim guidance is read for (H3): the
@@ -13240,7 +13240,7 @@ t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare
   and not _e_re.search(r"\b(?:Strong|Moderate|Weak) evidence\b", _e_line), _e_line)
 t("BRIEF E2 vinegar: the second statement names the related effect and claims no certainty it did not read",
   _e_out["effect_line"].startswith("What the studies did find: ")
-  and _e_out["effect_line"].endswith(". The abstracts we read do not rate how certain this is"), _e_out["effect_line"])
+  and _e_out["effect_line"].endswith(". The abstracts we read do not rate how certain this is."), _e_out["effect_line"])
 # The E3 follow-up replaced "says about 22 mg per dL once in 'says'": the
 # earlier 'says' sentence carried nothing the effect size did not, so it
 # went, and the figure is said once, in the effect size.
@@ -13287,14 +13287,14 @@ for _e_v in ("true", "false", "complicated", "insufficient"):
 t("BRIEF E2: no verdict value prints a bare strength word", not _e_bad, _e_bad)
 t("BRIEF E2: a refuted claim reads 'Not supported by the studies reviewed'",
   _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], "")
-  == "The claim: Not supported by the studies reviewed. Based on pooled reviews of trials",
+  == "The claim: Not supported by the studies reviewed. Based on pooled reviews of trials.",
   _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], ""))
 t("BRIEF E2: a certainty the line carried is kept, in words that are not a strength",
   _e_ev.claim_statement("true", "Low certainty evidence for this claim", _e_rcts, ["50"], "")
-  == "The claim: Supported only by limited studies. Certainty: low")
+  == "The claim: Supported only by limited studies. Certainty: low.")
 t("BRIEF E2: an effect sentence outside the closed pattern is printed as the model said it",
   _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", _e_rcts, ["50", "51"], cites=[2])
-  == "What the studies did find: Vinegar lowered glucose (Study 2). The abstracts we read do not rate how certain this is")
+  == "What the studies did find: Vinegar lowered glucose (Study 2). The abstracts we read do not rate how certain this is.")
 t("BRIEF E2: no second statement for a claim rated true, or one promising nothing absolute",
   _e_ev.effect_statement("true", "cure", "Glucose fell.", [], []) == ""
   and _e_ev.effect_statement("false", "", "Glucose fell.", [], []) == "")
@@ -13493,20 +13493,20 @@ _r3_said = ["Symptoms fell with placebo, not with cinnamon (Study 1).",
 _r3_rev = {"pmid": "1", "title": "Cinnamon and glycaemia: a meta-analysis", "publication_types": ["Meta-Analysis"],
            "abstract": "Trials in 600 adults. Conclusion: cinnamon lowered HbA1c."}
 _r3_bad = [x for x in _r3_said if _e_ev.effect_statement("false", _r3_cure, x, [_r3_rev], ["1"], "", cites=[1])
-           != f"What the studies did find: {x.rstrip('.')}. The abstracts we read do not rate how certain this is"]
+           != f"What the studies did find: {x.rstrip('.')}. The abstracts we read do not rate how certain this is."]
 t("BRIEF E2r B3/M3: statement 2 prints the sentence unchanged, with no reading of its verbs", not _r3_bad, _r3_bad)
 _r3_g1 = dict(_r3_rev, abstract="Trials in 600 adults. Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c.")
 _r3_g2 = dict(_r3_rev, pmid="2", abstract="Trials in 600 adults. Low certainty evidence. Conclusion: cinnamon lowered HbA1c.")
 t("BRIEF E2r B3: one stated grade reads 'as the review rates it'",
   _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1])
-  == "What the studies did find: HbA1c fell (Study 1). Certainty: moderate, as the review rates it",
+  == "What the studies did find: HbA1c fell (Study 1). Certainty: moderate, as the review rates it.",
   _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1]))
 # Brief E4 D3 replaced the sentence citing Study 1 alone (it took Study 2's
 # grade too): the sentence now cites both graded reviews.
 t("BRIEF E4 D3: several grades among the cited reviews read 'varies by outcome, lowest to highest, as the reviews rate it'",
   _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2], ["1", "2"], "", cites=[1, 2])
   == "What the studies did find: HbA1c fell (Studies 1 and 2). Certainty varies by outcome, low to moderate, "
-  "as the reviews rate it", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2],
+  "as the reviews rate it.", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2],
                                                    ["1", "2"], "", cites=[1, 2]))
 
 # Brief E2 repair, m1 and m2: statement 1 is never surer than the old line.
@@ -13528,13 +13528,13 @@ _m1_flag = _e_study("70", _E_REV, abstract="We pooled randomized trials. CONCLUS
                     cites_retracted=[{"pmid": "800001", "title": None, "trial": False}])
 t("BRIEF E2r m1: a flagged review as the best study relied on is named in the basis",
   _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], "")
-  == "The claim: Not supported by the studies reviewed. Based on a review that cites a retracted study",
+  == "The claim: Not supported by the studies reviewed. Based on a review that cites a retracted study.",
   _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], ""))
 # Brief E3 N1 replaced "a clean top-tier study beside it keeps the usual
 # basis": the flagged review is named whenever relied on, the clean after.
 t("BRIEF E3 N1: a clean top-tier study beside it follows the flagged review in the basis",
   _e_ev.claim_statement("false", "Strong evidence against this claim", [_m1_flag, _e_rcts[0]], ["70", "50"], "")
-  .endswith("Based on a review that cites a retracted study, and randomized trials"))
+  .endswith("Based on a review that cites a retracted study, and randomized trials."))
 t("BRIEF E2r m2: a narrowing reads 'which were only in'",
   _e_ev.claim_statement("complicated", "Moderate evidence, but only in older adults", _e_rcts, ["50"], "")
   .startswith("The claim: No plain yes or no from the studies reviewed, which were only in older adults."))
@@ -13881,7 +13881,7 @@ t("BRIEF E3 N1: kava, the caution sentence names the study, once at the end of t
   and _e3_kbdo["evidence"][-1] == _E3_ONE and _e3_kbdo["evidence"].count(_E3_ONE) == 1
   and _e3_kbdo["says"][-1] == _E3_ONE and _e3_kbdo["says"].count(_E3_ONE) == 1, (_e3_kava_on["explanation"], _e3_kbdo))
 t("BRIEF E3 N1: kava, the basis names the flagged review, then the clean design relied on",
-  _e3_kava_on["evidence_line"].endswith("Based on a review that cites a retracted study, and randomized trials"),
+  _e3_kava_on["evidence_line"].endswith("Based on a review that cites a retracted study, and randomized trials."),
   _e3_kava_on["evidence_line"])
 t("BRIEF E3 N1: the sentence for several flagged reviews names each",
   _e3_ev.retracted_review_sentence([3, 1]) == "Studies 1 and 3 cite studies that were later retracted, so treat "
@@ -14023,16 +14023,16 @@ t("BRIEF E3 N2: a sentence citing only flagged reviews says so and relays no gra
   "cites a retracted study, so treat it with caution.", _e3_only_flag)
 _e3_both = _e3_two("false", "Fasting glucose fell (Studies 1 and 2).", [_e3_flagged_low, _e3_ma_mod])
 t("BRIEF E3 N2: beside a clean review, only the clean review's grade counts",
-  _e3_both.endswith("Certainty: moderate, as the review rates it"), _e3_both)
+  _e3_both.endswith("Certainty: moderate, as the review rates it."), _e3_both)
 t("BRIEF E3 N2: unflagged, both grades count as before",
   _e3_two("false", "Fasting glucose fell (Studies 1 and 2).", [_e3_ma_low, _e3_ma_mod]).endswith(
-      "Certainty varies by outcome, low to moderate, as the reviews rate it"))
+      "Certainty varies by outcome, low to moderate, as the reviews rate it."))
 # Certainty is said once: beside a second statement the first ends with its basis.
 _e3_line = "Moderate certainty evidence against this claim"
 t("BRIEF E3 N2: the first statement ends with the basis when asked, with 'Certainty:' otherwise",
   _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure", basis_only=True)
-  == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews"
-  and _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure").endswith("Certainty: moderate"))
+  == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews."
+  and _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure").endswith("Certainty: moderate."))
 _e3_vg = _e3_fresh("Vinegar cures diabetes", _E3_Q[0], [_e3_ma_mod, _e3_trial], "false", ["against", "against"],
                    "Fasting glucose fell by 0.4 mmol/L, a small change (Study 1).",
                    {"evidence": ["Fasting glucose fell by 0.4 mmol/L (Study 1)."],
@@ -14051,7 +14051,7 @@ for _e3_es in ("Did glucose fall? Not clearly (Study 1)?", "Glucose fell in some
     _e3_joins[_e3_es] = _e3_two("false", _e3_es, [_e3_trial])
 _e3_join_bad = {k: v for k, v in _e3_joins.items()
                 if not v or _e3_re.search(r"\.\.|[?!]\.|[–—]|\.\s*\.", v)
-                or not v.endswith("The abstracts we read do not rate how certain this is")}
+                or not v.endswith("The abstracts we read do not rate how certain this is.")}
 t("BRIEF E3 N8: a sentence ending in '?', '!', '..' or '...' joins cleanly, and no dash reaches the statement",
   not _e3_join_bad, _e3_join_bad)
 t("BRIEF E3 N8: a sentence ending '!' keeps its mark and gets no full stop after it",
@@ -14071,7 +14071,7 @@ _e3_gk = _e3_fresh("Ginkgo improves memory in older adults", "(ginkgo) AND (memo
                    "memory (Study 2).", flag=(0,), tldr="The studies show it helps.")
 t("BRIEF E3 N9: ginkgo, a flag that lowered the level leaves the basis naming the flagged review, not 'Certainty: low'",
   "Certainty" not in _e3_gk["evidence_line"]
-  and _e3_gk["evidence_line"].endswith("Based on a review that cites a retracted study, and human studies"),
+  and _e3_gk["evidence_line"].endswith("Based on a review that cites a retracted study, and human studies."),
   _e3_gk["evidence_line"])
 
 # N3, N4, N7: an indirect mark only when the study measures a risk marker. Both
@@ -14485,6 +14485,25 @@ _d3_review = appmod._statement_two("false", _d3_ab, {"effect_size": "Systolic pr
                                    [_D3_MA, _D3_RCT], {"1", "2"}, "blood pressure", _D3_Q)
 t("BRIEF E4 D3: a sentence citing the review keeps the review's own grade",
   "Certainty: moderate, as the review rates it" in _d3_review, _d3_review)
+
+# BRIEF E4 D5: each of the two statements ends with exactly one full stop,
+# made in the Python (the templates strip and re-add one, so the page is the same).
+import evidence as _d5_ev
+import breakdown as _d5_bd
+_d5_rev = {"pmid": "1", "title": "Cinnamon and glycaemia: a meta-analysis", "publication_types": ["Meta-Analysis"],
+           "abstract": "Trials in 600 adults. Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c."}
+_d5_fl = dict(_d5_rev, cites_retracted=[{"pmid": "9", "title": None, "trial": False}])
+_d5_cure = _d5_bd.absolute_claim("Cinnamon cures diabetes")
+_d5_two = [_d5_ev.effect_statement("false", _d5_cure, x, [r], ["1"], "", cites=[1])
+           for x in ("HbA1c fell (Study 1).", "HbA1c fell (Study 1)", "HbA1c fell (Study 1)..", "Did HbA1c fall (Study 1)?")
+           for r in (_d5_rev, dict(_d5_rev, abstract="Trials in 600 adults. Conclusion: cinnamon lowered HbA1c."), _d5_fl)]
+t("BRIEF E4 D5: statement 2 ends with exactly one full stop, graded, ungraded or flagged",
+  all(x.endswith(".") and not x.endswith("..") for x in _d5_two), [x for x in _d5_two if not x.endswith(".") or x.endswith("..")])
+_d5_line = "Moderate certainty, from pooled reviews"
+_d5_one = [_d5_ev.claim_statement(v, _d5_line, [_d5_rev], {"1"}, _d5_cure, basis_only=b)
+           for v in ("false", "complicated", "true") for b in (False, True)]
+t("BRIEF E4 D5: statement 1 ends with exactly one full stop, with the certainty or the basis",
+  all(x.endswith(".") and not x.endswith("..") for x in _d5_one), _d5_one)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

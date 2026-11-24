@@ -3079,7 +3079,8 @@ def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: 
     span = re.match(r"^((?:very low|low|moderate|high)(?: to (?:very low|low|moderate|high))?) certainty\b", head)
     basis = (f"Certainty: {span.group(1)}" if span and not basis_only
              else f"Based on {design_kind(studies, cited_pmids)}")
-    return f"{claim_label(absolute)}: {phrase}. {basis}"
+    # Exactly one full stop at the end (brief E4 D5).
+    return f"{claim_label(absolute)}: {phrase}. {basis.rstrip('.')}."
 
 
 # Statement 2 has no parsed form: the effect sentence is shown as it was
@@ -3148,7 +3149,8 @@ def effect_statement(verdict: str, absolute: str, effect_sentence: str, studies,
     # "..", never "?." or "!.".
     said = re.sub(r"\s*\.+$", "", sentence)
     joined = f"{said} " if said.endswith(("?", "!")) else f"{said}. "
-    return f"What the studies did find: {joined}{sure}"
+    # Exactly one full stop at the end (brief E4 D5).
+    return f"What the studies did find: {joined}{sure.rstrip('.')}."
 
 
 def names_family(text: str, family: str) -> bool:
