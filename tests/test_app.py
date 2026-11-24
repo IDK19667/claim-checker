@@ -15084,6 +15084,57 @@ _e6e_avg = _e6e("Weight fell by 2 kg on average and HbA1c by 1.53 in adults (Stu
 t("BRIEF E6 B1e: 'on average' is no qualifier, so the cut keeps 'on average in adults'",
   _e6e_avg == "Weight fell by 2 kg on average in adults (Study 1).", _e6e_avg)
 
+# ===== SITE FIXES (q10-site): public lists, dates, footer =====
+# --- 1a: every public path passes one screen ---
+import re as _sf_re
+# Every GET address the app serves is either a public list of saved claims
+# (each must pass the one screen, app._public_claims) or a page that lists
+# none. A new address fails here until it is put in one of the two.
+_SF_LISTS = {"/", "/sitemap.xml", "/llms.txt", "/api/trending", "/api/suggest"}  # plus the 404 page
+_SF_NOT_LISTS = {"/checks", "/flight", "/robots.txt", "/favicon.ico", "/privacy", "/stats", "/about", "/method",
+                 "/corrections", "/og/<path:key>.png", "/manifest.webmanifest", "/sw.js", "/healthz",
+                 "/api/study/<pmid>", "/static/<path:filename>"}
+_sf_get = {r.rule for r in appmod.app.url_map.iter_rules() if "GET" in (r.methods or ()) and not r.rule.startswith("/__")}
+t("1a: every GET address is either a public list (screened) or a page that lists no saved claim",
+  _sf_get <= _SF_LISTS | _SF_NOT_LISTS and _SF_LISTS <= _sf_get, sorted(_sf_get - _SF_LISTS - _SF_NOT_LISTS))
+_SF_ST = [{"pmid": "SF1", "title": "Turmeric and arthritis: a randomized trial", "abstract": "Curcumin cured nothing; arthritis pain eased a little.",
+           "journal": "J", "year": "2020", "publication_types": ["Randomized Controlled Trial"], "authors": ["Vale J"],
+           "data_banks": None, "url": "u"}]
+
+
+def _sf_seed(claim, studies=None, verdict_="complicated"):
+    db.put_cached_verdict(claim, "turmeric AND arthritis", verdict_, "It may help a little (Study 1).", ["SF1"],
+                          [dict(s_) for s_ in (studies or _SF_ST)], tldr="Mixed.", still_open="Whether it lasts.")
+    for _ in range(2):
+        db.log_check(claim, verdict_, "x", [])
+
+
+def _sf_paths(q):
+    """Every public list's text, as a reader or a crawler gets it."""
+    out = {u: c.get(u).get_data(as_text=True) for u in ("/", "/sitemap.xml", "/llms.txt", "/api/trending")}
+    out["404"] = c.get("/no-such-page-sf").get_data(as_text=True)
+    out["/api/suggest"] = c.get("/api/suggest?q=" + urllib.parse.quote(q)).get_data(as_text=True)
+    return out
+
+
+def _sf_drop(*claims):
+    with db.get_conn() as _conn:
+        for _cl in claims:
+            _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_cl),))
+            _conn.execute("DELETE FROM checks WHERE claim_key = ?", (db.normalize_claim(_cl),))
+    appmod._sitemap_memo["stamp"] = None
+
+
+_SF_CAP = "Turmeric cured Jordan Vale of arthritis, call 415 555 0142"
+_sf_seed(_SF_CAP)
+_sf_p = _sf_paths("turmeric cured")
+t("1a: a typed claim with a capitalised name and a phone number is on no public path (home, 404, trending, llms, sitemap, type-ahead)",
+  not [u for u, v in _sf_p.items() if "Vale" in v or "0142" in v], [u for u, v in _sf_p.items() if "Vale" in v or "0142" in v])
+t("1a: its own result page still works for whoever has the link", c.get("/?q=" + urllib.parse.quote(_SF_CAP)).status_code == 200
+  and "Jordan Vale" in c.get("/?q=" + urllib.parse.quote(_SF_CAP)).get_data(as_text=True))
+_sf_drop(_SF_CAP)
+# ===== END SITE FIXES =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

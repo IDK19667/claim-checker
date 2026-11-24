@@ -331,7 +331,9 @@ def _citation(s: dict, relied_on: bool) -> dict:
 
 def _public_claims(rows, n, key="claim_text", indexable=False):
     """
-    The first n rows whose claim may be shown in a public list. A claim that looks
+    The one screen every public list passes (home's latest checks, the 404
+    page, trending, llms.txt, type-ahead; tests list each address): the first
+    n rows whose claim may be shown in a public list. A claim that looks
     like it holds a name, an age, contact details or a medical detail is left out
     (indexable=True also needs it to be a curated example, for the machine index).
     Callers fetch about three times n so a filtered list stays near its old size.
@@ -1961,6 +1963,9 @@ def api_suggest():
     except sqlite3.Error as e:
         app.logger.warning("Could not read claims for suggestions: %s", e)
         return jsonify({"suggestions": []})
+    # Type-ahead is a public list like the others: it offers only claims the
+    # one screen (_public_claims) lets any reader see.
+    claims = _public_claims(claims, len(claims))
     shown = (_suggested(r) for r in suggest_mod.suggest(q, claims))
     return jsonify({"suggestions": [r for r in shown if r is not None]})
 
