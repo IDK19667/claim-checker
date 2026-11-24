@@ -4,6 +4,17 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): The joined release, and three things no single part could see
+
+The result screens, the colours, the lamp on a phone and the speed work were joined on the engine
+under test. Three faults showed only together. In text mode on a tall wide screen the answer card
+sat halfway down (165 px at 1440x900): the card now starts under the strip there too, as
+DESIGN.md already says for wide screens. On a phone a fresh check jumped the camera for one frame
+when the answer landed: the lamp band's view now stays the first key until the glide is at rest.
+Pressing "Check the research" on a wide screen paints in about 176 ms: any change of text on the
+page costs one long rendering frame there, while a change of colour alone paints in 16 to 24 ms,
+and the button has no pressed state of its own; giving it one is a design decision, left open.
+
 ## 2026-11-24 (q10): An abstract shows an en or an em dash as a plain hyphen
 
 Abstracts are now in the server-rendered page, and the rule is zero en or em dashes in anything a

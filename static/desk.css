@@ -415,6 +415,8 @@ html.kbd .bar { visibility: hidden; }
   html.checked #s2 { min-height: calc(100vh - 150px); min-height: calc(100svh - 150px); }
   html.checked #s3 { min-height: 0; padding-bottom: 24px; }
   .has-gl #s2 .cap { align-items: flex-start; }
+  /* text mode too: the answer card starts just under the strip, not halfway down a tall screen (q10-rel) */
+  html.no-gl #short-label { margin-top: 0; }
   /* the rail at the right edge is the picker: no text panel runs under its labels */
   .cap.right .inner { margin-right: max(clamp(0px, 9vw, 150px), 196px); }
   .has-gl #s3 .cap.right .inner { margin-right: calc(max(clamp(0px, 9vw, 150px), 196px) - 26px); }
