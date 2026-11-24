@@ -996,14 +996,18 @@ $("cancel-btn")?.addEventListener("click", () => { if (controller) controller.ab
 
 // A press of "Check the research" first paints the button pressed (a colour change, one cheap frame); the check itself,
 // which relays out the page and the scene, starts in the next task after that frame. Without this the first thing a
-// desktop reader saw came one long frame (about 180 ms) after the press.
-let submitQueued = false;
+// desktop reader saw came one long frame (about 180 ms) after the press. A finger needs no wait: a touch paints :active
+// at touchstart, before the click, and holding the check back there lets the new sheets' faces paint before the answer
+// is on screen (check 21), so a touch press checks at once.
+let submitQueued = false, touchAt = -1e9;
+addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") touchAt = performance.now(); }, { capture: true, passive: true });
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   if (submitQueued) return;
   const claim = input.value;
   submitQueued = true; submitBtn.classList.add("pressed");
   const go = () => { if (!submitQueued) return; submitQueued = false; submitBtn.classList.remove("pressed"); check(claim); };
+  if (performance.now() - touchAt < 1000) { go(); return; }
   requestAnimationFrame(() => setTimeout(go, 0));
   setTimeout(go, 150);   // a hidden page runs no frames
 });
