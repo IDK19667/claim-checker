@@ -4088,7 +4088,8 @@ def cited_pmids(bd: dict, studies: list[dict]) -> list[str]:
 # studies as an earlier kept sentence, every number with its unit in it
 # appears in that sentence, and so does every content word (stop words and
 # the citation aside; fell, dropped, decreased, declined, lowered and
-# reduced count as one word, rose and increased as one). Only the
+# reduced count as one word, rose and increased as one), in the same order
+# (its words and numbers are a subsequence of that sentence's). Only the
 # explanation and the figure lists ("says", "evidence", "effect_size") are
 # read: never still_open, unknowns, safety lines, harms, assessments or
 # titles. No item or field is ever left empty: its sentences then stay. A
@@ -4128,6 +4129,28 @@ def content_words(sentence: str) -> set:
     return {_SAME_WORD.get(w, w) for w in _WORD.findall(text) if w not in _STOP_WORDS}
 
 
+_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[a-z]+(?:'[a-z]+)?")
+
+
+def word_order(sentence: str) -> list:
+    """The content words and numbers of a sentence, in the order written
+    (content_words' reading of each word), the citation left out."""
+    text = _REF.sub(" ", str(sentence or "")).lower()
+    out = []
+    for tok in _TOKEN.findall(text):
+        if tok[0].isdigit():
+            out.append(tok.replace(",", ""))
+        elif tok not in _STOP_WORDS:
+            out.append(_SAME_WORD.get(tok, tok))
+    return out
+
+
+def _in_order(part: list, whole: list) -> bool:
+    """Whether `part` is a subsequence of `whole`."""
+    it = iter(whole)
+    return all(any(x == y for y in it) for x in part)
+
+
 # A sentence that says whether a result was statistically significant or
 # clear is never dropped as a repeat (nor the figure it belongs to).
 _STATES_SIGNIFICANCE = re.compile(
@@ -4142,10 +4165,14 @@ def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:
     if not cites or not figs:
         return False
     words = content_words(sentence)
+    order = word_order(sentence)
     for earlier in kept:
+        # Order counts too (brief E3 N11): "rose by 3% with the drug and fell
+        # by 2% with placebo" is not repeated by its reverse.
         if (frozenset(refs(earlier, count)) == cites
                 and figs <= {(n, u) for n, u, _ in figures_of(earlier, count)}
-                and words <= content_words(earlier)):
+                and words <= content_words(earlier)
+                and _in_order(order, word_order(earlier))):
             return True
     return False
 

@@ -13624,7 +13624,7 @@ _b5_e, _b5_b = _e_bd.one_figure_once(
     {"says": [], "evidence": ["At 500 mg a day, two people had liver injury (Study 1).",
                               "In 3 trials, glucose fell (Study 2).", "In 3 trials, bleeding rose (Study 2).",
                               "Weight fell by 2 to 4 kg (Study 1).", "The mean loss was 4 kg (Study 1).",
-                              "Glucose dropped in 3 trials (Study 2). That is a real change."],
+                              "In 3 trials, glucose dropped (Study 2). That is a real change."],
      "effect_size": "The mean loss was 4 kg (Study 1).", "effect": {"label": "small"},
      "unknowns": "Nobody followed people beyond 12 weeks (Study 1).",
      "parts": [{"label": "Dose", "assessment": "People took 500 mg a day (Study 1)."}],
@@ -13633,8 +13633,13 @@ t("BRIEF E2r B5: a harm, a second outcome and a mean after a range are kept",
   _b5_b["evidence"][:5] == ["At 500 mg a day, two people had liver injury (Study 1).",
                             "In 3 trials, glucose fell (Study 2).", "In 3 trials, bleeding rose (Study 2).",
                             "Weight fell by 2 to 4 kg (Study 1).", "The mean loss was 4 kg (Study 1)."], _b5_b)
+# Brief E3 N11: the repeat is now written in the same order ("In 3 trials,
+# glucose dropped"): "Glucose dropped in 3 trials" is reordered and stays.
 t("BRIEF E2r B5: a true repeat goes with its 'That is' translation (dropped and fell read as one)",
   len(_b5_b["evidence"]) == 5, _b5_b["evidence"])
+_b5_ro = _e_bd.one_figure_once("", {"says": [], "evidence": ["In 3 trials, glucose fell (Study 2).",
+                                                         "Glucose dropped in 3 trials (Study 2)."]}, 3)[1]
+t("BRIEF E3 N11: the same words in another order are not a repeat", len(_b5_ro["evidence"]) == 2, _b5_ro)
 t("BRIEF E2r M5: unknowns, assessments and other fields are never read; no field or item is left empty",
   _b5_b["unknowns"] == "Nobody followed people beyond 12 weeks (Study 1)."
   and _b5_b["parts"][0]["assessment"] == "People took 500 mg a day (Study 1)."
@@ -14202,6 +14207,28 @@ try:
       and "cites_retracted" not in _e3_rev, (_e3_note, round(_e3_took, 2)))
 finally:
     pubmed._http = _e3_http
+
+# N11: a later sentence repeats an earlier one only if its words and numbers
+# come in the same order. The reviewer's reversed bleeding sentences.
+_e3_rev_pairs = [("Bleeding rose by 3% with the drug and fell by 2% with placebo (Study 1).",
+                  "Bleeding fell by 2% with the drug and rose by 3% with placebo (Study 1)."),
+                 ("Bleeding rose by 3% with the drug and fell by 2% with placebo (Study 1).",
+                  "Bleeding rose by 3% with placebo and fell by 2% with the drug (Study 1)."),
+                 ("Bleeding fell with the drug and rose with placebo (Study 2).",
+                  "Bleeding rose with the drug and fell with placebo (Study 2).")]
+_e3_rev_lost = []
+for _e3_a, _e3_b in _e3_rev_pairs:
+    _, _e3_o = _e3_bd.one_figure_once("", {"says": [_e3_a], "evidence": [_e3_b, "Sleep was not measured (Study 3)."]}, 3)
+    if _e3_o["says"] != [_e3_a] or _e3_b not in _e3_o["evidence"]:
+        _e3_rev_lost.append((_e3_a, _e3_b, _e3_o))
+t("BRIEF E3 N11: a reversed sentence is not a repeat: both bleeding sentences stay", not _e3_rev_lost, _e3_rev_lost)
+_, _e3_o = _e3_bd.one_figure_once("", {"says": ["Weight fell by 2 kg with the drug (Study 1)."],
+                                       "evidence": ["Weight dropped by 2 kg with the drug (Study 1).",
+                                                    "Bleeding was rare (Study 3)."]}, 3)
+t("BRIEF E3 N11: a true repeat in the same order still goes",
+  _e3_o["evidence"] == ["Bleeding was rare (Study 3)."], _e3_o)
+t("BRIEF E3 N11: word order reads numbers and content words, the citation left out",
+  _e3_bd.word_order("Glucose dropped by 0.5 mmol/L (Study 2).") == ["glucose", "fell", "0.5", "mmol", "l"])
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
