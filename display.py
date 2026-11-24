@@ -701,11 +701,20 @@ def _modal_as_name(tokens) -> bool:
 
 
 # Numbers that read as a phone number, a date of birth or an ID however they
-# are split: more than 6 digits in the whole claim, or a run of 4 or more
-# number words ("five five five one").
+# are split: more than 6 digits in the whole claim, each number word counting
+# as one digit ("five 5 five 5 one 2 three"), a run of 4 or more number words
+# ("five five five one"), or a date shape, three groups of digits joined by
+# "/", "." or "-" ("3/4/90", "3.4.1990"; "120/80" and "2.5 mg" are not dates).
 _MAX_DIGITS = 6
 _NUMBER_WORDS = frozenset("""zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen
 fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred""".split())
+
+
+_DATE_SHAPE = re.compile(r"\d+[/.-]\d+[/.-]\d+")
+
+
+def _digit_count(tokens) -> int:
+    return sum(sum(ch.isdigit() for ch in w) or (w in _NUMBER_WORDS) for w in tokens)
 
 
 def _number_words_run(tokens, n=4) -> bool:
@@ -725,7 +734,7 @@ def vouched(claim_text, studies) -> bool:
     tokens = _vouch_tokens(claim_text)
     if _modal_as_name(tokens) or _number_words_run(tokens):
         return False
-    if sum(ch.isdigit() for w in tokens for ch in w) > _MAX_DIGITS:
+    if _digit_count(tokens) > _MAX_DIGITS or _DATE_SHAPE.search(str(claim_text or "")):
         return False
     seen = exact = None
     for w in tokens:

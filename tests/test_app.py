@@ -15431,6 +15431,25 @@ for _cl in _SF_TAIL:
     _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
     t(f"R2 1: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
 _sf_drop(*_SF_TAIL)
+# --- re-check 1: a number half in words counts every word, and a short date is a date ---
+import html as _sf_html
+_SF_HN = [{"title": "Honey for cough", "abstract": "Honey can ease a cough in children."}]
+_SF_NUM = ("honey can ease a cough in children five 5 five 5 one 2 three", "honey can ease a cough in children 5 five 5 five 1 two 3",
+           "honey can ease a cough in children 3/4/90", "honey can ease a cough in children 3.4.1990")
+for _cl in _SF_NUM:
+    t(f"R2 2/3: {_cl!r} is not public, though its studies use every other word", not display.public_claim(_cl, _SF_HN))
+_SF_COF = [{"title": "Coffee and type 2 diabetes", "abstract": "Two cups of coffee a day lower the risk of type 2 diabetes. "
+            "Blood pressure of 120/80. A dose of 2.5 mg."}]
+t("R2 2/3: a few number words and a dose, a blood pressure and a decimal stay public",
+  all(display.public_claim(x, _SF_COF) for x in ("Two cups of coffee a day lower the risk of type 2 diabetes",
+                                                 "Coffee keeps blood pressure under 120/80", "A dose of 2.5 mg of coffee a day")))
+for _cl in _SF_NUM:
+    _sf_seed(_cl, studies=_SF_HN)
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("honey").items()}
+for _cl in _SF_NUM:
+    _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
+    t(f"R2 2/3: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*_SF_NUM)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
