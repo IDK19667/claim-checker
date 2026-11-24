@@ -3259,8 +3259,17 @@ _NO_UNIT = "\x00"
 # the figure just dropped.
 _CLAUSE_JOIN = re.compile(r"(?:\s*,\s*and|\s*,|\s*;|\s+and|\s+while|\s+whereas|\s+but)\s+",
                           re.IGNORECASE)
-_TRAILING_CI = re.compile(r"\s*\((?:[^()]*?\b(?:CI|confidence interval)\b)[^()]*\)",
-                          re.IGNORECASE)
+# A figure and its range travel together: the interval goes with the figure
+# whether it is in brackets, "(95% CI -2.65, -0.41)", or not: ", 95% CI
+# -2.65, -0.41", "with a 95% confidence interval of -2.65 to -0.41".
+_CI_END = r"[-−]?\d+(?:\.\d+)?(?:\s*%)?"
+_TRAILING_CI = re.compile(
+    r"\s*\((?:[^()]*?\b(?:CI|confidence interval)\b)[^()]*\)"
+    r"|\s*,?\s*(?:(?:with|and)\s+(?:an?\s+)?)?"
+    r"(?:95\s?(?:%|percent|per cent)\s*)?(?:CI|confidence interval|credible interval)s?"
+    r"\s*(?:of|from|was|:|=|,)?\s*[\[(]?\s*" + _CI_END + r"\s*(?:,|to|-|–|and)\s*" + _CI_END
+    + r"[\])]?",
+    re.IGNORECASE)
 _FIGURE_WITH_UNIT = re.compile(r"\d\s*" + _UNIT, re.IGNORECASE)
 UNITLESS_LEFT_OUT = "The size of this change is given without a unit, so it is left out here."
 

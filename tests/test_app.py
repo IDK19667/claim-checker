@@ -14618,6 +14618,40 @@ t("BRIEF E5 F3: over the suite's recorded answers no study is marked indirect an
    if s.get("indirect") is not False or s.get("indirect_reason") != ""
    or str(s.get("contribution") or "").startswith("Indirect context")][:5])
 
+# --- BRIEF E6 B1: a figure drop_unitless removes takes its unbracketed interval with it ---
+_e6_st = [{"abstract": "Fasting glucose fell 21.929 mg/dL (95% CI -29.19, -14.67). HbA1c 1.53 "
+                       "(95% CI -2.65, -0.41). LDL fell 0.4 mmol/L. Relative risk 0.28 (95% CI 0.12 to 0.71)."}]
+_e6_r = lambda s: breakdown.for_reading(s, _e6_st)
+_e6_vin = _e6_r("Fasting blood sugar was reduced by 21.929 mg/dL, 95% CI -29.19, -14.67, and HbA1c by 1.53, "
+                "95% CI -2.65, -0.41 (Study 2).")
+t("BRIEF E6 B1: the vinegar sentence keeps blood sugar's range and drops HbA1c's with HbA1c",
+  _e6_vin == "Fasting blood sugar was reduced by about 22 mg/dL, likely range -29, -15 (Study 2).", _e6_vin)
+_e6_worse = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53, 95% CI -2.65, -0.41 (Study 2).")
+t("BRIEF E6 B1: a dropped figure's comma interval never lands on the figure before it",
+  _e6_worse == "Fasting blood sugar fell by about 22 mg/dL (Study 2).", _e6_worse)
+_e6_with = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53 with a 95% confidence interval "
+                 "of -2.65 to -0.41 (Study 2).")
+t("BRIEF E6 B1: 'with a 95% confidence interval of a to b' goes with its dropped figure",
+  _e6_with == "Fasting blood sugar fell by about 22 mg/dL (Study 2).", _e6_with)
+_e6_rest = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53, CI -2.65 to -0.41, over 12 weeks "
+                 "(Study 2).")
+t("BRIEF E6 B1: 'CI a to b' goes with its dropped figure and the rest of the sentence stays",
+  _e6_rest == "Fasting blood sugar fell by about 22 mg/dL, over 12 weeks (Study 2).", _e6_rest)
+_e6_keep = [
+    ("Fasting blood sugar fell by 21.929 mg/dL (95% CI -29.19 to -14.67) and LDL by 0.4 mmol/L (Study 2).",
+     "Fasting blood sugar fell by about 22 mg/dL (likely range 29 to 15) and LDL by 0.4 mmol/L (Study 2)."),
+    ("Fasting blood sugar fell by 21.929 mg/dL, 95% CI -29.19, -14.67 (Study 2).",
+     "Fasting blood sugar fell by about 22 mg/dL, likely range -29, -15 (Study 2)."),
+    ("The relative risk was 0.28 with a 95% confidence interval of 0.12 to 0.71 (Study 4).",
+     "The relative risk was 0.28 with a likely range of 0.12 to 0.71 (Study 4)."),
+]
+t("BRIEF E6 B1: an interval of a figure that stays is left alone (kept unit, lone figure, relative risk)",
+  all(_e6_r(a) == b for a, b in _e6_keep), [_e6_r(a) for a, _b in _e6_keep])
+_e6_only = [_e6_r("HbA1c fell by 1.53, 95% CI -2.65, -0.41 (Study 2)."),
+            _e6_r("HbA1c fell by 1.53 (95% CI -2.65 to -0.41) (Study 2).")]
+t("BRIEF E6 B1: when the dropped figure is the only one, the unbracketed form ends as the bracketed one does",
+  _e6_only[0] == _e6_only[1], _e6_only)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
