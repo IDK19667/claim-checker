@@ -256,8 +256,8 @@ window.__evidentDesk3d = function (O) {
     spot.castShadow = true; spot.shadow.mapSize.set(2048, 2048); spot.shadow.bias = -0.00025; spot.shadow.normalBias = 0.012;
     spot.shadow.camera.near = 0.05; spot.shadow.camera.far = 2.6; spot.shadow.focus = 1;
     var leak = new T.PointLight(0xffc68c, LEAK_I, 0, 2); leak.position.copy(HEAD).add(new T.Vector3(0.03, 0.16, -0.1)); scene.add(leak);
-    var hemi = new T.HemisphereLight(0x9fb3ad, 0x1a120c, 0.12); scene.add(hemi);
-    var cool = new T.DirectionalLight(0x8fa6b4, 0.06); cool.position.set(2, 1.2, 1.5); scene.add(cool);
+    var hemi = new T.HemisphereLight(0xb2aeaa, 0x1a120c, 0.12); scene.add(hemi);
+    var cool = new T.DirectionalLight(0xa6a29e, 0.06); cool.position.set(2, 1.2, 1.5); scene.add(cool);
     var LAMP_I = spot.intensity, LAMP_ANGLE = spot.angle;
     var key = new T.SpotLight(0xfff1de, 0, 0, 0.32, 1, 2);
     key.position.set(0.12, 0.42, 0.62); key.target.position.set(-0.1, 0.047, 0.13); scene.add(key); scene.add(key.target);
@@ -297,7 +297,7 @@ window.__evidentDesk3d = function (O) {
     // ---- the pencil --------------------------------------------------------------
     var pencil = new T.Group();
     var pLen = 0.165, pR = 0.0037;
-    var paint = new T.MeshStandardMaterial({ color: 0x1d3a2e, roughness: 0.42, metalness: 0.05 });
+    var paint = new T.MeshStandardMaterial({ color: 0x343331, roughness: 0.42, metalness: 0.05 });
     var body = new T.Mesh(new T.CylinderGeometry(pR, pR, pLen, 6), paint); body.castShadow = true; body.receiveShadow = true; pencil.add(body);
     var cedar = new T.Mesh(new T.CylinderGeometry(0.0011, pR * 0.93, 0.02, 6), new T.MeshStandardMaterial({ color: 0xc9a27a, roughness: 0.8 }));
     cedar.position.y = pLen / 2 + 0.01; cedar.castShadow = true; pencil.add(cedar);

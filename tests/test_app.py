@@ -11754,6 +11754,15 @@ t("WARM GREYS: theme-color on every page and the manifest follow --deep",
   and all(f'name="theme-color" content="{_wg_deep}"' in (ROOT / "templates" / n).read_text()
           for n in ("index.html", "info.html", "privacy.html", "404.html", "stats.html")), (_wg_deep, _wg_man["theme_color"]))
 
+# ---- The scene's fill lights and pencil (q10-look 3) ------------------------------------
+# The two faint fill lights keep their intensity and lightness and lose their mint and blue;
+# the pencil is black lacquer of the same lightness.
+_sl_3d = (ROOT / "static" / "desk3d.js").read_text()
+t("SCENE: the fill lights are warm neutral at their old intensity, and the pencil is black lacquer",
+  "new T.HemisphereLight(0xb2aeaa, 0x1a120c, 0.12)" in _sl_3d and "new T.DirectionalLight(0xa6a29e, 0.06)" in _sl_3d
+  and "color: 0x343331, roughness: 0.42" in _sl_3d
+  and not any(h in _sl_3d.lower() for h in ("9fb3ad", "8fa6b4", "1d3a2e")))
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
