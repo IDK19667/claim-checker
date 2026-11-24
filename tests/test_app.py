@@ -14731,6 +14731,24 @@ _e6c_rel = "Weight fell by 2.3 kg and HbA1c by 1.53, which are improvements rath
 t("BRIEF E6 B1c: a relative clause after the dropped figure leaves the sentence whole",
   _e6b(_e6c_rel) == _e6c_rel, _e6b(_e6c_rel))
 
+# --- BRIEF E6 B1d: a trailing qualifier is shared only when the staying figure stands right before the cut ---
+_e6d_st = [{"abstract": "Weight fell 2 kg (95% CI 1.1 to 3.5). HbA1c 1.53."}]
+_e6d = lambda s: breakdown.for_reading(s, _e6d_st)
+_e6d_lim = "Weight fell by 2 kg in adults and HbA1c by 1.53 in children (Study 1)."
+t("BRIEF E6 B1d: a qualifier after a staying figure with words of its own leaves the sentence whole",
+  _e6d(_e6d_lim) == _e6d_lim, _e6d(_e6d_lim))
+t("BRIEF E6 B1d: the same staying figure with only the citation after the dropped one is still cut",
+  _e6d("Weight fell by 2 kg in adults and HbA1c by 1.53 (Study 1).") == "Weight fell by 2 kg in adults (Study 1).",
+  _e6d("Weight fell by 2 kg in adults and HbA1c by 1.53 (Study 1)."))
+# Through drop_unitless itself: for_reading does not mark a figure within 30
+# characters after "CI" as unitless (an older rule), so the mark is put by hand.
+_e6d_ci = [breakdown.drop_unitless(x) for x in (
+    "Weight fell by 2 kg (95% CI 1.1 to 3.5) and HbA1c by 1.53" + breakdown._NO_UNIT + " in adults (Study 1).",
+    "Weight fell by 2 kg, 95% CI 1.1 to 3.5, and HbA1c by 1.53" + breakdown._NO_UNIT + " in adults (Study 1).")]
+t("BRIEF E6 B1d: the staying figure's own interval between is no obstacle, and 'in adults' stays",
+  _e6d_ci == ["Weight fell by 2 kg (95% CI 1.1 to 3.5) in adults (Study 1).",
+              "Weight fell by 2 kg, 95% CI 1.1 to 3.5 in adults (Study 1)."], _e6d_ci)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

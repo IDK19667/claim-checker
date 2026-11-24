@@ -3305,10 +3305,20 @@ def _clean_rest(sent: str, end: int) -> bool:
     return bool(named) and not _NOT_A_NAME.search(named.group("gap"))
 
 
-def _clean_cut(sent: str, end: int) -> bool:
-    """Whether what follows a dropped figure and its interval lets it go cleanly."""
+def _clean_cut(sent: str, end: int, join: int) -> bool:
+    """Whether what follows a dropped figure and its interval lets it go
+    cleanly. `join` is where the cut clause starts. A trailing qualifier
+    holds for both figures only when the figure that stays (with its own
+    interval) stands right before that clause: "2 kg in adults and HbA1c by
+    1.53 in children" says "in children" of HbA1c alone."""
     if _clean_rest(sent, end):
         return True
+    kept = [m.end() for m in _FIGURE_WITH_UNIT.finditer(sent, 0, join)]
+    if not kept:
+        return False
+    own = _TRAILING_CI.match(sent, kept[-1], join)
+    if sent[own.end() if own else kept[-1]:join].strip():
+        return False
     qual = _QUALIFIER.match(sent, end)
     if not qual:
         return False
@@ -3514,7 +3524,7 @@ def drop_unitless(text: str) -> str:
             ci = _TRAILING_CI.match(sent, end)
             if ci:
                 end = ci.end()
-            if not _clean_cut(sent, end):
+            if not _clean_cut(sent, end, joins[-1].start()):
                 # A unitless figure is a plainness flaw; a p value or range
                 # pinned on the wrong figure is a wrong statement. Left whole.
                 sent = sent[:mark] + sent[mark + len(_NO_UNIT):]
