@@ -14558,6 +14558,46 @@ _f5_far, _ = _f5_run([_F5_W, _F5_O2, "The results were inconclusive (Study 2)."]
 t("BRIEF E5 F1 control: a certainty sentence about another study, later in the list, does not hold it either",
   _f5_far["evidence"] == [_F5_O2, "The results were inconclusive (Study 2)."], _f5_far)
 
+# BRIEF E5 F3: no study is marked indirect. Through the app's own response
+# builder with the suite's recorded answers (the vinegar check, with and
+# without its flagged review, and the three real certainty-limit checks):
+# every study carries indirect false and an empty reason, and no
+# contribution starts with "Indirect context".
+import copy as _f3_copy  # noqa: E402
+_f3_vin = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+
+
+def _f3_respond(claim, query, verdict_value, tldr, explanation, studies, breakdown=None, still_open=""):
+    cited = [s["pmid"] for s in studies if s.get("cited_in_verdict", True)]
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_value, tldr, explanation, cited,
+                                      _f3_copy.deepcopy(studies), "http://x",
+                                      breakdown=_f3_copy.deepcopy(breakdown), still_open=still_open)
+
+
+_f3_flagged = _f3_copy.deepcopy(_f3_vin["studies"])
+_f3_flagged[0]["references"] = ["38966098"]
+_e_ev.flag_retracted_citations(_f3_flagged, lambda ids: set())
+_f3_outs = [_f3_respond(_f3_vin["claim"], _f3_vin["search_query_used"], _f3_vin["verdict"], _f3_vin["tldr"],
+                        _f3_vin["explanation"], st, _f3_vin["breakdown"], _f3_vin["still_open"])
+            for st in (_f3_vin["studies"], _f3_flagged)]
+# Those three records keep only what the certainty limit reads; the page
+# fields a fetched record always has are filled in, empty.
+_f3_outs += [_f3_respond(c["claim"], c["search_query"], "complicated", "Mixed.", "The studies differ.",
+                         [{"journal": "", "year": "", "authors": [], "data_banks": None,
+                           "url": f"https://pubmed.ncbi.nlm.nih.gov/{s['pmid']}/", **s} for s in c["studies"]],
+                         still_open="Longer trials.")
+             for c in json.loads((ROOT / "tests" / "certainty_limit_real.json").read_text())["checks"]]
+_f3_studies = [s for o in _f3_outs for s in o["studies"]]
+t("BRIEF E5 F3: over the suite's recorded answers no study is marked indirect and no contribution says "
+  "'Indirect context'",
+  len(_f3_outs) == 5 and len(_f3_studies) > 10
+  and all(s["indirect"] is False and s["indirect_reason"] == "" for s in _f3_studies)
+  and not any(str(s.get("contribution") or "").startswith("Indirect context") for s in _f3_studies),
+  [(s.get("pmid"), s.get("indirect"), s.get("indirect_reason"), s.get("contribution")) for s in _f3_studies
+   if s.get("indirect") is not False or s.get("indirect_reason") != ""
+   or str(s.get("contribution") or "").startswith("Indirect context")][:5])
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
