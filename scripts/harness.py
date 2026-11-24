@@ -376,12 +376,14 @@ class Harness:
         return _Client()
 
     # ---- PubMed -----------------------------------------------------------
-    def _paced_post(self, endpoint, params):
+    def _paced_post(self, endpoint, params, timeout=None):
         """The same for a POST (the retraction lookup). Its key also names
-        the method; every GET key is exactly as before."""
-        return self._paced_get(endpoint, params, post=True)
+        the method; every GET key is exactly as before. It takes the same
+        keywords as pubmed._paced_post (`timeout`, which retracted_among
+        passes) and hands them on; the timeout is not part of the key."""
+        return self._paced_get(endpoint, params, post=True, timeout=timeout)
 
-    def _paced_get(self, endpoint, params, post=False):
+    def _paced_get(self, endpoint, params, post=False, timeout=None):
         req = pubmed_request(endpoint, params)
         if post:
             req["method"] = "post"
@@ -397,7 +399,11 @@ class Harness:
             self._miss("pubmed", key, endpoint)
         t0 = time.perf_counter()
         try:
-            resp = (self._orig_post if post else self._orig_paced)(endpoint, params)
+            if post:
+                resp = (self._orig_post(endpoint, params) if timeout is None
+                        else self._orig_post(endpoint, params, timeout=timeout))
+            else:
+                resp = self._orig_paced(endpoint, params)
         finally:
             ms = (time.perf_counter() - t0) * 1000
             self._add(pubmed_ms=ms, pubmed_live=1)
