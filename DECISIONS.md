@@ -4542,3 +4542,7 @@ What was deliberately rejected:
 - (Round 3.) Statins, antidepressants and epilepsy medicine keep a line on any claim about them, even a claim about a benefit: the reader weighing such a claim is the one who may stop. An amount meant for adults (vitamin A, vitamin D) is never shown beside a baby or child word. Of two lines with the same rank, an overdose or poisoning line (`poison`) comes first. A medicine named by its generic ending or a common brand counts for the pregnancy and breastfeeding lines, but no line ever names a brand.
 - Showing the lines under the short answer is a separate template change, made from the field.
 - To add an entry: write the line for everyone asking about the hazard, open the page, copy its own sentence into `quote` and its main heading into `page`, and add a firing claim and a near miss to the F2 block in `tests/test_app.py`.
+
+## 2026-11-23: a review that cites a retracted study (E2 repair)
+
+- Not checked yet: narrative and umbrella reviews typed only "Review", and pooled analyses typed only "Journal Article", are never read for a reference list, so a retracted study they cite is not flagged.

@@ -13702,6 +13702,10 @@ t("BRIEF E2r M2: the browser payload has no reference list and keeps cites_retra
   "references" not in json.dumps(_m2_out) and _m2_out["studies"][0]["cites_retracted"]
   and _m2_out["studies"][0]["caution"])
 
+# Brief E2 repair, M6: one id cap for both modules.
+t("BRIEF E2r M6: one id cap, 600, used by both modules",
+  pubmed.RETRACTION_LOOKUP_MAX == _e_ev.RETRACTION_LOOKUP_MAX == 600)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

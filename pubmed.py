@@ -108,8 +108,9 @@ def _post(endpoint: str, params: dict):
     return resp
 
 
-# At most this many cited ids go into the one retraction lookup of a check.
-RETRACTION_LOOKUP_MAX = 2000
+# At most this many cited ids go into the one retraction lookup of a check:
+# the one constant, evidence.RETRACTION_LOOKUP_MAX (600).
+RETRACTION_LOOKUP_MAX = evidence.RETRACTION_LOOKUP_MAX
 
 
 def retracted_among(pmids) -> set[str]:
