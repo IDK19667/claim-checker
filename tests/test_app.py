@@ -8371,9 +8371,10 @@ for _cl, _vd, _tl, _so in [("A very long claim " * 40, "complicated", "An answer
                            ("Short", "true", "Short answer.", ""), ("Medium length claim about sleep", "false", "", "Doses vary.")]:
     _im = _CI.open(_cio.BytesIO(og.render_card(_cl, _vd, _tl, 5, ("Meta-Analysis", "2020", "T " * 200), _so))).convert("RGB")
     _shots.append(_im)
+from PIL import ImageColor as _ImageColor_og  # noqa: E402
 def _runs_off(im):
     # The strip at the right edge, below the masthead, is only ever the night or the paper.
-    return any(im.getpixel((x, y)) not in {(15, 18, 17), (241, 242, 238)}
+    return any(im.getpixel((x, y)) not in {_ImageColor_og.getrgb(og.DEEP), _ImageColor_og.getrgb(og.PAPER)}
                for y in range(100, 630, 2) for x in range(1150, 1200, 2))
 t("share card: exactly 1200x630 for a very long claim, a run of letters, a long answer and a short one",
   all(i.size == (1200, 630) for i in _shots), [i.size for i in _shots])
@@ -8392,7 +8393,7 @@ t("share card: a long still-open line wraps to up to three lines before it trunc
   len(_o3) == 3 and og._wrap(_cd, _so3 * 3, og._body(21), 1000, 3)[-1].endswith("\u2026") and not _o3[-1].endswith("\u2026")
   and _i3.size == (1200, 630) and _dark(_i3, 330, 560) > _dark(_i1, 330, 560), _o3)
 t("share card: three still-open lines leave the footer row clear",
-  not any(_i3.getpixel((x, y)) != (241, 242, 238) for y in range(560, 590) for x in range(64, 1136, 3)))
+  not any(_i3.getpixel((x, y)) != _ImageColor_og.getrgb(og.PAPER) for y in range(560, 590) for x in range(64, 1136, 3)))
 
 # The card a link to the site itself unfurls with is a brand card: the
 # tagline is never drawn as if it were a claim someone checked.
@@ -11801,6 +11802,39 @@ for _pa_f in ("static/desk.css", "static/style.css", "static/desk3d.js", "static
             _pa_bad.append((_pa_f, _pa_h, round(_pa_c, 3), round(_pa_hue)))
 t("PALETTE: every colour literal with chroma 0.02 or more in the shipped colour files has a hue from 40 to 100",
   not _pa_bad, _pa_bad)
+
+# ---- The link preview takes the site's colours (q10-card 1) --------------------------------
+# og.py's card was outside q10-look and kept the mint ring and the green-cast greys. Now its
+# grounds, inks and ring are the site's tokens: rendered for every verdict with invented text,
+# no pixel is near a colour q10-look removed, no pixel has chroma 0.02 or more outside hue 40
+# to 100 (no green cast, no mint, blue or purple), and the size is still 1200 by 630.
+from PIL import Image as _ogc_Image  # noqa: E402
+import io as _ogc_io  # noqa: E402
+_OGC_REMOVED = ["9fc3b0", "4f6a5d", "d4e4da", "2c5848", "9fb3ad", "8fa6b4", "1d3a2e"]
+def _ogc_rgb(h):
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+_ogc_near, _ogc_cast, _ogc_sizes, _ogc_grounds = [], [], set(), []
+for _ogc_v in ("true", "false", "complicated", "insufficient"):
+    _ogc_im = _ogc_Image.open(_ogc_io.BytesIO(og.render_card(
+        "Cold showers boost the immune system", _ogc_v, "Small trials found fewer sick days reported, not fewer colds.", 6,
+        ("Randomized controlled trial", "2016", "Cold showers and sick days"), "Whether the effect lasts past three months."))).convert("RGB")
+    _ogc_sizes.add(_ogc_im.size)
+    _ogc_grounds.append((_ogc_im.getpixel((4, 4)), _ogc_im.getpixel((4, _ogc_im.height - 4))))
+    for _ogc_n, _ogc_px in _ogc_im.getcolors(1 << 20):
+        for _ogc_r in _OGC_REMOVED:
+            if sum((a - b) ** 2 for a, b in zip(_ogc_px, _ogc_rgb(_ogc_r))) <= 12 ** 2:
+                _ogc_near.append((_ogc_v, _ogc_px, _ogc_r))
+        _ogc_l, _ogc_c, _ogc_h = _wg_oklch("%02x%02x%02x" % _ogc_px)
+        if _ogc_c >= 0.02 and not (40 <= _ogc_h <= 100):
+            _ogc_cast.append((_ogc_v, _ogc_px, round(_ogc_c, 3), round(_ogc_h)))
+t("OG CARD COLOURS: no pixel of the link preview is near the mint or another colour q10-look removed, for every verdict",
+  not _ogc_near, _ogc_near[:5])
+t("OG CARD COLOURS: no pixel has chroma 0.02 or more outside hue 40 to 100 (no green cast, mint, blue or purple)",
+  not _ogc_cast, _ogc_cast[:5])
+t("OG CARD COLOURS: the grounds are the site's --deep and --paper, and the ring is the words' colour",
+  all(g == (_ogc_rgb("12110f"), _ogc_rgb("f4f2ef")) for g in _ogc_grounds) and og.PEN == og.ON_DEEP == "#f0ede9"
+  and not hasattr(og, "SAGE"), _ogc_grounds[:1])
+t("OG CARD COLOURS: the image is still 1200 by 630", _ogc_sizes == {(1200, 630)}, _ogc_sizes)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
