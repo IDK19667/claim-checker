@@ -668,7 +668,8 @@ _VOUCH_CLOSED = frozenset(f for w in _VOUCH_WORDS for f in _vouch_forms(w))
 # One is read as a name when it is the claim's last word, or follows a
 # preposition or joiner, or comes before a closed-list word that is not a verb
 # or adverb ("will young", "for may", "may west": names; "may cause", "will
-# not", "may also help": verbs). The verbs and adverbs are this fixed set
+# not", "may also help": verbs); and as the second-last word before
+# any word outside the verbs and adverbs, "will wells". The verbs and adverbs are this fixed set
 # inside the closed list, compared on folded forms ("causes" is "cause").
 _MODAL_NAMES = frozenset({"will", "may"})
 _NAME_AFTER = frozenset("for in to with by from of at on about and or than like".split())
@@ -683,6 +684,10 @@ exercising lower raise link
 
 
 def _modal_as_name(tokens) -> bool:
+    # Second-last, it is a name unless the last word is a verb or adverb
+    # ("smoking causes lung cancer, will wells"; "garlic may help" stays).
+    if len(tokens) >= 2 and tokens[-2] in _MODAL_NAMES and not _vouch_forms(tokens[-1]) & _VERB_OR_ADVERB:
+        return True
     for i, w in enumerate(tokens):
         if w not in _MODAL_NAMES:
             continue

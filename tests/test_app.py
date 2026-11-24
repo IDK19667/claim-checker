@@ -15413,6 +15413,24 @@ for _cl in _SF_DIGITS:
     _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
     t(f"R1 C/D: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
 _sf_drop(*_SF_DIGITS)
+# --- re-check 1: "will" or "may" second-last, before a surname the studies use, is a name ---
+import html as _sf_html
+_SF_SMK = [{"title": "Smoking and lung cancer", "abstract": "Smoking causes lung cancer. Wells, March, Cross, Power and White cohorts."}]
+_SF_TAIL = ("smoking causes lung cancer, will wells", "smoking causes lung cancer, may march",
+            "smoking causes lung cancer says will cross", "smoking causes lung cancer, may white")
+for _cl in _SF_TAIL:
+    t(f"R2 1: {_cl!r} is not public, though its studies use every word", not display.public_claim(_cl, _SF_SMK))
+_SF_GAR = [{"title": "Garlic and colds", "abstract": "Garlic may help adults with colds. Vitamin D did not help."}]
+t("R2 1: 'will' or 'may' second-last before a verb or adverb is still a verb: those claims stay public",
+  all(display.public_claim(x, _SF_GAR) for x in ("Garlic may help", "Vitamin D will not help", "Garlic may also help",
+                                                 "Vitamin D may not")))
+for _cl in _SF_TAIL:
+    _sf_seed(_cl, studies=_SF_SMK)
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("smoking").items()}
+for _cl in _SF_TAIL:
+    _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
+    t(f"R2 1: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*_SF_TAIL)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
