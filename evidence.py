@@ -3162,7 +3162,9 @@ def names_family(text: str, family: str) -> bool:
 # outcome the claim names (body weight, for a claim about curing diabetes) is
 # context, not a test of the claim. It is marked only between recognised
 # outcome families: the study's stated target ("effect of X on Y") falls in
-# exactly one family, the claim's outcome (the search step's outcome terms)
+# exactly one family, and that family is a risk marker (RISK_MARKERS: body
+# weight, blood pressure, blood fats, blood sugar control), the claim's
+# outcome (the search step's outcome terms)
 # in exactly one, the two differ, and the authors' conclusion names no stem
 # of the claim's family once the people studied are left out ("in adults
 # with type 2 diabetes" says who, not what was measured). In every other
@@ -3181,7 +3183,7 @@ OUTCOME_FAMILIES = (
                                      r"cerebrovasc", r"arrhythm", r"atrial fibrillation", r"atheroscl")),
     ("death", (r"mortality", r"death", r"surviv", r"all-cause", r"lifespan", r"longevity")),
     ("bone", (r"bones?\b", r"fractur", r"osteopor", r"osteopen")),
-    ("mood", (r"depress", r"anxi", r"mood")),
+    ("mood", (r"depress", r"anxi", r"mood", r"suicid", r"self-harm")),
     ("memory and thinking", (r"cognit", r"memory", r"dementia", r"alzheimer")),
     ("sleep", (r"sleep", r"insomni")),
     ("pain", (r"pain", r"analges", r"headache", r"migraine")),
@@ -3193,10 +3195,16 @@ OUTCOME_FAMILIES = (
     ("the liver", (r"liver", r"hepat")),
     ("the kidneys", (r"kidney", r"renal", r"nephr")),
     ("skin", (r"skin", r"acne", r"eczema", r"dermat", r"psoria", r"wrinkl")),
-    ("behaviour and attention", (r"hyperactiv", r"adhd", r"attention", r"behavio")),
+    ("behaviour and attention", (r"hyperactiv", r"adhd", r"attention", r"(?<!suicidal )behavio")),
     ("breathing and the lungs", (r"asthma", r"copd", r"lungs?\b", r"pulmonar", r"bronch", r"wheez", r"breath")),
-    ("joints", (r"arthrit", r"joints?\b", r"gout")),
+    ("joints", (r"arthrit", r"osteoarthrit", r"joints?\b", r"gout")),
 )
+# The study side of an indirect mark is only ever a risk marker (brief E3
+# N3): a keyword table cannot tell a symptom of the disease (pain in
+# arthritis, death in heart failure) from another outcome, but a weight, a
+# blood pressure, a blood fat or a blood sugar reading is plainly a measure
+# standing in for something else.
+RISK_MARKERS = ("body weight", "blood pressure", "blood fats", "blood sugar control")
 _FAMILY_RE = tuple((name, re.compile(r"\b(?:" + "|".join(stems) + r")", re.IGNORECASE))
                    for name, stems in OUTCOME_FAMILIES)
 
@@ -3238,7 +3246,7 @@ def indirect_label(study, search_queries) -> dict | None:
         return None
     target = _TARGET_END.sub("", _POPULATION_PHRASE.sub("", m.group("y"))).strip(" .")
     target_fams = outcome_families(target)
-    if len(target_fams) != 1 or target_fams == claim_fams:
+    if len(target_fams) != 1 or target_fams == claim_fams or target_fams[0] not in RISK_MARKERS:
         return None
     said = conclusion(study)
     if not said or outcome_families(_POPULATION_PHRASE.sub(" ", said)).count(claim_fams[0]):

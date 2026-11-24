@@ -13601,7 +13601,12 @@ _B4_INDIRECT = [
 _b4_false = [t_ for q, t_, k in _B4_DIRECT if _e_ev.indirect_label(_b4_st(t_, k), [q])]
 _b4_missed = [t_ for q, t_, k in _B4_INDIRECT if not _e_ev.indirect_label(_b4_st(t_, k), [q])]
 t("BRIEF E2r B4: none of the reviewer's 20 direct tests is marked indirect", not _b4_false, _b4_false)
-t("BRIEF E2r B4: the 8 truly indirect studies are marked", not _b4_missed, _b4_missed)
+# Brief E3 N3 replaced "the 8 truly indirect studies are marked": only a
+# study measuring a risk marker is marked, so 2 of the 8 stay marked and the
+# other 6 (gut, liver, bleeding, migraine, bone, heart rate) are not.
+t("BRIEF E3 N3: of the reviewer's 8 truly indirect studies, the 2 measuring a risk marker are marked",
+  sorted(_b4_missed) == sorted(t_ for q, t_, k in _B4_INDIRECT if "lipid" not in t_ and "triglycerides" not in t_),
+  _b4_missed)
 t("BRIEF E2r B4: the reason names both families",
   _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."),
                        ["(cinnamon) AND (diabetes)"])["reason"] == "Measures blood fats, not blood sugar control")
@@ -14022,6 +14027,123 @@ t("BRIEF E3 N9: ginkgo, a flag that lowered the level leaves the basis naming th
   "Certainty" not in _e3_gk["evidence_line"]
   and _e3_gk["evidence_line"].endswith("Based on a review that cites a retracted study, and human studies"),
   _e3_gk["evidence_line"])
+
+# N3, N4, N7: an indirect mark only when the study measures a risk marker. Both
+# reviewers' 40 direct pairs and 18 truly indirect ones (query, title, conclusion).
+_E3_DIRECT = [
+    ('(garlic) AND (blood pressure)', 'Effect of garlic on hypertension in adults: a randomized trial', 'Garlic reduced systolic readings by 8 mmHg.'),
+    ('(green tea) AND (weight loss OR weight)', 'Effect of green tea extract on body mass index in obese women', 'Green tea extract lowered BMI modestly.'),
+    ('(aspirin) AND (heart attack)', 'Effect of aspirin on myocardial infarction in older adults', 'Aspirin did not reduce myocardial infarction.'),
+    ('(cinnamon) AND (blood sugar)', 'Effect of cinnamon on glycaemic control in type 2 diabetes', 'Cinnamon improved HbA1c slightly.'),
+    ('(melatonin) AND (sleep)', 'Effect of melatonin on insomnia in older people', 'Melatonin shortened sleep onset latency.'),
+    ('(fish oil) AND (cholesterol)', 'Effect of omega-3 fatty acids on LDL and triglycerides', 'Omega-3 lowered triglycerides but raised LDL.'),
+    ('(vitamin D) AND (fracture)', 'Effect of vitamin D supplementation on hip fracture in women', 'Vitamin D did not prevent hip fractures.'),
+    ('(coffee) AND (stroke)', 'Effect of coffee intake on cerebrovascular events', 'Coffee was not linked to cerebrovascular events.'),
+    ('(exercise) AND (depression)', 'Effect of aerobic training on depressive symptoms in adults', 'Aerobic training reduced depressive symptoms.'),
+    ('(probiotics) AND (diarrhea)', 'Effect of Lactobacillus on loose stools in children', 'Lactobacillus shortened loose stools by a day.'),
+    ('(zinc) AND (common cold)', 'Effect of zinc lozenges on upper respiratory infection duration', 'Zinc shortened upper respiratory infections.'),
+    ('(statins) AND (memory loss)', 'Effect of statins on cognitive function in older adults', 'Statins did not impair cognition.'),
+    ('(lemon) AND (kidney stones)', 'Effect of citrate on nephrolithiasis recurrence', 'Citrate reduced nephrolithiasis recurrence.'),
+    ('(red wine) AND (heart disease)', 'Effect of resveratrol on coronary artery disease', 'Resveratrol did not change coronary events.'),
+    ('(turmeric) AND (cancer)', 'Effect of curcumin on tumour growth in patients with colorectal neoplasia', 'Curcumin did not shrink tumours.'),
+    ('(ketogenic diet) AND (weight loss)', 'Effect of a ketogenic diet on adiposity', 'The diet reduced fat mass.'),
+    ('(cranberry) AND (urinary tract infection)', 'Effect of cranberry juice on bacteriuria in women', 'Cranberry reduced bacteriuria.'),
+    ('(honey) AND (cough)', 'Effect of honey on nocturnal symptoms in children with upper respiratory infection', 'Honey eased night symptoms.'),
+    ('(magnesium) AND (migraine)', 'Effect of magnesium on headache frequency', 'Magnesium reduced headache days.'),
+    ('(sugar) AND (hyperactivity)', 'Effect of sucrose on behavior in children', 'Sucrose did not change behaviour.'),
+    ('(curcumin OR turmeric) AND (osteoarthritis OR knee osteoarthritis)', 'Effect of curcumin on pain in patients with knee osteoarthritis: a randomized trial', 'Curcumin reduced pain compared with placebo in patients with knee osteoarthritis.'),
+    ('(glucosamine) AND (osteoarthritis)', 'Effect of glucosamine on knee pain and function: a randomized trial', 'Glucosamine was no better than placebo for knee pain.'),
+    ('(probiotics) AND (irritable bowel syndrome OR IBS)', 'Effect of a multi-strain probiotic on abdominal pain in adults with irritable bowel syndrome', 'The probiotic reduced abdominal pain scores in adults with irritable bowel syndrome.'),
+    ('(coenzyme Q10) AND (heart failure)', 'Effect of coenzyme Q10 on mortality in chronic heart failure: the Q-SYMBIO trial', 'Coenzyme Q10 reduced all-cause mortality and hospital stays.'),
+    ('(lithium) AND (suicide OR suicidal behaviour)', 'Effect of lithium on suicide and all-cause mortality in mood disorders', 'Lithium reduced suicide and deaths from any cause in people with mood disorders.'),
+    ('(zinc) AND (diarrhea OR diarrhoea)', 'Effect of zinc supplementation on acute gastroenteritis in children under five', 'Zinc shortened the episode by about a day.'),
+    ('(vitamin D) AND (asthma OR wheeze)', 'Effect of prenatal vitamin D on recurrent wheeze in offspring', 'Prenatal vitamin D did not reduce recurrent wheeze by age 3.'),
+    ('(melatonin) AND (sleep OR insomnia)', 'Effect of melatonin on sleep onset latency in children with autism', 'Melatonin shortened the time taken to fall asleep by 30 minutes.'),
+    ('(cranberry) AND (urinary tract infection OR UTI)', 'Effect of cranberry juice on recurrence of UTIs in children: a randomized trial', 'Cranberry juice reduced recurrences by 65%.'),
+    ('(omega-3 OR fish oil) AND (ADHD OR attention deficit hyperactivity disorder)', 'Effect of omega-3 fatty acids on hyperactivity and inattention in boys', 'Omega-3 supplementation did not change parent-rated symptoms.'),
+    ('(lavender OR silexan) AND (anxiety)', 'Effect of silexan on Hamilton Anxiety Rating Scale scores in generalized anxiety disorder', 'Silexan reduced anxiety scores more than placebo.'),
+    ('(ginkgo) AND (dementia OR Alzheimer)', 'Effect of Ginkgo biloba on cognitive decline in older adults', 'Ginkgo did not slow cognitive decline.'),
+    ('(beetroot OR dietary nitrate) AND (hypertension OR blood pressure)', 'Effect of dietary nitrate on systolic and diastolic readings in hypertensive patients', 'Dietary nitrate lowered systolic readings by 8 mmHg.'),
+    ('(plant sterols) AND (cholesterol)', 'Effect of plant sterol margarine on LDL and HDL in adults', 'Plant sterols lowered LDL by 10%.'),
+    ('(calcium) AND (osteoporosis OR fracture)', 'Effect of calcium on bone mineral density in postmenopausal women', 'Calcium slowed loss of bone density slightly.'),
+    ('(green tea) AND (obesity OR weight loss)', 'Effect of green tea catechins on waist circumference and visceral fat', 'Catechins reduced waist circumference by 2 cm.'),
+    ('(silymarin OR milk thistle) AND (fatty liver OR liver disease)', 'Effect of silymarin on hepatic steatosis on ultrasound', 'Silymarin reduced steatosis grade.'),
+    ('(sodium bicarbonate) AND (chronic kidney disease)', 'Effect of sodium bicarbonate on progression to end-stage renal disease', 'Bicarbonate slowed progression.'),
+    ('(probiotics) AND (eczema OR atopic dermatitis)', 'Effect of probiotics on SCORAD and itch in infants with atopic dermatitis', 'Probiotics reduced SCORAD scores by 5 points.'),
+    ('(cinnamon) AND (diabetes OR blood sugar)', 'Effect of cinnamon on HbA1c and fasting glucose in type 2 diabetes', 'Cinnamon lowered HbA1c by 0.1 points.'),
+]
+_E3_INDIRECT = [
+    ('(garlic) AND (blood pressure)', 'Effect of garlic on gut microbiota in adults', 'Garlic changed the gut microbiota.'),
+    ('(green tea) AND (weight loss)', 'Effect of green tea on liver enzymes', 'Green tea raised liver enzymes in some.'),
+    ('(aspirin) AND (heart attack)', 'Effect of aspirin on gastrointestinal bleeding', 'Aspirin raised the risk of bleeding.'),
+    ('(cinnamon) AND (diabetes)', 'Effect of cinnamon on lipid profile', 'Cinnamon lowered total cholesterol.'),
+    ('(melatonin) AND (sleep)', 'Effect of melatonin on migraine frequency', 'Melatonin reduced migraine days.'),
+    ('(fish oil) AND (dementia)', 'Effect of fish oil on triglycerides in adults', 'Fish oil lowered triglycerides.'),
+    ('(vitamin D) AND (common cold)', 'Effect of vitamin D on bone mineral density', 'Vitamin D raised bone density.'),
+    ('(coffee) AND (cancer)', 'Effect of coffee on heart rate', 'Coffee raised heart rate.'),
+    ('(eggs) AND (heart disease OR myocardial infarction)', 'Effect of eggs on LDL cholesterol in healthy adults', 'Eggs raised LDL slightly.'),
+    ('(salt reduction) AND (stroke)', 'Effect of salt substitutes on blood pressure in older adults', 'Salt substitutes lowered systolic pressure by 5 mmHg.'),
+    ('(vinegar) AND (diabetes OR glucose)', 'Effect of vinegar on body weight in obese adults', 'Vinegar reduced body weight by 1 kg.'),
+    ('(exercise) AND (depression)', 'Effect of aerobic exercise on sleep quality in older adults', 'Exercise improved sleep quality.'),
+    ('(statins) AND (dementia OR cognitive decline)', 'Effect of atorvastatin on LDL cholesterol in older adults', 'Atorvastatin lowered LDL by 40%.'),
+    ('(vitamin D) AND (fracture)', 'Effect of vitamin D on depressive symptoms in older women', 'Vitamin D did not change mood.'),
+    ('(coffee) AND (liver disease)', 'Effect of coffee on blood pressure in healthy adults', 'Coffee raised blood pressure briefly.'),
+    ('(screen time) AND (ADHD OR attention deficit)', 'Effect of evening screen use on sleep duration in adolescents', 'Screen use shortened sleep by 20 minutes.'),
+    ('(probiotics) AND (common cold OR influenza)', 'Effect of probiotics on stool frequency in children', 'Probiotics increased stool frequency.'),
+    ('(omega-3) AND (cardiovascular events OR heart attack)', 'Effect of omega-3 on triglycerides in adults with hypertriglyceridemia', 'Omega-3 lowered triglycerides by 25%.'),
+]
+
+
+def _e3_rct(title, concl):
+    return {"pmid": "1", "title": title, "abstract": f"METHODS: 200 adults. CONCLUSIONS: {concl}",
+            "publication_types": ["Journal Article", "Randomized Controlled Trial"], "year": "2020"}
+
+
+_e3_false = [(t_, _e3_ev.indirect_label(_e3_rct(t_, k), [q])) for q, t_, k in _E3_DIRECT
+             if _e3_ev.indirect_label(_e3_rct(t_, k), [q])]
+t("BRIEF E3 N3: none of the two reviewers' 40 direct pairs is marked indirect", not _e3_false, _e3_false)
+_e3_kept = [t_ for q, t_, k in _E3_INDIRECT if _e3_ev.indirect_label(_e3_rct(t_, k), [q])]
+_e3_marked = sorted({q for q, t_, k in _E3_INDIRECT if _e3_ev.indirect_label(_e3_rct(t_, k), [q])})
+t(f"BRIEF E3 N3: of the 18 truly indirect pairs, those whose study measures a risk marker stay marked ({len(_e3_kept)})",
+  len(_e3_kept) == 8 and all(_e3_ev.indirect_label(_e3_rct(t_, k), [q])["measure"] in _e3_ev.RISK_MARKERS
+                             for q, t_, k in _E3_INDIRECT if t_ in _e3_kept), _e3_kept)
+_E3_POP = [("(coenzyme Q10) AND (heart failure)", "Effect of coenzyme Q10 on mortality in chronic heart failure",
+            "Coenzyme Q10 reduced mortality in patients with chronic heart failure."),
+           ("(curcumin) AND (arthritis)", "Effect of curcumin on pain in patients with arthritis",
+            "Curcumin reduced pain in adults with rheumatoid arthritis."),
+           ("(peppermint oil) AND (irritable bowel syndrome)",
+            "Effect of peppermint oil on abdominal pain in irritable bowel syndrome",
+            "Peppermint oil eased abdominal pain in patients with irritable bowel syndrome."),
+           ("(antibiotics) AND (acute otitis media OR ear infection)",
+            "Effect of amoxicillin on ear pain in children with acute otitis media",
+            "Amoxicillin reduced ear pain at day 3 in children with ear infections."),
+           ("(statins) AND (stroke)", "Effect of atorvastatin on mortality after stroke",
+            "Atorvastatin did not reduce mortality in people who had a stroke.")]
+_e3_popm = [t_ for q, t_, k in _E3_POP if _e3_ev.indirect_label(_e3_rct(t_, k), [q])]
+t("BRIEF E3 N4: none of the 5 conclusions naming the people studied is marked", not _e3_popm, _e3_popm)
+t("BRIEF E3 N7: a harm (aspirin and gut bleeding) is never marked as indirect context",
+  _e3_ev.indirect_label(_e3_rct("Effect of aspirin on gastrointestinal bleeding", "Aspirin raised the risk of bleeding."),
+                        ["(aspirin) AND (heart attack)"]) is None)
+t("BRIEF E3 N7: suicide and self-harm are mood; osteoarthritis is joints",
+  _e3_ev.outcome_families("suicide OR suicidal behaviour") == ["mood"]
+  and _e3_ev.outcome_families("self-harm") == ["mood"]
+  and _e3_ev.outcome_families("knee osteoarthritis") == ["joints"])
+_e3_egg = {"pmid": "40339906", "publication_types": ["Journal Article", "Randomized Controlled Trial"],
+           "title": "Impact of dietary cholesterol from eggs and saturated fat on LDL cholesterol levels: a randomized "
+                    "cross-over study.",
+           "abstract": "METHODS: 61 adults. CONCLUSIONS: Saturated fat, not dietary cholesterol, elevates LDL "
+                       "cholesterol. Compared with consuming a high-saturated fat diet with only 1 egg/wk, consuming 2 "
+                       "eggs daily as part of a low-saturated fat diet lowers LDL concentrations, which may reduce CVD "
+                       "risk."}
+_e3_egg_q = ["(egg OR eggs OR dietary cholesterol) AND (heart disease OR cardiovascular disease OR coronary heart "
+             "disease OR myocardial infarction OR stroke)"]
+t("BRIEF E3 N3: the recorded eggs study (regression 12) stays marked",
+  (_e3_ev.indirect_label(_e3_egg, _e3_egg_q) or {}).get("reason") == "Measures blood fats, not the heart and blood vessels",
+  _e3_ev.indirect_label(_e3_egg, _e3_egg_q))
+_e3_vin = _e3_json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+t("BRIEF E3 N3: the recorded vinegar weight review stays marked",
+  (_e3_ev.indirect_label(_e3_vin["studies"][0], [_e3_vin["search_query_used"]]) or {}).get("reason")
+  == "Measures body weight, not blood sugar control")
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
