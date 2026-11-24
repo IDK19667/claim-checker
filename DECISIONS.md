@@ -4,6 +4,13 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): End or Home in the claim box only moves the caret
+
+With the caret already at the end, End moved nothing in the box, so the browser passed it to the
+page and scrolled it to its end a moment later. Since the lamp band a check's page on a phone in 3D
+is 23 px taller than the screen, so words typed during a check were pushed up by 23 px when the
+answer landed. The box now keeps End and Home whenever they would leave the caret where it is.
+
 ## 2026-11-24 (q10-rel): The joined release, and three things no single part could see
 
 The result screens, the colours, the lamp on a phone and the speed work were joined on the engine

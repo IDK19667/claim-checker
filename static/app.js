@@ -1118,6 +1118,11 @@ input.addEventListener("keydown", (e) => {
     e.preventDefault(); moveSuggest(e.key === "ArrowDown" ? 1 : -1); return;
   }
   if (open && e.key === "Escape") { e.preventDefault(); closeSuggest(); return; }
+  // End (or Home) with the caret already there moves nothing in the box, so the browser hands the key to the page and
+  // scrolls it to its end a moment later, under the reader's words (on a phone in 3D a check's page is a little taller
+  // than the screen). In the claim box these keys only ever move the caret.
+  if ((e.key === "End" || e.key === "Home") && !e.ctrlKey && !e.metaKey && input.selectionStart === input.selectionEnd
+      && input.selectionEnd === (e.key === "End" ? input.value.length : 0)) { e.preventDefault(); return; }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     if (open && suggestAt >= 0) { takeSuggest(suggestAt); return; }
