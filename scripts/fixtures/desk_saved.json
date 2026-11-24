@@ -80,9 +80,7 @@
      "abstract": "",
      "data_banks": null,
      "url": "https://pubmed.ncbi.nlm.nih.gov/40755023/",
-     "population": "athletes",
-     "indirect": true,
-     "indirect_why": "Fixture: it measured brain energy, not thinking itself."
+     "population": "athletes"
     },
     {
      "pmid": "40971619",

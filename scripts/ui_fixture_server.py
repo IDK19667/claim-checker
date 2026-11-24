@@ -45,11 +45,12 @@ dotenv.load_dotenv = lambda *a, **k: None
 
 import app as appmod  # noqa: E402
 
-# The per-study lines the engine branch adds to each study (contribution, caution, indirect, indirect_why):
-# passed through here so the study list can be measured with them before that branch lands. Harmless after it.
-_PER_STUDY = ("contribution", "caution", "indirect", "indirect_why")
-_payload = appmod._study_payload
-appmod._study_payload = lambda s, cited: dict(_payload(s, cited), **{k: s[k] for k in _PER_STUDY if k in s})
+# The per-study lines a saved fixture study may carry (contribution, caution): laid over what the engine works out
+# (app._study_extra), so a row can be measured with them. Never indirect: the engine sends indirect false and an empty
+# reason for every study in this release, and the fixture keeps to that.
+_PER_STUDY = ("contribution", "caution")
+_extra = appmod._study_extra
+appmod._study_extra = lambda s, cited: dict(_extra(s, cited), **{k: s[k] for k in _PER_STUDY if k in s})
 import db  # noqa: E402
 import pubmed  # noqa: E402
 import ratelimit  # noqa: E402
@@ -125,6 +126,19 @@ DESK_SAVED = json.loads((ROOT / "scripts" / "fixtures" / "desk_saved.json").read
 for r in DESK_SAVED:
     db.put_cached_verdict(r["claim"], r["search_query"], r["verdict"], r["explanation"], r["cited"], r["studies"],
                           tldr=r["tldr"], still_open=r["still_open"], breakdown=r["breakdown"])
+
+# The recorded vinegar answer (tests/vinegar_recorded.json), as a saved answer: study 1 is a review whose reference
+# list names a retracted trial (flagged as a live check flags it, with no lookup), so its row carries the engine's
+# own caution; the claim is absolute and rated false, so the page has both statements under How sure.
+import copy  # noqa: E402
+import evidence  # noqa: E402
+VINEGAR = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+_vin_st = copy.deepcopy(VINEGAR["studies"])
+_vin_st[0]["references"] = ["38966098"]
+evidence.flag_retracted_citations(_vin_st, lambda ids: set())
+db.put_cached_verdict(VINEGAR["claim"], VINEGAR["search_query_used"], VINEGAR["verdict"], VINEGAR["explanation"],
+                      [s["pmid"] for s in _vin_st if s.get("cited_in_verdict")], _vin_st, tldr=VINEGAR["tldr"],
+                      still_open=VINEGAR["still_open"], breakdown=VINEGAR["breakdown"])
 
 # ---- gates ------------------------------------------------------------------
 gates = {n: threading.Event() for n in ("query", "found", "done")}

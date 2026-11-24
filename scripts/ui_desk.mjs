@@ -748,7 +748,8 @@ for (const [w, h] of [[375, 812], [1280, 800]]) for (const mode of ["3d", "text"
     must(srv.eyebrows.join() === "Studies,Explanation,Limitations" && srv.label === "Answer", `names: ${srv.label}; ${srv.eyebrows.join(", ")}`);
     must(srv.rail.join() === SECTIONS.join(), `the rail: ${srv.rail.join(", ")}`);
     must(srv.lines.length >= 3 && srv.lines.every((l) => /^What this study contributes \S/.test(l)), `a study without its line: ${srv.lines.find((l) => !/^What this study contributes \S/.test(l))}`);
-    must(srv.lines.some((l) => l.includes("Indirect context ")) && srv.lines.some((l) => / \| [^|]*small trial/.test(l)), "the fixture's caution or Indirect context did not print");
+    // no indirect label in this release (the engine sends indirect false for every study); the fixture's caution prints
+    must(!srv.lines.some((l) => /Indirect/.test(l)) && srv.lines.some((l) => / \| [^|]*small trial/.test(l)), "the fixture's caution did not print, or an Indirect label did");
     await page.goto(`${base}/${mode === "text" ? "?nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
     await page.click("#claim-input"); await page.keyboard.type(SAVED[0]); await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(600);
@@ -1461,6 +1462,57 @@ for (const [w, h] of [[375, 812], [1280, 800]]) {
     const bad = s.rows.filter((r) => r.a === r.no || !r.pm || !r.noFocus || (r.no && r.noText !== "No abstract on PubMed"));
     must(s.rows.length && !bad.length && s.rows.some((r) => r.a) && s.rows.some((r) => r.no), `${s.rows.length} rows, ${bad.length} wrong: ${JSON.stringify(bad[0] || {})}`);
     must(s.intro === "Each study has its PubMed page, and its abstract where PubMed has one.", `intro: "${s.intro}"`);
+  }, { w, h });
+}
+
+// ---- 24. Evidence handling joined (q10-rel step 2): the recorded vinegar answer, saved by the fixture server ------
+// The two statements under How sure, the effect-size sentence printed once, a flagged review's caution once in its
+// row, no Indirect label and no empty label, and no bare strength word as a label in the page, the ClaimReview
+// markup or the shared text; from the server's HTML with scripts off, and after renderResult (a check from the box).
+const VIN = "Apple cider vinegar cure diabetes", VIN_S = "Fasting blood sugar fell by about 22 mg per dL";
+const step2Read = (page) => page.evaluate((S) => {
+  const words = []; const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = tw.nextNode(); n; n = tw.nextNode()) if (!n.parentElement.closest("script, style, template")) words.push(n.nodeValue);
+  const text = words.join(" ").replace(/\s+/g, " ");
+  const ev = [...document.querySelectorAll("p.evline")], st1 = ev.find((e) => !e.classList.contains("effect-line")), st2 = document.querySelector("p.effect-line");
+  const cautions = [...document.querySelectorAll("#rows .row")].map((r) => r.querySelectorAll(".caution").length);
+  const flagged = [...document.querySelectorAll("#rows .row .caution")].map((e) => e.textContent.trim());
+  const emptyLabels = [...document.querySelectorAll(".lbl")].filter((b) => !b.parentElement.textContent.replace(b.textContent, "").trim()).length;
+  const ld = [...document.querySelectorAll('script[type="application/ld+json"]')].map((e) => e.textContent).join(" ");
+  return { count: text.split(S).length - 1, st1: st1 ? st1.textContent.trim() : "", st2: st2 ? st2.textContent.trim() : "",
+    shown: !!st1 && !!st2 && st1.checkVisibility() && st2.checkVisibility(), cautions, flagged, emptyLabels,
+    indirect: /Indirect/.test(text) || !!document.querySelector(".indirect"), bare: (text.match(/\b(Strong|Moderate|Limited|Weak) evidence\b/g) || []).join(),
+    ldBare: (ld.match(/\b(Strong|Moderate|Limited|Weak) evidence\b/g) || []).join(), ld: ld.length };
+}, VIN_S);
+const step2Must = (r, where) => {
+  must(r.count === 1, `${where}: the effect-size sentence is on the page ${r.count} times`);
+  must(r.shown && r.st1 && r.st2.startsWith("What the studies did find: " + VIN_S), `${where}: the two statements: "${r.st1}" / "${r.st2.slice(0, 80)}"`);
+  must(r.cautions.length && r.cautions.every((n) => n <= 1) && r.flagged.filter((t) => t.startsWith("This review cites a study that was later retracted")).length === 1,
+    `${where}: cautions per row ${r.cautions.join()}: ${r.flagged.join(" | ").slice(0, 120)}`);
+  must(!r.indirect && !r.emptyLabels, `${where}: an Indirect label ${r.indirect}, empty labels ${r.emptyLabels}`);
+  must(!r.bare && !r.ldBare && (r.ld > 0 || where !== "scripts off"), `${where}: bare strength words: page "${r.bare}", ClaimReview "${r.ldBare}" (${r.ld} chars of markup)`);
+};
+for (const [w, h] of [[375, 812], [1280, 800]]) {
+  const name = `24a: the vinegar answer with scripts off: two statements, the effect size once, one caution, no bare strength word, ${w}x${h}`;
+  if (!process.env.UI_ONLY || name.startsWith(process.env.UI_ONLY)) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, javaScriptEnabled: false, serviceWorkers: "block" });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(`${base}/?q=${encodeURIComponent(VIN)}`, { waitUntil: "load" });
+      step2Must(await step2Read(page), "scripts off");
+      results.push(true); console.log(`PASS ${name}`);
+    } catch (e) { results.push(false); console.log(`FAIL ${name}\n     ${String(e.message || e).split("\n")[0]}`); } finally { await ctx.close(); }
+  }
+  await test(`24b: the vinegar answer after renderResult, the same, and the shared text has no bare strength word, ${w}x${h}`, async (page) => {
+    await page.addInitScript(() => { window.__shared = []; Object.defineProperty(navigator, "share", { value: (d) => { window.__shared.push(d.text || ""); return Promise.resolve(); }, configurable: true }); Object.defineProperty(navigator, "canShare", { value: () => false, configurable: true }); });
+    await page.goto(`${base}/?nogl=1`, { waitUntil: "load" }); await ready(page);
+    await page.click("#claim-input"); await page.keyboard.type(VIN); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(600);
+    step2Must(await step2Read(page), "after renderResult");
+    await page.evaluate(() => document.getElementById("share-btn").click());
+    await page.waitForFunction(() => window.__shared.length > 0, null, { timeout: 5000 });
+    const shared = await page.evaluate(() => window.__shared.join(" "));
+    must(shared.includes(VIN) && !/\b(Strong|Moderate|Limited|Weak) evidence\b/.test(shared), `the shared text: ${shared.slice(0, 160)}`);
   }, { w, h });
 }
 
