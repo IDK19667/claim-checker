@@ -3077,7 +3077,12 @@ def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: 
         phrase += f", which were only in {narrow.group(1)}"
     head = line.lower()
     span = re.match(r"^((?:very low|low|moderate|high)(?: to (?:very low|low|moderate|high))?) certainty\b", head)
-    basis = (f"Certainty: {span.group(1)}" if span and not basis_only
+    grades = span.group(1).split(" to ") if span else []
+    # Two different grades read as a span, not as one grade: "Certainty
+    # varies, from very low to high." One grade stays "Certainty: low."
+    certainty = (f"Certainty varies, from {grades[0]} to {grades[1]}" if len(grades) == 2
+                 else f"Certainty: {span.group(1)}" if span else "")
+    basis = (certainty if span and not basis_only
              else f"Based on {design_kind(studies, cited_pmids)}")
     # Exactly one full stop at the end (brief E4 D5).
     return f"{claim_label(absolute)}: {phrase}. {basis.rstrip('.')}."

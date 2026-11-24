@@ -7983,7 +7983,9 @@ t("second fix 1: vaccine-shaped rows rated over a range stay Likely true with th
   all(p["verdict"] == "true" and p["tldr"] == tl and lst["verdict"] == "true" for _cl, tl, p, lst in _r1),
   [(p["verdict"], p["evidence_line"], p["tldr"]) for _c, _t, p, _l in _r1])
 t("second fix 1: their lines still read as ranges that start low, which is not a low rating",
-  all("Supported only by limited studies. Certainty: low to " in p["evidence_line"] for _c, _t, p, _l in _r1),
+  all("Supported only by limited studies. Certainty varies, from low to " in p["evidence_line"]
+      and p["evidence_line"].endswith(".") and not p["evidence_line"].endswith("..")
+      and "Certainty: " not in p["evidence_line"] for _c, _t, p, _l in _r1),
   [p["evidence_line"] for _c, _t, p, _l in _r1])
 _tur1 = appmod._check_response("Turmeric eases joint pain", "(turmeric) AND (joint pain)", "true", "Turmeric eases joint pain.",
                                "It helps (Study 1).", ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
@@ -14651,6 +14653,15 @@ _e6_only = [_e6_r("HbA1c fell by 1.53, 95% CI -2.65, -0.41 (Study 2)."),
             _e6_r("HbA1c fell by 1.53 (95% CI -2.65 to -0.41) (Study 2).")]
 t("BRIEF E6 B1: when the dropped figure is the only one, the unbracketed form ends as the bracketed one does",
   _e6_only[0] == _e6_only[1], _e6_only)
+
+# --- BRIEF E6 B4: two different grades read as a span in the first statement ---
+_e6_two = _e_ev.claim_statement("complicated", "Very low to high certainty evidence of no clear effect", [], ())
+_e6_one = _e_ev.claim_statement("complicated", "Low certainty evidence of no clear effect", [], ())
+t("BRIEF E6 B4: two different grades read 'Certainty varies, from very low to high.', with one full stop",
+  _e6_two.endswith(". Certainty varies, from very low to high.") and not _e6_two.endswith("..")
+  and "Certainty: " not in _e6_two, _e6_two)
+t("BRIEF E6 B4: one grade stays 'Certainty: low.'", _e6_one.endswith(". Certainty: low.")
+  and not _e6_one.endswith(".."), _e6_one)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
