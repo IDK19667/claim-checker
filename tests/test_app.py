@@ -13151,7 +13151,8 @@ t("BRIEF E1b: a review citing a retracted paper in the check is flagged",
 t("BRIEF E1a: the lookup is asked only for the cited ids not already known", _e_calls == [["30"]], _e_calls)
 t("BRIEF E1b: the caution says cites, may include, not retracted itself",
   _e_ev.retraction_caution(_e_set[0]) == "This review cites a study that was later retracted (PubMed 20). "
-  "Its conclusions may rest in part on that study. The review itself has not been retracted.",
+  "We cannot tell from the citation whether the review's results include that study, so treat its results "
+  "with caution. The review itself has not been retracted.",
   _e_ev.retraction_caution(_e_set[0]))
 t("BRIEF E1c: a flagged review is not top tier where a reader sees it", _e_ev.shown_tier(_e_set[0]) == "moderate"
   and _e_ev.gate_tier(_e_set[0]) == "strong")
@@ -13547,7 +13548,8 @@ _m4_two = _e_study("71", ["Journal Article", "Systematic Review"],
                                     {"pmid": "802", "title": None, "trial": False}])
 t("BRIEF E2r m4: the caution for several retracted studies, the same for every kind of review",
   _e_ev.retraction_caution(_m4_two) == "This review cites 2 studies that were later retracted (PubMed 801, 802). "
-  "Its conclusions may rest in part on them. The review itself has not been retracted.",
+  "We cannot tell from the citations whether the review's results include them, so treat its results "
+  "with caution. The review itself has not been retracted.",
   _e_ev.retraction_caution(_m4_two))
 _m4_set = [_m4_two, dict(_m1_flag)]
 _m4_ex, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71", "70"})

@@ -2949,13 +2949,16 @@ def retraction_caution(study) -> str:
     if not flagged:
         return ""
     # The same words for every kind of review: a systematic review that did
-    # not pool has no pooled result to speak of.
+    # not pool has no pooled result to speak of. A citation does not show
+    # that the results rest on the study (a review may cite it to refute it).
     ids = [f["pmid"] for f in flagged]
     if len(ids) == 1:
         return (f"This review cites a study that was later retracted (PubMed {ids[0]}). "
-                f"Its conclusions may rest in part on that study. The review itself has not been retracted.")
+                f"We cannot tell from the citation whether the review's results include that study, "
+                f"so treat its results with caution. The review itself has not been retracted.")
     return (f"This review cites {len(ids)} studies that were later retracted (PubMed {', '.join(ids)}). "
-            f"Its conclusions may rest in part on them. The review itself has not been retracted.")
+            f"We cannot tell from the citations whether the review's results include them, "
+            f"so treat its results with caution. The review itself has not been retracted.")
 
 
 def _numbers(ns) -> str:
