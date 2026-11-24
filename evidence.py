@@ -2912,10 +2912,7 @@ def flag_retracted_citations(studies, lookup=None) -> str | None:
     if not reviews:
         return None
     known = {str(s.get("pmid")): s for s in studies if withdrawn(s) == BG_RETRACTED}
-    # The ids sent are capped; the review's own order decides which go first.
-    rest = list(dict.fromkeys(str(r) for s in reviews for r in s["references"] if str(r) not in known))
-    cut = len(rest) > RETRACTION_LOOKUP_MAX
-    rest = rest[:RETRACTION_LOOKUP_MAX]
+    rest, cut = _lookup_ids(studies, reviews, known)
     found, failed = set(), False
     if rest and lookup is not None:
         try:
@@ -2928,6 +2925,22 @@ def flag_retracted_citations(studies, lookup=None) -> str | None:
             s["cites_retracted"] = [{"pmid": h, "title": (known[h].get("title") if h in known else None),
                                      "trial": bool(h in known and is_trial(known[h]))} for h in hits]
     return RETRACTION_UNCHECKED if failed else RETRACTION_CUT if cut else None
+
+
+def _lookup_ids(studies, reviews, known) -> tuple[list[str], bool]:
+    """The cited ids the one lookup is asked about, capped, and whether the
+    cap cut the list. The review's own order decides which go first."""
+    rest = list(dict.fromkeys(str(r) for s in reviews for r in s["references"] if str(r) not in known))
+    return rest[:RETRACTION_LOOKUP_MAX], len(rest) > RETRACTION_LOOKUP_MAX
+
+
+def retraction_lookup_ids(studies) -> list[str]:
+    """The ids flag_retracted_citations would ask its lookup about, or []
+    when it would ask nothing."""
+    studies = [s for s in studies or [] if isinstance(s, dict)]
+    reviews = [s for s in studies if is_review(s) and not withdrawn(s) and s.get("references")]
+    known = {str(s.get("pmid")): s for s in studies if withdrawn(s) == BG_RETRACTED}
+    return _lookup_ids(studies, reviews, known)[0] if reviews else []
 
 
 def retraction_caution(study) -> str:

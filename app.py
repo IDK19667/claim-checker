@@ -1018,8 +1018,18 @@ def _study_payload(s: dict, cited: set) -> dict:
 
 
 def _flag_retractions(studies):
-    """evidence.flag_retracted_citations with the one PubMed lookup."""
-    return evidence.flag_retracted_citations(studies, pubmed.retracted_among)
+    """evidence.flag_retracted_citations with the one PubMed lookup. The
+    lookup runs on the search pool and only returns ids; the flags are put
+    on the studies here, on the request thread, and only from a result that
+    came in time. A late result is thrown away and never touches them."""
+    ids = evidence.retraction_lookup_ids(studies)
+    found = _retraction_result(pubmed._ahead(pubmed.retracted_among, ids)) if ids else set()
+
+    def lookup(_ids):
+        if found is None:
+            raise LookupError("the retraction lookup could not be made")
+        return found
+    return evidence.flag_retracted_citations(studies, lookup if ids else None)
 
 
 # How long a check waits for that lookup before going on without it.
@@ -1027,13 +1037,13 @@ RETRACTION_WAIT = pubmed.TIMEOUT + 2
 
 
 def _retraction_result(future):
-    """The lookup's note for the response ("could not be made"), or None.
-    A lookup that fails or runs late never stops the check."""
+    """The retracted ids the lookup found, or None when it failed or ran
+    late. A lookup that fails or runs late never stops the check."""
     try:
-        return future.result(timeout=RETRACTION_WAIT)
+        return set(future.result(timeout=RETRACTION_WAIT) or ())
     except Exception:  # noqa: BLE001 — the check goes on without it
         app.logger.warning("The retraction lookup could not be made")
-        return evidence.RETRACTION_UNCHECKED
+        return None
 
 
 def _next_steps_safe(claim, query_used, studies, cited):
@@ -1635,14 +1645,13 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         studies, query_used, broadened = pubmed.search_with_fallback(
             search_query, max_results=MAX_STUDIES, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
-        # Which reviews cite a paper later retracted: one lookup at most,
-        # started now so it runs beside the saved-answer check below.
-        retraction = pubmed._ahead(_flag_retractions, studies)
         kept = _steady(claim, studies)
         if kept:
             yield from_cache(kept, typed, reason, claim if typed else None)
             return
-        retraction_check = _retraction_result(retraction)
+        # Which reviews cite a paper later retracted: one lookup at most, and
+        # none when a saved answer is served above.
+        retraction_check = _flag_retractions(studies)
         if studies:
             yield {"stage": "weigh"}
         result = verdict.weigh_evidence(claim, studies, query_used, surrogate)

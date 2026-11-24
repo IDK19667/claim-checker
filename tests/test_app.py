@@ -13191,7 +13191,7 @@ class _EFuture:
 
 
 t("BRIEF E1a: a lookup that runs late never stops the check",
-  appmod._retraction_result(_EFuture()) == _e_ev.RETRACTION_UNCHECKED)
+  appmod._retraction_result(_EFuture()) is None)
 # E1c(iii): only a flagged entry changes in the prompt.
 _e_plain = _e_study("15", _E_REV, abstract="We pooled ten trials. CONCLUSIONS: It helped.")
 _e_before = verdict._format_study_for_prompt(1, _e_plain, "x", "", "claim")
@@ -13642,6 +13642,45 @@ _b5_e3, _b5_b3 = _e_bd.one_figure_once("Glucose fell by 3 mg (Study 2).", {"says
 t("BRIEF E2r B5: a list or field that would be left empty keeps its sentence",
   _b5_b3["evidence"] == ["Glucose dropped by 3 mg (Study 2)."]
   and _b5_b3["effect_size"] == "Glucose decreased by 3 mg (Study 2).", _b5_b3)
+
+# Brief E2 repair, M1: a lookup that comes back late is thrown away and never
+# touches the studies; one in time flags them on the request thread.
+import time as _m1_time  # noqa: E402
+_m1_real = (pubmed.retracted_among, appmod.RETRACTION_WAIT)
+
+
+def _m1_slow(ids):
+    _m1_time.sleep(0.6)
+    return {"9101"}
+
+
+try:
+    pubmed.retracted_among, appmod.RETRACTION_WAIT = _m1_slow, 0.1
+    _m1_st = [_e_study("91", _E_REV, references=["9101"])]
+    _m1_note = appmod._flag_retractions(_m1_st)
+    _m1_time.sleep(0.9)
+    t("BRIEF E2r M1: a late lookup says it could not be made and never flags the studies, even after it ends",
+      _m1_note == _e_ev.RETRACTION_UNCHECKED and "cites_retracted" not in _m1_st[0], (_m1_note, _m1_st[0]))
+    appmod.RETRACTION_WAIT = 2
+    _m1_st = [_e_study("91", _E_REV, references=["9101"])]
+    _m1_note = appmod._flag_retractions(_m1_st)
+    t("BRIEF E2r M1: a lookup in time flags the review",
+      _m1_note is None and _e_ev.cited_retracted(_m1_st[0]) == [{"pmid": "9101", "title": None, "trial": False}],
+      (_m1_note, _m1_st[0]))
+finally:
+    pubmed.retracted_among, appmod.RETRACTION_WAIT = _m1_real
+
+# Brief E2 repair, m5: no retraction lookup when a saved answer is served.
+_m5_calls, _m5_real = [], (pubmed.retracted_among, _e_ev.retraction_lookup_ids)
+try:
+    pubmed.retracted_among = lambda ids: _m5_calls.append(ids) or set()
+    _e_ev.retraction_lookup_ids = lambda studies: ["9101"]
+    _steady_row("Steady claim with no retraction lookup")
+    _m5_r, _m5_evs = stream("Steady claim with no retraction lookup", ip="7.7.10.9")
+    t("BRIEF E2r m5: a saved answer served after the search sends no retraction lookup",
+      _m5_evs[-1]["stage"] == "done" and _m5_evs[-1]["result"]["cached"] and not _m5_calls, (_m5_calls, _m5_evs[-1]))
+finally:
+    pubmed.retracted_among, _e_ev.retraction_lookup_ids = _m5_real
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
