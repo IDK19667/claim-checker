@@ -3261,16 +3261,41 @@ _CLAUSE_JOIN = re.compile(r"(?:\s*,\s*and|\s*,|\s*;|\s+and|\s+while|\s+whereas|\
                           re.IGNORECASE)
 # A figure and its range travel together: the interval goes with the figure
 # whether it is in brackets, "(95% CI -2.65, -0.41)", or not: ", 95% CI
-# -2.65, -0.41", "with a 95% confidence interval of -2.65 to -0.41".
+# -2.65, -0.41", "with a 95% confidence interval of -2.65 to -0.41". Never
+# one brought in by "and": that one may belong to another figure.
 _CI_END = r"[-−]?\d+(?:\.\d+)?(?:\s*%)?"
 _TRAILING_CI = re.compile(
     r"\s*\((?:[^()]*?\b(?:CI|confidence interval)\b)[^()]*\)"
-    r"|\s*,?\s*(?:(?:with|and)\s+(?:an?\s+)?)?"
+    r"|\s*,?\s*(?:with\s+(?:an?\s+)?)?"
     r"(?:95\s?(?:%|percent|per cent)\s*)?(?:CI|confidence interval|credible interval)s?"
     r"\s*(?:of|from|was|:|=|,)?\s*[\[(]?\s*" + _CI_END + r"\s*(?:,|to|-|–|and)\s*" + _CI_END
     + r"[\])]?",
     re.IGNORECASE)
 _FIGURE_WITH_UNIT = re.compile(r"\d\s*" + _UNIT, re.IGNORECASE)
+# What may come after a dropped figure and its own interval for the cut to
+# be clean: nothing, the study citation, or a further clause that names its
+# own figure ("and LDL by 0.4 mmol/L"). Anything else (a p value, "which
+# was ...", a second interval, "for weight", "points") may belong to the
+# figure that stays, so the sentence is left whole.
+_CLEAN_END = re.compile(r"\s*(?:\(\s*Stud(?:y|ies)\b[^()]*\))?\s*[.!?]?\s*$", re.IGNORECASE)
+_NAMED_CLAUSE = re.compile(
+    r"(?:\s*,\s*and|\s*,|\s*;|\s+and|\s+while|\s+whereas|\s+but)\s+"
+    r"(?!(?:an?|the|which|that|this|these|it|its|p|with|for|CIs?|confidence|credible|95|and|but|"
+    r"while|whereas)\b)[A-Za-z]"
+    r"(?P<gap>(?:[^\d()]|(?<=[A-Za-z])\d)*?)"
+    r"(?<![\w.])[-\u2212]?\d+(?:\.\d+)?(?:\s*" + _UNIT + "|" + _NO_UNIT + ")",
+    re.IGNORECASE)
+_NOT_A_NAME = re.compile(r"\b(?:CIs?|confidence|credible|significan\w*|p\s*[<=>])", re.IGNORECASE)
+
+
+def _clean_cut(sent: str, end: int) -> bool:
+    """Whether what follows a dropped figure and its interval lets it go cleanly."""
+    if _CLEAN_END.match(sent, end):
+        return True
+    named = _NAMED_CLAUSE.match(sent, end)
+    return bool(named) and not _NOT_A_NAME.search(named.group("gap"))
+
+
 UNITLESS_LEFT_OUT = "The size of this change is given without a unit, so it is left out here."
 
 
@@ -3442,8 +3467,9 @@ def drop_unitless(text: str) -> str:
     Take out each figure for_reading marked as having no unit. When a figure
     with its unit comes earlier in the same sentence, only the clause that
     carries the bare one goes: "fell by about 22 mg/dL and HbA1c by 1.53"
-    keeps "fell by about 22 mg/dL". Otherwise the sentence goes. "" when
-    nothing is left.
+    keeps "fell by about 22 mg/dL", but only when the cut is clean
+    (_clean_cut); otherwise the sentence stays whole, bare figure and all.
+    With no such figure the sentence goes. "" when nothing is left.
     """
     if _NO_UNIT not in (text or ""):
         return text or ""
@@ -3463,6 +3489,11 @@ def drop_unitless(text: str) -> str:
             ci = _TRAILING_CI.match(sent, end)
             if ci:
                 end = ci.end()
+            if not _clean_cut(sent, end):
+                # A unitless figure is a plainness flaw; a p value or range
+                # pinned on the wrong figure is a wrong statement. Left whole.
+                sent = sent[:mark] + sent[mark + len(_NO_UNIT):]
+                continue
             sent = sent[:joins[-1].start()] + sent[end:]
         sent = re.sub(r"\s+([.,;)])", r"\1", " ".join(sent.split()))
         if sent:

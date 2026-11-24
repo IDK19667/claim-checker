@@ -4887,9 +4887,9 @@ _ACV_ABS = ("RESULTS: ACV significantly reduced fasting blood sugar (FBS) (WMD: 
             "p = 0.008) and increased insulin (WMD: 2.059 \u03bcu/ml). Seven studies, 319 people.")
 _ACV_R = [dict(_ACV[0], abstract=_ACV_ABS)] + _ACV[1:]
 _fr = breakdown.for_reading
-t("a figure with three decimals is rounded, and an HbA1c change with no unit is left out",
+t("a figure with three decimals is rounded; an HbA1c change with no unit stays when words follow it (E6 B1b)",
   _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 in adults (Study 1).", _ACV_R)
-  == "Fasting blood sugar fell by about 22 mg/dL in adults (Study 1).")
+  == "Fasting blood sugar fell by about 22 mg/dL and HbA1c fell by 1.53 in adults (Study 1).")
 t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its interval",
   _fr("Study 1 showed drops in fasting blood sugar with a weighted mean difference of -21.929 mg/dL "
       "and HbA1c with -1.53.", _ACV_R)
@@ -4905,8 +4905,8 @@ t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure
 t("  a unit the model wrote for a figure the abstract printed bare is no unit at all",
   _fr("Fasting blood sugar decreased by about 22 milligrams per deciliter and HbA1c decreased "
       "by 1.53 percent in patients with type 2 diabetes (Study 1).", _ACV_R)
-  == "Fasting blood sugar decreased by about 22 milligrams per deciliter in patients with "
-     "type 2 diabetes (Study 1)."
+  == "Fasting blood sugar decreased by about 22 milligrams per deciliter and HbA1c decreased by 1.53 "
+     "in patients with type 2 diabetes (Study 1)."
   and _fr("HbA1c decreased by 1.53 percent (Study 1).", _ACV_R) == "")
 t("  a unit the model dropped is put back from the abstract",
   _fr("Insulin rose by 2.059 (Study 1).", _ACV_R) == "Insulin rose by 2.06 \u03bcU/mL (Study 1).")
@@ -14639,8 +14639,9 @@ t("BRIEF E6 B1: 'with a 95% confidence interval of a to b' goes with its dropped
   _e6_with == "Fasting blood sugar fell by about 22 mg/dL (Study 2).", _e6_with)
 _e6_rest = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53, CI -2.65 to -0.41, over 12 weeks "
                  "(Study 2).")
-t("BRIEF E6 B1: 'CI a to b' goes with its dropped figure and the rest of the sentence stays",
-  _e6_rest == "Fasting blood sugar fell by about 22 mg/dL, over 12 weeks (Study 2).", _e6_rest)
+t("BRIEF E6 B1b: 'CI a to b' then further words is no clean cut, so the sentence stays whole",
+  _e6_rest == "Fasting blood sugar fell by about 22 mg/dL and HbA1c by 1.53, CI -2.65 to -0.41, over 12 weeks "
+              "(Study 2).", _e6_rest)
 _e6_keep = [
     ("Fasting blood sugar fell by 21.929 mg/dL (95% CI -29.19 to -14.67) and LDL by 0.4 mmol/L (Study 2).",
      "Fasting blood sugar fell by about 22 mg/dL (likely range 29 to 15) and LDL by 0.4 mmol/L (Study 2)."),
@@ -14664,6 +14665,46 @@ t("BRIEF E6 B4: two different grades read 'Certainty varies, from very low to hi
   and "Certainty: " not in _e6_two, _e6_two)
 t("BRIEF E6 B4: one grade stays 'Certainty: low.'", _e6_one.endswith(". Certainty: low.")
   and not _e6_one.endswith(".."), _e6_one)
+
+# --- BRIEF E6 B1b: drop_unitless cuts a figure only when the cut is clean ---
+_e6b_st = [{"abstract": "Fasting glucose fell 21.929 mg/dL (95% CI -29.19, -14.67). HbA1c 1.53 (95% CI -2.65, "
+                        "-0.41). LDL fell 0.4 mmol/L. Weight fell 2.3 kg (95% CI 1.1 to 3.5). Systolic blood "
+                        "pressure fell 4.1 mmHg. Relative risk 0.28 (95% CI 0.12 to 0.71)."}]
+_e6b = lambda s: breakdown.for_reading(s, _e6b_st)
+_e6b_whole = [
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, and a 95% CI of 1.1 to 3.5 for weight (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, and a likely range of 1.1 to 3.5 for weight (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, p = 0.01, 95% CI -2.65 to -0.41 (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, p = 0.01, likely range -2.65 to -0.41 (Study 1)."),
+    ("Systolic blood pressure fell by 4.1 mmHg and HbA1c by 1.53, which was not statistically significant (Study 1).",
+     "Systolic blood pressure fell by 4.1 mmHg and HbA1c by 1.53, which was not statistically significant (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, CIs 1.1 to 3.5 and -2.65 to -0.41 (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, CIs 1.1 to 3.5 and -2.65 to -0.41 (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, 95% CI -2.65 to -0.41 points (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, likely range -2.65 to -0.41 points (Study 1)."),
+]
+for _i, (_a, _b) in enumerate(_e6b_whole):
+    t(f"BRIEF E6 B1b: no clean cut leaves the sentence whole, nothing pinned on the other figure ({_i + 1})",
+      _e6b(_a) == _b, _e6b(_a))
+t("BRIEF E6 B1b: an interval brought in by 'and' is never taken as the dropped figure's own",
+  breakdown._TRAILING_CI.match(", and a 95% CI of 1.1 to 3.5") is None)
+_e6b_cut = [
+    ("Fasting blood sugar was reduced by 21.929 mg/dL, 95% CI -29.19, -14.67, and HbA1c by 1.53, "
+     "95% CI -2.65, -0.41 (Study 2).",
+     "Fasting blood sugar was reduced by about 22 mg/dL, likely range -29, -15 (Study 2)."),
+    ("Fasting blood sugar fell by 21.929 mg/dL, HbA1c by 1.53, and LDL by 0.4 mmol/L (Study 2).",
+     "Fasting blood sugar fell by about 22 mg/dL, and LDL by 0.4 mmol/L (Study 2)."),
+    ("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53 with a 95% confidence interval of -2.65 to "
+     "-0.41 (Study 2).", "Fasting blood sugar fell by about 22 mg/dL (Study 2)."),
+]
+t("BRIEF E6 B1b: clean cuts still cut (vinegar, a further named figure, 'with a 95% confidence interval')",
+  all(_e6b(a) == b for a, b in _e6b_cut), [_e6b(a) for a, _b in _e6b_cut])
+_e6b_ratio = ["The relative risk was 0.28 with a 95% confidence interval of 0.12 to 0.71 (Study 4).",
+              "Weight fell by 2.3 kg and the relative risk was 0.28, 95% CI 0.12 to 0.71 (Study 4)."]
+t("BRIEF E6 B1b: ratios are untouched",
+  [_e6b(x) for x in _e6b_ratio] == ["The relative risk was 0.28 with a likely range of 0.12 to 0.71 (Study 4).",
+                                    "Weight fell by 2.3 kg and the relative risk was 0.28, likely range 0.12 to "
+                                    "0.71 (Study 4)."], [_e6b(x) for x in _e6b_ratio])
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
