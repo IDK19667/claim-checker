@@ -236,7 +236,7 @@ class Harness:
         self.misses = []        # every miss since install, never reset
         self.quota_seen = []    # every 429 since install, never reset
         self.quota_log = pathlib.Path(quota_log) if quota_log else None
-        self._orig_gemini = self._orig_paced = None
+        self._orig_gemini = self._orig_paced = self._orig_post = None
         self._pace = threading.Lock()   # PubMed's spacing of starts, latency mode only
         self._last_start = 0.0
 
@@ -376,8 +376,15 @@ class Harness:
         return _Client()
 
     # ---- PubMed -----------------------------------------------------------
-    def _paced_get(self, endpoint, params):
+    def _paced_post(self, endpoint, params):
+        """The same for a POST (the retraction lookup). Its key also names
+        the method; every GET key is exactly as before."""
+        return self._paced_get(endpoint, params, post=True)
+
+    def _paced_get(self, endpoint, params, post=False):
         req = pubmed_request(endpoint, params)
+        if post:
+            req["method"] = "post"
         key = key_of(req)
         self._add(pubmed_requests=1)
         rec = self._serve("pubmed", key)
@@ -390,7 +397,7 @@ class Harness:
             self._miss("pubmed", key, endpoint)
         t0 = time.perf_counter()
         try:
-            resp = self._orig_paced(endpoint, params)
+            resp = (self._orig_post if post else self._orig_paced)(endpoint, params)
         finally:
             ms = (time.perf_counter() - t0) * 1000
             self._add(pubmed_ms=ms, pubmed_live=1)
@@ -407,15 +414,20 @@ class Harness:
         import pubmed
         import verdict
         self._orig_gemini, self._orig_paced = verdict._gemini, pubmed._paced_get
+        self._orig_post = getattr(pubmed, "_paced_post", None)
         verdict._gemini = self._gemini
         pubmed._paced_get = self._paced_get
+        if self._orig_post is not None:
+            pubmed._paced_post = self._paced_post
 
     def uninstall(self):
         import pubmed
         import verdict
         if self._orig_gemini is not None:
             verdict._gemini, pubmed._paced_get = self._orig_gemini, self._orig_paced
-            self._orig_gemini = self._orig_paced = None
+            if getattr(self, "_orig_post", None) is not None:
+                pubmed._paced_post = self._orig_post
+            self._orig_gemini = self._orig_paced = self._orig_post = None
 
 
 _active = None

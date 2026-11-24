@@ -86,6 +86,55 @@ def _paced_get(endpoint: str, params: dict):
     return _http.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
 
 
+def _paced_post(endpoint: str, params: dict):
+    """One E-utilities POST, in the same turn as every GET. For a list of
+    ids too long to carry in a URL."""
+    global _last_call
+    with _pace:
+        wait = MIN_INTERVAL - (time.monotonic() - _last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _last_call = time.monotonic()
+    return _http.post(f"{EUTILS_BASE}/{endpoint}", data=params, timeout=TIMEOUT)
+
+
+def _post(endpoint: str, params: dict):
+    """_get's rules (pace, one more try on a passing fault) for a POST."""
+    resp = _paced_post(endpoint, params)
+    if resp.status_code in _RETRY_STATUS:
+        time.sleep(RETRY_AFTER)
+        resp = _paced_post(endpoint, params)
+    resp.raise_for_status()
+    return resp
+
+
+# At most this many cited ids go into the one retraction lookup of a check.
+RETRACTION_LOOKUP_MAX = 2000
+
+
+def retracted_among(pmids) -> set[str]:
+    """
+    Which of these PubMed ids PubMed marks as retracted: one esearch, by POST,
+    of the ids against "Retracted Publication"[pt]. Raises on any failure, so
+    the caller can say the check could not be made.
+    """
+    ids = sorted({str(p) for p in pmids if str(p).isdigit()}, key=int)[:RETRACTION_LOOKUP_MAX]
+    if not ids:
+        return set()
+    params = {
+        "db": "pubmed",
+        "term": '"Retracted Publication"[pt] AND (' + " OR ".join(f"{i}[uid]" for i in ids) + ")",
+        "retmax": len(ids),
+        "retmode": "json",
+        **_tool_params(),
+    }
+    data = _post("esearch.fcgi", params).json()
+    found = (data.get("esearchresult") or {}).get("idlist")
+    if not isinstance(found, list):
+        raise ValueError("no id list in the retraction lookup")
+    return {str(i) for i in found} & set(ids)
+
+
 def _get(endpoint: str, params: dict):
     """One E-utilities call, no faster than NCBI's published rate, asked
     once more if NCBI turns it away or has a passing fault."""
@@ -207,7 +256,7 @@ def _parse_article(article_el) -> dict:
         if names:
             data_statement = ", ".join(names)
 
-    return {
+    record = {
         "pmid": pmid,
         "title": title,
         "abstract": abstract,
@@ -218,6 +267,19 @@ def _parse_article(article_el) -> dict:
         "data_banks": data_statement,  # reserved for future deep-dive feature
         "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
     }
+    # The PubMed ids a review cites, from its reference list, when PubMed
+    # carries one. Only for reviews: it is what lets a review that pooled a
+    # later retracted paper be flagged (evidence.flag_retracted_citations).
+    # A list proves the review cites the paper, never that it pooled it.
+    if evidence.is_review(record):
+        refs = []
+        for el in article_el.findall(".//ReferenceList//ArticleId[@IdType='pubmed']"):
+            ref = (el.text or "").strip()
+            if ref.isdigit() and ref != pmid and ref not in refs:
+                refs.append(ref)
+        if refs:
+            record["references"] = refs
+    return record
 
 
 def fetch_details(pmids: list[str]) -> list[dict]:
