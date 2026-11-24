@@ -10,6 +10,7 @@ import secrets
 import subprocess
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
@@ -333,13 +334,68 @@ def _public_claims(rows, n, key="claim_text", indexable=False):
     """
     The one screen every public list passes (home's latest checks, the 404
     page, trending, llms.txt, type-ahead; tests list each address): the first
-    n rows whose claim may be shown in a public list. A claim that looks
-    like it holds a name, an age, contact details or a medical detail is left out
-    (indexable=True also needs it to be a curated example, for the machine index).
-    Callers fetch about three times n so a filtered list stays near its old size.
+    n rows whose claim may be shown in a public list (display.public_claim: a
+    curated example, or a claim that does not look personal and whose every
+    word is vouched for by the closed list or the studies it read).
+    indexable=True also needs it to be a curated example, for the machine index.
+    A row that carries its studies is judged on them; a light row (trending,
+    type-ahead, llms.txt) by its saved answer, remembered per row
+    (_public_views). Callers fetch about three times n so a filtered list
+    stays near its old size.
     """
-    keep = display.indexable_claim if indexable else (lambda c: not display.looks_personal(c))
-    return [r for r in rows if keep(r[key])][:n]
+    rows = list(rows)
+    light = [r for r in rows if "studies" not in r and not (indexable and not display.indexable_claim(r[key]))]
+    views = _public_views(light, key) if light else {}
+    out = []
+    for r in rows:
+        if indexable and not display.indexable_claim(r[key]):
+            continue
+        if "studies" in r:
+            ok = display.public_claim(r[key], r["studies"])
+        else:
+            ok = views.get(r.get("claim_key") or db.normalize_claim(r[key]), (None, False))[1]
+        if ok:
+            out.append(r)
+    return out[:n]
+
+
+# What the one screen decided for each saved row a light list showed, by
+# claim key: (saved date, public). A row saved again has a new date and is
+# judged again. Capped, oldest out first, so memory stays bounded; a list
+# call reads only the rows it has not seen (one query, db.list_rows).
+PUBLIC_MEMO_MAX = 5000
+_public_memo: "OrderedDict[str, tuple]" = OrderedDict()
+_public_memo_lock = threading.Lock()
+
+
+def _public_views(rows, key="claim_text") -> dict:
+    keys = {}
+    for r in rows:
+        k = r.get("claim_key") or db.normalize_claim(r[key])
+        keys[k] = r.get("created_at")
+    found, need = {}, []
+    with _public_memo_lock:
+        for k, at in keys.items():
+            hit = _public_memo.get(k)
+            if hit and (at is None or hit[0] == at):
+                _public_memo.move_to_end(k)
+                found[k] = hit
+            else:
+                need.append(k)
+    if need:
+        try:
+            fetched = db.list_rows(need)
+        except sqlite3.Error as e:
+            app.logger.warning("Could not read rows for a public list: %s", e)
+            fetched = []
+        with _public_memo_lock:
+            for row in fetched:
+                view = (row["created_at"], display.public_claim(row["claim_text"], row["studies"]))
+                _public_memo[row["claim_key"]] = view
+                found[row["claim_key"]] = view
+            while len(_public_memo) > PUBLIC_MEMO_MAX:
+                _public_memo.popitem(last=False)
+    return found
 
 
 LIST_OVERFETCH = 3
@@ -1917,7 +1973,8 @@ def api_count():
 
 @app.route("/api/trending")
 def api_trending():
-    return jsonify(_public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8, key="claim"))
+    return jsonify([{"claim": r["claim"], "verdict": r["verdict"], "checks": r["checks"]}
+                    for r in _public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8, key="claim")])
 
 
 @app.route("/api/study/<pmid>")

@@ -553,9 +553,91 @@ def _name_risk(text: str) -> bool:
     return False
 
 
+# A run of 7 or more digits reads as a phone number, however it is spaced:
+# digits apart only by spaces, dots, dashes or brackets count as one run.
+_PHONE_RUN = re.compile(r"\d(?:[\s().-]*\d){6,}")
+
+
 def looks_personal(claim_text) -> bool:
     text = str(claim_text or "").replace("\u2019", "'").replace("\u2018", "'")
-    return bool(_PERSONAL.search(text)) or _name_risk(text)
+    return bool(_PERSONAL.search(text)) or bool(_PHONE_RUN.search(text)) or _name_risk(text)
+
+
+# Vouching. A typed claim is shown in a public list only when every word of it
+# is vouched for: a word in this closed list of ordinary claim words (function
+# words, question openers, the plain verbs and nouns of claims, and _TERMS; no
+# names), or a word in the titles or abstracts of the studies that check read
+# (never their authors or journals). Words are compared case-folded, with a
+# plain final "s" or "es" folded. A token with digits is vouched for when it
+# has at most 5 of them. A lowercase name or a word the studies never use
+# keeps a claim off every public list; the check itself is untouched.
+_VOUCH_WORDS = frozenset("""
+a an the and or but not no never without non if then than so as of to in on at by for from with into over under about after before during while until within up down out off away
+is are was were be been being am has have had do does did doing done can could may might will would shall should must
+it its this that these those there here what which who why how when where whether
+you your someone anyone everyone people person they their them
+dont doesnt didnt isnt arent wasnt werent cant cannot wont youre
+true false just only also even still too very much many more most less least few lot plenty enough some any all every each other same own several like
+good bad better best worse worst safe healthy harmful helpful effective natural normal regular extra main
+high higher low lower big small long longer short fast faster quick quickly fully regularly daily often always usually sometimes soon straight clear
+new old young older younger early late warm hot cold
+cause causing prevent stop cure treat help work make made take taking give giving get getting got go going keep put need use using find feel mean pass live remove
+raise increase boost improve reduce cut cutting decrease shorten speed ease relieve soothe protect harm link linked associated affect change catch catching
+eat eating drink drinking sleep sleeping breathing exercise exercising recovery
+risk chance effect benefit symptom sign problem
+health body life day week month year time morning
+child children baby babies adult man men woman women pregnant pregnancy
+food diet water salt sugar weight amount dose pill tablet medicine
+flu cold cough pain sickness fever infection teeth
+one two three four five six seven eight nine ten
+""".split()) | _TERMS
+_VOUCH_TOKEN = re.compile(r"[^\W_]+")
+
+
+def _vouch_tokens(text) -> list:
+    return _VOUCH_TOKEN.findall(str(text or "").replace("\u2019", "'").replace("'", "").casefold())
+
+
+def _vouch_forms(word: str) -> set:
+    forms = {word}
+    if len(word) > 3 and word.endswith("s"):
+        forms.add(word[:-1])
+    if len(word) > 4 and word.endswith("es"):
+        forms.add(word[:-2])
+    return forms
+
+
+_VOUCH_CLOSED = frozenset(f for w in _VOUCH_WORDS for f in _vouch_forms(w))
+
+
+def vouched(claim_text, studies) -> bool:
+    """Every word of the claim is vouched for (see _VOUCH_WORDS)."""
+    seen = None
+    for w in _vouch_tokens(claim_text):
+        if any(ch.isdigit() for ch in w):
+            if sum(ch.isdigit() for ch in w) > 5:
+                return False
+            continue
+        forms = _vouch_forms(w)
+        if forms & _VOUCH_CLOSED:
+            continue
+        if seen is None:
+            seen = set()
+            for s in studies or []:
+                if isinstance(s, dict):
+                    for x in _vouch_tokens(f"{s.get('title') or ''} {s.get('abstract') or ''}"):
+                        seen |= _vouch_forms(x)
+        if not forms & seen:
+            return False
+    return True
+
+
+def public_claim(claim_text, studies) -> bool:
+    """The one screen for every public list: a curated example always; any
+    other claim when it does not look personal and every word is vouched for."""
+    if is_curated_claim(claim_text):
+        return True
+    return not looks_personal(claim_text) and vouched(claim_text, studies)
 
 
 # The only claims whose result pages a search engine may index or the sitemap

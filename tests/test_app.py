@@ -227,6 +227,16 @@ verdict._gemini_client = fg
 STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", "year": "2020",
             "publication_types": ["Journal Article"], "authors": ["A B"], "data_banks": None, "url": f"u{i}"}
            for i in range(1, 4)]
+
+
+def _vouch_studies(*claims, base=None):
+    """The fake studies with the claims' words in their abstracts. A typed claim
+    is listed publicly only when the studies its check read vouch for its words
+    (display.public_claim), so a list test seeds rows whose studies do."""
+    return [dict(s_, abstract=(s_["abstract"] + " " + " ".join(claims)).strip())
+            for s_ in (base if base is not None else STUDIES)]
+
+
 _SP_REAL_SAF = pubmed.search_and_fetch  # the real one, for the check-speed tests at the end
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # The guideline check is one more call on high-stakes claims. It is tested
@@ -334,7 +344,9 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # ---- SSE stream -------------------------------------------------------------
 fg.models.script = [Resp("q"), Resp(VJ("false", [2]))]
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _vouch_studies("streamed claim")
 r, evs = stream("streamed claim")
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 t("sse content-type", r.status_code == 200 and "text/event-stream" in r.content_type)
 t("sse stages in order", [e["stage"] for e in evs] == ["search", "query", "found", "weigh", "done"], [e["stage"] for e in evs])
 t("  found carries count/query; done carries result", evs[2]["count"] == 3 and evs[2]["query"] == "q" and evs[4]["result"]["verdict"] == "false")
@@ -953,7 +965,7 @@ t("the front page never says '1 studies'", "1 studies read" not in _html)
 # Sentence case is the template's: the stored text and the link keep the
 # wording as typed, only the first letter shown is raised.
 db.put_cached_verdict("green tea speeds up METABOLISM", "green tea AND metabolism", "complicated", "x",
-                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "a", "journal": "J", "year": "2020",
+                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "Green tea speeds up metabolism.", "journal": "J", "year": "2020",
                         "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Randomized Controlled Trial"]}],
                       tldr="Maybe a little.", still_open="How much is unclear.")
 _sc_html = c.get("/").data.decode()
@@ -1006,7 +1018,7 @@ _sc_tpls = {n: (ROOT / "templates" / n).read_text() for n in ("index.html", "404
 t("  and both templates' lists use the one filter, with no first-letter upper of their own",
   all("{{ v.claim_text | sentence_case }}" in x and "[:1] | upper" not in x for x in _sc_tpls.values()))
 db.put_cached_verdict("mRNA vaccines change DNA", "mrna AND dna", "false", "x",
-                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "a", "journal": "J", "year": "2021",
+                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "Do mRNA vaccines change DNA?", "journal": "J", "year": "2021",
                         "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Review"]}],
                       tldr="No.", still_open="Long-term data are still coming.")
 _sc_home = c.get("/").data.decode()
@@ -8034,7 +8046,8 @@ _g2p = appmod._check_response(_g2c, "(measles vaccine) AND (measles)", "true", _
                               ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
 _g2l = appmod._listed({"claim_text": _g2c, "verdict": "true", "search_query": "(measles vaccine) AND (measles)",
                        "tldr": _g2t, "studies": [_LOWREV], "cited": ["L1"]})
-db.put_cached_verdict(_g2c, "(measles vaccine) AND (measles)", "true", "It helps (Study 1).", ["L1"], [_LOWREV],
+db.put_cached_verdict(_g2c, "(measles vaccine) AND (measles)", "true", "It helps (Study 1).", ["L1"],
+                      _vouch_studies(_g2c, base=[_LOWREV]),
                       tldr=_g2t, still_open="Doses vary.")
 _g2s = c.get("/api/suggest", query_string={"q": "Measles vaccine protects"}).get_json() or {}
 t("second fix 2: a guidance 'true' over a low-rated review keeps its stamp and its guidance takeaway",
@@ -8598,7 +8611,8 @@ t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt
 
 _pers, _ordc = "My son Tom has asthma, does honey help", "Honey soothes a cough in adults"
 for _cl, _q in ((_pers, "honey AND asthma"), (_ordc, "honey AND cough")):
-    db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], [_gs], tldr="Mixed.", still_open="Doses vary.")
+    db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], _vouch_studies(_cl, base=[_gs]),
+                          tldr="Mixed.", still_open="Doses vary.")
 _pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/no-such-page-xyz")}
 _pages["/llms.txt"] = c.get("/llms.txt").get_data(as_text=True)
 t("lists: a personal saved claim is on no public list (/, 404, /llms.txt)",
@@ -9286,7 +9300,7 @@ with db.get_conn() as _conn:
         [db.normalize_claim(x) for x in _OQ]).fetchall()}
 for _x in _OQ:
     db.put_cached_verdict(_x, "(x) AND (y)", "complicated", "Study 1 found a little.", ["P1"],
-                          [dict(s_) for s_ in STUDIES], tldr="A little, maybe.", still_open="For how long.")
+                          _vouch_studies(*_OQ), tldr="A little, maybe.", still_open="For how long.")
 _oq_list = [r_["claim_text"] for r_ in appmod._latest(500) if r_["claim_text"] in _OQ]
 t("one per question: each pair find_equivalent merges shows once, as its newest row under its own wording",
   _oq_list == ["Does it?", "Is it?", "Apple cider vinegar causes diabetes", "Apple cider vinegar helps diabetes",
@@ -9353,9 +9367,9 @@ _FR_BAD, _FR_GOOD, _FR_OLD = ("Zanzibar clove oil heals warts", "Zanzibar honey 
 _FR_CUR = "Ozempic cures alcoholism"   # a curated claim, so the sitemap and llms.txt would list it
 _ledger0 = db.ledger()["claims"]
 db.put_cached_verdict(_FR_GOOD, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_FR_GOOD), tldr="It helps a little.", still_open="For how long.")
 db.put_cached_verdict(_FR_OLD, "(ginger) AND (nausea)", "complicated", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="Maybe, a little.", still_open=None)
+                      _vouch_studies(_FR_OLD), tldr="Maybe, a little.", still_open=None)
 _fr_put(_FR_BAD)
 with db.get_conn() as _conn:
     _fr_cur_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
@@ -9413,9 +9427,9 @@ with db.get_conn() as _conn:
                                 (db.normalize_claim(_WL_ROWS[3][0]),)).fetchone()["n"]
 for _wc, _wt, _wo in _WL_ROWS:
     db.put_cached_verdict(_wc, "(quokka) AND (warts)", "true", "Because (Study 1).", ["P1"],
-                          [dict(s_) for s_ in STUDIES], tldr=_wt, still_open=_wo)
+                          _vouch_studies(_wc), tldr=_wt, still_open=_wo)
 db.put_cached_verdict(_WL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_WL_GOOD), tldr="It helps a little.", still_open="For how long.")
 for _x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]:
     db.log_check(_x, "true", "x", [])
     db.log_check(_x, "true", "x", [])
@@ -9461,9 +9475,9 @@ _OL_ROWS = (("Wombat tea soothes throats", None, "Doses vary."),
 _OL_GOOD = "Wombat ginger eases nausea"
 for _oc, _ot, _oo in _OL_ROWS:
     db.put_cached_verdict(_oc, "(wombat) AND (throat)", "true", "Because (Study 1).", ["P1"],
-                          [dict(s_) for s_ in STUDIES], tldr=_ot, still_open=_oo)
+                          _vouch_studies(_oc), tldr=_ot, still_open=_oo)
 db.put_cached_verdict(_OL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_OL_GOOD), tldr="It helps a little.", still_open="For how long.")
 for _x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]:
     db.log_check(_x, "true", "x", [])
     db.log_check(_x, "true", "x", [])
@@ -9503,9 +9517,9 @@ appmod._sitemap_memo["stamp"] = None
 # matches), the suggestion is left out of /api/suggest, never shown uncapped.
 _SB_TRUE, _SB_MIX = "Numbat honey soothes throats", "Numbat tea eases coughs"
 db.put_cached_verdict(_SB_TRUE, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_SB_TRUE), tldr="It helps a little.", still_open="For how long.")
 db.put_cached_verdict(_SB_MIX, "(tea) AND (cough)", "complicated", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="Maybe.", still_open="For how long.")
+                      _vouch_studies(_SB_MIX), tldr="Maybe.", still_open="For how long.")
 _sb_seen = [r_["claim_text"] for r_ in c.get("/api/suggest?q=numbat").get_json()["suggestions"]]
 _sb_get = db.get_cached_by_key
 db.get_cached_by_key = lambda key, *a, **k: None
@@ -13065,7 +13079,7 @@ db.recent_verdicts, db.get_cached_by_key = _hl_rv, _hl_key
 appmod.HOME_LIST_SECONDS = 60
 appmod._drop_home_lists()
 try:
-    db.put_cached_verdict("Home list claim one", "q", "complicated", "x", ["P1"], STUDIES,
+    db.put_cached_verdict("Home list claim one", "q", "complicated", "x", ["P1"], _vouch_studies("Home list claim one"),
                           tldr="Mixed.", still_open="Dose.")
     _hl_a = c.get("/").get_data(as_text=True)
     _hl_first = dict(_hl_calls)
@@ -13087,7 +13101,7 @@ try:
       _hl_r.status_code == 200 and "Home list claim one" in _hl_r.get_data(as_text=True)
       and _hl_calls["recent"] > 2 * _hl_first["recent"], dict(_hl_calls))
     _hl_n = _hl_calls["recent"]
-    db.put_cached_verdict("Home list claim two", "q", "complicated", "x", ["P1"], STUDIES,
+    db.put_cached_verdict("Home list claim two", "q", "complicated", "x", ["P1"], _vouch_studies("Home list claim two"),
                           tldr="Mixed.", still_open="Dose.")
     _hl_c = c.get("/").get_data(as_text=True)
     t("HOME LISTS: a check saved in this process drops the copy, so the next visit lists it",
@@ -15085,6 +15099,7 @@ t("BRIEF E6 B1e: 'on average' is no qualifier, so the cut keeps 'on average in a
   _e6e_avg == "Weight fell by 2 kg on average in adults (Study 1).", _e6e_avg)
 
 # ===== SITE FIXES (q10-site): public lists, dates, footer =====
+import display, suggest, logging  # noqa: E402,E401
 # --- 1a: every public path passes one screen ---
 import re as _sf_re
 # Every GET address the app serves is either a public list of saved claims
@@ -15133,6 +15148,51 @@ t("1a: a typed claim with a capitalised name and a phone number is on no public 
 t("1a: its own result page still works for whoever has the link", c.get("/?q=" + urllib.parse.quote(_SF_CAP)).status_code == 200
   and "Jordan Vale" in c.get("/?q=" + urllib.parse.quote(_SF_CAP)).get_data(as_text=True))
 _sf_drop(_SF_CAP)
+# --- 1b: the screen's two general rules: phone-like runs, and vouching ---
+_SF_LOW, _SF_SEVEN = "turmeric cured jordan vale of arthritis", "Turmeric cured arthritis for jordan vale, text 5550142"
+_SF_OK = "Turmeric eased arthritis pain"
+for _cl in (_SF_LOW, _SF_SEVEN, _SF_CAP, _SF_OK):
+    _sf_seed(_cl)
+_sf_p = _sf_paths("turmeric")
+for _cl, _probe in ((_SF_LOW, "cured jordan vale of"), (_SF_SEVEN, "5550142"), (_SF_CAP, "Jordan Vale")):
+    for _u, _v in _sf_p.items():
+        t(f"1b: {_cl!r} is not on {_u}", _probe not in _v)
+t("1b: an ordinary claim whose words its studies use is still listed (home, 404, trending, type-ahead)",
+  all(_SF_OK in _sf_p[u] for u in ("/", "404", "/api/trending", "/api/suggest")), [u for u in _sf_p if _SF_OK not in _sf_p[u]])
+for _cl in (_SF_LOW, _SF_SEVEN):
+    _r = c.get("/?q=" + urllib.parse.quote(_cl))
+    t(f"1b: an unlisted claim's own result page and share card still work: {_cl!r}",
+      _r.status_code == 200 and _cl in _r.get_data(as_text=True)
+      and c.get("/og/" + urllib.parse.quote(db.normalize_claim(_cl), safe="") + ".png").status_code == 200)
+t("1b: phone-like: 7 digits in one run, apart only by spaces, dots, dashes or brackets, is personal",
+  all(display.looks_personal(x) for x in ("call 5550142", "text 555 0142 now", "ring (555) 01.42", "555-01-42 cured it"))
+  and not any(display.looks_personal(x) for x in ("Take 200 mg twice a day", "Walking 10,000 steps a day extends life",
+                                                   "Omega 3 helps memory in adults over 65", "123456 is six digits")))
+_sf_st = [{"title": "Curcumin for knee osteoarthritis", "abstract": "Turmeric extracts reduced pain scores.", "authors": ["Vale J"],
+           "journal": "Jordan Medical Journal"}]
+t("1b: vouching: closed-list words and words from titles and abstracts vouch, with a final s or es folded",
+  display.vouched("Turmeric extract reduces knee pain", _sf_st) and display.vouched("Curcumin helps osteoarthritis", _sf_st))
+t("1b: vouching: an author's or a journal's name vouches for nothing",
+  not display.vouched("Turmeric helped vale", _sf_st) and not display.vouched("Turmeric helps jordan", _sf_st))
+t("1b: vouching: a token with digits is vouched for up to 5 digits",
+  display.vouched("Take 10000 a day", []) and not display.vouched("Take 100000 a day", []))
+t("1b: vouching: a check that read no studies is vouched for only by the closed list",
+  display.vouched("Sleep helps children", []) and not display.vouched("Turmeric helps children", []))
+t("1b: curated example claims are always listed, studies or not",
+  all(display.public_claim(x, []) for x in display.CURATED_CLAIMS))
+# Type-ahead remembers what the screen decided per row: a second call reads no row again.
+_sf_reads = []
+_sf_lr = db.list_rows
+db.list_rows = lambda keys, *a, **k: (_sf_reads.append(len(list(keys))), _sf_lr(keys))[1]
+try:
+    appmod._public_memo.clear()
+    c.get("/api/suggest?q=turmeric"); _sf_first = len(_sf_reads)
+    c.get("/api/suggest?q=turmeric"); c.get("/api/trending")
+finally:
+    db.list_rows = _sf_lr
+t("1b: type-ahead reads the rows it has not judged once, then answers from memory (one read, then none)",
+  _sf_first == 1 and len(_sf_reads) == 1, _sf_reads)
+_sf_drop(_SF_LOW, _SF_SEVEN, _SF_CAP, _SF_OK)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
