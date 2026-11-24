@@ -13274,7 +13274,7 @@ t("BRIEF E2: a refuted claim reads 'Not supported by the studies reviewed'",
   _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], ""))
 t("BRIEF E2: a certainty the line carried is kept, in words that are not a strength",
   _e_ev.claim_statement("true", "Low certainty evidence for this claim", _e_rcts, ["50"], "")
-  == "The claim: Supported by the studies reviewed. Certainty: low")
+  == "The claim: Supported only by limited studies. Certainty: low")
 t("BRIEF E2: an effect sentence outside the closed pattern is printed as the model said it",
   _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", [], [])
   == "What the studies did find: Vinegar lowered glucose (Study 2). The abstracts we read do not rate how certain this is")
@@ -13486,6 +13486,34 @@ t("BRIEF E2r B3: several grades read 'varies by outcome, lowest to highest, as t
   == "What the studies did find: HbA1c fell (Study 1). Certainty varies by outcome, low to moderate, "
   "as the reviews rate it", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2],
                                                    ["1", "2"], ""))
+
+# Brief E2 repair, m1 and m2: statement 1 is never surer than the old line.
+_m1_table = {"Strong evidence for this claim": "Supported by the studies reviewed",
+             "High certainty evidence for this claim": "Supported by the studies reviewed",
+             "Moderate evidence for this claim": "Supported by the studies reviewed, with some uncertainty",
+             "Moderate certainty evidence for this claim": "Supported by the studies reviewed, with some uncertainty",
+             "Weak evidence for this claim": "Supported only by limited studies",
+             "Low to moderate certainty evidence for this claim": "Supported only by limited studies",
+             "Very low certainty evidence for this claim": "Supported only by limited studies"}
+_m1_bad = [(k, _e_ev.claim_statement("true", k, _e_rcts, ["50"], "")) for k, v in _m1_table.items()
+           if not _e_ev.claim_statement("true", k, _e_rcts, ["50"], "").startswith(f"The claim: {v}.")]
+t("BRIEF E2r m1: a 'true' says the old line's cap: plain, with some uncertainty, or only limited studies",
+  not _m1_bad, _m1_bad)
+t("BRIEF E2r m1: a size stays beside the cap",
+  _e_ev.claim_statement("true", "Moderate evidence for this claim, a small effect", _e_rcts, ["50"], "")
+  .startswith("The claim: Supported by the studies reviewed, a small effect, with some uncertainty."))
+_m1_flag = _e_study("70", _E_REV, abstract="We pooled randomized trials. CONCLUSIONS: It worked.",
+                    cites_retracted=[{"pmid": "800001", "title": None, "trial": False}])
+t("BRIEF E2r m1: a flagged review as the best study relied on is named in the basis",
+  _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], "")
+  == "The claim: Not supported by the studies reviewed. Based on a review that cites a retracted study",
+  _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], ""))
+t("BRIEF E2r m1: a clean top-tier study beside it keeps the usual basis",
+  _e_ev.claim_statement("false", "Strong evidence against this claim", [_m1_flag, _e_rcts[0]], ["70", "50"], "")
+  .endswith("Based on randomized trials"))
+t("BRIEF E2r m2: a narrowing reads 'which were only in'",
+  _e_ev.claim_statement("complicated", "Moderate evidence, but only in older adults", _e_rcts, ["50"], "")
+  .startswith("The claim: No plain yes or no from the studies reviewed, which were only in older adults."))
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

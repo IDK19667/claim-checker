@@ -2986,6 +2986,10 @@ def design_kind(studies, cited_pmids=()) -> str:
     the top tier relied on: what "Strong" used to stand for."""
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
     top = [s for s in cited if shown_tier(s) == "strong"]
+    # The best study relied on is a review citing a retracted paper, and no
+    # clean top-tier study stands beside it: the basis says so.
+    if not top and any(demoted(s) and gate_tier(s) == "strong" for s in cited):
+        return FLAGGED_BASIS
     if top:
         reviews = [s for s in top if is_review(s)]
         if reviews:
@@ -3003,6 +3007,13 @@ def design_kind(studies, cited_pmids=()) -> str:
     return "case reports or opinion pieces"
 
 
+FLAGGED_BASIS = "a review that cites a retracted study"
+# A "true" is never surer in statement 1 than the old line's level word,
+# read at its low end (line_certainty): the phrase carries that cap.
+TRUE_PHRASES = {"high": CLAIM_PHRASES["true"],
+                "moderate": "Supported by the studies reviewed, with some uncertainty",
+                "low": "Supported only by limited studies",
+                "very low": "Supported only by limited studies"}
 _LINE_SIZE = re.compile(r"\ba (small|moderate|large) effect\b")
 _LINE_NARROW = re.compile(r", but only in (.+)$")
 
@@ -3013,13 +3024,19 @@ def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: 
         return line
     phrase = CLAIM_PHRASES[verdict]
     size = _LINE_SIZE.search(line)
-    if verdict == "true" and size:
-        phrase += f", a {size.group(1)} effect"
-    if "of no clear effect" in line and verdict != "true":
-        phrase += ", which found no clear effect"
+    if verdict == "true":
+        phrase = TRUE_PHRASES.get(line_certainty(line) or "moderate", TRUE_PHRASES["moderate"])
+        if size:
+            head, _, rest = phrase.partition(", with")
+            phrase = f"{head}, a {size.group(1)} effect" + (f", with{rest}" if rest else "")
+    clear = "of no clear effect" in line and verdict != "true"
     narrow = _LINE_NARROW.search(line)
-    if narrow:
-        phrase += f", whose studies were only in {narrow.group(1)}"
+    if clear and narrow:
+        phrase += f", which found no clear effect. The studies reviewed were only in {narrow.group(1)}"
+    elif clear:
+        phrase += ", which found no clear effect"
+    elif narrow:
+        phrase += f", which were only in {narrow.group(1)}"
     head = line.lower()
     span = re.match(r"^((?:very low|low|moderate|high)(?: to (?:very low|low|moderate|high))?) certainty\b", head)
     basis = (f"Certainty: {span.group(1)}" if span
