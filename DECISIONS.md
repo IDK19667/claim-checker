@@ -29,6 +29,12 @@ words hidden, and encoded to WebP with Pillow. Two crops, picked by
   the margin is too narrow to hold it beside the column, so there is no
   picture there (the column would have to move, and text mode's layout stays).
 
+The trade: the phone still is held to about 1.4 KB, soft but whole, because
+text mode's first load was already 196.9 KB and the 200 KB budget is the
+phone's; a sharper phone still needs about 5 KB cut elsewhere first. On a wide
+screen text mode's first load is about 217 KB with the 19 KB wide still,
+which is accepted because that budget is the phone's, not the laptop's.
+
 Hidden by default and `loading="lazy"`, so the 3D page and result pages never
 fetch it (browser check 26a and 26d); decorative (`alt=""`), fixed size, low
 fetch priority. Masks name the ground token only; no colour, glow or motion is
