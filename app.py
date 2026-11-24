@@ -1352,9 +1352,8 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # Indirect context (E3): a label on a relied-on study that measured
     # something other than the claim's outcome. Nothing else reads it.
     queries = [search_query] + [q for q in [pubmed.broaden_query(search_query or "")] if q]
-    named = evidence.outcome_name(claim, search_query)
     indirect_of = {s.get("pmid"): lab for s in studies or [] if s.get("pmid") in cited
-                   for lab in [evidence.indirect_label(s, queries, named)] if lab}
+                   for lab in [evidence.indirect_label(s, queries)] if lab}
     # No bare strength word (E2): the line a reader sees says whether the
     # studies support the claim, then how sure or on what kind of study; a
     # second line says what they found instead for an absolute claim. The

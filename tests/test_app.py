@@ -13243,8 +13243,8 @@ t("BRIEF E2 vinegar: the second statement names the related effect and claims no
 t("BRIEF E4 vinegar: about 22 mg per dL is said once in what the page prints",
   sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1, _e_lists)
 t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
-  _e_s1["indirect"] == "Measures body composition, not diabetes"
-  and _e_s1["contribution"] == "Indirect context: measures body composition, not diabetes.", _e_s1)
+  _e_s1["indirect"] == "Measures body weight, not blood sugar control"
+  and _e_s1["contribution"] == "Indirect context: measures body weight, not blood sugar control.", _e_s1)
 t("BRIEF E5: every relied-on study has a contribution, and every study has the three fields",
   all(s["contribution"] for s in _e_out["studies"] if s["cited_in_verdict"])
   and all({"contribution", "caution", "indirect"} <= set(s) for s in _e_out["studies"]))
@@ -13534,6 +13534,77 @@ t("BRIEF E2r m4: the explanation sentence is singular for one flagged review and
 _m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True, None)
 t("BRIEF E2r m3: a contribution never states a population the record does not give",
   "general population" not in _m3_c and _m3_c == "A randomized controlled trial.", _m3_c)
+
+# Brief E2 repair, B4: indirect is marked only between recognised outcome
+# families. The reviewer's 20 direct tests (worded with synonyms) are never
+# marked; the 8 truly indirect ones are.
+def _b4_st(title, concl):
+    return {"pmid": "1", "title": title, "abstract": f"Methods: 200 adults. Conclusion: {concl}",
+            "publication_types": ["Randomized Controlled Trial"]}
+
+
+_B4_DIRECT = [
+    ("(garlic) AND (blood pressure)", "Effect of garlic on hypertension in adults: a randomized trial",
+     "Garlic reduced systolic readings by 8 mmHg."),
+    ("(green tea) AND (weight loss OR weight)", "Effect of green tea extract on body mass index in obese women",
+     "Green tea extract lowered BMI modestly."),
+    ("(aspirin) AND (heart attack)", "Effect of aspirin on myocardial infarction in older adults",
+     "Aspirin did not reduce myocardial infarction."),
+    ("(cinnamon) AND (blood sugar)", "Effect of cinnamon on glycaemic control in type 2 diabetes",
+     "Cinnamon improved HbA1c slightly."),
+    ("(melatonin) AND (sleep)", "Effect of melatonin on insomnia in older people", "Melatonin shortened sleep onset."),
+    ("(fish oil) AND (cholesterol)", "Effect of omega-3 fatty acids on LDL and triglycerides",
+     "Omega-3 lowered triglycerides but raised LDL."),
+    ("(vitamin D) AND (fracture)", "Effect of vitamin D supplementation on hip fracture in women",
+     "Vitamin D did not prevent hip fractures."),
+    ("(coffee) AND (stroke)", "Effect of coffee intake on cerebrovascular events",
+     "Coffee was not linked to cerebrovascular events."),
+    ("(exercise) AND (depression)", "Effect of aerobic training on depressive symptoms in adults",
+     "Aerobic training reduced depressive symptoms."),
+    ("(probiotics) AND (diarrhea)", "Effect of Lactobacillus on loose stools in children",
+     "Lactobacillus shortened loose stools by a day."),
+    ("(zinc) AND (common cold)", "Effect of zinc lozenges on upper respiratory infection duration",
+     "Zinc shortened upper respiratory infections."),
+    ("(statins) AND (memory loss)", "Effect of statins on cognitive function in older adults",
+     "Statins did not impair cognition."),
+    ("(lemon) AND (kidney stones)", "Effect of citrate on nephrolithiasis recurrence",
+     "Citrate reduced nephrolithiasis recurrence."),
+    ("(red wine) AND (heart disease)", "Effect of resveratrol on coronary artery disease",
+     "Resveratrol did not change coronary events."),
+    ("(turmeric) AND (cancer)", "Effect of curcumin on tumour growth in patients with colorectal neoplasia",
+     "Curcumin did not shrink tumours."),
+    ("(ketogenic diet) AND (weight loss)", "Effect of a ketogenic diet on adiposity", "The diet reduced fat mass."),
+    ("(cranberry) AND (urinary tract infection)", "Effect of cranberry juice on bacteriuria in women",
+     "Cranberry reduced bacteriuria."),
+    ("(honey) AND (cough)", "Effect of honey on nocturnal symptoms in children with upper respiratory infection",
+     "Honey eased night symptoms."),
+    ("(magnesium) AND (migraine)", "Effect of magnesium on headache frequency", "Magnesium reduced headache days."),
+    ("(sugar) AND (hyperactivity)", "Effect of sucrose on behavior in children", "Sucrose did not change behaviour."),
+]
+_B4_INDIRECT = [
+    ("(garlic) AND (blood pressure)", "Effect of garlic on gut microbiota in adults", "Garlic changed the gut microbiota."),
+    ("(green tea) AND (weight loss)", "Effect of green tea on liver enzymes", "Green tea raised liver enzymes in some."),
+    ("(aspirin) AND (heart attack)", "Effect of aspirin on gastrointestinal bleeding", "Aspirin raised the risk of bleeding."),
+    ("(cinnamon) AND (diabetes)", "Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."),
+    ("(melatonin) AND (sleep)", "Effect of melatonin on migraine frequency", "Melatonin reduced migraine days."),
+    ("(fish oil) AND (dementia)", "Effect of fish oil on triglycerides in adults", "Fish oil lowered triglycerides."),
+    ("(vitamin D) AND (common cold)", "Effect of vitamin D on bone mineral density", "Vitamin D raised bone density."),
+    ("(coffee) AND (cancer)", "Effect of coffee on heart rate", "Coffee raised heart rate."),
+]
+_b4_false = [t_ for q, t_, k in _B4_DIRECT if _e_ev.indirect_label(_b4_st(t_, k), [q])]
+_b4_missed = [t_ for q, t_, k in _B4_INDIRECT if not _e_ev.indirect_label(_b4_st(t_, k), [q])]
+t("BRIEF E2r B4: none of the reviewer's 20 direct tests is marked indirect", not _b4_false, _b4_false)
+t("BRIEF E2r B4: the 8 truly indirect studies are marked", not _b4_missed, _b4_missed)
+t("BRIEF E2r B4: the reason names both families",
+  _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."),
+                       ["(cinnamon) AND (diabetes)"])["reason"] == "Measures blood fats, not blood sugar control")
+t("BRIEF E2r B4: a claim outcome in two families, or a conclusion naming the claim's family, is never marked",
+  _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered cholesterol."),
+                       ["(cinnamon) AND (diabetes OR weight)"]) is None
+  and _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered glucose and lipids."),
+                           ["(cinnamon) AND (diabetes)"]) is None)
+t("BRIEF E2r B4: the table is general: between 12 and 20 families",
+  12 <= len(_e_ev.OUTCOME_FAMILIES) <= 20 and len({n for n, _ in _e_ev.OUTCOME_FAMILIES}) == len(_e_ev.OUTCOME_FAMILIES))
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

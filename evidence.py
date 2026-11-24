@@ -3095,15 +3095,46 @@ def effect_statement(verdict: str, absolute: str, effect_sentence: str, studies,
 # Indirect context (E3), a label only
 #
 # A study of the same substance that measured something other than the
-# outcome the claim names (weight, for a claim about curing diabetes) is
-# context, not a test of the claim. It is marked so a reader can see it, and
-# nothing else changes: no gate, tier, cap or verdict reads this mark. The
-# rule marks only when it is sure: the title states its target ("effect of X
-# on Y") and that target names none of the outcome words the search itself
-# used, and the authors' own conclusion names none of them either once the
-# people studied ("in adults with type 2 diabetes") are left out. Anything
-# else is left unmarked.
+# outcome the claim names (body weight, for a claim about curing diabetes) is
+# context, not a test of the claim. It is marked only between recognised
+# outcome families: the study's stated target ("effect of X on Y") falls in
+# exactly one family, the claim's outcome (the search step's outcome terms)
+# in exactly one, the two differ, and the authors' conclusion names no stem
+# of the claim's family once the people studied are left out ("in adults
+# with type 2 diabetes" says who, not what was measured). In every other
+# case, no mark. Nothing reads the mark: no gate, tier, cap, verdict or
+# request. A disease and its measure share a family.
 # ---------------------------------------------------------------------------
+
+OUTCOME_FAMILIES = (
+    ("blood sugar control", (r"diabet", r"prediabet", r"glucos", r"glyc(?:a)?em", r"hba1c", r"a1c\b", r"insulin",
+                             r"blood sugar", r"hyperglyc", r"hypoglyc")),
+    ("body weight", (r"weight", r"obes", r"overweight", r"adipos", r"body mass", r"bmi\b", r"body fat",
+                     r"fat mass", r"waist", r"body composition")),
+    ("blood pressure", (r"blood pressure", r"hypertens", r"hypotens", r"systolic", r"diastolic")),
+    ("blood fats", (r"cholesterol", r"lipid", r"triglycer", r"ldl\b", r"hdl\b", r"dyslipid", r"lipoprotein")),
+    ("the heart and blood vessels", (r"heart(?!burn)", r"cardi", r"coronary", r"myocard", r"stroke",
+                                     r"cerebrovasc", r"arrhythm", r"atrial fibrillation", r"atheroscl")),
+    ("death", (r"mortality", r"death", r"surviv", r"all-cause", r"lifespan", r"longevity")),
+    ("bone", (r"bones?\b", r"fractur", r"osteopor", r"osteopen")),
+    ("mood", (r"depress", r"anxi", r"mood")),
+    ("memory and thinking", (r"cognit", r"memory", r"dementia", r"alzheimer")),
+    ("sleep", (r"sleep", r"insomni")),
+    ("pain", (r"pain", r"analges", r"headache", r"migraine")),
+    ("cancer", (r"cancer", r"tumou?r", r"carcinom", r"neoplas", r"malignan", r"leuk(?:a)?emi", r"lymphom")),
+    ("infections and colds", (r"infect", r"common cold", r"colds\b", r"influenza", r"flu\b", r"cough",
+                              r"sore throat", r"pneumon", r"sepsis", r"bacteriur", r"cystitis", r"utis?\b")),
+    ("digestion and the gut", (r"diarrh", r"constipat", r"bowel", r"stools?\b", r"gastr", r"gut\b", r"microbio",
+                               r"digest", r"bloat", r"reflux", r"dyspeps", r"colitis", r"crohn", r"intestin")),
+    ("the liver", (r"liver", r"hepat")),
+    ("the kidneys", (r"kidney", r"renal", r"nephr")),
+    ("skin", (r"skin", r"acne", r"eczema", r"dermat", r"psoria", r"wrinkl")),
+    ("behaviour and attention", (r"hyperactiv", r"adhd", r"attention", r"behavio")),
+    ("breathing and the lungs", (r"asthma", r"copd", r"lungs?\b", r"pulmonar", r"bronch", r"wheez", r"breath")),
+    ("joints", (r"arthrit", r"joints?\b", r"gout")),
+)
+_FAMILY_RE = tuple((name, re.compile(r"\b(?:" + "|".join(stems) + r")", re.IGNORECASE))
+                   for name, stems in OUTCOME_FAMILIES)
 
 _PEOPLE_WORDS = (r"(?:adults|patients|people|persons|participants|subjects|individuals|humans|"
                  r"women|men|children|adolescents|girls|boys|population|populations|volunteers)")
@@ -3115,47 +3146,37 @@ _TITLE_TARGET = re.compile(
 _TARGET_END = re.compile(r"\s+(?:in|among|of|for|during|after|with)\s+.*$|[,;].*$", re.IGNORECASE)
 
 
-def _search_stems(search_queries) -> list[str]:
-    """The outcome words of every query the search step used for this claim
-    (every AND group after the first, the substance), as stems and kin."""
-    stems = []
+def outcome_families(text: str) -> list[str]:
+    """The outcome families (OUTCOME_FAMILIES) a piece of text names."""
+    return [name for name, rx in _FAMILY_RE if rx.search(str(text or ""))]
+
+
+def claim_outcome_terms(search_queries) -> str:
+    """The outcome terms of every query the search step used for this claim:
+    every AND group after the first (the substance)."""
+    terms = []
     for q in search_queries or ():
         groups = [g for g in re.split(r"\)\s+AND\s+\(", str(q or "")) if g.strip()]
-        for g in groups[1:]:
-            for st in outcome_stems(g):
-                if st not in stems:
-                    stems.append(st)
-    return outcome_kin(stems) if stems else []
+        terms += groups[1:]
+    return " ".join(terms)
 
 
-def indirect_label(study, search_queries, outcome_name: str = "") -> dict | None:
-    """{"measure", "reason"} for a study that measured something other than
-    the claim's outcome, or None when it did not or the rule is unsure."""
-    stems = _search_stems(search_queries)
-    if not stems or not isinstance(study, dict) or withdrawn(study) or preclinical(study):
+def indirect_label(study, search_queries) -> dict | None:
+    """{"measure", "reason"} for a study that measured an outcome family other
+    than the claim's, or None whenever the rule is not sure."""
+    if not isinstance(study, dict) or withdrawn(study) or preclinical(study):
+        return None
+    claim_fams = outcome_families(claim_outcome_terms(search_queries))
+    if len(claim_fams) != 1:
         return None
     m = _TITLE_TARGET.search(str(study.get("title") or ""))
     if not m:
         return None
     target = _TARGET_END.sub("", _POPULATION_PHRASE.sub("", m.group("y"))).strip(" .")
-    if not target or len(target.split()) > 6 or names_any(target, stems):
+    target_fams = outcome_families(target)
+    if len(target_fams) != 1 or target_fams == claim_fams:
         return None
     said = conclusion(study)
-    if not said or names_any(_POPULATION_PHRASE.sub(" ", said), stems):
+    if not said or outcome_families(_POPULATION_PHRASE.sub(" ", said)).count(claim_fams[0]):
         return None
-    # Lower case, save a word written in capitals (an abbreviation).
-    measure = " ".join(w if len(w) > 1 and w.isupper() else w.lower() for w in target.split())
-    out = outcome_name or "the outcome the claim names"
-    return {"measure": measure, "reason": f"Measures {measure}, not {out}"}
-
-
-def outcome_name(claim: str, search_query: str) -> str:
-    """The claim's outcome in the claim's own word when the search used it
-    ("diabetes"), else "the outcome the claim names"."""
-    groups = [g.strip("() ") for g in re.split(r"\)\s+AND\s+\(", str(search_query or "")) if g.strip()]
-    for g in groups[1:]:
-        for term in sorted(re.split(r"\s+OR\s+", g), key=len):
-            term = term.strip(' "()')
-            if len(term) > 2 and re.search(r"\b" + re.escape(term) + r"\b", claim or "", re.IGNORECASE):
-                return term.lower()
-    return "the outcome the claim names"
+    return {"measure": target_fams[0], "reason": f"Measures {target_fams[0]}, not {claim_fams[0]}"}
