@@ -476,7 +476,7 @@ const eyebrow = (stops, name, text) =>
 // Under each study, one labelled line: what it adds (templates/index.html study_lines is the same). For a study set
 // aside or kept as background, why it was not counted (studyWhy, the words of its group); else the engine's own
 // contribution; else the study's
-// own conclusion from the breakdown; else its design and who was studied. Never an empty label. Then its caution,
+// own conclusion from the breakdown; else no label at all, only "Studied in: ..." plain when known. Never an empty label. Then its caution,
 // and Indirect context with its reason.
 // The effect size line without the sentences the second statement (effect_line) already quotes, or "" when
 // none is left. Without a statement it is the line as it was. The Jinja in "What the evidence shows" is the same.
@@ -493,9 +493,11 @@ function studyLines(s, n, bv) {
   if (s.off_topic || (s.background && !s.cited_in_verdict)) text = studyWhy(s);
   else if (String(s.contribution || "").trim()) text = String(s.contribution).trim();
   else if (said) text = said;
-  else text = typeInfo(s.publication_types).label + "." + (s.population ? ` Studied in: ${s.population}.` : "");
+  else text = "";
   const caution = String(s.caution || "").trim(), iwhy = String(s.indirect_reason || s.indirect_why || "").trim();
-  return `<p class="contrib"><b class="lbl">What this study contributes</b> ${escapeHtml(text)}</p>`
+  // with nothing to say, no label (the design is already above the title): who was studied, plain, if known
+  return (text ? `<p class="contrib"><b class="lbl">What this study contributes</b> ${escapeHtml(text)}</p>`
+    : s.population ? `<p class="studied">Studied in: ${escapeHtml(s.population)}.</p>` : "")
     + (caution ? `<p class="caution">${escapeHtml(caution)}</p>` : "")
     + (s.indirect && iwhy ? `<p class="indirect"><b class="lbl">Indirect context</b> ${escapeHtml(iwhy)}</p>` : "");
 }

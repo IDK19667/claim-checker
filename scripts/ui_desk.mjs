@@ -741,15 +741,18 @@ for (const [w, h] of [[375, 812], [1280, 800]]) for (const mode of ["3d", "text"
     const read = () => page.evaluate(() => ({
       eyebrows: [...document.querySelectorAll(".stop .eyebrow")].filter((e) => e.checkVisibility()).map((e) => e.textContent.trim()),
       rail: [...document.querySelectorAll("#rail button[aria-label^='Go to ']")].map((b) => b.textContent.trim()),
-      lines: [...document.querySelectorAll(".row")].map((r) => [...r.querySelectorAll(".contrib, .caution, .indirect")].map((p) => p.textContent.trim()).join(" | ")),
+      lines: [...document.querySelectorAll(".row")].map((r) => [...r.querySelectorAll(".contrib, .studied, .caution, .indirect")].map((p) => p.textContent.trim()).join(" | ")),
       label: document.querySelector("#short-label").textContent.trim() }));
     await openSaved(page, w, mode);
     const srv = await read();
     must(srv.eyebrows.join() === "Studies,Explanation,Limitations" && srv.label === "Answer", `names: ${srv.label}; ${srv.eyebrows.join(", ")}`);
     must(srv.rail.join() === SECTIONS.join(), `the rail: ${srv.rail.join(", ")}`);
-    must(srv.lines.length >= 3 && srv.lines.every((l) => /^What this study contributes \S/.test(l)), `a study without its line: ${srv.lines.find((l) => !/^What this study contributes \S/.test(l))}`);
+    // job 3 (c): a row with nothing to say has no label, only "Studied in: ..." plain when known, or nothing
+    const okLine = (l) => !/What this study contributes\s*($|\|)/.test(l) && (!l.includes("What this study contributes") || /^What this study contributes \S/.test(l));
+    must(srv.lines.length >= 3 && srv.lines.every(okLine) && srv.lines.some((l) => /^What this study contributes \S/.test(l)), `a wrong line: ${srv.lines.find((l) => !okLine(l))}`);
+    must(!srv.lines.some((l) => /^What this study contributes (Randomized Controlled Trial|Meta-Analysis|Systematic Review)\.( |$)/.test(l)), `a design name under the label: ${srv.lines.find((l) => /contributes (Randomized|Meta|Systematic)/.test(l))}`);
     // no indirect label in this release (the engine sends indirect false for every study); the fixture's caution prints
-    must(!srv.lines.some((l) => /Indirect/.test(l)) && srv.lines.some((l) => / \| [^|]*small trial/.test(l)), "the fixture's caution did not print, or an Indirect label did");
+    must(!srv.lines.some((l) => /Indirect/.test(l)) && srv.lines.some((l) => /small trial/.test(l)), "the fixture's caution did not print, or an Indirect label did");
     await page.goto(`${base}/${mode === "text" ? "?nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
     await page.click("#claim-input"); await page.keyboard.type(SAVED[0]); await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(600);
