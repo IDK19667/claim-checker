@@ -32,21 +32,21 @@
   color-scheme: light;
 
   /* Night */
-  --deep: #0f1211;
-  --deep-2: #181c1a;
-  --deep-line: #2a302d;
-  --on-deep: #eceee9;
-  --on-deep-2: #9ea6a1;
-  --on-deep-3: #7d8580;
+  --deep: #12110f;
+  --deep-2: #1c1a19;
+  --deep-line: #302f2c;
+  --on-deep: #f0ede9;
+  --on-deep-2: #a6a4a0;
+  --on-deep-3: #85837f;
 
   /* Day */
-  --paper: #f1f2ee;
-  --panel: #fafaf8;
-  --ink: #121514;
-  --ink-2: #434a46;
-  --ink-3: #5d6560;
-  --rule: #d9dcd5;
-  --rule-2: #b9bfb7;
+  --paper: #f4f2ef;
+  --panel: #fbfaf8;
+  --ink: #151412;
+  --ink-2: #4a4845;
+  --ink-3: #65625f;
+  --rule: #dddad7;
+  --rule-2: #bfbcb9;
 
   /* No accent colour: links are the words' own colour with an underline.
      A selection is a warm paper tint; the focus ring is ink by day and the

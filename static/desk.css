@@ -35,31 +35,31 @@
    read as they were approved; they mean these values on this page only. */
 :root {
   color-scheme: dark;
-  --desk-night: #0b0d0c;        /* the room beyond the lamp, and the page ground */
-  --desk-deep: #0f1211;         /* a solid ground for words over the desk */
-  --desk-deep-2: #181c1a;       /* the strip and the bar */
-  --desk-line: #2a302d;         /* rules on the night ground */
-  --desk-edge: #3a423e;         /* the outline of a bar control */
-  --desk-edge-2: #3c4440;       /* the outline of a field and a Details button */
-  --desk-edge-3: #59625d;       /* a ghost button, a rail dot, a hovered outline */
-  --desk-quote: #4a534e;        /* the rule beside a quoted conclusion */
+  --desk-night: #0d0c0b;        /* the room beyond the lamp, and the page ground */
+  --desk-deep: #12110f;         /* a solid ground for words over the desk */
+  --desk-deep-2: #1c1a19;       /* the strip and the bar */
+  --desk-line: #302f2c;         /* rules on the night ground */
+  --desk-edge: #42403d;         /* the outline of a bar control */
+  --desk-edge-2: #44423f;       /* the outline of a field and a Details button */
+  --desk-edge-3: #62605d;       /* a ghost button, a rail dot, a hovered outline */
+  --desk-quote: #53514e;        /* the rule beside a quoted conclusion */
   --desk-ref: #666461;          /* the box round a study number in the prose */
-  --desk-on: #eceee9;           /* words on the night ground */
-  --desk-on-2: #a9b0ab;         /* quieter words */
-  --desk-on-3: #8f9792;         /* the rail's stop names */
+  --desk-on: #f0ede9;           /* words on the night ground */
+  --desk-on-2: #b1aeaa;         /* quieter words */
+  --desk-on-3: #979591;         /* the rail's stop names */
   --desk-white: #ffffff;        /* the wordmark, a lifted study's title */
-  --desk-paper: #f1f2ee;        /* the light shape: the button to press */
+  --desk-paper: #f4f2ef;        /* the light shape: the button to press */
   --desk-card: #efe6d2;         /* the answer card */
-  --desk-ink: #121514;          /* words on paper and on the card */
-  --desk-ink-2: #434a46;
-  --desk-card-label: #3a403c;   /* the card's small label */
-  --desk-card-ink: #222624;     /* the card's claim and short answer */
-  --desk-card-verdict: #0f1110; /* the card's verdict words */
-  --desk-panel: #0c0e0d;        /* the reading panels */
-  --desk-well: rgba(15, 18, 17, 0.72); /* the claim field, a well in the night */
-  --desk-scrim: rgba(8, 10, 9, 0.8);
-  --desk-scrim-0: rgba(8, 10, 9, 0);
-  --desk-focus: #eceee9;        /* the focus ring: the words colour, drawn outside the control (no accent) */
+  --desk-ink: #151412;          /* words on paper and on the card */
+  --desk-ink-2: #4a4845;
+  --desk-card-label: #403e3b;   /* the card's small label */
+  --desk-card-ink: #262522;     /* the card's claim and short answer */
+  --desk-card-verdict: #12100f; /* the card's verdict words */
+  --desk-panel: #0e0d0c;        /* the reading panels */
+  --desk-well: rgba(18, 17, 15, 0.72); /* the claim field, a well in the night */
+  --desk-scrim: rgba(10, 9, 8, 0.8);
+  --desk-scrim-0: rgba(10, 9, 8, 0);
+  --desk-focus: var(--desk-on); /* the focus ring: the words colour, drawn outside the control (no accent) */
 
   --night: var(--desk-night);
   --deep: var(--desk-deep);

@@ -26,7 +26,7 @@ window.__evidentDesk3d = function (O) {
     renderer.shadowMap.autoUpdate = false;
 
     var scene = new T.Scene();
-    scene.background = new T.Color(0x0a0c0b);
+    scene.background = new T.Color(0x0c0b0a);
     var camera = new T.PerspectiveCamera(36, 1, 0.05, 20);
 
     // ---- painted textures -----------------------------------------------------
@@ -67,26 +67,26 @@ window.__evidentDesk3d = function (O) {
       var x = c.getContext("2d"), m = 92;
       x.setTransform(scale, 0, 0, scale, 0, 0);
       paperBase(x, SW, SH, "#f2eee4", 0.16 + seed * 0.08);
-      x.fillStyle = "#5b605c"; x.font = '500 22px "IBM Plex Mono"'; x.textBaseline = "alphabetic";
+      x.fillStyle = "#615e5b"; x.font = '500 22px "IBM Plex Mono"'; x.textBaseline = "alphabetic";
       var j = s.journal.toUpperCase(); if (j.length > 44) j = j.slice(0, 43).trim() + ".";
       x.fillText(j, m, 128);
       x.textAlign = "right"; x.fillText(s.year, SW - m, 128); x.textAlign = "left";
-      x.fillStyle = "#2b2f2d"; x.fillRect(m, 150, SW - 2 * m, 3);
+      x.fillStyle = "#2f2e2b"; x.fillRect(m, 150, SW - 2 * m, 3);
       var size = 50, lines;
       do { x.font = '600 ' + size + 'px "Instrument Sans"'; lines = wrap(x, s.title, SW - 2 * m); size -= 2; } while (lines.length > 6 && size > 30);
-      x.fillStyle = "#151816"; var y = 236, lh = size * 1.22;
+      x.fillStyle = "#181715"; var y = 236, lh = size * 1.22;
       lines.forEach(function (l) { x.fillText(l, m, y); y += lh; });
       y += 14;
-      x.font = '500 21px "IBM Plex Mono"'; x.fillStyle = "#5b605c";
+      x.font = '500 21px "IBM Plex Mono"'; x.fillStyle = "#615e5b";
       x.fillText((s.design || "Study").toUpperCase() + "   PMID " + s.pmid, m, y); y += 40;
       x.fillStyle = "#cfcabe"; x.fillRect(m, y, SW - 2 * m, 2); y += 52;
-      x.font = '500 20px "IBM Plex Mono"'; x.fillStyle = "#6a6e6a"; x.fillText("ABSTRACT", m, y); y += 36;
+      x.font = '500 20px "IBM Plex Mono"'; x.fillStyle = "#6f6c69"; x.fillText("ABSTRACT", m, y); y += 36;
       var col = (SW - 2 * m - 44) / 2, cx = [m, m + col + 44], ci = 0, top = y, r = seed * 997;
       while (ci < 2) {
         var para = 4 + Math.floor(hash(r, y) * 6);
         for (var k = 0; k < para && y < SH - 130; k++) {
           var wl = (k === para - 1) ? 0.3 + hash(r + k, y) * 0.5 : 0.9 + hash(y, r + k) * 0.1;
-          x.fillStyle = "rgba(38,40,38," + (0.22 + hash(k, y) * 0.08) + ")";
+          x.fillStyle = "rgba(40,39,37," + (0.22 + hash(k, y) * 0.08) + ")";
           var px = cx[ci], rest = col * wl;
           while (rest > 8) { var w = Math.min(rest, 22 + hash(px, y + r) * 70); x.fillRect(px, y - 9, w - 7, 10); px += w; rest -= w; }
           y += 24;
@@ -94,7 +94,7 @@ window.__evidentDesk3d = function (O) {
         y += 18;
         if (y >= SH - 130) { ci++; y = top; }
       }
-      if (s.n) { x.font = '500 18px "IBM Plex Mono"'; x.fillStyle = "#7a7e7a"; x.textAlign = "center"; x.fillText(String(s.n), SW / 2, SH - 62); x.textAlign = "left"; }
+      if (s.n) { x.font = '500 18px "IBM Plex Mono"'; x.fillStyle = "#7f7c79"; x.textAlign = "center"; x.fillText(String(s.n), SW / 2, SH - 62); x.textAlign = "left"; }
     }
     var CW = 1600, CH = 960, VERDICT_W = 1420;
     function cardWords() { return { claim: O.txt(document, "#claim-echo"), verdict: O.txt(document, "#stamp"), tldr: O.txt(document, "#tldr") }; }
@@ -118,23 +118,23 @@ window.__evidentDesk3d = function (O) {
       var x = c.getContext("2d");
       x.setTransform(scale || 1, 0, 0, scale || 1, 0, 0);
       paperBase(x, CW, CH, "#efe6d1", 0.14);
-      x.fillStyle = "rgba(44,88,72,0.42)"; x.fillRect(0, 150, CW, 3);
-      x.fillStyle = "rgba(70,96,110,0.16)";
+      x.fillStyle = "rgba(64,62,59,0.42)"; x.fillRect(0, 150, CW, 3);
+      x.fillStyle = "rgba(90,84,74,0.16)";
       for (var y = 150 + 66; y < CH - 20; y += 66) x.fillRect(0, y, CW, 2);
       if (!withVerdict) return;
       var m = 96, words = cardWords();
-      x.fillStyle = "#4b514d"; x.font = '500 32px "IBM Plex Mono"'; x.fillText("THE CLAIM YOU CHECKED", m, 108);
+      x.fillStyle = "#514f4c"; x.font = '500 32px "IBM Plex Mono"'; x.fillText("THE CLAIM YOU CHECKED", m, 108);
       // the claim: one line at 54, two at 46 or 40, three at 34 and then an ellipsis (layoutCard sets the HTML card the same way)
       var cf = fitClaim(function (size) { x.font = '400 ' + size + 'px "Instrument Sans"'; return wrap(x, "“" + words.claim + "”", CW - 2 * m).length; });
-      x.fillStyle = "#262a28"; x.font = '400 ' + cf.size + 'px "Instrument Sans"';
+      x.fillStyle = "#2a2926"; x.font = '400 ' + cf.size + 'px "Instrument Sans"';
       var cl = clampLines(x, wrap(x, "“" + words.claim + "”", CW - 2 * m), cf.lines, CW - 2 * m), cy = claimBase(cf);
       cl.forEach(function (l) { x.fillText(l, m, cy); cy += cf.size * 1.2; });
       // the verdict: 200 units, smaller when the words are wider than the card
-      x.fillStyle = "#0f1110"; x.font = '700 200px "Bricolage Grotesque"';
+      x.fillStyle = "#12100f"; x.font = '700 200px "Bricolage Grotesque"';
       var vw = x.measureText(words.verdict).width, vs = vw > VERDICT_W ? Math.floor(200 * VERDICT_W / vw) : 200;
       x.font = '700 ' + vs + 'px "Bricolage Grotesque"'; x.fillText(words.verdict, m - 10, 490);
       var tf = fitTldr(function (size) { x.font = '400 ' + size + 'px "Instrument Sans"'; return wrap(x, words.tldr, CW - 2 * m).length; });
-      x.fillStyle = "#222624"; x.font = '400 ' + tf.size + 'px "Instrument Sans"';
+      x.fillStyle = "#262522"; x.font = '400 ' + tf.size + 'px "Instrument Sans"';
       var ls = clampLines(x, wrap(x, words.tldr, CW - 2 * m), tf.lines, CW - 2 * m), yy = 618;
       ls.forEach(function (l) { x.fillText(l, m, yy); yy += tf.lh; });
     }
@@ -211,7 +211,7 @@ window.__evidentDesk3d = function (O) {
       leg.position.set(p[0] * (DESK_W / 2 - 0.06), -0.4, p[1] * (DESK_D / 2 - 0.06)); scene.add(leg);
     });
     var apron = new T.Mesh(new T.BoxGeometry(DESK_W - 0.1, 0.08, DESK_D - 0.1), darkWood); apron.position.y = -0.08; scene.add(apron);
-    var wall = new T.Mesh(new T.PlaneGeometry(8, 4), new T.MeshStandardMaterial({ color: 0x3a423d, roughness: 0.96 }));
+    var wall = new T.Mesh(new T.PlaneGeometry(8, 4), new T.MeshStandardMaterial({ color: 0x413f3d, roughness: 0.96 }));
     wall.position.set(0, 0.9, -0.52); wall.receiveShadow = true; scene.add(wall);
     var floor = new T.Mesh(new T.PlaneGeometry(10, 10), new T.MeshStandardMaterial({ color: 0x141210, roughness: 0.9 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = -0.76; scene.add(floor);

@@ -1065,7 +1065,7 @@ t("the page preloads the fonts it actually uses",
   "bricolagegrotesque" in _home and "instrumentsans" in _home
   and "librefranklin" not in _home and "librecaslon" not in _home and "archivo" not in _home)
 t("theme colour matches the shipped ground, and no dark scheme is claimed",
-  'content="#0f1211"' in _home and 'content="light dark"' not in _home)
+  'content="#12110f"' in _home and 'content="light dark"' not in _home)
 
 # ---- the cold page must contain everything the browser renders into ---------------
 # A streamed check renders from the front page, where no server-side result
@@ -11712,10 +11712,47 @@ t("NO MINT: a link on the night is the words' colour and keeps its underline",
   re.search(r"(?m)^a \{ color: var\(--on-deep\); text-underline-offset: 3px; \}", _nm_desk) is not None
   and not re.search(r"(?m)^a \{[^}]*text-decoration: none", _nm_desk))
 t("NO MINT: the focus ring is the words' colour on the night and ink by day, drawn outside the control",
-  "--desk-focus: #eceee9;" in _nm_desk and "--focus: var(--ink);" in _nm_style
+  "--desk-focus: var(--desk-on);" in _nm_desk and "--focus: var(--ink);" in _nm_style
   and re.search(r":focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 3px;", _nm_desk) is not None)
 t("NO MINT: the study-number box is a neutral grey and a selection a warm paper tint",
   "--desk-ref: #666461;" in _nm_desk and "--tint: #e6dcc6;" in _nm_style)
+
+# ---- Warm neutral greys (q10-look 2) -----------------------------------------------------
+# Every grey on the night and by day keeps its lightness and leans to the lamp (hue 75), with
+# chroma at most 0.006 for grounds and lines and 0.008 for text: no green cast. theme-color and
+# the manifest follow --deep.
+import math as _wg_m
+def _wg_oklch(h):
+    h = h.lstrip("#").lstrip("0x") if h.startswith("0x") else h.lstrip("#")
+    f = lambda c: (c / 12.92) if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = [f(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4)]
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    q = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * q
+    A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * q
+    B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * q
+    return L, _wg_m.hypot(A, B), _wg_m.degrees(_wg_m.atan2(B, A)) % 360
+_wg_greys = {}
+for _wg_f in ("desk.css", "style.css"):
+    _wg_src = (ROOT / "static" / _wg_f).read_text()
+    for _wg_k, _wg_h in re.findall(r"(--[a-z0-9-]+):\s*#([0-9a-fA-F]{6})\b", _wg_src):
+        _wg_l, _wg_c, _wg_hue = _wg_oklch(_wg_h)
+        if _wg_c < 0.02 and _wg_h.lower() not in ("ffffff", "000000"):
+            _wg_greys[_wg_f + " " + _wg_k] = (_wg_h, round(_wg_c, 4), round(_wg_hue))
+# at this little chroma an 8-bit hex can only land near hue 75: 40 to 100 is "leans to the lamp"
+_wg_bad = {k: v for k, v in _wg_greys.items() if not (40 <= v[2] <= 100 and v[1] <= 0.008)}
+t("WARM GREYS: every grey token in desk.css and style.css leans to hue 75 with chroma 0.008 or less",
+  len(_wg_greys) >= 30 and not _wg_bad, _wg_bad)
+_wg_3d = (ROOT / "static" / "desk3d.js").read_text()
+t("WARM GREYS: the scene's background and wall are warm neutral greys of the same lightness",
+  "scene.background = new T.Color(0x0c0b0a)" in _wg_3d and "color: 0x413f3d, roughness: 0.96" in _wg_3d)
+_wg_deep = re.search(r"--desk-deep:\s*(#[0-9a-f]{6})", (ROOT / "static" / "desk.css").read_text()).group(1)
+_wg_man = json.loads((ROOT / "static" / "manifest.webmanifest").read_text())
+t("WARM GREYS: theme-color on every page and the manifest follow --deep",
+  _wg_man["theme_color"] == _wg_man["background_color"] == _wg_deep
+  and all(f'name="theme-color" content="{_wg_deep}"' in (ROOT / "templates" / n).read_text()
+          for n in ("index.html", "info.html", "privacy.html", "404.html", "stats.html")), (_wg_deep, _wg_man["theme_color"]))
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
