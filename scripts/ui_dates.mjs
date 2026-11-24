@@ -34,6 +34,15 @@ try {
     const r = await page.evaluate(() => { const t = document.querySelector("#review-line time"); return t && { iso: t.dateTime, text: t.textContent }; });
     must(!!r && r.text === dayIn(r.iso, tz), `${tz}: the review line shows the reader's day (${r && r.text})`);
     if (tz === "America/Los_Angeles" && m && r) must(r.text === m[2], "home zone: server and script print the same day");
+    // An instant on two days: 20:00 UTC on 24 November is the 24th at home and the 25th in Kolkata.
+    // The page's own localizeTimes rewrites a server-printed <time> to the reader's day.
+    const cross = await page.evaluate(() => {
+      const t = document.createElement("time");
+      t.dateTime = "2026-11-24T20:00:00+00:00"; t.textContent = "24 November 2026";
+      const p = document.createElement("p"); p.append(t); localizeTimes(p); return t.textContent;
+    });
+    must(cross === (tz === "Asia/Kolkata" ? "25 November 2026" : "24 November 2026"),
+      `${tz}: a server-printed day for 20:00 UTC on 24 November reads as the reader's day (${cross})`);
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     const ts = await page.evaluate(() => [...document.querySelectorAll("time[datetime]")].map((t) => [t.dateTime, t.textContent]));
     must(ts.length > 0 && ts.every(([iso, text]) => text === dayIn(iso, tz)), `${tz}: every <time> on the home page shows the reader's day`);

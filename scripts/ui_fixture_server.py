@@ -94,7 +94,10 @@ def _rows(path):
 
 
 def _fallback_row(claim, verdict_word):
-    studies = [{"pmid": str(1000 + i), "title": f"A trial of the claim, part {i}", "abstract": "Background. Methods. Results. Conclusions.",
+    # Real studies name what they test, and a typed claim is listed publicly only when the studies its check read
+    # vouch for its words (display.public_claim), so a fallback row's abstracts name the claim.
+    studies = [{"pmid": str(1000 + i), "title": f"A trial of the claim, part {i}",
+                "abstract": f"Background. {claim}. Methods. Results. Conclusions.",
                 "journal": "Journal of Examples", "year": "2020", "publication_types": ["Randomized Controlled Trial"],
                 "authors": ["Author A", "Author B"], "data_banks": None, "url": f"https://pubmed.ncbi.nlm.nih.gov/{1000 + i}/"}
                for i in range(1, 5)]
