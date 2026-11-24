@@ -801,6 +801,11 @@ window.__evidentDesk3d = function (O) {
       if (K[1].fx0 === undefined) K[1].fx0 = K[1].fx;
       K[1].fx = K[1].fx0;
       if (camera.aspect >= 0.85) {
+        // the card comes up to just under the strip and its label, so the answer is read before the scenery
+        if (K[1].fy0 === undefined) K[1].fy0 = K[1].fy;
+        K[1].fy = K[1].fy0;
+        var wantY = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10;
+        for (var a = 0; a < 3; a++) { var qa = cardRectAt(1); K[1].fy += (wantY - qa.y) / H; }
         // wide screens: the card keeps 32 px clear of the panel beside it (at 1280 wide the panel would otherwise reach over its right edge)
         var inner = capAnswer.querySelector(".inner"), pl = inner ? inner.getBoundingClientRect().left : W;
         for (var m = 0; m < 3; m++) { var q = cardRectAt(1), over = q.x + q.w - (pl - 32); if (over <= 0) break; K[1].fx -= Math.min(over, Math.max(0, q.x - 24)) / W; }

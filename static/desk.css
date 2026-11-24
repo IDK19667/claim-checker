@@ -359,7 +359,12 @@ html.kbd .bar { visibility: hidden; }
   .cap.right .inner, .cap.left .inner { margin: 0; }
   .inner.wide, .inner.wider, .inner { width: 100%; }
   .inner.wide::before, .inner.wider::before { display: none; }
-  .has-gl .stop.long { padding-top: calc(var(--strip) + 42vh); padding-top: calc(var(--strip) + 42svh); }
+  /* content before scenery: each section starts under a band of the desk, its heading in the top 28% of the screen;
+     the Answer and the first half of Studies are as tall as their words, so what follows always shows at the foot */
+  .has-gl .stop.long, .has-gl #s3, .has-gl #s6 { padding-top: calc(var(--strip) + 14vh); padding-top: calc(var(--strip) + 14svh); }
+  .has-gl #s4 { padding-top: 0; }
+  html.checked #s2, html.checked #s3 { min-height: 0; }
+  html.checked #s3 { padding-bottom: 16px; }
   .has-gl #cap-answer .inner { width: 100%; }
 }
 /* short phones: the main button comes up to the first screen; the doctor line and "Check another claim" follow just below it */
@@ -382,6 +387,12 @@ html.kbd .bar { visibility: hidden; }
   .wordmark { margin-bottom: 16px; }
   .lede { margin-top: 12px; }
   form.ask { margin-top: 20px; gap: 10px; }
+}
+/* content before scenery on a wide screen: the Answer stops short of a full screen so the Studies heading shows at the
+   foot, and the first half of Studies is as tall as its words, so the list follows it */
+@media (min-width: 761px) and (min-aspect-ratio: 17/20) {
+  html.checked #s2 { min-height: calc(100vh - 96px); min-height: calc(100svh - 96px); }
+  html.checked #s3 { min-height: 0; padding-bottom: 24px; }
 }
 @media (min-width: 761px) and (max-aspect-ratio: 17/20) {
   .inner, .inner.wide, .inner.wider { max-width: 640px; }
