@@ -465,6 +465,10 @@ function deskNamed(data) {
   return [...out].sort((a, b) => a - b);
 }
 
+// An abstract is quoted from PubMed as it is, except that an en or an em dash shows as a plain hyphen; nothing else in
+// it changes (templates/index.html does the same with replace)
+const plainDashes = (t) => String(t).replace(/[\u2013\u2014]/g, "-");
+
 // A section's name, by what it holds (Answer, Studies, Explanation, Limitations); the template's eyebrow is the same.
 const eyebrow = (stops, name, text) =>
   `<p class="eyebrow" id="e-${name.toLowerCase()}">${escapeHtml(text)}</p>`;
@@ -491,7 +495,7 @@ function studyRowHtml(s, i, key, named, bv) {
   const title = String(s.title || "");
   // the study's own address, else its PubMed page from the number, so Open PubMed is on every real study
   const href = safeHref(s.url) || (/^\d+$/.test(String(s.pmid || "")) ? `https://pubmed.ncbi.nlm.nih.gov/${s.pmid}/` : null);
-  const abs = String(s.abstract || "").trim();
+  const abs = plainDashes(String(s.abstract || "").trim());
   const go = `<button type="button" class="act quiet study-go" aria-label="How often study ${n} is cited, and the studies next to it">Citations and related studies</button>`;
   const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "") + `PubMed ${escapeHtml(s.pmid)}`;
   return `<li class="row" id="row-${n}" data-n="${n}" data-i="${i}">`
@@ -1642,7 +1646,7 @@ function openStudy(i) {
 
   const abs = $("sheet-abstract");
   if (s.abstract) {
-    abs.innerHTML = s.abstract.split("\n").map((para) => {
+    abs.innerHTML = plainDashes(s.abstract).split("\n").map((para) => {
       const m = para.match(/^([A-Z][A-Za-z /&-]{2,40}):\s(.*)$/s);
       return m ? `<p><b>${escapeHtml(m[1])}</b>${escapeHtml(m[2])}</p>` : `<p>${escapeHtml(para)}</p>`;
     }).join("");

@@ -4,6 +4,13 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10): An abstract shows an en or an em dash as a plain hyphen
+
+Abstracts are now in the server-rendered page, and the rule is zero en or em dashes in anything a
+reader can see. An abstract is quoted from PubMed as it is, except that an en dash or an em dash is
+shown as a plain hyphen, in the server's row (a Jinja replace) and in app.js (plainDashes), the same
+way. Nothing else in an abstract changes: not a minus sign, not a word.
+
 ## 2026-11-24 (q10): A jump ends where the screen visibly goes on
 
 At the top of Studies the foot of the screen could fall in the gap between two blocks (320x568 in 3D,

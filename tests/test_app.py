@@ -11793,6 +11793,22 @@ t("NAV N3: a jump lands on the stop's top moved by landShift, which crosses the 
   "off = landShift(k, at); } return at + off;" in _n3_dj and "function landShift(k, y)" in _n3_dj
   and 'STOPS[k].name === "Answer"' in _n3_dj and "d <= room" in _n3_dj)
 
+# ---- NAV N3: an abstract is quoted from PubMed as it is, except that an en or an em dash shows as a plain hyphen ----
+# Both renderers: the server's row (templates/index.html) and app.js's studyRowHtml. A minus sign and every word stay.
+_n3_abs = "Doses of 5\u20137 mg were tested. Benefit\u2014if any\u2014was small, a change of \u22120.2 points."
+_n3_want = "Doses of 5-7 mg were tested. Benefit-if any-was small, a change of \u22120.2 points."
+_n3_studies = [dict(STUDIES[0], pmid="12345678", title="Dash study", abstract=_n3_abs)]
+db.put_cached_verdict("abstract dashes render plain", "q", "complicated", "Because (Study 1).", ["12345678"],
+                      _n3_studies, tldr="Short take.", still_open="Open.")
+_n3_page = c.get("/?q=abstract%20dashes%20render%20plain").data.decode()
+_n3_srv = re.findall(r'<p class="abs-text">(.*?)</p>', _n3_page, re.S)
+_n3_js = _apprun("__out.h = studyRowHtml(" + json.dumps(_n3_studies[0]) + ', 0, "relied", true, null);')["h"]
+_n3_jst = re.findall(r'<p class="abs-text">(.*?)</p>', _n3_js, re.S)
+t("NAV N3: the server-rendered abstract shows an en dash and an em dash as hyphens, the words and the minus sign intact",
+  [_htmllib.unescape(x) for x in _n3_srv] == [_n3_want], _n3_srv[:1])
+t("NAV N3: app.js draws the same abstract the same way",
+  [_htmllib.unescape(x) for x in _n3_jst] == [_n3_want], _n3_jst[:1])
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
