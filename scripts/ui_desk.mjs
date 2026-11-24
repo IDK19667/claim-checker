@@ -920,6 +920,20 @@ await snappy("21: the home page draws no picture while it scrolls, and none on a
   must((await page.evaluate(() => window.__draws)) === r0, "the settled result drew");
 }, { phone: false, gpu: false });
 
+await snappy("21: on the phone the first Next after a fresh answer starts moving within 300 ms, and glides, after one held-up frame too", async (page) => {
+  if (!(await fresh3d(page))) return;
+  // one frame held up longer than the whole glide by other work (as the answer arriving does on a slow phone): later moves still glide
+  await page.evaluate(() => window.__evident.goto(1)); await page.waitForTimeout(300);
+  await page.evaluate(() => { document.getElementById("next").click(); setTimeout(() => { const t = performance.now(); while (performance.now() - t < 2200); }, 60); });
+  await still3d(page); await page.evaluate(() => window.__evident.goto(2)); await still3d(page);
+  await page.waitForTimeout(1000);
+  const w = page.evaluate(() => window.__watch(8000)); await page.waitForTimeout(50);
+  await page.tap("#next"); const r = await w;
+  must(r.first !== null && r.first <= 300, `first movement ${r.first} ms after the press`);
+  // a glide is many pictures; a cut (the slow-machine rule) is one or two
+  must(r.moves >= 4, `the move was a cut (${r.moves} changes)`);
+});
+
 await snappy("21: on the phone at slow 4G the claim box is usable as the page's own scripts are in, not later", async (page, cdp) => {
   await cdp.send("Network.enable"); await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 150, downloadThroughput: 1.6e6 / 8, uploadThroughput: 750e3 / 8 });
   await page.addInitScript(() => {

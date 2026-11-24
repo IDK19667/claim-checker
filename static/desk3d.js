@@ -488,7 +488,7 @@ window.__evidentDesk3d = function (O) {
       W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr); forceDraw = true;
       camera.aspect = W / H; pickKeys(); O.layout(); cardKey = ""; shadowDirty = true; O.wake();
     }
-    var frameTimes = [];
+    var frameTimes = [], slowFrames = [];
     function adaptMoving(ft) {
       // one very slow moving frame is enough to drop to ratio 1 for the rest of the move (the still picture is redrawn at full ratio)
       if (ft > 120 && dpr > 1) { dpr = 1; frameTimes = []; return; }
@@ -617,13 +617,13 @@ window.__evidentDesk3d = function (O) {
     }
     function frame(now) {
       raf = 0;
+      var fStart = performance.now();
       // slow frames take bigger steps, so a slow machine settles in a few frames, not dozens
       var ft = now - last, dt = wasMoving ? Math.min(1, ft / 1000) : 1 / 60; last = now;
       if (O.tween) O.tween(now);
       var P = O.rawProgress();
       if (O.reduce.matches) Ps = Math.round(P);
       else Ps += (P - Ps) * (1 - Math.exp(-dt * 4.2));
-      if (wasMoving) O.slowGl = ft > 350;
       if (O.slowGl || Math.abs(P - Ps) < 0.0015) Ps = P;
 
       var hp = O.reduce.matches ? Math.round(P) : hold(Ps), u = CL ? hp / CL : 0;
@@ -658,6 +658,11 @@ window.__evidentDesk3d = function (O) {
       var vk = viewKey();
       if (forceDraw || vk !== drawnKey) {
         renderer.render(scene, camera); drawnKey = vk; forceDraw = false; lastRatio = ratioNow; frames++;
+        // a machine drawing under three frames a second glides by cuts. Judged on the last three frames drawn (a moving
+        // frame by the time since the one before, a still one by its own cost), so one frame held up by other work (an
+        // answer being laid out) never turns every later glide into a cut, and a cut frame drawn quickly lifts it
+        slowFrames.push((wasMoving ? ft : performance.now() - fStart) > 350); if (slowFrames.length > 3) slowFrames.shift();
+        O.slowGl = slowFrames.length === 3 && slowFrames[0] && slowFrames[1] && slowFrames[2];
       }
       wasMoving = moving; looping = moving;
       if (frames === 1) setTimeout(paintLazy, 0);
