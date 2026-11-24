@@ -14311,13 +14311,22 @@ _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], 
 t("BRIEF E3 follow-up: an earlier translation the later sentence lacks keeps the earlier sentence",
   _rf_y["says"] == [_RF_E + _RF_TR, _RF_OTHER], _rf_y)
 _RF_SIG = "Fasting glucose fell significantly, by about 22 mg per dL in patients (Study 2)."
-_RF_HARM = "Bleeding fell by 22% in patients (Study 2)."
+# Brief E4 D4 replaced "never a harm sentence, never across studies": the
+# earlier harm sentence now has only generic words beyond the later one, so
+# the harm guard alone keeps it; the cross-study case is its own test.
+_RF_HARM = "Bleeding fell by about 22% in patients (Study 2)."
 _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_HARM, _RF_OTHER], "evidence": [],
                                             "effect_size": "Bleeding fell by about 22% (Study 2)."}, 2)
+t("BRIEF E4 D4: an earlier harm sentence with only generic extras stays (the harm guard decides)",
+  _rf_y["says"] == [_RF_HARM, _RF_OTHER], _rf_y)
 _rf_x2, _rf_y2 = _rf_bd.one_figure_once("", {"says": [_RF_E, _RF_OTHER], "evidence": [],
                                               "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 1)."}, 2)
-t("BRIEF E3 follow-up: never a harm sentence, never across studies",
-  _rf_y["says"][0] == _RF_HARM and _rf_y2["says"] == [_RF_E, _RF_OTHER], (_rf_y, _rf_y2))
+t("BRIEF E3 follow-up: never across studies", _rf_y2["says"] == [_RF_E, _RF_OTHER], _rf_y2)
+# Brief E4 D4: the same, past the upstream figure match, at the rule itself.
+_rf_y2 = _rf_bd._drop_earlier({"says": [_RF_E, _RF_OTHER], "evidence": [],
+                               "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 1)."}, ["effect_size"], 2)
+t("BRIEF E4 D4: the rule itself never removes a sentence for a repeat from another study",
+  _rf_y2["says"] == [_RF_E, _RF_OTHER], _rf_y2)
 t("BRIEF E3 follow-up: the generic list is closed, and holds no population, outcome or significance word",
   _rf_bd.GENERIC_WORDS == frozenset("patients people participants subjects group groups about approximately around "
                                     "roughly average mean overall level levels".split()))
@@ -14325,6 +14334,20 @@ _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_SIG, _RF_OTHER], "eviden
                                             "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 2)."}, 2)
 t("BRIEF E3 follow-up: a sentence saying a result was significant always stays",
   _rf_y["says"] == [_RF_SIG, _RF_OTHER], _rf_y)
+# Brief E4 D4: the later-side half of the same rule. one_figure_once never
+# forces a significance sentence, so the guard is called directly: the later
+# sentence carries the significance, the earlier one has only generic
+# extras, and the earlier stays.
+_rf_y = _rf_bd._drop_earlier({"says": [_RF_E, _RF_OTHER], "evidence": [],
+                              "effect_size": "Fasting glucose fell significantly, by about 22 mg per dL (Study 2)."},
+                             ["effect_size"], 2)
+t("BRIEF E4 D4: a later sentence saying the result was significant keeps the earlier one too",
+  _rf_y["says"] == [_RF_E, _RF_OTHER], _rf_y)
+_RF_SAFE = "Safety events fell by about 22% in patients (Study 2)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_SAFE, _RF_OTHER], "evidence": [],
+                                            "effect_size": "Safety events fell by about 22% (Study 2)."}, 2)
+t("BRIEF E4 D4: an earlier safety sentence with only generic extras stays (the safety guard decides)",
+  _rf_y["says"] == [_RF_SAFE, _RF_OTHER], _rf_y)
 _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_L, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
 t("BRIEF E3 follow-up: a word-for-word copy keeps the earlier sentence (the page already prints it once, there)",
   _rf_y["says"] == [_RF_L, _RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
