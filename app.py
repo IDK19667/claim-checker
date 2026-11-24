@@ -353,14 +353,17 @@ def _public_claims(rows, n, key="claim_text", indexable=False):
         if "studies" in r:
             ok = display.public_claim(r[key], r["studies"])
         else:
-            ok = views.get(r.get("claim_key") or db.normalize_claim(r[key]), (None, False))[1]
+            view = views.get(r.get("claim_key") or db.normalize_claim(r[key]))
+            ok = bool(view and view[1])
+            # A light row carries its stored stamp: shown as the page shows it.
+            r = dict(r, verdict=view[2]) if ok and "verdict" in r else r
         if ok:
             out.append(r)
     return out[:n]
 
 
 # What the one screen decided for each saved row a light list showed, by
-# claim key: (saved date, public). A row saved again has a new date and is
+# claim key: (saved date, public, the verdict its page shows). A row saved again has a new date and is
 # judged again. Capped, oldest out first, so memory stays bounded; a list
 # call reads only the rows it has not seen (one query, db.list_rows).
 PUBLIC_MEMO_MAX = 5000
@@ -390,7 +393,8 @@ def _public_views(rows, key="claim_text") -> dict:
             fetched = []
         with _public_memo_lock:
             for row in fetched:
-                view = (row["created_at"], display.public_claim(row["claim_text"], row["studies"]))
+                view = (row["created_at"], display.public_claim(row["claim_text"], row["studies"]),
+                        _shown_verdict(row))
                 _public_memo[row["claim_key"]] = view
                 found[row["claim_key"]] = view
             while len(_public_memo) > PUBLIC_MEMO_MAX:
@@ -1203,6 +1207,13 @@ def _nothing_relied(claim, verdict_value, tldr, studies=None):
     if verdict.forgoes_treatment(claim) == "forgo":  # as a fresh check writes it
         out = f"{out} {verdict.FORGO_DOCTOR}"
     return "insufficient", out, True
+
+
+def _shown_verdict(v: dict) -> str:
+    """The verdict a saved answer's result page shows. Every public list
+    reads a saved answer's stamp from here (or from _listed, which this is),
+    so no list is ever surer than the page it links to."""
+    return _listed(v)["verdict"]
 
 
 def _listed(v: dict) -> dict:
@@ -2038,10 +2049,10 @@ def _suggested(r: dict) -> dict | None:
         row = db.get_cached_by_key(db.normalize_claim(r["claim_text"]))
         if not row:
             return None
-        shown = _listed({"claim_text": row["claim_text"], "verdict": row["verdict"],
-                         "search_query": row.get("search_query") or "", "tldr": row.get("tldr") or "",
-                         "studies": row["studies"], "cited": row["cited_studies"]})
-        return dict(r, verdict=shown["verdict"])
+        return dict(r, verdict=_shown_verdict({
+            "claim_text": row["claim_text"], "verdict": row["verdict"],
+            "search_query": row.get("search_query") or "", "tldr": row.get("tldr") or "",
+            "studies": row["studies"], "cited": row["cited_studies"]}))
     except Exception:  # noqa: BLE001
         return dict(r, verdict="complicated")
 

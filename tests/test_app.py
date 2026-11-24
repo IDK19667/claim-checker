@@ -15204,6 +15204,27 @@ t("1c: under Latest checks, one plain line says they are from all readers and pe
   '<p class="fine">From all readers. A check that looks personal is not listed.</p>' in _sf_lat and "this device" not in _sf_lat)
 t("1c: 'Saved only on this device' stays with Your recent checks, once",
   _sf_h.count("Saved only on this device") == 1 and "Saved only on this device" in _sf_h.split('id="recent"')[1].split('id="nudge"')[0])
+# --- 5: a public list never shows a surer verdict than the result page ---
+_SF_TRUE = "Turmeric eases arthritis pain a little"
+# The lead study is a review that rates its own evidence low: the page caps a
+# "true" on it to "It's complicated" (the stage A case on the live list).
+_SF_LOW = [{"pmid": "SF1", "title": "Turmeric for arthritis pain: a meta-analysis", "journal": "J", "year": "2021",
+            "abstract": "Ten randomized trials were pooled. Low-certainty evidence suggests turmeric eases arthritis pain a little.",
+            "publication_types": ["Meta-Analysis"], "authors": ["A B"], "data_banks": None, "url": "u"}]
+_sf_seed(_SF_TRUE, studies=_SF_LOW, verdict_="true")
+_sf_row = db.get_cached_by_key(db.normalize_claim(_SF_TRUE))
+_sf_page = appmod._listed({"claim_text": _sf_row["claim_text"], "verdict": _sf_row["verdict"], "search_query": _sf_row["search_query"],
+                           "tldr": _sf_row["tldr"], "studies": _sf_row["studies"], "cited": _sf_row["cited_studies"]})["verdict"]
+with appmod.app.test_request_context("/"):
+    _sf_cr = appmod._check_response(_SF_TRUE, _sf_row["search_query"], _sf_row["verdict"], _sf_row["tldr"], _sf_row["explanation"],
+                                    _sf_row["cited_studies"], _sf_row["studies"], "http://x", still_open=_sf_row["still_open"])["verdict"]
+appmod._public_memo.clear()
+_sf_tr = {x["claim"]: x["verdict"] for x in c.get("/api/trending").get_json()}
+_sf_sg = {x["claim_text"]: x["verdict"] for x in c.get("/api/suggest?q=turmeric").get_json()["suggestions"]}
+t("5: the case: saved 'true' (Likely true), the result page shows 'complicated'", _sf_page == _sf_cr == "complicated", (_sf_page, _sf_cr))
+t("5: trending shows the page's verdict, never the saved 'true'", _sf_tr.get(_SF_TRUE) == _sf_cr, _sf_tr)
+t("5: type-ahead shows the page's verdict", _sf_sg.get(_SF_TRUE) == _sf_cr, _sf_sg)
+_sf_drop(_SF_TRUE)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
