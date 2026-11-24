@@ -10910,7 +10910,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v130";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v131";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
