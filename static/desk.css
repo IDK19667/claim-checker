@@ -261,9 +261,6 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .rail button:hover { color: var(--on-deep); }
 .rail button[aria-current] { color: var(--on-deep); }
 .rail button[aria-current]::after { background: var(--on-deep); border-color: var(--on-deep); }
-.rail .rail-again { margin-top: 10px; }
-.rail .rail-again::after { display: none; }
-.rail .rail-again span { text-decoration: underline; text-underline-offset: 3px; }
 .menu .menu-again { margin-top: 6px; border-top: 1px solid var(--deep-line); }
 .rail button span { background: var(--scrim); padding: 3px 6px; border-radius: 3px; }
 
@@ -682,6 +679,9 @@ html:not(.js) .rows[hidden] { display: block; }
 html:not(.js) .grp-btn::after, html:not(.js) .row-more, html:not(.js) .study-go, html:not(.js) .bar, html:not(.js) .rail,
 html:not(.js) #how-answer, html:not(.js) #back-btn, html:not(.js) .sure-more, html:not(.js) #s6 .two, html:not(.js) .feedback, html:not(.js) .report { display: none !important; }
 html:not(.js) .stop { min-height: 0; }
+/* the end of the page's "Check another claim" without scripts: a link home in place of the action row's button */
+html.js .nojs-again { display: none; }
+.nojs-again a { display: inline-flex; align-items: center; min-height: 44px; }
 html:not(.js).checked #s1 { display: none; }
 html:not(.js) .stop:last-child { padding-bottom: 48px; }
 

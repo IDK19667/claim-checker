@@ -4,6 +4,14 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): One "Check another claim" on a result, at the end of the page
+
+On a wide screen it showed twice, in the rail and in the action row under Share. The rail is
+drawn by script, so the page served without scripts has none; the action row's is therefore the
+one kept at every width and in every mode, and the rail no longer carries it. Without scripts the
+action row's buttons cannot work, so a plain link home stands in its place. The phone's place
+menu keeps its own, which shows only when the menu is opened.
+
 ## 2026-11-24 (q10-rel): The primary button has a pressed state, and the check starts a frame later
 
 "Check the research" and "View evidence" dim to the quieter words' grey (`--desk-on-2`, ink words

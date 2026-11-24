@@ -1419,6 +1419,32 @@ await test("22g: a primary button looks pressed under Space and Enter, words and
   must(off.bg === a.bg && !/pressed/.test(off.cls) && !/pressed/.test(up.cls), `after Enter comes up: ${off.bg}, class "${off.cls}"; after Space and blur, class "${up.cls}"`);
 });
 
+// ---- 23. After the review of the joined release (q10-rel C2) ------------------------------------------------------
+// (a) a result shows exactly one "Check another claim" at every width and in every mode: the one at the end of the page
+const againCount = (page) => page.evaluate(() => [...document.querySelectorAll("button, a")]
+  .filter((e) => e.textContent.trim() === "Check another claim" && e.checkVisibility() && e.getBoundingClientRect().height > 0).length);
+for (const [w, h] of [[375, 812], [1280, 800]]) {
+  for (const mode of ["3D", "text mode"]) {
+    await test(`23a: a result shows exactly one "Check another claim", ${w}x${h} ${mode}`, async (page) => {
+      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}${mode === "3D" ? "" : "&nogl=1"}`, { waitUntil: "load" }); await ready(page);
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })); await page.waitForTimeout(800);
+      const n = await againCount(page);
+      must(n === 1, `${n} displayed`);
+    }, { w, h });
+  }
+  const name = `23a: a result with scripts off shows exactly one "Check another claim", ${w}x${h}`;
+  if (!process.env.UI_ONLY || name.startsWith(process.env.UI_ONLY)) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, javaScriptEnabled: false, serviceWorkers: "block" });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" });
+      const n = await againCount(page), href = await page.evaluate(() => { const a = document.querySelector(".nojs-again a"); return a && a.getAttribute("href"); });
+      must(n === 1 && href === "/", `${n} displayed, the link goes to ${href}`);
+      results.push(true); console.log(`PASS ${name}`);
+    } catch (e) { results.push(false); console.log(`FAIL ${name}\n     ${String(e.message || e).split("\n")[0]}`); } finally { await ctx.close(); }
+  }
+}
+
 await gpuBrowser.close();
 await browser.close();
 const passed = results.filter(Boolean).length;

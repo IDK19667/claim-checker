@@ -551,8 +551,10 @@ Sizes and floors:
   the foot: one row, 64px with the safe area under it, a full-width
   button saying "Section" and where you are, that opens the four
   sections, then "Check another claim", then the site links. On a wide
-  screen the rail at the right edge is the picker (the four sections
-  and "Check another claim") and there is no bottom bar. It names
+  screen the rail at the right edge is the picker (the four sections)
+  and there is no bottom bar. On a result the page shows one "Check
+  another claim" at every width and in every mode: the one at the end
+  of the page (a link home when scripts are off), never also in the rail. It names
   itself to screen readers ("Sections. You are in Studies") and works
   by keyboard.
 - **No screen looks finished when it is not.** The Answer and Studies

@@ -131,10 +131,9 @@
       var m = el("button", "", c.name); m.type = "button";
       m.addEventListener("click", function () { closeMenu(); jump(c.stop); where.focus({ preventScroll: true }); }); menu.appendChild(m); menuBtns.push(m);
     });
-    // Check another claim, from anywhere: the same press as the one at the end of the page
+    // Check another claim from the place menu: the same press as the one at the end of the page. Not in the rail: the
+    // page without scripts has no rail, so the end of the page carries the one that always shows
     if (checked) {
-      var ra = el("button", "rail-again"); ra.type = "button"; ra.appendChild(el("span", "", "Check another claim"));
-      ra.addEventListener("click", again); rail.appendChild(ra);
       var ma = el("button", "menu-again", "Check another claim"); ma.type = "button";
       ma.addEventListener("click", function () { closeMenu(); again(); }); menu.appendChild(ma);
     }
