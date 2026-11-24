@@ -8630,8 +8630,11 @@ t("lists: the trending filter drops a personal claim and keeps an ordinary one",
 t("lists: /api/trending carries the ordinary claim checked twice and not the personal one",
   any(x["claim"] == _ordc for x in _tr) and not any("Tom" in x["claim"] for x in _tr), _tr)
 t("privacy: it says lists of recent checks leave out a claim that looks personal",
-  "Lists of recent checks on the site leave out any claim that looks like it holds a name, an age, contact details or a personal medical detail"
-  in _re.sub(r"\s+", " ", c.get("/privacy").get_data(as_text=True)))
+  # It promises only what the screen does: the lists try, and can miss one.
+  "Lists of recent checks on the site try to leave out any claim that looks like it holds a name or another personal detail, "
+  "such as an age, contact details or a personal medical detail. They can miss one, so leave anything personal out of a claim."
+  in _re.sub(r"\s+", " ", c.get("/privacy").get_data(as_text=True))
+  and "leave out any claim that looks like it holds a name, an age" not in c.get("/privacy").get_data(as_text=True))
 
 
 # ---- Day counts: per-day totals, no identifiers ------------------------------------------
