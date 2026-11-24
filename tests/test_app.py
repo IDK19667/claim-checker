@@ -15193,6 +15193,17 @@ finally:
 t("1b: type-ahead reads the rows it has not judged once, then answers from memory (one read, then none)",
   _sf_first == 1 and len(_sf_reads) == 1, _sf_reads)
 _sf_drop(_SF_LOW, _SF_SEVEN, _SF_CAP, _SF_OK)
+# --- 1c: the list says whose checks it shows; the device line stays with the reader's own ---
+_sf_seed("Turmeric eased arthritis pain")
+appmod._drop_home_lists()
+_sf_h = c.get("/").get_data(as_text=True)
+_sf_drop("Turmeric eased arthritis pain")
+_sf_lat = _sf_h.split('<h2 class="sec-title">Latest checks</h2>')[1].split("</ol>")[0] if "Latest checks</h2>" in _sf_h else ""
+_sf_rec = _sf_h.split('id="recent"')[1].split("</div>\n")[0] if 'id="recent"' in _sf_h else ""
+t("1c: under Latest checks, one plain line says they are from all readers and personal checks are not listed",
+  '<p class="fine">From all readers. A check that looks personal is not listed.</p>' in _sf_lat and "this device" not in _sf_lat)
+t("1c: 'Saved only on this device' stays with Your recent checks, once",
+  _sf_h.count("Saved only on this device") == 1 and "Saved only on this device" in _sf_h.split('id="recent"')[1].split('id="nudge"')[0])
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
