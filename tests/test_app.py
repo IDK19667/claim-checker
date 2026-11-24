@@ -13379,6 +13379,26 @@ t("B: a study with an abstract has the Read abstract button and no note; one wit
   and "Each study has its PubMed page, and its abstract where PubMed has one." in _abs_page
   and "Each study has its PubMed page, and its abstract where PubMed has one." in (ROOT / "static" / "app.js").read_text(), _abs_kind)
 
+# ---- q10-rel step 2: the row reads the engine's indirect_reason, and never prints the label without one ----------
+# The engine sends indirect false and an empty reason for every study in this release; a reason under the engine's
+# own field name would show (renderResult and the Jinja read the same names), and an indirect study with no reason
+# shows no label at all. Saved studies marked indirect come out of the engine unmarked, so the page has none.
+_ind_studies = [dict(STUDIES[0], pmid="33333331", indirect=True, indirect_reason="Test reason: it measured blood levels."),
+                dict(STUDIES[1], pmid="33333332", indirect=True, indirect_reason=""),
+                dict(STUDIES[1], pmid="33333333", indirect=False, indirect_reason="")]
+db.put_cached_verdict("rows with an indirect reason", "q", "complicated", "Because (Study 1).",
+                      ["33333331"], _ind_studies, tldr="Short take.", still_open="Open.")
+_ind_page = c.get("/?q=rows+with+an+indirect+reason").data.decode()
+_ind_rows = re.findall(r'<li class="row" id="row-\d+".*?</li>', _ind_page, re.S)
+_ind_kind = [r.count('<p class="indirect">') for r in _ind_rows]
+_ind_js = (ROOT / "static" / "app.js").read_text()
+_ind_html = (ROOT / "templates" / "index.html").read_text()
+t("step 2: no Indirect label on the page (the engine sends none); both renderers read indirect_reason and never print "
+  "the label without a reason",
+  _ind_kind == [0, 0, 0] and "Indirect" not in re.sub(r"<[^>]+>", " ", _ind_page) and len(_ind_rows) == 3
+  and "s.indirect_reason || s.indirect_why" in _ind_js and "s.indirect && iwhy ?" in _ind_js
+  and "(s.indirect_reason or s.indirect_why or \"\")|trim" in _ind_html and "{% if s.indirect and iwhy %}" in _ind_html, _ind_kind)
+
 # ---------------------------------------------------------------------------
 # Brief E: a review citing a retracted paper, no bare strength word,
 # indirect context, one figure once, what each study contributes.

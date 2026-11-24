@@ -484,10 +484,10 @@ function studyLines(s, n, bv) {
   else if (s.off_topic || (s.background && !s.cited_in_verdict)) text = studyWhy(s);
   else if (said) text = said;
   else text = typeInfo(s.publication_types).label + "." + (s.population ? ` Studied in: ${s.population}.` : "");
-  const caution = String(s.caution || "").trim(), iwhy = String(s.indirect_why || "").trim();
+  const caution = String(s.caution || "").trim(), iwhy = String(s.indirect_reason || s.indirect_why || "").trim();
   return `<p class="contrib"><b class="lbl">What this study contributes</b> ${escapeHtml(text)}</p>`
     + (caution ? `<p class="caution">${escapeHtml(caution)}</p>` : "")
-    + (s.indirect ? `<p class="indirect"><b class="lbl">Indirect context</b>${iwhy ? " " + escapeHtml(iwhy) : ""}</p>` : "");
+    + (s.indirect && iwhy ? `<p class="indirect"><b class="lbl">Indirect context</b> ${escapeHtml(iwhy)}</p>` : "");
 }
 
 function studyRowHtml(s, i, key, named, bv) {
