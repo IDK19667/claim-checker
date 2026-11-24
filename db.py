@@ -635,7 +635,7 @@ def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT c.claim_key, v.claim_text, v.verdict, v.tldr, v.still_open, COUNT(*) AS n
+            """SELECT c.claim_key, v.claim_text, v.verdict, v.tldr, v.still_open, v.created_at, COUNT(*) AS n
                FROM checks c
                JOIN verdict_cache v ON v.claim_key = c.claim_key
                WHERE c.checked_at > ? AND """ + _ANSWERED.format(t="v.") + """
@@ -645,7 +645,8 @@ def trending(days: int = 7, min_checks: int = 2, limit: int = 8) -> list[dict]:
                LIMIT ?""",
             (since, FAILED_REPLY_TLDR, min_checks, limit),
         ).fetchall()
-        return [{"claim": r["claim_text"], "verdict": r["verdict"], "checks": r["n"]}
+        return [{"claim": r["claim_text"], "verdict": r["verdict"], "checks": r["n"],
+                 "claim_key": r["claim_key"], "created_at": r["created_at"]}
                 for r in rows if _listable(r)]
 
 
@@ -654,11 +655,11 @@ def recent_cached(limit: int = 200) -> list[dict]:
     """Cached claims, newest first. Used for the sitemap and llms.txt."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT claim_text, verdict, created_at, tldr, still_open FROM verdict_cache "
+            "SELECT claim_key, claim_text, verdict, created_at, tldr, still_open FROM verdict_cache "
             "WHERE " + _ANSWERED.format(t="") + " "
             "ORDER BY created_at DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
-        return [{k: r[k] for k in ("claim_text", "verdict", "created_at")} for r in rows if _listable(r)]
+        return [{k: r[k] for k in ("claim_key", "claim_text", "verdict", "created_at")} for r in rows if _listable(r)]
 
 
 @_routed
@@ -1009,11 +1010,48 @@ def all_claims(limit: int = 500) -> list[dict]:
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT claim_text, verdict, tldr, still_open FROM verdict_cache "
+            "SELECT claim_key, claim_text, verdict, tldr, still_open, created_at FROM verdict_cache "
             "WHERE " + _ANSWERED.format(t="") + " "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (FAILED_REPLY_TLDR, limit)
         ).fetchall()
-    return [{"claim_text": r["claim_text"], "verdict": r["verdict"]} for r in rows if _listable(r)]
+    return [{"claim_text": r["claim_text"], "verdict": r["verdict"], "claim_key": r["claim_key"],
+             "created_at": r["created_at"]} for r in rows if _listable(r)]
+
+
+# Keys read at once by list_rows: well under SQLite's limit on query parameters.
+LIST_ROWS_CHUNK = 400
+
+
+@_routed
+def list_rows(claim_keys) -> list[dict]:
+    """
+    The saved answers for these keys as a public list needs them to decide
+    what it may show (the claim, its studies, and the lines the page's stamp
+    reads), in the shape recent_verdicts gives, with the key. One query per
+    LIST_ROWS_CHUNK keys; the callers remember the answer per row.
+    """
+    keys = list(dict.fromkeys(k for k in claim_keys if k))
+    out = []
+    with get_conn() as conn:
+        for i in range(0, len(keys), LIST_ROWS_CHUNK):
+            part = keys[i:i + LIST_ROWS_CHUNK]
+            rows = conn.execute(
+                "SELECT claim_key, claim_text, search_query, verdict, tldr, still_open, studies_json, cited_json, "
+                "created_at FROM verdict_cache WHERE claim_key IN (" + ",".join("?" * len(part)) + ")",
+                tuple(part)).fetchall()
+            for r in rows:
+                if not _listable(r):
+                    continue
+                try:
+                    studies = json.loads(r["studies_json"] or "[]")
+                    cited = json.loads(r["cited_json"] or "[]")
+                except (ValueError, TypeError):
+                    studies, cited = [], []
+                out.append({"claim_key": r["claim_key"], "claim_text": r["claim_text"],
+                            "search_query": r["search_query"] or "", "verdict": r["verdict"],
+                            "tldr": r["tldr"] or "", "still_open": r["still_open"] or "",
+                            "created_at": r["created_at"], "studies": studies, "cited": cited})
+    return out
 
 
 @_routed

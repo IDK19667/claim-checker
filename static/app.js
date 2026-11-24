@@ -265,6 +265,29 @@ function confidenceLine(data) {
 // record with no date.
 function hasDate(iso) { return !!iso && !Number.isNaN(new Date(iso).getTime()); }
 
+// The server prints each date as the site's home zone's day inside a
+// <time datetime>; the script prints the reader's own day, in the same words.
+function localDay(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+function localizeTimes(root) {
+  root.querySelectorAll("time[datetime]").forEach((t) => { const s = localDay(t.dateTime); if (s) t.textContent = s; });
+}
+localizeTimes(document);
+
+function setReviewLine(data) {
+  const el = $("review-line"), line = data.review_line || "", w = data.review_when || {};
+  el.textContent = line;
+  if (w.iso && w.day && line.includes(w.day)) {
+    const i = line.indexOf(w.day), tm = document.createElement("time");
+    tm.dateTime = w.iso; tm.textContent = w.day;
+    el.replaceChildren(line.slice(0, i), tm, line.slice(i + w.day.length));
+    localizeTimes(el);
+  }
+  el.hidden = !line;
+}
+
 function fmtDate(iso) {
   try { return new Date(iso || Date.now()).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); }
   catch { return ""; }
@@ -661,8 +684,7 @@ function renderResult(data, replay, keepTyped) {
   $("query-what").hidden = !usedQuery;
   $("broadened").textContent = data.search_broadened ? " (the first search found nothing, so it was widened)" : "";
   $("more-link").href = safeHref(data.pubmed_url) || "#";
-  $("review-line").textContent = data.review_line || "";
-  $("review-line").hidden = !data.review_line;
+  setReviewLine(data);
   const note = $("cached-note");
   note.hidden = !(data.cached || data.restored);
   note.textContent = data.restored
@@ -1772,9 +1794,7 @@ for (const d of document.querySelectorAll("dialog.sheet")) {
 }
 // How it works is a link to /method, so it works with no script at all; with
 // one it opens the same words in a sheet over the page instead.
-for (const id of ["how-btn", "how-btn-2"]) {
-  $(id)?.addEventListener("click", (e) => { e.preventDefault(); openSheet($("how-sheet"), $("how-title")); });
-}
+$("how-btn")?.addEventListener("click", (e) => { e.preventDefault(); openSheet($("how-sheet"), $("how-title")); });
 $("meter").addEventListener("click", () => openSheet($("how-sheet"), $("how-title")));
 
 // ---- Voice input (where the browser has it) --------------------------------

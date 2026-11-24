@@ -227,6 +227,16 @@ verdict._gemini_client = fg
 STUDIES = [{"pmid": f"P{i}", "title": f"T{i}", "abstract": "a", "journal": "J", "year": "2020",
             "publication_types": ["Journal Article"], "authors": ["A B"], "data_banks": None, "url": f"u{i}"}
            for i in range(1, 4)]
+
+
+def _vouch_studies(*claims, base=None):
+    """The fake studies with the claims' words in their abstracts. A typed claim
+    is listed publicly only when the studies its check read vouch for its words
+    (display.public_claim), so a list test seeds rows whose studies do."""
+    return [dict(s_, abstract=(s_["abstract"] + " " + " ".join(claims)).strip())
+            for s_ in (base if base is not None else STUDIES)]
+
+
 _SP_REAL_SAF = pubmed.search_and_fetch  # the real one, for the check-speed tests at the end
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 # The guideline check is one more call on high-stakes claims. It is tested
@@ -334,7 +344,9 @@ pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # ---- SSE stream -------------------------------------------------------------
 fg.models.script = [Resp("q"), Resp(VJ("false", [2]))]
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _vouch_studies("streamed claim")
 r, evs = stream("streamed claim")
+pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 t("sse content-type", r.status_code == 200 and "text/event-stream" in r.content_type)
 t("sse stages in order", [e["stage"] for e in evs] == ["search", "query", "found", "weigh", "done"], [e["stage"] for e in evs])
 t("  found carries count/query; done carries result", evs[2]["count"] == 3 and evs[2]["query"] == "q" and evs[4]["result"]["verdict"] == "false")
@@ -953,7 +965,7 @@ t("the front page never says '1 studies'", "1 studies read" not in _html)
 # Sentence case is the template's: the stored text and the link keep the
 # wording as typed, only the first letter shown is raised.
 db.put_cached_verdict("green tea speeds up METABOLISM", "green tea AND metabolism", "complicated", "x",
-                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "a", "journal": "J", "year": "2020",
+                      ["SC1"], [{"pmid": "SC1", "title": "Green tea and energy use", "abstract": "Green tea speeds up metabolism.", "journal": "J", "year": "2020",
                         "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Randomized Controlled Trial"]}],
                       tldr="Maybe a little.", still_open="How much is unclear.")
 _sc_html = c.get("/").data.decode()
@@ -1006,7 +1018,7 @@ _sc_tpls = {n: (ROOT / "templates" / n).read_text() for n in ("index.html", "404
 t("  and both templates' lists use the one filter, with no first-letter upper of their own",
   all("{{ v.claim_text | sentence_case }}" in x and "[:1] | upper" not in x for x in _sc_tpls.values()))
 db.put_cached_verdict("mRNA vaccines change DNA", "mrna AND dna", "false", "x",
-                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "a", "journal": "J", "year": "2021",
+                      ["SC2"], [{"pmid": "SC2", "title": "mRNA and the genome", "abstract": "Do mRNA vaccines change DNA?", "journal": "J", "year": "2021",
                         "authors": ["A B"], "data_banks": None, "url": "u", "publication_types": ["Review"]}],
                       tldr="No.", still_open="Long-term data are still coming.")
 _sc_home = c.get("/").data.decode()
@@ -8037,7 +8049,8 @@ _g2p = appmod._check_response(_g2c, "(measles vaccine) AND (measles)", "true", _
                               ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
 _g2l = appmod._listed({"claim_text": _g2c, "verdict": "true", "search_query": "(measles vaccine) AND (measles)",
                        "tldr": _g2t, "studies": [_LOWREV], "cited": ["L1"]})
-db.put_cached_verdict(_g2c, "(measles vaccine) AND (measles)", "true", "It helps (Study 1).", ["L1"], [_LOWREV],
+db.put_cached_verdict(_g2c, "(measles vaccine) AND (measles)", "true", "It helps (Study 1).", ["L1"],
+                      _vouch_studies(_g2c, base=[_LOWREV]),
                       tldr=_g2t, still_open="Doses vary.")
 _g2s = c.get("/api/suggest", query_string={"q": "Measles vaccine protects"}).get_json() or {}
 t("second fix 2: a guidance 'true' over a low-rated review keeps its stamp and its guidance takeaway",
@@ -8601,7 +8614,8 @@ t("privacy: still no dash after the indexing paragraph", "\u2014" not in _pv_txt
 
 _pers, _ordc = "My son Tom has asthma, does honey help", "Honey soothes a cough in adults"
 for _cl, _q in ((_pers, "honey AND asthma"), (_ordc, "honey AND cough")):
-    db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], [_gs], tldr="Mixed.", still_open="Doses vary.")
+    db.put_cached_verdict(_cl, _q, "complicated", "Honey may help (Study 1).", ["S1"], _vouch_studies(_cl, base=[_gs]),
+                          tldr="Mixed.", still_open="Doses vary.")
 _pages = {u: c.get(u).get_data(as_text=True) for u in ("/", "/no-such-page-xyz")}
 _pages["/llms.txt"] = c.get("/llms.txt").get_data(as_text=True)
 t("lists: a personal saved claim is on no public list (/, 404, /llms.txt)",
@@ -8619,8 +8633,11 @@ t("lists: the trending filter drops a personal claim and keeps an ordinary one",
 t("lists: /api/trending carries the ordinary claim checked twice and not the personal one",
   any(x["claim"] == _ordc for x in _tr) and not any("Tom" in x["claim"] for x in _tr), _tr)
 t("privacy: it says lists of recent checks leave out a claim that looks personal",
-  "Lists of recent checks on the site leave out any claim that looks like it holds a name, an age, contact details or a personal medical detail"
-  in _re.sub(r"\s+", " ", c.get("/privacy").get_data(as_text=True)))
+  # It promises only what the screen does: the lists try, and can miss one.
+  "Lists of recent checks on the site try to leave out any claim that looks like it holds a name or another personal detail, "
+  "such as an age, contact details or a personal medical detail. They can miss one, so leave anything personal out of a claim."
+  in _re.sub(r"\s+", " ", c.get("/privacy").get_data(as_text=True))
+  and "leave out any claim that looks like it holds a name, an age" not in c.get("/privacy").get_data(as_text=True))
 
 
 # ---- Day counts: per-day totals, no identifiers ------------------------------------------
@@ -9289,7 +9306,7 @@ with db.get_conn() as _conn:
         [db.normalize_claim(x) for x in _OQ]).fetchall()}
 for _x in _OQ:
     db.put_cached_verdict(_x, "(x) AND (y)", "complicated", "Study 1 found a little.", ["P1"],
-                          [dict(s_) for s_ in STUDIES], tldr="A little, maybe.", still_open="For how long.")
+                          _vouch_studies(*_OQ), tldr="A little, maybe.", still_open="For how long.")
 _oq_list = [r_["claim_text"] for r_ in appmod._latest(500) if r_["claim_text"] in _OQ]
 t("one per question: each pair find_equivalent merges shows once, as its newest row under its own wording",
   _oq_list == ["Does it?", "Is it?", "Apple cider vinegar causes diabetes", "Apple cider vinegar helps diabetes",
@@ -9356,9 +9373,9 @@ _FR_BAD, _FR_GOOD, _FR_OLD = ("Zanzibar clove oil heals warts", "Zanzibar honey 
 _FR_CUR = "Ozempic cures alcoholism"   # a curated claim, so the sitemap and llms.txt would list it
 _ledger0 = db.ledger()["claims"]
 db.put_cached_verdict(_FR_GOOD, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_FR_GOOD), tldr="It helps a little.", still_open="For how long.")
 db.put_cached_verdict(_FR_OLD, "(ginger) AND (nausea)", "complicated", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="Maybe, a little.", still_open=None)
+                      _vouch_studies(_FR_OLD), tldr="Maybe, a little.", still_open=None)
 _fr_put(_FR_BAD)
 with db.get_conn() as _conn:
     _fr_cur_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?",
@@ -9416,9 +9433,9 @@ with db.get_conn() as _conn:
                                 (db.normalize_claim(_WL_ROWS[3][0]),)).fetchone()["n"]
 for _wc, _wt, _wo in _WL_ROWS:
     db.put_cached_verdict(_wc, "(quokka) AND (warts)", "true", "Because (Study 1).", ["P1"],
-                          [dict(s_) for s_ in STUDIES], tldr=_wt, still_open=_wo)
+                          _vouch_studies(_wc), tldr=_wt, still_open=_wo)
 db.put_cached_verdict(_WL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_WL_GOOD), tldr="It helps a little.", still_open="For how long.")
 for _x in [r_[0] for r_ in _WL_ROWS] + [_WL_GOOD]:
     db.log_check(_x, "true", "x", [])
     db.log_check(_x, "true", "x", [])
@@ -9464,9 +9481,9 @@ _OL_ROWS = (("Wombat tea soothes throats", None, "Doses vary."),
 _OL_GOOD = "Wombat ginger eases nausea"
 for _oc, _ot, _oo in _OL_ROWS:
     db.put_cached_verdict(_oc, "(wombat) AND (throat)", "true", "Because (Study 1).", ["P1"],
-                          [dict(s_) for s_ in STUDIES], tldr=_ot, still_open=_oo)
+                          _vouch_studies(_oc), tldr=_ot, still_open=_oo)
 db.put_cached_verdict(_OL_GOOD, "(ginger) AND (nausea)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_OL_GOOD), tldr="It helps a little.", still_open="For how long.")
 for _x in [r_[0] for r_ in _OL_ROWS] + [_OL_GOOD]:
     db.log_check(_x, "true", "x", [])
     db.log_check(_x, "true", "x", [])
@@ -9506,9 +9523,9 @@ appmod._sitemap_memo["stamp"] = None
 # matches), the suggestion is left out of /api/suggest, never shown uncapped.
 _SB_TRUE, _SB_MIX = "Numbat honey soothes throats", "Numbat tea eases coughs"
 db.put_cached_verdict(_SB_TRUE, "(honey) AND (throat)", "true", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="It helps a little.", still_open="For how long.")
+                      _vouch_studies(_SB_TRUE), tldr="It helps a little.", still_open="For how long.")
 db.put_cached_verdict(_SB_MIX, "(tea) AND (cough)", "complicated", "Because (Study 1).", ["P1"],
-                      [dict(s_) for s_ in STUDIES], tldr="Maybe.", still_open="For how long.")
+                      _vouch_studies(_SB_MIX), tldr="Maybe.", still_open="For how long.")
 _sb_seen = [r_["claim_text"] for r_ in c.get("/api/suggest?q=numbat").get_json()["suggestions"]]
 _sb_get = db.get_cached_by_key
 db.get_cached_by_key = lambda key, *a, **k: None
@@ -10893,7 +10910,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v129";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v130";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -11272,11 +11289,19 @@ process.stdout.write(JSON.stringify({ text, html, title: rec.title || "" }));
 _d1_vis = [re.sub(r"\s+", " ", _htmllib.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"(?s)<(script|style)\b.*?</\1>", " ",
            p_.split('<main id="track">')[1].split('id="server-result"')[0])))) for p_ in _r4_pages]
 _d1_srv = [_r4_full(p_).byid.get("review-line", "").strip() for p_ in _r4_pages]
-_d1_stmt = [l_ for l_ in _r4js.splitlines() if '$("review-line").textContent' in l_]
+# The script writes the line through setReviewLine (it wraps the day in <time>
+# and prints the reader's day; ui_dates.mjs checks that part in a browser, so
+# localizeTimes is a no-op here and the text must equal the server's line).
+_d1_stmt = [l_ for l_ in _r4js.splitlines() if '$("review-line").textContent' in l_ or "setReviewLine(data);" in l_]
+_d1_fn = _r4js[_r4js.index("function setReviewLine"):_r4js.index("\nfunction fmtDate")] if "function setReviewLine" in _r4js else ""
 _d1_js = None
-if _shutil.which("node") and len(_d1_stmt) == 1:
+if _shutil.which("node") and len(_d1_stmt) == 1 and _d1_fn:
     _d1_js = json.loads(_subprocess.run(["node", "-e", "const D = " + json.dumps(_r4_datas) + "; const out = [];"
-        "for (const data of D) { const el = {}; const $ = () => el;" + _d1_stmt[0] + "; out.push(el.textContent); }"
+        "let el; const $ = () => el; function localizeTimes() {}"
+        "const document = { createElement: () => ({}) };" + _d1_fn +
+        "for (const data of D) { el = { textContent: '', replaceChildren(...p) {"
+        " this.textContent = p.map((x) => typeof x === 'string' ? x : x.textContent).join(''); } };"
+        " setReviewLine(data); out.push(el.textContent); }"
         "console.log(JSON.stringify(out));"], capture_output=True, text=True, check=True).stdout)
 t("D1: no result prints two full stops in a row, and the dated line reads the same on both paths, on every fixture",
   all(_d1_srv) and not [v for v in _d1_vis if re.search(r"\.\s*\.", v)]
@@ -11495,9 +11520,16 @@ t("without scripts the 16-study result's verdict, still open and every study are
   (_nojs_body.count('<li class="row" '), len(_R4_ROWS[0]["studies"])))
 _r4_tpl = (ROOT / "templates" / "index.html").read_text()
 _r4_disp = (ROOT / "display.py").read_text()
-t("R4: the template never marks a value safe, and the one Markup on the server wraps text escaped first (desk_refs)",
-  "|safe" not in _r4_tpl.replace(" ", "") and _r4_disp.count("Markup(") == 1
-  and 'safe = str(escape(text or ""))' in _r4_disp.split("def desk_refs")[1].split("return Markup(")[0])
+# Two Markups on the server: desk_refs wraps text escaped first, and with_time
+# (the dated line's <time>) builds through Markup.format, which escapes every
+# value it is given; a hostile line, day or instant comes back escaped.
+_r4_wt = str(_dsc.with_time('<b x="1">Checked 1 May 2026</b>', {"day": "1 May 2026", "iso": '"><script>'}))
+t("R4: the template never marks a value safe, and the two Markups on the server wrap text escaped first (desk_refs, with_time)",
+  "|safe" not in _r4_tpl.replace(" ", "") and _r4_disp.count("Markup(") == 2
+  and 'safe = str(escape(text or ""))' in _r4_disp.split("def desk_refs")[1].split("return Markup(")[0]
+  and 'return Markup("{}<time datetime=\\"{}\\">{}</time>{}").format(' in _r4_disp.split("def with_time")[1]
+  and "<b" not in _r4_wt and "<script>" not in _r4_wt and '<time datetime="&#34;&gt;&lt;script&gt;">1 May 2026</time>' in _r4_wt,
+  _r4_wt)
 
 # ---- K2: no regex lookbehind in a shipped script ------------------------------
 # Safari before 16.4 cannot parse (?<= or (?<!, and one in app.js stops the whole
@@ -13068,7 +13100,7 @@ db.recent_verdicts, db.get_cached_by_key = _hl_rv, _hl_key
 appmod.HOME_LIST_SECONDS = 60
 appmod._drop_home_lists()
 try:
-    db.put_cached_verdict("Home list claim one", "q", "complicated", "x", ["P1"], STUDIES,
+    db.put_cached_verdict("Home list claim one", "q", "complicated", "x", ["P1"], _vouch_studies("Home list claim one"),
                           tldr="Mixed.", still_open="Dose.")
     _hl_a = c.get("/").get_data(as_text=True)
     _hl_first = dict(_hl_calls)
@@ -13090,7 +13122,7 @@ try:
       _hl_r.status_code == 200 and "Home list claim one" in _hl_r.get_data(as_text=True)
       and _hl_calls["recent"] > 2 * _hl_first["recent"], dict(_hl_calls))
     _hl_n = _hl_calls["recent"]
-    db.put_cached_verdict("Home list claim two", "q", "complicated", "x", ["P1"], STUDIES,
+    db.put_cached_verdict("Home list claim two", "q", "complicated", "x", ["P1"], _vouch_studies("Home list claim two"),
                           tldr="Mixed.", still_open="Dose.")
     _hl_c = c.get("/").get_data(as_text=True)
     t("HOME LISTS: a check saved in this process drops the copy, so the next visit lists it",
@@ -15121,6 +15153,345 @@ t("BRIEF E6 B1e: a staying figure with a qualifier of its own after other words 
 _e6e_avg = _e6e("Weight fell by 2 kg on average and HbA1c by 1.53 in adults (Study 1).")
 t("BRIEF E6 B1e: 'on average' is no qualifier, so the cut keeps 'on average in adults'",
   _e6e_avg == "Weight fell by 2 kg on average in adults (Study 1).", _e6e_avg)
+
+# ===== SITE FIXES (q10-site): public lists, dates, footer =====
+import display, suggest, logging  # noqa: E402,E401
+# --- 1a: every public path passes one screen ---
+import re as _sf_re
+# Every GET address the app serves is either a public list of saved claims
+# (each must pass the one screen, app._public_claims) or a page that lists
+# none. A new address fails here until it is put in one of the two.
+_SF_LISTS = {"/", "/sitemap.xml", "/llms.txt", "/api/trending", "/api/suggest"}  # plus the 404 page
+_SF_NOT_LISTS = {"/checks", "/flight", "/robots.txt", "/favicon.ico", "/privacy", "/stats", "/about", "/method",
+                 "/corrections", "/og/<path:key>.png", "/manifest.webmanifest", "/sw.js", "/healthz",
+                 "/api/study/<pmid>", "/static/<path:filename>"}
+_sf_get = {r.rule for r in appmod.app.url_map.iter_rules() if "GET" in (r.methods or ()) and not r.rule.startswith("/__")}
+t("1a: every GET address is either a public list (screened) or a page that lists no saved claim",
+  _sf_get <= _SF_LISTS | _SF_NOT_LISTS and _SF_LISTS <= _sf_get, sorted(_sf_get - _SF_LISTS - _SF_NOT_LISTS))
+_SF_ST = [{"pmid": "SF1", "title": "Turmeric and arthritis: a randomized trial", "abstract": "Curcumin cured nothing; arthritis pain eased a little.",
+           "journal": "J", "year": "2020", "publication_types": ["Randomized Controlled Trial"], "authors": ["Vale J"],
+           "data_banks": None, "url": "u"}]
+
+
+def _sf_seed(claim, studies=None, verdict_="complicated"):
+    db.put_cached_verdict(claim, "turmeric AND arthritis", verdict_, "It may help a little (Study 1).", ["SF1"],
+                          [dict(s_) for s_ in (studies or _SF_ST)], tldr="Mixed.", still_open="Whether it lasts.")
+    for _ in range(2):
+        db.log_check(claim, verdict_, "x", [])
+
+
+def _sf_paths(q):
+    """Every public list's text, as a reader or a crawler gets it."""
+    out = {u: c.get(u).get_data(as_text=True) for u in ("/", "/sitemap.xml", "/llms.txt", "/api/trending")}
+    out["404"] = c.get("/no-such-page-sf").get_data(as_text=True)
+    out["/api/suggest"] = c.get("/api/suggest?q=" + urllib.parse.quote(q)).get_data(as_text=True)
+    return out
+
+
+def _sf_drop(*claims):
+    with db.get_conn() as _conn:
+        for _cl in claims:
+            _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_cl),))
+            _conn.execute("DELETE FROM checks WHERE claim_key = ?", (db.normalize_claim(_cl),))
+    appmod._sitemap_memo["stamp"] = None
+
+
+_SF_CAP = "Turmeric cured Jordan Vale of arthritis, call 415 555 0142"
+_sf_seed(_SF_CAP)
+_sf_p = _sf_paths("turmeric cured")
+t("1a: a typed claim with a capitalised name and a phone number is on no public path (home, 404, trending, llms, sitemap, type-ahead)",
+  not [u for u, v in _sf_p.items() if "Vale" in v or "0142" in v], [u for u, v in _sf_p.items() if "Vale" in v or "0142" in v])
+t("1a: its own result page still works for whoever has the link", c.get("/?q=" + urllib.parse.quote(_SF_CAP)).status_code == 200
+  and "Jordan Vale" in c.get("/?q=" + urllib.parse.quote(_SF_CAP)).get_data(as_text=True))
+_sf_drop(_SF_CAP)
+# --- 1b: the screen's two general rules: phone-like runs, and vouching ---
+_SF_LOW, _SF_SEVEN = "turmeric cured jordan vale of arthritis", "Turmeric cured arthritis for jordan vale, text 5550142"
+_SF_OK = "Turmeric eased arthritis pain"
+for _cl in (_SF_LOW, _SF_SEVEN, _SF_CAP, _SF_OK):
+    _sf_seed(_cl)
+_sf_p = _sf_paths("turmeric")
+for _cl, _probe in ((_SF_LOW, "cured jordan vale of"), (_SF_SEVEN, "5550142"), (_SF_CAP, "Jordan Vale")):
+    for _u, _v in _sf_p.items():
+        t(f"1b: {_cl!r} is not on {_u}", _probe not in _v)
+t("1b: an ordinary claim whose words its studies use is still listed (home, 404, trending, type-ahead)",
+  all(_SF_OK in _sf_p[u] for u in ("/", "404", "/api/trending", "/api/suggest")), [u for u in _sf_p if _SF_OK not in _sf_p[u]])
+for _cl in (_SF_LOW, _SF_SEVEN):
+    _r = c.get("/?q=" + urllib.parse.quote(_cl))
+    t(f"1b: an unlisted claim's own result page and share card still work: {_cl!r}",
+      _r.status_code == 200 and _cl in _r.get_data(as_text=True)
+      and c.get("/og/" + urllib.parse.quote(db.normalize_claim(_cl), safe="") + ".png").status_code == 200)
+t("1b: phone-like: 7 digits in one run, apart only by spaces, dots, dashes or brackets, is personal",
+  all(display.looks_personal(x) for x in ("call 5550142", "text 555 0142 now", "ring (555) 01.42", "555-01-42 cured it"))
+  and not any(display.looks_personal(x) for x in ("Take 200 mg twice a day", "Walking 10,000 steps a day extends life",
+                                                   "Omega 3 helps memory in adults over 65", "123456 is six digits")))
+_sf_st = [{"title": "Curcumin for knee osteoarthritis", "abstract": "Turmeric extracts reduced pain scores.", "authors": ["Vale J"],
+           "journal": "Jordan Medical Journal"}]
+t("1b: vouching: closed-list words and words from titles and abstracts vouch, with a final s or es folded",
+  display.vouched("Turmeric extract reduces knee pain", _sf_st) and display.vouched("Curcumin helps osteoarthritis", _sf_st))
+t("1b: vouching: an author's or a journal's name vouches for nothing",
+  not display.vouched("Turmeric helped vale", _sf_st) and not display.vouched("Turmeric helps jordan", _sf_st))
+t("1b: vouching: a token with digits is vouched for up to 5 digits",
+  display.vouched("Take 10000 a day", []) and not display.vouched("Take 100000 a day", []))
+t("1b: vouching: a check that read no studies is vouched for only by the closed list",
+  display.vouched("Sleep helps children", []) and not display.vouched("Turmeric helps children", []))
+t("1b: curated example claims are always listed, studies or not",
+  all(display.public_claim(x, []) for x in display.CURATED_CLAIMS))
+# Type-ahead remembers what the screen decided per row: a second call reads no row again.
+_sf_reads = []
+_sf_lr = db.list_rows
+db.list_rows = lambda keys, *a, **k: (_sf_reads.append(len(list(keys))), _sf_lr(keys))[1]
+try:
+    appmod._public_memo.clear()
+    c.get("/api/suggest?q=turmeric"); _sf_first = len(_sf_reads)
+    c.get("/api/suggest?q=turmeric"); c.get("/api/trending")
+finally:
+    db.list_rows = _sf_lr
+t("1b: type-ahead reads the rows it has not judged once, then answers from memory (one read, then none)",
+  _sf_first == 1 and len(_sf_reads) == 1, _sf_reads)
+_sf_drop(_SF_LOW, _SF_SEVEN, _SF_CAP, _SF_OK)
+# --- 1c: the list says whose checks it shows; the device line stays with the reader's own ---
+_sf_seed("Turmeric eased arthritis pain")
+appmod._drop_home_lists()
+_sf_h = c.get("/").get_data(as_text=True)
+_sf_drop("Turmeric eased arthritis pain")
+_sf_lat = _sf_h.split('<h2 class="sec-title">Latest checks</h2>')[1].split("</ol>")[0] if "Latest checks</h2>" in _sf_h else ""
+_sf_rec = _sf_h.split('id="recent"')[1].split("</div>\n")[0] if 'id="recent"' in _sf_h else ""
+t("1c: under Latest checks, one plain line says they are from all readers and personal checks are not listed",
+  '<p class="fine">From all readers. A check that looks personal is not listed.</p>' in _sf_lat and "this device" not in _sf_lat)
+t("1c: 'Saved only on this device' stays with Your recent checks, once",
+  _sf_h.count("Saved only on this device") == 1 and "Saved only on this device" in _sf_h.split('id="recent"')[1].split('id="nudge"')[0])
+# --- 5: a public list never shows a surer verdict than the result page ---
+_SF_TRUE = "Turmeric eases arthritis pain a little"
+# The lead study is a review that rates its own evidence low: the page caps a
+# "true" on it to "It's complicated" (the stage A case on the live list).
+_SF_LOW = [{"pmid": "SF1", "title": "Turmeric for arthritis pain: a meta-analysis", "journal": "J", "year": "2021",
+            "abstract": "Ten randomized trials were pooled. Low-certainty evidence suggests turmeric eases arthritis pain a little.",
+            "publication_types": ["Meta-Analysis"], "authors": ["A B"], "data_banks": None, "url": "u"}]
+_sf_seed(_SF_TRUE, studies=_SF_LOW, verdict_="true")
+_sf_row = db.get_cached_by_key(db.normalize_claim(_SF_TRUE))
+_sf_page = appmod._listed({"claim_text": _sf_row["claim_text"], "verdict": _sf_row["verdict"], "search_query": _sf_row["search_query"],
+                           "tldr": _sf_row["tldr"], "studies": _sf_row["studies"], "cited": _sf_row["cited_studies"]})["verdict"]
+with appmod.app.test_request_context("/"):
+    _sf_cr = appmod._check_response(_SF_TRUE, _sf_row["search_query"], _sf_row["verdict"], _sf_row["tldr"], _sf_row["explanation"],
+                                    _sf_row["cited_studies"], _sf_row["studies"], "http://x", still_open=_sf_row["still_open"])["verdict"]
+appmod._public_memo.clear()
+_sf_tr = {x["claim"]: x["verdict"] for x in c.get("/api/trending").get_json()}
+_sf_sg = {x["claim_text"]: x["verdict"] for x in c.get("/api/suggest?q=turmeric").get_json()["suggestions"]}
+t("5: the case: saved 'true' (Likely true), the result page shows 'complicated'", _sf_page == _sf_cr == "complicated", (_sf_page, _sf_cr))
+t("5: trending shows the page's verdict, never the saved 'true'", _sf_tr.get(_SF_TRUE) == _sf_cr, _sf_tr)
+t("5: type-ahead shows the page's verdict", _sf_sg.get(_SF_TRUE) == _sf_cr, _sf_sg)
+_sf_drop(_SF_TRUE)
+# --- 2: near-duplicates, display only ---
+def _sf_one(a, b, va="complicated", vb="complicated"):
+    return len(appmod._one_per_question([{"claim_text": a, "verdict": va}, {"claim_text": b, "verdict": vb}])) == 1
+for _a, _b in (("Calcium and vitamin D strengthen bones", "Vitamin D and calcium strengthen bones"),
+               ("Coffee before a workout boosts performance", "Coffee boosts performance before a workout"),
+               ("Does eating late cause weight gain", "Late eating causes weight gain")):
+    t(f"2: one row for {_a!r} and {_b!r}", _sf_one(_a, _b))
+for _a, _b in (("Coffee raises blood pressure", "Coffee lowers blood pressure"),
+               ("Creatine is safe for the kidneys", "Creatine is not safe for the kidneys"),
+               ("Stress causes acne", "Acne causes stress"),
+               ("500 mg of vitamin C prevents colds", "5000 mg of vitamin C prevents colds"),
+               ("Coffee is safe in pregnancy", "Coffee is safe for children"),
+               ("Butter is healthier than margarine", "Margarine is healthier than butter"),
+               ("Hypertension raises stroke risk", "Hypotension raises stroke risk"),
+               ("Take 1 g of fish oil a day for the heart", "Take 4 g of fish oil a day for the heart"),
+               ("Coffee causes cancer", "Coffee can cause cancer")):
+    t(f"2: two rows for {_a!r} and {_b!r}", not _sf_one(_a, _b))
+t("2: a different verdict keeps two wordings apart", not _sf_one("Calcium and vitamin D strengthen bones",
+                                                               "Vitamin D and calcium strengthen bones", "complicated", "insufficient"))
+t("2: the newest row stays, under its own wording",
+  appmod._one_per_question([{"claim_text": "Late eating causes weight gain", "verdict": "x"},
+                            {"claim_text": "Does eating late cause weight gain", "verdict": "x"}])[0]["claim_text"] == "Late eating causes weight gain")
+t("2: the misspelt pair is not joined by this rule; the screen keeps the misspelt row off the lists instead",
+  not _sf_one("Turmeric reduces inflammation", "Tumeric reduces inflammation")
+  and not display.public_claim("Tumeric reduces inflammation", [{"title": "Turmeric and inflammation", "abstract": "reduces"}]))
+_SF_D1, _SF_D2 = "Curcumin and turmeric ease arthritis pain", "Turmeric and curcumin ease arthritis pain"
+_sf_seed(_SF_D1); _sf_seed(_SF_D2)
+_sf_p = _sf_paths("turmeric")
+for _u in ("/", "404", "/api/trending", "/api/suggest"):
+    t(f"2: {_u} shows one of the two wordings, the newest", (_SF_D2 in _sf_p[_u]) and (_SF_D1 not in _sf_p[_u]), _u)
+_sf_drop(_SF_D1, _SF_D2)
+# --- 3: every date a reader sees: the home zone's day on the server, the reader's day in the script ---
+_SF_EVE = "Turmeric eased arthritis pain in the evening"
+_sf_seed(_SF_EVE)
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", ("2026-11-24T03:30:00+00:00", db.normalize_claim(_SF_EVE)))
+_sf_h = c.get("/?q=" + urllib.parse.quote(_SF_EVE)).get_data(as_text=True)
+_sf_rl = _sf_re.search(r'id="review-line"[^>]*>(.*?)</p>', _sf_h, _sf_re.S).group(1)
+t("3: saved 19:30 Pacific on 23 November (03:30 UTC on the 24th): the result page says 23 November, in a <time> holding the instant",
+  'Checked <time datetime="2026-11-24T03:30:00+00:00">23 November 2026</time>' in _sf_rl, _sf_rl)
+with appmod.app.test_request_context("/"):
+    _sf_r = appmod._check_response(_SF_EVE, "q", "complicated", "Mixed.", "x (Study 1).", ["SF1"], _SF_ST, "http://x",
+                                   cached_at="2026-11-24T03:30:00+00:00", still_open="Whether it lasts.")
+t("3: the script gets the same day and the instant (review_when)",
+  _sf_r["review_when"] == {"iso": "2026-11-24T03:30:00+00:00", "day": "23 November 2026"} and "23 November 2026" in _sf_r["review_line"], _sf_r.get("review_when"))
+_sf_ex = db.normalize_claim(appmod.EXAMPLE_CLAIM)
+with db.get_conn() as _conn:
+    _sf_had = _conn.execute("SELECT created_at FROM verdict_cache WHERE claim_key = ?", (_sf_ex,)).fetchone()
+if not _sf_had:
+    db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "vinegar AND diabetes", "insufficient", "x (Study 1).", ["SF1"],
+                          [dict(_SF_ST[0], title="Vinegar and diabetes")], tldr="Unproven.", still_open="Whether it lasts.")
+with db.get_conn() as _conn:
+    _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", ("2026-11-24T03:30:00+00:00", _sf_ex))
+appmod._drop_home_lists()
+_sf_pm = _sf_re.search(r'class="proof-meta">(.*?)</p>', c.get("/").get_data(as_text=True), _sf_re.S)
+t("3: the trust example's date is the home zone's day, in a <time> holding the instant",
+  _sf_pm and 'Checked <time datetime="2026-11-24T03:30:00+00:00">23 November 2026</time>.' in _sf_pm.group(1), _sf_pm and _sf_pm.group(1))
+with db.get_conn() as _conn:
+    if _sf_had:
+        _conn.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", (_sf_had[0], _sf_ex))
+    else:
+        _conn.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (_sf_ex,))
+appmod._drop_home_lists()
+import zoneinfo as _sf_zi
+_sf_logs = []
+class _SFH(logging.Handler):
+    def emit(self, rec): _sf_logs.append(rec.getMessage())
+_sf_hd = _SFH(); logging.getLogger("display").addHandler(_sf_hd)
+_sf_real = _sf_zi.ZoneInfo
+def _sf_nozone(*a, **k): raise _sf_zi.ZoneInfoNotFoundError("no tz database")
+_sf_zi.ZoneInfo = _sf_nozone
+display._home_tz_memo.clear()
+try:
+    _sf_days = [display.home_day("2026-11-24T03:30:00+00:00"), display.home_day("2026-11-24T07:59:00+00:00"),
+                display.home_day("2026-11-24T08:00:00+00:00")]
+finally:
+    _sf_zi.ZoneInfo = _sf_real
+    display._home_tz_memo.clear()
+    logging.getLogger("display").removeHandler(_sf_hd)
+t("3: with no time zone database: a fixed UTC minus 8, one logged warning, no crash",
+  _sf_days == ["23 November 2026", "23 November 2026", "24 November 2026"] and len([m for m in _sf_logs if "UTC minus 8" in m]) == 1,
+  (_sf_days, _sf_logs))
+t("3: ClaimReview's machine dates stay ISO", _sf_re.search(r'"datePublished":\s*"2026-11-24"', _sf_h) is not None)
+_sf_drop(_SF_EVE)
+# --- 4: the footer links /method once, as Methodology; the first stop keeps How it works ---
+for _u in ("/", "/?q=" + urllib.parse.quote("Vaccines cause autism")):
+    _sf_f = _sf_re.search(r'<footer class="closing".*?</footer>', c.get(_u).get_data(as_text=True), _sf_re.S)
+    _sf_f = _sf_f.group(0) if _sf_f else ""
+    t(f"4: {_u[:12]} footer: one link to /method, named Methodology, and no How it works",
+      _sf_f.count('href="/method"') == 1 and 'href="/method">Methodology</a>' in _sf_f and "How it works" not in _sf_f
+      and "how-btn-2" not in _sf_f, _sf_f[-400:])
+_sf_home = c.get("/").get_data(as_text=True)
+t("4: the first stop keeps How it works (id how-btn, to /method)", 'id="how-btn" class="how-link" href="/method">How it works</a>' in _sf_home)
+# --- review 1, A and B: _TERMS words and "will"/"may" no longer vouch for a name ---
+# Each case's studies use every word of it but the name, so only the name can keep it off.
+import html as _sf_html
+_SF_SMOKE = [{"title": "Smoking and lung cancer", "abstract": "Smoking causes lung cancer in adults."}]
+_SF_CIN = [{"title": "Cinnamon and glucose", "abstract": "Cinnamon lowers blood sugar in adults."}]
+_SF_HONEY = [{"title": "Honey for cough", "abstract": "Honey can ease a cough in children."}]
+_SF_NAMED = (("smoking causes lung cancer for will young", _SF_SMOKE), ("will best has flu", []),
+             ("may west has a fever", []), ("cinnamon lowers blood sugar in lou graves", _SF_CIN),
+             ("will young has lung cancer from smoking", _SF_SMOKE),
+             ("HONEY CAN EASE A COUGH IN CHILDREN WILL YOUNG", _SF_HONEY),
+             ("Smoking causes lung cancer for Lou Bell", _SF_SMOKE))
+_SF_PLAIN = (("Smoking causes lung cancer", _SF_SMOKE), ("Salt may cause high blood pressure",
+             [{"title": "Salt and blood pressure", "abstract": "Salt raises blood pressure."}]),
+             ("Honey may also ease a cough in children", _SF_HONEY), ("Will honey ease a cough in children", _SF_HONEY))
+for _cl, _st in _SF_NAMED:
+    t(f"R1 A/B: {_cl!r} is not public, though its studies use every other word", not display.public_claim(_cl, _st))
+for _cl, _st in _SF_PLAIN:
+    t(f"R1 A/B: {_cl!r} is still public: 'may' and 'will' as verbs, words the studies use", display.public_claim(_cl, _st))
+t("R1 A: a _TERMS word (Bell, Graves) is vouched only by the studies, like any word outside the closed list",
+  not display.vouched("cinnamon lowers blood sugar in graves", _SF_CIN)
+  and display.vouched("cinnamon lowers blood sugar in graves", [dict(_SF_CIN[0], abstract=_SF_CIN[0]["abstract"] + " Graves disease.")]))
+t("R1 B: will or may is a name as the last word, after a preposition or joiner, or before a closed word that is not a verb or adverb",
+  [display._modal_as_name(display._vouch_tokens(x)) for x in
+   ("ask may", "salt for will", "will young", "may waters", "may cause harm", "will not", "may also help", "salt may raise risk")]
+  == [True, True, True, True, False, False, False, False])
+for _cl, _st in _SF_NAMED:
+    _sf_seed(_cl, studies=_st or [{"title": "x", "abstract": "y"}])
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("smoking").items()}
+_sf_p2 = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("will").items()}
+for _cl, _st in _SF_NAMED:
+    _sf_bad = [u for u, v in list(_sf_p.items()) + [("/api/suggest?q=will", _sf_p2["/api/suggest"])] if _cl.casefold() in v]
+    t(f"R1 A/B: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*[x for x, _ in _SF_NAMED])
+# --- review 1, F: llms.txt shows a curated claim's verdict as its page shows it ---
+_SF_LL = "Intermittent fasting improves brain function"
+with db.get_conn() as _conn:
+    _sf_ll_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF_LL),)).fetchone()["n"]
+_sf_seed(_SF_LL, studies=[{"pmid": "SF1", "title": "Intermittent fasting and cognition: a meta-analysis", "journal": "J", "year": "2021",
+         "abstract": "Ten randomized trials were pooled. Low-certainty evidence suggests intermittent fasting improves brain function.",
+         "publication_types": ["Meta-Analysis"], "authors": ["A B"], "data_banks": None, "url": "u"}], verdict_="true")
+_sf_llr = db.get_cached_by_key(db.normalize_claim(_SF_LL))
+_sf_llv = appmod._shown_verdict({"claim_text": _sf_llr["claim_text"], "verdict": _sf_llr["verdict"], "search_query": _sf_llr["search_query"],
+                                 "tldr": _sf_llr["tldr"], "studies": _sf_llr["studies"], "cited": _sf_llr["cited_studies"]})
+appmod._public_memo.clear()
+_sf_lltxt = c.get("/llms.txt").get_data(as_text=True)
+_sf_llline = [l_ for l_ in _sf_lltxt.splitlines() if f"[{_SF_LL}]" in l_]
+t("R1 F: llms.txt shows a saved 'true' its page caps as the page's verdict, not 'Likely true'",
+  _sf_llv == "complicated" and len(_sf_llline) == 1 and _sf_llline[0].endswith(": " + appmod.VERDICT_LABELS["complicated"])
+  and appmod.VERDICT_LABELS["true"] not in _sf_llline[0], (_sf_llv, _sf_llline))
+if not _sf_ll_had:
+    _sf_drop(_SF_LL)
+# --- review 1, C and D: digits glued to a word, or split up, keep a claim off the lists ---
+import html as _sf_html
+_SF_HON = [{"title": "Honey for cough", "abstract": "Honey can ease a cough in children."}]
+_SF_DIGITS = ("honey can ease a cough in children jordanvale88", "honey can ease a cough in children rosegreen1985",
+              "honey can ease a cough in children 555 then 0142",
+              "honey can ease a cough in children five five five one two three four",
+              "honey can ease a cough in children 03/04/1990")
+for _cl in _SF_DIGITS:
+    t(f"R1 C/D: {_cl!r} is not public, though its studies use every other word", not display.public_claim(_cl, _SF_HON))
+_SF_B12 = [{"title": "Vitamin B12 and energy in adults", "abstract": "COVID19 vaccines and H1N1 infection were also studied."}]
+t("R1 C: a token mixing letters and digits is vouched only when the studies use that exact token",
+  all(display.public_claim(x, _SF_B12) for x in ("Vitamin B12 helps energy", "COVID19 vaccines help adults", "H1N1 infection harms adults"))
+  and not any(display.public_claim(x, _SF_HON) for x in ("Vitamin B12 helps energy", "honey can ease a cough in b12"))
+  and not display.public_claim("Vitamin B12s helps energy", _SF_B12))
+t("R1 D: more than 6 digits in the whole claim, or 4 number words in a row, is not public; fewer still is",
+  not display.public_claim("Take 200 mg 3 times a day for 14 days 99", [{"title": "200 mg times days"}])
+  and display.public_claim("Take 200 mg 3 times a day for 14 days", [{"title": "200 mg times days"}])
+  and not display.public_claim("Take one two three four", [])
+  and display.public_claim("Take one or two a day", []) and display.public_claim("Take 10000 a day", []))
+t("R1 C/D: the replay proof's number claims stay public with their studies",
+  display.public_claim("You need to drink 8 glasses of water a day", [{"title": "glasses"}])
+  and display.public_claim("Omega 3 helps memory in adults over 65", [{"title": "Omega memory"}]))
+for _cl in _SF_DIGITS:
+    _sf_seed(_cl, studies=_SF_HON)
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("honey").items()}
+for _cl in _SF_DIGITS:
+    _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
+    t(f"R1 C/D: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*_SF_DIGITS)
+# --- re-check 1: "will" or "may" second-last, before a surname the studies use, is a name ---
+import html as _sf_html
+_SF_SMK = [{"title": "Smoking and lung cancer", "abstract": "Smoking causes lung cancer. Wells, March, Cross, Power and White cohorts."}]
+_SF_TAIL = ("smoking causes lung cancer, will wells", "smoking causes lung cancer, may march",
+            "smoking causes lung cancer says will cross", "smoking causes lung cancer, may white")
+for _cl in _SF_TAIL:
+    t(f"R2 1: {_cl!r} is not public, though its studies use every word", not display.public_claim(_cl, _SF_SMK))
+_SF_GAR = [{"title": "Garlic and colds", "abstract": "Garlic may help adults with colds. Vitamin D did not help."}]
+t("R2 1: 'will' or 'may' second-last before a verb or adverb is still a verb: those claims stay public",
+  all(display.public_claim(x, _SF_GAR) for x in ("Garlic may help", "Vitamin D will not help", "Garlic may also help",
+                                                 "Vitamin D may not")))
+for _cl in _SF_TAIL:
+    _sf_seed(_cl, studies=_SF_SMK)
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("smoking").items()}
+for _cl in _SF_TAIL:
+    _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
+    t(f"R2 1: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*_SF_TAIL)
+# --- re-check 1: a number half in words counts every word, and a short date is a date ---
+import html as _sf_html
+_SF_HN = [{"title": "Honey for cough", "abstract": "Honey can ease a cough in children."}]
+_SF_NUM = ("honey can ease a cough in children five 5 five 5 one 2 three", "honey can ease a cough in children 5 five 5 five 1 two 3",
+           "honey can ease a cough in children 3/4/90", "honey can ease a cough in children 3.4.1990")
+for _cl in _SF_NUM:
+    t(f"R2 2/3: {_cl!r} is not public, though its studies use every other word", not display.public_claim(_cl, _SF_HN))
+_SF_COF = [{"title": "Coffee and type 2 diabetes", "abstract": "Two cups of coffee a day lower the risk of type 2 diabetes. "
+            "Blood pressure of 120/80. A dose of 2.5 mg."}]
+t("R2 2/3: a few number words and a dose, a blood pressure and a decimal stay public",
+  all(display.public_claim(x, _SF_COF) for x in ("Two cups of coffee a day lower the risk of type 2 diabetes",
+                                                 "Coffee keeps blood pressure under 120/80", "A dose of 2.5 mg of coffee a day")))
+for _cl in _SF_NUM:
+    _sf_seed(_cl, studies=_SF_HN)
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("honey").items()}
+for _cl in _SF_NUM:
+    _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
+    t(f"R2 2/3: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*_SF_NUM)
+# ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

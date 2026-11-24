@@ -1,4 +1,5 @@
 import copy
+import functools
 import gzip
 import hashlib
 import hmac
@@ -10,6 +11,7 @@ import secrets
 import subprocess
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
@@ -109,6 +111,7 @@ app.jinja_env.globals["safe_href"] = display.safe_href
 app.jinja_env.globals["typed_note"] = display.typed_note
 app.jinja_env.globals["typed_note_parts"] = display.typed_note_parts
 app.jinja_env.filters["sentence_case"] = display.sentence_case
+app.jinja_env.filters["with_time"] = display.with_time
 # The one sentence on privacy that the footer and the top of /privacy both
 # print, from here, so the two cannot drift. It says what /privacy says in
 # full: the claim text is kept, nothing that identifies the person is, and
@@ -331,13 +334,74 @@ def _citation(s: dict, relied_on: bool) -> dict:
 
 def _public_claims(rows, n, key="claim_text", indexable=False):
     """
-    The first n rows whose claim may be shown in a public list. A claim that looks
-    like it holds a name, an age, contact details or a medical detail is left out
-    (indexable=True also needs it to be a curated example, for the machine index).
-    Callers fetch about three times n so a filtered list stays near its old size.
+    The one screen every public list passes (home's latest checks, the 404
+    page, trending, llms.txt, type-ahead; tests list each address): the first
+    n rows whose claim may be shown in a public list (display.public_claim: a
+    curated example, or a claim that does not look personal and whose every
+    word is vouched for by the closed list or the studies it read).
+    indexable=True also needs it to be a curated example, for the machine index.
+    A row that carries its studies is judged on them; a light row (trending,
+    type-ahead, llms.txt) by its saved answer, remembered per row
+    (_public_views). Callers fetch about three times n so a filtered list
+    stays near its old size.
     """
-    keep = display.indexable_claim if indexable else (lambda c: not display.looks_personal(c))
-    return [r for r in rows if keep(r[key])][:n]
+    rows = list(rows)
+    light = [r for r in rows if "studies" not in r and not (indexable and not display.indexable_claim(r[key]))]
+    views = _public_views(light, key) if light else {}
+    out = []
+    for r in rows:
+        if indexable and not display.indexable_claim(r[key]):
+            continue
+        if "studies" in r:
+            ok = display.public_claim(r[key], r["studies"])
+        else:
+            view = views.get(r.get("claim_key") or db.normalize_claim(r[key]))
+            ok = bool(view and view[1])
+            # A light row carries its stored stamp: shown as the page shows it.
+            r = dict(r, verdict=view[2]) if ok and "verdict" in r else r
+        if ok:
+            out.append(r)
+    return out[:n]
+
+
+# What the one screen decided for each saved row a light list showed, by
+# claim key: (saved date, public, the verdict its page shows). A row saved again has a new date and is
+# judged again. Capped, oldest out first, so memory stays bounded; a list
+# call reads only the rows it has not seen (one query, db.list_rows).
+PUBLIC_MEMO_MAX = 5000
+_public_memo: "OrderedDict[str, tuple]" = OrderedDict()
+_public_memo_lock = threading.Lock()
+
+
+def _public_views(rows, key="claim_text") -> dict:
+    keys = {}
+    for r in rows:
+        k = r.get("claim_key") or db.normalize_claim(r[key])
+        keys[k] = r.get("created_at")
+    found, need = {}, []
+    with _public_memo_lock:
+        for k, at in keys.items():
+            hit = _public_memo.get(k)
+            if hit and (at is None or hit[0] == at):
+                _public_memo.move_to_end(k)
+                found[k] = hit
+            else:
+                need.append(k)
+    if need:
+        try:
+            fetched = db.list_rows(need)
+        except sqlite3.Error as e:
+            app.logger.warning("Could not read rows for a public list: %s", e)
+            fetched = []
+        with _public_memo_lock:
+            for row in fetched:
+                view = (row["created_at"], display.public_claim(row["claim_text"], row["studies"]),
+                        _shown_verdict(row))
+                _public_memo[row["claim_key"]] = view
+                found[row["claim_key"]] = view
+            while len(_public_memo) > PUBLIC_MEMO_MAX:
+                _public_memo.popitem(last=False)
+    return found
 
 
 LIST_OVERFETCH = 3
@@ -382,7 +446,7 @@ def _latest(n: int) -> list[dict]:
     while True:
         rows = db.recent_verdicts(limit)
         whole = [r for r in rows if db.whole(r)]
-        out = _one_per_question(_public_claims(whole, len(whole)))[:n]
+        out = _one_per_question(_public_claims(whole, len(whole)), verdict_of=_shown_verdict)[:n]
         if len(out) >= n or len(rows) < limit:
             return out
         limit *= 2
@@ -428,19 +492,59 @@ def _drop_home_lists() -> None:
         _home_lists.clear()
 
 
-def _one_per_question(rows: list[dict]) -> list[dict]:
+# Words a public list ignores when it asks whether two rows are one claim in
+# another order: suggest's filler words, but never a word that gives a
+# direction or a comparison, nor a negation (those are not in _STOP anyway).
+_LIST_FILLER = suggest_mod._STOP - {"than", "over", "under", "into", "from", "before", "after"}
+_LIST_ORDERED = frozenset({"than", "vs", "versus"})
+
+
+def _list_fold(w: str) -> str:
+    if len(w) > 4 and w.endswith("es"):
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s"):
+        return w[:-1]
+    return w
+
+
+@functools.lru_cache(maxsize=8192)
+def _list_key(claim: str) -> tuple:
+    """(claim_fold key, the claim's words as a set, its hedges, first word,
+    last word, whether word order carries meaning), for _one_per_question."""
+    fold = db.claim_fold(claim)
+    words = [_list_fold(w) for w in fold if not w.startswith("~") and w not in _LIST_FILLER]
+    hedges = tuple(sorted(w for w in fold if w.startswith("~")))
+    if not words:
+        return fold, None, hedges, None, None, True
+    return fold, frozenset(words), hedges, words[0], words[-1], bool(_LIST_ORDERED & set(words))
+
+
+def _one_per_question(rows: list[dict], key: str = "claim_text", verdict_of=None) -> list[dict]:
     """
-    Each question once, newest first. Rows whose db.claim_fold keys are equal
-    are one question asked in other words ("Does creatine cause hair loss" and
-    "Creatine causes hair loss"); the newest row stands, under its own saved
-    wording. A row whose key is empty is never merged with another.
+    Each question once, newest first; the newest row stands, under its own
+    saved wording. Two rows are one question when their db.claim_fold keys
+    are equal ("Does creatine cause hair loss" and "Creatine causes hair
+    loss"), or when they show the same verdict (verdict_of, the stamp as the
+    page shows it) and, after claim_fold and the filler words, hold the same
+    set of words with a final s or es folded, the same hedge, no "than" or
+    "versus", and the same first or last word ("Calcium and vitamin D
+    strengthen bones" and "Vitamin D and calcium strengthen bones"). So a
+    claim and its opposite, two doses, two groups of people and "stress causes
+    acne" against "acne causes stress" all stay. A row whose key is empty is
+    never merged with another. Display only: no saved row or key changes.
     """
-    seen, out = set(), []
+    verdict_of = verdict_of or (lambda r: r.get("verdict"))
+    seen, groups, out = set(), {}, []
     for r in rows:
-        key = db.claim_fold(r["claim_text"])
-        if key and key in seen:
+        fold, words, hedges, first, last, ordered = _list_key(r[key])
+        if fold and fold in seen:
             continue
-        seen.add(key)
+        group = (words, hedges, verdict_of(r)) if words and not ordered else None
+        if group and any(f == first or l_ == last for f, l_ in groups.get(group, ())):
+            continue
+        seen.add(fold)
+        if group:
+            groups.setdefault(group, []).append((first, last))
         out.append(r)
     return out
 
@@ -458,7 +562,9 @@ def _trust_example():
         if not row or not row["studies"] or row["verdict"] not in VERDICT_LABELS \
                 or not row["tldr"].strip() or not row["still_open"].strip():
             return None
-        d = datetime.fromisoformat(str(row["cached_at"]))
+        d = display.as_instant(row["cached_at"])
+        if d is None:
+            raise ValueError("unreadable date")
         v = _list_entries([{"claim_text": row["claim_text"], "search_query": row["search_query"],
                             "verdict": row["verdict"], "tldr": row["tldr"], "still_open": row["still_open"],
                             "created_at": row["cached_at"], "studies": row["studies"],
@@ -467,7 +573,7 @@ def _trust_example():
         app.logger.warning("Could not build the trust example: %s", e)
         return None
     return {"claim": v["claim_text"], "verdict": v["verdict"], "tldr": v["tldr"],
-            "checked": f"{d.day} {d.strftime('%B %Y')}", "read": v["evidence"]["read"],
+            "checked": display.home_day(d), "checked_iso": d.isoformat(), "read": v["evidence"]["read"],
             "href": "/?q=" + quote(v["claim_text"])}
 
 
@@ -632,7 +738,7 @@ def sitemap():
 def llms_txt():
     """A plain description of this site for language models that read one."""
     base = _base_url()
-    recent = _public_claims(db.recent_cached(25 * LIST_OVERFETCH), 25, indexable=True)
+    recent = _one_per_question(_public_claims(db.recent_cached(25 * LIST_OVERFETCH), 25 * LIST_OVERFETCH, indexable=True))[:25]
     lines = [
         "# Evident",
         "",
@@ -1147,6 +1253,13 @@ def _nothing_relied(claim, verdict_value, tldr, studies=None):
     return "insufficient", out, True
 
 
+def _shown_verdict(v: dict) -> str:
+    """The verdict a saved answer's result page shows. Every public list
+    reads a saved answer's stamp from here (or from _listed, which this is),
+    so no list is ever surer than the page it links to."""
+    return _listed(v)["verdict"]
+
+
 def _listed(v: dict) -> dict:
     """A recent-checks entry with the stamp the page itself would show."""
     # Off-topic studies are not relied on here either (see _check_response),
@@ -1439,6 +1552,9 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # day than cached_at (the last re-check). Otherwise null.
         "first_checked_at": _original_check_date(claim, cached_at) if cached_at else None,
         "review_line": _review_line(cached_at, studies, cited),
+        # The instant behind the line's day: the page wraps the day in <time>
+        # and the script prints the reader's own day from it.
+        "review_when": _review_when(cached_at),
         "share_url": f"{base_url}/?q={quote(claim)}",
         "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/?term={quote(search_query or claim)}",
         # Counts the reader can check us on, computed from PubMed's own
@@ -1462,16 +1578,25 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     return response
 
 
+def _review_instant(cached_at) -> datetime:
+    """When the check ran: the saved date, or now (to the minute, so one
+    answer built twice reads the same) for a check that just ran."""
+    return ((display.as_instant(cached_at) if cached_at else None)
+            or datetime.now(timezone.utc).replace(second=0, microsecond=0))
+
+
+def _review_when(cached_at) -> dict:
+    when = _review_instant(cached_at)
+    return {"iso": when.isoformat(), "day": display.home_day(when)}
+
+
 def _review_line(cached_at, studies, cited) -> str:
     """The dated line under the verdict: when the check ran, and the years of
     the studies it relied on. "Checked 14 November 2026, from studies
     published 2019 to 2025." Built here once, so the page a shared link
-    renders and a streamed check say the same thing."""
-    try:
-        when = datetime.fromisoformat(cached_at) if cached_at else datetime.now(timezone.utc)
-    except (TypeError, ValueError):
-        when = datetime.now(timezone.utc)
-    line = f"Checked {when.day} {when.strftime('%B %Y')}"
+    renders and a streamed check say the same thing. The day is the home
+    zone's (display.home_day); the script prints the reader's own."""
+    line = f"Checked {display.home_day(_review_instant(cached_at))}"
     used = [s for s in studies or [] if s.get("pmid") in cited]
     years = sorted({int(y) for y in (str(s.get("year") or "")[:4] for s in used) if y.isdigit()})
     if not years:
@@ -1915,7 +2040,9 @@ def api_count():
 
 @app.route("/api/trending")
 def api_trending():
-    return jsonify(_public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8, key="claim"))
+    return jsonify([{"claim": r["claim"], "verdict": r["verdict"], "checks": r["checks"]}
+                    for r in _one_per_question(_public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8 * LIST_OVERFETCH,
+                                                              key="claim"), key="claim")[:8]])
 
 
 @app.route("/api/study/<pmid>")
@@ -1961,6 +2088,9 @@ def api_suggest():
     except sqlite3.Error as e:
         app.logger.warning("Could not read claims for suggestions: %s", e)
         return jsonify({"suggestions": []})
+    # Type-ahead is a public list like the others: it offers only claims the
+    # one screen (_public_claims) lets any reader see.
+    claims = _one_per_question(_public_claims(claims, len(claims)))
     shown = (_suggested(r) for r in suggest_mod.suggest(q, claims))
     return jsonify({"suggestions": [r for r in shown if r is not None]})
 
@@ -1976,10 +2106,10 @@ def _suggested(r: dict) -> dict | None:
         row = db.get_cached_by_key(db.normalize_claim(r["claim_text"]))
         if not row:
             return None
-        shown = _listed({"claim_text": row["claim_text"], "verdict": row["verdict"],
-                         "search_query": row.get("search_query") or "", "tldr": row.get("tldr") or "",
-                         "studies": row["studies"], "cited": row["cited_studies"]})
-        return dict(r, verdict=shown["verdict"])
+        return dict(r, verdict=_shown_verdict({
+            "claim_text": row["claim_text"], "verdict": row["verdict"],
+            "search_query": row.get("search_query") or "", "tldr": row.get("tldr") or "",
+            "studies": row["studies"], "cited": row["cited_studies"]}))
     except Exception:  # noqa: BLE001
         return dict(r, verdict="complicated")
 

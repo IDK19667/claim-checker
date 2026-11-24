@@ -377,6 +377,60 @@ def safe_href(url):
     return raw if parts.scheme.lower() in ("http", "https") and parts.netloc else None
 
 
+# ---- Dates a reader sees ----------------------------------------------------
+# One rule: the server prints a day in the site's home zone, inside a <time>
+# holding the exact instant; the script rewrites each <time> to the reader's
+# own day. With scripts off the day is the home zone's, never UTC's.
+HOME_ZONE = "America/Los_Angeles"
+_home_tz_memo: list = []
+
+
+def home_tz():
+    """The home zone, or a fixed UTC minus 8 (one logged warning) when the
+    time zone database is missing. Never raises."""
+    if not _home_tz_memo:
+        from datetime import timedelta, timezone
+        try:
+            from zoneinfo import ZoneInfo
+            _home_tz_memo.append(ZoneInfo(HOME_ZONE))
+        except Exception:  # noqa: BLE001 - no tz database: a fixed offset, never a crash
+            import logging
+            logging.getLogger(__name__).warning("Time zone %s is missing; dates use UTC minus 8", HOME_ZONE)
+            _home_tz_memo.append(timezone(timedelta(hours=-8), "UTC-8"))
+    return _home_tz_memo[0]
+
+
+def as_instant(value):
+    """An aware datetime from a saved ISO date (a date without a zone is UTC), or None."""
+    from datetime import datetime, timezone
+    if isinstance(value, datetime):
+        d = value
+    else:
+        try:
+            d = datetime.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def home_day(instant) -> str:
+    """"23 November 2026": the instant's day in the home zone."""
+    d = as_instant(instant).astimezone(home_tz())
+    return f"{d.day} {d.strftime('%B %Y')}"
+
+
+def with_time(line, when) -> Markup:
+    """A line holding a day, with that day wrapped in <time datetime> so the
+    script can print the reader's own day. `when` is {"iso", "day"}."""
+    line = str(line or "")
+    day = (when or {}).get("day") or ""
+    if not day or day not in line:
+        return escape(line)
+    i = line.index(day)
+    return Markup("{}<time datetime=\"{}\">{}</time>{}").format(
+        line[:i], (when or {}).get("iso") or "", day, line[i + len(day):])
+
+
 def sentence_case(text) -> str:
     """
     A listed claim as a list shows it: the first letter raised only when the
@@ -553,9 +607,163 @@ def _name_risk(text: str) -> bool:
     return False
 
 
+# A run of 7 or more digits reads as a phone number, however it is spaced:
+# digits apart only by spaces, dots, dashes or brackets count as one run.
+_PHONE_RUN = re.compile(r"\d(?:[\s().-]*\d){6,}")
+
+
 def looks_personal(claim_text) -> bool:
     text = str(claim_text or "").replace("\u2019", "'").replace("\u2018", "'")
-    return bool(_PERSONAL.search(text)) or _name_risk(text)
+    return bool(_PERSONAL.search(text)) or bool(_PHONE_RUN.search(text)) or _name_risk(text)
+
+
+# Vouching. A typed claim is shown in a public list only when every word of it
+# is vouched for: a word in this closed list of ordinary claim words (function
+# words, question openers, the plain verbs and nouns of claims; no names, and
+# not _TERMS, whose words include surnames such as Bell and Graves, so a _TERMS
+# word is vouched only by the studies), or a word in the titles or abstracts of the studies that check read
+# (never their authors or journals). Words are compared case-folded, with a
+# plain final "s" or "es" folded. A token with digits is vouched for when it
+# has at most 5 of them. A lowercase name or a word the studies never use
+# keeps a claim off every public list; the check itself is untouched.
+_VOUCH_WORDS = frozenset("""
+a an the and or but not no never without non if then than so as of to in on at by for from with into over under about after before during while until within up down out off away
+is are was were be been being am has have had do does did doing done can could may might will would shall should must
+it its this that these those there here what which who why how when where whether
+you your someone anyone everyone people person they their them
+dont doesnt didnt isnt arent wasnt werent cant cannot wont youre
+true false just only also even still too very much many more most less least few lot plenty enough some any all every each other same own several like
+good bad better best worse worst safe healthy harmful helpful effective natural normal regular extra main
+high higher low lower big small long longer short fast faster quick quickly fully regularly daily often always usually sometimes soon straight clear
+new old young older younger early late warm hot cold
+cause causing prevent stop cure treat help work make made take taking give giving get getting got go going keep put need use using find feel mean pass live remove
+raise increase boost improve reduce cut cutting decrease shorten speed ease relieve soothe protect harm link linked associated affect change catch catching
+eat eating drink drinking sleep sleeping breathing exercise exercising recovery
+risk chance effect benefit symptom sign problem
+health body life day week month year time morning
+child children baby babies adult man men woman women pregnant pregnancy
+food diet water salt sugar weight amount dose pill tablet medicine
+flu cold cough pain sickness fever infection teeth
+one two three four five six seven eight nine ten
+""".split())
+_VOUCH_TOKEN = re.compile(r"[^\W_]+")
+
+
+def _vouch_tokens(text) -> list:
+    return _VOUCH_TOKEN.findall(str(text or "").replace("\u2019", "'").replace("'", "").casefold())
+
+
+def _vouch_forms(word: str) -> set:
+    forms = {word}
+    if len(word) > 3 and word.endswith("s"):
+        forms.add(word[:-1])
+    if len(word) > 4 and word.endswith("es"):
+        forms.add(word[:-2])
+    return forms
+
+
+_VOUCH_CLOSED = frozenset(f for w in _VOUCH_WORDS for f in _vouch_forms(w))
+
+# "will" and "may" are closed-list words as modal verbs, and first names too.
+# One is read as a name when it is the claim's last word, or follows a
+# preposition or joiner, or comes before a closed-list word that is not a verb
+# or adverb ("will young", "for may", "may west": names; "may cause", "will
+# not", "may also help": verbs); and as the second-last word before
+# any word outside the verbs and adverbs, "will wells". The verbs and adverbs are this fixed set
+# inside the closed list, compared on folded forms ("causes" is "cause").
+_MODAL_NAMES = frozenset({"will", "may"})
+_NAME_AFTER = frozenset("for in to with by from of at on about and or than like".split())
+_VERB_OR_ADVERB = frozenset(f for w in """
+be been being have has had do does did not never no also still only just even too very much always usually often
+sometimes soon quickly fully regularly daily straight
+cause causing prevent stop cure treat help work make take taking give giving get getting go going keep put need use
+using find feel mean pass live remove raise increase boost improve reduce cut cutting decrease shorten speed ease
+relieve soothe protect harm affect change catch catching eat eating drink drinking sleep sleeping exercise
+exercising lower raise link
+""".split() for f in _vouch_forms(w))
+
+
+def _modal_as_name(tokens) -> bool:
+    # Second-last, it is a name unless the last word is a verb or adverb
+    # ("smoking causes lung cancer, will wells"; "garlic may help" stays).
+    if len(tokens) >= 2 and tokens[-2] in _MODAL_NAMES and not _vouch_forms(tokens[-1]) & _VERB_OR_ADVERB:
+        return True
+    for i, w in enumerate(tokens):
+        if w not in _MODAL_NAMES:
+            continue
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+        if nxt is None or (i and tokens[i - 1] in _NAME_AFTER):
+            return True
+        forms = _vouch_forms(nxt)
+        if forms & _VOUCH_CLOSED and not forms & _VERB_OR_ADVERB:
+            return True
+    return False
+
+
+# Numbers that read as a phone number, a date of birth or an ID however they
+# are split: more than 6 digits in the whole claim, each number word counting
+# as one digit ("five 5 five 5 one 2 three"), a run of 4 or more number words
+# ("five five five one"), or a date shape, three groups of digits joined by
+# "/", "." or "-" ("3/4/90", "3.4.1990"; "120/80" and "2.5 mg" are not dates).
+_MAX_DIGITS = 6
+_NUMBER_WORDS = frozenset("""zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen
+fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred""".split())
+
+
+_DATE_SHAPE = re.compile(r"\d+[/.-]\d+[/.-]\d+")
+
+
+def _digit_count(tokens) -> int:
+    return sum(sum(ch.isdigit() for ch in w) or (w in _NUMBER_WORDS) for w in tokens)
+
+
+def _number_words_run(tokens, n=4) -> bool:
+    run = 0
+    for w in tokens:
+        run = run + 1 if w in _NUMBER_WORDS else 0
+        if run >= n:
+            return True
+    return False
+
+
+def vouched(claim_text, studies) -> bool:
+    """Every word of the claim is vouched for (see _VOUCH_WORDS). A token of
+    digits alone is vouched with at most 5 digits; a token mixing letters and
+    digits ("b12", "jordanvale88") only when that exact token is in the
+    studies' titles or abstracts, never by the closed list or its letters."""
+    tokens = _vouch_tokens(claim_text)
+    if _modal_as_name(tokens) or _number_words_run(tokens):
+        return False
+    if _digit_count(tokens) > _MAX_DIGITS or _DATE_SHAPE.search(str(claim_text or "")):
+        return False
+    seen = exact = None
+    for w in tokens:
+        if w.isdigit():
+            if len(w) > 5:
+                return False
+            continue
+        mixed = any(ch.isdigit() for ch in w)
+        forms = _vouch_forms(w)
+        if not mixed and forms & _VOUCH_CLOSED:
+            continue
+        if seen is None:
+            seen, exact = set(), set()
+            for s in studies or []:
+                if isinstance(s, dict):
+                    for x in _vouch_tokens(f"{s.get('title') or ''} {s.get('abstract') or ''}"):
+                        exact.add(x)
+                        seen |= _vouch_forms(x)
+        if not (w in exact if mixed else forms & seen):
+            return False
+    return True
+
+
+def public_claim(claim_text, studies) -> bool:
+    """The one screen for every public list: a curated example always; any
+    other claim when it does not look personal and every word is vouched for."""
+    if is_curated_claim(claim_text):
+        return True
+    return not looks_personal(claim_text) and vouched(claim_text, studies)
 
 
 # The only claims whose result pages a search engine may index or the sitemap
