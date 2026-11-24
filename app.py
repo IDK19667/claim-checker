@@ -942,7 +942,7 @@ def _client_ip() -> str:
     return request.remote_addr or "unknown"
 
 
-def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
+def _contribution(s: dict, relied: bool) -> str:
     """E5: one sentence for "What this study contributes": its authors'
     conclusion cut to a sentence, else its design and who it was run in.
     Empty when the record gives nothing beyond the design's name ("A study.",
@@ -951,8 +951,6 @@ def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
         evidence.background_why(s) if s.get("background") else "")
     if why_aside and not relied:
         return f"Set aside: {str(why_aside).rstrip('.')}."
-    if indirect:
-        return f"Indirect context: {indirect['reason'][0].lower()}{indirect['reason'][1:]}."
     said = breakdown_mod.sentences(evidence.conclusion(s) or "")
     if said:
         one = said[0].strip()
@@ -965,14 +963,18 @@ def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
     return f"{a} {design} in {who}." if who else ""
 
 
-def _study_extra(s: dict, cited: set, indirect: dict | None = None) -> dict:
+def _study_extra(s: dict, cited: set) -> dict:
     """The E1, E3 and E5 fields of one study, on the way out, so a saved
-    answer gets them too."""
+    answer gets them too. `indirect` is always false and its reason empty
+    (brief E4 D1: the keyword mark left this release); the fields stay so
+    page code keeps working and a later label read by the model can fill
+    them."""
     return {
         "cites_retracted": evidence.cited_retracted(s) or None,
         "caution": evidence.retraction_caution(s) or None,
-        "indirect": indirect["reason"] if indirect else None,
-        "contribution": _contribution(s, s.get("pmid") in cited, indirect),
+        "indirect": False,
+        "indirect_reason": "",
+        "contribution": _contribution(s, s.get("pmid") in cited),
     }
 
 
@@ -1369,11 +1371,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         breakdown = breakdown_mod.effect_alone(breakdown)
     # A "That is ..." sentence travels with the figure it explains.
     breakdown = breakdown_mod.translations_follow(breakdown, withheld)
-    # Indirect context (E3): a label on a relied-on study that measured
-    # something other than the claim's outcome. Nothing else reads it.
     queries = [search_query] + [q for q in [pubmed.broaden_query(search_query or "")] if q]
-    indirect_of = {s.get("pmid"): lab for s in studies or [] if s.get("pmid") in cited
-                   for lab in [evidence.indirect_label(s, queries)] if lab}
     # No bare strength word (E2): the line a reader sees says whether the
     # studies support the claim, then how sure or on what kind of study; a
     # second line says what they found instead for an absolute claim. The
@@ -1456,7 +1454,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
-        "studies": [{**_study_payload(s, cited), **_study_extra(s, cited, indirect_of.get(s.get("pmid")))}
+        "studies": [{**_study_payload(s, cited), **_study_extra(s, cited)}
                     for s in _as_shown(studies)],
     }
     if safety:

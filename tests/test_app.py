@@ -13247,9 +13247,13 @@ t("BRIEF E2 vinegar: the second statement names the related effect and claims no
 t("BRIEF E3 follow-up vinegar: the recorded pair says about 22 mg per dL once among 'says', 'evidence' and the "
   "effect size, in the effect size", sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1
   and "22 mg" in (_e_bdo.get("effect_size") or ""), _e_lists)
-t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
-  _e_s1["indirect"] == "Measures body weight, not blood sugar control"
-  and _e_s1["contribution"] == "Indirect context: measures body weight, not blood sugar control.", _e_s1)
+# Brief E4 D1 replaced "the body composition review is marked indirect
+# context": the keyword mark left this release. Study 1 keeps its caution
+# and its contribution is its own conclusion.
+_d1_own = _e_bd.sentences(_e_ev.conclusion(_e_vin["studies"][0]) or "")[0]
+t("BRIEF E4 D1 vinegar: Study 1 is not marked, keeps its caution, and its contribution is its own conclusion",
+  _e_s1["indirect"] is False and _e_s1["indirect_reason"] == "" and bool(_e_s1["caution"])
+  and _e_s1["contribution"].rstrip(".") == _d1_own.rstrip(".") and "Indirect" not in _e_s1["contribution"], _e_s1)
 # Brief E3 N12 replaced "every relied-on study has a contribution": one is
 # empty when its record gives nothing beyond the design's name.
 _e_bare = _e_re.compile(r"^(?:A|An) [a-z -]+\.$")
@@ -13265,9 +13269,11 @@ _e_new = [_e_line, _e_out["effect_line"], _e_s1["caution"], _e_ev.retracted_revi
     [s["contribution"] for s in _e_out["studies"]] + [s["indirect"] or "" for s in _e_out["studies"]]
 t("BRIEF E: no dash in any new string a reader sees", not any(_e_re.search("[–—]", x or "") for x in _e_new))
 _e_unflag = _e_respond(_e_vin, flag=False)
-t("BRIEF E3: the indirect label changes no tier or verdict",
+# Brief E4 D1 replaced "the indirect label changes no tier or verdict"
+# (which asserted Study 1 marked): no study is marked, flag or not.
+t("BRIEF E4 D1: unflagged, the verdict and tiers are as recorded and no study is marked",
   _e_unflag["verdict"] == _e_vin["verdict"] and _e_unflag["studies"][0]["tier"] == "strong"
-  and _e_unflag["studies"][0]["indirect"])
+  and not any(st_["indirect"] or st_["indirect_reason"] for st_ in _e_unflag["studies"] + _e_out["studies"]))
 # E2: no verdict prints a bare strength word.
 _e_rcts = [_e_study("50", _E_RCT, abstract="We randomized 400 adults. CONCLUSIONS: It worked."),
            _e_study("51", _E_REV, abstract="We pooled randomized trials. CONCLUSIONS: It worked.")]
@@ -13547,13 +13553,13 @@ t("BRIEF E3 N1: the explanation sentence names one flagged review, or each of tw
   _m4_ex.endswith("Studies 1 and 2 cite studies that were later retracted, so treat their results with caution.")
   and _m4_ex1.endswith("Study 1 cites a study that was later retracted, so treat its results with caution."),
   (_m4_ex, _m4_ex1))
-_m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True, None)
+_m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True)
 # Brief E3 N12 replaced 'is "A randomized controlled trial."': a record with
 # nothing beyond its design now has no contribution at all.
 t("BRIEF E3 N12: a contribution never states a population the record does not give, nor the design's name alone",
   _m3_c == "", _m3_c)
 _n12_who = appmod._contribution(_e_study("73", _E_RCT, title="A trial in older adults",
-                                         abstract="We randomized 300 older adults with knee pain."), True, None)
+                                         abstract="We randomized 300 older adults with knee pain."), True)
 t("BRIEF E3 N12: a record that names who was studied still says so", _n12_who.endswith(".") and " in " in _n12_who,
   _n12_who)
 
@@ -13613,23 +13619,28 @@ _B4_INDIRECT = [
     ("(vitamin D) AND (common cold)", "Effect of vitamin D on bone mineral density", "Vitamin D raised bone density."),
     ("(coffee) AND (cancer)", "Effect of coffee on heart rate", "Coffee raised heart rate."),
 ]
-_b4_false = [t_ for q, t_, k in _B4_DIRECT if _e_ev.indirect_label(_b4_st(t_, k), [q])]
-_b4_missed = [t_ for q, t_, k in _B4_INDIRECT if not _e_ev.indirect_label(_b4_st(t_, k), [q])]
-t("BRIEF E2r B4: none of the reviewer's 20 direct tests is marked indirect", not _b4_false, _b4_false)
-# Brief E3 N3 replaced "the 8 truly indirect studies are marked": only a
-# study measuring a risk marker is marked, so 2 of the 8 stay marked and the
-# other 6 (gut, liver, bleeding, migraine, bone, heart rate) are not.
-t("BRIEF E3 N3: of the reviewer's 8 truly indirect studies, the 2 measuring a risk marker are marked",
-  sorted(_b4_missed) == sorted(t_ for q, t_, k in _B4_INDIRECT if "lipid" not in t_ and "triglycerides" not in t_),
-  _b4_missed)
-t("BRIEF E2r B4: the reason names both families",
-  _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."),
-                       ["(cinnamon) AND (diabetes)"])["reason"] == "Measures blood fats, not blood sugar control")
-t("BRIEF E2r B4: a claim outcome in two families, or a conclusion naming the claim's family, is never marked",
-  _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered cholesterol."),
-                       ["(cinnamon) AND (diabetes OR weight)"]) is None
-  and _e_ev.indirect_label(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered glucose and lipids."),
-                           ["(cinnamon) AND (diabetes)"]) is None)
+# Brief E4 D1: the keyword mark left this release, so every study comes back
+# unmarked and contributes its authors' conclusion.
+def _d1_extra(st_):
+    return appmod._study_extra(st_, {st_["pmid"]})
+
+
+_b4_false = [t_ for q, t_, k in _B4_DIRECT if _d1_extra(_b4_st(t_, k))["indirect"]]
+t("BRIEF E4 D1: none of the B4 reviewer's 20 direct tests is marked indirect", not _b4_false, _b4_false)
+# Brief E4 D1 replaced "of the reviewer's 8 truly indirect studies, the 2
+# measuring a risk marker are marked" and "the reason names both families".
+_b4_marked = [(t_, _d1_extra(_b4_st(t_, k))) for q, t_, k in _B4_INDIRECT]
+t("BRIEF E4 D1: the B4 reviewer's 8 truly indirect studies come back unmarked, each contributing its conclusion",
+  all(x["indirect"] is False and x["indirect_reason"] == "" and x["contribution"] == k
+      for (t_, x), (q, _t, k) in zip(_b4_marked, _B4_INDIRECT)), _b4_marked)
+t("BRIEF E4 D1: the cinnamon lipid study has an empty reason and its own conclusion as its contribution",
+  _d1_extra(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."))
+  == {"cites_retracted": None, "caution": None, "indirect": False, "indirect_reason": "",
+      "contribution": "Cinnamon lowered total cholesterol."})
+t("BRIEF E4 D1: the keyword rule and its helpers are gone, not switched off",
+  not any(hasattr(_e_ev, n) for n in ("indirect_label", "_POPULATION_PHRASE", "RISK_MARKERS", "_TITLE_TARGET",
+                                      "_TARGET_END", "_PEOPLE_WORDS"))
+  and "Indirect context" not in (ROOT / "app.py").read_text())
 t("BRIEF E2r B4: the table is general: between 12 and 20 families",
   12 <= len(_e_ev.OUTCOME_FAMILIES) <= 20 and len({n for n, _ in _e_ev.OUTCOME_FAMILIES}) == len(_e_ev.OUTCOME_FAMILIES))
 
@@ -14132,14 +14143,14 @@ def _e3_rct(title, concl):
             "publication_types": ["Journal Article", "Randomized Controlled Trial"], "year": "2020"}
 
 
-_e3_false = [(t_, _e3_ev.indirect_label(_e3_rct(t_, k), [q])) for q, t_, k in _E3_DIRECT
-             if _e3_ev.indirect_label(_e3_rct(t_, k), [q])]
-t("BRIEF E3 N3: none of the two reviewers' 40 direct pairs is marked indirect", not _e3_false, _e3_false)
-_e3_kept = [t_ for q, t_, k in _E3_INDIRECT if _e3_ev.indirect_label(_e3_rct(t_, k), [q])]
-_e3_marked = sorted({q for q, t_, k in _E3_INDIRECT if _e3_ev.indirect_label(_e3_rct(t_, k), [q])})
-t(f"BRIEF E3 N3: of the 18 truly indirect pairs, those whose study measures a risk marker stay marked ({len(_e3_kept)})",
-  len(_e3_kept) == 8 and all(_e3_ev.indirect_label(_e3_rct(t_, k), [q])["measure"] in _e3_ev.RISK_MARKERS
-                             for q, t_, k in _E3_INDIRECT if t_ in _e3_kept), _e3_kept)
+_e3_false = [t_ for q, t_, k in _E3_DIRECT if appmod._study_extra(_e3_rct(t_, k), {"1"})["indirect"]]
+t("BRIEF E4 D1: none of the two earlier reviewers' 40 direct pairs is marked indirect", not _e3_false, _e3_false)
+# Brief E4 D1 replaced "of the 18 truly indirect pairs, those whose study
+# measures a risk marker stay marked (8)".
+_e3_kept = [(t_, appmod._study_extra(_e3_rct(t_, k), {"1"})) for q, t_, k in _E3_INDIRECT]
+t("BRIEF E4 D1: the 18 truly indirect pairs come back unmarked, each contributing its conclusion",
+  all(x["indirect"] is False and x["indirect_reason"] == "" and x["contribution"].rstrip(".") == k.rstrip(".")
+      for (t_, x), (q, _t, k) in zip(_e3_kept, _E3_INDIRECT)), [x for x in _e3_kept if x[1]["indirect"]])
 _E3_POP = [("(coenzyme Q10) AND (heart failure)", "Effect of coenzyme Q10 on mortality in chronic heart failure",
             "Coenzyme Q10 reduced mortality in patients with chronic heart failure."),
            ("(curcumin) AND (arthritis)", "Effect of curcumin on pain in patients with arthritis",
@@ -14152,11 +14163,11 @@ _E3_POP = [("(coenzyme Q10) AND (heart failure)", "Effect of coenzyme Q10 on mor
             "Amoxicillin reduced ear pain at day 3 in children with ear infections."),
            ("(statins) AND (stroke)", "Effect of atorvastatin on mortality after stroke",
             "Atorvastatin did not reduce mortality in people who had a stroke.")]
-_e3_popm = [t_ for q, t_, k in _E3_POP if _e3_ev.indirect_label(_e3_rct(t_, k), [q])]
-t("BRIEF E3 N4: none of the 5 conclusions naming the people studied is marked", not _e3_popm, _e3_popm)
-t("BRIEF E3 N7: a harm (aspirin and gut bleeding) is never marked as indirect context",
-  _e3_ev.indirect_label(_e3_rct("Effect of aspirin on gastrointestinal bleeding", "Aspirin raised the risk of bleeding."),
-                        ["(aspirin) AND (heart attack)"]) is None)
+_e3_popm = [t_ for q, t_, k in _E3_POP if appmod._study_extra(_e3_rct(t_, k), {"1"})["indirect"]]
+t("BRIEF E4 D1: none of the 5 conclusions naming the people studied is marked", not _e3_popm, _e3_popm)
+t("BRIEF E4 D1: a harm (aspirin and gut bleeding) is never marked as indirect context",
+  appmod._study_extra(_e3_rct("Effect of aspirin on gastrointestinal bleeding", "Aspirin raised the risk of bleeding."),
+                      {"1"})["contribution"] == "Aspirin raised the risk of bleeding.")
 t("BRIEF E3 N7: suicide and self-harm are mood; osteoarthritis is joints",
   _e3_ev.outcome_families("suicide OR suicidal behaviour") == ["mood"]
   and _e3_ev.outcome_families("self-harm") == ["mood"]
@@ -14170,13 +14181,17 @@ _e3_egg = {"pmid": "40339906", "publication_types": ["Journal Article", "Randomi
                        "risk."}
 _e3_egg_q = ["(egg OR eggs OR dietary cholesterol) AND (heart disease OR cardiovascular disease OR coronary heart "
              "disease OR myocardial infarction OR stroke)"]
-t("BRIEF E3 N3: the recorded eggs study (regression 12) stays marked",
-  (_e3_ev.indirect_label(_e3_egg, _e3_egg_q) or {}).get("reason") == "Measures blood fats, not the heart and blood vessels",
-  _e3_ev.indirect_label(_e3_egg, _e3_egg_q))
+# Brief E4 D1 replaced "the recorded eggs study (regression 12) stays
+# marked" and "the recorded vinegar weight review stays marked": both come
+# back unmarked and contribute their authors' conclusion.
+_e3_eggx = appmod._study_extra(_e3_egg, {_e3_egg["pmid"]})
+t("BRIEF E4 D1: the recorded eggs study (regression 12) is unmarked and contributes its conclusion",
+  _e3_eggx["indirect"] is False and _e3_eggx["contribution"] == "Saturated fat, not dietary cholesterol, elevates LDL "
+  "cholesterol.", _e3_eggx)
 _e3_vin = _e3_json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
-t("BRIEF E3 N3: the recorded vinegar weight review stays marked",
-  (_e3_ev.indirect_label(_e3_vin["studies"][0], [_e3_vin["search_query_used"]]) or {}).get("reason")
-  == "Measures body weight, not blood sugar control")
+_e3_vinx = appmod._study_extra(_e3_vin["studies"][0], {_e3_vin["studies"][0]["pmid"]})
+t("BRIEF E4 D1: the recorded vinegar weight review is unmarked and does not say 'Indirect context'",
+  _e3_vinx["indirect"] is False and not _e3_vinx["contribution"].startswith("Indirect context"), _e3_vinx)
 
 # N10: the retraction lookup on the request path is one attempt, within
 # pubmed.RETRACTION_LOOKUP_SECONDS (4) in all, then "could not be made".
@@ -14315,6 +14330,85 @@ _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E, "That is a drop of ab
                                             "evidence": [], "effect_size": _RF_L + _RF_TR}, 2)
 t("BRIEF E3 follow-up: a 'That is' item after the earlier sentence goes with it",
   _rf_y["says"] == [_RF_OTHER], _rf_y)
+
+# ---------------------------------------------------------------------
+# BRIEF E4 (third repair of the evidence change).
+# ---------------------------------------------------------------------
+# D1: the keyword "indirect" mark left this release. The third reviewer's
+# 20 direct pairs and 10 truly indirect ones (tag, query, title, conclusion)
+# all come back unmarked, each contributing the authors' conclusion.
+def _e4_st(title, concl):
+    return {"pmid": "1", "title": title, "abstract": f"BACKGROUND: x. METHODS: y. RESULTS: z. CONCLUSIONS: {concl}",
+            "publication_types": ["Journal Article", "Randomized Controlled Trial"], "year": "2020"}
+
+
+_E4_DIRECT = [ 
+ ("pop-strip BP", "(garlic) AND (blood pressure OR hypertension)",
+  "Effect of garlic on body weight in adults with hypertension", "Garlic reduced body weight in adults with hypertension and lowered their blood pressure."),
+ ("SBP abbrev", "(oral contraceptives) AND (hypertension)",
+  "Effect of oral contraceptives on lipid profile", "Oral contraceptives raised triglycerides and raised SBP by 4 mmHg."),
+ ("GDM abbrev pregnancy", "(exercise) AND (gestational diabetes)",
+  "Effect of exercise during pregnancy on gestational weight gain", "Exercise reduced gestational weight gain and the incidence of GDM."),
+ ("NODM statins", "(statins) AND (diabetes)",
+  "Effect of rosuvastatin on LDL cholesterol: a randomized trial", "Rosuvastatin lowered LDL and increased new-onset DM by 25%."),
+ ("MI abbrev", "(niacin) AND (myocardial infarction OR heart attack)",
+  "Effect of niacin on HDL cholesterol in people at high risk", "Niacin raised HDL but did not reduce MI or stroke-free survival."),
+ ("children conduct", "(sugar) AND (hyperactivity OR ADHD)",
+  "Effect of sucrose on glycemic response in children", "Sucrose did not change children's conduct or activity levels."),
+ ("NAFLD", "(vitamin E) AND (fatty liver OR NAFLD)",
+  "Effect of vitamin E on body weight and steatosis", "Vitamin E improved NASH histology."),
+ ("pop-strip diabetes", "(cinnamon) AND (diabetes)",
+  "Effect of cinnamon on body weight in patients with diabetes", "Cinnamon reduced weight in patients with diabetes and improved their glucose control."),
+ ("T2D abbrev", "(sugar-sweetened beverages) AND (diabetes)",
+  "Effect of sugar-sweetened beverages on weight gain in children", "SSB intake raised BMI and the risk of T2D."),
+ ("pregnancy PE", "(calcium) AND (preeclampsia OR hypertensive disorders of pregnancy)",
+  "Effect of calcium on blood lipids in pregnant women", "Calcium lowered the risk of pre-eclampsia by half."),
+ ("CVD abbrev", "(omega-3) AND (cardiovascular disease)",
+  "Effect of omega-3 on triglycerides: the REDUCE-IT trial", "Icosapent ethyl reduced triglycerides and major CVD events by 25%."),
+ ("HbA1c direct", "(metformin) AND (diabetes)",
+  "Effect of metformin on HbA1c in adolescents", "Metformin lowered HbA1c by 0.5% in adolescents with type 2 diabetes."),
+ ("weight/obesity children", "(breastfeeding) AND (childhood obesity)",
+  "Effect of breastfeeding on BMI z-score at age 6", "Breastfeeding did not reduce obesity at six years."),
+ ("two outcomes", "(green tea) AND (weight loss OR blood pressure)",
+  "Effect of green tea on body weight", "Green tea had no effect on weight."),
+ ("kidney via BP", "(ACE inhibitors) AND (kidney disease)",
+  "Effect of ramipril on blood pressure in diabetic nephropathy", "Ramipril slowed decline in GFR and reduced ESRD."),
+ ("stroke HTN abbrev", "(salt reduction) AND (stroke)",
+  "Effect of salt substitutes on blood pressure: SSaSS", "Salt substitution reduced CVA events and deaths."),
+ ("pregnancy BP direct", "(aspirin) AND (preeclampsia OR gestational hypertension)",
+  "Effect of low-dose aspirin on blood pressure in pregnant women", "Aspirin reduced preterm pre-eclampsia."),
+ ("dementia via BP", "(blood pressure lowering) AND (dementia)",
+  "Effect of intensive blood pressure control on systolic pressure: SPRINT MIND", "Intensive control reduced MCI and probable dementia combined."),
+ ("hypoglycaemia children", "(insulin pumps) AND (hypoglycaemia)",
+  "Effect of insulin pumps on HbA1c in children", "Pumps lowered HbA1c without more severe lows."),
+ ("pop-strip with and", "(walnuts) AND (cholesterol)",
+  "Effect of walnuts on body weight in people who have high cholesterol", "Walnuts did not change weight in people who have high cholesterol, and lowered LDL by 5%."),
+]
+_E4_INDIRECT = [
+ ("vinegar", "(apple cider vinegar) AND (diabetes)", "Effect of apple cider vinegar on body weight", "Vinegar reduced body weight modestly."),
+ ("eggs", "(eggs) AND (heart disease)", "Effect of egg intake on LDL cholesterol", "Eggs raised LDL slightly."),
+ ("salt dementia", "(salt) AND (dementia)", "Effect of salt reduction on blood pressure", "Salt reduction lowered blood pressure."),
+ ("coffee bone", "(coffee) AND (fractures)", "Effect of coffee on body weight", "Coffee did not change weight."),
+ ("chocolate mood", "(chocolate) AND (depression)", "Effect of dark chocolate on blood pressure", "Dark chocolate lowered blood pressure by 2 mmHg."),
+ ("oats heart", "(oats) AND (heart attack)", "Effect of oat beta-glucan on cholesterol", "Oats lowered cholesterol."),
+ ("fish oil cancer", "(fish oil) AND (cancer)", "Effect of fish oil on triglycerides", "Fish oil lowered triglycerides."),
+ ("tea sleep", "(tea) AND (insomnia)", "Effect of tea on blood glucose", "Tea lowered fasting glucose."),
+ ("nuts death", "(nuts) AND (mortality)", "Effect of nuts on lipids", "Nuts lowered LDL."),
+ ("yoga pain", "(yoga) AND (back pain)", "Effect of yoga on blood pressure", "Yoga lowered blood pressure."),
+]
+_e4_marked = [(tag, appmod._study_extra(_e4_st(t_, k), {"1"})) for tag, q, t_, k in _E4_DIRECT + _E4_INDIRECT]
+t("BRIEF E4 D1: the third reviewer's 20 direct and 10 truly indirect pairs all come back unmarked, with an empty "
+  "reason and the authors' conclusion as the contribution",
+  len(_e4_marked) == 30 and all(x["indirect"] is False and x["indirect_reason"] == "" for _, x in _e4_marked)
+  # (a conclusion too short for evidence.conclusion to read leaves it empty, N12)
+  and all(x["contribution"] == (k if appmod.evidence.conclusion(_e4_st(_t, k)) else "")
+          for (_, x), (_, _q, _t, k) in zip(_e4_marked, _E4_DIRECT + _E4_INDIRECT)),
+  [m for m in _e4_marked if m[1]["indirect"] or "Indirect" in m[1]["contribution"]])
+t("BRIEF E4 D1: the reviewer's garlic and cinnamon inputs contribute the authors' own conclusion",
+  dict(_e4_marked)["pop-strip BP"]["contribution"]
+  == "Garlic reduced body weight in adults with hypertension and lowered their blood pressure."
+  and dict(_e4_marked)["pop-strip diabetes"]["contribution"]
+  == "Cinnamon reduced weight in patients with diabetes and improved their glucose control.")
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

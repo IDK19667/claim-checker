@@ -3156,20 +3156,10 @@ def names_family(text: str, family: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Indirect context (E3), a label only
-#
-# A study of the same substance that measured something other than the
-# outcome the claim names (body weight, for a claim about curing diabetes) is
-# context, not a test of the claim. It is marked only between recognised
-# outcome families: the study's stated target ("effect of X on Y") falls in
-# exactly one family, and that family is a risk marker (RISK_MARKERS: body
-# weight, blood pressure, blood fats, blood sugar control), the claim's
-# outcome (the search step's outcome terms)
-# in exactly one, the two differ, and the authors' conclusion names no stem
-# of the claim's family once the people studied are left out ("in adults
-# with type 2 diabetes" says who, not what was measured). In every other
-# case, no mark. Nothing reads the mark: no gate, tier, cap, verdict or
-# request. A disease and its measure share a family.
+# Outcome families: which outcome a piece of text names. The second statement
+# reads them to prefer a sentence naming the claim's own outcome. (The
+# keyword "indirect" mark that also read them left after three reviews:
+# brief E4 D1. A study's `indirect` field is always false.)
 # ---------------------------------------------------------------------------
 
 OUTCOME_FAMILIES = (
@@ -3199,24 +3189,8 @@ OUTCOME_FAMILIES = (
     ("breathing and the lungs", (r"asthma", r"copd", r"lungs?\b", r"pulmonar", r"bronch", r"wheez", r"breath")),
     ("joints", (r"arthrit", r"osteoarthrit", r"joints?\b", r"gout")),
 )
-# The study side of an indirect mark is only ever a risk marker (brief E3
-# N3): a keyword table cannot tell a symptom of the disease (pain in
-# arthritis, death in heart failure) from another outcome, but a weight, a
-# blood pressure, a blood fat or a blood sugar reading is plainly a measure
-# standing in for something else.
-RISK_MARKERS = ("body weight", "blood pressure", "blood fats", "blood sugar control")
 _FAMILY_RE = tuple((name, re.compile(r"\b(?:" + "|".join(stems) + r")", re.IGNORECASE))
                    for name, stems in OUTCOME_FAMILIES)
-
-_PEOPLE_WORDS = (r"(?:adults|patients|people|persons|participants|subjects|individuals|humans|"
-                 r"women|men|children|adolescents|girls|boys|population|populations|volunteers)")
-_POPULATION_PHRASE = re.compile(
-    r"\b(?:in|among|for|of)\s+(?:[\w-]+\s+){0,4}?" + _PEOPLE_WORDS + r"\b(?:\s+(?:with|who)\s+[^,.;:]+)?"
-    r"|\b" + _PEOPLE_WORDS + r"\s+(?:with|who)\s+[^,.;:]+", re.IGNORECASE)
-_TITLE_TARGET = re.compile(
-    r"\b(?:effects?|impacts?|influence|role)\s+of\s+.+?\s+on\s+(?:the\s+)?(?P<y>[^:?]+)", re.IGNORECASE)
-_TARGET_END = re.compile(r"\s+(?:in|among|of|for|during|after|with)\s+.*$|[,;].*$", re.IGNORECASE)
-
 
 def outcome_families(text: str) -> list[str]:
     """The outcome families (OUTCOME_FAMILIES) a piece of text names."""
@@ -3231,24 +3205,3 @@ def claim_outcome_terms(search_queries) -> str:
         groups = [g for g in re.split(r"\)\s+AND\s+\(", str(q or "")) if g.strip()]
         terms += groups[1:]
     return " ".join(terms)
-
-
-def indirect_label(study, search_queries) -> dict | None:
-    """{"measure", "reason"} for a study that measured an outcome family other
-    than the claim's, or None whenever the rule is not sure."""
-    if not isinstance(study, dict) or withdrawn(study) or preclinical(study):
-        return None
-    claim_fams = outcome_families(claim_outcome_terms(search_queries))
-    if len(claim_fams) != 1:
-        return None
-    m = _TITLE_TARGET.search(str(study.get("title") or ""))
-    if not m:
-        return None
-    target = _TARGET_END.sub("", _POPULATION_PHRASE.sub("", m.group("y"))).strip(" .")
-    target_fams = outcome_families(target)
-    if len(target_fams) != 1 or target_fams == claim_fams or target_fams[0] not in RISK_MARKERS:
-        return None
-    said = conclusion(study)
-    if not said or outcome_families(_POPULATION_PHRASE.sub(" ", said)).count(claim_fams[0]):
-        return None
-    return {"measure": target_fams[0], "reason": f"Measures {target_fams[0]}, not {claim_fams[0]}"}

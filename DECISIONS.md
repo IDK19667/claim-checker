@@ -4546,4 +4546,4 @@ What was deliberately rejected:
 ## 2026-11-23: a review that cites a retracted study (E2 repair)
 
 - Not checked yet: narrative and umbrella reviews typed only "Review", and pooled analyses typed only "Journal Article", are never read for a reference list, so a retracted study they cite is not flagged.
-- (E3 repair.) An "Indirect" mark is only ever given to a study measuring a risk marker (body weight, blood pressure, blood fats, blood sugar control): a keyword table cannot tell a symptom of the disease (pain in arthritis, death in heart failure) from another outcome, and a false mark tells a reader a direct test is beside the point. Fewer true marks is the accepted cost.
+- (E4 repair.) The keyword "indirect" mark was removed after three independent reviews each found it marking studies that test the claim directly: a word list cannot tell the people studied from the outcome measured. Every study's `indirect` stays false and its reason empty. The label needs the model's own reading of the abstract (a schema field, with a live regression), planned for a later accuracy round.
