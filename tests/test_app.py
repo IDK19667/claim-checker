@@ -15496,12 +15496,12 @@ _sf_drop(*_SF_NUM)
 # ===== Q10 STILL: text mode's still picture of the desk =====
 _st_files = {n: ROOT / "static" / "desk" / f"still-{n}.webp" for n in ("phone", "wide")}
 _st_bytes = {n: f.read_bytes() if f.exists() else b"" for n, f in _st_files.items()}
-t("ST 1: the two stills are WebP files of our own scene, each at most 20,480 bytes, the phone's at most 2,048 (text mode stays under 200 KB)",
+t("ST 1: the two stills are WebP files of our own scene, each at most 20,480 bytes, the phone's at most 1,400 (text mode stays under 200 KB)",
   all(v[:4] == b"RIFF" and v[8:12] == b"WEBP" for v in _st_bytes.values())
-  and all(0 < len(v) <= 20480 for v in _st_bytes.values()) and len(_st_bytes["phone"]) <= 2048, {n: len(v) for n, v in _st_bytes.items()})
+  and all(0 < len(v) <= 20480 for v in _st_bytes.values()) and len(_st_bytes["phone"]) <= 1400, {n: len(v) for n, v in _st_bytes.items()})
 _st_mk = (ROOT / "scripts" / "make_still.mjs").read_text() if (ROOT / "scripts" / "make_still.mjs").exists() else ""
 t("ST 1: the script that makes them is kept, renders this tree's desk and encodes with Pillow inside the budgets",
-  "still-phone.webp" in _st_mk and "still-wide.webp" in _st_mk and "make_still.py" in _st_mk and '"2048"' in _st_mk and '"20480"' in _st_mk
+  "still-phone.webp" in _st_mk and "still-wide.webp" in _st_mk and "make_still.py" in _st_mk and '"1400"' in _st_mk and '"20480"' in _st_mk
   and "Image" in (ROOT / "scripts" / "make_still.py").read_text())
 _st_home = c.get("/").data.decode()
 _st_pic = re.search(r'<picture class="desk-still" aria-hidden="true">(.*?)</picture>', _st_home, re.S)

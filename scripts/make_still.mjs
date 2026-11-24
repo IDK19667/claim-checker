@@ -10,7 +10,7 @@
  *
  * Two crops of the same scene, chosen by the page with <picture media>:
  *   static/desk/still-phone.webp  the phone's band (390 wide, the band at its
- *                                 tallest), at 1.5x, at most 2,048 bytes: text
+ *                                 tallest), at 1.5x, at most 1,400 bytes: text
  *                                 mode's first load (about 197 KB as sent) must
  *                                 stay under 200 KB
  *   static/desk/still-wide.webp   the lamp and its lit wood from the desktop
@@ -54,7 +54,7 @@ const phone = await shoot(390, 844, 1.5, () => {
 const wide = await shoot(1280, 800, 2, () => ({ x: 90, y: 0, width: 520, height: 660 }), path.join(tmp, "wide.png"));
 await b.close();
 execFileSync(py, [path.join(root, "scripts/make_still.py"),
-  path.join(tmp, "phone.png"), path.join(root, "static/desk/still-phone.webp"), "2048",
+  path.join(tmp, "phone.png"), path.join(root, "static/desk/still-phone.webp"), "1400",
   path.join(tmp, "wide.png"), path.join(root, "static/desk/still-wide.webp"), "20480", "room"], { stdio: "inherit" });
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log("phone band", JSON.stringify(phone), "wide crop", JSON.stringify(wide));
