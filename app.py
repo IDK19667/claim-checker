@@ -1032,8 +1032,9 @@ def _flag_retractions(studies):
     return evidence.flag_retracted_citations(studies, lookup if ids else None)
 
 
-# How long a check waits for that lookup before going on without it.
-RETRACTION_WAIT = pubmed.TIMEOUT + 2
+# How long a check waits for that lookup before going on without it: the
+# one constant, pubmed.RETRACTION_LOOKUP_SECONDS (4), for everything.
+RETRACTION_WAIT = pubmed.RETRACTION_LOOKUP_SECONDS
 
 
 def _retraction_result(future):

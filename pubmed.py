@@ -86,7 +86,7 @@ def _paced_get(endpoint: str, params: dict):
     return _http.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
 
 
-def _paced_post(endpoint: str, params: dict):
+def _paced_post(endpoint: str, params: dict, timeout=None):
     """One E-utilities POST, in the same turn as every GET. For a list of
     ids too long to carry in a URL."""
     global _last_call
@@ -95,29 +95,24 @@ def _paced_post(endpoint: str, params: dict):
         if wait > 0:
             time.sleep(wait)
         _last_call = time.monotonic()
-    return _http.post(f"{EUTILS_BASE}/{endpoint}", data=params, timeout=TIMEOUT)
-
-
-def _post(endpoint: str, params: dict):
-    """_get's rules (pace, one more try on a passing fault) for a POST."""
-    resp = _paced_post(endpoint, params)
-    if resp.status_code in _RETRY_STATUS:
-        time.sleep(RETRY_AFTER)
-        resp = _paced_post(endpoint, params)
-    resp.raise_for_status()
-    return resp
+    return _http.post(f"{EUTILS_BASE}/{endpoint}", data=params, timeout=TIMEOUT if timeout is None else timeout)
 
 
 # At most this many cited ids go into the one retraction lookup of a check:
 # the one constant, evidence.RETRACTION_LOOKUP_MAX (600).
 RETRACTION_LOOKUP_MAX = evidence.RETRACTION_LOOKUP_MAX
+# The retraction lookup sits on a check's request path: one attempt, at most
+# this many seconds in all (connect and read, half each), then the check goes
+# on and says the lookup could not be made. app.py waits no longer than this.
+RETRACTION_LOOKUP_SECONDS = 4
 
 
 def retracted_among(pmids) -> set[str]:
     """
     Which of these PubMed ids PubMed marks as retracted: one esearch, by POST,
-    of the ids against "Retracted Publication"[pt]. Raises on any failure, so
-    the caller can say the check could not be made.
+    of the ids against "Retracted Publication"[pt]. One attempt, never asked
+    again, within RETRACTION_LOOKUP_SECONDS. Raises on any failure, so the
+    caller can say the check could not be made.
     """
     ids = sorted({str(p) for p in pmids if str(p).isdigit()}, key=int)[:RETRACTION_LOOKUP_MAX]
     if not ids:
@@ -129,7 +124,10 @@ def retracted_among(pmids) -> set[str]:
         "retmode": "json",
         **_tool_params(),
     }
-    data = _post("esearch.fcgi", params).json()
+    half = RETRACTION_LOOKUP_SECONDS / 2
+    resp = _paced_post("esearch.fcgi", params, timeout=(half, half))
+    resp.raise_for_status()
+    data = resp.json()
     found = (data.get("esearchresult") or {}).get("idlist")
     if not isinstance(found, list):
         raise ValueError("no id list in the retraction lookup")

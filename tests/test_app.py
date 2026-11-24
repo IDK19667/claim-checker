@@ -14158,6 +14158,51 @@ t("BRIEF E3 N3: the recorded vinegar weight review stays marked",
   (_e3_ev.indirect_label(_e3_vin["studies"][0], [_e3_vin["search_query_used"]]) or {}).get("reason")
   == "Measures body weight, not blood sugar control")
 
+# N10: the retraction lookup on the request path is one attempt, within
+# pubmed.RETRACTION_LOOKUP_SECONDS (4) in all, then "could not be made".
+import time as _e3_time  # noqa: E402
+
+
+class _E3Post:
+    def __init__(self, status=503, delay=0.0):
+        self.calls, self.status, self.delay = [], status, delay
+
+    def post(self, url, data=None, timeout=None):
+        self.calls.append(timeout)
+        if self.delay:
+            _e3_time.sleep(self.delay)
+        return types.SimpleNamespace(status_code=self.status, json=lambda: {"esearchresult": {"idlist": []}},
+                                     raise_for_status=lambda: (_ for _ in ()).throw(requests.HTTPError("503"))
+                                     if self.status >= 400 else None)
+
+
+_e3_http = pubmed._http
+try:
+    _e3_fake = _E3Post(503)
+    pubmed._http = _e3_fake
+    try:
+        pubmed.retracted_among(["101", "102"])
+        _e3_raised = False
+    except requests.HTTPError:
+        _e3_raised = True
+    t("BRIEF E3 N10: a lookup PubMed turns away is one attempt, never asked again, and raises",
+      _e3_raised and len(_e3_fake.calls) == 1, _e3_fake.calls)
+    t("BRIEF E3 N10: its connect and read limits together are the one constant, 4 seconds",
+      pubmed.RETRACTION_LOOKUP_SECONDS == 4 and sum(_e3_fake.calls[0]) <= pubmed.RETRACTION_LOOKUP_SECONDS
+      and appmod.RETRACTION_WAIT == pubmed.RETRACTION_LOOKUP_SECONDS, _e3_fake.calls)
+    # The slow fake: PubMed answers only after 6 seconds. The check waits 4.
+    pubmed._http = _E3Post(200, delay=6.0)
+    _e3_rev = {"pmid": "95", "title": "R", "abstract": "a", "publication_types": ["Meta-Analysis"],
+               "references": ["9501"]}
+    _e3_t0 = _e3_time.monotonic()
+    _e3_note = appmod._flag_retractions([_e3_rev])
+    _e3_took = _e3_time.monotonic() - _e3_t0
+    t("BRIEF E3 N10: with a slow PubMed the check waits at most 4 seconds, says the lookup could not be made, "
+      "and flags nothing", _e3_note == _e3_ev.RETRACTION_UNCHECKED and _e3_took < pubmed.RETRACTION_LOOKUP_SECONDS + 0.8
+      and "cites_retracted" not in _e3_rev, (_e3_note, round(_e3_took, 2)))
+finally:
+    pubmed._http = _e3_http
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
