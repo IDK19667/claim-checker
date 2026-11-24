@@ -4887,9 +4887,9 @@ _ACV_ABS = ("RESULTS: ACV significantly reduced fasting blood sugar (FBS) (WMD: 
             "p = 0.008) and increased insulin (WMD: 2.059 \u03bcu/ml). Seven studies, 319 people.")
 _ACV_R = [dict(_ACV[0], abstract=_ACV_ABS)] + _ACV[1:]
 _fr = breakdown.for_reading
-t("a figure with three decimals is rounded; an HbA1c change with no unit stays when words follow it (E6 B1b)",
+t("a figure with three decimals is rounded, and an HbA1c change with no unit is left out",
   _fr("Fasting blood sugar fell by 21.929 mg/dL and HbA1c fell by 1.53 in adults (Study 1).", _ACV_R)
-  == "Fasting blood sugar fell by about 22 mg/dL and HbA1c fell by 1.53 in adults (Study 1).")
+  == "Fasting blood sugar fell by about 22 mg/dL in adults (Study 1).")
 t("  the live run's own sentences keep about 22 mg/dL and lose the 1.53 and its interval",
   _fr("Study 1 showed drops in fasting blood sugar with a weighted mean difference of -21.929 mg/dL "
       "and HbA1c with -1.53.", _ACV_R)
@@ -4905,8 +4905,8 @@ t("  a sentence that is only the bare figure goes, and 'Study 1' is not a figure
 t("  a unit the model wrote for a figure the abstract printed bare is no unit at all",
   _fr("Fasting blood sugar decreased by about 22 milligrams per deciliter and HbA1c decreased "
       "by 1.53 percent in patients with type 2 diabetes (Study 1).", _ACV_R)
-  == "Fasting blood sugar decreased by about 22 milligrams per deciliter and HbA1c decreased by 1.53 "
-     "in patients with type 2 diabetes (Study 1)."
+  == "Fasting blood sugar decreased by about 22 milligrams per deciliter in patients with "
+     "type 2 diabetes (Study 1)."
   and _fr("HbA1c decreased by 1.53 percent (Study 1).", _ACV_R) == "")
 t("  a unit the model dropped is put back from the abstract",
   _fr("Insulin rose by 2.059 (Study 1).", _ACV_R) == "Insulin rose by 2.06 \u03bcU/mL (Study 1).")
@@ -14639,9 +14639,8 @@ t("BRIEF E6 B1: 'with a 95% confidence interval of a to b' goes with its dropped
   _e6_with == "Fasting blood sugar fell by about 22 mg/dL (Study 2).", _e6_with)
 _e6_rest = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53, CI -2.65 to -0.41, over 12 weeks "
                  "(Study 2).")
-t("BRIEF E6 B1b: 'CI a to b' then further words is no clean cut, so the sentence stays whole",
-  _e6_rest == "Fasting blood sugar fell by about 22 mg/dL and HbA1c by 1.53, CI -2.65 to -0.41, over 12 weeks "
-              "(Study 2).", _e6_rest)
+t("BRIEF E6 B1: 'CI a to b' goes with its dropped figure and the rest of the sentence stays",
+  _e6_rest == "Fasting blood sugar fell by about 22 mg/dL, over 12 weeks (Study 2).", _e6_rest)
 _e6_keep = [
     ("Fasting blood sugar fell by 21.929 mg/dL (95% CI -29.19 to -14.67) and LDL by 0.4 mmol/L (Study 2).",
      "Fasting blood sugar fell by about 22 mg/dL (likely range 29 to 15) and LDL by 0.4 mmol/L (Study 2)."),
@@ -14705,6 +14704,32 @@ t("BRIEF E6 B1b: ratios are untouched",
   [_e6b(x) for x in _e6b_ratio] == ["The relative risk was 0.28 with a likely range of 0.12 to 0.71 (Study 4).",
                                     "Weight fell by 2.3 kg and the relative risk was 0.28, likely range 0.12 to "
                                     "0.71 (Study 4)."], [_e6b(x) for x in _e6b_ratio])
+
+# --- BRIEF E6 B1c: a plain qualifier of group, time or comparison may follow the dropped figure ---
+_e6c_cut = [
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 among older adults (Study 1).",
+     "Weight fell by 2.3 kg among older adults (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 after 12 weeks (Study 1).",
+     "Weight fell by 2.3 kg after 12 weeks (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 compared with placebo (Study 1).",
+     "Weight fell by 2.3 kg compared with placebo (Study 1)."),
+]
+for _a, _b in _e6c_cut:
+    t(f"BRIEF E6 B1c: a plain qualifier after the dropped figure still lets it go: {_a.split('1.53 ')[1][:20]}",
+      _e6b(_a) == _b, _e6b(_a))
+_e6c_whole = [
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 in patients, which was not significant (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53 in patients, which was not significant (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 in adults (p = 0.03) (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53 in adults (p = 0.03) (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 in adults with no significant change (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53 in adults with no significant change (Study 1)."),
+]
+t("BRIEF E6 B1c: a qualifier holding anything statistical leaves the sentence whole",
+  all(_e6b(a) == b for a, b in _e6c_whole), [_e6b(a) for a, _b in _e6c_whole])
+_e6c_rel = "Weight fell by 2.3 kg and HbA1c by 1.53, which are improvements rather than cures (Study 1)."
+t("BRIEF E6 B1c: a relative clause after the dropped figure leaves the sentence whole",
+  _e6b(_e6c_rel) == _e6c_rel, _e6b(_e6c_rel))
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

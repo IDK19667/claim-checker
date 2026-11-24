@@ -3274,7 +3274,8 @@ _TRAILING_CI = re.compile(
 _FIGURE_WITH_UNIT = re.compile(r"\d\s*" + _UNIT, re.IGNORECASE)
 # What may come after a dropped figure and its own interval for the cut to
 # be clean: nothing, the study citation, or a further clause that names its
-# own figure ("and LDL by 0.4 mmol/L"). Anything else (a p value, "which
+# own figure ("and LDL by 0.4 mmol/L"), each maybe after a plain qualifier
+# (_QUALIFIER). Anything else (a p value, "which
 # was ...", a second interval, "for weight", "points") may belong to the
 # figure that stays, so the sentence is left whole.
 _CLEAN_END = re.compile(r"\s*(?:\(\s*Stud(?:y|ies)\b[^()]*\))?\s*[.!?]?\s*$", re.IGNORECASE)
@@ -3288,12 +3289,36 @@ _NAMED_CLAUSE = re.compile(
 _NOT_A_NAME = re.compile(r"\b(?:CIs?|confidence|credible|significan\w*|p\s*[<=>])", re.IGNORECASE)
 
 
-def _clean_cut(sent: str, end: int) -> bool:
-    """Whether what follows a dropped figure and its interval lets it go cleanly."""
+# A plain qualifier of group, time or comparison holds for both figures and
+# may follow the dropped one: "in adults", "over 12 weeks", "compared with
+# placebo". No commas or brackets in it, and nothing statistical.
+_QUALIFIER = re.compile(r"(?:\s*,)?\s+(?:in|among|across|over|after|at|during|within|compared with|compared to|"
+                        r"versus|vs\.?|relative to|than)\s+(?P<body>[^(),;]*)", re.IGNORECASE)
+_P_VALUE = re.compile(r"\bp\s*[<=>\u2264\u2265]", re.IGNORECASE)
+
+
+def _clean_rest(sent: str, end: int) -> bool:
+    """Nothing, the study citation, or a clause naming its own figure."""
     if _CLEAN_END.match(sent, end):
         return True
     named = _NAMED_CLAUSE.match(sent, end)
     return bool(named) and not _NOT_A_NAME.search(named.group("gap"))
+
+
+def _clean_cut(sent: str, end: int) -> bool:
+    """Whether what follows a dropped figure and its interval lets it go cleanly."""
+    if _clean_rest(sent, end):
+        return True
+    qual = _QUALIFIER.match(sent, end)
+    if not qual:
+        return False
+    start = qual.start("body")
+    for k in range(start + 1, qual.end("body") + 1):
+        body = sent[start:k]
+        if _clean_rest(sent, k):
+            return not (_STATES_SIGNIFICANCE.search(body) or _P_VALUE.search(body)
+                        or _NOT_A_NAME.search(body))
+    return False
 
 
 UNITLESS_LEFT_OUT = "The size of this change is given without a unit, so it is left out here."
