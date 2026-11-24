@@ -13240,8 +13240,9 @@ t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare
 t("BRIEF E2 vinegar: the second statement names the related effect and claims no certainty it did not read",
   _e_out["effect_line"].startswith("What the studies did find: ")
   and _e_out["effect_line"].endswith(". The abstracts we read do not rate how certain this is"), _e_out["effect_line"])
-t("BRIEF E4 vinegar: about 22 mg per dL is said once in what the page prints",
-  sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1, _e_lists)
+t("BRIEF E4 vinegar: the recorded pair says about 22 mg per dL once in 'says', and the evidence list "
+  "drops its repeat", sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in (_e_bdo.get("says") or [])) == 1
+  and not any("22 mg" in x for x in _e_bdo.get("evidence") or []), _e_lists)
 t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
   _e_s1["indirect"] == "Measures body weight, not blood sugar control"
   and _e_s1["contribution"] == "Indirect context: measures body weight, not blood sugar control.", _e_s1)
@@ -13283,13 +13284,15 @@ t("BRIEF E2: no second statement for a claim rated true, or one promising nothin
   and _e_ev.effect_statement("false", "", "Glucose fell.", [], []) == "")
 # E4: repeated figures, and different ones.
 _e_e, _e_b = _e_bd.one_figure_once("", {"says": ["Weight fell by 2 kg (Study 1)."],
-                                        "evidence": ["Weight dropped by 2 kg in adults (Study 1).",
+                                        "evidence": ["Weight dropped by 2 kg (Study 1).",
                                                      "Weight fell by 3 kg (Study 1).",
                                                      "Weight fell by 2 kg (Study 2)."],
-                                        "effect_size": "Weight fell 2 kg (Study 1). That is a small change."}, 3)
-t("BRIEF E4: the same number, unit and study is said once; other numbers or studies stay",
+                                        "effect_size": "Weight fell 2 kg (Study 1). That is a small change.",
+                                        "effect": {"label": "small"}}, 3)
+t("BRIEF E4: a sentence saying nothing new goes; other numbers or studies stay; no field is left empty",
   _e_b["evidence"] == ["Weight fell by 3 kg (Study 1).", "Weight fell by 2 kg (Study 2)."]
-  and _e_b["effect_size"] == "" and _e_b.get("effect") is None, _e_b)
+  and _e_b["effect_size"] == "Weight fell 2 kg (Study 1). That is a small change."
+  and _e_b["effect"] == {"label": "small"}, _e_b)
 # An untouched check: no flag, no change to the prompt, no lookup sent.
 _e_un = [_e_study("60", _E_REV), _e_study("61", _E_RCT)]
 _e_calls.clear()
@@ -13605,6 +13608,40 @@ t("BRIEF E2r B4: a claim outcome in two families, or a conclusion naming the cla
                            ["(cinnamon) AND (diabetes)"]) is None)
 t("BRIEF E2r B4: the table is general: between 12 and 20 families",
   12 <= len(_e_ev.OUTCOME_FAMILIES) <= 20 and len({n for n, _ in _e_ev.OUTCOME_FAMILIES}) == len(_e_ev.OUTCOME_FAMILIES))
+
+# Brief E2 repair, B5 and M5: a sentence goes only when it says nothing new.
+_b5_e, _b5_b = _e_bd.one_figure_once(
+    "People took 500 mg a day (Study 1).",
+    {"says": [], "evidence": ["At 500 mg a day, two people had liver injury (Study 1).",
+                              "In 3 trials, glucose fell (Study 2).", "In 3 trials, bleeding rose (Study 2).",
+                              "Weight fell by 2 to 4 kg (Study 1).", "The mean loss was 4 kg (Study 1).",
+                              "Glucose dropped in 3 trials (Study 2). That is a real change."],
+     "effect_size": "The mean loss was 4 kg (Study 1).", "effect": {"label": "small"},
+     "unknowns": "Nobody followed people beyond 12 weeks (Study 1).",
+     "parts": [{"label": "Dose", "assessment": "People took 500 mg a day (Study 1)."}],
+     "strength": "In 3 trials (Study 2).", "applies_to": "Adults taking 500 mg a day (Study 1)."}, 3)
+t("BRIEF E2r B5: a harm, a second outcome and a mean after a range are kept",
+  _b5_b["evidence"][:5] == ["At 500 mg a day, two people had liver injury (Study 1).",
+                            "In 3 trials, glucose fell (Study 2).", "In 3 trials, bleeding rose (Study 2).",
+                            "Weight fell by 2 to 4 kg (Study 1).", "The mean loss was 4 kg (Study 1)."], _b5_b)
+t("BRIEF E2r B5: a true repeat goes with its 'That is' translation (dropped and fell read as one)",
+  len(_b5_b["evidence"]) == 5, _b5_b["evidence"])
+t("BRIEF E2r M5: unknowns, assessments and other fields are never read; no field or item is left empty",
+  _b5_b["unknowns"] == "Nobody followed people beyond 12 weeks (Study 1)."
+  and _b5_b["parts"][0]["assessment"] == "People took 500 mg a day (Study 1)."
+  and _b5_b["strength"] == "In 3 trials (Study 2)." and _b5_b["applies_to"].startswith("Adults")
+  and _b5_b["effect_size"] == "The mean loss was 4 kg (Study 1)." and _b5_b["effect"] == {"label": "small"}
+  and all(_b5_b["evidence"]), _b5_b)
+_b5_e2, _b5_b2 = _e_bd.one_figure_once("", {"says": ["Glucose fell by 3 mg (Study 2).",
+                                                     "Glucose dropped by 3 mg (Study 2). That is small.",
+                                                     "Glucose fell by 3 mg (Study 2). Bleeding rose."]}, 3)
+t("BRIEF E2r B5: within an item only the repeated sentence goes, and its translation with it",
+  _b5_b2["says"] == ["Glucose fell by 3 mg (Study 2).", "Bleeding rose."], _b5_b2["says"])
+_b5_e3, _b5_b3 = _e_bd.one_figure_once("Glucose fell by 3 mg (Study 2).", {"says": [], "evidence": [
+    "Glucose dropped by 3 mg (Study 2)."], "effect_size": "Glucose decreased by 3 mg (Study 2)."}, 3)
+t("BRIEF E2r B5: a list or field that would be left empty keeps its sentence",
+  _b5_b3["evidence"] == ["Glucose dropped by 3 mg (Study 2)."]
+  and _b5_b3["effect_size"] == "Glucose decreased by 3 mg (Study 2).", _b5_b3)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

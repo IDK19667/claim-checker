@@ -4083,18 +4083,28 @@ def cited_pmids(bd: dict, studies: list[dict]) -> list[str]:
 # ---------------------------------------------------------------------
 # One figure, once (E4).
 #
-# The audit found "about 22 mg per dL" five times on one answer: in the
-# explanation, twice in "What the research says", in the evidence list and
-# in the effect box. Within everything a reader sees for one answer, a
-# sentence that gives only figures already given (the same number, the same
-# word after it, the same studies cited) says nothing new and goes; the
-# first one stays. A different number, unit or study is kept. Code only.
+# The audit found "about 22 mg per dL" five times on one answer. A later
+# sentence goes only when it says nothing new: it cites the same study or
+# studies as an earlier kept sentence, every number with its unit in it
+# appears in that sentence, and so does every content word (stop words and
+# the citation aside; fell, dropped, decreased, declined, lowered and
+# reduced count as one word, rose and increased as one). Only the
+# explanation and the figure lists ("says", "evidence", "effect_size") are
+# read: never still_open, unknowns, safety lines, harms, assessments or
+# titles. No item or field is ever left empty: its sentences then stay. A
+# "That is ..." sentence stays or goes with the sentence before it.
 # ---------------------------------------------------------------------
 
 _FIGURE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)*)\s*(%|[A-Za-z]+)?")
-# The order the page prints the fields in (display.breakdown_view).
-FIGURE_ORDER = ("says", "parts", "evidence", "effect_size", "strength",
-                "applies_to", "not_applies_to", "unknowns")
+# The figure lists, in the order the page prints them (display.breakdown_view).
+FIGURE_ORDER = ("says", "evidence", "effect_size")
+_SAME_WORD = {w: "fell" for w in ("fell", "dropped", "decreased", "declined", "lowered", "reduced",
+                                  "fall", "drop", "decrease", "decline", "reduction")}
+_SAME_WORD.update({w: "rose" for w in ("rose", "increased", "rise", "increase")})
+_STOP_WORDS = frozenset(
+    "a an the of in on at by to for with and or was were is are be been being that this these those it its "
+    "as from than per into over after during their there which who whom".split())
+_WORD = re.compile(r"[a-z]+(?:'[a-z]+)?")
 
 
 def figures_of(sentence: str, count: int) -> set:
@@ -4111,58 +4121,73 @@ def figures_of(sentence: str, count: int) -> set:
     return out
 
 
-def one_figure_once(explanation: str, bd, count: int):
-    """(explanation, breakdown) with every sentence dropped whose figures
-    were all given before it, in the page's reading order. The explanation
-    leads when the breakdown has no "says" (the page prints it there)."""
-    seen = set()
+def content_words(sentence: str) -> set:
+    """The words of a sentence that carry meaning, the citation left out and
+    the verbs of a fall, or of a rise, read as one."""
+    text = _REF.sub(" ", str(sentence or "")).lower()
+    return {_SAME_WORD.get(w, w) for w in _WORD.findall(text) if w not in _STOP_WORDS}
 
-    def keep(text):
+
+def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:
+    """Whether an earlier kept sentence already says all of this one."""
+    cites = frozenset(refs(sentence, count))
+    figs = {(n, u) for n, u, _ in figures_of(sentence, count)}
+    if not cites or not figs:
+        return False
+    words = content_words(sentence)
+    for earlier in kept:
+        if (frozenset(refs(earlier, count)) == cites
+                and figs <= {(n, u) for n, u, _ in figures_of(earlier, count)}
+                and words <= content_words(earlier)):
+            return True
+    return False
+
+
+def one_figure_once(explanation: str, bd, count: int):
+    """(explanation, breakdown) with every sentence dropped that says nothing
+    an earlier kept one did not, in the page's reading order. The
+    explanation leads when the breakdown has no "says" (the page prints it
+    there); beside a "says" it is read within itself only."""
+    def keep(text, kept):
+        parts = sentences(text or "")
         out, dropped = [], False
-        for s in sentences(text or ""):
-            figs = figures_of(s, count)
-            # A "That is ..." sentence travels with the figure it explains.
-            if (figs and figs <= seen) or (dropped and s.startswith("That ")):
-                dropped = True
+        for s in parts:
+            if s.startswith("That "):
+                # A translation goes with a dropped figure, and stays with a kept one.
+                if not dropped:
+                    out.append(s)
                 continue
-            dropped = False
-            seen.update(figs)
-            out.append(s)
+            dropped = _says_nothing_new(s, kept + out, count)
+            if not dropped:
+                out.append(s)
+        kept.extend(out)
         return " ".join(out)
 
+    def keep_field(text, kept):
+        # A field is never left empty: its sentences then stay.
+        said = keep(text, kept)
+        return said if said or not str(text or "").strip() else text
+
     has_says = isinstance(bd, dict) and any(str(x or "").strip() for x in bd.get("says") or [])
-    if not has_says:
-        explanation = keep(explanation)
+    seen = []
+    explanation = keep_field(explanation, seen if not has_says else [])
     if not isinstance(bd, dict):
         return explanation, bd
     out = dict(bd)
     for key in FIGURE_ORDER:
         value = out.get(key)
-        if key == "parts" and isinstance(value, list):
-            out[key] = [{**p, "assessment": keep(p.get("assessment"))} if isinstance(p, dict) else p
-                        for p in value]
-        elif key == "says" and isinstance(value, list):
+        if key == "says" and isinstance(value, list):
             # The who-line is printed under "Who and what this applies to",
-            # not here, so it is left as it is and gives nothing as seen.
-            out[key] = [v if str(v or "").lower().startswith(WHO_LABEL.strip().lower()) else keep(v)
-                        for v in value]
-            out[key] = [v for v in out[key] if v]
+            # not here, so it is left as it is.
+            items = [v if str(v or "").lower().startswith(WHO_LABEL.strip().lower()) else keep(v, seen)
+                     for v in value]
         elif isinstance(value, list):
-            out[key] = [k for k in (keep(v) for v in value) if k]
-        elif isinstance(value, str) and value:
-            out[key] = keep(value)
-    if bd.get("effect_size") and not out.get("effect_size"):
-        out["effect"] = None
-    if has_says:
-        # The explanation travels beside "says" (share text, ClaimReview):
-        # within itself it says each figure once.
-        inner = set()
-        kept = []
-        for s in sentences(explanation or ""):
-            figs = figures_of(s, count)
-            if figs and figs <= inner:
-                continue
-            inner.update(figs)
-            kept.append(s)
-        explanation = " ".join(kept)
+            items = [keep(v, seen) if isinstance(v, str) else v for v in value]
+        else:
+            if isinstance(value, str) and value:
+                out[key] = keep_field(value, seen)
+            continue
+        # A list is never left empty: it then stays as it was.
+        items = [v for v in items if v]
+        out[key] = items if items or not any(value) else value
     return explanation, out
