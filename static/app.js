@@ -465,32 +465,66 @@ function deskNamed(data) {
   return [...out].sort((a, b) => a - b);
 }
 
-const backBtn = '<button class="back" type="button" data-go="1">Back to the short answer</button>';
-const eyebrow = (stops, name, text) =>
-  `<p class="eyebrow"${name === "Open" ? ' id="h-open"' : ""}><b aria-hidden="true">${pad2(stops.indexOf(name) + 1)}</b>${escapeHtml(text)}</p>`;
+// An abstract is quoted from PubMed as it is, except that an en or an em dash shows as a plain hyphen; nothing else in
+// it changes (templates/index.html does the same with replace)
+const plainDashes = (t) => String(t).replace(/[\u2013\u2014]/g, "-");
 
-function studyRowHtml(s, i, key, named) {
+// A section's name, by what it holds (Answer, Studies, Explanation, Limitations); the template's eyebrow is the same.
+const eyebrow = (stops, name, text) =>
+  `<p class="eyebrow" id="e-${name.toLowerCase()}">${escapeHtml(text)}</p>`;
+
+// Under each study, one labelled line: what it adds (templates/index.html study_lines is the same). For a study set
+// aside or kept as background, why it was not counted (studyWhy, the words of its group); else the engine's own
+// contribution; else the study's
+// own conclusion from the breakdown; else its design and who was studied. Never an empty label. Then its caution,
+// and Indirect context with its reason.
+// The effect size line without the sentences the second statement (effect_line) already quotes, or "" when
+// none is left. Without a statement it is the line as it was. The Jinja in "What the evidence shows" is the same.
+function effectOnce(eff, line) {
+  eff = String(eff || ""); line = String(line || "");
+  if (!eff || !line) return eff;
+  return eff.split(". ").map((u) => u.trim()).filter((u) => u && !line.includes(u.replace(/\.+$/, "")))
+    .map((u) => (/[.?!]$/.test(u) ? u : u + ".")).join(" ");
+}
+
+function studyLines(s, n, bv) {
+  const said = bv && bv.concluded ? String((bv.concluded.find((c) => Number(c.n) === n) || {}).said || "").trim() : "";
+  let text;
+  if (s.off_topic || (s.background && !s.cited_in_verdict)) text = studyWhy(s);
+  else if (String(s.contribution || "").trim()) text = String(s.contribution).trim();
+  else if (said) text = said;
+  else text = typeInfo(s.publication_types).label + "." + (s.population ? ` Studied in: ${s.population}.` : "");
+  const caution = String(s.caution || "").trim(), iwhy = String(s.indirect_reason || s.indirect_why || "").trim();
+  return `<p class="contrib"><b class="lbl">What this study contributes</b> ${escapeHtml(text)}</p>`
+    + (caution ? `<p class="caution">${escapeHtml(caution)}</p>` : "")
+    + (s.indirect && iwhy ? `<p class="indirect"><b class="lbl">Indirect context</b> ${escapeHtml(iwhy)}</p>` : "");
+}
+
+function studyRowHtml(s, i, key, named, bv) {
   const n = i + 1, d = typeInfo(s.publication_types).label;
   const title = String(s.title || "");
-  const href = safeHref(s.url);
-  const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "")
-    + (href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="Study ${n} on PubMed, opens in a new tab">PubMed ${escapeHtml(s.pmid)}</a>` : `PubMed ${escapeHtml(s.pmid)}`);
+  // the study's own address, else its PubMed page from the number, so Open PubMed is on every real study
+  const href = safeHref(s.url) || (/^\d+$/.test(String(s.pmid || "")) ? `https://pubmed.ncbi.nlm.nih.gov/${s.pmid}/` : null);
+  const abs = plainDashes(String(s.abstract || "").trim());
+  const go = `<button type="button" class="act quiet study-go" aria-label="How often study ${n} is cited, and the studies next to it">Citations and related studies</button>`;
+  const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "") + `PubMed ${escapeHtml(s.pmid)}`;
   return `<li class="row" id="row-${n}" data-n="${n}" data-i="${i}">`
     + `<button class="row-head" type="button" aria-pressed="false" aria-label="Study ${n}, ${escapeHtml(d)}: ${escapeHtml(title.replace(/\n/g, " ").replace(/^\.+|\.+$/g, ""))}. Lift its sheet">`
     + `<span class="num">${n}</span><span class="design">${escapeHtml(d)}</span><span class="ttl">${escapeHtml(title)}</span></button>`
-    + `<div class="body"><p class="src">${src}</p>`
-    + `<button class="row-more" type="button" aria-expanded="false" aria-controls="more-${n}" aria-label="Details for study ${n}">Details</button>`
-    + `<div class="more" id="more-${n}" hidden><p class="status${key !== "relied" ? " no" : ""}">${VERDICT_SETS[key]}</p>`
-    + (named.includes(n) ? '<p class="named">The answer names it</p>' : "")
-    + `<p class="note why">${escapeHtml(studyWhy(s))}</p>`
-    + `<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">Deep dive</button></div></div></li>`;
+    + `<div class="body"><p class="src">${src}</p>${studyLines(s, n, bv)}<div class="acts">`
+    + (abs
+      ? `<details class="abs" id="abs-${n}"><summary class="act"><span class="shut">Read abstract</span><span class="open">Hide abstract</span><span class="sr-only"> of study ${n}</span></summary>`
+        + `<div class="abs-body"><p class="abs-text">${escapeHtml(abs)}</p>${go}</div></details>`
+      : `<p class="noabs">No abstract on PubMed</p>${go}`)
+    + (href ? `<a class="act pm" href="${escapeHtml(href)}" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study ${n}, opens in a new tab</span></a>` : "")
+    + `</div></div></li>`;
 }
 
 // Stop 4, Weighed: every study as a row, in its group; the first group open.
 function weighedHtml(data) {
   const studies = data.studies || [];
   if (!studies.length) return "";
-  const stops = deskStops(data), g = sourceGroups(studies), named = deskNamed(data);
+  const stops = deskStops(data), g = sourceGroups(studies), named = deskNamed(data), bv = breakdownView(data);
   const groups = [
     ["relied", "Relied on for the verdict", g.cited],
     ["back", (data.evidence && data.evidence.background_label) || "Background only: animal and lab studies", g.back],
@@ -499,11 +533,11 @@ function weighedHtml(data) {
   ].filter((x) => x[2].length);
   const rows = groups.map(([key, title, idx], gi) =>
     `<h3 class="grp-h"><button class="grp-btn" type="button" aria-label="${escapeHtml(title)} (${idx.length})" aria-controls="grp-${key}" aria-expanded="${gi === 0}">${escapeHtml(title)} (${idx.length})</button></h3>`
-    + `<ul class="rows" id="grp-${key}"${gi ? " hidden" : ""}>${idx.map((i) => studyRowHtml(studies[i], i, key, named)).join("")}</ul>`).join("");
+    + `<ul class="rows" id="grp-${key}"${gi ? " hidden" : ""}>${idx.map((i) => studyRowHtml(studies[i], i, key, named, bv)).join("")}</ul>`).join("");
   return `<section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort"><div class="cap left"><div class="inner wide">`
-    + `<div class="panel list" id="list-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Weighed", "Weighed, not counted")}`
+    + `<div class="panel list" id="list-panel" tabindex="-1">`
     + `<h2 id="h-sort">Which studies the answer rests on</h2>`
-    + `<p class="intro">Pick a study to lift its sheet. Tap a sheet on the desk to find it here. Details open its abstract, how often it has been cited and the studies next to it.</p>`
+    + `<p class="intro">Each study has its PubMed page, and its abstract where PubMed has one.</p>`
     + `<div id="rows">${rows}</div></div></div></div></section>`;
 }
 
@@ -527,16 +561,20 @@ function researchHtml(data) {
       h += `<details class="said-wrap" data-fold><summary>The claim, part by part (${bv.parts.length})</summary>`
         + bv.parts.map((x) => `<p class="intro part-claim">${escapeHtml(x.part)}</p>${p("part-take", x.assessment)}`).join("") + "</details>";
     }
-    const pts = bv.evidence.length + (bv.effect_size ? 1 : 0);
+    // the effect size once: what the second statement already quotes is left out (the Jinja is the same)
+    const eff = effectOnce(bv.effect_size, data.effect_line);
+    const pts = bv.evidence.length + (eff ? 1 : 0);
     if (pts) {
       h += `<details class="said-wrap" data-fold><summary>What the evidence shows (${pts} ${pts === 1 ? "point" : "points"})</summary>`
         + `<ul class="ev">${bv.evidence.map((x) => `<li>${deskRefs(x, n)}</li>`).join("")}</ul>`
-        + (bv.effect_size ? `<p class="effect"><b>How big the effect is.</b> <span>${deskRefs(bv.effect_size, n)}</span></p>` : "")
+        + (eff ? `<p class="effect"><b>How big the effect is.</b> <span>${deskRefs(eff, n)}</span></p>` : "")
         + "</details>";
     }
   }
   const ev = String(data.evidence_line || "").replace(/^\.+|\.+$/g, "");
   h += `<h3>How sure, and why</h3><p class="evline">${escapeHtml(data.evidence_line ? ev + "." : confidenceLine(data))}</p>`;
+  // Brief E: what the studies found instead, for an absolute claim (evidence.effect_statement).
+  if (data.effect_line) h += `<p class="evline effect-line">${escapeHtml(String(data.effect_line).replace(/\.+$/, ""))}.</p>`;
   if (bv && bv.strength) h += p("strength", bv.strength);
   if (bv && bv.unknowns) h += p("unknowns", bv.unknowns);
   if (bv && bv.concluded.length) {
@@ -553,8 +591,8 @@ function researchHtml(data) {
   const rb = restsByDesign(studies);
   if (rb.length) h += `<ul class="rests">${rb.map((d) => `<li><b>${d.count}</b><span>${deskRefs(`${d.label} (${d.refs})`, n)}</span></li>`).join("")}</ul>`;
   if (bv) h += '<p class="fine">Every sentence written for this breakdown names the studies it rests on. Figures are copied from the abstracts and rounded for reading, never worked out from them.</p>';
-  return `<section class="stop long" id="s5" data-stop="Research" aria-labelledby="h-research"><div class="cap left"><div class="inner wider">`
-    + `<div class="panel read" id="read-panel" tabindex="-1">${backBtn}${eyebrow(stops, "Research", "The thorough answer")}`
+  return `<section class="stop long" id="s5" data-stop="Research" aria-labelledby="e-research"><div class="cap left"><div class="inner wider">`
+    + `<div class="panel read" id="read-panel" tabindex="-1">${eyebrow(stops, "Research", "Explanation")}`
     + `<h2 id="h-research">What the research says</h2><div id="research">${h}</div></div></div></div></section>`;
 }
 
@@ -581,9 +619,6 @@ function renderResult(data, replay, keepTyped) {
   showTyped(data.typed, data.typed_reason);
   $("confidence").textContent = confidenceLine(data);
   $("doctor-line").hidden = false;
-  // the cue row on top of the bar, as the server prints it on the Answer stop; desk.js names it for each stop after
-  $("cue-label").textContent = "Scroll down: what was read";
-  $("cue").hidden = false;
   resultSection.dataset.verdict = data.verdict;
   if (userTapped && navigator.vibrate && !matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate(25);
   // Stop 3: what was read.
@@ -614,7 +649,6 @@ function renderResult(data, replay, keepTyped) {
   $("s5")?.remove();
   $("s6").insertAdjacentHTML("beforebegin", stops45);
   // Stop 6: what is still open, the search, and the ways on.
-  $("h-open").innerHTML = `<b aria-hidden="true">${pad2(stops.indexOf("Open") + 1)}</b>Still open`;
   $("still-open").hidden = !data.still_open;
   $("still-open-text").textContent = data.still_open || "";
   $("query").textContent = usedQuery;
@@ -974,7 +1008,29 @@ async function check(claim) {
 
 $("cancel-btn")?.addEventListener("click", () => { if (controller) controller.abort(); });
 
-form.addEventListener("submit", (e) => { e.preventDefault(); check(input.value); });
+// A press of "Check the research" first paints the button pressed (a colour change, one cheap frame); the check itself,
+// which relays out the page and the scene, starts in the next task after that frame. Without this the first thing a
+// desktop reader saw came one long frame (about 180 ms) after the press. A finger needs no wait: a touch paints :active
+// at touchstart, before the click, and holding the check back there lets the new sheets' faces paint before the answer
+// is on screen (check 21), so a touch press checks at once.
+let submitQueued = false, touchAt = -1e9;
+addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") touchAt = performance.now(); }, { capture: true, passive: true });
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (submitQueued) return;
+  const claim = input.value;
+  submitQueued = true; submitBtn.classList.add("pressed");
+  const go = () => { if (!submitQueued) return; submitQueued = false; submitBtn.classList.remove("pressed"); check(claim); };
+  if (performance.now() - touchAt < 1000) { go(); return; }
+  requestAnimationFrame(() => setTimeout(go, 0));
+  setTimeout(go, 150);   // a hidden page runs no frames
+});
+// Enter on a primary button presses it too (the pointer and Space already have :active); Enter and Space both
+// end the press on key up or when focus leaves, except a queued submit, which ends its own.
+const primaryBtn = (el) => el && el.classList && el.classList.contains("btn") && !el.classList.contains("ghost") && !el.classList.contains("quiet");
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && primaryBtn(e.target)) e.target.classList.add("pressed"); });
+const unpress = (e) => { if (primaryBtn(e.target) && !(e.target === submitBtn && submitQueued)) e.target.classList.remove("pressed"); };
+document.addEventListener("keyup", unpress); document.addEventListener("focusout", unpress);
 
 
 // When an on-screen keyboard opens it shrinks the visual viewport. If that
@@ -1098,6 +1154,11 @@ input.addEventListener("keydown", (e) => {
     e.preventDefault(); moveSuggest(e.key === "ArrowDown" ? 1 : -1); return;
   }
   if (open && e.key === "Escape") { e.preventDefault(); closeSuggest(); return; }
+  // End (or Home) with the caret already there moves nothing in the box, so the browser hands the key to the page and
+  // scrolls it to its end a moment later, under the reader's words (on a phone in 3D a check's page is a little taller
+  // than the screen). In the claim box these keys only ever move the caret.
+  if ((e.key === "End" || e.key === "Home") && !e.ctrlKey && !e.metaKey && input.selectionStart === input.selectionEnd
+      && input.selectionEnd === (e.key === "End" ? input.value.length : 0)) { e.preventDefault(); return; }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     if (open && suggestAt >= 0) { takeSuggest(suggestAt); return; }
@@ -1269,13 +1330,16 @@ async function copyText(str) {
 // shared text and on the shared image. Mirrored in og.py for the link preview.
 const DOCTOR_LINE = "Check important health decisions with a doctor.";
 
+// The site's own tokens (style.css, desk.css); the cloths are DESIGN.md's c-*.
+// No accent: the pen ring and the thread's knots take the words' colour, as the
+// page's pen does. The plank has no token of its own: the nearest is --desk-card-ink.
 const CARD = {
-  deep: "#0f1211", deepLine: "#2a302d", onDeep: "#eceee9", onDeep2: "#9ea6a1", onDeep3: "#7d8580", sage: "#9fc3b0",
-  paper: "#f1f2ee", ink: "#121514", ink2: "#434a46", ink3: "#5d6560", rule: "#d9dcd5", wood: "#2b2622",
-  cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#434a46" },
-  // each cloth at 18% on the paper, mixed in oklab as style.css mixes it: the
-  // wash inside a book that was read but not used
-  wash: { strong: "#cdd5cf", human: "#cdd2d6", lab: "#d4d1d3", weak: "#dcd3cc", retracted: "#cfd1cd" },
+  deep: "#12110f", deepLine: "#302f2c", onDeep: "#f0ede9", onDeep2: "#a6a4a0", onDeep3: "#85837f", pen: "#f0ede9",
+  paper: "#f4f2ef", ink: "#151412", ink2: "#4a4845", ink3: "#65625f", rule: "#dddad7", wood: "#262522",
+  cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#4a4845" },
+  // each cloth at 18% on the paper, mixed in oklab: the wash inside a book
+  // that was read but not used
+  wash: { strong: "#cfd5cf", human: "#d0d2d6", lab: "#d6d1d4", weak: "#dfd3cd", retracted: "#d3d1ce" },
 };
 
 function wrapLines(ctx, text, maxWidth, maxLines) {
@@ -1319,7 +1383,7 @@ async function renderShareCard(r) {
                        `500 20px ${MONO}`].map((f) => document.fonts.load(f)));
   } catch {}
   ctx.textBaseline = "alphabetic";
-  const knot = (y) => { ctx.fillStyle = CARD.sage; ctx.beginPath(); ctx.arc(pad + 4, y, 5, 0, Math.PI * 2); ctx.fill(); };
+  const knot = (y) => { ctx.fillStyle = CARD.pen; ctx.beginPath(); ctx.arc(pad + 4, y, 5, 0, Math.PI * 2); ctx.fill(); };
 
   // Night: the masthead, the claim, the verdict.
   const n = r.studies.length, cited = r.studies.filter((s) => s.cited_in_verdict).length;
@@ -1358,7 +1422,7 @@ async function renderShareCard(r) {
   ctx.font = `350 ${vSize}px ${DISPLAY}`; ctx.fillStyle = CARD.onDeep;
   ctx.fillText(label, inset, verdictY);
   const vw = ctx.measureText(label).width;
-  ctx.strokeStyle = CARD.sage; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+  ctx.strokeStyle = CARD.pen; ctx.lineWidth = 2.5; ctx.lineCap = "round";
   ctx.stroke(ringPath(inset - 22, verdictY - vSize * 0.92, vw + 44, vSize * 1.22));
   ctx.font = `400 26px ${BODY}`; ctx.fillStyle = CARD.onDeep2;
   ctx.fillText(DOCTOR_LINE, inset, doctorY);
@@ -1626,7 +1690,7 @@ function openStudy(i) {
 
   const abs = $("sheet-abstract");
   if (s.abstract) {
-    abs.innerHTML = s.abstract.split("\n").map((para) => {
+    abs.innerHTML = plainDashes(s.abstract).split("\n").map((para) => {
       const m = para.match(/^([A-Z][A-Za-z /&-]{2,40}):\s(.*)$/s);
       return m ? `<p><b>${escapeHtml(m[1])}</b>${escapeHtml(m[2])}</p>` : `<p>${escapeHtml(para)}</p>`;
     }).join("");

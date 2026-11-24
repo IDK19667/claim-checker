@@ -1,14 +1,15 @@
 """Draw Evident's icon: a short shelf of books on the night ground, in the
-cloths the site uses, the relied-on one marked with a sage dot. Pure
+cloths of the desk's own books, the relied-on one marked with a paper dot. Pure
 geometry, so the SVG and the PNGs are the same drawing and no font is
 needed at 16px."""
 import pathlib, sys
 from PIL import Image, ImageDraw
 
 OUT = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent / "static" / "icons"
-DEEP, ON_DEEP, SAGE = "#0f1211", "#eceee9", "#9fc3b0"
-CLOTH = {"strong": "#35594c", "human": "#3a4e6b", "lab": "#5a4760", "weak": "#7e4f3d"}
-FOIL = (241, 242, 238, 115)  # --foil at 0.45
+# No mint, blue or purple: the scene's cloths (desk3d.js books) and paper white for the mark.
+DEEP, ON_DEEP, MARK = "#12110f", "#f0ede9", "#f4f2ef"
+CLOTH = {"strong": "#cfc6b2", "human": "#3a2f26", "lab": "#2a2d29", "weak": "#7e4f3d"}
+FOIL = (244, 242, 239, 115)  # paper at 0.45
 
 # On a 512 canvas. Books 72 wide, 14 apart, standing on a light rule.
 W, GAP, BASE_Y, BASE_H = 72, 14, 420, 16
@@ -38,14 +39,14 @@ def svg():
             parts.append(f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" fill="{c}"/>')
         elif kind == "foil":
             x1, y1, x2, y2 = a
-            parts.append(f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" fill="#f1f2ee" fill-opacity="0.45"/>')
+            parts.append(f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" fill="#f4f2ef" fill-opacity="0.45"/>')
         else:
             cx, cy, r = a
-            parts.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="{r}" fill="{SAGE}"/>')
+            parts.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="{r}" fill="{MARK}"/>')
     body = "\n  ".join(parts)
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">\n'
             '  <!-- A short shelf on the night ground: each book\'s cloth is a kind of\n'
-            '       study, and the sage dot marks the one a verdict relied on. -->\n'
+            '       study, and the paper dot marks the one a verdict relied on. -->\n'
             f'  {body}\n</svg>\n')
 
 
@@ -72,7 +73,7 @@ def png(size, scale=1.0):
         else:
             cx, cy, r = a
             rr = r * scale * k
-            d.ellipse([tx(cx) - rr, tx(cy) - rr, tx(cx) + rr, tx(cy) + rr], fill=SAGE)
+            d.ellipse([tx(cx) - rr, tx(cy) - rr, tx(cx) + rr, tx(cy) + rr], fill=MARK)
     im = Image.alpha_composite(im, over).convert("RGB")
     return im.resize((size, size), Image.LANCZOS)
 

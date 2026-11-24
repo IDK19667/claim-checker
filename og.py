@@ -3,7 +3,7 @@ Server-rendered share/preview card (1200x630 PNG) for a checked claim, so a
 shared link unfurls in iMessage/WhatsApp/Slack with the verdict itself.
 
 Same page as the app: the claim and its verdict on the night ground, joined
-by the thread, the verdict ringed in sage; the short answer below on the day
+by the thread, the verdict ringed in the words' colour; the short answer below on the day
 stock. The ring and the ground are identical on every verdict: nothing here
 is coloured by what the verdict was.
 """
@@ -20,17 +20,19 @@ BODY = os.path.join(FONTS, "InstrumentSans.ttf")
 MONO = os.path.join(FONTS, "IBMPlexMono-Medium.ttf")
 
 W, H = 1200, 630
-DEEP = "#0f1211"
-DEEP_LINE = "#2a302d"
-ON_DEEP = "#eceee9"
-ON_DEEP_2 = "#9ea6a1"
-ON_DEEP_3 = "#7d8580"
-SAGE = "#9fc3b0"
-PAPER = "#f1f2ee"
-INK = "#121514"
-INK_2 = "#434a46"
-INK_3 = "#5d6560"
-RULE = "#d9dcd5"
+# The site's own tokens (static/style.css, static/desk.css). No accent: the pen
+# ring and the thread's knots take the words' colour, as the page's pen does.
+DEEP = "#12110f"
+DEEP_LINE = "#302f2c"
+ON_DEEP = "#f0ede9"
+ON_DEEP_2 = "#a6a4a0"
+ON_DEEP_3 = "#85837f"
+PEN = ON_DEEP
+PAPER = "#f4f2ef"
+INK = "#151412"
+INK_2 = "#4a4845"
+INK_3 = "#65625f"
+RULE = "#dddad7"
 # The page's own words for the four verdicts (app.VERDICT_LABELS).
 LABELS = {"true": "Likely true", "false": "Likely false", "complicated": "It's complicated",
           "insufficient": "Not enough evidence"}
@@ -82,7 +84,7 @@ def _ring(im: Image.Image, box: tuple, width: float) -> Image.Image:
             px = u**3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t**3 * p3[0]
             py = u**3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t**3 * p3[1]
             pts.append(((x + px / 300 * w) * k, (y + py / 80 * h) * k))
-    ImageDraw.Draw(layer).line(pts, fill=SAGE, width=round(width * k), joint="curve")
+    ImageDraw.Draw(layer).line(pts, fill=PEN, width=round(width * k), joint="curve")
     layer = layer.resize(im.size, Image.LANCZOS)
     return Image.alpha_composite(im.convert("RGBA"), layer)
 
@@ -192,7 +194,7 @@ def _render(claim: str, verdict: str, tldr: str, study_count: int, receipt: tupl
     # The thread, from the claim's knot down to the verdict's.
     d.rectangle([pad + 3, claim_label_y + 10, pad + 4, verdict_label_y + 10], fill=DEEP_LINE)
     for ky in (claim_label_y + 10, verdict_label_y + 10):
-        d.ellipse([pad, ky - 4, pad + 8, ky + 4], fill=SAGE)
+        d.ellipse([pad, ky - 4, pad + 8, ky + 4], fill=PEN)
     d.text((inset, claim_label_y), "The claim you checked", font=small, fill=ON_DEEP_3)
     y = claim_y
     for line in claim_lines:

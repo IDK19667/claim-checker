@@ -64,7 +64,7 @@ app does not need one.
   (`scripts/qa.mjs` fails on drift).
 - Three faces only: Bricolage Grotesque for display, Instrument Sans for
   reading, IBM Plex Mono for labels and counts. No fourth family.
-- One accent (sage on the night, green by day). The book cloths say what
+- No accent colour: links are the words' colour with an underline. The book cloths say what
   kind of study a study is, never anything else. Verdicts are not
   colour-coded: the words on the card carry them, identically.
 - 3px corners. No cards as a default container, no shadows on content,

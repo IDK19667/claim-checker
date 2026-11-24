@@ -942,6 +942,42 @@ def _client_ip() -> str:
     return request.remote_addr or "unknown"
 
 
+def _contribution(s: dict, relied: bool) -> str:
+    """E5: one sentence for "What this study contributes": its authors'
+    conclusion cut to a sentence, else its design and who it was run in.
+    Empty when the record gives nothing beyond the design's name ("A study.",
+    "A meta-analysis." carry nothing: brief E3 N12)."""
+    why_aside = s.get("off_topic") or evidence.withdrawn(s) or (
+        evidence.background_why(s) if s.get("background") else "")
+    if why_aside and not relied:
+        return f"Set aside: {str(why_aside).rstrip('.')}."
+    said = breakdown_mod.sentences(evidence.conclusion(s) or "")
+    if said:
+        one = said[0].strip()
+        return one if one.endswith((".", "!", "?")) else one + "."
+    design = (evidence.strongest_label(s.get("publication_types")) or "study").lower()
+    who = evidence.population(s)
+    a = "An" if design[:1] in "aeiou" else "A"
+    # Never a population the record does not give, and never the design's
+    # name alone.
+    return f"{a} {design} in {who}." if who else ""
+
+
+def _study_extra(s: dict, cited: set) -> dict:
+    """The E1, E3 and E5 fields of one study, on the way out, so a saved
+    answer gets them too. `indirect` is always false and its reason empty
+    (brief E4 D1: the keyword mark left this release); the fields stay so
+    page code keeps working and a later label read by the model can fill
+    them."""
+    return {
+        "cites_retracted": evidence.cited_retracted(s) or None,
+        "caution": evidence.retraction_caution(s) or None,
+        "indirect": False,
+        "indirect_reason": "",
+        "contribution": _contribution(s, s.get("pmid") in cited),
+    }
+
+
 def _study_payload(s: dict, cited: set) -> dict:
     return {
         "pmid": s["pmid"],
@@ -954,7 +990,7 @@ def _study_payload(s: dict, cited: set) -> dict:
         # The study's tier, classified once on the server from PubMed's own
         # publication types, so both renderers draw the same evidence field
         # instead of each deciding for itself.
-        "tier": evidence.classify(s["publication_types"]),
+        "tier": evidence.shown_tier(s),
         # The most informative type name, for the one line the evidence
         # chart shows on hover and focus. Same reason as the tier.
         "type_label": evidence.strongest_label(s["publication_types"]),
@@ -983,6 +1019,36 @@ def _study_payload(s: dict, cited: set) -> dict:
         "background": bool(s.get("background")) or bool(evidence.withdrawn(s)),
         "background_why": evidence.withdrawn(s) or evidence.background_why(s),
     }
+
+
+def _flag_retractions(studies):
+    """evidence.flag_retracted_citations with the one PubMed lookup. The
+    lookup runs on the search pool and only returns ids; the flags are put
+    on the studies here, on the request thread, and only from a result that
+    came in time. A late result is thrown away and never touches them."""
+    ids = evidence.retraction_lookup_ids(studies)
+    found = _retraction_result(pubmed._ahead(pubmed.retracted_among, ids)) if ids else set()
+
+    def lookup(_ids):
+        if found is None:
+            raise LookupError("the retraction lookup could not be made")
+        return found
+    return evidence.flag_retracted_citations(studies, lookup if ids else None)
+
+
+# How long a check waits for that lookup before going on without it: the
+# one constant, pubmed.RETRACTION_LOOKUP_SECONDS (4), for everything.
+RETRACTION_WAIT = pubmed.RETRACTION_LOOKUP_SECONDS
+
+
+def _retraction_result(future):
+    """The retracted ids the lookup found, or None when it failed or ran
+    late. A lookup that fails or runs late never stops the check."""
+    try:
+        return set(future.result(timeout=RETRACTION_WAIT) or ())
+    except Exception:  # noqa: BLE001 — the check goes on without it
+        app.logger.warning("The retraction lookup could not be made")
+        return None
 
 
 def _next_steps_safe(claim, query_used, studies, cited):
@@ -1104,6 +1170,64 @@ def _listed(v: dict) -> dict:
     return v
 
 
+def _retracted_review_rules(explanation, breakdown, studies, cited):
+    """E1c(iv), as brief E3 N1 has it: a flag never removes a sentence. When
+    a review relied on cites a retracted study, one sentence naming it
+    (evidence.retracted_review_sentence) stands once at the end of the
+    explanation, and once at the end of each breakdown list ("says",
+    "evidence") holding a sentence that cites such a review. Untouched when
+    no relied-on study is flagged."""
+    count = len(studies or [])
+    flagged = [i + 1 for i, s in enumerate(studies or [])
+               if evidence.cited_retracted(s) and s.get("pmid") in cited]
+    if not flagged:
+        return explanation, breakdown
+    said = evidence.retracted_review_sentence(flagged)
+    if said not in (explanation or ""):
+        explanation = f"{(explanation or '').strip()} {said}".strip()
+    if isinstance(breakdown, dict):
+        bd = dict(breakdown)
+        for key in ("says", "evidence"):
+            items = bd.get(key)
+            if not isinstance(items, list):
+                continue
+            named = sorted({n for x in items if isinstance(x, str)
+                            for n in breakdown_mod.refs(x, count) if n in flagged})
+            if named:
+                line = evidence.retracted_review_sentence(named)
+                if line not in items:
+                    bd[key] = [*items, line]
+        breakdown = bd
+    return explanation, breakdown
+
+
+def _statement_two(verdict_value, absolute, breakdown, studies, cited, outcome, queries) -> str:
+    """Statement 2 (evidence.effect_statement), or "". Its sentence is the
+    first effect sentence citing a relied-on study in people (the flag
+    ignored), preferring one that names the claim's outcome family when that
+    family is recognised; a sentence travels with its "That ..." translation,
+    and is tidied like any model prose."""
+    text = breakdown.get("effect_size") if isinstance(breakdown, dict) else ""
+    if not absolute or verdict_value not in evidence.STATEMENT_TWO_VERDICTS or not isinstance(text, str):
+        return ""
+    count = len(studies or [])
+    units = []
+    for x in breakdown_mod.sentences(text):
+        if x.startswith("That ") and units:
+            units[-1] = f"{units[-1]} {x}"
+        else:
+            units.append(x)
+    good = [u for u in units
+            if any(studies[n - 1].get("pmid") in cited and evidence.human_evidence(studies[n - 1])
+                   for n in breakdown_mod.refs(u, count))]
+    if not good:
+        return ""
+    family = evidence.outcome_families(evidence.claim_outcome_terms(queries))
+    pick = next((u for u in good if len(family) == 1 and evidence.names_family(u, family[0])), good[0])
+    return evidence.effect_statement(verdict_value, absolute, verdict.tidy_prose(pick, 4000), studies, cited,
+                                     outcome, cites=breakdown_mod.refs(pick, count))
+
+
 def _check_response(claim, search_query, verdict_value, tldr, explanation, cited_studies, studies,
                     base_url, cached_at=None, broadened=False, still_open="", breakdown=None,
                     typed=None, typed_reason=None):
@@ -1199,9 +1323,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     if withheld:
         breakdown = breakdown_mod.unsized(breakdown)
 
-    def line_for(stamp):
+    def line_for(stamp, pool=None):
+        pool = studies if pool is None else pool
         lines = [evidence.evidence_line(
-            stamp, studies, used, claim, sized,
+            stamp, pool, used, claim, sized,
             breakdown_mod.absolute_claim(claim),
             bool(breakdown_mod._COMPARATIVE_CLAIM.search(claim or "")),
             outcome, stated=stated, withheld=withheld) for used in readings]
@@ -1246,6 +1371,34 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         breakdown = breakdown_mod.effect_alone(breakdown)
     # A "That is ..." sentence travels with the figure it explains.
     breakdown = breakdown_mod.translations_follow(breakdown, withheld)
+    queries = [search_query] + [q for q in [pubmed.broaden_query(search_query or "")] if q]
+    # No bare strength word (E2): the line a reader sees says whether the
+    # studies support the claim, then how sure or on what kind of study; a
+    # second line says what they found instead for an absolute claim. The
+    # old line above still set every cap; only its wording is replaced.
+    absolute = breakdown_mod.absolute_claim(claim)
+    if evidence_line == verdict.GUIDANCE_LINE:
+        shown_line, effect_line = evidence_line, ""
+    else:
+        effect_line = _statement_two(verdict_value, absolute, breakdown, studies, cited, outcome, queries)
+        # Certainty is said once: beside a second statement, or when a flagged
+        # review lowered the level (no review states that certainty), the
+        # first statement ends with its basis (brief E3 N2, N9).
+        flag_lowered = False
+        if any(evidence.cited_retracted(s) for s in studies or []):
+            plain = [{k: v for k, v in s.items() if k != "cites_retracted"} for s in studies]
+            rank = lambda line: (evidence._rank(evidence.line_certainty(line))
+                                 if evidence.line_certainty(line) else len(evidence.CERTAINTY_LEVELS))
+            flag_lowered = rank(evidence_line) < rank(line_for(verdict_value, plain))
+        shown_line = evidence.claim_statement(verdict_value, evidence_line, studies, cited, absolute,
+                                              basis_only=bool(effect_line) or flag_lowered)
+    # One figure, once (E4): within everything a reader sees, a sentence
+    # that only repeats figures already given goes. Code only.
+    explanation, breakdown = breakdown_mod.one_figure_once(explanation, breakdown, len(studies or []))
+    # A review relied on cites a retracted paper (E1): the answer names it,
+    # once in the explanation and once in each list citing it. Last, so no
+    # rule above can take the sentence out; a flag never removes a sentence.
+    explanation, breakdown = _retracted_review_rules(explanation, breakdown, studies, cited)
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in
@@ -1294,11 +1447,15 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # What that evidence shows about the claim, for the line under the
         # chart: "Strong evidence of a small effect, not a cure". The level
         # word alone described the designs, not the claim.
-        "evidence_line": evidence_line,
+        "evidence_line": shown_line,
+        # What the studies found instead, for a claim promising something
+        # absolute that is not rated true (evidence.effect_statement), or "".
+        "effect_line": effect_line,
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
-        "studies": [_study_payload(s, cited) for s in _as_shown(studies)],
+        "studies": [{**_study_payload(s, cited), **_study_extra(s, cited)}
+                    for s in _as_shown(studies)],
     }
     if safety:
         response["safety"] = safety
@@ -1335,7 +1492,7 @@ def _outcome_group(search_query) -> str:
 def _log_check_safe(claim, verdict_value, explanation, studies, cached=False):
     """Logging is a side effect; it must never sink a check the user waited for."""
     try:
-        db.log_check(claim, verdict_value, explanation, studies, cached=cached)
+        db.log_check(claim, verdict_value, explanation, _without_references(studies), cached=cached)
     except sqlite3.Error as e:
         app.logger.warning("Could not log check: %s", e)
 
@@ -1512,6 +1669,9 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         if kept:
             yield from_cache(kept, typed, reason, claim if typed else None)
             return
+        # Which reviews cite a paper later retracted: one lookup at most, and
+        # none when a saved answer is served above.
+        retraction_check = _flag_retractions(studies)
         if studies:
             yield {"stage": "weigh"}
         result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
@@ -1573,6 +1733,8 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
         result["cited_studies"], studies, base_url, broadened=broadened,
         still_open=result.get("still_open", ""), breakdown=result.get("breakdown"), typed=typed,
         typed_reason=reason)
+    if retraction_check:
+        response["retraction_check"] = retraction_check
     try:
         yield {"stage": "done", "result": response}
     finally:
@@ -1580,9 +1742,18 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             _save_and_log(claim, query_used, *kept)
 
 
+def _without_references(studies):
+    """The studies as they are stored: a review's reference list (up to
+    hundreds of ids) is read once, for the retraction check, and never
+    stored or sent. Its result, cites_retracted, is kept."""
+    return [{k: v for k, v in s.items() if k != "references"} if isinstance(s, dict) else s
+            for s in studies or []]
+
+
 def _save_and_log(claim, query_used, result, studies):
     """Save a fresh answer and log the check. A write that fails is logged
     and never reaches the reader, who may already have the answer."""
+    studies = _without_references(studies)
     try:
         db.put_cached_verdict(claim, query_used, result["verdict"], result["explanation"],
                               result["cited_studies"], studies, tldr=result["tldr"],

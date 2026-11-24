@@ -33,9 +33,10 @@
       "Journal Article"
      ],
      "authors": [],
-     "abstract": "",
+     "abstract": "BACKGROUND: Fixture text, invented for the layout tests. Creatine is a common supplement.\nMETHODS: Pooled analysis of randomized trials in adults.\nRESULTS: Memory scores rose a little with creatine.\nCONCLUSIONS: Creatine may help memory a little.",
      "data_banks": null,
-     "url": "https://pubmed.ncbi.nlm.nih.gov/35984306/"
+     "url": "https://pubmed.ncbi.nlm.nih.gov/35984306/",
+     "contribution": "Fixture: the largest pooled estimate of the effect on memory."
     },
     {
      "pmid": "39070254",
@@ -47,9 +48,10 @@
       "Systematic Review"
      ],
      "authors": [],
-     "abstract": "",
+     "abstract": "Fixture text, invented for the layout tests. A trial of creatine and attention in young adults found no clear change in reaction time.",
      "data_banks": null,
-     "url": "https://pubmed.ncbi.nlm.nih.gov/39070254/"
+     "url": "https://pubmed.ncbi.nlm.nih.gov/39070254/",
+     "caution": "Fixture: a small trial, so one result can swing the estimate."
     },
     {
      "pmid": "29704637",
@@ -61,7 +63,7 @@
       "Systematic Review"
      ],
      "authors": [],
-     "abstract": "",
+     "abstract": "Fixture text, invented for the layout tests. A review of creatine in older adults. In conclusion, fixture text: creatine may help memory in older adults, but the trials were small.",
      "data_banks": null,
      "url": "https://pubmed.ncbi.nlm.nih.gov/29704637/"
     },
@@ -752,6 +754,198 @@
    "cited": [],
    "studies": [],
    "breakdown": null
+  },
+  {
+   "claim": "Drinking two cups of green tea every morning lowers blood pressure and protects the heart in adults over sixty who also have type 2 diabetes",
+   "search_query": "Drinking two cups of green tea every morning lowers blood pressure and protects the heart in adults over sixty who also have type 2 diabetes",
+   "verdict": "complicated",
+   "tldr": "Green tea may lower blood pressure a little in some adults, but the trials in older people with diabetes are few, small and short, so the benefit is unclear.",
+   "explanation": "Pooled trials found fish oil lowers blood pressure by a few points (Studies 1, 3). The drop was larger in people who already had high blood pressure (Studies 2, 5), and small in healthy volunteers (Study 4).",
+   "still_open": "Whether the small drop lasts beyond a year, and what dose matters.",
+   "cited": [
+    "90000001",
+    "90000002",
+    "90000003",
+    "90000004",
+    "90000005"
+   ],
+   "studies": [
+    {
+     "pmid": "90000001",
+     "title": "Omega-3 fatty acids and blood pressure: a meta-analysis of randomized trials.",
+     "journal": "Journal of Hypertension",
+     "year": "2022",
+     "publication_types": [
+      "Meta-Analysis",
+      "Systematic Review",
+      "Journal Article"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000001/"
+    },
+    {
+     "pmid": "90000002",
+     "title": "Fish oil supplements in adults with high blood pressure: a randomized controlled trial.",
+     "journal": "Hypertension",
+     "year": "2021",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000002/",
+     "population": "adults with high blood pressure"
+    },
+    {
+     "pmid": "90000003",
+     "title": "A systematic review of marine omega-3 intake and blood pressure.",
+     "journal": "Nutrients",
+     "year": "2020",
+     "publication_types": [
+      "Journal Article",
+      "Systematic Review"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000003/"
+    },
+    {
+     "pmid": "90000004",
+     "title": "Twelve weeks of fish oil and resting blood pressure in healthy volunteers.",
+     "journal": "Clinical Nutrition",
+     "year": "2019",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000004/"
+    },
+    {
+     "pmid": "90000005",
+     "title": "Dose and response: omega-3 and blood pressure in older adults.",
+     "journal": "Age and Ageing",
+     "year": "2023",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000005/",
+     "population": "older adults"
+    },
+    {
+     "pmid": "90000006",
+     "title": "Diet, fish intake and blood pressure in a national cohort.",
+     "journal": "European Heart Journal",
+     "year": "2018",
+     "publication_types": [
+      "Journal Article",
+      "Observational Study"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000006/"
+    },
+    {
+     "pmid": "90000007",
+     "title": "Omega-3 fatty acids in heart health: a review.",
+     "journal": "Nutrition Reviews",
+     "year": "2017",
+     "publication_types": [
+      "Journal Article",
+      "Review"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000007/"
+    },
+    {
+     "pmid": "90000008",
+     "title": "Fish oil and triglycerides after heart surgery.",
+     "journal": "Annals of Surgery",
+     "year": "2016",
+     "publication_types": [
+      "Journal Article",
+      "Randomized Controlled Trial"
+     ],
+     "authors": [
+      "A. Author",
+      "B. Author",
+      "C. Author"
+     ],
+     "abstract": "Background: The question was tested in adults.\nMethods: Participants were assigned to the supplement or a placebo.\nResults: The change was small.\nConclusions: More trials are needed.",
+     "data_banks": null,
+     "url": "https://pubmed.ncbi.nlm.nih.gov/90000008/",
+     "off_topic": "tests triglycerides after surgery, not blood pressure"
+    }
+   ],
+   "breakdown": {
+    "says": [
+     "Pooled trials found fish oil lowers blood pressure by a few points (Studies 1, 3).",
+     "The drop was larger in people who already had high blood pressure (Studies 2, 5), and small in healthy volunteers (Study 4)."
+    ],
+    "parts": [],
+    "evidence": [
+     "A pooled review found a small fall in systolic pressure (Study 1)."
+    ],
+    "effect_size": "",
+    "applies_to": "",
+    "not_applies_to": "",
+    "unknowns": "",
+    "strength": "Several trials and two pooled reviews agree on a small effect (Studies 1, 2, 3).",
+    "populations": [],
+    "concluded": [
+     {
+      "n": 1,
+      "said": "Omega-3 supplementation reduced systolic blood pressure modestly."
+     },
+     {
+      "n": 2,
+      "said": "Fish oil lowered blood pressure in hypertensive adults."
+     }
+    ],
+    "contents": ""
+   }
   },
   {
    "claim": "Escaping test <b>bold</b> & \"quoted\" <img src=x onerror=\"document.title='pwned'\">",

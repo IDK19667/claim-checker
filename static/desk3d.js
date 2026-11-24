@@ -26,7 +26,7 @@ window.__evidentDesk3d = function (O) {
     renderer.shadowMap.autoUpdate = false;
 
     var scene = new T.Scene();
-    scene.background = new T.Color(0x0a0c0b);
+    scene.background = new T.Color(0x0c0b0a);
     var camera = new T.PerspectiveCamera(36, 1, 0.05, 20);
 
     // ---- painted textures -----------------------------------------------------
@@ -67,26 +67,26 @@ window.__evidentDesk3d = function (O) {
       var x = c.getContext("2d"), m = 92;
       x.setTransform(scale, 0, 0, scale, 0, 0);
       paperBase(x, SW, SH, "#f2eee4", 0.16 + seed * 0.08);
-      x.fillStyle = "#5b605c"; x.font = '500 22px "IBM Plex Mono"'; x.textBaseline = "alphabetic";
+      x.fillStyle = "#615e5b"; x.font = '500 22px "IBM Plex Mono"'; x.textBaseline = "alphabetic";
       var j = s.journal.toUpperCase(); if (j.length > 44) j = j.slice(0, 43).trim() + ".";
       x.fillText(j, m, 128);
       x.textAlign = "right"; x.fillText(s.year, SW - m, 128); x.textAlign = "left";
-      x.fillStyle = "#2b2f2d"; x.fillRect(m, 150, SW - 2 * m, 3);
+      x.fillStyle = "#2f2e2b"; x.fillRect(m, 150, SW - 2 * m, 3);
       var size = 50, lines;
       do { x.font = '600 ' + size + 'px "Instrument Sans"'; lines = wrap(x, s.title, SW - 2 * m); size -= 2; } while (lines.length > 6 && size > 30);
-      x.fillStyle = "#151816"; var y = 236, lh = size * 1.22;
+      x.fillStyle = "#181715"; var y = 236, lh = size * 1.22;
       lines.forEach(function (l) { x.fillText(l, m, y); y += lh; });
       y += 14;
-      x.font = '500 21px "IBM Plex Mono"'; x.fillStyle = "#5b605c";
+      x.font = '500 21px "IBM Plex Mono"'; x.fillStyle = "#615e5b";
       x.fillText((s.design || "Study").toUpperCase() + "   PMID " + s.pmid, m, y); y += 40;
       x.fillStyle = "#cfcabe"; x.fillRect(m, y, SW - 2 * m, 2); y += 52;
-      x.font = '500 20px "IBM Plex Mono"'; x.fillStyle = "#6a6e6a"; x.fillText("ABSTRACT", m, y); y += 36;
+      x.font = '500 20px "IBM Plex Mono"'; x.fillStyle = "#6f6c69"; x.fillText("ABSTRACT", m, y); y += 36;
       var col = (SW - 2 * m - 44) / 2, cx = [m, m + col + 44], ci = 0, top = y, r = seed * 997;
       while (ci < 2) {
         var para = 4 + Math.floor(hash(r, y) * 6);
         for (var k = 0; k < para && y < SH - 130; k++) {
           var wl = (k === para - 1) ? 0.3 + hash(r + k, y) * 0.5 : 0.9 + hash(y, r + k) * 0.1;
-          x.fillStyle = "rgba(38,40,38," + (0.22 + hash(k, y) * 0.08) + ")";
+          x.fillStyle = "rgba(40,39,37," + (0.22 + hash(k, y) * 0.08) + ")";
           var px = cx[ci], rest = col * wl;
           while (rest > 8) { var w = Math.min(rest, 22 + hash(px, y + r) * 70); x.fillRect(px, y - 9, w - 7, 10); px += w; rest -= w; }
           y += 24;
@@ -94,7 +94,7 @@ window.__evidentDesk3d = function (O) {
         y += 18;
         if (y >= SH - 130) { ci++; y = top; }
       }
-      if (s.n) { x.font = '500 18px "IBM Plex Mono"'; x.fillStyle = "#7a7e7a"; x.textAlign = "center"; x.fillText(String(s.n), SW / 2, SH - 62); x.textAlign = "left"; }
+      if (s.n) { x.font = '500 18px "IBM Plex Mono"'; x.fillStyle = "#7f7c79"; x.textAlign = "center"; x.fillText(String(s.n), SW / 2, SH - 62); x.textAlign = "left"; }
     }
     var CW = 1600, CH = 960, VERDICT_W = 1420;
     function cardWords() { return { claim: O.txt(document, "#claim-echo"), verdict: O.txt(document, "#stamp"), tldr: O.txt(document, "#tldr") }; }
@@ -118,23 +118,23 @@ window.__evidentDesk3d = function (O) {
       var x = c.getContext("2d");
       x.setTransform(scale || 1, 0, 0, scale || 1, 0, 0);
       paperBase(x, CW, CH, "#efe6d1", 0.14);
-      x.fillStyle = "rgba(44,88,72,0.42)"; x.fillRect(0, 150, CW, 3);
-      x.fillStyle = "rgba(70,96,110,0.16)";
+      x.fillStyle = "rgba(64,62,59,0.42)"; x.fillRect(0, 150, CW, 3);
+      x.fillStyle = "rgba(90,84,74,0.16)";
       for (var y = 150 + 66; y < CH - 20; y += 66) x.fillRect(0, y, CW, 2);
       if (!withVerdict) return;
       var m = 96, words = cardWords();
-      x.fillStyle = "#4b514d"; x.font = '500 32px "IBM Plex Mono"'; x.fillText("THE CLAIM YOU CHECKED", m, 108);
+      x.fillStyle = "#514f4c"; x.font = '500 32px "IBM Plex Mono"'; x.fillText("THE CLAIM YOU CHECKED", m, 108);
       // the claim: one line at 54, two at 46 or 40, three at 34 and then an ellipsis (layoutCard sets the HTML card the same way)
       var cf = fitClaim(function (size) { x.font = '400 ' + size + 'px "Instrument Sans"'; return wrap(x, "“" + words.claim + "”", CW - 2 * m).length; });
-      x.fillStyle = "#262a28"; x.font = '400 ' + cf.size + 'px "Instrument Sans"';
+      x.fillStyle = "#2a2926"; x.font = '400 ' + cf.size + 'px "Instrument Sans"';
       var cl = clampLines(x, wrap(x, "“" + words.claim + "”", CW - 2 * m), cf.lines, CW - 2 * m), cy = claimBase(cf);
       cl.forEach(function (l) { x.fillText(l, m, cy); cy += cf.size * 1.2; });
       // the verdict: 200 units, smaller when the words are wider than the card
-      x.fillStyle = "#0f1110"; x.font = '700 200px "Bricolage Grotesque"';
+      x.fillStyle = "#12100f"; x.font = '700 200px "Bricolage Grotesque"';
       var vw = x.measureText(words.verdict).width, vs = vw > VERDICT_W ? Math.floor(200 * VERDICT_W / vw) : 200;
       x.font = '700 ' + vs + 'px "Bricolage Grotesque"'; x.fillText(words.verdict, m - 10, 490);
       var tf = fitTldr(function (size) { x.font = '400 ' + size + 'px "Instrument Sans"'; return wrap(x, words.tldr, CW - 2 * m).length; });
-      x.fillStyle = "#222624"; x.font = '400 ' + tf.size + 'px "Instrument Sans"';
+      x.fillStyle = "#262522"; x.font = '400 ' + tf.size + 'px "Instrument Sans"';
       var ls = clampLines(x, wrap(x, words.tldr, CW - 2 * m), tf.lines, CW - 2 * m), yy = 618;
       ls.forEach(function (l) { x.fillText(l, m, yy); yy += tf.lh; });
     }
@@ -211,7 +211,7 @@ window.__evidentDesk3d = function (O) {
       leg.position.set(p[0] * (DESK_W / 2 - 0.06), -0.4, p[1] * (DESK_D / 2 - 0.06)); scene.add(leg);
     });
     var apron = new T.Mesh(new T.BoxGeometry(DESK_W - 0.1, 0.08, DESK_D - 0.1), darkWood); apron.position.y = -0.08; scene.add(apron);
-    var wall = new T.Mesh(new T.PlaneGeometry(8, 4), new T.MeshStandardMaterial({ color: 0x3a423d, roughness: 0.96 }));
+    var wall = new T.Mesh(new T.PlaneGeometry(8, 4), new T.MeshStandardMaterial({ color: 0x413f3d, roughness: 0.96 }));
     wall.position.set(0, 0.9, -0.52); wall.receiveShadow = true; scene.add(wall);
     var floor = new T.Mesh(new T.PlaneGeometry(10, 10), new T.MeshStandardMaterial({ color: 0x141210, roughness: 0.9 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = -0.76; scene.add(floor);
@@ -256,8 +256,8 @@ window.__evidentDesk3d = function (O) {
     spot.castShadow = true; spot.shadow.mapSize.set(2048, 2048); spot.shadow.bias = -0.00025; spot.shadow.normalBias = 0.012;
     spot.shadow.camera.near = 0.05; spot.shadow.camera.far = 2.6; spot.shadow.focus = 1;
     var leak = new T.PointLight(0xffc68c, LEAK_I, 0, 2); leak.position.copy(HEAD).add(new T.Vector3(0.03, 0.16, -0.1)); scene.add(leak);
-    var hemi = new T.HemisphereLight(0x9fb3ad, 0x1a120c, 0.12); scene.add(hemi);
-    var cool = new T.DirectionalLight(0x8fa6b4, 0.06); cool.position.set(2, 1.2, 1.5); scene.add(cool);
+    var hemi = new T.HemisphereLight(0xb2aeaa, 0x1a120c, 0.12); scene.add(hemi);
+    var cool = new T.DirectionalLight(0xa6a29e, 0.06); cool.position.set(2, 1.2, 1.5); scene.add(cool);
     var LAMP_I = spot.intensity, LAMP_ANGLE = spot.angle;
     var key = new T.SpotLight(0xfff1de, 0, 0, 0.32, 1, 2);
     key.position.set(0.12, 0.42, 0.62); key.target.position.set(-0.1, 0.047, 0.13); scene.add(key); scene.add(key.target);
@@ -297,7 +297,7 @@ window.__evidentDesk3d = function (O) {
     // ---- the pencil --------------------------------------------------------------
     var pencil = new T.Group();
     var pLen = 0.165, pR = 0.0037;
-    var paint = new T.MeshStandardMaterial({ color: 0x1d3a2e, roughness: 0.42, metalness: 0.05 });
+    var paint = new T.MeshStandardMaterial({ color: 0x343331, roughness: 0.42, metalness: 0.05 });
     var body = new T.Mesh(new T.CylinderGeometry(pR, pR, pLen, 6), paint); body.castShadow = true; body.receiveShadow = true; pencil.add(body);
     var cedar = new T.Mesh(new T.CylinderGeometry(0.0011, pR * 0.93, 0.02, 6), new T.MeshStandardMaterial({ color: 0xc9a27a, roughness: 0.8 }));
     cedar.position.y = pLen / 2 + 0.01; cedar.castShadow = true; pencil.add(cedar);
@@ -322,7 +322,16 @@ window.__evidentDesk3d = function (O) {
         var px = pos.getX(v) / (PW / 2), pz = pos.getZ(v) / (PH / 2);
         pos.setY(v, pos.getY(v) + 0.0005 * px * px + cA * Math.pow(Math.max(0, px * corner * 0.5 + pz * 0.5), 4));
       }
-      g.computeVertexNormals(); return g;
+      g.computeVertexNormals();
+      // the four edges share one material: drawn as one group, so a sheet is three draw calls, not six (and three in
+      // the shadow pass). The same triangles with the same materials
+      var idx = g.index.array, gs = g.groups, order = [0, 1, 4, 5, 2, 3], out = new (idx.constructor)(idx.length), at = 0, ng = [];
+      order.forEach(function (gi) { var q = gs[gi]; out.set(idx.subarray(q.start, q.start + q.count), at);
+        var mi = gi === 2 ? 2 : gi === 3 ? 3 : 0, last = ng[ng.length - 1];
+        if (last && last.materialIndex === mi) last.count += q.count; else ng.push({ start: at, count: q.count, materialIndex: mi });
+        at += q.count; });
+      g.setIndex(new T.BufferAttribute(out, 1)); g.clearGroups(); ng.forEach(function (q) { g.addGroup(q.start, q.count, q.materialIndex); });
+      return g;
     }
     var sheets = [], STACK = new T.Vector3(-0.46, 0, 0.0), GAP = 0.0004, sheetGen = 0;
     // one blank paper face for every sheet until its own face is painted, after the first frame
@@ -379,11 +388,24 @@ window.__evidentDesk3d = function (O) {
     var cardSide = new T.MeshStandardMaterial({ color: 0xe6dcc6, roughness: 0.9 });
     var cbMap = tex(cBlank), cvMap = cbMap, csMap = cbMap, cardPainted = false;
     // the large faces are painted only when the check runs: the standing face, then the printed verdict
-    function paintCardFaces() {
+    // later: a result landing on a desk already drawing paints the large plain standing face in its own task after the
+    // answer is on screen (it is only seen once the card has settled, under the HTML words; until then the card stands
+    // with its printed face)
+    var standGen = 0;
+    function paintCardFaces(later) {
       if (cardPainted) return; cardPainted = true;
-      var cStand = cnv(CW * 1.6, CH * 1.6); paintCard(cStand, false, 1.6); csMap = tex(cStand);
       paintVerdictFace();
-      vMat.map = csMap; vMat.emissiveMap = csMap; vMat.needsUpdate = true;
+      var gen = ++standGen;
+      // the plain face carries no words of the result: painted once, kept for every answer after
+      function stand() {
+        if (gen !== standGen || !cardPainted || csMap !== cbMap) return;
+        var cStand = cnv(CW * 1.6, CH * 1.6); paintCard(cStand, false, 1.6); var old = csMap; csMap = tex(cStand);
+        if (vMat.map === old) { vMat.map = csMap; vMat.emissiveMap = csMap; }
+        O.wake();
+      }
+      if (later) setTimeout(stand, 0); else stand();
+      if (!later) { vMat.map = csMap; vMat.emissiveMap = csMap; }
+      vMat.needsUpdate = true;
     }
     // the printed faces use the page's web fonts; one painted before they arrived is painted again when they do
     var cvFontOk = false;
@@ -445,10 +467,25 @@ window.__evidentDesk3d = function (O) {
     var EXPO = [1, 1, 1, 0.92, 0.42, 0.72];
     // the framings of the stops the page prints (before a check, all six: the camera rests on the first)
     var K, AK, EK, CL = 5, posCurve, tgtCurve, AIMS6 = AIMS, EXPO6 = EXPO;
+    // ---- the phone's first screen (L2): before a check, on a phone held upright, the first stop is the desktop's own
+    // view of the lamp, fitted by fitPhoneHome() into the band between the strip and the words (desk.css --lamp-band)
+    var PHONE_HOME = { p: KEYS.wide[0].p.clone(), t: KEYS.wide[0].t.clone(), fov: 36, fx: 0.5, fy: 0.3 };
+    // what must show in the band: the base, the stem and elbow, the shade, and the pool of lit wood under it
+    // (the shade as its crown, knuckle and rim all round, so its top keeps clear air under the strip)
+    var LAMP_PTS = [V(-0.74, 0, -0.38), V(-0.54, 0, -0.2), V(-0.66, 0.46, -0.36), V(-0.27, 0.71, 0), V(-0.37, 0.6, 0), V(-0.17, 0.6, 0),
+      V(-0.27, 0.6, -0.1), V(-0.27, 0.6, 0.1), V(-0.27, 0.67, -0.07), V(-0.27, 0.67, 0.07), V(0.12, 0, 0.12), V(-0.3, 0, 0.32), V(-0.62, 0, 0.18)];
+    function phoneHome() { return !O.root.classList.contains("checked") && stage.clientWidth <= 760 && stage.clientHeight > stage.clientWidth; }
+    // a fresh check leaves the phone's first screen from where the camera is: the lamp band's view stays the first key
+    // until the glide out has come to rest on a later stop, so no frame shows the old first-stop framing (q10-rel)
+    var leaveHome = false;
     function pickKeys() {
       var tall = (stage.clientWidth / Math.max(1, stage.clientHeight)) < 0.85, all = KEYS[tall ? "tall" : "wide"];
       var cams = O.checked && O.NS > 1 ? O.STOPS.map(function (s) { return s.cam; }) : [0, 1, 2, 3, 4, 5];
+      var wasHome = !!K && K[0] === PHONE_HOME;
       K = cams.map(function (c) { return all[c]; }); AK = cams.map(function (c) { return AIMS6[c]; }); EK = cams.map(function (c) { return EXPO6[c]; });
+      if (phoneHome()) leaveHome = false;
+      else if (wasHome && O.root.classList.contains("checked") && stage.clientWidth <= 760 && stage.clientHeight > stage.clientWidth) leaveHome = true;
+      if (phoneHome() || leaveHome) { K[0] = PHONE_HOME; AK[0] = AIMS6[0]; EK[0] = EXPO6[0]; }
       CL = K.length - 1;
       posCurve = new T.CatmullRomCurve3(K.map(function (k) { return k.p; }), false, "centripetal");
       tgtCurve = new T.CatmullRomCurve3(K.map(function (k) { return k.t; }), false, "centripetal");
@@ -485,10 +522,10 @@ window.__evidentDesk3d = function (O) {
       var w = stage.clientWidth, h = stage.clientHeight;
       if (keepsPicture(w, h, d)) { stage.style.height = H + "px"; return; }
       DPR_CAP = d; dpr = DPR_CAP;
-      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr);
+      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr); forceDraw = true;
       camera.aspect = W / H; pickKeys(); O.layout(); cardKey = ""; shadowDirty = true; O.wake();
     }
-    var frameTimes = [];
+    var frameTimes = [], slowFrames = [];
     function adaptMoving(ft) {
       // one very slow moving frame is enough to drop to ratio 1 for the rest of the move (the still picture is redrawn at full ratio)
       if (ft > 120 && dpr > 1) { dpr = 1; frameTimes = []; return; }
@@ -617,14 +654,17 @@ window.__evidentDesk3d = function (O) {
     }
     function frame(now) {
       raf = 0;
+      var fStart = performance.now();
       // slow frames take bigger steps, so a slow machine settles in a few frames, not dozens
       var ft = now - last, dt = wasMoving ? Math.min(1, ft / 1000) : 1 / 60; last = now;
       if (O.tween) O.tween(now);
       var P = O.rawProgress();
       if (O.reduce.matches) Ps = Math.round(P);
       else Ps += (P - Ps) * (1 - Math.exp(-dt * 4.2));
-      if (wasMoving) O.slowGl = ft > 350;
       if (O.slowGl || Math.abs(P - Ps) < 0.0015) Ps = P;
+      // at rest on a later stop's key, or anywhere past the second stop, the picture does not depend on the first key,
+      // so it can return to the result's own
+      if (leaveHome && Ps === P && (P >= 2 || (P >= 1 && Math.abs(P - Math.round(P)) < 1e-6))) { leaveHome = false; pickKeys(); }
 
       var hp = O.reduce.matches ? Math.round(P) : hold(Ps), u = CL ? hp / CL : 0;
       posCurve.getPoint(u, camera.position); var tg = tgtCurve.getPoint(u);
@@ -653,8 +693,17 @@ window.__evidentDesk3d = function (O) {
       var sig = casterSig();
       if (shadowDirty || sig !== lastSig) { renderer.shadowMap.needsUpdate = true; lastSig = sig; shadowDirty = false; }
       if (placeCard(stand, moving, ft)) moving = true;
-      renderer.render(scene, camera);
-      lastRatio = ratioNow; frames++;
+      // a frame that would draw the very picture already on the canvas (a scroll of the home page, a wake with nothing
+      // new) is not drawn again: the canvas keeps its last frame
+      var vk = viewKey();
+      if (forceDraw || vk !== drawnKey) {
+        renderer.render(scene, camera); drawnKey = vk; forceDraw = false; lastRatio = ratioNow; frames++;
+        // a machine drawing under three frames a second glides by cuts. Judged on the last three frames drawn (a moving
+        // frame by the time since the one before, a still one by its own cost), so one frame held up by other work (an
+        // answer being laid out) never turns every later glide into a cut, and a cut frame drawn quickly lifts it
+        slowFrames.push((wasMoving ? ft : performance.now() - fStart) > 350); if (slowFrames.length > 3) slowFrames.shift();
+        O.slowGl = slowFrames.length === 3 && slowFrames[0] && slowFrames[1] && slowFrames[2];
+      }
       wasMoving = moving; looping = moving;
       if (frames === 1) setTimeout(paintLazy, 0);
       if (moving) O.wake();
@@ -671,6 +720,18 @@ window.__evidentDesk3d = function (O) {
       }
     }
     var lastShadowPs = -1, readyDone = false, lastSig = "", casters = null, handed = false;
+    // everything the picture is drawn from: the camera, every caster (lastSig), the lights, the exposure, the faces and
+    // their textures, the soft shadows and the canvas size. forceDraw covers anything else (a resize clears the canvas)
+    var drawnKey = "", forceDraw = true;
+    function texKey(t) { return t ? t.id + "." + t.version : "0"; }
+    function viewKey() {
+      var e = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, out = [];
+      for (var i = 0; i < 16; i++) out.push(e[i].toFixed(6), p[i].toFixed(6));
+      sheets.forEach(function (o) { var f = o.mesh.userData.face; out.push(texKey(f.map), f.emissiveIntensity.toFixed(4), o.sh.visible ? o.sh.material.opacity.toFixed(4) : "-"); });
+      out.push(texKey(vMat.map), vMat.emissiveIntensity.toFixed(4), texKey(woodMat.map), woodMat.color.getHex(), woodMat.version, cardSh.material.opacity.toFixed(4),
+        renderer.toneMappingExposure.toFixed(5), key.intensity.toFixed(5), spot.angle.toFixed(5), ratioNow, W, H, lastSig);
+      return out.join(",");
+    }
     // the desk takes over from the early text-mode card: the page switches to its desk layout and keeps the reader on the same stop
     function handover() {
       handed = true;
@@ -795,17 +856,57 @@ window.__evidentDesk3d = function (O) {
       var y0 = Math.max(c[0][1], c[1][1]), y1 = Math.min(c[2][1], c[3][1]), x0 = Math.max(c[0][0], c[3][0]), x1 = Math.min(c[1][0], c[2][0]);
       return { x: x0, y: y0, h: y1 - y0, w: x1 - x0 };
     }
+    // L2: where a set of world points falls on screen through a framing, as a box
+    function boxAt(A, pts) {
+      var cam = camera.clone();
+      cam.position.copy(A.p); cam.fov = A.fov; cam.aspect = W / H; cam.lookAt(A.t);
+      cam.setViewOffset(W, H, (0.5 - A.fx) * W, (0.5 - A.fy) * H, W, H); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      var b = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+      pts.forEach(function (v) { var q = v.clone().project(cam), x = (q.x * 0.5 + 0.5) * W, y = (-q.y * 0.5 + 0.5) * H;
+        b.x0 = Math.min(b.x0, x); b.x1 = Math.max(b.x1, x); b.y0 = Math.min(b.y0, y); b.y1 = Math.max(b.y1, y); });
+      return b;
+    }
+    // L2: the lamp and its lit wood fill the band above the words, centred, with a margin all round
+    var s1Inner = document.querySelector("#s1 .inner");
+    function fitPhoneHome() {
+      if (K[0] !== PHONE_HOME || !s1Inner) return;
+      var strip = O.byId("strip"), top = (strip ? strip.offsetHeight : 32) + 16;
+      var bottom = s1Inner.getBoundingClientRect().top + window.scrollY - 20, wantH = bottom - top, wantW = W - 40;
+      if (wantH < 60) return;
+      for (var j = 0; j < 4; j++) {
+        var b = boxAt(PHONE_HOME, LAMP_PTS), k = Math.max((b.y1 - b.y0) / wantH, (b.x1 - b.x0) / wantW);
+        PHONE_HOME.fov = T.MathUtils.radToDeg(2 * Math.atan(Math.tan(T.MathUtils.degToRad(PHONE_HOME.fov / 2)) * k));
+        b = boxAt(PHONE_HOME, LAMP_PTS);
+        PHONE_HOME.fx += (W / 2 - (b.x0 + b.x1) / 2) / W; PHONE_HOME.fy += ((top + bottom) / 2 - (b.y0 + b.y1) / 2) / H;
+      }
+    }
     O.layoutHook = function () {
       capAnswer.style.paddingTop = "";
       if (!K) return;
+      fitPhoneHome();
       if (K[1].fx0 === undefined) K[1].fx0 = K[1].fx;
       K[1].fx = K[1].fx0;
       if (camera.aspect >= 0.85) {
+        // the card comes up to just under the strip and its label, so the answer is read before the scenery
+        if (K[1].fy0 === undefined) K[1].fy0 = K[1].fy;
+        K[1].fy = K[1].fy0;
+        if (!K[1].fov0) K[1].fov0 = K[1].fov;
+        K[1].fov = K[1].fov0;
+        var wantY = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10;
+        for (var a = 0; a < 3; a++) { var qa = cardRectAt(1); K[1].fy += (wantY - qa.y) / H; }
         // wide screens: the card keeps 32 px clear of the panel beside it (at 1280 wide the panel would otherwise reach over its right edge)
         var inner = capAnswer.querySelector(".inner"), pl = inner ? inner.getBoundingClientRect().left : W;
         for (var m = 0; m < 3; m++) { var q = cardRectAt(1), over = q.x + q.w - (pl - 32); if (over <= 0) break; K[1].fx -= Math.min(over, Math.max(0, q.x - 24)) / W; }
+        // the panel now starts level with the card: where the card still reaches it, the card is drawn smaller to fit beside it
+        var qw = cardRectAt(1), wantW = pl - 32 - 24;
+        if (qw.x + qw.w > pl - 32 && wantW > 200) {
+          for (var f = 0; f < 3; f++) { var qf = cardRectAt(1), tf = Math.tan(T.MathUtils.degToRad(K[1].fov / 2)) * qf.w / wantW; K[1].fov = T.MathUtils.radToDeg(2 * Math.atan(tf)); }
+          for (var b = 0; b < 3; b++) { var qb = cardRectAt(1); K[1].fy += (wantY - qb.y) / H; }
+          for (var m2 = 0; m2 < 3; m2++) { var q2 = cardRectAt(1), over2 = q2.x + q2.w - (pl - 32); if (over2 <= 0) break; K[1].fx -= Math.min(over2, Math.max(0, q2.x - 24)) / W; }
+        }
         cardKey = ""; prepareStandFace(); return;
       }
+      // every phone draws the card at the same width, so its words always fit it; the panel starts under its real bottom edge
       var want = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10, wantW = Math.min(W - 22, 560);
       if (!K[1].fov0) K[1].fov0 = K[1].fov;
       K[1].fov = K[1].fov0;
@@ -868,6 +969,11 @@ window.__evidentDesk3d = function (O) {
         // the smallest cards drop the label line, which the painted card already carries, before the verdict goes below 28 px
         if (vcard.scrollHeight > h + 0.5) vcard.querySelector(".lbl").style.display = "none";
         while (vcard.scrollHeight > h + 0.5 && vs > 28) { vs -= 2; v.style.fontSize = vs + "px"; }
+        // a long claim on the smallest phones gives up lines before the short answer loses any: two, then one, ending in an
+        // ellipsis (the whole claim is the page's heading and on the printed face's twin in text mode)
+        var q = vcard.querySelector(".q");
+        if (vcard.scrollHeight > h + 0.5) q.style.webkitLineClamp = "2";
+        if (vcard.scrollHeight > h + 0.5) q.style.webkitLineClamp = "1";
       }
     }
 
@@ -915,7 +1021,7 @@ window.__evidentDesk3d = function (O) {
         // true once every printed card face in use was painted after the web fonts were ready
         facesFontsOk: (!cardPainted || cvFontOk) && (!csvMap || csvFontOk) };
     };
-    O.drawImpl = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } frame(performance.now()); };
+    O.drawImpl = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } forceDraw = true; frame(performance.now()); };
     O.gotoImpl = function (n) {
       n = clamp(Math.round(n), 1, O.NS); if (n >= 2) O.check(); O.endTween(); O.clearStudy(); O.layout();
       window.scrollTo({ top: O.anchors[n - 1], behavior: "instant" }); O.prevY = O.progY = window.scrollY; O.nextWords(n - 1, window.scrollY); O.noteRest();
@@ -946,7 +1052,12 @@ window.__evidentDesk3d = function (O) {
       proj: function (x, y, z) { var v = new T.Vector3(x, y, z).project(camera); return [Math.round((v.x * 0.5 + 0.5) * W), Math.round((-v.y * 0.5 + 0.5) * H)]; }
     };
     // ---- lazy painting: the sheets' own faces after the first frame, a few at a time; the card on check ----
-    var lazyQ = null;
+    var lazyQ = null, bigTop = false;
+    // content before scenery: a result arriving on a desk already drawing paints the card's faces and one sheet, then
+    // nothing more until the verdict is on screen (verdictShown, two frames after onCheck: the frame that paints the
+    // verdict, then the first frame with it on screen); the later batches start from there
+    var lazyHold = false, lazyParked = null;
+    function verdictShown() { lazyHold = false; var s = lazyParked; lazyParked = null; if (s) setTimeout(s, 0); }
     function paintOne(o, big) {
       if (o.painted && !big) return; o.painted = true;
       var k = big ? 1 : 0.5, c = cnv(SW * k, SH * k); paintSheet(c, o.s, o.seed, k);
@@ -954,17 +1065,26 @@ window.__evidentDesk3d = function (O) {
       if (hiSlot === o) o.lowMap = t; else { f.map = t; f.emissiveMap = t; f.needsUpdate = true; }
     }
     function paintLazy() {
-      if (lazyQ) return;
+      if (lazyQ && lazyQ.gen === sheetGen) return;
       var gen = sheetGen;
-      lazyQ = sheets.slice().sort(function (a, b) { return b.rest.y - a.rest.y; });
+      var q = lazyQ = sheets.slice().sort(function (a, b) { return b.rest.y - a.rest.y; });
+      q.gen = gen;
       (function step() {
+        if (lazyQ !== q) return;
         if (gen !== sheetGen) { lazyQ = null; return; }
         var t0 = performance.now();
-        var seen = false;
-        while (lazyQ.length && performance.now() - t0 < 12) { var o = lazyQ.shift(); paintOne(o); seen = seen || o.mesh.visible; }
+        var seen = false, cap = lazyHold ? 1 : 1e9;
+        while (lazyQ.length && performance.now() - t0 < 12 && cap-- > 0) {
+          var o = lazyQ.shift(), big = bigTop && o === sheets[sheets.length - 1];
+          if (big) { bigTop = false; o.painted = false; }
+          paintOne(o, big); seen = seen || o.mesh.visible;
+        }
         // a sheet out of sight needs no new frame
         if (seen) O.wake();
-        if (lazyQ.length) setTimeout(step, 16); else lazyQ = null;
+        if (lazyQ.length) { if (lazyHold) lazyParked = step; else setTimeout(step, 16); return; }
+        lazyQ = null;
+        // faces painted after the warm-up went through are sent too
+        if (warmGen === gen) { warmGen = -1; warmSoon(); }
       })();
     }
     // ---- the warm-up: the first press of Next pays for no compile and no upload ----------
@@ -986,6 +1106,9 @@ window.__evidentDesk3d = function (O) {
           ["map", "emissiveMap", "alphaMap", "roughnessMap", "bumpMap"].forEach(function (k) { var t = m[k]; if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
         });
       });
+      // the card's faces not on it right now: the printed verdict, swapped in as the card leaves its stand on the
+      // first Next, and the two standing faces
+      [cvMap, csMap, csvMap].forEach(function (t) { if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
       return list;
     }
     function warmStep() {
@@ -1004,7 +1127,15 @@ window.__evidentDesk3d = function (O) {
     }
     O.onCheck = function () {
       casters = null; shadowDirty = true;
-      paintCardFaces();
+      // a result landing on a desk already drawing (a check just run, an answer picked): the sheets' faces are painted
+      // a few at a time after the answer is on screen (paintLazy, the top of the stack first and at full size), and
+      // the standing face in a task of its own, so the answer is never held behind them. The page as it arrives
+      // paints them all before its first frame, as before
+      var later = frames > 0;
+      paintCardFaces(later);
+      // the verdict is laid out in this task and painted in the next frame; the frame after that starts with it on
+      // screen, and the parked batches go on from there
+      if (later) { bigTop = true; O.wake(); requestAnimationFrame(function () { requestAnimationFrame(verdictShown); }); return; }
       sheets.forEach(function (o) { paintOne(o); });
       // the top of the stack is seen close at the reading: its face at full size
       if (sheets.length) paintOne(sheets[sheets.length - 1], true);
@@ -1024,11 +1155,11 @@ window.__evidentDesk3d = function (O) {
       buildSheets(); if (staged) sheets.forEach(function (o) { o.placed = true; });
       cardPainted = false; csvKey = ""; cardKey = ""; pickKeys();
       O.checked = false; O.check();
-      if (frames) setTimeout(paintLazy, 0);
+      if (frames) { lazyHold = true; lazyParked = null; setTimeout(paintLazy, 0); }
       Ps = O.rawProgress(); O.wake();
     };
     // back to the claim box: the camera is at the first stop at once
-    O.onHome = function () { if (stagedN) { stagedN = 0; O.CHECK = { studies: [] }; dropSheets(); } pickKeys(); Ps = 0; O.hoverN = 0; O.wake(); };
+    O.onHome = function () { verdictShown(); if (stagedN) { stagedN = 0; O.CHECK = { studies: [] }; dropSheets(); } pickKeys(); Ps = 0; O.hoverN = 0; O.wake(); };
     buildSheets(); pickKeys();
     if (O.checked) { O.checked = false; O.check(); }
     O.layout(); O.updateWay();

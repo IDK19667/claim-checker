@@ -41,7 +41,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Evident" />
 
-  <meta name="theme-color" content="#0f1211" />
+  <meta name="theme-color" content="#12110f" />
   <meta name="color-scheme" content="dark" />
 
   <!-- PWA -->
@@ -251,12 +251,11 @@
      rebuilt identically by renderResult in static/app.js after a live check.
      A stop with nothing real to show is not printed (display.desk_stops). The
      card's words and every line here are the same ink whatever the verdict. #}
-  {# Still open is a heading, so heading navigation reaches it; the stop number is not read, so its region is named "Still open". #}
-  {% macro eyebrow(name, text) %}{% set tag = "h2" if name == "Open" else "p" %}<{{ tag }} class="eyebrow"{% if name == "Open" %} id="h-open"{% endif %}><b aria-hidden="true">{{ "%02d"|format(stops.index(name) + 1) }}</b>{{ text }}</{{ tag }}>{% endmacro %}
-  {% macro back() %}<button class="back" type="button" data-go="1">Back to the short answer</button>{% endmacro %}
+  {# A section's name, by what it holds: Answer, Studies, Explanation, Limitations. Limitations is a heading, so heading navigation reaches it. #}
+  {% macro eyebrow(name, text) %}{% set tag = "h2" if name == "Open" else "p" %}<{{ tag }} class="eyebrow" id="{{ 'h-open' if name == 'Open' else 'e-' ~ name|lower }}">{{ text }}</{{ tag }}>{% endmacro %}
   <div id="result"{% if result %} data-verdict="{{ result.verdict }}"{% endif %}>
-  <section class="stop" id="s2" data-stop="Answer" aria-labelledby="claim-echo">
-    <p class="layer" id="short-label">The short answer</p>
+  <section class="stop" id="s2" data-stop="Answer" aria-labelledby="short-label">
+    <p class="layer" id="short-label">Answer</p>
     <div class="vcard" id="vcard">
       <p class="lbl">The claim you checked</p>
       {# One h1 per screen: the claim on a result; at home it is an h2 in the hidden stops. app.js setH1 keeps the same rule. #}
@@ -275,17 +274,16 @@
       <p class="sure" id="confidence">{% if result %}{{ confidence_line(result) }}{% endif %}</p>
       <p class="sure-more"><button type="button" class="btn quiet" id="meter">What does this mean?</button></p>
       <p class="doctor" id="doctor-line"{% if not result %} hidden{% endif %}>Check important health decisions with a doctor.</p>
+      {# The one button on the Answer: it goes to the studies. Check another claim is in the section picker and at the end of the page. #}
       <div class="two">
-        <button class="btn" type="button" id="how-answer">See how we got this answer</button>
-        <button class="btn quiet" type="button" id="back-btn" data-again>Check another claim</button>
+        <button class="btn" type="button" id="how-answer">View evidence</button>
       </div>
     </div></div>
   </section>
 
-  <section class="stop" id="s3" data-stop="Read" aria-labelledby="h-read">
+  <section class="stop" id="s3" data-stop="Read" aria-labelledby="e-read">
     <div class="cap right"><div class="inner">
-      {{ back() }}
-      {% if result %}{{ eyebrow("Read", "What was read") }}{% else %}<p class="eyebrow"><b aria-hidden="true">03</b>What was read</p>{% endif %}
+      {{ eyebrow("Read", "Studies") }}
       <h2 class="h2" id="h-read">{% if dl %}{{ dl.read }}{% endif %}</h2>
       <p class="scope" id="scope"><span id="path">{% if dl %}{{ dl.path }}{% endif %}</span></p>
       <p class="legend" id="legend3"{% if not (dl and dl.legend) %} hidden{% endif %}>{% if dl %}{{ dl.legend }}{% endif %}</p>
@@ -311,15 +309,30 @@
     </div></div>
   </section>
 
-  {% macro row(s, i, key, status, named) %}{% set n = i + 1 %}{% set d = design_note(s.publication_types) %}<li class="row" id="row-{{ n }}" data-n="{{ n }}" data-i="{{ i }}"><button class="row-head" type="button" aria-pressed="false" aria-label="Study {{ n }}, {{ d[0] }}: {{ s.title | replace('\n', ' ') | trim('.') }}. Lift its sheet"><span class="num">{{ n }}</span><span class="design">{{ d[0] }}</span><span class="ttl">{{ s.title }}</span></button><div class="body"><p class="src">{% if s.journal %}{{ s.journal }} · {% endif %}{% if s.year %}{{ s.year }} · {% endif %}{% set href = safe_href(s.url) %}{% if href %}<a href="{{ href }}" target="_blank" rel="noopener" aria-label="Study {{ n }} on PubMed, opens in a new tab">PubMed {{ s.pmid }}</a>{% else %}PubMed {{ s.pmid }}{% endif %}</p><button class="row-more" type="button" aria-expanded="false" aria-controls="more-{{ n }}" aria-label="Details for study {{ n }}">Details</button><div class="more" id="more-{{ n }}" hidden><p class="status{% if key != 'relied' %} no{% endif %}">{{ status }}</p>{% if n in named %}<p class="named">The answer names it</p>{% endif %}<p class="note why">{{ study_why(s) }}</p><button type="button" class="row-more study-go" aria-label="Deep dive on study {{ n }}">Deep dive</button></div></div></li>{% endmacro %}
+  {# An abstract is quoted from PubMed as it is, except that an en or an em dash shows as a plain hyphen (app.js plainDashes is the same). #}
+  {# A study row. Under its title, two actions on every width: Read abstract opens the abstract in place (a
+     disclosure that works with scripts off), Open PubMed opens its page in a new tab. Lifting its sheet on the desk
+     (pressing the title) is an extra, never the way to the source. renderResult's studyRowHtml is the same. #}
+  {# Under each study, one labelled line: what it adds. For a study set aside or kept as background, the reason it was
+     not counted (study_why, so a retraction says so, and the words match its group); else the engine's own
+     contribution when it sends one; else the
+     study's own conclusion from the breakdown, else its design and who was studied. Never an
+     empty label. Then its caution, and "Indirect context" with the reason (indirect_reason) when it only bears on the claim
+     indirectly; never the label without a reason.
+     renderResult's studyLines is the same. #}
+  {% macro study_lines(s, n, d) %}{% set said = namespace(t="") %}{% if bv and bv.concluded %}{% for c in bv.concluded %}{% if c.n == n and not said.t %}{% set said.t = (c.said or "")|trim %}{% endif %}{% endfor %}{% endif %}
+    {%- if s.off_topic or (s.background and not s.cited_in_verdict) %}{% set text = study_why(s) %}
+    {%- elif (s.contribution or "")|trim %}{% set text = s.contribution|trim %}
+    {%- elif said.t %}{% set text = said.t %}
+    {%- else %}{% set text = d[0] ~ "." ~ ((" Studied in: " ~ s.population ~ ".") if s.population else "") %}{% endif -%}
+    <p class="contrib"><b class="lbl">What this study contributes</b> {{ text }}</p>{% if (s.caution or "")|trim %}<p class="caution">{{ s.caution|trim }}</p>{% endif %}{% set iwhy = (s.indirect_reason or s.indirect_why or "")|trim %}{% if s.indirect and iwhy %}<p class="indirect"><b class="lbl">Indirect context</b> {{ iwhy }}</p>{% endif %}{% endmacro %}
+  {% macro row(s, i, key, status, named) %}{% set n = i + 1 %}{% set d = design_note(s.publication_types) %}{% set href = safe_href(s.url) or (("https://pubmed.ncbi.nlm.nih.gov/" ~ s.pmid ~ "/") if (s.pmid|string).isdigit() else None) %}<li class="row" id="row-{{ n }}" data-n="{{ n }}" data-i="{{ i }}"><button class="row-head" type="button" aria-pressed="false" aria-label="Study {{ n }}, {{ d[0] }}: {{ s.title | replace('\n', ' ') | trim('.') }}. Lift its sheet"><span class="num">{{ n }}</span><span class="design">{{ d[0] }}</span><span class="ttl">{{ s.title }}</span></button><div class="body"><p class="src">{% if s.journal %}{{ s.journal }} · {% endif %}{% if s.year %}{{ s.year }} · {% endif %}PubMed {{ s.pmid }}</p>{{ study_lines(s, n, d) }}<div class="acts">{% if (s.abstract or "")|trim %}<details class="abs" id="abs-{{ n }}"><summary class="act"><span class="shut">Read abstract</span><span class="open">Hide abstract</span><span class="sr-only"> of study {{ n }}</span></summary><div class="abs-body"><p class="abs-text">{{ s.abstract|trim|replace("\u2013", "-")|replace("\u2014", "-") }}</p><button type="button" class="act quiet study-go" aria-label="How often study {{ n }} is cited, and the studies next to it">Citations and related studies</button></div></details>{% else %}<p class="noabs">No abstract on PubMed</p><button type="button" class="act quiet study-go" aria-label="How often study {{ n }} is cited, and the studies next to it">Citations and related studies</button>{% endif %}{% if href %}<a class="act pm" href="{{ href }}" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study {{ n }}, opens in a new tab</span></a>{% endif %}</div></div></li>{% endmacro %}
   {% if result and result.studies %}{% set g = source_groups(result.studies) %}{% set named = desk_named(result) %}
   <section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort">
     <div class="cap left"><div class="inner wide">
       <div class="panel list" id="list-panel" tabindex="-1">
-        {{ back() }}
-        {{ eyebrow("Weighed", "Weighed, not counted") }}
         <h2 id="h-sort">Which studies the answer rests on</h2>
-        <p class="intro">Pick a study to lift its sheet. Tap a sheet on the desk to find it here. Details open its abstract, how often it has been cited and the studies next to it.</p>
+        <p class="intro">Each study has its PubMed page, and its abstract where PubMed has one.</p>
         <div id="rows">
           {%- set groups = [("relied", "Relied on for the verdict", "Relied on", g.cited),
                             ("back", result.evidence.background_label or "Background only: animal and lab studies", "Background only, not counted", g.back),
@@ -336,11 +349,10 @@
   {% endif %}
 
   {% if "Research" in stops %}
-  <section class="stop long" id="s5" data-stop="Research" aria-labelledby="h-research">
+  <section class="stop long" id="s5" data-stop="Research" aria-labelledby="e-research">
     <div class="cap left"><div class="inner wider">
       <div class="panel read" id="read-panel" tabindex="-1">
-        {{ back() }}
-        {{ eyebrow("Research", "The thorough answer") }}
+        {{ eyebrow("Research", "Explanation") }}
         <h2 id="h-research">What the research says</h2>
         {%- set n_st = result.studies|length %}
         <div id="research">
@@ -361,12 +373,19 @@
           {%- if bv.parts %}
           <details class="said-wrap" data-fold><summary>The claim, part by part ({{ bv.parts | length }})</summary>{% for p in bv.parts %}<p class="intro part-claim">{{ p.part }}</p><p class="part-take">{{ desk_refs(p.assessment, n_st) }}</p>{% endfor %}</details>
           {%- endif %}
-          {%- if bv.evidence or bv.effect_size %}
-          <details class="said-wrap" data-fold><summary>What the evidence shows ({{ (bv.evidence | length) + (1 if bv.effect_size else 0) }} {{ "point" if (bv.evidence | length) + (1 if bv.effect_size else 0) == 1 else "points" }})</summary><ul class="ev">{% for para in bv.evidence %}<li>{{ desk_refs(para, n_st) }}</li>{% endfor %}</ul>{% if bv.effect_size %}<p class="effect"><b>How big the effect is.</b> <span>{{ desk_refs(bv.effect_size, n_st) }}</span></p>{% endif %}</details>
+          {#- The effect size is printed once: a sentence the second statement (result.effect_line, under How sure)
+              already quotes is left out here, and the line goes when nothing is left. A saved answer without the
+              statement prints it as before. renderResult's effectOnce is the same. #}
+          {%- set eff = namespace(t=bv.effect_size or "") %}
+          {%- if eff.t and result.effect_line %}{% set eff.t = "" %}{% for u in bv.effect_size.split(". ") %}{% set k = u | trim %}{% if k and (k | trim('.')) not in result.effect_line %}{% set eff.t = eff.t ~ (" " if eff.t else "") ~ k ~ ("" if k[-1:] in ".?!" else ".") %}{% endif %}{% endfor %}{% endif %}
+          {%- if bv.evidence or eff.t %}
+          <details class="said-wrap" data-fold><summary>What the evidence shows ({{ (bv.evidence | length) + (1 if eff.t else 0) }} {{ "point" if (bv.evidence | length) + (1 if eff.t else 0) == 1 else "points" }})</summary><ul class="ev">{% for para in bv.evidence %}<li>{{ desk_refs(para, n_st) }}</li>{% endfor %}</ul>{% if eff.t %}<p class="effect"><b>How big the effect is.</b> <span>{{ desk_refs(eff.t, n_st) }}</span></p>{% endif %}</details>
           {%- endif %}
           {%- endif %}
           <h3>How sure, and why</h3>
           <p class="evline">{% if result.evidence_line %}{{ result.evidence_line | trim('.') }}.{% else %}{{ confidence_line(result) }}{% endif %}</p>
+          {#- Brief E: what the studies found instead, for an absolute claim (evidence.effect_statement). #}
+          {%- if result.effect_line %}<p class="evline effect-line">{{ result.effect_line | trim('.') }}.</p>{% endif %}
           {%- if bv and bv.strength %}<p class="strength">{{ desk_refs(bv.strength, n_st) }}</p>{% endif %}
           {%- if bv and bv.unknowns %}<p class="unknowns">{{ desk_refs(bv.unknowns, n_st) }}</p>{% endif %}
           {%- if bv and bv.concluded %}
@@ -385,8 +404,7 @@
 
   <section class="stop" id="s6" data-stop="Open" aria-labelledby="h-open">
     <div class="cap left"><div class="inner">
-      {{ back() }}
-      {% if result %}{{ eyebrow("Open", "Still open") }}{% else %}<h2 class="eyebrow" id="h-open"><b aria-hidden="true">06</b>Still open</h2>{% endif %}
+      {{ eyebrow("Open", "Limitations") }}
       <p class="still-open" id="still-open"{% if not (result and result.still_open) %} hidden{% endif %}><span id="still-open-text">{% if result %}{{ result.still_open }}{% endif %}</span></p>
       <details class="said-wrap qwrap" id="qwrap"><summary>Search used</summary>
         <p class="legend query"><span id="query-what"{% if result and not (result.search_query_used or "")|trim %} hidden{% endif %}>Searched PubMed for <code id="query">{% if result %}{{ (result.search_query_used or "")|trim }}{% endif %}</code><span id="broadened">{% if result and result.search_broadened %} (the first search found nothing, so it was widened){% endif %}</span>. </span><a id="more-link" href="{{ (safe_href(result.pubmed_url) or '#') if result else '#' }}" target="_blank" rel="noopener">More on PubMed</a></p>
@@ -400,6 +418,7 @@
         <button class="btn quiet" id="edit-claim" type="button">Edit claim</button>
         <button class="btn quiet" type="button" data-again>Check another claim</button>
       </div>
+      <p class="nojs-again"><a href="/">Check another claim</a></p>
       <span class="toast" id="toast" role="status"></span>
       <div class="feedback" id="feedback">
         <span id="feedback-q">Was this verdict helpful?</span>
@@ -431,13 +450,10 @@
   </div>
 </main>
 
+{# The section picker: on a phone (or a tall screen) the one control in the foot bar; on a wide screen the rail at the
+   right edge is the picker and this bar is not drawn. It names the section in view and opens the list of the four. #}
 <div class="bar" id="bar">
-  <!-- Next comes first in the tab order and Back right after it, so Shift+Tab from Back reaches Next without leaving the bar; the grid still places Back, place, Next left to right. -->
-  <button class="next" type="button" id="next"><span id="next-label">Next</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
-  <button class="prev" type="button" id="prev" aria-label="Back one stop"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2.5L4.5 7 9 11.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="lab">Back</span></button>
-  <button class="where" type="button" id="where" aria-haspopup="true" aria-expanded="false" aria-controls="menu"></button>
-  <!-- The cue row, drawn on top of the bar row: a wider target for the same press as Next, in words that say to scroll. Next carries the same destination for keyboards and screen readers, so this one is out of the tab order and not read. desk.js names it from the same state as Next (cueWords). -->
-  <button class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"{% if not result %} hidden{% endif %}><span id="cue-label">{% if result %}Scroll down: what was read{% endif %}</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 5l4.5 4.5L11.5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+  <button class="where" type="button" id="where" aria-haspopup="true" aria-expanded="false" aria-controls="menu" aria-label="Sections. You are in Answer. Choose a section"><span class="where-k" aria-hidden="true">Section</span><span id="where-name">Answer</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 9l4.5-4.5L11.5 9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 </div>
 <div class="menu" id="menu" hidden></div>
 
@@ -498,13 +514,13 @@
       </ol>
       <h3 class="section-label">Reading the evidence meter</h3>
       <ul class="legend">
-        <li><b>Strong:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
-        <li><b>Moderate:</b> human studies or expert reviews, but no randomized trial behind it.</li>
-        <li><b>Weak:</b> only case reports, letters, or opinion pieces.</li>
+        <li><b>Strong designs:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
+        <li><b>Moderate designs:</b> human studies or expert reviews, but no randomized trial behind it.</li>
+        <li><b>Weak designs:</b> only case reports, letters, or opinion pieces.</li>
         <li><b>No direct evidence:</b> nothing found actually tests the claim.</li>
         <li><b>Low certainty:</b> the review behind it rates its own evidence low, or every trial is small or a pilot.</li>
       </ul>
-      <p class="fine">The How sure line says what that evidence shows about the claim itself. Strong evidence of a small effect is not strong evidence for a cure.</p>
+      <p class="fine">The How sure line says whether the studies reviewed support the claim itself, then how sure or what kind of study it rests on. A strong design that finds a small effect is not support for a cure.</p>
       <p class="fine"><a href="/method">The full method, and what Evident cannot do</a></p>
       <p class="fine">Not medical advice. The model can misread an abstract, and PubMed doesn't index everything. Read the studies. Talk to a clinician about your own health.</p>
       <div class="two sheet-actions">

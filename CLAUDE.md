@@ -82,12 +82,11 @@ build step is a feature: anyone can read the shipped file.
 - Motion: the camera, the light and the words move with the scroll.
   The one automatic move is the glide to the answer: once, after a check
   the reader just ran, cancelled by any input, a cut under reduced
-  motion. Don't add another. A press of Next, Back, the rail or the menu
-  glides to its stop; a live check stands its blank sheets on the desk
-  and prints the reading log. The one deliberate exception beside the
-  glide: the cue row's chevron moves one time only, as two short dips,
-  about 3 seconds after an answer the reader just ran lands, cancelled by any input, never under reduced
-  motion, never on a saved or shared answer. No entrances on every
+  motion. Don't add another. A press of "View evidence" or a section in
+  the picker glides to it; a live check stands its blank sheets on the
+  desk and prints the reading log. Scrolling is native and never snaps:
+  there is no cue row, no Back or Next, and nothing nudges the reader
+  down. No entrances on every
   section, no animated backgrounds, no cursor effects, no scroll
   hijacking. Respect `prefers-reduced-motion`.
 - Cards are not a default container. Group with rules, space and the
@@ -99,8 +98,11 @@ build step is a feature: anyone can read the shipped file.
   same rule to model output.
 - Three faces, no more: Bricolage Grotesque for display (headlines, the
   verdict, figures), Instrument Sans for everything read, IBM Plex Mono
-  for labels a reader scans. One accent: sage on the night for what you
-  can act on, green by day on the other pages. The book cloths
+  for labels a reader scans. No accent colour: a link is the words' own
+  colour with an underline, focus is the words' colour on the night and
+  ink by day, and the greys are neutral with a faint lean to the lamp
+  (hue 75). The lamp's light, the wood and the paper are the only colour
+  in the room; a test holds the shipped colour files to that. The book cloths
   (`--c-strong`, `--c-human`, `--c-lab`, `--c-weak`) mean the kind of
   study and nothing else. Verdicts are never colour-coded: no stylesheet
   selects on `data-verdict`.

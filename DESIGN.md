@@ -3,52 +3,49 @@ version: alpha
 name: Evident
 description: One lamp-lit desk is the whole front page. A claim is typed into the dark beside a desk under a lamp; the answer arrives as a paper card on the desk, and the reasoning waits below it one stop at a time. The pages beside it keep a night masthead over the text by day. Three faces, one accent, and nothing ever coloured by what the verdict was.
 colors:
-  primary: "#0b0d0c"
+  primary: "#0d0c0b"
   secondary: "#efe6d2"
-  tertiary: "#9fc3b0"
-  desk-night: "#0b0d0c"
-  desk-deep: "#0f1211"
-  desk-deep-2: "#181c1a"
-  desk-line: "#2a302d"
-  desk-edge: "#3a423e"
-  desk-edge-2: "#3c4440"
-  desk-edge-3: "#59625d"
-  desk-quote: "#4a534e"
-  desk-ref: "#4f6a5d"
-  desk-on: "#eceee9"
-  desk-on-2: "#a9b0ab"
-  desk-on-3: "#8f9792"
+  tertiary: "#f0ede9"
+  desk-night: "#0d0c0b"
+  desk-deep: "#12110f"
+  desk-deep-2: "#1c1a19"
+  desk-line: "#302f2c"
+  desk-edge: "#42403d"
+  desk-edge-2: "#44423f"
+  desk-edge-3: "#62605d"
+  desk-quote: "#53514e"
+  desk-ref: "#666461"
+  desk-on: "#f0ede9"
+  desk-on-2: "#b1aeaa"
+  desk-on-3: "#979591"
   desk-white: "#ffffff"
-  desk-sage: "#9fc3b0"
-  desk-paper: "#f1f2ee"
+  desk-paper: "#f4f2ef"
   desk-card: "#efe6d2"
-  desk-ink: "#121514"
-  desk-ink-2: "#434a46"
-  desk-card-label: "#3a403c"
-  desk-card-ink: "#222624"
-  desk-card-verdict: "#0f1110"
-  desk-panel: "#0c0e0d"
-  desk-well: "rgba(15, 18, 17, 0.72)"
-  desk-scrim: "rgba(8, 10, 9, 0.8)"
-  desk-scrim-0: "rgba(8, 10, 9, 0)"
-  desk-focus: "#9fc3b0"
-  deep: "#0f1211"
-  deep-2: "#181c1a"
-  deep-line: "#2a302d"
-  on-deep: "#eceee9"
-  on-deep-2: "#9ea6a1"
-  on-deep-3: "#7d8580"
-  paper: "#f1f2ee"
-  panel: "#fafaf8"
-  ink: "#121514"
-  ink-2: "#434a46"
-  ink-3: "#5d6560"
-  rule: "#d9dcd5"
-  rule-2: "#b9bfb7"
-  green: "#2c5848"
-  sage: "#9fc3b0"
-  tint: "#d4e4da"
-  focus: "#2c5848"
+  desk-ink: "#151412"
+  desk-ink-2: "#4a4845"
+  desk-card-label: "#403e3b"
+  desk-card-ink: "#262522"
+  desk-card-verdict: "#12100f"
+  desk-panel: "#0e0d0c"
+  desk-well: "rgba(18, 17, 15, 0.72)"
+  desk-scrim: "rgba(10, 9, 8, 0.8)"
+  desk-scrim-0: "rgba(10, 9, 8, 0)"
+  desk-focus: "#f0ede9"
+  deep: "#12110f"
+  deep-2: "#1c1a19"
+  deep-line: "#302f2c"
+  on-deep: "#f0ede9"
+  on-deep-2: "#a6a4a0"
+  on-deep-3: "#85837f"
+  paper: "#f4f2ef"
+  panel: "#fbfaf8"
+  ink: "#151412"
+  ink-2: "#4a4845"
+  ink-3: "#65625f"
+  rule: "#dddad7"
+  rule-2: "#bfbcb9"
+  tint: "#e6dcc6"
+  focus: "#151412"
   c-strong: "#35594c"
   c-human: "#3a4e6b"
   c-lab: "#5a4760"
@@ -309,7 +306,7 @@ components:
     backgroundColor: "{colors.desk-ref}"
   desk-link:
     backgroundColor: "{colors.desk-night}"
-    textColor: "{colors.desk-sage}"
+    textColor: "{colors.desk-on}"
   desk-focus-ring:
     backgroundColor: "{colors.desk-focus}"
   desk-button:
@@ -368,7 +365,7 @@ components:
     backgroundColor: "{colors.deep-line}"
   page-night-focus:
     backgroundColor: "{colors.deep}"
-    textColor: "{colors.sage}"
+    textColor: "{colors.on-deep}"
   page-day:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
@@ -389,7 +386,7 @@ components:
     backgroundColor: "{colors.rule-2}"
   page-link:
     backgroundColor: "{colors.paper}"
-    textColor: "{colors.green}"
+    textColor: "{colors.ink}"
   page-focus-ring:
     backgroundColor: "{colors.focus}"
   page-selection:
@@ -429,15 +426,17 @@ Two stylesheets, two grounds:
 
 - **The front** (`templates/index.html`, `static/desk.css`,
   `static/desk.js`, three.js in `static/vendor/`) stands on the night,
-  `--desk-night`. The six stops of a result: the claim (1), the answer
-  (2), what was read (3), the studies weighed (4), the research (5), and
-  what is still open with the search that ran (6). Home is stop 1 alone.
+  `--desk-night`. A result has four sections, named by what they hold:
+  Answer (the claim and the answer card), Studies (what was read, then
+  the list), Explanation (the research) and Limitations (what is still
+  open, with the search that ran). Under them the page keeps six stops
+  for the camera; Home is the claim box alone.
 - **Every other page** (about, how it works, corrections, privacy,
   the 404 and the stats page) keeps `static/style.css`: a night masthead
   and footer, the text by day on `--paper`, no scripts.
 
 The page works without the desk. Text mode (no WebGL, Save-Data, 2G,
-reduced data, `?nogl=1`, or three.js refused) sets the same six stops on
+reduced data, `?nogl=1`, or three.js refused) sets the same sections on
 the night ground with the answer card as a block of card stock; with
 scripts off a result reads top to bottom from the server's HTML.
 
@@ -445,35 +444,39 @@ scripts off a result reads top to bottom from the server's HTML.
 
 The desk's colours are the approved sample's, under desk names in
 `desk.css` (`--desk-*`, with short aliases that mean those values on the
-front only). No other hue may appear on the front.
+front only). No other hue may appear on the front: the greys are neutral
+with the faintest lean to the lamp (hue 75, chroma 0.008 or less), and
+the only colour in the room is the lamp's light, the wood and the paper.
 
 | Role | Token | Hex | Used for |
 |---|---|---|---|
-| Ground | `--desk-night` | `#0b0d0c` | The room beyond the lamp; the page |
-| Solid ground | `--desk-deep` | `#0f1211` | Words over the desk, the sheets, the menu |
-| Strip | `--desk-deep-2` | `#181c1a` | The top strip and the bar |
-| Rule | `--desk-line` | `#2a302d` | Hairlines on the night |
-| Edges | `--desk-edge`, `-2`, `-3` | `#3a423e`, `#3c4440`, `#59625d` | Outlines of bar controls, fields, ghost buttons, rail dots |
-| Quote rule | `--desk-quote` | `#4a534e` | The rule beside a quoted conclusion |
-| Ref box | `--desk-ref` | `#4f6a5d` | The box round a study number in the prose |
-| Words | `--desk-on`, `-2`, `-3` | `#eceee9`, `#a9b0ab`, `#8f9792` | Text on the night, quieter text, the rail's names |
+| Ground | `--desk-night` | `#0d0c0b` | The room beyond the lamp; the page |
+| Solid ground | `--desk-deep` | `#12110f` | Words over the desk, the sheets, the menu |
+| Strip | `--desk-deep-2` | `#1c1a19` | The top strip and the bar |
+| Rule | `--desk-line` | `#302f2c` | Hairlines on the night |
+| Edges | `--desk-edge`, `-2`, `-3` | `#42403d`, `#44423f`, `#62605d` | Outlines of bar controls, fields, ghost buttons, rail dots, the panel's top rule |
+| Quote rule | `--desk-quote` | `#53514e` | The rule beside a quoted conclusion |
+| Ref box | `--desk-ref` | `#666461` | The box round a study number in the prose |
+| Words | `--desk-on`, `-2`, `-3` | `#f0ede9`, `#b1aeaa`, `#979591` | Text and links on the night (a link keeps its underline), quieter text and small labels, the rail's names |
 | White | `--desk-white` | `#ffffff` | The wordmark, a lifted study's title |
-| Accent | `--desk-sage` | `#9fc3b0` | Links, the live dot, a stop number, focus |
-| Light shape | `--desk-paper` | `#f1f2ee` | The button to press, Next |
+| Focus | `--desk-focus` | `--desk-on` | The focus ring, drawn outside the control (inside the bar's controls, in `--deep` on paper) |
+| Light shape | `--desk-paper` | `#f4f2ef` | The button to press, Next |
 | Card | `--desk-card` | `#efe6d2` | The answer card |
-| Card words | `--desk-ink`, `-ink-2`, `-card-label`, `-card-ink`, `-card-verdict` | `#121514` to `#0f1110` | Words on the card and on the light shape |
-| Panel | `--desk-panel` | `#0c0e0d` | The reading panels |
-| Well | `--desk-well` | `rgba(15, 18, 17, 0.72)` | The claim box, a well in the night |
-| Scrim | `--desk-scrim`, `--desk-scrim-0` | `rgba(8, 10, 9, 0.8)` and clear | The two scrims behind words over the desk |
+| Card words | `--desk-ink`, `-ink-2`, `-card-label`, `-card-ink`, `-card-verdict` | `#151412` to `#12100f` | Words on the card and on the light shape |
+| Panel | `--desk-panel` | `#0e0d0c` | The reading panels |
+| Well | `--desk-well` | `rgba(18, 17, 15, 0.72)` | The claim box, a well in the night |
+| Scrim | `--desk-scrim`, `--desk-scrim-0` | `rgba(10, 9, 8, 0.8)` and clear | The two scrims behind words over the desk |
 
 The other pages keep `style.css`'s own tokens: night (`--deep`,
 `--deep-2`, `--deep-line`, `--on-deep` to `--on-deep-3`), day
-(`--paper`, `--panel`, `--ink` to `--ink-3`, `--rule`, `--rule-2`), and
-one accent, bottle green `--green` by day for links and focus, with sage
-for links on the night masthead.
+(`--paper`, `--panel`, `--ink` to `--ink-3`, `--rule`, `--rule-2`), a
+warm paper `--tint` for a selection, and `--focus` (ink by day, the words'
+colour on the night masthead).
 
-**One accent, and it means "you can act on this".** Sage on the night,
-green by day. It never signals safe, good or true.
+**No accent colour.** A link is the words' own colour with an underline;
+what can be pressed looks pressable by its shape (an underline, an outline,
+a filled paper button), never by colour alone. The pale mint that used to
+mark links and focus on the night read as neon on near-black and is gone.
 
 **No verdict is ever coloured.** "Likely true", "Likely false", "It's
 complicated" and "Not enough evidence" are set identically, on the same
@@ -493,19 +496,17 @@ The roles on the pages beside the desk (`style.css`):
 
 | Role | Token | Hex | Used for |
 |---|---|---|---|
-| Background | `--paper` | `#f1f2ee` | The day ground every long read sits on |
-| Surface | `--panel` | `#fafaf8` | Raised day surfaces |
-| Text | `--ink` | `#121514` | Headings and body copy |
-| Secondary text | `--ink-2` | `#434a46` | Explanations, helper text |
-| Muted text | `--ink-3` | `#5d6560` | Metadata and mono labels |
-| Action | `--green` | `#2c5848` | Links and the focus ring by day |
-| Selection | `--tint` | `#d4e4da` | Selected text |
-| Dark surface | `--deep` | `#0f1211` | The masthead and the footer |
+| Background | `--paper` | `#f4f2ef` | The day ground every long read sits on |
+| Surface | `--panel` | `#fbfaf8` | Raised day surfaces |
+| Text | `--ink` | `#151412` | Headings and body copy |
+| Secondary text | `--ink-2` | `#4a4845` | Explanations, helper text |
+| Muted text | `--ink-3` | `#65625f` | Metadata and mono labels |
+| Focus | `--focus` | `--ink` | The focus ring by day |
+| Selection | `--tint` | `#e6dcc6` | Selected text |
+| Dark surface | `--deep` | `#12110f` | The masthead and the footer |
 
-**Green never signals "safe", "good" or "true".** Green, like sage on
-the desk, means "you can act on this" and nothing about the evidence.
-No verdict, confidence or study count may borrow it to look
-reassuring.
+**No colour signals "safe", "good" or "true".** No verdict, confidence
+or study count may borrow a colour to look reassuring.
 
 ## Typography
 
@@ -543,25 +544,38 @@ Sizes and floors:
   it: right of the lamp, left of it, or at the foot, behind one of the
   two scrims. On a phone or a portrait screen there is one column, and
   on the long stops the picture shows at the top.
-- **The bar** is fixed at the foot once a result shows: Back, where you
-  are, and Next, which names the next stop. On a wide screen a rail of
-  stop names sits at the right edge.
-- **The cue row** sits on top of the bar row whenever something is
-  below, and the two read as one block on the bar's ground: one
-  paper-filled button with a down chevron and the words "Scroll down: "
-  and what comes next ("what was read", or "11 more studies" on a long
-  stop, from the same state that names Next). At 760px wide and below
-  it is as wide as the bar row; on a wider screen it is a button no
-  wider than 480px, centred in the block, never a band. It does what
-  Next does. It goes at the end of the last stop. While it shows, Next
-  is its quiet partner: drawn exactly as Back (outline, panel ground,
-  quieter words), showing only "Next" or "Keep reading", with its full
-  words ("Next: what was read") as its accessible name; so the cue is
-  the one paper-filled control in the block. At the end of the last
-  stop, with no cue, Next has its paper fill again ("Back to the
-  start"). Next carries the same place for keyboards and screen
-  readers, so the cue is out of the tab order and not read. Everything
-  that lays itself out against the bar uses the whole block.
+- **Three ways to move, no others**: native scrolling (no snapping,
+  nothing moves the reader one stop), one section picker, and the one
+  "View evidence" button on the Answer, which goes to Studies.
+- **The picker.** On a phone it is the only thing in the fixed bar at
+  the foot: one row, 64px with the safe area under it, a full-width
+  button saying "Section" and where you are, that opens the four
+  sections, then "Check another claim", then the site links. On a wide
+  screen the rail at the right edge is the picker (the four sections)
+  and there is no bottom bar. On a result the page shows one "Check
+  another claim" at every width and in every mode: the one at the end
+  of the page (a link home when scripts are off), never also in the rail. It names
+  itself to screen readers ("Sections. You are in Studies") and works
+  by keyboard.
+- **No screen looks finished when it is not.** The Answer and Studies
+  are as tall as what they hold, so at every resting place the next
+  content is cut by the foot of the screen or the bar, or the end of
+  the page is in view. On a phone the desk shows as a band above
+  Studies, Explanation and Limitations, so the heading and six lines of
+  text are on the first screen; on a wide screen the answer card starts
+  just under the strip. On the Answer at rest, in order: every line of
+  the card is whole (nothing covers or clips it); the Studies heading is
+  whole above the bar, or the bar crosses a line or a control of the
+  Answer; View evidence is in view where both fit.
+- **The phone's first screen** (760px wide or less, held upright, in 3D,
+  before a check) shows the lamp as the desktop does: the desktop's own
+  view of the lamp, its light and the lit wood is fitted into a band
+  under the strip, and the headline, the claim box and the rest start
+  below it, so no word lies on the lamp and no scrim dims it. The band is
+  a third of the screen at most and gives way to the words: the claim box
+  and "Check the research" stay on the first screen. The page's own
+  "Evident" line steps aside there, since the strip names the site. Text
+  mode, a result, a tablet and a phone turned sideways keep their layout.
 - **The first screen holds the claim box.** At 1366x650, 1280x720,
   1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
   the claim box and "Check the research" are wholly on screen with no
@@ -598,7 +612,7 @@ Every corner on the front is 3px: buttons, fields, panels, the card,
 the sheets' top corners. The other pages keep 3px controls and 4px
 panels. No pills, no circles but the rail's dots and the live dot,
 no icon circles, no badges, no card grids. Panels are a solid ground
-with a 2px sage rule on top; groups are made with rules and space, not
+with a 2px grey rule on top (`--desk-edge-3`); groups are made with rules and space, not
 boxes.
 
 ## Components
@@ -607,7 +621,9 @@ boxes.
   `--desk-edge-2` edge, Clear and Speak inside it at the right, a helper
   line above, the type-ahead of saved checks under it.
 - **The button**: the one light shape on the screen, `--desk-paper`
-  with `--desk-ink` words, 52px tall. Next in the bar is the same shape.
+  with `--desk-ink` words, 52px tall. "View evidence" is this shape.
+  Pressed (pointer, Space or Enter) it dims to `--desk-on-2` with the
+  same words: a colour change only, no motion, the focus ring as it is.
   A ghost button is an outline in `--desk-edge-3`; a quiet one is
   underlined words.
 - **The answer card**: card stock (`--desk-card`) with the claim in
@@ -615,12 +631,23 @@ boxes.
   painted on the paper on the desk and the same words are laid over it as
   real text; in text mode it is a block of the same stock.
 - **The reading log**: Plex Mono 13px in `--desk-on-2`, a short rule
-  before each line, the live line in `--desk-on` with a sage dot, Cancel
+  before each line, the live line in `--desk-on` with a dot of the same colour, Cancel
   as underlined words under it.
-- **Panels**: `--desk-panel`, a sage rule on top, 17px reading text,
+- **Panels**: `--desk-panel`, a grey rule on top, 17px reading text,
   mono section labels over a hairline.
 - **The study rows**: a number in Bricolage, the design in mono, the
-  title in 600; pressing one lifts its sheet on the desk.
+  title in 600. Under the title, one line labelled "What this study
+  contributes" (the label in mono; the engine's own words, else the
+  study's conclusion, else why it was set aside, else its design and who
+  was studied), its caution as a sentence, and "Indirect context" with
+  its reason when it is indirect. Then two actions, each at least 44px
+  tall at every width: "Read abstract", a disclosure that opens the
+  abstract in the row ("Hide abstract" closes it), with "Citations and
+  related studies" inside it; and "Open PubMed", a link in a new tab.
+  Where PubMed has no abstract, the plain words "No abstract on PubMed"
+  stand in the button's place: the mono label in `--desk-on-2`, not a
+  button, not focusable. Pressing the row's
+  title still lifts its sheet on the desk, as an extra no text explains.
 - **The sheets** (a study's abstract, How it works): rise from the foot
   over the scrim on `--desk-deep`, with a sticky bar holding Close.
 - **The strip and the bar**: `--desk-deep-2` with a `--desk-line` rule.
@@ -634,17 +661,12 @@ value, so the scene is never ahead of the reader. Beyond that:
    A saved or shared result opens at the answer with no glide. Any touch,
    wheel or key stops it; it waits for a hidden tab; under reduced motion
    it is a cut. It is the only time the page moves itself.
-2. **A press of Next, Back, the rail or the menu** glides to that stop.
+2. **A press of "View evidence" or a section in the picker** glides there.
 3. **A live check**: at "found N" the desk stands N blank sheets in its
    stack (none under reduced motion), and each line of the log fades in
    as its stage happens.
 4. **The card's words** fade in over 150ms once the card has settled.
-5. **The cue's chevron moves one time only, as two short dips**, a
-   deliberate exception beside the glide: about 3 seconds after an answer
-   the reader just ran lands, if nothing was touched, it goes 4px down and
-   back two times in a row, 600ms each, and never again on that answer.
-   Any input cancels it; never under reduced motion, never on a saved or
-   shared answer. Next does not pulse.
+5. **Nothing nudges the reader down**: there is no cue row and no dip.
 6. **A sheet** rises in 260ms and its scrim fades in.
 
 Nothing else animates: no entrances on sections, no parallax beyond the
@@ -669,7 +691,7 @@ visible on every screen.
   `app.js` together, so a result reads with scripts off.
 - Do keep every desk colour in `desk.css`'s `:root` and in this file's
   frontmatter; `scripts/qa.mjs` fails on drift.
-- Don't colour a verdict, add a second accent, or give the cloths any
+- Don't colour a verdict, add an accent colour, or give the cloths any
   meaning but the kind of study.
 - Don't add glow, neon, cyan, shadows on content, blur, glass, gradient
   washes (beyond the two scrims), pills, badges, card grids, icon

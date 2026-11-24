@@ -1078,7 +1078,7 @@ t("the page preloads the fonts it actually uses",
   "bricolagegrotesque" in _home and "instrumentsans" in _home
   and "librefranklin" not in _home and "librecaslon" not in _home and "archivo" not in _home)
 t("theme colour matches the shipped ground, and no dark scheme is claimed",
-  'content="#0f1211"' in _home and 'content="light dark"' not in _home)
+  'content="#12110f"' in _home and 'content="light dark"' not in _home)
 
 # ---- the cold page must contain everything the browser renders into ---------------
 # A streamed check renders from the front page, where no server-side result
@@ -1989,10 +1989,10 @@ t("  and the answer the reader gets is the consistent one",
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
 
 _html = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
-# The desk front: the breakdown is stop 5, Research ("The thorough answer").
+# The desk front: the breakdown is the Explanation (stop 5, Research).
 # Its longer parts fold away, closed, and its last part says what it rests on.
 t("the breakdown is server rendered, so a shared link carries it",
-  'data-stop="Research"' in _html and "The thorough answer" in _html and "The claim, part by part" in _html
+  'data-stop="Research"' in _html and 'id="e-research">Explanation<' in _html and "The claim, part by part" in _html
   and "11,321 people found an odds ratio" in _html
   and "only if you are deficient" in _html)
 t("  its folds are closed by default, on the server and in the markup",
@@ -2003,10 +2003,10 @@ t("  it says how many studies it rests on",
 # A list item with role="button" around a PubMed link is a control inside a
 # control, which screen readers cannot reach cleanly (axe: serious).
 t("  each study opens from a real button, not a list item playing one",
-  '<button type="button" class="row-more study-go" aria-label="Deep dive on study 1">' in _html
+  '<button type="button" class="act quiet study-go" aria-label="How often study 1 is cited, and the studies next to it">' in _html
   and '<button class="row-head" type="button" aria-pressed="false" aria-label="Study 1,' in _html
   and 'role="button"' not in _html.split('id="rows"', 1)[-1].split("</section>", 1)[0]
-  and '<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">'
+  and 'class="act quiet study-go" aria-label="How often study ${n} is cited, and the studies next to it"'
       in (ROOT / "static" / "app.js").read_text())
 t("  what was gated out is not in the page either",
   "47%" not in _html and "cites nothing" not in _html and "wards off" not in _html)
@@ -2051,7 +2051,7 @@ _heads = lambda src: set(re.findall(r"<h3[^>]*>([A-Z][^<{$]+)</h3>", src)) | set
 t("the server and the browser render the same breakdown headings",
   _heads(_res_tpl) == _heads(_res_js) and len(_heads(_res_tpl)) >= 5, sorted(_heads(_res_tpl) ^ _heads(_res_js)))
 t("the browser's renderer runs every sentence through the same ref linking",
-  'p("part-take", x.assessment)' in _res_js and "deskRefs(text, n)" in _res_js and "deskRefs(bv.effect_size, n)" in _res_js
+  'p("part-take", x.assessment)' in _res_js and "deskRefs(text, n)" in _res_js and "deskRefs(eff, n)" in _res_js and "effectOnce(bv.effect_size, data.effect_line)" in _res_js
   and "desk_refs(p.assessment, n_st)" in _res_tpl)
 # Nothing that holds reading is boxed, and nothing in it is colour coded.
 _desk_css = (ROOT / "static" / "desk.css").read_text()
@@ -2209,7 +2209,7 @@ _dk_dash = re.findall(r"[–—]|\\u\{?0*201[34]\}?|\\x[0-9a-f]{0,2}201[34]|&[mn
                       r"|fromCharCode\(\s*(?:821[12]|0x201[34])\s*\)|fromCodePoint\(\s*(?:821[12]|0x201[34])\s*\)",
                       _dk_code, re.I)
 t("no string desk.js writes or paints carries an em or en dash, typed or spelled as an escape, entity or code",
-  all(w in _dk_code for w in ("Keep reading", "function glideToAnswer", "fillText")) and not _dk_dash, _dk_dash[:5])
+  all(w in _dk_code for w in ("Check another claim", "function glideToAnswer", "fillText")) and not _dk_dash, _dk_dash[:5])
 _nudge = _deskjs[_deskjs.find("function glideToAnswer"):]
 # desk.js is one closure, so its functions end at a two-space brace.
 _nudge = _nudge[:_nudge.find("\n  }\n")]
@@ -2340,11 +2340,12 @@ t("  a check started from a result's claim box first goes back to stop 1",
 # bar, L 2 px under the strip).
 t("E4/E5: the stop is measured on its lines of text, never on the words laid over the 3D card",
   "function textLines(k)" in _deskjs and "NodeFilter.SHOW_TEXT" in _deskjs
-  and 'e.closest("#vcard, #short-label")' in _deskjs and "if (!el || overlay(el) || !shown(el)) continue;" in _deskjs
-  and "contentBottom(k) - (y + barTop()) > 2" in _deskjs)
-t("E1 before E2: a press goes exactly to the stop's last line 2 px above the bar, or to L 2 px under the strip",
-  "Math.ceil(contentBottom(k) - barTop() + 2)" in _deskjs and "Math.floor(L.top - stripH - 2)" in _deskjs
-  and "to = Math.min(to, lim);" in _deskjs and "pageStep() - " not in _deskjs)
+  and 'e.closest("#vcard, #short-label")' in _deskjs and "if (!el || overlay(el) || !shown(el)) continue;" in _deskjs)
+# Replaced (NAV 2): E1/E2 measured where a press of Next landed inside a long stop. Next is gone; the
+# browser checks N2c to N2e say where scrolling, the picker and View evidence land.
+t("E1/E2 replaced: nothing moves the reader one stop: the settle after a scroll only notes the rest",
+  "function settleStop() { settleT = 0; glideLeft = null; restY = window.scrollY; runLen = 0; }" in _deskjs
+  and "to = Math.min(to, lim);" not in _deskjs and "pageStep() - " not in _deskjs)
 t("  any touch, wheel or key from the reader cancels it",
   all(e in _nudge for e in ('"wheel"', '"touchstart"', '"pointerdown"', '"keydown"')))
 t("  it honours reduced motion and waits for a hidden tab",
@@ -2389,7 +2390,7 @@ t("  closing the keyboard returns to the place, unless a check came in between; 
   "window.scrollTo({ top: back.y, behavior: \"instant\" })" in _kbd and "if (back.checked !== checked) return false;" in _kbd
   and "if (innerWidth !== kbd.w) { kbd = null;" in _kbd and 'root.classList.toggle("kbd", isField(document.activeElement))' in _kbd
   and "html.kbd .bar { visibility: hidden; }" in _css_d and "showField(); adoptScroll(400); return true;" in _kbd
-  and "function keepRest() {\n    if (keyboardOpen()) return;" in _deskjs and "if (!checked || tween || touching || pressing || keyboardOpen()) return;" in _deskjs
+  and "function keepRest() {\n    if (keyboardOpen()) return;" in _deskjs
   and 'addEventListener("resize", function () { layout(); keyboardMoved(); updateWay(); wake(); });' in _deskjs)
 # J2: only a touch screen has that keyboard. On a desktop a window dragged shorter with the
 # claim box focused is a shorter window: the picture draws afresh and the bar stays.
@@ -2397,7 +2398,7 @@ t("J2: a change of height counts as the keyboard only on a touch screen",
   'var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };' in _deskjs
   and "if (!isField(e.target) || !coarse.matches) return;" in _deskjs
   and _kbd.startswith("function keyboardMoved() {\n    if (!kbd) return false;\n    if (!coarse.matches) {")
-  and "a desktop window dragged shorter keeps the bar" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
+  and "a desktop window dragged shorter keeps the section picker" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
 # L4: on a screen with no touch, the kept keyboard state is dropped, class and all, so a
 # window that later turns touch (or a stale kbd class) cannot leave the bar hidden.
 t("L4: a change of height on a desktop clears the kept keyboard state and the kbd class",
@@ -2423,7 +2424,7 @@ _desk_css2 = (ROOT / "static" / "desk.css").read_text()
 t("without scripts a result hides the claim box, opens every group and hides the desk and the script-only controls",
   "html:not(.js).checked #s1 { display: none; }" in _desk_css2 and "html:not(.js) .rows[hidden] { display: block; }" in _desk_css2
   and "html:not(.js) #stage { display: none; }" in _desk_css2.replace(".no-gl #stage, ", "")
-  and all(f"html:not(.js) {x}" in _desk_css2 for x in (".bar", ".rail", ".row-more", ".back"))
+  and all(f"html:not(.js) {x}" in _desk_css2 for x in (".bar", ".rail", ".row-more", ".study-go"))
   and '<script nonce="{{ csp_nonce }}">document.documentElement.classList.add("js");</script>' in _desk_tpl)
 # A listener on an element the page no longer has stops app.js at that line,
 # and every listener after it with it. Each id the script binds without ?.
@@ -2437,18 +2438,9 @@ t("every element app.js binds a listener to without a guard is on the page",
 _ids_desk = set(re.findall(r'byId\("([\w-]+)"\)', _deskjs))
 t("  and so is every element desk.js looks up, but for the stops a result may leave out",
   _ids_desk and not (_ids_desk - _ids_tpl - {"s4", "s5"}), sorted(_ids_desk - _ids_tpl))
-if _shutil.which("node"):
-    _kw = _deskjs[_deskjs.find("function keepWords"):]
-    _kw = _kw[:_kw.find("\n  }\n") + 4]
-    _kw_out = json.loads(_subprocess.run(["node", "-e", _kw + "console.log(JSON.stringify([keepWords(0, false), keepWords(1, false),"
-                                          " keepWords(7, false), keepWords(7, true), keepWords(1, true)]))"],
-                                         capture_output=True, text=True, check=True).stdout)
-    t("E3: in Weighed the label counts the studies left: N more studies, 1 more study, the short form at 420px and under",
-      _kw_out == ["Keep reading", "Keep reading: 1 more study", "Keep reading: 7 more studies",
-                  "Keep reading: 7 more", "Keep reading: 1 more"], _kw_out)
-t("  only rows that are shown are counted, and the accessible name is always the full words",
-  "shown(r)" in _deskjs and "innerWidth <= 420" in _deskjs
-  and 'setAttribute("aria-label", ' in _deskjs and "keepWords(left, false)" in _deskjs)
+# Replaced (NAV 2): E3's "Keep reading: N more studies" label went with Next; nothing names a count to press for.
+t("E3 replaced: no Keep reading or Next label is left to count studies; scrolling and the picker move the reader",
+  "function keepWords" not in _deskjs and "Keep reading" not in _deskjs and "Keep reading" not in (ROOT / "static" / "app.js").read_text())
 
 # ---- the result screen: a labelled claim, an answer, then the evidence -----------
 #
@@ -2466,6 +2458,26 @@ t("after a check the address carries the claim as checked, so a fixed spelling s
   'encodeURIComponent(final.result.claim || claim)' in _done
   and "encodeURIComponent(claim))" not in _done)
 _ord = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+# q10-nav: the NAV block near the end reads this page; the check is gone from the store by then, so it is kept here,
+# with a second render in which the engine's per-study fields (contribution, caution, indirect) are sent.
+_nav_ord_early = _ord
+_nav_streamed_early = c.get("/?q=streamed%20claim").data.decode()
+# (after q10-evid the engine's own per-study fields come from _study_extra, laid over the payload, so that is patched)
+_nav_orig_sp = appmod._study_extra
+_nav_seen = []
+def _nav_sp(s_, cited_):
+    out = _nav_orig_sp(s_, cited_)
+    _nav_seen.append(s_.get("pmid"))
+    k = s_.get("pmid")
+    if k == "D1": out["contribution"] = "Test line: the one trial that measured colds directly."
+    if k == "D2": out["caution"] = "Test caution: a small trial."
+    if k == "D2": out["indirect"], out["indirect_reason"] = True, "Test reason: it measured blood levels, not colds."
+    return out
+appmod._study_extra = _nav_sp
+try:
+    _nav_lines = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+finally:
+    appmod._study_extra = _nav_orig_sp
 
 
 def _at(needle):
@@ -2475,9 +2487,9 @@ def _at(needle):
 # The desk front's stops: the answer card (claim, verdict, short answer), how
 # sure, what was read, the studies weighed, the thorough answer, still open.
 t("the result reads claim, answer, how sure, what was read, the studies, research, then still open",
-  _at("The short answer") < _at("The claim you checked") < _at('id="stamp"') < _at('id="tldr"')
+  _at('id="short-label">Answer') < _at("The claim you checked") < _at('id="stamp"') < _at('id="tldr"')
   < _at('id="confidence"') < _at('id="h-read"') < _at('id="h-sort"') < _at("What the research says")
-  < _at(">Still open<") < _at('id="share-btn"') < _at('id="report-open"'))
+  < _at(">Limitations<") < _at('id="share-btn"') < _at('id="report-open"'))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
   and "Vitamin D supplements in winter cut colds</h1>" in _ord)
@@ -2627,7 +2639,7 @@ _edit_js = (ROOT / "static" / "app.js").read_text().split('$("edit-claim").addEv
 # The desk front: Edit claim is one of the ways on in the Open stop, beside
 # Share and Check another claim; Back from the answer is the claim box itself.
 t("the result offers 'Edit claim' with the other ways on, after what is still open",
-  _at("The claim you checked") < _at(">Still open<") < _at('id="edit-claim"') < _at('id="report-open"')
+  _at("The claim you checked") < _at(">Limitations<") < _at('id="edit-claim"') < _at('id="report-open"')
   and '>Edit claim</button>' in _ord and 'id="claim-echo"' in _ord)
 t("  it goes back to the claim box with the claim filled, cursor at the end, suggestions shut",
   "goHome()" in _edit_js and "input.value = claim" in _edit_js and "currentResult.claim" in _edit_js
@@ -2641,8 +2653,8 @@ t("  it is a 44px target and is not offered while a check runs (the stops after 
 # ---- who and what it applies to, then the limitation -----------------------------
 _folds_html = " ".join(_re.findall(r'<details class="said-wrap".*?</details>', _ord, _re.S))
 t("who and what the answer applies to is its own block, between the research and what is still open",
-  _at("What the research says") < _at("Who and what this applies to") < _at(">Still open<")
-  and "Adults aged 18 to 67" in _ord.split(">Still open<")[0].split("Who and what this applies to")[1])
+  _at("What the research says") < _at("Who and what this applies to") < _at(">Limitations<")
+  and "Adults aged 18 to 67" in _ord.split(">Limitations<")[0].split("Who and what this applies to")[1])
 t("  it is not inside a fold, so the folds do not say it a second time",
   "Who and what this applies to" not in _folds_html and "And who it does not" not in _folds_html
   and "Adults aged 18 to 67" not in _folds_html)
@@ -2675,8 +2687,8 @@ t("  the table of designs is the same in the script and on the server",
               (ROOT / "static" / "app.js").read_text().split("const TYPES = [")[1].split("\n];")[0])
   == [tuple(x) for x in _display.DESIGN_NOTES])
 t("  every source on the result page carries its line",
-  _ord.split('id="server-result"')[0].count('<li class="row" ') == _ord.split('id="server-result"')[0].count('<p class="note why">')
-  and _ord.count('<p class="note why">') >= 1)
+  _ord.split('id="server-result"')[0].count('<li class="row" ') == _ord.split('id="server-result"')[0].count('<p class="contrib">')
+  and _ord.count('<p class="contrib">') >= 1)
 if _shutil.which("node"):
     _tsrc = (ROOT / "static" / "app.js").read_text()
     _tsrc = ("const TYPES = [" + _tsrc.split("const TYPES = [")[1].split("function escapeHtml")[0])
@@ -2838,11 +2850,9 @@ t("each row names its design, and its group says whether the verdict used it",
 def _grp_audit(page):
     grp = {int(n): key for key, body in re.findall(r'<ul class="rows" id="grp-(\w+)"[^>]*>(.*?)</ul>', page, re.S)
            for n in re.findall(r'<li class="row" id="row-(\d+)"', body)}
-    status = dict((int(n), st) for n, st in re.findall(r'id="more-(\d+)" hidden><p class="status( no)?"', page))
     used = [s_["cited_in_verdict"] for s_ in json.loads(re.search(
         r'<script id="server-result" type="application/json"[^>]*>(.*?)</script>', page, re.S).group(1))["studies"]]
-    ok = len(grp) == len(used) == len(status) and all(
-        (grp[i + 1] == "relied") == u and (status[i + 1] == "") == u for i, u in enumerate(used))
+    ok = len(grp) == len(used) and all((grp[i + 1] == "relied") == u for i, u in enumerate(used))
     return ok, grp, used
 
 
@@ -2859,8 +2869,9 @@ _row_js = _row_js[:_row_js.index("\n}\n")]
 t("the server and the browser draw the same row",
   all(piece in _row_tpl and piece in _row_js
       for piece in ('<li class="row" id="row-', '<button class="row-head" type="button" aria-pressed="false"',
-                    '<span class="design">', '<p class="src">', 'aria-controls="more-', "Lift its sheet",
-                    "The answer names it", '<p class="note why">', "Deep dive on study")))
+                    '<span class="design">', '<p class="src">', '<details class="abs" id="abs-', "Lift its sheet",
+                    "Read abstract", "Hide abstract", "No abstract on PubMed", '<a class="act pm" href="',
+                    'target="_blank" rel="noopener">Open PubMed', "opens in a new tab", "Citations and related studies")))
 t("  and the chart's code is gone from the page and the script",
   "barcol" not in _ord and "function renderChart" not in _js and "fitSpines" not in _js
   and 'id="chart-sec"' not in _tpl)
@@ -3558,7 +3569,7 @@ with appmod.app.test_request_context("/"):
                                  "true", "Creatine raises strength.", "Strength rose (Study 1).", ["SA1"],
                                  [dict(_SA_TRIAL), dict(_SA_REVIEW)], "http://x", still_open="Doses.")
 t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
-  _sa["evidence_line"].startswith("Very low certainty") and _sa["verdict"] == "complicated",
+  _sa["evidence_line"].endswith("Certainty: very low.") and _sa["verdict"] == "complicated",
   (_sa["verdict"], _sa["evidence_line"]))
 # A saved answer that relied on a study the current code sets aside was written
 # with that study in view, and code cannot tell which of its sentences lean
@@ -4877,7 +4888,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence, and none of it shows a cure", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews.", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -5626,8 +5637,8 @@ t("  a pointer left with nothing above it, after a later step, is taken out",
                                "evidence": ["LDL fell by 0.19 mmol/L (Study 1)."]})["effect_size"]
   == breakdown.EFFECT_SIZE_ABOVE)
 t("  and the page prints no effect row when there is no line",
-  '{% if bv.effect_size %}<p class="effect">' in (ROOT / "templates" / "index.html").read_text()
-  and '(bv.effect_size ? `<p class="effect">' in (ROOT / "static" / "app.js").read_text())
+  '{% if eff.t %}<p class="effect">' in (ROOT / "templates" / "index.html").read_text()
+  and '(eff ? `<p class="effect">' in (ROOT / "static" / "app.js").read_text())
 
 # All of it, through a real check.
 _LENT_CLAIM = "Lentils lower LDL cholesterol"
@@ -6356,7 +6367,7 @@ t("guidance line: under an answer the guidance rule set, the evidence line says 
   _ge["evidence_line"] == verdict.GUIDANCE_LINE == "Rests on health guidance, not on these studies"
   and not re.search(r"(?i)\b(?:strong|moderate|weak|low|high|certainty|small|large|against|for this claim)\b",
                     _ge["evidence_line"])
-  and _ge_plain["evidence_line"].endswith("evidence against this claim"),
+  and _ge_plain["evidence_line"].startswith("The claim: Not supported by the studies reviewed."),
   (_ge["evidence_line"], _ge_plain["evidence_line"]))
 t("  and an answer the guidance rule did not set keeps its own figure",
   _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
@@ -7407,9 +7418,10 @@ t("footer: the separators are CSS on the links, not dots in the text, so none ca
   and re.search(r"\.foot-links a::before \{[^}]*content: \"\\00b7\"", _css9) is not None
   and re.search(r"\.foot-links \{[^}]*overflow: hidden", _css9) is not None, _fl[0])
 _design9 = (ROOT / "DESIGN.md").read_text()
-t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
-  "Palette roles" in _design9 and "Green never signals" in _design9
-  and all(h in _design9 for h in ("#f1f2ee", "#fafaf8", "#121514", "#434a46", "#5d6560", "#2c5848", "#d4e4da", "#0f1211")))
+t("DESIGN.md: palette roles are written down and say no colour signals safe or a good verdict",
+  "Palette roles" in _design9 and "No colour signals" in _design9 and "No accent colour" in _design9
+  and all(h in _design9 for h in ("#f4f2ef", "#fbfaf8", "#151412", "#4a4845", "#65625f", "#e6dcc6", "#12110f"))
+  and not any(h in _design9 for h in ("#9fc3b0", "#2c5848", "#d4e4da")))
 _tpl_who = (ROOT / "templates" / "index.html").read_text()
 t("who: with only a 'does not apply' sentence, the heading says so and no empty 'applies to' heading is left",
   "Who this does not apply to" in _tpl_who and '{% if who_yes %}<p class="intro label-2">And who it does not</p>{% endif %}' in _tpl_who
@@ -7443,10 +7455,9 @@ _acv = appmod._check_response(
 _acv_words = " ".join([_acv["tldr"], _acv["evidence_line"], _acv["breakdown"]["strength"],
                        *_acv["breakdown"]["says"]]).lower()
 t("F1: the evidence line is never surer than the short answer's stated certainty, in its own design word",
-  _acv["evidence_line"].startswith("Weak evidence")
-  and evidence.line_certainty(_acv["evidence_line"]) == "low", _acv["evidence_line"])
+  _acv["evidence_line"].startswith("The claim: No plain yes or no") and "Certainty:" not in _acv["evidence_line"], _acv["evidence_line"])
 t("F1: the short answer, the evidence line and the breakdown state one certainty level",
-  evidence.stated_certainty(_acv["tldr"]) == evidence.line_certainty(_acv["evidence_line"])
+  evidence.stated_certainty(_acv["tldr"])
   == evidence.stated_certainty(_acv["breakdown"]["strength"])
   == evidence.stated_certainty(*_acv["breakdown"]["says"]) == "low"
   and "moderate evidence" not in _acv_words and "strong evidence" not in _acv_words,
@@ -7854,7 +7865,7 @@ _f9line = (_f9a.get_json() or {}).get("evidence_line", "")
 _f9h = c.get("/", query_string={"q": _f9c}).get_data(as_text=True)
 t("fix 9: get_cached_by_key returns the stored search query", _f9k and _f9k["search_query"] == _GIN_Q)
 t("fix 9: the streamed check reads the review on the claim's outcome (moderate, not the lowest)",
-  _f9line.startswith("Moderate"), _f9line)
+  _f9line.endswith("Certainty: moderate."), _f9line)
 t("fix 9: the shared link prints the same evidence line as the streamed check",
   _f9line and _f9line in _f9h and "Low certainty evidence" not in _f9h)
 
@@ -7925,7 +7936,7 @@ try:
 finally:
     appmod.og.render_card = _xcard
 t("extra: a cached 'true' over a low-rated lead review is shown as complicated, with the low line",
-  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").startswith("Low certainty")
+  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").endswith("Certainty: low.")
   and "certainty of that evidence is low" in (_xa.get("tldr") or ""), (_xa.get("verdict"), _xa.get("evidence_line"), _xa.get("tldr")))
 t("extra: the shared page, its markup and its card never say Likely true over that line",
   not _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">" + appmod.VERDICT_LABELS["true"], _xh)
@@ -7984,7 +7995,9 @@ t("second fix 1: vaccine-shaped rows rated over a range stay Likely true with th
   all(p["verdict"] == "true" and p["tldr"] == tl and lst["verdict"] == "true" for _cl, tl, p, lst in _r1),
   [(p["verdict"], p["evidence_line"], p["tldr"]) for _c, _t, p, _l in _r1])
 t("second fix 1: their lines still read as ranges that start low, which is not a low rating",
-  all(evidence.line_certainty(p["evidence_line"]) == "low" and " to " in p["evidence_line"] for _c, _t, p, _l in _r1),
+  all("Supported only by limited studies. Certainty varies, from low to " in p["evidence_line"]
+      and p["evidence_line"].endswith(".") and not p["evidence_line"].endswith("..")
+      and "Certainty: " not in p["evidence_line"] for _c, _t, p, _l in _r1),
   [p["evidence_line"] for _c, _t, p, _l in _r1])
 _tur1 = appmod._check_response("Turmeric eases joint pain", "(turmeric) AND (joint pain)", "true", "Turmeric eases joint pain.",
                                "It helps (Study 1).", ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
@@ -8385,9 +8398,10 @@ for _cl, _vd, _tl, _so in [("A very long claim " * 40, "complicated", "An answer
                            ("Short", "true", "Short answer.", ""), ("Medium length claim about sleep", "false", "", "Doses vary.")]:
     _im = _CI.open(_cio.BytesIO(og.render_card(_cl, _vd, _tl, 5, ("Meta-Analysis", "2020", "T " * 200), _so))).convert("RGB")
     _shots.append(_im)
+from PIL import ImageColor as _ImageColor_og  # noqa: E402
 def _runs_off(im):
     # The strip at the right edge, below the masthead, is only ever the night or the paper.
-    return any(im.getpixel((x, y)) not in {(15, 18, 17), (241, 242, 238)}
+    return any(im.getpixel((x, y)) not in {_ImageColor_og.getrgb(og.DEEP), _ImageColor_og.getrgb(og.PAPER)}
                for y in range(100, 630, 2) for x in range(1150, 1200, 2))
 t("share card: exactly 1200x630 for a very long claim, a run of letters, a long answer and a short one",
   all(i.size == (1200, 630) for i in _shots), [i.size for i in _shots])
@@ -8406,7 +8420,7 @@ t("share card: a long still-open line wraps to up to three lines before it trunc
   len(_o3) == 3 and og._wrap(_cd, _so3 * 3, og._body(21), 1000, 3)[-1].endswith("\u2026") and not _o3[-1].endswith("\u2026")
   and _i3.size == (1200, 630) and _dark(_i3, 330, 560) > _dark(_i1, 330, 560), _o3)
 t("share card: three still-open lines leave the footer row clear",
-  not any(_i3.getpixel((x, y)) != (241, 242, 238) for y in range(560, 590) for x in range(64, 1136, 3)))
+  not any(_i3.getpixel((x, y)) != _ImageColor_og.getrgb(og.PAPER) for y in range(560, 590) for x in range(64, 1136, 3)))
 
 # The card a link to the site itself unfurls with is a brand card: the
 # tagline is never drawn as if it were a claim someone checked.
@@ -8795,7 +8809,7 @@ _oth = c.get("/?q=creatine+strength+off+topic+saved").data.decode()
 # The desk front's Weighed list: a group button, then its rows (open when the
 # button says aria-expanded="true", the list hidden otherwise).
 _ot_src = _oth[_oth.index('id="rows"'):_oth.index('id="s5"') if 'id="s5"' in _oth else _oth.index('id="s6"')]
-_ot_groups = [(m.group(2), m.group(1) == "true", int(m.group(3)), _re_s.findall(r">PubMed (\w+)</a>", m.group(4)))
+_ot_groups = [(m.group(2), m.group(1) == "true", int(m.group(3)), _re_s.findall(r"PubMed (\w+)</p>", m.group(4)))
               for m in _re_s.finditer(r'<h3 class="grp-h"><button class="grp-btn" type="button" aria-label="[^"]*" '
                                       r'aria-controls="grp-\w+" aria-expanded="(true|false)">([^<]*) \((\d+)\)</button></h3>'
                                       r'\s*<ul class="rows" id="grp-\w+"(?: hidden)?>(.*?)</ul>', _ot_src, _re_s.S)]
@@ -8804,7 +8818,7 @@ t("off topic: a study both cited and off topic is never under 'Relied on' on the
   "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
   and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
 t("  it sits in a 'Set aside: off topic' group, folded, with the other off-topic study",
-  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PubMed OT3</a>") == 1, _ot_groups)
+  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count("PubMed OT3</p>") == 1, _ot_groups)
 t("  and its line says it was set aside, not relied on",
   "Read and set aside: measures a different outcome" in _ot_src.split("PubMed OT3")[1].split("</li>")[0])
 _otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
@@ -9218,7 +9232,7 @@ _mo_grp = _mo_pg.split('aria-controls="grp-off"')
 t("  the page puts it in 'Set aside: off topic' with the line: " + _MO_WHY,
   len(_mo_grp) == 2 and "Set aside: off topic (" in _mo_grp[1].split("</button>")[0]
   and _HAIR["study"]["title"][:30] in _mo_grp[1].split("</ul>")[0]
-  and f'<p class="note why">{_MO_WHY}</p>' in _mo_grp[1].split("</ul>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
+  and f'What this study contributes</b> {_MO_WHY}</p>' in _mo_grp[1].split("</ul>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
 t("  and that line is true of the rule: the study measured something else, and no dash",
   "different outcome" in _MO_WHY and not any(ch in _MO_WHY for ch in "\u2013\u2014"))
 if _shutil.which("node"):
@@ -9833,9 +9847,9 @@ _el_off = _el("Cold showers boost immunity", _EL_Q, "complicated",
 _el_on = _el("Cold showers boost immunity", _EL_Q, "complicated",
              _el_bd("Immune function rose with an effect size of 1.03 (Study 1).", _EL_LARGE))
 t("effect line: a figure whose sentence names another outcome gives the evidence line no size",
-  _el_off == "Strong evidence, but no plain yes or no", _el_off)
+  _el_off == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews.", _el_off)
 t("  and a figure whose sentence names the claim's outcome keeps it",
-  _el_on == "Strong evidence of a large effect, but no plain yes or no", _el_on)
+  _el_on == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews.", _el_on)
 # ---- final fix F8: the effect box follows the line's size gate ---------------
 # Live: cold showers showed "a large effect" for a figure about inflammation.
 # When line_label withholds the size from the line, code writes no size word
@@ -9874,8 +9888,7 @@ _h8_rep = _f8("Cold showers boost immunity", _EL_Q, "complicated",
                                                      "That is an effect size of 1.03, a large effect (Study 1)."]))
 t("H8: with the size withheld, a 'That is' sentence that only repeats the figure goes, box and research lines",
   _h8_rep["breakdown"]["effect"]["label"] == ""
-  and _h8_rep["breakdown"]["effect_size"] == ("Inflammation increased with an effect size of 1.03 (Study 1). "
-                                              "Immune function rose with an effect size of 1.03 (Study 1).")
+  and _h8_rep["breakdown"]["effect_size"] == "Immune function rose with an effect size of 1.03 (Study 1)."
   and _h8_rep["breakdown"]["says"] == ["Inflammation increased with an effect size of 1.03 (Study 1)."],
   (_h8_rep["breakdown"]["effect_size"], _h8_rep["breakdown"]["says"]))
 t("  one that converts the figure stays (the F8 case, and arithmetic in percent)",
@@ -10060,18 +10073,18 @@ _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
                tldr="No, it does not cure it.")
 t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
-  _el_cure == "Strong evidence, and none of it shows a cure", _el_cure)
+  _el_cure == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews.", _el_cure)
 _el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
               _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
                      dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
 t("  and a short name in the outcome group (ASD) does not make the outcome unreadable",
-  _el_asd == "Strong evidence of no clear effect", _el_asd)
+  _el_asd == "The claim: Not supported by the studies reviewed, which found no clear effect. Based on pooled reviews.", _el_asd)
 _el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
               _el_bd("Deaths were lower with a relative risk of 0.83 (Study 1).",
                      {"figure": "relative risk 0.83", "label": "small", "plain": "about 17% lower risk"}),
               tldr="Yes, coffee drinkers lived longer.")
 t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
-  _el_gen == "Strong evidence for this claim", _el_gen)
+  _el_gen == "The claim: Supported by the studies reviewed. Based on pooled reviews.", _el_gen)
 
 # ---- The evidence line sizes only a figure that moves the way the claim says ----
 # Live run: "Smoking causes lung cancer" (True) read "a moderate effect", from
@@ -10097,9 +10110,9 @@ _ed_up = _ed("Smoking causes lung cancer", _ED_Q,
              "Current smokers had a relative risk of 4.21 for lung cancer (Study 1).",
              {"figure": "relative risk 4.21", "label": "large", "plain": "about 321% higher risk"})
 t("effect direction: a claim that something raises a risk, answered True, is not sized by a figure of lower risk",
-  _ed_down == "Strong evidence for this claim", _ed_down)
+  _ed_down == "The claim: Supported by the studies reviewed. Based on pooled reviews.", _ed_down)
 t("  and a figure of higher risk under it keeps its size",
-  _ed_up == "Strong evidence for this claim, a large effect", _ed_up)
+  _ed_up == "The claim: Supported by the studies reviewed, a large effect. Based on pooled reviews.", _ed_up)
 _ed_mirror = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
                  "The depression odds ratio was 0.83 (Study 1).",
                  {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% lower odds"})
@@ -10107,8 +10120,8 @@ _ed_mirror_up = _ed("Exercise lowers the risk of depression", "(exercise) AND (d
                     "The depression odds ratio was 0.83 (Study 1).",
                     {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% higher odds"})
 t("  and the mirror case: a lowers claim keeps a figure of lower odds and loses one of higher odds",
-  _ed_mirror == "Strong evidence for this claim, a small effect"
-  and _ed_mirror_up == "Strong evidence for this claim", (_ed_mirror, _ed_mirror_up))
+  _ed_mirror == "The claim: Supported by the studies reviewed, a small effect. Based on pooled reviews."
+  and _ed_mirror_up == "The claim: Supported by the studies reviewed. Based on pooled reviews.", (_ed_mirror, _ed_mirror_up))
 t("  and a claim that says no direction ('improves'), or a figure that says none, gives no size",
   breakdown.claim_direction("Creatine improves memory") is None
   and breakdown.claim_direction("Smoking does not cause lung cancer") is None
@@ -10224,12 +10237,12 @@ def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd
 t("meet: the thin review is one code sets aside, and it says its evidence is thin",
   evidence.measured_outcome(_TR_THIN, _hair_out, "", "(creatine)") is False and evidence.says_thin(_TR_THIN))
 t("meet: a thin review among the put-back studies lowers the line shown",
-  _tr_line([_TR_REV]).startswith("Moderate certainty") and _tr_line([_TR_REV, _TR_THIN]).startswith("Low certainty"),
+  _tr_line([_TR_REV]).endswith("Certainty: moderate.") and _tr_line([_TR_REV, _TR_THIN]).endswith("Certainty: low."),
   (_tr_line([_TR_REV]), _tr_line([_TR_REV, _TR_THIN])))
 _TR_BD = {"effect": {"label": "large", "effect_size": "Inflammation rose with an effect size of 1.03 (Study 1)."}}
 t("meet: a size about another outcome is withheld in both readings, and the less sure line still shows",
   "large" not in _tr_line([_TR_REV], bd=_TR_BD) and "large" not in _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)
-  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).startswith("Low certainty"),
+  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).endswith("Certainty: low."),
   (_tr_line([_TR_REV], bd=_TR_BD), _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)))
 _TR_G = verdict.GUIDELINE_LEAD + "creatine is fine for most adults."
 # A guidance-set answer is one on a claim guidance is read for (H3): the
@@ -10498,7 +10511,7 @@ pubmed.search_and_fetch = _rt_search
 _mc = _f8("Cold showers cure the common cold", "(cold shower) AND (common cold)", "false", _f8_bd)
 _mc_text = json.dumps(_mc).lower()
 t("meet F8 and L4: a false answer to a cure claim whose size is withheld shows the cure line and no code size word",
-  "none of it shows a cure" in _mc["evidence_line"] and _mc["breakdown"]["effect"]["label"] == ""
+  _mc["evidence_line"].startswith("Cure claim: Not supported by the studies reviewed") and _mc["breakdown"]["effect"]["label"] == ""
   and not re.search(r"\b(?:small|moderate|large) effect", _mc_text), (_mc["evidence_line"], _mc["breakdown"]))
 # F9 (the guidance line whenever a study is listed) meets L1 (a retracted
 # paper is background): the only cited study is retracted.
@@ -10850,29 +10863,19 @@ t("CLAUDE.md and AGENTS.md describe the desk: desk.css and desk.js named, the ol
 _cue_tpl = (ROOT / "templates" / "index.html").read_text()
 _cue_js = (ROOT / "static" / "desk.js").read_text()
 _cue_css = (ROOT / "static" / "desk.css").read_text()
-t("the cue row: one wide button in the bar that does what Next does, out of the tab order and not read; the dim Below: line is gone",
-  'class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"' in _cue_tpl
-  and _cue_tpl.index('id="cue"') > _cue_tpl.index('id="where"') and _cue_tpl.index('id="cue"') < _cue_tpl.index('id="menu"')
-  and 'cueBtn.addEventListener("click", function () { nextBtn.click(); })' in _cue_js
-  and "function cueWords(k, keep, left, short)" in _cue_js and "cueWords(k, keep, left, short)" in _cue_js.split("function nextWords")[1]
-  and "Below:" not in _cue_tpl and "Below:" not in (ROOT / "static" / "app.js").read_text()
-  and "Below:" not in (ROOT / "display.py").read_text() and 'id="below"' not in _cue_tpl)
-t("the cue row's chevron dips once and never under reduced motion; Next no longer pulses; the docs say so",
-  "@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }" in _cue_css
-  and "animation: dip 600ms ease-in-out 2" in _cue_css and "pulse" not in _cue_css and "pulse" not in _cue_js
-  and "if (reduce.matches || cueBtn.hidden" in _cue_js and "if (detail.fresh && !typing) armDip();" in _cue_js.split('addEventListener("desk:result"')[1].split("});")[0]
-  and "The cue's chevron moves one time only, as two short dips" in (ROOT / "DESIGN.md").read_text()
-  and "chevron moves one time only, as two short dips" in _cl_design
-  and "Next pulses once" not in _cl_design)
-# the dip is said one way everywhere: one time only, as two short dips; never "dips once" beside "twice"
-_dip_docs = [(ROOT / "DESIGN.md").read_text(), (ROOT / "CLAUDE.md").read_text(), _cue_js]
-t("the docs and the code say the chevron's movement one way: one time only, as two short dips",
-  not [d for d in _dip_docs if "dips once" in d or "(600ms, twice)" in d or "twice, 600 ms" in d]
-  and all("one time only, as two short dips" in d for d in _dip_docs))
-_cue_design = (ROOT / "DESIGN.md").read_text().split("- **The cue row**")[1].split("\n- **")[0]
-t("DESIGN.md's cue paragraph says Next goes quiet beside the cue and how wide the cue is on a wide screen",
-  "quiet partner" in _cue_design and "drawn exactly as Back" in _cue_design and "no\n  wider than 480px" in _cue_design
-  and "centred in the block" in _cue_design and "accessible name" in _cue_design)
+# Replaced (NAV 2): the cue row, its dip and Next's quiet partner went. The bar holds the picker alone,
+# nothing dips, and the docs say so.
+_bar_tpl = _cue_tpl.split('<div class="bar" id="bar">')[1].split("</div>")[0]
+t("cue replaced: the bar holds one control, the section picker, named for screen readers; no cue, Next or Back",
+  'id="cue"' not in _cue_tpl and 'id="next"' not in _cue_tpl and 'id="prev"' not in _cue_tpl
+  and _bar_tpl.count("<button") == 1 and 'id="where"' in _bar_tpl and 'aria-haspopup="true"' in _bar_tpl
+  and 'aria-label="Sections. You are in Answer. Choose a section"' in _bar_tpl
+  and "cueWords" not in _cue_js and "nextBtn" not in _cue_js and "Below:" not in _cue_tpl)
+t("dip replaced: nothing in desk.css or desk.js dips or pulses, and the docs no longer promise a dip",
+  "@keyframes dip" not in _cue_css and "armDip" not in _cue_js and "pulse" not in _cue_css and "pulse" not in _cue_js
+  and "two short dips" not in (ROOT / "DESIGN.md").read_text() and "two short dips" not in _cl_design
+  and "there is no cue row, no Back or Next" in _cl.replace("\n  ", " ")
+  and "Three ways to move, no others" in (ROOT / "DESIGN.md").read_text())
 
 _dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
 t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",
@@ -10887,7 +10890,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v122";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v128";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -11134,7 +11137,7 @@ if _shutil.which("node"):
       [j["stops"] for j in _r4js_out])
     t("R4: stops 2 and 3 carry the same lines on both paths",
       all("below" not in _tr.byid and "below" not in _js_["lines"]
-          and _tr.byid.get("cue-label", "").strip() == "Scroll down: what was read"
+          and "cue-label" not in _tr.byid
           and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
           and _tr.byid.get("path", "").strip() == _js_["lines"]["path"] and _tr.byid.get("legend3", "").strip() == _js_["lines"]["legend"]
           for _tr, _js_ in zip(_r4_trees, _r4js_out)),
@@ -11478,10 +11481,9 @@ t("G7: the strip is a banner with the notice in it, and the site links are a Sit
 t("  the last stop's closing lines are a footer landmark holding the notice and the site links",
   _g6_res.count('role="contentinfo"') == 1
   and re.search(r'<footer class="closing" role="contentinfo">\s*<p class="legend privacy">.*?<p class="nma">Not medical advice\..*?<nav class="site-links" aria-label="Site">.*?</nav>\s*</footer>', _g7_s6, re.S) is not None)
-t("  Still open is a heading on both paths and its number is not read",
-  '<h2 class="eyebrow" id="h-open"><b aria-hidden="true">' in _g7_s6 and '<h2 class="eyebrow" id="h-open"><b aria-hidden="true">06</b>Still open</h2>' in _g6_home
-  and '$("h-open").innerHTML = `<b aria-hidden="true">${pad2(stops.indexOf("Open") + 1)}</b>Still open`;' in _g6_app
-  and 'aria-labelledby="h-open"' in _g7_s6)
+t("  Limitations is a heading on both paths, with no numeral",
+  '<h2 class="eyebrow" id="h-open">Limitations</h2>' in _g7_s6 and '<h2 class="eyebrow" id="h-open">Limitations</h2>' in _g6_home
+  and '$("h-open").innerHTML' not in _g6_app and 'aria-labelledby="h-open"' in _g7_s6)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)
@@ -13105,6 +13107,1982 @@ finally:
     appmod.time = __import__("time")
     appmod.HOME_LIST_SECONDS = 0
     appmod._drop_home_lists()
+
+# ---- q10-nav, point 1: every study shows Read abstract and Open PubMed ------------------------
+# On every row, server rendered (so phone, desktop, 3D, text mode and scripts off all get it):
+# a Read abstract disclosure (or "No abstract on PubMed"), and an Open PubMed link in a new tab
+# that says so to screen readers. No visible text says "Details"; the lift instruction is gone.
+def _nav_rows(page):
+    return re.findall(r'<li class="row" id="row-\d+".*?</li>', page, re.S)
+_nav_ord = _nav_ord_early
+_nav_pages = [_nav_ord, _nav_streamed_early]
+_nav_bad = []
+for _np in _nav_pages:
+    for _r in _nav_rows(_np):
+        _has_abs = re.search(r'<details class="abs" id="abs-\d+"><summary class="act"><span class="shut">Read abstract</span>', _r)
+        _no_abs = '<p class="noabs">No abstract on PubMed</p>' in _r
+        _pm = re.search(r'<a class="act pm" href="https://[^"]+" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study \d+, opens in a new tab</span></a>', _r)
+        # a study whose number is not a PubMed number and that has no address (test data) has no page to open
+        _no_page = re.search(r'PubMed (\w+)</p>', _r) and not re.search(r'PubMed \d+</p>', _r) and 'class="act pm"' not in _r
+        if not ((_has_abs or _no_abs) and (_pm or _no_page) and "<summary" not in _r.split('class="abs-body"')[-1]):
+            _nav_bad.append(_r[:160])
+t("NAV 1: every study row has Read abstract (or says there is none) and Open PubMed in a new tab",
+  all(_nav_rows(p_) for p_ in _nav_pages) and not _nav_bad, _nav_bad[:2])
+t("NAV 1: the abstract is in the row itself, with the citations and related studies inside the opened part",
+  re.search(r'<div class="abs-body"><p class="abs-text">[^<]+</p><button type="button" class="act quiet study-go"', _nav_ord) is not None)
+_nav_vis = [re.sub(r"<[^>]+>", " ", re.sub(r"<script.*?</script>|<style.*?</style>", "", p_, flags=re.S)) for p_ in _nav_pages]
+t("NAV 1: no visible text says Details, and the lift instruction is gone from both renderers",
+  not any(re.search(r"\bDetails\b", v) for v in _nav_vis)
+  and all("Pick a study to lift its sheet" not in x for x in (_tpl, _js, (ROOT / "templates" / "index.html").read_text(), (ROOT / "static" / "app.js").read_text()))
+  and "Each study has its PubMed page, and its abstract where PubMed has one." in _nav_ord)
+_nav_css = (ROOT / "static" / "desk.css").read_text()
+t("NAV 1: the actions are 44px targets on every width and never hidden on a wide screen",
+  ".row .act { appearance: none; box-sizing: border-box; min-height: 44px;" in _nav_css
+  and ".row-more { display: none; }" not in _nav_css and ".row .noabs { display: inline-flex; align-items: center; min-height: 44px;" in _nav_css)
+
+# ---- q10-nav, point 2: three ways to move (scrolling, the picker, View evidence) ------------
+# Browser checks N2a to N2f in scripts/ui_desk.mjs replace the cue, Back, Next and dip checks.
+_nav_s2 = _nav_ord.split('id="s2"')[1].split('id="s3"')[0]
+_nav_vis_all = " ".join(_nav_vis)
+t("NAV 2: the Answer has one button, View evidence; no Scroll down, Keep reading or Back to the short answer anywhere",
+  len(re.findall(r'<button[^>]*class="btn"', _nav_s2)) == 1 and "data-again" not in _nav_s2 and "prev" not in _nav_s2 and '<button class="btn" type="button" id="how-answer">View evidence</button>' in _nav_s2
+  and all(w not in x for w in ("Scroll down", "Back to the short answer", "Keep reading", "See how we got this answer")
+          for x in (_nav_vis_all, (ROOT / "templates" / "index.html").read_text(), (ROOT / "static" / "app.js").read_text(),
+                    (ROOT / "static" / "desk.js").read_text())))
+t("NAV 2: Check another claim shows once on the page, at the end, and the picker's menu offers it too",
+  _nav_ord.count("data-again") == 1 and _nav_ord.index("data-again") > _nav_ord.index('id="h-open"')
+  and '"menu-again"' in (ROOT / "static" / "desk.js").read_text())
+t("NAV 2: the server names the section the reader is in, so the picker is never an empty button",
+  '<span id="where-name">Answer</span>' in _nav_ord)
+
+# ---- q10-nav, point 4: four names, and one line per study on what it contributes -----------
+_nav_names = re.findall(r'class="eyebrow" id="[\w-]+">([^<]+)<', _nav_ord)
+t("NAV 4: the sections are named Answer, Studies, Explanation, Limitations, with no numerals or slogans",
+  _nav_names == ["Studies", "Explanation", "Limitations"] and 'id="short-label">Answer<' in _nav_ord
+  and 'aria-labelledby="e-read"' in _nav_ord and 'aria-labelledby="e-research"' in _nav_ord
+  and not any(w in _nav_vis_all for w in ("Weighed, not counted", "The thorough answer"))
+  and re.search(r'class="eyebrow"[^>]*><b', _nav_ord) is None
+  and all(f'SEC = {{ Claim: "Answer", Answer: "Answer", Read: "Studies", Weighed: "Studies", Research: "Explanation", Open: "Limitations" }}' in (ROOT / "static" / "desk.js").read_text() for _ in [0]))
+_nav_lr = _nav_rows(_nav_lines)
+t("NAV 4: every study has a labelled What this study contributes line that is never empty",
+  _nav_lr and all(re.search(r'<p class="contrib"><b class="lbl">What this study contributes</b> \S', r_) for r_ in _nav_lr),
+  [r_[:120] for r_ in _nav_lr if "What this study contributes</b> " not in r_][:2])
+t("NAV 4: contribution, caution and Indirect context print when the engine sends them",
+  "What this study contributes</b> Test line: the one trial that measured colds directly." in _nav_lines
+  and '<p class="caution">Test caution: a small trial.</p>' in _nav_lines
+  and '<p class="indirect"><b class="lbl">Indirect context</b> Test reason: it measured blood levels, not colds.</p>' in _nav_lines,
+  sorted(set(_nav_seen))[:8])
+_nav_appjs = (ROOT / "static" / "app.js").read_text()
+t("NAV 4: app.js writes the same line, in the same order of sources, as the server",
+  "function studyLines(s, n, bv)" in _nav_appjs and "${studyLines(s, n, bv)}<div class=\"acts\">" in _nav_appjs
+  and all(w in _nav_appjs for w in ('"What this study contributes"'.strip('"'), "studyWhy(s)", " Studied in: ", "Indirect context"))
+  and "Relied on" not in _nav_appjs.split("function studyRowHtml")[1].split("\n}\n")[0])
+
+# ---- NAV fix: every function desk.js calls by name is defined (a study group's button called a removed setGroup) ----
+_navfix_js = (ROOT / "static" / "desk.js").read_text()
+_navfix_calls = set(re.findall(r"(?<![\w.])(setGroup|grpBtn|rowBtn|setMore|selectStudy|clearStudy|layoutChanged|answerFoot)\(", _navfix_js))
+t("NAV fix: the study groups' buttons open and close their group (setGroup and every helper desk.js calls is defined)",
+  all(re.search(r"function " + f + r"\(", _navfix_js) for f in _navfix_calls) and "setGroup" in _navfix_calls,
+  sorted(f for f in _navfix_calls if not re.search(r"function " + f + r"\(", _navfix_js)))
+
+# ---- NAV N2: the short answer is never covered, and the Answer's first screen still goes on (browser check N5a measures it) ----
+_n2_d3 = (ROOT / "static" / "desk3d.js").read_text()
+_n2_js = (ROOT / "static" / "desk.js").read_text()
+t("NAV N2: every phone draws the answer card at the same width (no narrower card on short screens), and a long claim gives up card lines first",
+  "wantW = Math.min(W - 22, 560);" in _n2_d3 and "0.75 : 1)" not in _n2_d3
+  and 'q.style.webkitLineClamp = "2"' in _n2_d3 and 'q.style.webkitLineClamp = "1"' in _n2_d3)
+t("NAV N2: layout places how sure after the fold so the bar crosses a line or the Studies heading shows, from a clean start",
+  "fold(); answerFoot(); measure();" in _n2_js and 'capAns.style.marginTop = ""; layoutHook();' in _n2_js)
+t("NAV N2: the saved fixtures hold a claim of about 140 characters with a short answer of three lines or more",
+  any(130 <= len(r["claim"]) <= 150 and len(r["tldr"]) >= 140 for r in _R4_ROWS))
+
+# ---- NAV N3: a jump (picker, rail, View evidence) ends where the screen visibly goes on (browser check N2f measures it) ----
+_n3_dj = (ROOT / "static" / "desk.js").read_text()
+t("NAV N3: a jump lands on the stop's top moved by landShift, which crosses the foot with words and keeps the heading whole, and the Answer keeps its top",
+  "off = landShift(k, at); } return at + off;" in _n3_dj and "function landShift(k, y)" in _n3_dj
+  and 'STOPS[k].name === "Answer"' in _n3_dj and "d <= room" in _n3_dj)
+
+# ---- NAV N3: an abstract is quoted from PubMed as it is, except that an en or an em dash shows as a plain hyphen ----
+# Both renderers: the server's row (templates/index.html) and app.js's studyRowHtml. A minus sign and every word stay.
+_n3_abs = "Doses of 5\u20137 mg were tested. Benefit\u2014if any\u2014was small, a change of \u22120.2 points."
+_n3_want = "Doses of 5-7 mg were tested. Benefit-if any-was small, a change of \u22120.2 points."
+_n3_studies = [dict(STUDIES[0], pmid="12345678", title="Dash study", abstract=_n3_abs)]
+db.put_cached_verdict("abstract dashes render plain", "q", "complicated", "Because (Study 1).", ["12345678"],
+                      _n3_studies, tldr="Short take.", still_open="Open.")
+_n3_page = c.get("/?q=abstract%20dashes%20render%20plain").data.decode()
+_n3_srv = re.findall(r'<p class="abs-text">(.*?)</p>', _n3_page, re.S)
+_n3_js = _apprun("__out.h = studyRowHtml(" + json.dumps(_n3_studies[0]) + ', 0, "relied", true, null);')["h"]
+_n3_jst = re.findall(r'<p class="abs-text">(.*?)</p>', _n3_js, re.S)
+t("NAV N3: the server-rendered abstract shows an en dash and an em dash as hyphens, the words and the minus sign intact",
+  [_htmllib.unescape(x) for x in _n3_srv] == [_n3_want], _n3_srv[:1])
+t("NAV N3: app.js draws the same abstract the same way",
+  [_htmllib.unescape(x) for x in _n3_jst] == [_n3_want], _n3_jst[:1])
+
+# ---- No mint on the night (q10-look 1) ---------------------------------------------------
+# The owner asked four times for no neon or AI colours; the pale mint #9fc3b0 on near-black
+# was the cause. It is gone from both stylesheets: links are the words' colour with an
+# underline, labels a quieter grey, the focus ring the words' colour (ink by day).
+_nm_desk = (ROOT / "static" / "desk.css").read_text()
+_nm_style = (ROOT / "static" / "style.css").read_text()
+t("NO MINT: #9fc3b0 and the sage token are gone from desk.css and style.css",
+  all("9fc3b0" not in x.lower() and "--sage" not in x and "--desk-sage" not in x for x in (_nm_desk, _nm_style)))
+t("NO MINT: a link on the night is the words' colour and keeps its underline",
+  re.search(r"(?m)^a \{ color: var\(--on-deep\); text-underline-offset: 3px; \}", _nm_desk) is not None
+  and not re.search(r"(?m)^a \{[^}]*text-decoration: none", _nm_desk))
+t("NO MINT: the focus ring is the words' colour on the night and ink by day, drawn outside the control",
+  "--desk-focus: var(--desk-on);" in _nm_desk and "--focus: var(--ink);" in _nm_style
+  and re.search(r":focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 3px;", _nm_desk) is not None)
+t("NO MINT: the study-number box is a neutral grey and a selection a warm paper tint",
+  "--desk-ref: #666461;" in _nm_desk and "--tint: #e6dcc6;" in _nm_style)
+
+# ---- Warm neutral greys (q10-look 2) -----------------------------------------------------
+# Every grey on the night and by day keeps its lightness and leans to the lamp (hue 75), with
+# chroma at most 0.006 for grounds and lines and 0.008 for text: no green cast. theme-color and
+# the manifest follow --deep.
+import math as _wg_m
+def _wg_oklch(h):
+    h = h.lstrip("#").lstrip("0x") if h.startswith("0x") else h.lstrip("#")
+    f = lambda c: (c / 12.92) if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = [f(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4)]
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    q = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * q
+    A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * q
+    B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * q
+    return L, _wg_m.hypot(A, B), _wg_m.degrees(_wg_m.atan2(B, A)) % 360
+_wg_greys = {}
+for _wg_f in ("desk.css", "style.css"):
+    _wg_src = (ROOT / "static" / _wg_f).read_text()
+    for _wg_k, _wg_h in re.findall(r"(--[a-z0-9-]+):\s*#([0-9a-fA-F]{6})\b", _wg_src):
+        _wg_l, _wg_c, _wg_hue = _wg_oklch(_wg_h)
+        if _wg_c < 0.02 and _wg_h.lower() not in ("ffffff", "000000"):
+            _wg_greys[_wg_f + " " + _wg_k] = (_wg_h, round(_wg_c, 4), round(_wg_hue))
+# at this little chroma an 8-bit hex can only land near hue 75: 40 to 100 is "leans to the lamp"
+_wg_bad = {k: v for k, v in _wg_greys.items() if not (40 <= v[2] <= 100 and v[1] <= 0.008)}
+t("WARM GREYS: every grey token in desk.css and style.css leans to hue 75 with chroma 0.008 or less",
+  len(_wg_greys) >= 30 and not _wg_bad, _wg_bad)
+_wg_3d = (ROOT / "static" / "desk3d.js").read_text()
+t("WARM GREYS: the scene's background and wall are warm neutral greys of the same lightness",
+  "scene.background = new T.Color(0x0c0b0a)" in _wg_3d and "color: 0x413f3d, roughness: 0.96" in _wg_3d)
+_wg_deep = re.search(r"--desk-deep:\s*(#[0-9a-f]{6})", (ROOT / "static" / "desk.css").read_text()).group(1)
+_wg_man = json.loads((ROOT / "static" / "manifest.webmanifest").read_text())
+t("WARM GREYS: theme-color on every page and the manifest follow --deep",
+  _wg_man["theme_color"] == _wg_man["background_color"] == _wg_deep
+  and all(f'name="theme-color" content="{_wg_deep}"' in (ROOT / "templates" / n).read_text()
+          for n in ("index.html", "info.html", "privacy.html", "404.html", "stats.html")), (_wg_deep, _wg_man["theme_color"]))
+
+# ---- The scene's fill lights and pencil (q10-look 3) ------------------------------------
+# The two faint fill lights keep their intensity and lightness and lose their mint and blue;
+# the pencil is black lacquer of the same lightness.
+_sl_3d = (ROOT / "static" / "desk3d.js").read_text()
+t("SCENE: the fill lights are warm neutral at their old intensity, and the pencil is black lacquer",
+  "new T.HemisphereLight(0xb2aeaa, 0x1a120c, 0.12)" in _sl_3d and "new T.DirectionalLight(0xa6a29e, 0.06)" in _sl_3d
+  and "color: 0x343331, roughness: 0.42" in _sl_3d
+  and not any(h in _sl_3d.lower() for h in ("9fb3ad", "8fa6b4", "1d3a2e")))
+
+# ---- The icon's cloths (q10-look 4) -------------------------------------------------------
+# The home-screen icon takes the desk's own book cloths and a paper mark: no blue, purple,
+# green or mint. The PNGs are drawn by scripts/make_icons.py from the same shapes.
+_ic_svg = (ROOT / "static" / "icons" / "icon.svg").read_text().lower()
+t("ICON: the spines are the scene's cloths and the mark is paper white",
+  all(h in _ic_svg for h in ("#cfc6b2", "#3a2f26", "#2a2d29", "#7e4f3d", "#f4f2ef", "#12110f"))
+  and not any(h in _ic_svg for h in ("#3a4e6b", "#5a4760", "#35594c", "#9fc3b0")))
+try:
+    from PIL import Image as _ic_Image
+    _ic_px = _ic_Image.open(ROOT / "static" / "icons" / "icon-512.png").convert("RGB")
+    t("ICON: the 512 PNG is the same drawing (the tall relied-on spine is page cloth, the ground --deep)",
+      _ic_px.getpixel((213, 300)) == (0xcf, 0xc6, 0xb2) and _ic_px.getpixel((5, 5)) == (0x12, 0x11, 0x0f), (_ic_px.getpixel((213, 300)), _ic_px.getpixel((5, 5))))
+except ImportError:
+    pass
+
+# ---- One room of warm colour (q10-look 5) -------------------------------------------------
+# --green had no rule left on any page and is gone. Across the shipped colour files, every
+# colour literal with chroma 0.02 or more has a hue between 40 and 100: the lamp, the wood and
+# the paper are the only colour in the room (no green, mint, teal, cyan, blue or purple).
+_pa_css = (ROOT / "static" / "style.css").read_text()
+t("PALETTE: --green is gone and nothing on any page asks for it",
+  "--green" not in _pa_css and not any("var(--green)" in (ROOT / d / f).read_text()
+      for d, f in [("static", "desk.css"), ("static", "app.js"), ("static", "desk.js")] + [("templates", n.name) for n in (ROOT / "templates").glob("*.html")]))
+def _pa_lits(src):
+    out = []
+    for m in re.finditer(r"#([0-9a-fA-F]{6})\b|0x([0-9a-fA-F]{6})\b|rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", src):
+        h = m.group(1) or m.group(2) or "".join(f"{int(v):02x}" for v in m.group(3, 4, 5))
+        out.append(h.lower())
+    return out
+_pa_bad = []
+for _pa_f in ("static/desk.css", "static/style.css", "static/desk3d.js", "static/icons/icon.svg", "static/manifest.webmanifest"):
+    for _pa_h in _pa_lits((ROOT / _pa_f).read_text()):
+        _pa_l, _pa_c, _pa_hue = _wg_oklch(_pa_h)
+        if _pa_c >= 0.02 and not (40 <= _pa_hue <= 100):
+            _pa_bad.append((_pa_f, _pa_h, round(_pa_c, 3), round(_pa_hue)))
+t("PALETTE: every colour literal with chroma 0.02 or more in the shipped colour files has a hue from 40 to 100",
+  not _pa_bad, _pa_bad)
+
+# ---- The link preview takes the site's colours (q10-card 1) --------------------------------
+# og.py's card was outside q10-look and kept the mint ring and the green-cast greys. Now its
+# grounds, inks and ring are the site's tokens: rendered for every verdict with invented text,
+# no pixel is near a colour q10-look removed, no pixel has chroma 0.02 or more outside hue 40
+# to 100 (no green cast, no mint, blue or purple), and the size is still 1200 by 630.
+from PIL import Image as _ogc_Image  # noqa: E402
+import io as _ogc_io  # noqa: E402
+_OGC_REMOVED = ["9fc3b0", "4f6a5d", "d4e4da", "2c5848", "9fb3ad", "8fa6b4", "1d3a2e"]
+def _ogc_rgb(h):
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+_ogc_near, _ogc_cast, _ogc_sizes, _ogc_grounds = [], [], set(), []
+for _ogc_v in ("true", "false", "complicated", "insufficient"):
+    _ogc_im = _ogc_Image.open(_ogc_io.BytesIO(og.render_card(
+        "Cold showers boost the immune system", _ogc_v, "Small trials found fewer sick days reported, not fewer colds.", 6,
+        ("Randomized controlled trial", "2016", "Cold showers and sick days"), "Whether the effect lasts past three months."))).convert("RGB")
+    _ogc_sizes.add(_ogc_im.size)
+    _ogc_grounds.append((_ogc_im.getpixel((4, 4)), _ogc_im.getpixel((4, _ogc_im.height - 4))))
+    for _ogc_n, _ogc_px in _ogc_im.getcolors(1 << 20):
+        for _ogc_r in _OGC_REMOVED:
+            if sum((a - b) ** 2 for a, b in zip(_ogc_px, _ogc_rgb(_ogc_r))) <= 12 ** 2:
+                _ogc_near.append((_ogc_v, _ogc_px, _ogc_r))
+        _ogc_l, _ogc_c, _ogc_h = _wg_oklch("%02x%02x%02x" % _ogc_px)
+        if _ogc_c >= 0.02 and not (40 <= _ogc_h <= 100):
+            _ogc_cast.append((_ogc_v, _ogc_px, round(_ogc_c, 3), round(_ogc_h)))
+t("OG CARD COLOURS: no pixel of the link preview is near the mint or another colour q10-look removed, for every verdict",
+  not _ogc_near, _ogc_near[:5])
+t("OG CARD COLOURS: no pixel has chroma 0.02 or more outside hue 40 to 100 (no green cast, mint, blue or purple)",
+  not _ogc_cast, _ogc_cast[:5])
+t("OG CARD COLOURS: the grounds are the site's --deep and --paper, and the ring is the words' colour",
+  all(g == (_ogc_rgb("12110f"), _ogc_rgb("f4f2ef")) for g in _ogc_grounds) and og.PEN == og.ON_DEEP == "#f0ede9"
+  and not hasattr(og, "SAGE"), _ogc_grounds[:1])
+t("OG CARD COLOURS: the image is still 1200 by 630", _ogc_sizes == {(1200, 630)}, _ogc_sizes)
+
+# ---- L2: the lamp on a phone's first screen --------------------------------------------------
+# Held upright, before a check, in 3D, the words of stop 1 start below a band the lamp is fitted
+# into (desk3d.js PHONE_HOME, fitted to the band by fitPhoneHome); the band is a third of the
+# screen at most; text mode, a result and a tablet keep today's layout.
+_l2_css = re.sub(r"/\*.*?\*/", "", (ROOT / "static" / "desk.css").read_text(), flags=re.S)
+_l2_block = re.search(r"@media \(max-width: 760px\) and \(orientation: portrait\) \{(.*?)\n\}", _l2_css, re.S)
+_l2_body = _l2_block.group(1) if _l2_block else ""
+t("L2: on a phone held upright, before a check and in 3D, stop 1 starts below the lamp's band, a third of the screen at most",
+  "html.js:not(.no-gl):not(.checked) #s1 { padding-top: calc(var(--strip) + var(--lamp-band)); }" in _l2_body
+  and re.search(r"--lamp-band: clamp\([^;]*30svh\)", _l2_body) is not None, _l2_body[:200])
+_l2_js = (ROOT / "static" / "desk3d.js").read_text()
+t("L2: the scene fits the lamp into that band only on a phone held upright before a check",
+  "function fitPhoneHome()" in _l2_js and "fitPhoneHome();" in _l2_js
+  and re.search(r"function phoneHome\(\) \{ return !O\.root\.classList\.contains\(\"checked\"\) && stage\.clientWidth <= 760 && stage\.clientHeight > stage\.clientWidth; \}", _l2_js) is not None)
+
+# ---- q10-rel C2, B: every study row shows Open PubMed and either Read abstract or "No abstract on PubMed" -------
+# The note stands in the button's place where PubMed has no abstract: plain words, never a button, never both.
+_abs_studies = [dict(STUDIES[0], pmid="11111111", url=""), dict(STUDIES[1], pmid="22222222", url="", abstract="")]
+db.put_cached_verdict("rows with and without an abstract", "q", "complicated", "Because (Study 1).",
+                      ["11111111"], _abs_studies, tldr="Short take.", still_open="Open.")
+_abs_page = c.get("/?q=rows+with+and+without+an+abstract").data.decode()
+_abs_rows = re.findall(r'<li class="row" id="row-\d+".*?</li>', _abs_page, re.S)
+_abs_kind = [("Read abstract</span>" in r, '<p class="noabs">No abstract on PubMed</p>' in r, 'class="act pm"' in r) for r in _abs_rows]
+t("B: a study with an abstract has the Read abstract button and no note; one without has the note and no button",
+  _abs_kind == [(True, False, True), (False, True, True)]
+  and "Each study has its PubMed page, and its abstract where PubMed has one." in _abs_page
+  and "Each study has its PubMed page, and its abstract where PubMed has one." in (ROOT / "static" / "app.js").read_text(), _abs_kind)
+
+# ---- q10-rel step 2: the row reads the engine's indirect_reason, and never prints the label without one ----------
+# The engine sends indirect false and an empty reason for every study in this release; a reason under the engine's
+# own field name would show (renderResult and the Jinja read the same names), and an indirect study with no reason
+# shows no label at all. Saved studies marked indirect come out of the engine unmarked, so the page has none.
+_ind_studies = [dict(STUDIES[0], pmid="33333331", indirect=True, indirect_reason="Test reason: it measured blood levels."),
+                dict(STUDIES[1], pmid="33333332", indirect=True, indirect_reason=""),
+                dict(STUDIES[1], pmid="33333333", indirect=False, indirect_reason="")]
+db.put_cached_verdict("rows with an indirect reason", "q", "complicated", "Because (Study 1).",
+                      ["33333331"], _ind_studies, tldr="Short take.", still_open="Open.")
+_ind_page = c.get("/?q=rows+with+an+indirect+reason").data.decode()
+_ind_rows = re.findall(r'<li class="row" id="row-\d+".*?</li>', _ind_page, re.S)
+_ind_kind = [r.count('<p class="indirect">') for r in _ind_rows]
+_ind_js = (ROOT / "static" / "app.js").read_text()
+_ind_html = (ROOT / "templates" / "index.html").read_text()
+t("step 2: no Indirect label on the page (the engine sends none); both renderers read indirect_reason and never print "
+  "the label without a reason",
+  _ind_kind == [0, 0, 0] and "Indirect" not in re.sub(r"<[^>]+>", " ", _ind_page) and len(_ind_rows) == 3
+  and "s.indirect_reason || s.indirect_why" in _ind_js and "s.indirect && iwhy ?" in _ind_js
+  and "(s.indirect_reason or s.indirect_why or \"\")|trim" in _ind_html and "{% if s.indirect and iwhy %}" in _ind_html, _ind_kind)
+
+# ---- q10-rel step 2: the effect-size sentence is printed once (owner: "remove the repeated 22 mg/dL sentence") ----
+# The second statement under How sure quotes it ("What the studies did find: ..."), so the "How big the effect is"
+# line of What the evidence shows leaves it out, and goes when nothing is left. A saved answer without the
+# statement prints the line as before. The same rule is renderResult's effectOnce (checked in the browser).
+_eo_rec = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+_eo_cited = [s["pmid"] for s in _eo_rec["studies"] if s.get("cited_in_verdict")]
+db.put_cached_verdict(_eo_rec["claim"], _eo_rec["search_query_used"], _eo_rec["verdict"], _eo_rec["explanation"],
+                      _eo_cited, _eo_rec["studies"], tldr=_eo_rec["tldr"], still_open=_eo_rec["still_open"],
+                      breakdown=_eo_rec["breakdown"])
+_EO_S = "Fasting blood sugar fell by about 22 mg per dL"
+def _eo_text(page):
+    page = re.sub(r"<(script|style)\b.*?</\1>", " ", page, flags=re.S)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", page))
+_eo_page = c.get("/?q=" + _eo_rec["claim"].replace(" ", "+")).data.decode()
+_eo_t = _eo_text(_eo_page)
+t("step 2: with the second statement on the page, the effect-size sentence is printed once and the effect line is gone",
+  _eo_t.count(_EO_S) == 1 and "What the studies did find: " + _EO_S in _eo_t and "How big the effect is" not in _eo_t,
+  (_eo_t.count(_EO_S), "What the studies did find" in _eo_t))
+_eo_true = dict(_eo_rec, claim="Apple cider vinegar lowers fasting blood sugar", verdict="true")
+db.put_cached_verdict(_eo_true["claim"], "q", "true", _eo_rec["explanation"], _eo_cited, _eo_rec["studies"],
+                      tldr=_eo_rec["tldr"], still_open=_eo_rec["still_open"], breakdown=_eo_rec["breakdown"])
+_eo_t2 = _eo_text(c.get("/?q=" + _eo_true["claim"].replace(" ", "+")).data.decode())
+t("step 2: a saved answer without the second statement prints the How big the effect is line as before, once",
+  "What the studies did find" not in _eo_t2 and "How big the effect is. " + _EO_S in _eo_t2 and _eo_t2.count(_EO_S) == 1,
+  (_eo_t2.count(_EO_S), "What the studies did find" in _eo_t2))
+_eo_js = (ROOT / "static" / "app.js").read_text()
+t("step 2: renderResult uses the same rule (effectOnce on the effect size and the second statement)",
+  "const eff = effectOnce(bv.effect_size, data.effect_line);" in _eo_js and "function effectOnce(eff, line)" in _eo_js)
+
+# ---------------------------------------------------------------------------
+# Brief E: a review citing a retracted paper, no bare strength word,
+# indirect context, one figure once, what each study contributes.
+# ---------------------------------------------------------------------------
+import copy as _e_copy  # noqa: E402
+import re as _e_re  # noqa: E402
+import xml.etree.ElementTree as _e_ET  # noqa: E402
+import evidence as _e_ev  # noqa: E402
+import breakdown as _e_bd  # noqa: E402
+
+
+def _e_study(pmid, types, title="A study", abstract="Results here. CONCLUSIONS: It helped.", **kw):
+    return {"pmid": pmid, "title": title, "journal": "J", "year": "2024", "authors": [],
+            "publication_types": types, "abstract": abstract, "data_banks": None,
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/", **kw}
+
+
+_E_REV = ["Journal Article", "Meta-Analysis"]
+_E_RCT = ["Journal Article", "Randomized Controlled Trial"]
+_E_RETR = ["Journal Article", "Randomized Controlled Trial", "Retracted Publication"]
+
+# E1a: the reference list is read for a review, and only for a review.
+_e_xml = ("<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID>900</PMID><Article><ArticleTitle>R</ArticleTitle>"
+          "<PublicationTypeList><PublicationType>Meta-Analysis</PublicationType></PublicationTypeList></Article>"
+          "</MedlineCitation><PubmedData><ReferenceList><Reference><ArticleIdList><ArticleId IdType=\"pubmed\">901"
+          "</ArticleId></ArticleIdList></Reference><Reference><ArticleIdList><ArticleId IdType=\"doi\">x</ArticleId>"
+          "</ArticleIdList></Reference></ReferenceList></PubmedData></PubmedArticle></PubmedArticleSet>")
+_e_rec = pubmed._parse_article(_e_ET.fromstring(_e_xml).find("PubmedArticle"))
+t("BRIEF E1a: a review's reference list gives its cited PubMed ids", _e_rec.get("references") == ["901"],
+  _e_rec.get("references"))
+_e_rec2 = pubmed._parse_article(_e_ET.fromstring(_e_xml.replace("Meta-Analysis", "Clinical Trial")).find("PubmedArticle"))
+t("BRIEF E1a: a record that is not a review carries no reference list", "references" not in _e_rec2)
+
+# E1a/b: a retracted paper already in the check flags the review with no lookup.
+_e_calls = []
+_e_set = [_e_study("10", _E_REV, references=["20", "30"]), _e_study("20", _E_RETR, title="Retracted trial"),
+          _e_study("40", _E_RCT)]
+_e_note = _e_ev.flag_retracted_citations(_e_set, lambda ids: _e_calls.append(list(ids)) or set())
+t("BRIEF E1b: a review citing a retracted paper in the check is flagged",
+  _e_set[0].get("cites_retracted") and _e_set[0]["cites_retracted"][0]["pmid"] == "20" and _e_note is None,
+  _e_set[0].get("cites_retracted"))
+t("BRIEF E1a: the lookup is asked only for the cited ids not already known", _e_calls == [["30"]], _e_calls)
+t("BRIEF E1b: the caution says cites, may include, not retracted itself",
+  _e_ev.retraction_caution(_e_set[0]) == "This review cites a study that was later retracted (PubMed 20). "
+  "We cannot tell from the citation whether the review's results include that study, so treat its results "
+  "with caution. The review itself has not been retracted.",
+  _e_ev.retraction_caution(_e_set[0]))
+t("BRIEF E1c: a flagged review is not top tier where a reader sees it", _e_ev.shown_tier(_e_set[0]) == "moderate"
+  and _e_ev.gate_tier(_e_set[0]) == "strong")
+_e_unf = {k: v for k, v in _e_set[0].items() if k != "cites_retracted"}
+t("BRIEF E2r B2: every gate reader counts a flagged review exactly as an unflagged one",
+  _e_ev.design_rank(_e_set[0]) == _e_ev.design_rank(_e_unf) and verdict._strong(_e_set[0]) == verdict._strong(_e_unf)
+  and verdict._strong(_e_set[0]))
+_e_set2 = [_e_study("11", _E_REV, references=["31", "32"])]
+t("BRIEF E1a: a cited id the lookup finds retracted flags the review",
+  _e_ev.flag_retracted_citations(_e_set2, lambda ids: {"32"}) is None
+  and [f["pmid"] for f in _e_set2[0]["cites_retracted"]] == ["32"])
+
+
+def _e_fail(ids):
+    raise requests.ConnectionError("down")
+
+
+_e_set3 = [_e_study("12", _E_REV, references=["20", "33"]), _e_study("20", _E_RETR)]
+t("BRIEF E1a: a failed lookup says the check could not be made, and still flags what is known",
+  _e_ev.flag_retracted_citations(_e_set3, _e_fail) == _e_ev.RETRACTION_UNCHECKED
+  and _e_set3[0].get("cites_retracted"))
+_e_set4 = [_e_study("13", _E_REV), _e_study("20", _E_RETR)]
+_e_calls.clear()
+t("BRIEF E1a: a review with no reference list is not flagged and asks nothing",
+  _e_ev.flag_retracted_citations(_e_set4, lambda ids: _e_calls.append(1) or set()) is None
+  and not _e_set4[0].get("cites_retracted") and not _e_calls)
+_e_set5 = [_e_study("14", _E_REV, references=[str(1000 + i) for i in range(_e_ev.RETRACTION_LOOKUP_MAX + 5)])]
+_e_sent = []
+t("BRIEF E1a: the ids sent are capped, and the response says the list was cut",
+  _e_ev.flag_retracted_citations(_e_set5, lambda ids: _e_sent.append(len(ids)) or set()) == _e_ev.RETRACTION_CUT
+  and _e_sent == [_e_ev.RETRACTION_LOOKUP_MAX])
+
+
+class _EFuture:
+    def result(self, timeout=None):
+        raise TimeoutError()
+
+
+t("BRIEF E1a: a lookup that runs late never stops the check",
+  appmod._retraction_result(_EFuture()) is None)
+# E1c(iii): only a flagged entry changes in the prompt.
+_e_plain = _e_study("15", _E_REV, abstract="We pooled ten trials. CONCLUSIONS: It helped.")
+_e_before = verdict._format_study_for_prompt(1, _e_plain, "x", "", "claim")
+t("BRIEF E1c: an unflagged review's prompt entry is byte for byte the same, reference list or not",
+  verdict._format_study_for_prompt(1, {**_e_plain, "references": ["99"]}, "x", "", "claim") == _e_before)
+_e_flagged = {**_e_plain, "cites_retracted": [{"pmid": "99", "title": None, "trial": False}]}
+_e_after = verdict._format_study_for_prompt(1, _e_flagged, "x", "", "claim")
+_e_added = [ln for ln in _e_after.split("\n") if ln.startswith("CITES")]
+t("BRIEF E1c: a flagged review's entry tells the model, and only adds that line",
+  len(_e_added) == 1 and "PubMed 99" in _e_added[0] and _e_after.replace(_e_added[0] + "\n", "") == _e_before)
+t("BRIEF E1c: a true resting only on flagged reviews is capped by the existing certainty cap",
+  _e_ev.certainty_cap([_e_flagged], ["15"]) == _e_ev.RETRACTED_CAP_REASON
+  and _e_ev.certainty_cap([_e_plain], ["15"]) is None)
+
+# The vinegar recording, through the response builder.
+_e_vin = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+
+
+def _e_respond(rec, flag=True):
+    st = _e_copy.deepcopy(rec["studies"])
+    if flag:
+        st[0]["references"] = ["38966098"]
+        _e_ev.flag_retracted_citations(st, lambda ids: set())
+    cited = [s["pmid"] for s in st if s.get("cited_in_verdict")]
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(rec["claim"], rec["search_query_used"], rec["verdict"], rec["tldr"],
+                                      rec["explanation"], cited, st, "http://x",
+                                      breakdown=_e_copy.deepcopy(rec["breakdown"]), still_open=rec["still_open"])
+
+
+_e_out = _e_respond(_e_vin)
+_e_s1 = _e_out["studies"][0]
+t("BRIEF E1 vinegar: the review that cites the retracted trial carries the caution and loses top tier",
+  _e_s1["caution"] and "38966098" in _e_s1["caution"] and _e_s1["tier"] == "moderate", (_e_s1["caution"], _e_s1["tier"]))
+_e_bdo = _e_out["breakdown"]
+_e_lists = (_e_bdo.get("says") or []) + (_e_bdo.get("evidence") or []) + [_e_bdo.get("effect_size") or ""]
+# Brief E3 N1 replaced "a figure taken from the flagged review alone leaves
+# the figure lists": a flag never removes a sentence.
+t("BRIEF E3 N1 vinegar: a figure taken from the flagged review stays in the figure lists",
+  any("789" in x for x in _e_lists), _e_lists)
+_e_one = _e_ev.retracted_review_sentence([1])
+t("BRIEF E3 N1 vinegar: the answer names the flagged review once in 'says' and once in the explanation",
+  sum(x.count(_e_one) for x in _e_bdo.get("says") or []) == 1
+  and _e_out["explanation"].count(_e_one) == 1 and _e_one.startswith("Study 1 cites a study"))
+_e_line = _e_out["evidence_line"]
+t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare strength word",
+  _e_line.startswith("Cure claim: Not supported by the studies reviewed.")
+  and not _e_re.search(r"\b(?:Strong|Moderate|Weak) evidence\b", _e_line), _e_line)
+t("BRIEF E2 vinegar: the second statement names the related effect and claims no certainty it did not read",
+  _e_out["effect_line"].startswith("What the studies did find: ")
+  and _e_out["effect_line"].endswith(". The abstracts we read do not rate how certain this is."), _e_out["effect_line"])
+# The E3 follow-up replaced "says about 22 mg per dL once in 'says'": the
+# earlier 'says' sentence carried nothing the effect size did not, so it
+# went, and the figure is said once, in the effect size.
+t("BRIEF E3 follow-up vinegar: the recorded pair says about 22 mg per dL once among 'says', 'evidence' and the "
+  "effect size, in the effect size", sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1
+  and "22 mg" in (_e_bdo.get("effect_size") or ""), _e_lists)
+# Brief E4 D1 replaced "the body composition review is marked indirect
+# context": the keyword mark left this release. Study 1 keeps its caution
+# and its contribution is its own conclusion.
+_d1_own = _e_bd.sentences(_e_ev.conclusion(_e_vin["studies"][0]) or "")[0]
+t("BRIEF E4 D1 vinegar: Study 1 is not marked, keeps its caution, and its contribution is its own conclusion",
+  _e_s1["indirect"] is False and _e_s1["indirect_reason"] == "" and bool(_e_s1["caution"])
+  and _e_s1["contribution"].rstrip(".") == _d1_own.rstrip(".") and "Indirect" not in _e_s1["contribution"], _e_s1)
+# Brief E3 N12 replaced "every relied-on study has a contribution": one is
+# empty when its record gives nothing beyond the design's name.
+_e_bare = _e_re.compile(r"^(?:A|An) [a-z -]+\.$")
+t("BRIEF E3 N12: a relied-on study has a contribution unless its record gives only its design, never a bare "
+  "design name, and every study has the three fields",
+  all(s["contribution"] or not (_e_ev.conclusion(r) or _e_ev.population(r))
+      for s, r in zip(_e_out["studies"], _e_vin["studies"]) if s["cited_in_verdict"])
+  and not any(_e_bare.match(s["contribution"] or "") for s in _e_out["studies"])
+  and all({"contribution", "caution", "indirect"} <= set(s) for s in _e_out["studies"]))
+t("BRIEF E5: a study set aside says why",
+  _e_out["studies"][3]["contribution"] == "Set aside: retracted by the journal.", _e_out["studies"][3]["contribution"])
+_e_new = [_e_line, _e_out["effect_line"], _e_s1["caution"], _e_ev.retracted_review_sentence([1, 2])] + \
+    [s["contribution"] for s in _e_out["studies"]] + [s["indirect"] or "" for s in _e_out["studies"]]
+t("BRIEF E: no dash in any new string a reader sees", not any(_e_re.search("[–—]", x or "") for x in _e_new))
+_e_unflag = _e_respond(_e_vin, flag=False)
+# Brief E4 D1 replaced "the indirect label changes no tier or verdict"
+# (which asserted Study 1 marked): no study is marked, flag or not.
+t("BRIEF E4 D1: unflagged, the verdict and tiers are as recorded and no study is marked",
+  _e_unflag["verdict"] == _e_vin["verdict"] and _e_unflag["studies"][0]["tier"] == "strong"
+  and not any(st_["indirect"] or st_["indirect_reason"] for st_ in _e_unflag["studies"] + _e_out["studies"]))
+# E2: no verdict prints a bare strength word.
+_e_rcts = [_e_study("50", _E_RCT, abstract="We randomized 400 adults. CONCLUSIONS: It worked."),
+           _e_study("51", _E_REV, abstract="We pooled randomized trials. CONCLUSIONS: It worked.")]
+_e_bad = []
+for _e_v in ("true", "false", "complicated", "insufficient"):
+    for _e_claim in ("Zinc cures colds", "Zinc shortens colds"):
+        _e_old = _e_ev.evidence_line(_e_v, _e_rcts, ["50", "51"], _e_claim, None, _e_bd.absolute_claim(_e_claim))
+        _e_say = _e_ev.claim_statement(_e_v, _e_old, _e_rcts, ["50", "51"], _e_bd.absolute_claim(_e_claim))
+        if _e_re.search(r"\b(?:Strong|Moderate|Weak) evidence\b", _e_say) or (_e_old and not _e_say):
+            _e_bad.append((_e_v, _e_claim, _e_say))
+t("BRIEF E2: no verdict value prints a bare strength word", not _e_bad, _e_bad)
+t("BRIEF E2: a refuted claim reads 'Not supported by the studies reviewed'",
+  _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], "")
+  == "The claim: Not supported by the studies reviewed. Based on pooled reviews of trials.",
+  _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], ""))
+t("BRIEF E2: a certainty the line carried is kept, in words that are not a strength",
+  _e_ev.claim_statement("true", "Low certainty evidence for this claim", _e_rcts, ["50"], "")
+  == "The claim: Supported only by limited studies. Certainty: low.")
+t("BRIEF E2: an effect sentence outside the closed pattern is printed as the model said it",
+  _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", _e_rcts, ["50", "51"], cites=[2])
+  == "What the studies did find: Vinegar lowered glucose (Study 2). The abstracts we read do not rate how certain this is.")
+t("BRIEF E2: no second statement for a claim rated true, or one promising nothing absolute",
+  _e_ev.effect_statement("true", "cure", "Glucose fell.", [], []) == ""
+  and _e_ev.effect_statement("false", "", "Glucose fell.", [], []) == "")
+# E4: repeated figures, and different ones.
+_e_e, _e_b = _e_bd.one_figure_once("", {"says": ["Weight fell by 2 kg (Study 1)."],
+                                        "evidence": ["Weight dropped by 2 kg (Study 1).",
+                                                     "Weight fell by 3 kg (Study 1).",
+                                                     "Weight fell by 2 kg (Study 2)."],
+                                        "effect_size": "Weight fell 2 kg (Study 1). That is a small change.",
+                                        "effect": {"label": "small"}}, 3)
+t("BRIEF E4: a sentence saying nothing new goes; other numbers or studies stay; no field is left empty",
+  _e_b["evidence"] == ["Weight fell by 3 kg (Study 1).", "Weight fell by 2 kg (Study 2)."]
+  and _e_b["effect_size"] == "Weight fell 2 kg (Study 1). That is a small change."
+  and _e_b["effect"] == {"label": "small"}, _e_b)
+# An untouched check: no flag, no change to the prompt, no lookup sent.
+_e_un = [_e_study("60", _E_REV), _e_study("61", _E_RCT)]
+_e_calls.clear()
+_e_p0 = [verdict._format_study_for_prompt(i + 1, s, "x", "", "c") for i, s in enumerate(_e_un)]
+_e_ev.flag_retracted_citations(_e_un, lambda ids: _e_calls.append(1) or set())
+t("BRIEF E: a check no rule touches builds the same request bytes and sends no lookup",
+  [verdict._format_study_for_prompt(i + 1, s, "x", "", "c") for i, s in enumerate(_e_un)] == _e_p0 and not _e_calls)
+
+# ---------------------------------------------------------------------------
+# Brief E2 repair, B1 and B2: a flagged review never raises confidence and
+# never weakens a gate that protects a reader. A seeded property over the
+# code-side verdict path, flags on and off, plus the reviewer's inputs.
+# ---------------------------------------------------------------------------
+import random as _r2_random  # noqa: E402
+
+_R2_TEMPL = {
+    "ma_rct": (["Journal Article", "Meta-Analysis", "Systematic Review"],
+               "{x}: a systematic review and meta-analysis of randomized controlled trials",
+               "We pooled 12 randomized controlled trials (n=1800). {res} CONCLUSIONS: {con}"),
+    "ma_obs": (["Journal Article", "Meta-Analysis"],
+               "{x}: a meta-analysis of cohort studies",
+               "We pooled 9 prospective cohort studies (n=40000). {res} CONCLUSIONS: {con}"),
+    "rct": (["Journal Article", "Randomized Controlled Trial"],
+            "{x}: a randomized, double-blind, placebo-controlled trial",
+            "In a randomized double-blind placebo-controlled trial of 640 adults, {res} CONCLUSIONS: {con}"),
+    "pilot": (["Journal Article", "Randomized Controlled Trial"],
+              "{x}: a pilot randomized trial",
+              "In this pilot randomized trial of 24 adults, {res} CONCLUSIONS: {con}"),
+    "cohort": (["Journal Article", "Observational Study"],
+               "{x}: a prospective cohort study",
+               "In a prospective cohort of 5000 adults, {res} CONCLUSIONS: {con}"),
+}
+_R2_STANCE = {
+    "for": ("the outcome improved (p<0.001).", "It helped."),
+    "against": ("no difference was found (95% CI -0.5 to 0.3).", "It did not help."),
+    "harm": ("serious adverse events and liver injury rose (RR 1.4).", "It was harmful."),
+    "thin": ("few small studies were found.", "The evidence is insufficient to draw conclusions."),
+}
+_R2_CLAIMS = [("Zinc lozenges shorten the common cold", "(zinc) AND (common cold OR cold duration)"),
+              ("Stop taking your prescribed blood pressure medication",
+               "(antihypertensive discontinuation) AND (blood pressure OR cardiovascular events)"),
+              ("Kava supplements are safe for the liver", "(kava) AND (liver injury OR hepatotoxicity)"),
+              ("Vinegar cures type 2 diabetes", "(vinegar) AND (diabetes OR glucose)")]
+_R2_FIND = {"for": "for", "against": "against", "harm": "against", "thin": "mixed"}
+_R2_FLAG = [{"pmid": "800001", "title": None, "trial": False}]
+
+
+def _r2_study(n, kind, stance, topic):
+    types, title, abstract = _R2_TEMPL[kind]
+    res, con = _R2_STANCE[stance]
+    if kind.startswith("ma"):
+        res = res[0].upper() + res[1:]
+    return {"pmid": str(970000 + n), "title": title.format(x=topic), "journal": "J", "year": "2022",
+            "authors": [], "publication_types": list(types), "data_banks": None,
+            "abstract": abstract.format(res=res, con=con),
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{970000 + n}/"}
+
+
+def _r2_path(claim, query, model_v, studies, finds):
+    """The code-side verdict path after the call, as weigh_evidence runs it
+    (no guidance call: guidelines are never flagged)."""
+    groups = pubmed.split_and(query)
+    raw = json.dumps({
+        "verdict": model_v, "tldr": "The studies here point both ways.", "explanation": "See the studies (Study 1).",
+        "still_open": "Longer trials are needed.", "cited_study_numbers": list(range(1, len(studies) + 1)),
+        "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f}
+                      for i, f in enumerate(finds)],
+        "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+        "not_applies_to": "", "unknowns": ""})
+    res = verdict._read_verdict(raw, None, studies, claim, subject=groups[0], outcome=groups[1], surrogate="")
+    guard = res.get("guarded")
+    off = res.pop("off_topic", None) or {}
+    back = res.pop("background", None) or {}
+    res.pop("ranked", None)
+    res.pop("guarded", None)
+    for s in studies:
+        s.pop("off_topic", None)
+        s.pop("background", None)
+        if s["pmid"] in off:
+            s["off_topic"] = off[s["pmid"]]
+        elif s["pmid"] in back:
+            s["background"] = back[s["pmid"]]
+    res = verdict._settle_confounding(verdict._settle_ruling(res, claim), studies)
+    res = verdict._too_thin(verdict.check_faithful(res, studies, claim, groups[1]), studies, claim)
+    return res["verdict"], (guard or {}).get("verdict"), bool(guard)
+
+
+_R2_SURE = {"true": 2, "false": 2, "complicated": 1, "insufficient": 0}
+
+_R2_N = 320  # seeded cases; each runs four model verdicts, flags on and off
+_r2_rng = _r2_random.Random(20261123)
+_r2_bad, _r2_cases, _r2_moved, _r2_guarded = [], 0, 0, 0
+_r2_quiet = logging.getLogger().manager.disable
+logging.disable(logging.CRITICAL)
+for _r2_i in range(_R2_N):
+    _r2_claim, _r2_q = _r2_rng.choice(_R2_CLAIMS)
+    _r2_kinds = [_r2_rng.choice(list(_R2_TEMPL)) for _ in range(_r2_rng.randint(2, 4))]
+    if not any(k.startswith("ma") for k in _r2_kinds):
+        _r2_kinds[0] = _r2_rng.choice(["ma_rct", "ma_obs"])
+    _r2_stances = [_r2_rng.choice(list(_R2_STANCE)) for _ in _r2_kinds]
+    _r2_finds = [_R2_FIND[x] for x in _r2_stances]
+    _r2_topic = "Antihypertensive discontinuation" if _r2_claim.startswith("Stop") else _r2_claim.split()[0]
+    _r2_base = [_r2_study(_r2_i * 10 + j, k, st, _r2_topic) for j, (k, st) in enumerate(zip(_r2_kinds, _r2_stances))]
+    _r2_reviews = [j for j, k in enumerate(_r2_kinds) if k.startswith("ma")]
+    _r2_flag = [j for j in _r2_reviews if _r2_rng.random() < 0.6] or [_r2_reviews[0]]
+    for _r2_v in ("true", "false", "complicated", "insufficient"):
+        _r2_off = _e_copy.deepcopy(_r2_base)
+        _r2_on = _e_copy.deepcopy(_r2_base)
+        for j in _r2_flag:
+            _r2_on[j]["cites_retracted"] = list(_R2_FLAG)
+        try:
+            a = _r2_path(_r2_claim, _r2_q, _r2_v, _r2_off, _r2_finds)
+            b = _r2_path(_r2_claim, _r2_q, _r2_v, _r2_on, _r2_finds)
+        except Exception as e:  # noqa: BLE001
+            _r2_bad.append((_r2_i, _r2_v, "raised", repr(e)[:120]))
+            continue
+        _r2_cases += 1
+        _r2_moved += a[0] != b[0]
+        _r2_guarded += a[2]
+        surer = b[0] != a[0] and _R2_SURE[b[0]] >= _R2_SURE[a[0]]
+        if surer or (a[2] and a[1:] != b[1:]):
+            _r2_bad.append((_r2_i, _r2_claim[:20], _r2_kinds, _r2_finds, _r2_flag, _r2_v, a, b))
+logging.disable(_r2_quiet)
+t("BRIEF E2r B1/B2: over 1280 seeded cases a flagged review never makes a verdict surer, and the harm guard "
+  "decides as it did without the flag", not _r2_bad and _r2_cases >= 1200, (_r2_cases, _r2_moved, _r2_bad[:3]))
+print(f"  ({_r2_cases} cases, {_r2_moved} verdicts lowered by a flag, {_r2_guarded} decided by the harm guard)")
+
+# The reviewer's B1 input: a flagged review against, a large trial for, a
+# cohort against, the model "complicated": the trials disagree, so nothing
+# is forced, exactly as before the flag.
+_r2_b1 = [_r2_study(1, "ma_rct", "against", "Zinc lozenges"), _r2_study(2, "rct", "for", "Zinc lozenges"),
+          _r2_study(3, "cohort", "against", "Zinc lozenges")]
+_r2_b1[0]["cites_retracted"] = list(_R2_FLAG)
+_r2_b1p = {"relevance": [{"study": 1, "finding": "against"}, {"study": 2, "finding": "for"},
+                         {"study": 3, "finding": "against"}]}
+t("BRIEF E2r B1: a flagged review that disagrees still blocks the trials override",
+  verdict._trials_outweigh(_r2_b1p, _r2_b1, {}, {}, []) is None
+  and _r2_path(_R2_CLAIMS[0][0], _R2_CLAIMS[0][1], "complicated", _e_copy.deepcopy(_r2_b1),
+               ["against", "for", "against"])[0] == "complicated")
+_r2_b1b = [_r2_study(1, "ma_rct", "for", "Zinc lozenges"), _r2_study(2, "cohort", "against", "Zinc lozenges")]
+_r2_b1b[0]["cites_retracted"] = list(_R2_FLAG)
+t("BRIEF E2r B1: a flagged review on the winning side cannot force a yes",
+  verdict._flagged_cannot_win(verdict._trials_outweigh(
+      {"relevance": [{"study": 1, "finding": "for"}, {"study": 2, "finding": "against"}]}, _r2_b1b, {}, {}, []),
+      "complicated") is None)
+# The reviewer's B2 inputs: the harm guard follows a flagged protective review
+# exactly as it follows an unflagged one.
+for _r2_claim, _r2_mv, _r2_st in (
+        ("Stop taking your prescribed blood pressure medication", "complicated",
+         [_r2_study(1, "ma_rct", "harm", "Antihypertensive discontinuation"),
+          _r2_study(2, "cohort", "for", "Antihypertensive discontinuation")]),
+        ("Kava supplements are safe for the liver", "true",
+         [_r2_study(1, "ma_obs", "harm", "Kava"), _r2_study(2, "cohort", "for", "Kava")])):
+    _r2_g = []
+    for _r2_fl in (False, True):
+        _r2_s = _e_copy.deepcopy(_r2_st)
+        if _r2_fl:
+            _r2_s[0]["cites_retracted"] = list(_R2_FLAG)
+        _r2_g.append(verdict._guard_reading(_r2_claim, _r2_mv, {"relevance": [
+            {"study": 1, "finding": "against"}, {"study": 2, "finding": "for"}]}, _r2_s, {}, {},
+            [s["pmid"] for s in _r2_s]))
+    t(f"BRIEF E2r B2: the harm guard follows a flagged protective review: {_r2_claim[:30]}",
+      _r2_g[0] and _r2_g[0] == _r2_g[1] and _r2_g[1]["verdict"] == "false" and _r2_g[1]["follows"] == [1], _r2_g)
+_r2_note = verdict._format_study_for_prompt(1, _r2_b1[0], "(common cold)", "", "Zinc lozenges shorten the common cold")
+t("BRIEF E2r B1: the note to the model says a harm or a doubt from a flagged review still counts",
+  "CITES A RETRACTED STUDY: this review's reference list includes PubMed 800001, later retracted. Do not count "
+  "its pooled result as support for the claim unless the abstract says the result held without that study. "
+  "A harm or a doubt it reports still counts." in _r2_note, _r2_note)
+
+# Brief E2 repair, B3 and M3: the second statement has no parsed form. Every
+# sentence the reviewer tried passes through unchanged, so nothing about the
+# control group or a second outcome can be lost or reversed.
+# Since brief E3 N2 statement 2 needs a cited study in people: the inputs say so.
+_r3_cure = _e_bd.absolute_claim("Cinnamon cures diabetes")
+_r3_said = ["Symptoms fell with placebo, not with cinnamon (Study 1).",
+            "Fasting glucose dropped in the control group only (Study 1).",
+            "Body weight fell by 2 kg and blood pressure rose by 3 mmHg (Study 1).",
+            "Fasting glucose decreased in men but increased in women (Study 1).",
+            "HbA1c did not fall (Study 1).", "Bleeding risk rose by 30% (Study 1).",
+            "Insulin resistance declined only in the placebo group (Study 1).",
+            "Adverse events increased with cinnamon (Study 1).", "Weight rose less than with placebo (Study 1)"]
+_r3_rev = {"pmid": "1", "title": "Cinnamon and glycaemia: a meta-analysis", "publication_types": ["Meta-Analysis"],
+           "abstract": "Trials in 600 adults. Conclusion: cinnamon lowered HbA1c."}
+_r3_bad = [x for x in _r3_said if _e_ev.effect_statement("false", _r3_cure, x, [_r3_rev], ["1"], "", cites=[1])
+           != f"What the studies did find: {x.rstrip('.')}. The abstracts we read do not rate how certain this is."]
+t("BRIEF E2r B3/M3: statement 2 prints the sentence unchanged, with no reading of its verbs", not _r3_bad, _r3_bad)
+_r3_g1 = dict(_r3_rev, abstract="Trials in 600 adults. Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c.")
+_r3_g2 = dict(_r3_rev, pmid="2", abstract="Trials in 600 adults. Low certainty evidence. Conclusion: cinnamon lowered HbA1c.")
+t("BRIEF E2r B3: one stated grade reads 'as the review rates it'",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1])
+  == "What the studies did find: HbA1c fell (Study 1). Certainty: moderate, as the review rates it.",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1]))
+# Brief E4 D3 replaced the sentence citing Study 1 alone (it took Study 2's
+# grade too): the sentence now cites both graded reviews.
+t("BRIEF E4 D3: several grades among the cited reviews read 'varies by outcome, lowest to highest, as the reviews rate it'",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2], ["1", "2"], "", cites=[1, 2])
+  == "What the studies did find: HbA1c fell (Studies 1 and 2). Certainty varies by outcome, low to moderate, "
+  "as the reviews rate it.", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2],
+                                                   ["1", "2"], "", cites=[1, 2]))
+
+# Brief E2 repair, m1 and m2: statement 1 is never surer than the old line.
+_m1_table = {"Strong evidence for this claim": "Supported by the studies reviewed",
+             "High certainty evidence for this claim": "Supported by the studies reviewed",
+             "Moderate evidence for this claim": "Supported by the studies reviewed, with some uncertainty",
+             "Moderate certainty evidence for this claim": "Supported by the studies reviewed, with some uncertainty",
+             "Weak evidence for this claim": "Supported only by limited studies",
+             "Low to moderate certainty evidence for this claim": "Supported only by limited studies",
+             "Very low certainty evidence for this claim": "Supported only by limited studies"}
+_m1_bad = [(k, _e_ev.claim_statement("true", k, _e_rcts, ["50"], "")) for k, v in _m1_table.items()
+           if not _e_ev.claim_statement("true", k, _e_rcts, ["50"], "").startswith(f"The claim: {v}.")]
+t("BRIEF E2r m1: a 'true' says the old line's cap: plain, with some uncertainty, or only limited studies",
+  not _m1_bad, _m1_bad)
+t("BRIEF E2r m1: a size stays beside the cap",
+  _e_ev.claim_statement("true", "Moderate evidence for this claim, a small effect", _e_rcts, ["50"], "")
+  .startswith("The claim: Supported by the studies reviewed, a small effect, with some uncertainty."))
+_m1_flag = _e_study("70", _E_REV, abstract="We pooled randomized trials. CONCLUSIONS: It worked.",
+                    cites_retracted=[{"pmid": "800001", "title": None, "trial": False}])
+t("BRIEF E2r m1: a flagged review as the best study relied on is named in the basis",
+  _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], "")
+  == "The claim: Not supported by the studies reviewed. Based on a review that cites a retracted study.",
+  _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], ""))
+# Brief E3 N1 replaced "a clean top-tier study beside it keeps the usual
+# basis": the flagged review is named whenever relied on, the clean after.
+t("BRIEF E3 N1: a clean top-tier study beside it follows the flagged review in the basis",
+  _e_ev.claim_statement("false", "Strong evidence against this claim", [_m1_flag, _e_rcts[0]], ["70", "50"], "")
+  .endswith("Based on a review that cites a retracted study, and randomized trials."))
+t("BRIEF E2r m2: a narrowing reads 'which were only in'",
+  _e_ev.claim_statement("complicated", "Moderate evidence, but only in older adults", _e_rcts, ["50"], "")
+  .startswith("The claim: No plain yes or no from the studies reviewed, which were only in older adults."))
+
+# Brief E2 repair, m3 and m4: the words a reader sees beside a flagged review.
+_m4_two = _e_study("71", ["Journal Article", "Systematic Review"],
+                   cites_retracted=[{"pmid": "801", "title": None, "trial": True},
+                                    {"pmid": "802", "title": None, "trial": False}])
+t("BRIEF E2r m4: the caution for several retracted studies, the same for every kind of review",
+  _e_ev.retraction_caution(_m4_two) == "This review cites 2 studies that were later retracted (PubMed 801, 802). "
+  "We cannot tell from the citations whether the review's results include them, so treat its results "
+  "with caution. The review itself has not been retracted.",
+  _e_ev.retraction_caution(_m4_two))
+_m4_set = [_m4_two, dict(_m1_flag)]
+_m4_ex, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71", "70"})
+_m4_ex1, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71"})
+# Brief E3 N1 replaced the generic sentence with one naming the studies.
+t("BRIEF E3 N1: the explanation sentence names one flagged review, or each of two",
+  _m4_ex.endswith("Studies 1 and 2 cite studies that were later retracted, so treat their results with caution.")
+  and _m4_ex1.endswith("Study 1 cites a study that was later retracted, so treat its results with caution."),
+  (_m4_ex, _m4_ex1))
+_m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True)
+# Brief E3 N12 replaced 'is "A randomized controlled trial."': a record with
+# nothing beyond its design now has no contribution at all.
+t("BRIEF E3 N12: a contribution never states a population the record does not give, nor the design's name alone",
+  _m3_c == "", _m3_c)
+_n12_who = appmod._contribution(_e_study("73", _E_RCT, title="A trial in older adults",
+                                         abstract="We randomized 300 older adults with knee pain."), True)
+t("BRIEF E3 N12: a record that names who was studied still says so", _n12_who.endswith(".") and " in " in _n12_who,
+  _n12_who)
+
+# Brief E2 repair, B4: indirect is marked only between recognised outcome
+# families. The reviewer's 20 direct tests (worded with synonyms) are never
+# marked; the 8 truly indirect ones are.
+def _b4_st(title, concl):
+    return {"pmid": "1", "title": title, "abstract": f"Methods: 200 adults. Conclusion: {concl}",
+            "publication_types": ["Randomized Controlled Trial"]}
+
+
+_B4_DIRECT = [
+    ("(garlic) AND (blood pressure)", "Effect of garlic on hypertension in adults: a randomized trial",
+     "Garlic reduced systolic readings by 8 mmHg."),
+    ("(green tea) AND (weight loss OR weight)", "Effect of green tea extract on body mass index in obese women",
+     "Green tea extract lowered BMI modestly."),
+    ("(aspirin) AND (heart attack)", "Effect of aspirin on myocardial infarction in older adults",
+     "Aspirin did not reduce myocardial infarction."),
+    ("(cinnamon) AND (blood sugar)", "Effect of cinnamon on glycaemic control in type 2 diabetes",
+     "Cinnamon improved HbA1c slightly."),
+    ("(melatonin) AND (sleep)", "Effect of melatonin on insomnia in older people", "Melatonin shortened sleep onset."),
+    ("(fish oil) AND (cholesterol)", "Effect of omega-3 fatty acids on LDL and triglycerides",
+     "Omega-3 lowered triglycerides but raised LDL."),
+    ("(vitamin D) AND (fracture)", "Effect of vitamin D supplementation on hip fracture in women",
+     "Vitamin D did not prevent hip fractures."),
+    ("(coffee) AND (stroke)", "Effect of coffee intake on cerebrovascular events",
+     "Coffee was not linked to cerebrovascular events."),
+    ("(exercise) AND (depression)", "Effect of aerobic training on depressive symptoms in adults",
+     "Aerobic training reduced depressive symptoms."),
+    ("(probiotics) AND (diarrhea)", "Effect of Lactobacillus on loose stools in children",
+     "Lactobacillus shortened loose stools by a day."),
+    ("(zinc) AND (common cold)", "Effect of zinc lozenges on upper respiratory infection duration",
+     "Zinc shortened upper respiratory infections."),
+    ("(statins) AND (memory loss)", "Effect of statins on cognitive function in older adults",
+     "Statins did not impair cognition."),
+    ("(lemon) AND (kidney stones)", "Effect of citrate on nephrolithiasis recurrence",
+     "Citrate reduced nephrolithiasis recurrence."),
+    ("(red wine) AND (heart disease)", "Effect of resveratrol on coronary artery disease",
+     "Resveratrol did not change coronary events."),
+    ("(turmeric) AND (cancer)", "Effect of curcumin on tumour growth in patients with colorectal neoplasia",
+     "Curcumin did not shrink tumours."),
+    ("(ketogenic diet) AND (weight loss)", "Effect of a ketogenic diet on adiposity", "The diet reduced fat mass."),
+    ("(cranberry) AND (urinary tract infection)", "Effect of cranberry juice on bacteriuria in women",
+     "Cranberry reduced bacteriuria."),
+    ("(honey) AND (cough)", "Effect of honey on nocturnal symptoms in children with upper respiratory infection",
+     "Honey eased night symptoms."),
+    ("(magnesium) AND (migraine)", "Effect of magnesium on headache frequency", "Magnesium reduced headache days."),
+    ("(sugar) AND (hyperactivity)", "Effect of sucrose on behavior in children", "Sucrose did not change behaviour."),
+]
+_B4_INDIRECT = [
+    ("(garlic) AND (blood pressure)", "Effect of garlic on gut microbiota in adults", "Garlic changed the gut microbiota."),
+    ("(green tea) AND (weight loss)", "Effect of green tea on liver enzymes", "Green tea raised liver enzymes in some."),
+    ("(aspirin) AND (heart attack)", "Effect of aspirin on gastrointestinal bleeding", "Aspirin raised the risk of bleeding."),
+    ("(cinnamon) AND (diabetes)", "Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."),
+    ("(melatonin) AND (sleep)", "Effect of melatonin on migraine frequency", "Melatonin reduced migraine days."),
+    ("(fish oil) AND (dementia)", "Effect of fish oil on triglycerides in adults", "Fish oil lowered triglycerides."),
+    ("(vitamin D) AND (common cold)", "Effect of vitamin D on bone mineral density", "Vitamin D raised bone density."),
+    ("(coffee) AND (cancer)", "Effect of coffee on heart rate", "Coffee raised heart rate."),
+]
+# Brief E4 D1: the keyword mark left this release, so every study comes back
+# unmarked and contributes its authors' conclusion.
+def _d1_extra(st_):
+    return appmod._study_extra(st_, {st_["pmid"]})
+
+
+_b4_false = [t_ for q, t_, k in _B4_DIRECT if _d1_extra(_b4_st(t_, k))["indirect"]]
+t("BRIEF E4 D1: none of the B4 reviewer's 20 direct tests is marked indirect", not _b4_false, _b4_false)
+# Brief E4 D1 replaced "of the reviewer's 8 truly indirect studies, the 2
+# measuring a risk marker are marked" and "the reason names both families".
+_b4_marked = [(t_, _d1_extra(_b4_st(t_, k))) for q, t_, k in _B4_INDIRECT]
+t("BRIEF E4 D1: the B4 reviewer's 8 truly indirect studies come back unmarked, each contributing its conclusion",
+  all(x["indirect"] is False and x["indirect_reason"] == "" and x["contribution"] == k
+      for (t_, x), (q, _t, k) in zip(_b4_marked, _B4_INDIRECT)), _b4_marked)
+t("BRIEF E4 D1: the cinnamon lipid study has an empty reason and its own conclusion as its contribution",
+  _d1_extra(_b4_st("Effect of cinnamon on lipid profile", "Cinnamon lowered total cholesterol."))
+  == {"cites_retracted": None, "caution": None, "indirect": False, "indirect_reason": "",
+      "contribution": "Cinnamon lowered total cholesterol."})
+t("BRIEF E4 D1: the keyword rule and its helpers are gone, not switched off",
+  not any(hasattr(_e_ev, n) for n in ("indirect_label", "_POPULATION_PHRASE", "RISK_MARKERS", "_TITLE_TARGET",
+                                      "_TARGET_END", "_PEOPLE_WORDS"))
+  and "Indirect context" not in (ROOT / "app.py").read_text())
+t("BRIEF E2r B4: the table is general: between 12 and 20 families",
+  12 <= len(_e_ev.OUTCOME_FAMILIES) <= 20 and len({n for n, _ in _e_ev.OUTCOME_FAMILIES}) == len(_e_ev.OUTCOME_FAMILIES))
+
+# Brief E2 repair, B5 and M5: a sentence goes only when it says nothing new.
+_b5_e, _b5_b = _e_bd.one_figure_once(
+    "People took 500 mg a day (Study 1).",
+    {"says": [], "evidence": ["At 500 mg a day, two people had liver injury (Study 1).",
+                              "In 3 trials, glucose fell (Study 2).", "In 3 trials, bleeding rose (Study 2).",
+                              "Weight fell by 2 to 4 kg (Study 1).", "The mean loss was 4 kg (Study 1).",
+                              "In 3 trials, glucose dropped (Study 2). That is a real change."],
+     "effect_size": "The mean loss was 4 kg (Study 1).", "effect": {"label": "small"},
+     "unknowns": "Nobody followed people beyond 12 weeks (Study 1).",
+     "parts": [{"label": "Dose", "assessment": "People took 500 mg a day (Study 1)."}],
+     "strength": "In 3 trials (Study 2).", "applies_to": "Adults taking 500 mg a day (Study 1)."}, 3)
+t("BRIEF E2r B5: a harm, a second outcome and a mean after a range are kept",
+  _b5_b["evidence"][:5] == ["At 500 mg a day, two people had liver injury (Study 1).",
+                            "In 3 trials, glucose fell (Study 2).", "In 3 trials, bleeding rose (Study 2).",
+                            "Weight fell by 2 to 4 kg (Study 1).", "The mean loss was 4 kg (Study 1)."], _b5_b)
+# Brief E3 N11: the repeat is now written in the same order ("In 3 trials,
+# glucose dropped"): "Glucose dropped in 3 trials" is reordered and stays.
+t("BRIEF E2r B5: a true repeat goes with its 'That is' translation (dropped and fell read as one)",
+  len(_b5_b["evidence"]) == 5, _b5_b["evidence"])
+_b5_ro = _e_bd.one_figure_once("", {"says": [], "evidence": ["In 3 trials, glucose fell (Study 2).",
+                                                         "Glucose dropped in 3 trials (Study 2)."]}, 3)[1]
+t("BRIEF E3 N11: the same words in another order are not a repeat", len(_b5_ro["evidence"]) == 2, _b5_ro)
+t("BRIEF E2r M5: unknowns, assessments and other fields are never read; no field or item is left empty",
+  _b5_b["unknowns"] == "Nobody followed people beyond 12 weeks (Study 1)."
+  and _b5_b["parts"][0]["assessment"] == "People took 500 mg a day (Study 1)."
+  and _b5_b["strength"] == "In 3 trials (Study 2)." and _b5_b["applies_to"].startswith("Adults")
+  and _b5_b["effect_size"] == "The mean loss was 4 kg (Study 1)." and _b5_b["effect"] == {"label": "small"}
+  and all(_b5_b["evidence"]), _b5_b)
+_b5_e2, _b5_b2 = _e_bd.one_figure_once("", {"says": ["Glucose fell by 3 mg (Study 2).",
+                                                     "Glucose dropped by 3 mg (Study 2). That is small.",
+                                                     "Glucose fell by 3 mg (Study 2). Bleeding rose."]}, 3)
+t("BRIEF E2r B5: within an item only the repeated sentence goes, and its translation with it",
+  _b5_b2["says"] == ["Glucose fell by 3 mg (Study 2).", "Bleeding rose."], _b5_b2["says"])
+_b5_e3, _b5_b3 = _e_bd.one_figure_once("Glucose fell by 3 mg (Study 2).", {"says": [], "evidence": [
+    "Glucose dropped by 3 mg (Study 2)."], "effect_size": "Glucose decreased by 3 mg (Study 2)."}, 3)
+t("BRIEF E2r B5: a list or field that would be left empty keeps its sentence",
+  _b5_b3["evidence"] == ["Glucose dropped by 3 mg (Study 2)."]
+  and _b5_b3["effect_size"] == "Glucose decreased by 3 mg (Study 2).", _b5_b3)
+
+# Brief E2 repair, M1: a lookup that comes back late is thrown away and never
+# touches the studies; one in time flags them on the request thread.
+import time as _m1_time  # noqa: E402
+_m1_real = (pubmed.retracted_among, appmod.RETRACTION_WAIT)
+
+
+def _m1_slow(ids):
+    _m1_time.sleep(0.6)
+    return {"9101"}
+
+
+try:
+    pubmed.retracted_among, appmod.RETRACTION_WAIT = _m1_slow, 0.1
+    _m1_st = [_e_study("91", _E_REV, references=["9101"])]
+    _m1_note = appmod._flag_retractions(_m1_st)
+    _m1_time.sleep(0.9)
+    t("BRIEF E2r M1: a late lookup says it could not be made and never flags the studies, even after it ends",
+      _m1_note == _e_ev.RETRACTION_UNCHECKED and "cites_retracted" not in _m1_st[0], (_m1_note, _m1_st[0]))
+    appmod.RETRACTION_WAIT = 2
+    _m1_st = [_e_study("91", _E_REV, references=["9101"])]
+    _m1_note = appmod._flag_retractions(_m1_st)
+    t("BRIEF E2r M1: a lookup in time flags the review",
+      _m1_note is None and _e_ev.cited_retracted(_m1_st[0]) == [{"pmid": "9101", "title": None, "trial": False}],
+      (_m1_note, _m1_st[0]))
+finally:
+    pubmed.retracted_among, appmod.RETRACTION_WAIT = _m1_real
+
+# Brief E2 repair, m5: no retraction lookup when a saved answer is served.
+_m5_calls, _m5_real = [], (pubmed.retracted_among, _e_ev.retraction_lookup_ids)
+try:
+    pubmed.retracted_among = lambda ids: _m5_calls.append(ids) or set()
+    _e_ev.retraction_lookup_ids = lambda studies: ["9101"]
+    _steady_row("Steady claim with no retraction lookup")
+    _m5_r, _m5_evs = stream("Steady claim with no retraction lookup", ip="7.7.10.9")
+    t("BRIEF E2r m5: a saved answer served after the search sends no retraction lookup",
+      _m5_evs[-1]["stage"] == "done" and _m5_evs[-1]["result"]["cached"] and not _m5_calls, (_m5_calls, _m5_evs[-1]))
+finally:
+    pubmed.retracted_among, _e_ev.retraction_lookup_ids = _m5_real
+
+# Brief E2 repair, M2: a reference list is never stored or sent.
+assert db._turso_config() is None
+_m2_st = [_e_study("92", _E_REV, references=[str(9200 + i) for i in range(40)],
+                   cites_retracted=[{"pmid": "9201", "title": None, "trial": False}])]
+appmod._save_and_log("Stored without a reference list", "(x) AND (y)",
+                     {"verdict": "complicated", "explanation": "E.", "cited_studies": ["92"], "tldr": "T.",
+                      "still_open": "O.", "breakdown": None}, _m2_st)
+with db.get_conn() as _m2_c:
+    _m2_rows = [r[0] for r in _m2_c.execute("SELECT studies_json FROM verdict_cache WHERE studies_json LIKE '%9201%'")]
+    _m2_rows += [r[0] for r in _m2_c.execute("SELECT studies_json FROM checks WHERE studies_json LIKE '%9201%'")]
+t("BRIEF E2r M2: both tables store the flag and the caution's source, never the reference list",
+  len(_m2_rows) >= 2 and all("references" not in json.loads(r)[0] and json.loads(r)[0]["cites_retracted"]
+                             for r in _m2_rows) and "references" in _m2_st[0], _m2_rows[:1])
+with appmod.app.test_request_context("/"):
+    _m2_out = appmod._check_response("x", "(x) AND (y)", "complicated", "T.", "E.", ["92"], _m2_st, "http://x",
+                                     still_open="O.")
+t("BRIEF E2r M2: the browser payload has no reference list and keeps cites_retracted and caution",
+  "references" not in json.dumps(_m2_out) and _m2_out["studies"][0]["cites_retracted"]
+  and _m2_out["studies"][0]["caution"])
+
+# Brief E2 repair, M6: one id cap for both modules.
+t("BRIEF E2r M6: one id cap, 600, used by both modules",
+  pubmed.RETRACTION_LOOKUP_MAX == _e_ev.RETRACTION_LOOKUP_MAX == 600)
+
+# Brief E2 repair, null figures: the E4 code once defined a second
+# module-level _FIGURE in breakdown.py, which replaced the one the null
+# reading uses, so an OR of 0.99 (0.92 to 1.06) was read as "a small
+# effect". A module never binds the same top-level name twice.
+import ast as _ast_nf, breakdown
+
+
+def _nf_constants_twice(source: str) -> dict:
+    """{name: times} for every top-level constant (an all-capitals name, a
+    leading underscore allowed) a module binds more than once. Brief E3 N5:
+    the old filter wanted k.isupper() to be False, which no constant is."""
+    seen = {}
+    for n in _ast_nf.parse(source).body:
+        names = ([x.id for t_ in n.targets for x in _ast_nf.walk(t_) if isinstance(x, _ast_nf.Name)]
+                 if isinstance(n, _ast_nf.Assign) else
+                 [n.target.id] if isinstance(n, _ast_nf.AnnAssign) and isinstance(n.target, _ast_nf.Name) else
+                 [n.name] if isinstance(n, (_ast_nf.FunctionDef, _ast_nf.ClassDef)) else [])
+        for x in names:
+            seen[x] = seen.get(x, 0) + 1
+    return {k: v for k, v in seen.items() if v > 1 and k == k.upper() and k.strip("_")[:1].isalpha()}
+
+
+_nf_twice = {}
+for _nf_f in ("breakdown.py", "evidence.py", "verdict.py", "app.py", "pubmed.py", "db.py"):
+    _nf_twice.update({f"{_nf_f}:{k}": v for k, v in _nf_constants_twice((ROOT / _nf_f).read_text()).items()})
+t("BRIEF E2r null: no module binds a top-level constant twice (one shadowed the null reading)", not _nf_twice, _nf_twice)
+_nf_copy = (ROOT / "breakdown.py").read_text() + '\n_FIGURE = re.compile("x")\nCAP: int = 1\nCAP = 2\n'
+t("BRIEF E3 N5: the duplicate-constant check is not vacuous: a second _FIGURE in a copy of breakdown.py is caught",
+  _nf_constants_twice(_nf_copy) == {"_FIGURE": 2, "CAP": 2}, _nf_constants_twice(_nf_copy))
+_nf_bd = {"says": ["The odds ratio was 0.99 (Study 1)."],
+          "evidence": ["The odds ratio was 0.99 (Study 1). That is no clear difference between the groups, "
+                       "because the result was not statistically significant (Study 1)."],
+          "effect_size": "The odds ratio was 0.99 (Study 1). That is about 1% lower odds (Study 1)."}
+_nf_x, _nf_out = breakdown.one_figure_once("", json.loads(json.dumps(_nf_bd)), 1)
+t("BRIEF E2r null: a repeat whose translation says it was not significant stays, with its translation",
+  _nf_out["evidence"] == _nf_bd["evidence"], _nf_out["evidence"])
+t("BRIEF E2r null: a plain repeat still goes with its 'That is' translation",
+  "0.99" not in (_nf_out["effect_size"] or "") or _nf_out["effect_size"] == _nf_bd["effect_size"], _nf_out["effect_size"])
+
+# ---------------------------------------------------------------------
+# BRIEF E3 (second repair of the evidence change). Self-contained: each
+# finding's tests use only the names defined here.
+# ---------------------------------------------------------------------
+import copy as _e3_copy  # noqa: E402
+import json as _e3_json  # noqa: E402
+import random as _e3_random  # noqa: E402
+import re as _e3_re  # noqa: E402
+import breakdown as _e3_bd  # noqa: E402
+import evidence as _e3_ev  # noqa: E402
+
+_E3_FLAG = [{"pmid": "39000001", "title": None, "trial": False}]
+_E3_MA = ["Journal Article", "Meta-Analysis", "Systematic Review"]
+_E3_RCT = ["Journal Article", "Randomized Controlled Trial"]
+
+
+def _e3_mk(pmid, types, title, abstract):
+    return {"pmid": pmid, "title": title, "journal": "J", "year": "2022", "authors": ["A"],
+            "publication_types": list(types), "data_banks": None, "abstract": abstract,
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"}
+
+
+def _e3_fresh(claim, query, studies, model, finds, expl, bd_extra=None, flag=(), tldr="The studies show it is not safe."):
+    """A fresh check end to end: weigh_evidence with a canned model answer,
+    then the response builder. `flag` lists the studies (0-based) flagged."""
+    st = _e3_copy.deepcopy(studies)
+    for j in flag:
+        st[j]["cites_retracted"] = list(_E3_FLAG)
+    raw = _e3_json.dumps({"verdict": model, "tldr": tldr, "explanation": expl, "still_open": "Longer studies are needed.",
+                          "cited_study_numbers": list(range(1, len(st) + 1)),
+                          "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True,
+                                         "finding": f} for i, f in enumerate(finds)],
+                          "parts": [], "evidence": (bd_extra or {}).get("evidence", []),
+                          "effect_size": (bd_extra or {}).get("effect_size", ""),
+                          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
+    saved = verdict._complete_json, verdict.guidance_ahead
+    verdict._complete_json = lambda *a, **k: (raw, None)
+    verdict.guidance_ahead = lambda c: None
+    try:
+        r = verdict.weigh_evidence(claim, st, query)
+    finally:
+        verdict._complete_json, verdict.guidance_ahead = saved
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, r["verdict"], r["tldr"], r["explanation"],
+                                      r.get("cited_studies") or [], st, "http://localhost/",
+                                      still_open=r.get("still_open", ""), breakdown=r.get("breakdown"))
+
+
+def _e3_said(resp):
+    """Every sentence a reader sees in the explanation and each list, by place."""
+    bd = resp.get("breakdown") or {}
+    out = {"explanation": set(_e3_bd.sentences(resp.get("explanation") or ""))}
+    for key in ("says", "evidence"):
+        out[key] = {x for item in bd.get(key) or [] for x in _e3_bd.sentences(item or "")}
+    out["effect_size"] = set(_e3_bd.sentences(bd.get("effect_size") or ""))
+    return out
+
+
+def _e3_lost(off, on):
+    """The sentences present with the flags off and missing with them on."""
+    a, b = _e3_said(off), _e3_said(on)
+    return {k: sorted(a[k] - b[k]) for k in a if a[k] - b[k]}
+
+
+# N1: the flag never removes a sentence. The reviewer's kava input.
+_e3_kr = _e3_mk("620001", _E3_MA, "Kava and liver injury: a systematic review and meta-analysis",
+                "We pooled 20 studies (n=2600). RESULTS: Liver injury occurred in 3.1% of kava users (RR 2.4, 95% CI "
+                "1.5 to 3.8), with 2 liver transplants. CONCLUSIONS: Kava can injure the liver.")
+_e3_kt = _e3_mk("620002", _E3_RCT, "Kava for anxiety: a randomized placebo-controlled trial",
+                "In a randomized double-blind placebo-controlled trial of 210 adults, liver enzymes did not differ. "
+                "CONCLUSIONS: Kava was well tolerated over 8 weeks.")
+_E3_HARM = "Liver injury occurred in 3.1% of kava users, with 2 needing a liver transplant (Study 1)."
+_e3_kexpl = _E3_HARM + " A short trial saw no change in liver enzymes over 8 weeks (Study 2)."
+_e3_kbd = {"evidence": [_E3_HARM], "effect_size": "Kava users had a risk ratio of 2.4 for liver injury (Study 1)."}
+_e3_kava_bad = []
+for _e3_model in ("false", "true", "complicated"):
+    _e3_off = _e3_fresh("Kava supplements are safe for the liver", "(kava) AND (liver injury OR hepatotoxicity)",
+                        [_e3_kr, _e3_kt], _e3_model, ["against", "for"], _e3_kexpl, _e3_kbd)
+    _e3_on = _e3_fresh("Kava supplements are safe for the liver", "(kava) AND (liver injury OR hepatotoxicity)",
+                       [_e3_kr, _e3_kt], _e3_model, ["against", "for"], _e3_kexpl, _e3_kbd, flag=(0,))
+    _e3_harm_on = [k for k, v in _e3_said(_e3_on).items() if _E3_HARM in v]
+    if _e3_lost(_e3_off, _e3_on) or "explanation" not in _e3_harm_on or "evidence" not in _e3_harm_on:
+        _e3_kava_bad.append((_e3_model, _e3_lost(_e3_off, _e3_on), _e3_harm_on))
+    if _e3_model == "false":
+        _e3_kava_on = _e3_on
+t("BRIEF E3 N1: kava, the flagged review's harm sentence stays under every verdict, and no sentence leaves",
+  not _e3_kava_bad, _e3_kava_bad)
+_E3_ONE = "Study 1 cites a study that was later retracted, so treat its results with caution."
+_e3_kbdo = _e3_kava_on["breakdown"]
+t("BRIEF E3 N1: kava, the caution sentence names the study, once at the end of the explanation and of each list citing it",
+  _e3_kava_on["explanation"].endswith(_E3_ONE) and _e3_kava_on["explanation"].count(_E3_ONE) == 1
+  and _e3_kbdo["evidence"][-1] == _E3_ONE and _e3_kbdo["evidence"].count(_E3_ONE) == 1
+  and _e3_kbdo["says"][-1] == _E3_ONE and _e3_kbdo["says"].count(_E3_ONE) == 1, (_e3_kava_on["explanation"], _e3_kbdo))
+t("BRIEF E3 N1: kava, the basis names the flagged review, then the clean design relied on",
+  _e3_kava_on["evidence_line"].endswith("Based on a review that cites a retracted study, and randomized trials."),
+  _e3_kava_on["evidence_line"])
+t("BRIEF E3 N1: the sentence for several flagged reviews names each",
+  _e3_ev.retracted_review_sentence([3, 1]) == "Studies 1 and 3 cite studies that were later retracted, so treat "
+  "their results with caution." and _e3_ev.retracted_review_sentence([1, 2, 4]).startswith("Studies 1, 2 and 4 cite"))
+_e3_two = [_e3_mk("71", _E3_MA, "A review", "x"), _e3_mk("72", _E3_MA, "B review", "y"), _e3_mk("73", _E3_RCT, "C", "z")]
+for _e3_s in _e3_two[:2]:
+    _e3_s["cites_retracted"] = list(_E3_FLAG)
+_e3_x, _e3_b = appmod._retracted_review_rules("It helped (Study 1). It did not (Study 3).",
+                                              {"says": ["It helped (Study 2)."], "evidence": ["It did not (Study 3)."]},
+                                              _e3_two, {"71", "72", "73"})
+t("BRIEF E3 N1: the explanation names every flagged review relied on; a list names those it cites, and a list "
+  "citing none gets no sentence",
+  _e3_x.endswith("Studies 1 and 2 cite studies that were later retracted, so treat their results with caution.")
+  and _e3_b["says"][-1] == "Study 2 cites a study that was later retracted, so treat its results with caution."
+  and _e3_b["evidence"] == ["It did not (Study 3)."], (_e3_x, _e3_b))
+_e3_x1, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _e3_two, {"73"})
+t("BRIEF E3 N1: a flagged review not relied on adds nothing", _e3_x1 == "It helped (Study 1).", _e3_x1)
+_e3_x2, _e3_b2 = _e3_bd.one_figure_once(_e3_x + " " + _E3_ONE.replace("Study 1", "Study 2"),
+                                        {"says": [_E3_ONE], "evidence": [_E3_ONE]}, 3)
+t("BRIEF E3 N1: the caution sentence is exempt from one figure once",
+  _E3_ONE in _e3_b2["evidence"] and _E3_ONE in _e3_b2["says"], _e3_b2)
+
+# N1 property: over seeded cases, every sentence present with the flags off
+# is present with them on, in the explanation and in every list.
+_E3_DESIGNS = (("ma", _E3_MA), ("rct", _E3_RCT), ("cohort", ["Journal Article", "Observational Study"]),
+               ("review", ["Journal Article", "Review"]), ("case", ["Case Reports"]), ("mice", ["Journal Article"]))
+_E3_OUTS = ("liver injury", "fasting glucose", "pain scores", "body weight", "bleeding", "memory scores")
+_E3_CLAIMS = (("Kava supplements are safe for the liver", "(kava) AND (liver injury)"),
+              ("Vinegar cures diabetes", "(vinegar) AND (diabetes OR glucose)"),
+              ("Turmeric relieves joint pain", "(turmeric) AND (pain)"),
+              ("Green tea causes weight loss", "(green tea) AND (weight loss)"),
+              ("Ginkgo is safe to take before surgery", "(ginkgo) AND (bleeding)"),
+              ("Ginkgo improves memory", "(ginkgo) AND (memory)"))
+
+
+def _e3_case(rng):
+    claim, query = rng.choice(_E3_CLAIMS)
+    n = rng.randint(1, 4)
+    studies, sentences, finds = [], [], []
+    for i in range(n):
+        name, types = rng.choice(_E3_DESIGNS)
+        out = rng.choice(_E3_OUTS)
+        fig = rng.choice((12, 18, 25, 31, 40))
+        who = "mice" if name == "mice" else "adults"
+        verb = rng.choice(("fell", "rose"))
+        ab = (f"We studied 300 {who}. RESULTS: {out.capitalize()} {verb} by {fig}% (95% CI 4 to 50). "
+              f"CONCLUSIONS: The effect on {out} was {rng.choice(('clear', 'harmful', 'helpful'))}.")
+        studies.append(_e3_mk(str(800000 + i), types, f"{name} of {out}", ab))
+        sentences.append(f"{out.capitalize()} {verb} by {fig}% in {who} (Study {i + 1}).")
+        finds.append(rng.choice(("for", "against", "unclear")))
+    flag = [i for i, s in enumerate(studies) if s["publication_types"] in (_E3_MA, ["Journal Article", "Review"])
+            and rng.random() < 0.7]
+    expl = " ".join(rng.sample(sentences, len(sentences)))
+    bd = {"evidence": rng.sample(sentences, rng.randint(1, len(sentences))),
+          "effect_size": rng.choice(sentences)}
+    return claim, query, studies, rng.choice(("true", "false", "complicated", "insufficient")), finds, expl, bd, flag
+
+
+_e3_rng = _e3_random.Random(20261124)
+_e3_prop_bad, _e3_prop_n, _e3_prop_flagged = [], 0, 0
+_e3_i = 0
+while _e3_prop_n < 320 and _e3_i < 3000:
+    _e3_i += 1
+    _e3_c = _e3_case(_e3_rng)
+    if not _e3_c[7]:
+        continue
+    _e3_prop_n += 1
+    _e3_off = _e3_fresh(*_e3_c[:7])
+    _e3_on = _e3_fresh(*_e3_c[:7], flag=_e3_c[7])
+    _e3_prop_flagged += bool(any(s.get("cites_retracted") for s in _e3_on["studies"]))
+    if _e3_lost(_e3_off, _e3_on):
+        _e3_prop_bad.append((_e3_i, _e3_c[0], _e3_lost(_e3_off, _e3_on)))
+t(f"BRIEF E3 N1: over {_e3_prop_n} seeded cases with a flagged review, no sentence present with the flags off is "
+  "missing with them on, in the explanation or any list", _e3_prop_n >= 300 and not _e3_prop_bad,
+  (_e3_prop_n, _e3_prop_bad[:3]))
+
+# N2: the second statement shows only for an absolute claim rated false or
+# complicated, over a sentence citing a relied-on study in people.
+_e3_mice = _e3_mk("710001", ["Journal Article"], "Curcumin shrinks tumours in mice",
+                  "Mice with xenograft tumours were given curcumin for 4 weeks. RESULTS: Tumour volume fell by 40% "
+                  "compared with control. CONCLUSIONS: Curcumin slowed tumour growth in mice.")
+_e3_pilot = _e3_mk("720001", _E3_RCT, "Garlic and blood pressure: a pilot randomized trial",
+                   "In this pilot randomized trial of 18 adults, systolic pressure fell by 6 mmHg. CONCLUSIONS: Larger "
+                   "trials are needed; evidence is insufficient.")
+_e3_st2_bad = []
+for _e3_claim, _e3_q, _e3_st, _e3_es in (
+        ("Turmeric cures cancer", "(turmeric OR curcumin) AND (cancer OR tumour)", _e3_mice,
+         "Tumour volume fell by 40% in mice given curcumin (Study 1)."),
+        ("Garlic cures high blood pressure", "(garlic) AND (hypertension OR blood pressure)", _e3_pilot,
+         "Systolic pressure fell by 6 mmHg in a small pilot trial (Study 1).")):
+    _e3_r = _e3_fresh(_e3_claim, _e3_q, [_e3_st], "complicated", ["for"], _e3_es,
+                      {"evidence": [_e3_es], "effect_size": _e3_es}, tldr="The studies point both ways.")
+    if _e3_r["verdict"] != "insufficient" or _e3_r["effect_line"]:
+        _e3_st2_bad.append((_e3_claim, _e3_r["verdict"], _e3_r["effect_line"]))
+t("BRIEF E3 N2: the reviewer's turmeric (mice) and garlic (pilot) answers, rated 'Not enough evidence', have no "
+  "second statement", not _e3_st2_bad, _e3_st2_bad)
+
+_e3_trial = _e3_mk("730001", _E3_RCT, "Vinegar and glucose: a randomized trial",
+                   "We randomized 120 adults with type 2 diabetes. RESULTS: Weight fell by 2 kg and fasting glucose fell "
+                   "by 0.5 mmol/L. CONCLUSIONS: Vinegar lowered glucose a little.")
+_e3_ma_low = _e3_mk("730002", _E3_MA, "Vinegar and glycaemic control: a meta-analysis",
+                    "We pooled 9 trials in 900 adults with type 2 diabetes. RESULTS: HbA1c fell by 0.2 points (low certainty evidence). CONCLUSIONS: Vinegar "
+                    "may lower HbA1c slightly.")
+_e3_ma_mod = _e3_mk("730003", _E3_MA, "Vinegar and fasting glucose: a meta-analysis",
+                    "We pooled 12 trials in 1400 adults with type 2 diabetes. RESULTS: Fasting glucose fell by 0.4 mmol/L (moderate certainty evidence). "
+                    "CONCLUSIONS: Vinegar lowers fasting glucose a little.")
+_e3_case_rep = _e3_mk("730004", ["Case Reports"], "Vinegar and glucose in one patient: a case report",
+                      "A woman with diabetes drank vinegar daily. Her glucose fell by 1 mmol/L.")
+_E3_Q = ["(vinegar) AND (diabetes OR glucose)"]
+
+
+def _e3_two(verdict_value, effect_size, studies, absolute="a cure", cited=None, queries=_E3_Q):
+    cited = {s["pmid"] for s in studies} if cited is None else cited
+    return appmod._statement_two(verdict_value, absolute, {"effect_size": effect_size}, studies, cited, "", queries)
+
+
+_e3_es1 = "Weight fell by 2 kg (Study 1). Fasting glucose fell by 0.5 mmol/L (Study 1)."
+t("BRIEF E3 N2: never under 'true' or 'Not enough evidence', and never for a claim that is not absolute",
+  all(not _e3_two(v, _e3_es1, [_e3_trial]) for v in ("true", "insufficient"))
+  and not _e3_two("false", _e3_es1, [_e3_trial], absolute="") and _e3_two("false", _e3_es1, [_e3_trial])
+  and _e3_two("complicated", _e3_es1, [_e3_trial]))
+t("BRIEF E3 N2: never over a sentence resting only on animal or lab studies, or only on case reports",
+  not _e3_two("false", "Tumour volume fell by 40% in mice (Study 1).", [_e3_mice])
+  and not _e3_two("false", "Glucose fell by 1 mmol/L (Study 1).", [_e3_case_rep]))
+t("BRIEF E3 N2: never over a sentence citing only studies not relied on",
+  not _e3_two("false", _e3_es1, [_e3_trial], cited=set()))
+t("BRIEF E3 N2: the first sentence naming the claim's outcome family is quoted",
+  _e3_two("false", _e3_es1, [_e3_trial]).startswith("What the studies did find: Fasting glucose fell by 0.5 mmol/L"),
+  _e3_two("false", _e3_es1, [_e3_trial]))
+t("BRIEF E3 N2: with no family recognised, the first sentence in people is quoted",
+  _e3_two("false", _e3_es1, [_e3_trial], queries=["(vinegar)"]).startswith("What the studies did find: Weight fell"))
+_e3_mixed = "Tumour volume fell by 40% in mice (Study 2). Weight fell by 2 kg (Study 1)."
+t("BRIEF E3 N2: a sentence resting only on an animal study is passed over for one in people",
+  _e3_two("false", _e3_mixed, [_e3_trial, _e3_mice], queries=["(x)"]).startswith("What the studies did find: Weight"))
+_e3_flagged_low = {**_e3_ma_low, "cites_retracted": list(_E3_FLAG)}
+_e3_only_flag = _e3_two("false", "HbA1c fell by 0.2 points (Study 1).", [_e3_flagged_low])
+t("BRIEF E3 N2: a sentence citing only flagged reviews says so and relays no grade",
+  _e3_only_flag == "What the studies did find: HbA1c fell by 0.2 points (Study 1). This comes from a review that "
+  "cites a retracted study, so treat it with caution.", _e3_only_flag)
+_e3_both = _e3_two("false", "Fasting glucose fell (Studies 1 and 2).", [_e3_flagged_low, _e3_ma_mod])
+t("BRIEF E3 N2: beside a clean review, only the clean review's grade counts",
+  _e3_both.endswith("Certainty: moderate, as the review rates it."), _e3_both)
+t("BRIEF E3 N2: unflagged, both grades count as before",
+  _e3_two("false", "Fasting glucose fell (Studies 1 and 2).", [_e3_ma_low, _e3_ma_mod]).endswith(
+      "Certainty varies by outcome, low to moderate, as the reviews rate it."))
+# Certainty is said once: beside a second statement the first ends with its basis.
+_e3_line = "Moderate certainty evidence against this claim"
+t("BRIEF E3 N2: the first statement ends with the basis when asked, with 'Certainty:' otherwise",
+  _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure", basis_only=True)
+  == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews."
+  and _e3_ev.claim_statement("false", _e3_line, [_e3_ma_mod], {"730003"}, "a cure").endswith("Certainty: moderate."))
+_e3_vg = _e3_fresh("Vinegar cures diabetes", _E3_Q[0], [_e3_ma_mod, _e3_trial], "false", ["against", "against"],
+                   "Fasting glucose fell by 0.4 mmol/L, a small change (Study 1).",
+                   {"evidence": ["Fasting glucose fell by 0.4 mmol/L (Study 1)."],
+                    "effect_size": "Fasting glucose fell by 0.4 mmol/L (Study 1)."},
+                   tldr="Vinegar does not cure diabetes.")
+t("BRIEF E3 N2: end to end, with a second statement certainty is said once, in it",
+  _e3_vg["effect_line"] and "Certainty" not in _e3_vg["evidence_line"]
+  and (_e3_vg["evidence_line"] + _e3_vg["effect_line"]).count("ertainty") <= 1, (_e3_vg["evidence_line"], _e3_vg["effect_line"]))
+
+# N8: a clean join whatever the sentence ends with, and no dash reaches the page.
+_e3_joins = {}
+for _e3_es in ("Did glucose fall? Not clearly (Study 1)?", "Glucose fell in some people (Study 1)!",
+               "Glucose fell by 0.5 mmol/L (Study 1)..", "Glucose fell by 0.5 mmol/L (Study 1)...",
+               "Glucose fell by 0.5 mmol/L (Study 1)", "Glucose fell — by a third (Study 1).",
+               "Glucose fell by 0.3 – 0.5 mmol/L (Study 1)."):
+    _e3_joins[_e3_es] = _e3_two("false", _e3_es, [_e3_trial])
+_e3_join_bad = {k: v for k, v in _e3_joins.items()
+                if not v or _e3_re.search(r"\.\.|[?!]\.|[–—]|\.\s*\.", v)
+                or not v.endswith("The abstracts we read do not rate how certain this is.")}
+t("BRIEF E3 N8: a sentence ending in '?', '!', '..' or '...' joins cleanly, and no dash reaches the statement",
+  not _e3_join_bad, _e3_join_bad)
+t("BRIEF E3 N8: a sentence ending '!' keeps its mark and gets no full stop after it",
+  "people (Study 1)! The abstracts" in _e3_joins["Glucose fell in some people (Study 1)!"])
+
+# N9: when a flag lowered the level, the first statement ends with the basis
+# naming the flagged review, never a "Certainty: X" no review states. The
+# reviewer's ginkgo input.
+_e3_gma = _e3_mk("610001", _E3_MA, "Ginkgo biloba and memory in older adults: a meta-analysis of randomized trials",
+                 "We pooled 14 randomized controlled trials (n=3100). RESULTS: Memory scores did not differ (SMD 0.03, "
+                 "95% CI -0.08 to 0.14). CONCLUSIONS: Ginkgo did not improve memory.")
+_e3_gco = _e3_mk("610002", ["Journal Article", "Observational Study"], "Ginkgo use and memory in older adults: a prospective cohort study",
+                 "In a prospective cohort of 4000 older adults, ginkgo users had better memory scores. CONCLUSIONS: Ginkgo "
+                 "use was associated with better memory.")
+_e3_gk = _e3_fresh("Ginkgo improves memory in older adults", "(ginkgo) AND (memory OR cognition)", [_e3_gma, _e3_gco],
+                   "true", ["against", "for"], "Trials found no memory benefit (Study 1), while a cohort found better "
+                   "memory (Study 2).", flag=(0,), tldr="The studies show it helps.")
+t("BRIEF E3 N9: ginkgo, a flag that lowered the level leaves the basis naming the flagged review, not 'Certainty: low'",
+  "Certainty" not in _e3_gk["evidence_line"]
+  and _e3_gk["evidence_line"].endswith("Based on a review that cites a retracted study, and human studies."),
+  _e3_gk["evidence_line"])
+
+# N3, N4, N7: an indirect mark only when the study measures a risk marker. Both
+# reviewers' 40 direct pairs and 18 truly indirect ones (query, title, conclusion).
+_E3_DIRECT = [
+    ('(garlic) AND (blood pressure)', 'Effect of garlic on hypertension in adults: a randomized trial', 'Garlic reduced systolic readings by 8 mmHg.'),
+    ('(green tea) AND (weight loss OR weight)', 'Effect of green tea extract on body mass index in obese women', 'Green tea extract lowered BMI modestly.'),
+    ('(aspirin) AND (heart attack)', 'Effect of aspirin on myocardial infarction in older adults', 'Aspirin did not reduce myocardial infarction.'),
+    ('(cinnamon) AND (blood sugar)', 'Effect of cinnamon on glycaemic control in type 2 diabetes', 'Cinnamon improved HbA1c slightly.'),
+    ('(melatonin) AND (sleep)', 'Effect of melatonin on insomnia in older people', 'Melatonin shortened sleep onset latency.'),
+    ('(fish oil) AND (cholesterol)', 'Effect of omega-3 fatty acids on LDL and triglycerides', 'Omega-3 lowered triglycerides but raised LDL.'),
+    ('(vitamin D) AND (fracture)', 'Effect of vitamin D supplementation on hip fracture in women', 'Vitamin D did not prevent hip fractures.'),
+    ('(coffee) AND (stroke)', 'Effect of coffee intake on cerebrovascular events', 'Coffee was not linked to cerebrovascular events.'),
+    ('(exercise) AND (depression)', 'Effect of aerobic training on depressive symptoms in adults', 'Aerobic training reduced depressive symptoms.'),
+    ('(probiotics) AND (diarrhea)', 'Effect of Lactobacillus on loose stools in children', 'Lactobacillus shortened loose stools by a day.'),
+    ('(zinc) AND (common cold)', 'Effect of zinc lozenges on upper respiratory infection duration', 'Zinc shortened upper respiratory infections.'),
+    ('(statins) AND (memory loss)', 'Effect of statins on cognitive function in older adults', 'Statins did not impair cognition.'),
+    ('(lemon) AND (kidney stones)', 'Effect of citrate on nephrolithiasis recurrence', 'Citrate reduced nephrolithiasis recurrence.'),
+    ('(red wine) AND (heart disease)', 'Effect of resveratrol on coronary artery disease', 'Resveratrol did not change coronary events.'),
+    ('(turmeric) AND (cancer)', 'Effect of curcumin on tumour growth in patients with colorectal neoplasia', 'Curcumin did not shrink tumours.'),
+    ('(ketogenic diet) AND (weight loss)', 'Effect of a ketogenic diet on adiposity', 'The diet reduced fat mass.'),
+    ('(cranberry) AND (urinary tract infection)', 'Effect of cranberry juice on bacteriuria in women', 'Cranberry reduced bacteriuria.'),
+    ('(honey) AND (cough)', 'Effect of honey on nocturnal symptoms in children with upper respiratory infection', 'Honey eased night symptoms.'),
+    ('(magnesium) AND (migraine)', 'Effect of magnesium on headache frequency', 'Magnesium reduced headache days.'),
+    ('(sugar) AND (hyperactivity)', 'Effect of sucrose on behavior in children', 'Sucrose did not change behaviour.'),
+    ('(curcumin OR turmeric) AND (osteoarthritis OR knee osteoarthritis)', 'Effect of curcumin on pain in patients with knee osteoarthritis: a randomized trial', 'Curcumin reduced pain compared with placebo in patients with knee osteoarthritis.'),
+    ('(glucosamine) AND (osteoarthritis)', 'Effect of glucosamine on knee pain and function: a randomized trial', 'Glucosamine was no better than placebo for knee pain.'),
+    ('(probiotics) AND (irritable bowel syndrome OR IBS)', 'Effect of a multi-strain probiotic on abdominal pain in adults with irritable bowel syndrome', 'The probiotic reduced abdominal pain scores in adults with irritable bowel syndrome.'),
+    ('(coenzyme Q10) AND (heart failure)', 'Effect of coenzyme Q10 on mortality in chronic heart failure: the Q-SYMBIO trial', 'Coenzyme Q10 reduced all-cause mortality and hospital stays.'),
+    ('(lithium) AND (suicide OR suicidal behaviour)', 'Effect of lithium on suicide and all-cause mortality in mood disorders', 'Lithium reduced suicide and deaths from any cause in people with mood disorders.'),
+    ('(zinc) AND (diarrhea OR diarrhoea)', 'Effect of zinc supplementation on acute gastroenteritis in children under five', 'Zinc shortened the episode by about a day.'),
+    ('(vitamin D) AND (asthma OR wheeze)', 'Effect of prenatal vitamin D on recurrent wheeze in offspring', 'Prenatal vitamin D did not reduce recurrent wheeze by age 3.'),
+    ('(melatonin) AND (sleep OR insomnia)', 'Effect of melatonin on sleep onset latency in children with autism', 'Melatonin shortened the time taken to fall asleep by 30 minutes.'),
+    ('(cranberry) AND (urinary tract infection OR UTI)', 'Effect of cranberry juice on recurrence of UTIs in children: a randomized trial', 'Cranberry juice reduced recurrences by 65%.'),
+    ('(omega-3 OR fish oil) AND (ADHD OR attention deficit hyperactivity disorder)', 'Effect of omega-3 fatty acids on hyperactivity and inattention in boys', 'Omega-3 supplementation did not change parent-rated symptoms.'),
+    ('(lavender OR silexan) AND (anxiety)', 'Effect of silexan on Hamilton Anxiety Rating Scale scores in generalized anxiety disorder', 'Silexan reduced anxiety scores more than placebo.'),
+    ('(ginkgo) AND (dementia OR Alzheimer)', 'Effect of Ginkgo biloba on cognitive decline in older adults', 'Ginkgo did not slow cognitive decline.'),
+    ('(beetroot OR dietary nitrate) AND (hypertension OR blood pressure)', 'Effect of dietary nitrate on systolic and diastolic readings in hypertensive patients', 'Dietary nitrate lowered systolic readings by 8 mmHg.'),
+    ('(plant sterols) AND (cholesterol)', 'Effect of plant sterol margarine on LDL and HDL in adults', 'Plant sterols lowered LDL by 10%.'),
+    ('(calcium) AND (osteoporosis OR fracture)', 'Effect of calcium on bone mineral density in postmenopausal women', 'Calcium slowed loss of bone density slightly.'),
+    ('(green tea) AND (obesity OR weight loss)', 'Effect of green tea catechins on waist circumference and visceral fat', 'Catechins reduced waist circumference by 2 cm.'),
+    ('(silymarin OR milk thistle) AND (fatty liver OR liver disease)', 'Effect of silymarin on hepatic steatosis on ultrasound', 'Silymarin reduced steatosis grade.'),
+    ('(sodium bicarbonate) AND (chronic kidney disease)', 'Effect of sodium bicarbonate on progression to end-stage renal disease', 'Bicarbonate slowed progression.'),
+    ('(probiotics) AND (eczema OR atopic dermatitis)', 'Effect of probiotics on SCORAD and itch in infants with atopic dermatitis', 'Probiotics reduced SCORAD scores by 5 points.'),
+    ('(cinnamon) AND (diabetes OR blood sugar)', 'Effect of cinnamon on HbA1c and fasting glucose in type 2 diabetes', 'Cinnamon lowered HbA1c by 0.1 points.'),
+]
+_E3_INDIRECT = [
+    ('(garlic) AND (blood pressure)', 'Effect of garlic on gut microbiota in adults', 'Garlic changed the gut microbiota.'),
+    ('(green tea) AND (weight loss)', 'Effect of green tea on liver enzymes', 'Green tea raised liver enzymes in some.'),
+    ('(aspirin) AND (heart attack)', 'Effect of aspirin on gastrointestinal bleeding', 'Aspirin raised the risk of bleeding.'),
+    ('(cinnamon) AND (diabetes)', 'Effect of cinnamon on lipid profile', 'Cinnamon lowered total cholesterol.'),
+    ('(melatonin) AND (sleep)', 'Effect of melatonin on migraine frequency', 'Melatonin reduced migraine days.'),
+    ('(fish oil) AND (dementia)', 'Effect of fish oil on triglycerides in adults', 'Fish oil lowered triglycerides.'),
+    ('(vitamin D) AND (common cold)', 'Effect of vitamin D on bone mineral density', 'Vitamin D raised bone density.'),
+    ('(coffee) AND (cancer)', 'Effect of coffee on heart rate', 'Coffee raised heart rate.'),
+    ('(eggs) AND (heart disease OR myocardial infarction)', 'Effect of eggs on LDL cholesterol in healthy adults', 'Eggs raised LDL slightly.'),
+    ('(salt reduction) AND (stroke)', 'Effect of salt substitutes on blood pressure in older adults', 'Salt substitutes lowered systolic pressure by 5 mmHg.'),
+    ('(vinegar) AND (diabetes OR glucose)', 'Effect of vinegar on body weight in obese adults', 'Vinegar reduced body weight by 1 kg.'),
+    ('(exercise) AND (depression)', 'Effect of aerobic exercise on sleep quality in older adults', 'Exercise improved sleep quality.'),
+    ('(statins) AND (dementia OR cognitive decline)', 'Effect of atorvastatin on LDL cholesterol in older adults', 'Atorvastatin lowered LDL by 40%.'),
+    ('(vitamin D) AND (fracture)', 'Effect of vitamin D on depressive symptoms in older women', 'Vitamin D did not change mood.'),
+    ('(coffee) AND (liver disease)', 'Effect of coffee on blood pressure in healthy adults', 'Coffee raised blood pressure briefly.'),
+    ('(screen time) AND (ADHD OR attention deficit)', 'Effect of evening screen use on sleep duration in adolescents', 'Screen use shortened sleep by 20 minutes.'),
+    ('(probiotics) AND (common cold OR influenza)', 'Effect of probiotics on stool frequency in children', 'Probiotics increased stool frequency.'),
+    ('(omega-3) AND (cardiovascular events OR heart attack)', 'Effect of omega-3 on triglycerides in adults with hypertriglyceridemia', 'Omega-3 lowered triglycerides by 25%.'),
+]
+
+
+def _e3_rct(title, concl):
+    return {"pmid": "1", "title": title, "abstract": f"METHODS: 200 adults. CONCLUSIONS: {concl}",
+            "publication_types": ["Journal Article", "Randomized Controlled Trial"], "year": "2020"}
+
+
+_e3_false = [t_ for q, t_, k in _E3_DIRECT if appmod._study_extra(_e3_rct(t_, k), {"1"})["indirect"]]
+t("BRIEF E4 D1: none of the two earlier reviewers' 40 direct pairs is marked indirect", not _e3_false, _e3_false)
+# Brief E4 D1 replaced "of the 18 truly indirect pairs, those whose study
+# measures a risk marker stay marked (8)".
+_e3_kept = [(t_, appmod._study_extra(_e3_rct(t_, k), {"1"})) for q, t_, k in _E3_INDIRECT]
+t("BRIEF E4 D1: the 18 truly indirect pairs come back unmarked, each contributing its conclusion",
+  all(x["indirect"] is False and x["indirect_reason"] == "" and x["contribution"].rstrip(".") == k.rstrip(".")
+      for (t_, x), (q, _t, k) in zip(_e3_kept, _E3_INDIRECT)), [x for x in _e3_kept if x[1]["indirect"]])
+_E3_POP = [("(coenzyme Q10) AND (heart failure)", "Effect of coenzyme Q10 on mortality in chronic heart failure",
+            "Coenzyme Q10 reduced mortality in patients with chronic heart failure."),
+           ("(curcumin) AND (arthritis)", "Effect of curcumin on pain in patients with arthritis",
+            "Curcumin reduced pain in adults with rheumatoid arthritis."),
+           ("(peppermint oil) AND (irritable bowel syndrome)",
+            "Effect of peppermint oil on abdominal pain in irritable bowel syndrome",
+            "Peppermint oil eased abdominal pain in patients with irritable bowel syndrome."),
+           ("(antibiotics) AND (acute otitis media OR ear infection)",
+            "Effect of amoxicillin on ear pain in children with acute otitis media",
+            "Amoxicillin reduced ear pain at day 3 in children with ear infections."),
+           ("(statins) AND (stroke)", "Effect of atorvastatin on mortality after stroke",
+            "Atorvastatin did not reduce mortality in people who had a stroke.")]
+_e3_popm = [t_ for q, t_, k in _E3_POP if appmod._study_extra(_e3_rct(t_, k), {"1"})["indirect"]]
+t("BRIEF E4 D1: none of the 5 conclusions naming the people studied is marked", not _e3_popm, _e3_popm)
+t("BRIEF E4 D1: a harm (aspirin and gut bleeding) is never marked as indirect context",
+  appmod._study_extra(_e3_rct("Effect of aspirin on gastrointestinal bleeding", "Aspirin raised the risk of bleeding."),
+                      {"1"})["contribution"] == "Aspirin raised the risk of bleeding.")
+t("BRIEF E3 N7: suicide and self-harm are mood; osteoarthritis is joints",
+  _e3_ev.outcome_families("suicide OR suicidal behaviour") == ["mood"]
+  and _e3_ev.outcome_families("self-harm") == ["mood"]
+  and _e3_ev.outcome_families("knee osteoarthritis") == ["joints"])
+_e3_egg = {"pmid": "40339906", "publication_types": ["Journal Article", "Randomized Controlled Trial"],
+           "title": "Impact of dietary cholesterol from eggs and saturated fat on LDL cholesterol levels: a randomized "
+                    "cross-over study.",
+           "abstract": "METHODS: 61 adults. CONCLUSIONS: Saturated fat, not dietary cholesterol, elevates LDL "
+                       "cholesterol. Compared with consuming a high-saturated fat diet with only 1 egg/wk, consuming 2 "
+                       "eggs daily as part of a low-saturated fat diet lowers LDL concentrations, which may reduce CVD "
+                       "risk."}
+_e3_egg_q = ["(egg OR eggs OR dietary cholesterol) AND (heart disease OR cardiovascular disease OR coronary heart "
+             "disease OR myocardial infarction OR stroke)"]
+# Brief E4 D1 replaced "the recorded eggs study (regression 12) stays
+# marked" and "the recorded vinegar weight review stays marked": both come
+# back unmarked and contribute their authors' conclusion.
+_e3_eggx = appmod._study_extra(_e3_egg, {_e3_egg["pmid"]})
+t("BRIEF E4 D1: the recorded eggs study (regression 12) is unmarked and contributes its conclusion",
+  _e3_eggx["indirect"] is False and _e3_eggx["contribution"] == "Saturated fat, not dietary cholesterol, elevates LDL "
+  "cholesterol.", _e3_eggx)
+_e3_vin = _e3_json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+_e3_vinx = appmod._study_extra(_e3_vin["studies"][0], {_e3_vin["studies"][0]["pmid"]})
+t("BRIEF E4 D1: the recorded vinegar weight review is unmarked and does not say 'Indirect context'",
+  _e3_vinx["indirect"] is False and not _e3_vinx["contribution"].startswith("Indirect context"), _e3_vinx)
+
+# N10: the retraction lookup on the request path is one attempt, within
+# pubmed.RETRACTION_LOOKUP_SECONDS (4) in all, then "could not be made".
+import time as _e3_time  # noqa: E402
+
+
+class _E3Post:
+    def __init__(self, status=503, delay=0.0):
+        self.calls, self.status, self.delay = [], status, delay
+
+    def post(self, url, data=None, timeout=None):
+        self.calls.append(timeout)
+        if self.delay:
+            _e3_time.sleep(self.delay)
+        return types.SimpleNamespace(status_code=self.status, json=lambda: {"esearchresult": {"idlist": []}},
+                                     raise_for_status=lambda: (_ for _ in ()).throw(requests.HTTPError("503"))
+                                     if self.status >= 400 else None)
+
+
+_e3_http = pubmed._http
+try:
+    _e3_fake = _E3Post(503)
+    pubmed._http = _e3_fake
+    try:
+        pubmed.retracted_among(["101", "102"])
+        _e3_raised = False
+    except requests.HTTPError:
+        _e3_raised = True
+    t("BRIEF E3 N10: a lookup PubMed turns away is one attempt, never asked again, and raises",
+      _e3_raised and len(_e3_fake.calls) == 1, _e3_fake.calls)
+    t("BRIEF E3 N10: its connect and read limits together are the one constant, 4 seconds",
+      pubmed.RETRACTION_LOOKUP_SECONDS == 4 and sum(_e3_fake.calls[0]) <= pubmed.RETRACTION_LOOKUP_SECONDS
+      and appmod.RETRACTION_WAIT == pubmed.RETRACTION_LOOKUP_SECONDS, _e3_fake.calls)
+    # The slow fake: PubMed answers only after 6 seconds. The check waits 4.
+    pubmed._http = _E3Post(200, delay=6.0)
+    _e3_rev = {"pmid": "95", "title": "R", "abstract": "a", "publication_types": ["Meta-Analysis"],
+               "references": ["9501"]}
+    _e3_t0 = _e3_time.monotonic()
+    _e3_note = appmod._flag_retractions([_e3_rev])
+    _e3_took = _e3_time.monotonic() - _e3_t0
+    t("BRIEF E3 N10: with a slow PubMed the check waits at most 4 seconds, says the lookup could not be made, "
+      "and flags nothing", _e3_note == _e3_ev.RETRACTION_UNCHECKED and _e3_took < pubmed.RETRACTION_LOOKUP_SECONDS + 0.8
+      and "cites_retracted" not in _e3_rev, (_e3_note, round(_e3_took, 2)))
+finally:
+    pubmed._http = _e3_http
+
+# N11: a later sentence repeats an earlier one only if its words and numbers
+# come in the same order. The reviewer's reversed bleeding sentences.
+_e3_rev_pairs = [("Bleeding rose by 3% with the drug and fell by 2% with placebo (Study 1).",
+                  "Bleeding fell by 2% with the drug and rose by 3% with placebo (Study 1)."),
+                 ("Bleeding rose by 3% with the drug and fell by 2% with placebo (Study 1).",
+                  "Bleeding rose by 3% with placebo and fell by 2% with the drug (Study 1)."),
+                 ("Bleeding fell with the drug and rose with placebo (Study 2).",
+                  "Bleeding rose with the drug and fell with placebo (Study 2).")]
+_e3_rev_lost = []
+for _e3_a, _e3_b in _e3_rev_pairs:
+    _, _e3_o = _e3_bd.one_figure_once("", {"says": [_e3_a], "evidence": [_e3_b, "Sleep was not measured (Study 3)."]}, 3)
+    if _e3_o["says"] != [_e3_a] or _e3_b not in _e3_o["evidence"]:
+        _e3_rev_lost.append((_e3_a, _e3_b, _e3_o))
+t("BRIEF E3 N11: a reversed sentence is not a repeat: both bleeding sentences stay", not _e3_rev_lost, _e3_rev_lost)
+_, _e3_o = _e3_bd.one_figure_once("", {"says": ["Weight fell by 2 kg with the drug (Study 1)."],
+                                       "evidence": ["Weight dropped by 2 kg with the drug (Study 1).",
+                                                    "Bleeding was rare (Study 3)."]}, 3)
+t("BRIEF E3 N11: a true repeat in the same order still goes",
+  _e3_o["evidence"] == ["Bleeding was rare (Study 3)."], _e3_o)
+t("BRIEF E3 N11: word order reads numbers and content words, the citation left out",
+  _e3_bd.word_order("Glucose dropped by 0.5 mmol/L (Study 2).") == ["glucose", "fell", "0.5", "mmol", "l"])
+
+# Brief E3 follow-up: when a later repeat cannot go without emptying its list
+# or field, the earlier sentence goes instead, if all it carries is in the
+# later one (generic words aside) and its own list keeps another sentence.
+import copy as _rf_copy  # noqa: E402
+import json as _rf_json  # noqa: E402
+import breakdown as _rf_bd  # noqa: E402
+import evidence as _rf_ev  # noqa: E402
+
+_rf_rec = _rf_json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+_rf_st = _rf_copy.deepcopy(_rf_rec["studies"])
+_rf_st[0]["references"] = ["38966098"]
+_rf_ev.flag_retracted_citations(_rf_st, lambda ids: set())
+with appmod.app.test_request_context("/"):
+    _rf_o = appmod._check_response(_rf_rec["claim"], _rf_rec["search_query_used"], _rf_rec["verdict"], _rf_rec["tldr"],
+                                   _rf_rec["explanation"], [s["pmid"] for s in _rf_st if s.get("cited_in_verdict")],
+                                   _rf_st, "http://x", breakdown=_rf_copy.deepcopy(_rf_rec["breakdown"]),
+                                   still_open=_rf_rec["still_open"])
+_rf_b = _rf_o["breakdown"]
+_rf_lists = [x for k in ("says", "evidence") for it in _rf_b.get(k) or [] for x in _rf_bd.sentences(it)]
+_rf_lists += _rf_bd.sentences(_rf_b.get("effect_size") or "")
+_rf_22 = [x for x in _rf_lists if "22 mg" in x]
+t("BRIEF E3 follow-up: recorded vinegar, the 22 mg per dL figure appears once among says, evidence and effect_size, "
+  "and the second statement still leads with it",
+  len(_rf_22) == 1 and _rf_b["effect_size"] == "Fasting blood sugar fell by about 22 mg per dL (Study 2)."
+  and _rf_o["effect_line"].startswith("What the studies did find: Fasting blood sugar fell by about 22 mg per dL"),
+  (_rf_22, _rf_o["effect_line"]))
+
+_RF_E = "Fasting glucose fell by about 22 mg per dL in patients (Study 2)."
+_RF_L = "Fasting glucose fell by about 22 mg per dL (Study 2)."
+_RF_OTHER = "HbA1c fell by 0.5 points (Study 1)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: the earlier sentence, differing only by generic words, goes; the later field keeps its sentence",
+  _rf_y["says"] == [_RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_RF_KIDS = "Fasting glucose fell by about 22 mg per dL in children (Study 2)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_KIDS, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: an earlier sentence naming a population (in children) stays, and so does the later one",
+  _rf_y["says"] == [_RF_KIDS, _RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: when the earlier list would be emptied, both stay",
+  _rf_y["says"] == [_RF_E] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_RF_TR = " That is a drop of about a tenth."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], "evidence": [],
+                                            "effect_size": _RF_L + _RF_TR}, 2)
+# Brief E4 D2 replaced "a sentence goes with its 'That is' translation": a
+# figure and its translation now always stay together, and nothing goes.
+t("BRIEF E4 D2: a sentence with its 'That is' translation stays, and so does the later pair",
+  _rf_y["says"] == [_RF_E + _RF_TR, _RF_OTHER] and _rf_y["effect_size"] == _RF_L + _RF_TR, _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: an earlier translation the later sentence lacks keeps the earlier sentence",
+  _rf_y["says"] == [_RF_E + _RF_TR, _RF_OTHER], _rf_y)
+_RF_SIG = "Fasting glucose fell significantly, by about 22 mg per dL in patients (Study 2)."
+# Brief E4 D4 replaced "never a harm sentence, never across studies": the
+# earlier harm sentence now has only generic words beyond the later one, so
+# the harm guard alone keeps it; the cross-study case is its own test.
+_RF_HARM = "Bleeding fell by about 22% in patients (Study 2)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_HARM, _RF_OTHER], "evidence": [],
+                                            "effect_size": "Bleeding fell by about 22% (Study 2)."}, 2)
+t("BRIEF E4 D4: an earlier harm sentence with only generic extras stays (the harm guard decides)",
+  _rf_y["says"] == [_RF_HARM, _RF_OTHER], _rf_y)
+_rf_x2, _rf_y2 = _rf_bd.one_figure_once("", {"says": [_RF_E, _RF_OTHER], "evidence": [],
+                                              "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 1)."}, 2)
+t("BRIEF E3 follow-up: never across studies", _rf_y2["says"] == [_RF_E, _RF_OTHER], _rf_y2)
+# Brief E4 D4: the same, past the upstream figure match, at the rule itself.
+_rf_y2 = _rf_bd._drop_earlier({"says": [_RF_E, _RF_OTHER], "evidence": [],
+                               "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 1)."}, ["effect_size"], 2)
+t("BRIEF E4 D4: the rule itself never removes a sentence for a repeat from another study",
+  _rf_y2["says"] == [_RF_E, _RF_OTHER], _rf_y2)
+t("BRIEF E3 follow-up: the generic list is closed, and holds no population, outcome or significance word",
+  _rf_bd.GENERIC_WORDS == frozenset("patients people participants subjects group groups about approximately around "
+                                    "roughly average mean overall level levels".split()))
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_SIG, _RF_OTHER], "evidence": [],
+                                            "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 2)."}, 2)
+t("BRIEF E3 follow-up: a sentence saying a result was significant always stays",
+  _rf_y["says"] == [_RF_SIG, _RF_OTHER], _rf_y)
+# Brief E4 D4: the later-side half of the same rule. one_figure_once never
+# forces a significance sentence, so the guard is called directly: the later
+# sentence carries the significance, the earlier one has only generic
+# extras, and the earlier stays.
+_rf_y = _rf_bd._drop_earlier({"says": [_RF_E, _RF_OTHER], "evidence": [],
+                              "effect_size": "Fasting glucose fell significantly, by about 22 mg per dL (Study 2)."},
+                             ["effect_size"], 2)
+t("BRIEF E4 D4: a later sentence saying the result was significant keeps the earlier one too",
+  _rf_y["says"] == [_RF_E, _RF_OTHER], _rf_y)
+_RF_SAFE = "Safety events fell by about 22% in patients (Study 2)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_SAFE, _RF_OTHER], "evidence": [],
+                                            "effect_size": "Safety events fell by about 22% (Study 2)."}, 2)
+t("BRIEF E4 D4: an earlier safety sentence with only generic extras stays (the safety guard decides)",
+  _rf_y["says"] == [_RF_SAFE, _RF_OTHER], _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_L, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: a word-for-word copy keeps the earlier sentence (the page already prints it once, there)",
+  _rf_y["says"] == [_RF_L, _RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E, "That is a drop of about a tenth.", _RF_OTHER],
+                                            "evidence": [], "effect_size": _RF_L + _RF_TR}, 2)
+# Brief E4 D2 replaced "a 'That is' item after the earlier sentence goes
+# with it": the figure and its translation both stay.
+t("BRIEF E4 D2: a 'That is' item right after the earlier sentence keeps both",
+  _rf_y["says"] == [_RF_E, "That is a drop of about a tenth.", _RF_OTHER], _rf_y)
+# D2: the reviewer's three variants (R2). A figure and its significance stay
+# together; nothing is removed.
+_RF_W = "Weight fell by about 2 kg (Study 1)."
+_RF_WL = "Weight fell by 2 kg (Study 1)."
+_RF_O2 = "HbA1c fell by 0.5 points (Study 2)."
+_rf_r2 = {}
+for _rf_name, _rf_ev_list in (
+        ("separate sentence", [_RF_W, "The difference was not statistically significant (Study 1).", _RF_O2]),
+        ("one sentence", ["Weight fell by about 2 kg, but the difference was not statistically significant (Study 1).",
+                          _RF_O2]),
+        ("confidence interval", [_RF_W, "The confidence interval crossed zero (Study 1).", _RF_O2])):
+    _rf_r2[_rf_name] = (_rf_ev_list, _rf_bd.one_figure_once("", {"says": [], "evidence": list(_rf_ev_list),
+                                                                  "effect_size": _RF_WL}, 2)[1])
+t("BRIEF E4 D2: the reviewer's three variants keep the figure with its significance, and remove nothing",
+  all(out["evidence"] == ev and out["effect_size"] == _RF_WL for ev, out in _rf_r2.values()),
+  {k: v[1] for k, v in _rf_r2.items() if v[1]["evidence"] != v[0]})
+t("BRIEF E4 D2: one recogniser: 'crossed zero', 'p value', 'uncertain' and 'imprecise' read as significance wording",
+  all(_rf_bd._STATES_SIGNIFICANCE.search(x) for x in ("The interval crossed zero.", "The p value was 0.2.",
+                                                      "The estimate is uncertain.", "Results were imprecise.")))
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [], "evidence": [_RF_W, "The interval crossed zero (Study 2).", _RF_O2],
+                                            "effect_size": _RF_WL}, 2)
+t("BRIEF E4 D2: a significance sentence about another study does not hold the figure",
+  _rf_y["evidence"] == ["The interval crossed zero (Study 2).", _RF_O2], _rf_y)
+
+# ---------------------------------------------------------------------
+# BRIEF E4 (third repair of the evidence change).
+# ---------------------------------------------------------------------
+# D1: the keyword "indirect" mark left this release. The third reviewer's
+# 20 direct pairs and 10 truly indirect ones (tag, query, title, conclusion)
+# all come back unmarked, each contributing the authors' conclusion.
+def _e4_st(title, concl):
+    return {"pmid": "1", "title": title, "abstract": f"BACKGROUND: x. METHODS: y. RESULTS: z. CONCLUSIONS: {concl}",
+            "publication_types": ["Journal Article", "Randomized Controlled Trial"], "year": "2020"}
+
+
+_E4_DIRECT = [ 
+ ("pop-strip BP", "(garlic) AND (blood pressure OR hypertension)",
+  "Effect of garlic on body weight in adults with hypertension", "Garlic reduced body weight in adults with hypertension and lowered their blood pressure."),
+ ("SBP abbrev", "(oral contraceptives) AND (hypertension)",
+  "Effect of oral contraceptives on lipid profile", "Oral contraceptives raised triglycerides and raised SBP by 4 mmHg."),
+ ("GDM abbrev pregnancy", "(exercise) AND (gestational diabetes)",
+  "Effect of exercise during pregnancy on gestational weight gain", "Exercise reduced gestational weight gain and the incidence of GDM."),
+ ("NODM statins", "(statins) AND (diabetes)",
+  "Effect of rosuvastatin on LDL cholesterol: a randomized trial", "Rosuvastatin lowered LDL and increased new-onset DM by 25%."),
+ ("MI abbrev", "(niacin) AND (myocardial infarction OR heart attack)",
+  "Effect of niacin on HDL cholesterol in people at high risk", "Niacin raised HDL but did not reduce MI or stroke-free survival."),
+ ("children conduct", "(sugar) AND (hyperactivity OR ADHD)",
+  "Effect of sucrose on glycemic response in children", "Sucrose did not change children's conduct or activity levels."),
+ ("NAFLD", "(vitamin E) AND (fatty liver OR NAFLD)",
+  "Effect of vitamin E on body weight and steatosis", "Vitamin E improved NASH histology."),
+ ("pop-strip diabetes", "(cinnamon) AND (diabetes)",
+  "Effect of cinnamon on body weight in patients with diabetes", "Cinnamon reduced weight in patients with diabetes and improved their glucose control."),
+ ("T2D abbrev", "(sugar-sweetened beverages) AND (diabetes)",
+  "Effect of sugar-sweetened beverages on weight gain in children", "SSB intake raised BMI and the risk of T2D."),
+ ("pregnancy PE", "(calcium) AND (preeclampsia OR hypertensive disorders of pregnancy)",
+  "Effect of calcium on blood lipids in pregnant women", "Calcium lowered the risk of pre-eclampsia by half."),
+ ("CVD abbrev", "(omega-3) AND (cardiovascular disease)",
+  "Effect of omega-3 on triglycerides: the REDUCE-IT trial", "Icosapent ethyl reduced triglycerides and major CVD events by 25%."),
+ ("HbA1c direct", "(metformin) AND (diabetes)",
+  "Effect of metformin on HbA1c in adolescents", "Metformin lowered HbA1c by 0.5% in adolescents with type 2 diabetes."),
+ ("weight/obesity children", "(breastfeeding) AND (childhood obesity)",
+  "Effect of breastfeeding on BMI z-score at age 6", "Breastfeeding did not reduce obesity at six years."),
+ ("two outcomes", "(green tea) AND (weight loss OR blood pressure)",
+  "Effect of green tea on body weight", "Green tea had no effect on weight."),
+ ("kidney via BP", "(ACE inhibitors) AND (kidney disease)",
+  "Effect of ramipril on blood pressure in diabetic nephropathy", "Ramipril slowed decline in GFR and reduced ESRD."),
+ ("stroke HTN abbrev", "(salt reduction) AND (stroke)",
+  "Effect of salt substitutes on blood pressure: SSaSS", "Salt substitution reduced CVA events and deaths."),
+ ("pregnancy BP direct", "(aspirin) AND (preeclampsia OR gestational hypertension)",
+  "Effect of low-dose aspirin on blood pressure in pregnant women", "Aspirin reduced preterm pre-eclampsia."),
+ ("dementia via BP", "(blood pressure lowering) AND (dementia)",
+  "Effect of intensive blood pressure control on systolic pressure: SPRINT MIND", "Intensive control reduced MCI and probable dementia combined."),
+ ("hypoglycaemia children", "(insulin pumps) AND (hypoglycaemia)",
+  "Effect of insulin pumps on HbA1c in children", "Pumps lowered HbA1c without more severe lows."),
+ ("pop-strip with and", "(walnuts) AND (cholesterol)",
+  "Effect of walnuts on body weight in people who have high cholesterol", "Walnuts did not change weight in people who have high cholesterol, and lowered LDL by 5%."),
+]
+_E4_INDIRECT = [
+ ("vinegar", "(apple cider vinegar) AND (diabetes)", "Effect of apple cider vinegar on body weight", "Vinegar reduced body weight modestly."),
+ ("eggs", "(eggs) AND (heart disease)", "Effect of egg intake on LDL cholesterol", "Eggs raised LDL slightly."),
+ ("salt dementia", "(salt) AND (dementia)", "Effect of salt reduction on blood pressure", "Salt reduction lowered blood pressure."),
+ ("coffee bone", "(coffee) AND (fractures)", "Effect of coffee on body weight", "Coffee did not change weight."),
+ ("chocolate mood", "(chocolate) AND (depression)", "Effect of dark chocolate on blood pressure", "Dark chocolate lowered blood pressure by 2 mmHg."),
+ ("oats heart", "(oats) AND (heart attack)", "Effect of oat beta-glucan on cholesterol", "Oats lowered cholesterol."),
+ ("fish oil cancer", "(fish oil) AND (cancer)", "Effect of fish oil on triglycerides", "Fish oil lowered triglycerides."),
+ ("tea sleep", "(tea) AND (insomnia)", "Effect of tea on blood glucose", "Tea lowered fasting glucose."),
+ ("nuts death", "(nuts) AND (mortality)", "Effect of nuts on lipids", "Nuts lowered LDL."),
+ ("yoga pain", "(yoga) AND (back pain)", "Effect of yoga on blood pressure", "Yoga lowered blood pressure."),
+]
+_e4_marked = [(tag, appmod._study_extra(_e4_st(t_, k), {"1"})) for tag, q, t_, k in _E4_DIRECT + _E4_INDIRECT]
+t("BRIEF E4 D1: the third reviewer's 20 direct and 10 truly indirect pairs all come back unmarked, with an empty "
+  "reason and the authors' conclusion as the contribution",
+  len(_e4_marked) == 30 and all(x["indirect"] is False and x["indirect_reason"] == "" for _, x in _e4_marked)
+  # (a conclusion too short for evidence.conclusion to read leaves it empty, N12)
+  and all(x["contribution"] == (k if appmod.evidence.conclusion(_e4_st(_t, k)) else "")
+          for (_, x), (_, _q, _t, k) in zip(_e4_marked, _E4_DIRECT + _E4_INDIRECT)),
+  [m for m in _e4_marked if m[1]["indirect"] or "Indirect" in m[1]["contribution"]])
+t("BRIEF E4 D1: the reviewer's garlic and cinnamon inputs contribute the authors' own conclusion",
+  dict(_e4_marked)["pop-strip BP"]["contribution"]
+  == "Garlic reduced body weight in adults with hypertension and lowered their blood pressure."
+  and dict(_e4_marked)["pop-strip diabetes"]["contribution"]
+  == "Cinnamon reduced weight in patients with diabetes and improved their glucose control.")
+
+# BRIEF E4 D3: the second statement's certainty comes only from the studies
+# its quoted sentence cites. The reviewer's input (R3): a sentence citing only
+# a trial, beside a relied-on meta-analysis rated moderate (GRADE).
+def _d3_st(pmid, types, title, ab):
+    return {"pmid": pmid, "title": title, "abstract": ab, "publication_types": list(types), "year": "2020"}
+_D3_MA = _d3_st("1", ("Journal Article", "Meta-Analysis", "Systematic Review"),
+                "Garlic and blood pressure: a meta-analysis of randomized trials in adults",
+                "We pooled 20 randomized trials in 1,500 adults. Systolic pressure fell by 8 mmHg. The certainty of "
+                "evidence was moderate (GRADE). CONCLUSIONS: Garlic lowers blood pressure.")
+_D3_RCT = _d3_st("2", ("Journal Article", "Randomized Controlled Trial"),
+                 "Garlic for hypertension: a randomized trial in adults",
+                 "In a randomized trial of 200 adults, pressure fell by 5 mmHg. CONCLUSIONS: Garlic lowered blood pressure.")
+_D3_Q = ["(garlic) AND (hypertension OR blood pressure)"]
+_d3_ab = appmod.breakdown_mod.absolute_claim("Garlic cures high blood pressure")
+_d3_trial = appmod._statement_two("false", _d3_ab, {"effect_size": "Pressure fell by 5 mmHg (Study 2)."},
+                                  [_D3_MA, _D3_RCT], {"1", "2"}, "blood pressure", _D3_Q)
+t("BRIEF E4 D3: a sentence citing only a trial takes no grade from the relied-on review beside it",
+  _d3_trial.startswith("What the studies did find: Pressure fell by 5 mmHg (Study 2).")
+  and "moderate" not in _d3_trial and appmod.evidence.UNGRADED in _d3_trial, _d3_trial)
+_d3_review = appmod._statement_two("false", _d3_ab, {"effect_size": "Systolic pressure fell by 8 mmHg (Study 1)."},
+                                   [_D3_MA, _D3_RCT], {"1", "2"}, "blood pressure", _D3_Q)
+t("BRIEF E4 D3: a sentence citing the review keeps the review's own grade",
+  "Certainty: moderate, as the review rates it" in _d3_review, _d3_review)
+
+# BRIEF E4 D5: each of the two statements ends with exactly one full stop,
+# made in the Python (the templates strip and re-add one, so the page is the same).
+import evidence as _d5_ev
+import breakdown as _d5_bd
+_d5_rev = {"pmid": "1", "title": "Cinnamon and glycaemia: a meta-analysis", "publication_types": ["Meta-Analysis"],
+           "abstract": "Trials in 600 adults. Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c."}
+_d5_fl = dict(_d5_rev, cites_retracted=[{"pmid": "9", "title": None, "trial": False}])
+_d5_cure = _d5_bd.absolute_claim("Cinnamon cures diabetes")
+_d5_two = [_d5_ev.effect_statement("false", _d5_cure, x, [r], ["1"], "", cites=[1])
+           for x in ("HbA1c fell (Study 1).", "HbA1c fell (Study 1)", "HbA1c fell (Study 1)..", "Did HbA1c fall (Study 1)?")
+           for r in (_d5_rev, dict(_d5_rev, abstract="Trials in 600 adults. Conclusion: cinnamon lowered HbA1c."), _d5_fl)]
+t("BRIEF E4 D5: statement 2 ends with exactly one full stop, graded, ungraded or flagged",
+  all(x.endswith(".") and not x.endswith("..") for x in _d5_two), [x for x in _d5_two if not x.endswith(".") or x.endswith("..")])
+_d5_line = "Moderate certainty, from pooled reviews"
+_d5_one = [_d5_ev.claim_statement(v, _d5_line, [_d5_rev], {"1"}, _d5_cure, basis_only=b)
+           for v in ("false", "complicated", "true") for b in (False, True)]
+t("BRIEF E4 D5: statement 1 ends with exactly one full stop, with the certainty or the basis",
+  all(x.endswith(".") and not x.endswith("..") for x in _d5_one), _d5_one)
+
+# ---------------------------------------------------------------------
+# BRIEF E5 F1: a figure stays where its significance or certainty is said.
+# The follow-up rule never removes the earlier sentence when any other
+# sentence in the same list, at any distance, before or after it, says
+# whether a result was significant or how certain it is, and cites a study
+# the figure cites or none. The fourth reviewer's shapes (review4 d2_sig).
+# ---------------------------------------------------------------------
+import breakdown as _f5_bd  # noqa: E402
+_F5_W = "Weight fell by about 2 kg (Study 1)."
+_F5_WL = "Weight fell by 2 kg (Study 1)."
+_F5_O2 = "HbA1c fell by 0.5 points (Study 2)."
+
+
+def _f5_run(ev):
+    out = _f5_bd.one_figure_once("", {"says": [], "evidence": list(ev), "effect_size": _F5_WL}, 2)[1]
+    return out, out["evidence"] == list(ev) and out["effect_size"] == _F5_WL
+
+
+_F5_SHAPES = {
+    "certainty sentence": [_F5_W, "The certainty of this evidence was low (Study 1).", _F5_O2],
+    "low-certainty evidence": [_F5_W, "This is low-certainty evidence (Study 1).", _F5_O2],
+    "significance two sentences later": [_F5_W, "Participants were adults aged 40 (Study 1).",
+                                         "The difference was not statistically significant (Study 1).", _F5_O2],
+    "significance after a sentence about another study": [_F5_W, _F5_O2,
+                                                          "The difference was not significant (Study 1)."],
+    "significance before the figure": ["The difference was not significant (Study 1).", _F5_W, _F5_O2],
+    "superset citation": [_F5_W, "Neither difference was statistically significant (Studies 1 and 2).", _F5_O2],
+    "could be due to chance": [_F5_W, "This could be due to chance (Study 1).", _F5_O2],
+    "inconclusive": [_F5_W, "The results were inconclusive (Study 1).", _F5_O2],
+    "no difference from placebo": [_F5_W, "There was no difference from placebo (Study 1).", _F5_O2],
+    "same item, significance two sentences later": [
+        _F5_W + " It was run in adults (Study 1). The difference was not statistically significant (Study 1).", _F5_O2],
+}
+_f5_res = {k: _f5_run(v) for k, v in _F5_SHAPES.items()}
+for _f5_name, (_f5_out, _f5_ok) in _f5_res.items():
+    t(f"BRIEF E5 F1: {_f5_name}: the figure stays in the evidence list and no sentence is lost",
+      _f5_ok, _f5_out)
+t("BRIEF E5 F1: one recogniser: certainty, chance, 'inconclusive', 'no difference' and 'did not reach "
+  "significance' read as significance wording",
+  all(_f5_bd._STATES_SIGNIFICANCE.search(x) for x in (
+      "The certainty of this evidence was low.", "This is low-certainty evidence.", "Low certainty.",
+      "This could be due to chance.", "The results were inconclusive.", "There was no difference from placebo.",
+      "The difference did not reach significance.")))
+_f5_ctl, _ = _f5_run([_F5_W, _F5_O2])
+t("BRIEF E5 F1 control: a list with no significance or certainty sentence still loses its earlier repeat",
+  _f5_ctl["evidence"] == [_F5_O2] and _f5_ctl["effect_size"] == _F5_WL, _f5_ctl)
+_f5_oth, _ = _f5_run([_F5_W, "The difference was not significant (Study 2).", _F5_O2])
+t("BRIEF E5 F1 control: a significance sentence citing only another study does not hold the figure",
+  _f5_oth["evidence"] == ["The difference was not significant (Study 2).", _F5_O2], _f5_oth)
+_f5_far, _ = _f5_run([_F5_W, _F5_O2, "The results were inconclusive (Study 2)."])
+t("BRIEF E5 F1 control: a certainty sentence about another study, later in the list, does not hold it either",
+  _f5_far["evidence"] == [_F5_O2, "The results were inconclusive (Study 2)."], _f5_far)
+
+# BRIEF E5 F1, second pass: the reviewer's further forms. Each, as the
+# sentence between the figure and another study's, keeps the figure.
+for _f5b_name, _f5b_x in (
+        ("nonsignificant", "The change was nonsignificant (Study 1)."),
+        ("insignificant", "The change was insignificant (Study 1)."),
+        ("non-significant", "The change was non-significant (Study 1)."),
+        ("did not differ", "The groups did not differ (Study 1)."),
+        ("similar between groups", "Results were similar between groups (Study 1)."),
+        ("the interval was wide", "The interval was wide (Study 1)."),
+        ("95% CI", "The 95% CI ran from 0.5 to 3.5 kg (Study 1)."),
+        ("less certain", "This result is less certain (Study 1)."),
+        ("low confidence", "We have low confidence in this result (Study 1)."),
+        ("low quality", "The evidence was of low quality (Study 1)."),
+        ("very low quality", "This is very low quality evidence (Study 1)."),
+        ("quality of the evidence", "The quality of the evidence was poor (Study 1)."),
+        ("a chance finding", "This may be a chance finding (Study 1).")):
+    _f5b_out, _f5b_ok = _f5_run([_F5_W, _f5b_x, _F5_O2])
+    t(f"BRIEF E5 F1b: {_f5b_name}: the figure stays in the evidence list and no sentence is lost",
+      _f5b_ok, _f5b_out)
+
+# BRIEF E5 F3: no study is marked indirect. Through the app's own response
+# builder with the suite's recorded answers (the vinegar check, with and
+# without its flagged review, and the three real certainty-limit checks):
+# every study carries indirect false and an empty reason, and no
+# contribution starts with "Indirect context".
+import copy as _f3_copy  # noqa: E402
+_f3_vin = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+
+
+def _f3_respond(claim, query, verdict_value, tldr, explanation, studies, breakdown=None, still_open=""):
+    cited = [s["pmid"] for s in studies if s.get("cited_in_verdict", True)]
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, verdict_value, tldr, explanation, cited,
+                                      _f3_copy.deepcopy(studies), "http://x",
+                                      breakdown=_f3_copy.deepcopy(breakdown), still_open=still_open)
+
+
+_f3_flagged = _f3_copy.deepcopy(_f3_vin["studies"])
+_f3_flagged[0]["references"] = ["38966098"]
+_e_ev.flag_retracted_citations(_f3_flagged, lambda ids: set())
+_f3_outs = [_f3_respond(_f3_vin["claim"], _f3_vin["search_query_used"], _f3_vin["verdict"], _f3_vin["tldr"],
+                        _f3_vin["explanation"], st, _f3_vin["breakdown"], _f3_vin["still_open"])
+            for st in (_f3_vin["studies"], _f3_flagged)]
+# Those three records keep only what the certainty limit reads; the page
+# fields a fetched record always has are filled in, empty.
+_f3_outs += [_f3_respond(c["claim"], c["search_query"], "complicated", "Mixed.", "The studies differ.",
+                         [{"journal": "", "year": "", "authors": [], "data_banks": None,
+                           "url": f"https://pubmed.ncbi.nlm.nih.gov/{s['pmid']}/", **s} for s in c["studies"]],
+                         still_open="Longer trials.")
+             for c in json.loads((ROOT / "tests" / "certainty_limit_real.json").read_text())["checks"]]
+_f3_studies = [s for o in _f3_outs for s in o["studies"]]
+t("BRIEF E5 F3: over the suite's recorded answers no study is marked indirect and no contribution says "
+  "'Indirect context'",
+  len(_f3_outs) == 5 and len(_f3_studies) > 10
+  and all(s["indirect"] is False and s["indirect_reason"] == "" for s in _f3_studies)
+  and not any(str(s.get("contribution") or "").startswith("Indirect context") for s in _f3_studies),
+  [(s.get("pmid"), s.get("indirect"), s.get("indirect_reason"), s.get("contribution")) for s in _f3_studies
+   if s.get("indirect") is not False or s.get("indirect_reason") != ""
+   or str(s.get("contribution") or "").startswith("Indirect context")][:5])
+
+# --- BRIEF E6 B1: a figure drop_unitless removes takes its unbracketed interval with it ---
+_e6_st = [{"abstract": "Fasting glucose fell 21.929 mg/dL (95% CI -29.19, -14.67). HbA1c 1.53 "
+                       "(95% CI -2.65, -0.41). LDL fell 0.4 mmol/L. Relative risk 0.28 (95% CI 0.12 to 0.71)."}]
+_e6_r = lambda s: breakdown.for_reading(s, _e6_st)
+_e6_vin = _e6_r("Fasting blood sugar was reduced by 21.929 mg/dL, 95% CI -29.19, -14.67, and HbA1c by 1.53, "
+                "95% CI -2.65, -0.41 (Study 2).")
+t("BRIEF E6 B1: the vinegar sentence keeps blood sugar's range and drops HbA1c's with HbA1c",
+  _e6_vin == "Fasting blood sugar was reduced by about 22 mg/dL, likely range -29, -15 (Study 2).", _e6_vin)
+_e6_worse = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53, 95% CI -2.65, -0.41 (Study 2).")
+t("BRIEF E6 B1: a dropped figure's comma interval never lands on the figure before it",
+  _e6_worse == "Fasting blood sugar fell by about 22 mg/dL (Study 2).", _e6_worse)
+_e6_with = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53 with a 95% confidence interval "
+                 "of -2.65 to -0.41 (Study 2).")
+t("BRIEF E6 B1: 'with a 95% confidence interval of a to b' goes with its dropped figure",
+  _e6_with == "Fasting blood sugar fell by about 22 mg/dL (Study 2).", _e6_with)
+_e6_rest = _e6_r("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53, CI -2.65 to -0.41, over 12 weeks "
+                 "(Study 2).")
+t("BRIEF E6 B1: 'CI a to b' goes with its dropped figure and the rest of the sentence stays",
+  _e6_rest == "Fasting blood sugar fell by about 22 mg/dL, over 12 weeks (Study 2).", _e6_rest)
+_e6_keep = [
+    ("Fasting blood sugar fell by 21.929 mg/dL (95% CI -29.19 to -14.67) and LDL by 0.4 mmol/L (Study 2).",
+     "Fasting blood sugar fell by about 22 mg/dL (likely range 29 to 15) and LDL by 0.4 mmol/L (Study 2)."),
+    ("Fasting blood sugar fell by 21.929 mg/dL, 95% CI -29.19, -14.67 (Study 2).",
+     "Fasting blood sugar fell by about 22 mg/dL, likely range -29, -15 (Study 2)."),
+    ("The relative risk was 0.28 with a 95% confidence interval of 0.12 to 0.71 (Study 4).",
+     "The relative risk was 0.28 with a likely range of 0.12 to 0.71 (Study 4)."),
+]
+t("BRIEF E6 B1: an interval of a figure that stays is left alone (kept unit, lone figure, relative risk)",
+  all(_e6_r(a) == b for a, b in _e6_keep), [_e6_r(a) for a, _b in _e6_keep])
+_e6_only = [_e6_r("HbA1c fell by 1.53, 95% CI -2.65, -0.41 (Study 2)."),
+            _e6_r("HbA1c fell by 1.53 (95% CI -2.65 to -0.41) (Study 2).")]
+t("BRIEF E6 B1: when the dropped figure is the only one, the unbracketed form ends as the bracketed one does",
+  _e6_only[0] == _e6_only[1], _e6_only)
+
+# --- BRIEF E6 B4: two different grades read as a span in the first statement ---
+_e6_two = _e_ev.claim_statement("complicated", "Very low to high certainty evidence of no clear effect", [], ())
+_e6_one = _e_ev.claim_statement("complicated", "Low certainty evidence of no clear effect", [], ())
+t("BRIEF E6 B4: two different grades read 'Certainty varies, from very low to high.', with one full stop",
+  _e6_two.endswith(". Certainty varies, from very low to high.") and not _e6_two.endswith("..")
+  and "Certainty: " not in _e6_two, _e6_two)
+t("BRIEF E6 B4: one grade stays 'Certainty: low.'", _e6_one.endswith(". Certainty: low.")
+  and not _e6_one.endswith(".."), _e6_one)
+
+# --- BRIEF E6 B1b: drop_unitless cuts a figure only when the cut is clean ---
+_e6b_st = [{"abstract": "Fasting glucose fell 21.929 mg/dL (95% CI -29.19, -14.67). HbA1c 1.53 (95% CI -2.65, "
+                        "-0.41). LDL fell 0.4 mmol/L. Weight fell 2.3 kg (95% CI 1.1 to 3.5). Systolic blood "
+                        "pressure fell 4.1 mmHg. Relative risk 0.28 (95% CI 0.12 to 0.71)."}]
+_e6b = lambda s: breakdown.for_reading(s, _e6b_st)
+_e6b_whole = [
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, and a 95% CI of 1.1 to 3.5 for weight (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, and a likely range of 1.1 to 3.5 for weight (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, p = 0.01, 95% CI -2.65 to -0.41 (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, p = 0.01, likely range -2.65 to -0.41 (Study 1)."),
+    ("Systolic blood pressure fell by 4.1 mmHg and HbA1c by 1.53, which was not statistically significant (Study 1).",
+     "Systolic blood pressure fell by 4.1 mmHg and HbA1c by 1.53, which was not statistically significant (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, CIs 1.1 to 3.5 and -2.65 to -0.41 (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, CIs 1.1 to 3.5 and -2.65 to -0.41 (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53, 95% CI -2.65 to -0.41 points (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53, likely range -2.65 to -0.41 points (Study 1)."),
+]
+for _i, (_a, _b) in enumerate(_e6b_whole):
+    t(f"BRIEF E6 B1b: no clean cut leaves the sentence whole, nothing pinned on the other figure ({_i + 1})",
+      _e6b(_a) == _b, _e6b(_a))
+t("BRIEF E6 B1b: an interval brought in by 'and' is never taken as the dropped figure's own",
+  breakdown._TRAILING_CI.match(", and a 95% CI of 1.1 to 3.5") is None)
+_e6b_cut = [
+    ("Fasting blood sugar was reduced by 21.929 mg/dL, 95% CI -29.19, -14.67, and HbA1c by 1.53, "
+     "95% CI -2.65, -0.41 (Study 2).",
+     "Fasting blood sugar was reduced by about 22 mg/dL, likely range -29, -15 (Study 2)."),
+    ("Fasting blood sugar fell by 21.929 mg/dL, HbA1c by 1.53, and LDL by 0.4 mmol/L (Study 2).",
+     "Fasting blood sugar fell by about 22 mg/dL, and LDL by 0.4 mmol/L (Study 2)."),
+    ("Fasting blood sugar fell by 21.929 mg/dL and HbA1c by 1.53 with a 95% confidence interval of -2.65 to "
+     "-0.41 (Study 2).", "Fasting blood sugar fell by about 22 mg/dL (Study 2)."),
+]
+t("BRIEF E6 B1b: clean cuts still cut (vinegar, a further named figure, 'with a 95% confidence interval')",
+  all(_e6b(a) == b for a, b in _e6b_cut), [_e6b(a) for a, _b in _e6b_cut])
+_e6b_ratio = ["The relative risk was 0.28 with a 95% confidence interval of 0.12 to 0.71 (Study 4).",
+              "Weight fell by 2.3 kg and the relative risk was 0.28, 95% CI 0.12 to 0.71 (Study 4)."]
+t("BRIEF E6 B1b: ratios are untouched",
+  [_e6b(x) for x in _e6b_ratio] == ["The relative risk was 0.28 with a likely range of 0.12 to 0.71 (Study 4).",
+                                    "Weight fell by 2.3 kg and the relative risk was 0.28, likely range 0.12 to "
+                                    "0.71 (Study 4)."], [_e6b(x) for x in _e6b_ratio])
+
+# --- BRIEF E6 B1c: a plain qualifier of group, time or comparison may follow the dropped figure ---
+_e6c_cut = [
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 among older adults (Study 1).",
+     "Weight fell by 2.3 kg among older adults (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 after 12 weeks (Study 1).",
+     "Weight fell by 2.3 kg after 12 weeks (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 compared with placebo (Study 1).",
+     "Weight fell by 2.3 kg compared with placebo (Study 1)."),
+]
+for _a, _b in _e6c_cut:
+    t(f"BRIEF E6 B1c: a plain qualifier after the dropped figure still lets it go: {_a.split('1.53 ')[1][:20]}",
+      _e6b(_a) == _b, _e6b(_a))
+_e6c_whole = [
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 in patients, which was not significant (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53 in patients, which was not significant (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 in adults (p = 0.03) (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53 in adults (p = 0.03) (Study 1)."),
+    ("Weight fell by 2.3 kg and HbA1c by 1.53 in adults with no significant change (Study 1).",
+     "Weight fell by 2.3 kg and HbA1c by 1.53 in adults with no significant change (Study 1)."),
+]
+t("BRIEF E6 B1c: a qualifier holding anything statistical leaves the sentence whole",
+  all(_e6b(a) == b for a, b in _e6c_whole), [_e6b(a) for a, _b in _e6c_whole])
+_e6c_rel = "Weight fell by 2.3 kg and HbA1c by 1.53, which are improvements rather than cures (Study 1)."
+t("BRIEF E6 B1c: a relative clause after the dropped figure leaves the sentence whole",
+  _e6b(_e6c_rel) == _e6c_rel, _e6b(_e6c_rel))
+
+# --- BRIEF E6 B1d: a trailing qualifier is shared only when the staying figure stands right before the cut ---
+_e6d_st = [{"abstract": "Weight fell 2 kg (95% CI 1.1 to 3.5). HbA1c 1.53."}]
+_e6d = lambda s: breakdown.for_reading(s, _e6d_st)
+_e6d_lim = "Weight fell by 2 kg in adults and HbA1c by 1.53 in children (Study 1)."
+t("BRIEF E6 B1d: a qualifier after a staying figure with words of its own leaves the sentence whole",
+  _e6d(_e6d_lim) == _e6d_lim, _e6d(_e6d_lim))
+t("BRIEF E6 B1d: the same staying figure with only the citation after the dropped one is still cut",
+  _e6d("Weight fell by 2 kg in adults and HbA1c by 1.53 (Study 1).") == "Weight fell by 2 kg in adults (Study 1).",
+  _e6d("Weight fell by 2 kg in adults and HbA1c by 1.53 (Study 1)."))
+# Through drop_unitless itself: for_reading does not mark a figure within 30
+# characters after "CI" as unitless (an older rule), so the mark is put by hand.
+_e6d_ci = [breakdown.drop_unitless(x) for x in (
+    "Weight fell by 2 kg (95% CI 1.1 to 3.5) and HbA1c by 1.53" + breakdown._NO_UNIT + " in adults (Study 1).",
+    "Weight fell by 2 kg, 95% CI 1.1 to 3.5, and HbA1c by 1.53" + breakdown._NO_UNIT + " in adults (Study 1).")]
+t("BRIEF E6 B1d: the staying figure's own interval between is no obstacle, and 'in adults' stays",
+  _e6d_ci == ["Weight fell by 2 kg (95% CI 1.1 to 3.5) in adults (Study 1).",
+              "Weight fell by 2 kg, 95% CI 1.1 to 3.5 in adults (Study 1)."], _e6d_ci)
+
+# --- BRIEF E6 B1e: only a qualifier of the staying figure's own keeps the trailing one from being shared ---
+_e6e_st = [{"abstract": "Fasting glucose fell 21.929 mg/dL. HbA1c 1.53. Weight fell 2 kg."}]
+_e6e = lambda s: breakdown.for_reading(s, _e6e_st)
+_e6e_perdl = _e6e("Fasting blood sugar dropped by 21.929 mg per dL and HbA1c dropped by 1.53 in patients (Study 2).")
+t("BRIEF E6 B1e: the rest of a unit ('per dL') is not a qualifier, so the trailing one is shared and the cut stands",
+  _e6e_perdl == "Fasting blood sugar dropped by about 22 mg per dL in patients (Study 2).", _e6e_perdl)
+_e6e_week = "Weight fell by 2 kg per week in adults and HbA1c by 1.53 in children (Study 1)."
+t("BRIEF E6 B1e: a staying figure with a qualifier of its own after other words keeps the sentence whole",
+  _e6e(_e6e_week) == _e6e_week, _e6e(_e6e_week))
+_e6e_avg = _e6e("Weight fell by 2 kg on average and HbA1c by 1.53 in adults (Study 1).")
+t("BRIEF E6 B1e: 'on average' is no qualifier, so the cut keeps 'on average in adults'",
+  _e6e_avg == "Weight fell by 2 kg on average in adults (Study 1).", _e6e_avg)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

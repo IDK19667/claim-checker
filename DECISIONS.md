@@ -4,6 +4,120 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel step 2): The effect-size sentence is printed once
+
+The owner asked to remove the repeated 22 mg/dL sentence. The second statement under How sure
+(`effect_line`, "What the studies did find: ...") quotes the effect-size sentence, and "What the
+evidence shows" printed it again as "How big the effect is". Where the statement is present, the
+page leaves out of that line each sentence the statement already holds, and drops the line when
+nothing is left; a saved answer without the statement prints the line as before. Front end only,
+the same rule in the Jinja and in renderResult (`effectOnce`); the shared text prints neither.
+
+## 2026-11-24 (q10-rel step 2): Joining q10-evid's study fields to q10-rel's rows
+
+- The rows keep q10-rel's markup, which already prints `contribution` and `caution`. The engine's
+  reason field is `indirect_reason`; both renderers read it (and the old `indirect_why`), and print
+  "Indirect context" only with a reason. This release sends `indirect` false for every study, so
+  no Indirect label shows anywhere, and the fixture server no longer passes one through.
+- For a study set aside or kept as background, the row's line is the page's own reason
+  (`study_why`, the words of its group, so a retraction says so), not the engine's "Set aside: ..."
+  contribution; every other study shows the engine's contribution.
+- The fixture server saves the recorded vinegar answer with study 1 flagged as a review citing a
+  retracted trial, so the browser checks see the two statements and a real caution.
+
+## 2026-11-24 (q10-rel): Check 21 reads the verdict's time in the page
+
+Check 21 keeps its limit (4 canvases) and its meaning, but now times "on screen" with its own
+per-frame look at the verdict stamp, installed before the press and stamped with the page's
+clock, instead of a script sent from the runner after the answer arrived. That round trip
+made the check count sheets painted after the verdict showed as before it. Proof: 5 of 5 on
+this tip (the check runs with the processor slowed 4 times); with the desk change below
+reverted, 3 of 5 fail. This replaces the "check 21 is unchanged" note below.
+
+## 2026-11-24 (q10-rel): Content before scenery: the desk paints no more sheets until the verdict is on screen
+
+A result arriving on a desk already drawing paints the card's faces and one sheet, then holds
+the rest until two frames after the page marks the result checked (the frame that paints the
+verdict, then the first frame with it on screen); the later batches start from there, not
+from a timer. Check 21 is unchanged. It still fails about 1 run in 3: in a page-side trace every
+held batch now starts after the verdict is on screen, but the check notices the verdict only
+when its own script reaches the page, up to about 420 ms after the answer arrived, so batches
+painted after the verdict showed can still count as before it.
+
+## 2026-11-24 (q10-rel): Every study row says where its abstract is
+
+Each row shows "Open PubMed" and either the "Read abstract" button or, where PubMed has no
+abstract, the plain words "No abstract on PubMed" in its place (a label, not a control). The
+Studies intro no longer promises an abstract for every study: "Each study has its PubMed page,
+and its abstract where PubMed has one."
+
+## 2026-11-24 (q10-rel): One "Check another claim" on a result, at the end of the page
+
+On a wide screen it showed twice, in the rail and in the action row under Share. The rail is
+drawn by script, so the page served without scripts has none; the action row's is therefore the
+one kept at every width and in every mode, and the rail no longer carries it. Without scripts the
+action row's buttons cannot work, so a plain link home stands in its place. The phone's place
+menu keeps its own, which shows only when the menu is opened.
+
+## 2026-11-24 (q10-rel): The primary button has a pressed state, and the check starts a frame later
+
+"Check the research" and "View evidence" dim to the quieter words' grey (`--desk-on-2`, ink words
+stay) while pressed: by pointer and Space through `:active`, by Enter through a `.pressed` class.
+A colour change paints in the press's own frame; the check's first relayout (the page and the
+scene) now starts in the task after that frame, so a wide screen shows the press in under 100 ms
+instead of about 180. No new colour, no motion. This closes the open point in the entry below.
+
+## 2026-11-24 (q10-rel): End or Home in the claim box only moves the caret
+
+With the caret already at the end, End moved nothing in the box, so the browser passed it to the
+page and scrolled it to its end a moment later. Since the lamp band a check's page on a phone in 3D
+is 23 px taller than the screen, so words typed during a check were pushed up by 23 px when the
+answer landed. The box now keeps End and Home whenever they would leave the caret where it is.
+
+## 2026-11-24 (q10-rel): The joined release, and three things no single part could see
+
+The result screens, the colours, the lamp on a phone and the speed work were joined on the engine
+under test. Three faults showed only together. In text mode on a tall wide screen the answer card
+sat halfway down (165 px at 1440x900): the card now starts under the strip there too, as
+DESIGN.md already says for wide screens. On a phone a fresh check jumped the camera for one frame
+when the answer landed: the lamp band's view now stays the first key until the glide is at rest.
+Pressing "Check the research" on a wide screen paints in about 176 ms: any change of text on the
+page costs one long rendering frame there, while a change of colour alone paints in 16 to 24 ms,
+and the button has no pressed state of its own; giving it one is a design decision, left open.
+
+## 2026-11-24 (q10): An abstract shows an en or an em dash as a plain hyphen
+
+Abstracts are now in the server-rendered page, and the rule is zero en or em dashes in anything a
+reader can see. An abstract is quoted from PubMed as it is, except that an en dash or an em dash is
+shown as a plain hyphen, in the server's row (a Jinja replace) and in app.js (plainDashes), the same
+way. Nothing else in an abstract changes: not a minus sign, not a word.
+
+## 2026-11-24 (q10): A jump ends where the screen visibly goes on
+
+At the top of Studies the foot of the screen could fall in the gap between two blocks (320x568 in 3D,
+1280x800 in text mode), so the screen looked finished. Rather than tune a margin per size, a jump by
+the picker, the rail or View evidence now checks where it would end: if the foot would cross no line,
+control or drawn panel, it lands a little further, on the middle of the next line, as long as the
+section's heading stays whole under the strip (else a little less far). The Answer keeps its top. No
+new motion: only where the glide ends. The browser check runs eight sizes in both modes.
+
+## 2026-11-24 (q10): The short answer is never covered; the Answer's first screen still goes on
+
+On short phones the answer card had been drawn at three quarters of its width so the Studies heading
+would show above the bar; the card's words then ran past its edge and how sure covered the end of the
+short answer, the most important text on the site. Now every phone draws the card at the same width, and
+the rule on the Answer at rest is, in this order: every line of the card is whole; the screen visibly
+goes on (the Studies heading whole above the bar, or the bar crossing a line or a control of the Answer);
+View evidence in view where both fit. Where the bar would fall in a gap, desk.js moves how sure down (or
+up into the space under the card, never nearer than 12 px in 3D) by the fewest pixels that put a line
+under it. On the smallest phones a long claim gives up card lines (three, two, one, with an ellipsis)
+before the short answer loses any; the whole claim is still the page's heading. Checked by N5a at eight
+sizes, both modes, a short and a 140-character claim.
+
+## 2026-11-23 (q10): The cue row, Back and Next are gone; one picker and "View evidence" move the reader
+
+An outside review found too many competing controls: scrolling, one section picker (the bar on a phone, the rail on a wide screen) and one "View evidence" button now do it all, the sections are named Answer, Studies, Explanation and Limitations, and every study shows "Read abstract" and "Open PubMed". This reverses the cue row and its dip.
+
 ## 2026-11-23 (q10): A check does its waiting side by side
 
 The searches of one pass, the surrogate search and the guidance check
@@ -21,6 +135,21 @@ failed PubMed search no longer stops the three beside it. `verdict.py`
 and `pubmed.py` are part of the method stamp, so after a deploy each
 saved answer is made again once when it is next asked for: deploy
 engine changes together, not one by one.
+
+## 2026-11-23 (q10): No mint, no green cast: the room's only colour is the lamp, the wood and the paper
+
+The owner asked four times for no neon or AI colours; the pale mint
+`#9fc3b0` on near-black (links, labels, focus, dots) was the cause, helped
+by a green cast in every grey. The mint is gone with no new accent, the
+greys keep their lightness at hue 75, the scene's fill lights and pencil
+and the icon lost their mint, blue and purple, and a test holds the
+shipped colour files to hue 40 to 100. Still open: the share image
+(`app.js` CARD) and the link preview (`og.py`) keep the old sage ring and
+the four cloths.
+
+## 2026-11-23 (q10, L2): The lamp shows on a phone's first screen
+
+The owner: "on the phone i dont see the primary lamp screen". The phone framed the desk behind the words, under the scrim, so it read as a dark page. Now, before a check on a phone held upright, the desktop's own view of the lamp is fitted into a band under the strip (a third of the screen at most, as the owner asked that content come before scenery) and the words start below it; the claim box and the button stay on the first screen. A band on top rather than the lamp beside the headline, because a 375px screen has no dark side wide enough for a 46px headline next to a lamp that still reads. Results keep their framings.
 
 ## 2026-11-23 (q10): The scene warms up before the first press of Next
 
@@ -4542,3 +4671,8 @@ What was deliberately rejected:
 - (Round 3.) Statins, antidepressants and epilepsy medicine keep a line on any claim about them, even a claim about a benefit: the reader weighing such a claim is the one who may stop. An amount meant for adults (vitamin A, vitamin D) is never shown beside a baby or child word. Of two lines with the same rank, an overdose or poisoning line (`poison`) comes first. A medicine named by its generic ending or a common brand counts for the pregnancy and breastfeeding lines, but no line ever names a brand.
 - Showing the lines under the short answer is a separate template change, made from the field.
 - To add an entry: write the line for everyone asking about the hazard, open the page, copy its own sentence into `quote` and its main heading into `page`, and add a firing claim and a near miss to the F2 block in `tests/test_app.py`.
+
+## 2026-11-23: a review that cites a retracted study (E2 repair)
+
+- Not checked yet: narrative and umbrella reviews typed only "Review", and pooled analyses typed only "Journal Article", are never read for a reference list, so a retracted study they cite is not flagged.
+- (E4 repair.) The keyword "indirect" mark was removed after three independent reviews each found it marking studies that test the claim directly: a word list cannot tell the people studied from the outcome measured. Every study's `indirect` stays false and its reason empty. The label needs the model's own reading of the abstract (a schema field, with a live regression), planned for a later accuracy round.

@@ -3259,9 +3259,76 @@ _NO_UNIT = "\x00"
 # the figure just dropped.
 _CLAUSE_JOIN = re.compile(r"(?:\s*,\s*and|\s*,|\s*;|\s+and|\s+while|\s+whereas|\s+but)\s+",
                           re.IGNORECASE)
-_TRAILING_CI = re.compile(r"\s*\((?:[^()]*?\b(?:CI|confidence interval)\b)[^()]*\)",
-                          re.IGNORECASE)
+# A figure and its range travel together: the interval goes with the figure
+# whether it is in brackets, "(95% CI -2.65, -0.41)", or not: ", 95% CI
+# -2.65, -0.41", "with a 95% confidence interval of -2.65 to -0.41". Never
+# one brought in by "and": that one may belong to another figure.
+_CI_END = r"[-−]?\d+(?:\.\d+)?(?:\s*%)?"
+_TRAILING_CI = re.compile(
+    r"\s*\((?:[^()]*?\b(?:CI|confidence interval)\b)[^()]*\)"
+    r"|\s*,?\s*(?:with\s+(?:an?\s+)?)?"
+    r"(?:95\s?(?:%|percent|per cent)\s*)?(?:CI|confidence interval|credible interval)s?"
+    r"\s*(?:of|from|was|:|=|,)?\s*[\[(]?\s*" + _CI_END + r"\s*(?:,|to|-|–|and)\s*" + _CI_END
+    + r"[\])]?",
+    re.IGNORECASE)
 _FIGURE_WITH_UNIT = re.compile(r"\d\s*" + _UNIT, re.IGNORECASE)
+# What may come after a dropped figure and its own interval for the cut to
+# be clean: nothing, the study citation, or a further clause that names its
+# own figure ("and LDL by 0.4 mmol/L"), each maybe after a plain qualifier
+# (_QUALIFIER). Anything else (a p value, "which
+# was ...", a second interval, "for weight", "points") may belong to the
+# figure that stays, so the sentence is left whole.
+_CLEAN_END = re.compile(r"\s*(?:\(\s*Stud(?:y|ies)\b[^()]*\))?\s*[.!?]?\s*$", re.IGNORECASE)
+_NAMED_CLAUSE = re.compile(
+    r"(?:\s*,\s*and|\s*,|\s*;|\s+and|\s+while|\s+whereas|\s+but)\s+"
+    r"(?!(?:an?|the|which|that|this|these|it|its|p|with|for|CIs?|confidence|credible|95|and|but|"
+    r"while|whereas)\b)[A-Za-z]"
+    r"(?P<gap>(?:[^\d()]|(?<=[A-Za-z])\d)*?)"
+    r"(?<![\w.])[-\u2212]?\d+(?:\.\d+)?(?:\s*" + _UNIT + "|" + _NO_UNIT + ")",
+    re.IGNORECASE)
+_NOT_A_NAME = re.compile(r"\b(?:CIs?|confidence|credible|significan\w*|p\s*[<=>])", re.IGNORECASE)
+
+
+# A plain qualifier of group, time or comparison holds for both figures and
+# may follow the dropped one: "in adults", "over 12 weeks", "compared with
+# placebo". No commas or brackets in it, and nothing statistical.
+_QUALIFIER = re.compile(r"(?:\s*,)?\s+(?:in|among|across|over|after|at|during|within|compared with|compared to|"
+                        r"versus|vs\.?|relative to|than)\s+(?P<body>[^(),;]*)", re.IGNORECASE)
+_P_VALUE = re.compile(r"\bp\s*[<=>\u2264\u2265]", re.IGNORECASE)
+
+
+def _clean_rest(sent: str, end: int) -> bool:
+    """Nothing, the study citation, or a clause naming its own figure."""
+    if _CLEAN_END.match(sent, end):
+        return True
+    named = _NAMED_CLAUSE.match(sent, end)
+    return bool(named) and not _NOT_A_NAME.search(named.group("gap"))
+
+
+def _clean_cut(sent: str, end: int, join: int) -> bool:
+    """Whether what follows a dropped figure and its interval lets it go
+    cleanly. `join` is where the cut clause starts. A trailing qualifier
+    holds for both figures only when the figure that stays has no qualifier
+    of its own before that clause: "2 kg in adults and HbA1c by 1.53 in
+    children" says "in children" of HbA1c alone. Other words there ("per
+    dL", "on average", its own interval) leave it shared."""
+    if _clean_rest(sent, end):
+        return True
+    kept = [m.end() for m in _FIGURE_WITH_UNIT.finditer(sent, 0, join)]
+    if not kept or _QUALIFIER.search(sent, kept[-1], join):
+        return False
+    qual = _QUALIFIER.match(sent, end)
+    if not qual:
+        return False
+    start = qual.start("body")
+    for k in range(start + 1, qual.end("body") + 1):
+        body = sent[start:k]
+        if _clean_rest(sent, k):
+            return not (_STATES_SIGNIFICANCE.search(body) or _P_VALUE.search(body)
+                        or _NOT_A_NAME.search(body))
+    return False
+
+
 UNITLESS_LEFT_OUT = "The size of this change is given without a unit, so it is left out here."
 
 
@@ -3433,8 +3500,9 @@ def drop_unitless(text: str) -> str:
     Take out each figure for_reading marked as having no unit. When a figure
     with its unit comes earlier in the same sentence, only the clause that
     carries the bare one goes: "fell by about 22 mg/dL and HbA1c by 1.53"
-    keeps "fell by about 22 mg/dL". Otherwise the sentence goes. "" when
-    nothing is left.
+    keeps "fell by about 22 mg/dL", but only when the cut is clean
+    (_clean_cut); otherwise the sentence stays whole, bare figure and all.
+    With no such figure the sentence goes. "" when nothing is left.
     """
     if _NO_UNIT not in (text or ""):
         return text or ""
@@ -3454,6 +3522,11 @@ def drop_unitless(text: str) -> str:
             ci = _TRAILING_CI.match(sent, end)
             if ci:
                 end = ci.end()
+            if not _clean_cut(sent, end, joins[-1].start()):
+                # A unitless figure is a plainness flaw; a p value or range
+                # pinned on the wrong figure is a wrong statement. Left whole.
+                sent = sent[:mark] + sent[mark + len(_NO_UNIT):]
+                continue
             sent = sent[:joins[-1].start()] + sent[end:]
         sent = re.sub(r"\s+([.,;)])", r"\1", " ".join(sent.split()))
         if sent:
@@ -4077,4 +4150,325 @@ def cited_pmids(bd: dict, studies: list[dict]) -> list[str]:
         pmid = studies[n - 1].get("pmid")
         if pmid and pmid not in out:
             out.append(pmid)
+    return out
+
+
+# ---------------------------------------------------------------------
+# One figure, once (E4).
+#
+# The audit found "about 22 mg per dL" five times on one answer. A later
+# sentence goes only when it says nothing new: it cites the same study or
+# studies as an earlier kept sentence, every number with its unit in it
+# appears in that sentence, and so does every content word (stop words and
+# the citation aside; fell, dropped, decreased, declined, lowered and
+# reduced count as one word, rose and increased as one), in the same order
+# (its words and numbers are a subsequence of that sentence's). Only the
+# explanation and the figure lists ("says", "evidence", "effect_size") are
+# read: never still_open, unknowns, safety lines, harms, assessments or
+# titles. No item or field is ever left empty: its sentences then stay, and
+# the earlier sentence may go instead (_drop_earlier). A "That is ..."
+# sentence stays or goes with the sentence before it.
+# ---------------------------------------------------------------------
+
+_E4_FIGURE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)*)\s*(%|[A-Za-z]+)?")
+# The figure lists, in the order the page prints them (display.breakdown_view).
+FIGURE_ORDER = ("says", "evidence", "effect_size")
+_SAME_WORD = {w: "fell" for w in ("fell", "dropped", "decreased", "declined", "lowered", "reduced",
+                                  "fall", "drop", "decrease", "decline", "reduction")}
+_SAME_WORD.update({w: "rose" for w in ("rose", "increased", "rise", "increase")})
+_STOP_WORDS = frozenset(
+    "a an the of in on at by to for with and or was were is are be been being that this these those it its "
+    "as from than per into over after during their there which who whom".split())
+_WORD = re.compile(r"[a-z]+(?:'[a-z]+)?")
+
+
+def figures_of(sentence: str, count: int) -> set:
+    """(number, the word after it, the studies cited) for each figure in a
+    sentence, citations themselves left out."""
+    cites = frozenset(refs(sentence, count))
+    text = _REF.sub(" ", sentence or "")
+    out = set()
+    for m in _E4_FIGURE.finditer(text):
+        number = m.group(1).replace(",", "")
+        unit = (m.group(2) or "").lower()
+        unit = {"percent": "%", "per": ""}.get(unit, unit)
+        out.add((number, unit, cites))
+    return out
+
+
+def content_words(sentence: str) -> set:
+    """The words of a sentence that carry meaning, the citation left out and
+    the verbs of a fall, or of a rise, read as one."""
+    text = _REF.sub(" ", str(sentence or "")).lower()
+    return {_SAME_WORD.get(w, w) for w in _WORD.findall(text) if w not in _STOP_WORDS}
+
+
+_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[a-z]+(?:'[a-z]+)?")
+
+
+def word_order(sentence: str) -> list:
+    """The content words and numbers of a sentence, in the order written
+    (content_words' reading of each word), the citation left out."""
+    text = _REF.sub(" ", str(sentence or "")).lower()
+    out = []
+    for tok in _TOKEN.findall(text):
+        if tok[0].isdigit():
+            out.append(tok.replace(",", ""))
+        elif tok not in _STOP_WORDS:
+            out.append(_SAME_WORD.get(tok, tok))
+    return out
+
+
+def _in_order(part: list, whole: list) -> bool:
+    """Whether `part` is a subsequence of `whole`."""
+    it = iter(whole)
+    return all(any(x == y for y in it) for x in part)
+
+
+# A sentence that says whether a result was statistically significant,
+# clear or uncertain, or how certain the evidence is, is never dropped as a
+# repeat (nor the figure it belongs to). The one recogniser for both rules
+# (brief E4 D2); certainty, chance, "inconclusive" and "no difference" joined
+# it in brief E5 F1, then any word with "significan", "did not differ",
+# "similar between groups", intervals and CI, "certain", confidence and
+# evidence quality. Every use only ever keeps more sentences.
+_STATES_SIGNIFICANCE = re.compile(
+    r"\b(?:statistically significant|not significant|\w*significan\w*|no clear|clear (?:difference|effect)|"
+    r"confidence intervals?|intervals?|(?-i:CI)\b|cross(?:ed|es|ing)? (?:zero|one|the line of no effect)|"
+    r"p[ -]?values?|p\s*[<=>]|uncertain\w*|imprecis\w*|certain\w*|confidence|"
+    r"(?:very low|low|moderate|high)[ -]quality|quality of (?:the )?evidence|chance|inconclusive|"
+    r"no differences?|did not differ|similar between (?:the )?groups)", re.IGNORECASE)
+
+
+def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:
+    """Whether an earlier kept sentence already says all of this one."""
+    cites = frozenset(refs(sentence, count))
+    figs = {(n, u) for n, u, _ in figures_of(sentence, count)}
+    if not cites or not figs:
+        return False
+    words = content_words(sentence)
+    order = word_order(sentence)
+    for earlier in kept:
+        # Order counts too (brief E3 N11): "rose by 3% with the drug and fell
+        # by 2% with placebo" is not repeated by its reverse.
+        if (frozenset(refs(earlier, count)) == cites
+                and figs <= {(n, u) for n, u, _ in figures_of(earlier, count)}
+                and words <= content_words(earlier)
+                and _in_order(order, word_order(earlier))):
+            return True
+    return False
+
+
+def one_figure_once(explanation: str, bd, count: int):
+    """(explanation, breakdown) with every sentence dropped that says nothing
+    an earlier kept one did not, in the page's reading order. The
+    explanation leads when the breakdown has no "says" (the page prints it
+    there); beside a "says" it is read within itself only."""
+    def keep(text, kept):
+        # A sentence and the "That ..." translations after it are one unit:
+        # they stay or go together, and a unit that says whether a result
+        # was significant or clear always stays.
+        units = []
+        for s in sentences(text or ""):
+            if s.startswith("That ") and units:
+                units[-1].append(s)
+            else:
+                units.append([s])
+        out = []
+        for unit in units:
+            if (any(_STATES_SIGNIFICANCE.search(s) for s in unit)
+                    or not _says_nothing_new(unit[0], kept + out, count)):
+                out.extend(unit)
+        kept.extend(out)
+        return " ".join(out)
+
+    forced = []  # the lists and fields kept whole because the rule would empty them
+
+    def keep_field(text, kept, key=None):
+        # A field is never left empty: its sentences then stay.
+        said = keep(text, kept)
+        if said or not str(text or "").strip():
+            return said
+        if key:
+            forced.append(key)
+        return text
+
+    has_says = isinstance(bd, dict) and any(str(x or "").strip() for x in bd.get("says") or [])
+    seen = []
+    explanation = keep_field(explanation, seen if not has_says else [])
+    if not isinstance(bd, dict):
+        return explanation, bd
+    out = dict(bd)
+    for key in FIGURE_ORDER:
+        value = out.get(key)
+        if key == "says" and isinstance(value, list):
+            # The who-line is printed under "Who and what this applies to",
+            # not here, so it is left as it is.
+            items = [v if str(v or "").lower().startswith(WHO_LABEL.strip().lower()) else keep(v, seen)
+                     for v in value]
+        elif isinstance(value, list):
+            items = [keep(v, seen) if isinstance(v, str) else v for v in value]
+        else:
+            if isinstance(value, str) and value:
+                out[key] = keep_field(value, seen, key)
+            continue
+        # A list is never left empty: it then stays as it was.
+        items = [v for v in items if v]
+        if not items and any(value):
+            forced.append(key)
+        out[key] = items if items or not any(value) else value
+    return explanation, _drop_earlier(out, forced, count)
+
+
+# The earlier sentence goes instead (brief E3 follow-up). When a later
+# sentence is a repeat by the rule above but removing it would empty its list
+# or field, the earlier one goes, if: it is in a different figure list that
+# keeps another sentence; it is not tied to a "That ..." translation right
+# after it, and no sentence in its list about the same studies (or none)
+# says whether a result was significant or how certain it is (brief E4 D2,
+# E5 F1: then both stay); it
+# cites the same studies; and all it carries is in
+# the later sentence, in the same order, these generic words counting as
+# nothing. No other word may join this list: no named population, outcome,
+# dose, time, harm, safety or significance word.
+GENERIC_WORDS = frozenset(
+    "patients people participants subjects group groups about approximately around roughly average mean "
+    "overall level levels".split())
+_SAFETY = re.compile(r"\b(?:safe\w*|unsafe)\b", re.IGNORECASE)
+
+
+def _units(text: str) -> list:
+    """The sentences of a text, each with the "That ..." sentences after it."""
+    units = []
+    for x in sentences(text or ""):
+        if x.startswith("That ") and units:
+            units[-1].append(x)
+        else:
+            units.append([x])
+    return units
+
+
+def _carried_by(earlier: list, later: list, count: int) -> bool:
+    """Whether everything the earlier unit says is in the later one, the
+    generic words aside, in the same order."""
+    e, l = " ".join(earlier), " ".join(later)
+    cites = frozenset(refs(e, count))
+    if not cites or cites != frozenset(refs(l, count)):
+        return False
+    if not {(n, u) for n, u, _ in figures_of(e, count)} <= {(n, u) for n, u, _ in figures_of(l, count)}:
+        return False
+    if not content_words(e) - GENERIC_WORDS <= content_words(l):
+        return False
+    return _in_order([w for w in word_order(e) if w not in GENERIC_WORDS], word_order(l))
+
+
+def _next_sentence(items: list, i: int, j: int, units: list) -> str:
+    """The sentence right after unit j of item i in the same list, or ""."""
+    if j + 1 < len(units):
+        return units[j + 1][0]
+    for nxt in items[i + 1:]:
+        if isinstance(nxt, str) and sentences(nxt):
+            return sentences(nxt)[0]
+    return ""
+
+
+def _figure_bound(sentence: str, after: str, count: int) -> bool:
+    """Whether a figure is tied to what it says about certainty (brief E4
+    D2): the sentence itself says whether the result was significant or
+    clear, or the next sentence in the same list, citing the same studies
+    (or none), translates it ("That ...") or says so. Then both stay."""
+    if _STATES_SIGNIFICANCE.search(sentence):
+        return True
+    if not after or frozenset(refs(after, count)) not in (frozenset(), frozenset(refs(sentence, count))):
+        return False
+    return after.startswith("That ") or bool(_STATES_SIGNIFICANCE.search(after))
+
+
+def _figure_held(items: list, i: int, j: int, units: list, count: int) -> bool:
+    """Whether the earlier unit j of item i must stay where it is (brief E5
+    F1): it is tied by _figure_bound, or any other sentence in the same list,
+    before or after it and at any distance, says whether a result was
+    significant or how certain the evidence is, and cites at least one study
+    the earlier sentence cites or no study at all."""
+    sentence = units[j][0]
+    if _figure_bound(sentence, _next_sentence(items, i, j, units), count):
+        return True
+    cites = frozenset(refs(sentence, count))
+    for k, it in enumerate(items):
+        if not isinstance(it, str):
+            continue
+        for m, unit in enumerate(_units(it)):
+            if (k, m) == (i, j):
+                continue
+            for x in unit:
+                if _STATES_SIGNIFICANCE.search(x):
+                    other = frozenset(refs(x, count))
+                    if not other or other & cites:
+                        return True
+    return False
+
+
+def _same_words(a: str, b: str) -> bool:
+    """Whether two sentences are the same letters and digits. The page prints
+    such a copy once already (display.unseen), in the earlier block, so the
+    earlier one is never the one removed."""
+    return re.sub(r"[^a-z0-9]+", "", a.lower()) == re.sub(r"[^a-z0-9]+", "", b.lower())
+
+
+def _drop_earlier(bd: dict, forced: list, count: int) -> dict:
+    """The breakdown with, for each repeat kept only so its list or field is
+    not emptied, the earlier sentence removed instead where the rule allows.
+    Never across studies, never in the explanation, never a harm, safety or
+    significance sentence, and never when the two are word for word the same."""
+    if not forced:
+        return bd
+    out = dict(bd)
+
+    def items_of(key):
+        v = out.get(key)
+        if isinstance(v, list):
+            return v
+        return [v] if isinstance(v, str) and v else []
+
+    def put(key, items):
+        if isinstance(out.get(key), list):
+            out[key] = [i for i in items if not isinstance(i, str) or i.strip()]
+        else:
+            out[key] = items[0] if items else ""
+
+    def sentence_count(key):
+        return sum(len(sentences(i)) for i in items_of(key)
+                   if isinstance(i, str) and not i.lower().startswith(WHO_LABEL.strip().lower()))
+
+    for later_key in forced:
+        for item in list(items_of(later_key)):
+            if not isinstance(item, str):
+                continue
+            for later in _units(item):
+                if any(_STATES_SIGNIFICANCE.search(x) for x in later):
+                    continue
+                done = False
+                for key in FIGURE_ORDER[:FIGURE_ORDER.index(later_key)]:
+                    items = list(items_of(key))
+                    for i, it in enumerate(items):
+                        if not isinstance(it, str) or (key == "says" and it.lower().startswith(WHO_LABEL.strip().lower())):
+                            continue
+                        units = _units(it)
+                        for j, earlier in enumerate(units):
+                            text = " ".join(earlier)
+                            if (len(earlier) > 1 or _figure_held(items, i, j, units, count)
+                                    or HARM.search(text) or _HARM_WORDS.search(text)
+                                    or _SAFETY.search(text) or _same_words(earlier[0], later[0])
+                                    or not _says_nothing_new(later[0], [earlier[0]], count)
+                                    or not _carried_by(earlier, later, count)
+                                    or sentence_count(key) - len(earlier) < 1):
+                                continue
+                            items[i] = " ".join(x for k, u in enumerate(units) if k != j for x in u)
+                            put(key, items)
+                            done = True
+                            break
+                        if done:
+                            break
+                    if done:
+                        break
     return out
