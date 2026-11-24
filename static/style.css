@@ -2,9 +2,9 @@
    Evident: the pages beside the desk (about, how it works, corrections,
    privacy, the 404 and the stats page). The front page is the lamp-lit desk
    and has its own stylesheet, static/desk.css. Here: a night masthead and
-   footer, a charcoal with the green of the stacks in it, and the text by day
-   on cool stone. One accent, bottle green by day and sage by night, for what
-   you can act on. Nothing is ever coloured by what a verdict was.
+   footer in a neutral charcoal, and the text by day on paper. No accent
+   colour: a link is the words' own colour with an underline. Nothing is ever
+   coloured by what a verdict was.
    ========================================================================== */
 
 /* Self-hosted latin subsets, trimmed to the axes the page uses. OFL; see
@@ -48,13 +48,13 @@
   --rule: #d9dcd5;
   --rule-2: #b9bfb7;
 
-  /* The one accent: green by day for what you can act on, sage for focus on
-     the night, a pale tint for a selection. */
+  /* No accent colour: links are the words' own colour with an underline.
+     A selection is a warm paper tint; the focus ring is ink by day and the
+     words' colour on the night. */
   --green: #2c5848;
-  --sage: #9fc3b0;
-  --tint: #d4e4da;
+  --tint: #e6dcc6;
 
-  --focus: #2c5848;
+  --focus: var(--ink);
 
   --display: "Bricolage Grotesque", system-ui, sans-serif;
   --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -111,7 +111,7 @@ body {
   border-image: linear-gradient(var(--deep), var(--deep)) fill 0 / 0 / 0 100vmax;
 }
 .band, .foot { position: relative; }
-.band :focus-visible, .foot :focus-visible { outline-color: var(--sage); }
+.band :focus-visible, .foot :focus-visible { outline-color: var(--on-deep); }
 
 /* ---- Masthead ------------------------------------------------------------ */
 
@@ -186,7 +186,7 @@ body {
 /* On the night ground the box is a well in it, and the button is the light
    shape: the one bright thing on the screen is the thing to press. */
 .band .claim-box { background: var(--deep-2); border-color: var(--on-deep-3); }
-.band .claim-box:focus-within { outline-color: var(--sage); }
+.band .claim-box:focus-within { outline-color: var(--on-deep); }
 .band #claim-input { color: var(--on-deep); }
 .band #claim-input::placeholder { color: var(--on-deep-3); }
 .band .primary { background: var(--on-deep); color: var(--deep); border-color: var(--on-deep); }

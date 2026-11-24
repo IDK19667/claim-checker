@@ -11700,6 +11700,23 @@ finally:
     appmod.HOME_LIST_SECONDS = 0
     appmod._drop_home_lists()
 
+# ---- No mint on the night (q10-look 1) ---------------------------------------------------
+# The owner asked four times for no neon or AI colours; the pale mint #9fc3b0 on near-black
+# was the cause. It is gone from both stylesheets: links are the words' colour with an
+# underline, labels a quieter grey, the focus ring the words' colour (ink by day).
+_nm_desk = (ROOT / "static" / "desk.css").read_text()
+_nm_style = (ROOT / "static" / "style.css").read_text()
+t("NO MINT: #9fc3b0 and the sage token are gone from desk.css and style.css",
+  all("9fc3b0" not in x.lower() and "--sage" not in x and "--desk-sage" not in x for x in (_nm_desk, _nm_style)))
+t("NO MINT: a link on the night is the words' colour and keeps its underline",
+  re.search(r"(?m)^a \{ color: var\(--on-deep\); text-underline-offset: 3px; \}", _nm_desk) is not None
+  and not re.search(r"(?m)^a \{[^}]*text-decoration: none", _nm_desk))
+t("NO MINT: the focus ring is the words' colour on the night and ink by day, drawn outside the control",
+  "--desk-focus: #eceee9;" in _nm_desk and "--focus: var(--ink);" in _nm_style
+  and re.search(r":focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 3px;", _nm_desk) is not None)
+t("NO MINT: the study-number box is a neutral grey and a selection a warm paper tint",
+  "--desk-ref: #666461;" in _nm_desk and "--tint: #e6dcc6;" in _nm_style)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
