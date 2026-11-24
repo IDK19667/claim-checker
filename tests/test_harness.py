@@ -477,6 +477,44 @@ t("scorer: the command prints ids and counts and writes score.json",
   p5.returncode == 0 and "b: true -> complicated" in p5.stdout and (WORK / "r2" / "score.json").exists(),
   p5.stderr[-300:])
 
+# ---- the retraction lookup under the harness (brief E5, third item) ----------
+# pubmed.retracted_among passes `timeout=` to _paced_post; the harness wrapper
+# must take it and hand it on, or every lookup under the harness raises
+# TypeError and is reported as "could not be made".
+_rl_posts = []
+
+
+def _rl_post(url, data=None, timeout=None):
+    _rl_posts.append((url, timeout))
+    r = requests.Response()
+    r.status_code = 200
+    r.encoding = "utf-8"
+    r._content = json.dumps({"esearchresult": {"idlist": ["102"]}}).encode()
+    return r
+
+
+_rl_http = pubmed._http
+pubmed._http = pytypes.SimpleNamespace(get=fake_get, post=_rl_post)
+_rl_res = {}
+for _rl_mode, _rl_store in (("live", None), ("record", str(WORK / "rlstore"))):
+    h = harness.install(_rl_mode, _rl_store)
+    try:
+        _rl_res[_rl_mode] = pubmed.retracted_among(["101", "102", "103"])
+    except Exception as e:  # noqa: BLE001
+        _rl_res[_rl_mode] = repr(e)
+    h.uninstall()
+h = harness.install("replay", str(WORK / "rlstore"))
+try:
+    _rl_res["replay"] = pubmed.retracted_among(["101", "102", "103"])
+except Exception as e:  # noqa: BLE001
+    _rl_res["replay"] = repr(e)
+h.uninstall()
+pubmed._http = _rl_http
+t("harness: a retraction lookup through the wrapper returns its flags and raises nothing (live, record, replay)",
+  _rl_res == {"live": {"102"}, "record": {"102"}, "replay": {"102"}}, _rl_res)
+t("harness: the wrapper hands the lookup's timeout on to the real POST",
+  len(_rl_posts) == 2 and all(isinstance(x[1], tuple) and len(x[1]) == 2 for x in _rl_posts), _rl_posts)
+
 shutil.rmtree(WORK, ignore_errors=True)
 t("no test used the network", not NET_TRIES, NET_TRIES)
 print(f"\n{sum(results)}/{len(results)} passed")

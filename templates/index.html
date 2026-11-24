@@ -377,6 +377,8 @@
           {%- endif %}
           <h3>How sure, and why</h3>
           <p class="evline">{% if result.evidence_line %}{{ result.evidence_line | trim('.') }}.{% else %}{{ confidence_line(result) }}{% endif %}</p>
+          {#- Brief E: what the studies found instead, for an absolute claim (evidence.effect_statement). #}
+          {%- if result.effect_line %}<p class="evline effect-line">{{ result.effect_line | trim('.') }}.</p>{% endif %}
           {%- if bv and bv.strength %}<p class="strength">{{ desk_refs(bv.strength, n_st) }}</p>{% endif %}
           {%- if bv and bv.unknowns %}<p class="unknowns">{{ desk_refs(bv.unknowns, n_st) }}</p>{% endif %}
           {%- if bv and bv.concluded %}
@@ -505,13 +507,13 @@
       </ol>
       <h3 class="section-label">Reading the evidence meter</h3>
       <ul class="legend">
-        <li><b>Strong:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
-        <li><b>Moderate:</b> human studies or expert reviews, but no randomized trial behind it.</li>
-        <li><b>Weak:</b> only case reports, letters, or opinion pieces.</li>
+        <li><b>Strong designs:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
+        <li><b>Moderate designs:</b> human studies or expert reviews, but no randomized trial behind it.</li>
+        <li><b>Weak designs:</b> only case reports, letters, or opinion pieces.</li>
         <li><b>No direct evidence:</b> nothing found actually tests the claim.</li>
         <li><b>Low certainty:</b> the review behind it rates its own evidence low, or every trial is small or a pilot.</li>
       </ul>
-      <p class="fine">The How sure line says what that evidence shows about the claim itself. Strong evidence of a small effect is not strong evidence for a cure.</p>
+      <p class="fine">The How sure line says whether the studies reviewed support the claim itself, then how sure or what kind of study it rests on. A strong design that finds a small effect is not support for a cure.</p>
       <p class="fine"><a href="/method">The full method, and what Evident cannot do</a></p>
       <p class="fine">Not medical advice. The model can misread an abstract, and PubMed doesn't index everything. Read the studies. Talk to a clinician about your own health.</p>
       <div class="two sheet-actions">

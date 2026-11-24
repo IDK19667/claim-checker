@@ -561,6 +561,8 @@ function researchHtml(data) {
   }
   const ev = String(data.evidence_line || "").replace(/^\.+|\.+$/g, "");
   h += `<h3>How sure, and why</h3><p class="evline">${escapeHtml(data.evidence_line ? ev + "." : confidenceLine(data))}</p>`;
+  // Brief E: what the studies found instead, for an absolute claim (evidence.effect_statement).
+  if (data.effect_line) h += `<p class="evline effect-line">${escapeHtml(String(data.effect_line).replace(/\.+$/, ""))}.</p>`;
   if (bv && bv.strength) h += p("strength", bv.strength);
   if (bv && bv.unknowns) h += p("unknowns", bv.unknowns);
   if (bv && bv.concluded.length) {

@@ -1,0 +1,251 @@
+{
+ "claim": "Apple cider vinegar cure diabetes",
+ "search_query_used": "(apple cider vinegar OR cider vinegar) AND (diabetes mellitus OR diabetes OR blood glucose OR blood sugar OR glycemic control)",
+ "verdict": "false",
+ "tldr": "Apple cider vinegar can lower blood sugar a bit, but it does not cure diabetes.",
+ "explanation": "Pooled reviews (meta-analyses) of randomized trials show apple cider vinegar reduces fasting blood sugar and HbA1c in people with diabetes, but it does not cure the condition (Studies 1, 2, 3). Fasting blood sugar dropped by about 22 mg per dL in patients (Study 2).",
+ "still_open": "Long term trials are needed to see if apple cider vinegar can maintain these glycemic improvements over years.",
+ "breakdown": {
+  "parts": [
+   {
+    "part": "Apple cider vinegar cure diabetes",
+    "assessment": "Trials show it improves blood sugar indices, but it does not cure diabetes (Studies 1, 2, 3).",
+    "studies": [
+     1,
+     2,
+     3
+    ]
+   }
+  ],
+  "evidence": [
+   "A systematic review found that daily apple cider vinegar intake significantly reduced fasting blood sugar and HbA1c (Study 2).",
+   "Another trial of 30 ml per day for 8 weeks showed significant drops in hemoglobin A1c in diabetic patients (Study 3).",
+   "Fasting blood sugar decreased by about 22 mg per dL in patients (Study 2).",
+   "The pooled trials included 789 people across 10 randomized controlled trials evaluating adults with type 2 diabetes or overweight (Study 1).",
+   "Animal studies also showed improved lipid profiles and antioxidant enzyme activities in diabetic rats (Studies 5, 6)."
+  ],
+  "effect_size": "Fasting blood sugar fell by about 22 mg per dL (Study 2).",
+  "strength": "Systematic reviews and randomized controlled trials in people provide reliable evidence that apple cider vinegar improves blood sugar control without curing diabetes (Studies 1, 2, 3).",
+  "applies_to": "Adults with type 2 diabetes or overweight who consumed apple cider vinegar for at least 4 weeks (Studies 1, 2, 3).",
+  "not_applies_to": "",
+  "unknowns": "It remains unknown if apple cider vinegar provides long term diabetes remission or lowers the risk of diabetes onset in healthy groups (Studies 1, 2).",
+  "effect": null,
+  "rests_on": 4,
+  "grade": 11.5,
+  "populations": [
+   "people with diabetes"
+  ],
+  "says": [
+   "Fasting blood sugar dropped by about 22 mg per dL in patients (Study 2).",
+   "Fasting blood sugar fell by about 22 mg per dL (Study 2).",
+   "Who was studied: adults with type 2 diabetes or overweight who consumed apple cider vinegar for at least 4 weeks (Studies 1, 2, 3).",
+   "Apple cider vinegar can slow down stomach emptying in people with type 1 diabetes and gastroparesis (Study 8)."
+  ],
+  "concluded": [
+   {
+    "n": 1,
+    "said": "Overall, this meta-analysis suggests that ACV supplementation may be a promising and accessible adjunctive strategy for short-term weight management in adults with excess body weight or metabolic complications."
+   },
+   {
+    "n": 2,
+    "said": "ACV had positive effects on FBS and HbA1c in T2DM patients."
+   },
+   {
+    "n": 3,
+    "said": "Daily consumption of ACV may have beneficial effects in controlling blood glucose indices and lipid profile in patients with type 2 diabetes."
+   },
+   {
+    "n": 8,
+    "said": "This study shows that vinegar affects insulin-dependent diabetes mellitus patients with diabetic gastroparesis by reducing the gastric emptying rate even further, and this might be a disadvantage regarding to their glycaemic control."
+   }
+  ],
+  "contents": "The claim part by part, each study's own conclusion, how big the effect is and who it applies to."
+ },
+ "studies": [
+  {
+   "pmid": "41010525",
+   "title": "Effect of Apple Cider Vinegar Intake on Body Composition in Humans with Type 2 Diabetes and/or Overweight: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+   "journal": "Nutrients",
+   "year": "2025",
+   "authors": [
+    "Alberto Castagna",
+    "Yvelise Ferro",
+    "Francesca Rita Noto",
+    "Rossella Bruno",
+    "Analucia Aragao Guimaraes",
+    "Carmelo Pujia",
+    "Elisa Mazza",
+    "Samantha Maurotti",
+    "Tiziana Montalcini",
+    "Arturo Pujia"
+   ],
+   "publication_types": [
+    "Journal Article",
+    "Systematic Review",
+    "Meta-Analysis"
+   ],
+   "abstract": "Background: Apple cider vinegar (ACV) is a naturally fermented beverage with potential metabolic health benefits; however, its effects on weight loss remain controversial. This systematic review and meta-analysis of randomized controlled trials (RCTs) was conducted to assess the effect of ACV on anthropometric measurements in adults. Methods: We performed a systematic search of PubMed, Web of Science, Scopus, and CENTRAL up to March 2025 for randomized controlled trials (RCTs) in adults (\u226518 years) evaluating the effects of ACV for \u22654 weeks on body composition parameters. Primary outcomes included changes in body weight, BMI, waist circumference, and other anthropometric measures. Risk of bias was assessed using the Revised Cochrane Risk-of-bias tool. Results: Out of 2961 reports screened, 10 RCTs comprising a total of 789 participants were eligible for inclusion in this meta-analysis. The pooled results using a random-effects model showed that daily ACV intake significantly reduced body weight [SMD: -0.39; 95% CI: -0.63, -0.15; p = 0.001; I2 = 62%], BMI [SMD: -0.65; 95% CI: -1.05, -0.26; p = 0.001; I2 = 83%], and WC [SMD: -0.34; 95% CI: -0.67, -0.02; p = 0.04; I2 = 61%]. However, no significant effects of ACV were observed on the other body composition parameters analyzed. Sensitivity analyses excluding high-risk-of-bias studies confirmed the robustness of ACV's beneficial effects on body weight and BMI. Subgroup analyses suggested that ACV consumption significantly improved anthropometric parameters when administered for up to 12 weeks, at a dose of 30 mL/day, and in adults who were overweight, obese, or had type 2 diabetes. Conclusions: Overall, this meta-analysis suggests that ACV supplementation may be a promising and accessible adjunctive strategy for short-term weight management in adults with excess body weight or metabolic complications.",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/41010525/",
+   "cited_in_verdict": true,
+   "off_topic": null,
+   "background": false
+  },
+  {
+   "pmid": "39949546",
+   "title": "Effects of apple cider vinegar on glycemic control and insulin sensitivity in patients with type 2 diabetes: A GRADE-assessed systematic review and dose-response meta-analysis of controlled clinical trials.",
+   "journal": "Frontiers in nutrition",
+   "year": "2025",
+   "authors": [
+    "Donya Arjmandfard",
+    "Mehrdad Behzadi",
+    "Zahra Sohrabi",
+    "Mohsen Mohammadi Sartang"
+   ],
+   "publication_types": [
+    "Journal Article",
+    "Systematic Review"
+   ],
+   "abstract": "BACKGROUND AND AIMS: Diabetes mellitus (DM) is a multifactorial metabolic disorder that affects the body's ability to regulate blood sugar levels. Apple cider vinegar (ACV) could possibly improve diabetes; nevertheless, evidences provide conflicting results. This study aimed to evaluate the effects of ACV on glycemic profile in type 2 diabetes patients (T2DM) in controlled trials (CTs) by systematically reviewing and dose-response meta-analysis.\nMETHODS: The Scopus, PubMed, and Web of Science databases were searched until November 2024 according to a systematic approach. All CTs investigating ACV's effects on glycemic factors were included. We used a random-effects model to calculate WMDs and 95% confidence intervals (CIs). The present study assessed publication bias, sensitivity analysis, meta-regression, and heterogeneity based on standard methods. We assessed the bias risk of the included studies using Cochrane quality assessments and used GRADE (Grading of Recommendations Assessment, Development, and Evaluation) to calculate evidence certainty. We registered the study protocol at Prospero (no. CRD42023457493).\nRESULTS: Overall, we included seven studies in this meta-analysis. ACV significantly reduced fasting blood sugar (FBS) (WMD: -21.929\u202fmg/dL, 95% CI: -29.19, -14.67, p\u202f<\u202f0.001) and HbA1c (WMD: -1.53, 95% CI: -2.65, -0.41, p\u202f=\u202f0.008) and increased insulin (WMD: 2.059 \u03bcu/ml, 95% CI: 0.26, 3.86, p\u202f=\u202f0.025), while it did not affect hemostatic model assessment for insulin resistance (HOMA-IR). We observed linear and non-linear associations between ACV consumption and FBS levels (p\u202f<\u202f0.001). Each 1\u202fmL/day increase in ACV consumption was associated with a-1.255\u202fmg/dL reduction in FBS. Moreover, greater effects on FBS were in dosages >10.\nCONCLUSION: ACV had positive effects on FBS and HbA1c in T2DM patients.\nSYSTEMATIC REVIEW REGISTRATION: The study protocol was registered at Prospero (no. CRD42023457493).",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/39949546/",
+   "cited_in_verdict": true,
+   "off_topic": null,
+   "background": false
+  },
+  {
+   "pmid": "38028980",
+   "title": "The improvement effect of apple cider vinegar as a functional food on anthropometric indices, blood glucose and lipid profile in diabetic patients: a randomized controlled clinical trial.",
+   "journal": "Frontiers in clinical diabetes and healthcare",
+   "year": "2023",
+   "authors": [
+    "Sima Jafarirad",
+    "Mohammad-Reza Elahi",
+    "Anahita Mansoori",
+    "Abdollah Khanzadeh",
+    "Mohammad-Hossein Haghighizadeh"
+   ],
+   "publication_types": [
+    "Journal Article"
+   ],
+   "abstract": "BACKGROUND: Numerous medical costs are spent each year on treating and preventing the progression of diabetes. The positive effect of apple cider vinegar (ACV) has been shown on post-prandial hyperglycemia. This study aimed to evaluate the effects of prolonged consumption of ACV on blood glucose indices and lipid profile in patients with type 2 diabetes.\nMETHODS: This study was a randomized clinical trial and the participants were adults with type 2 diabetes. Participants were divided into two groups: ACV and control. The ACV group was treated with 30\u00a0ml of ACV per day. Both the intervention and control groups received the same recommendation for a healthy diet. Before and after eight weeks, fasting blood glucose, insulin, hemoglobin A1C, insulin resistance, total cholesterol (Chol), low-density lipoprotein (LDL), high-density lipoprotein (HDL) and triglyceride were measured.\nRESULTS: Fasting blood glucose decreased after intervention in both groups, which was only significant in the ACV group (p = 0.01). There was a significant difference in hemoglobin A1C levels between the two groups (p < 0.001) after eight weeks. LDL was decreased in the ACV group (p < 0.001). Total Chol, LDL/HDL and Chol/HDL ratio decreased after the intervention period in the ACV group compared to the control group (p = 0.003, p = 0.001 and p = 0.001, respectively).\nCONCLUSION: Daily consumption of ACV may have beneficial effects in controlling blood glucose indices and lipid profile in patients with type 2 diabetes.\nCLINICAL TRIAL REGISTRATION: http://www.irct.ir, identifier IRCT20140107016123N13.",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/38028980/",
+   "cited_in_verdict": true,
+   "off_topic": null,
+   "background": false
+  },
+  {
+   "pmid": "38966098",
+   "title": "Apple cider vinegar for weight management in Lebanese adolescents and young adults with overweight and obesity: a randomised, double-blind, placebo-controlled study.",
+   "journal": "BMJ nutrition, prevention & health",
+   "year": "2024",
+   "authors": [
+    "Rony Abou-Khalil",
+    "Jeanne Andary",
+    "Elissar El-Hayek"
+   ],
+   "publication_types": [
+    "Journal Article",
+    "Retracted Publication"
+   ],
+   "abstract": "BACKGROUND AND AIMS: Obesity and overweight have become significant health concerns worldwide, leading to an increased interest in finding natural remedies for weight reduction. One such remedy that has gained popularity is apple cider vinegar (ACV).\nOBJECTIVE: To investigate the effects of ACV consumption on weight, blood glucose, triglyceride and cholesterol levels in a sample of the Lebanese population.\nMATERIALS AND METHODS: 120 overweight and obese individuals were recruited. Participants were randomly assigned to either an intervention group receiving 5, 10 or 15\u2009mL of ACV or a control group receiving a placebo (group 4) over a 12-week period. Measurements of anthropometric parameters, fasting blood glucose, triglyceride and cholesterol levels were taken at weeks 0, 4, 8 and 12.\nRESULTS: Our findings showed that daily consumption of the three doses of ACV for a duration of between 4 and 12 weeks is associated with significant reductions in anthropometric variables (weight, body mass index, waist/hip circumferences and body fat ratio), blood glucose, triglyceride and cholesterol levels. No significant risk factors were observed during the 12 weeks of ACV intake.\nCONCLUSION: Consumption of ACV in people with overweight and obesity led to an improvement in the anthropometric and metabolic parameters. ACV could be a promising antiobesity supplement that does not produce any side effects.",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/38966098/",
+   "cited_in_verdict": false,
+   "off_topic": null,
+   "background": true
+  },
+  {
+   "pmid": "19630216",
+   "title": "Apple cider vinegar attenuates lipid profile in normal and diabetic rats.",
+   "journal": "Pakistan journal of biological sciences : PJBS",
+   "year": "2008",
+   "authors": [
+    "F Shishehbor",
+    "A Mansoori",
+    "A R Sarkaki",
+    "M T Jalali",
+    "S M Latifi"
+   ],
+   "publication_types": [
+    "Journal Article",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "abstract": "In this study, the effect of apple cider vinegar on Fasting Blood Glucose (FBG), glycated haemoglobin (HbA1c) and lipid profile in normal and diabetic rats was investigated. Diabetes was induced in male Wistar rats (300+/-30 g) by the intraperitoneal injection of streptozotocin (60 mg kg(-1) of body weight). Both normal and diabetic animals were fed with standard animal food containing apple cider vinegar (6% w/w) for 4 weeks. Fasting blood glucose did not change, while HbA1c significantly decreased by apple cider vinegar in diabetic group (p<0.05). In normal rats fed with vinegar, significant reduction of low density lipoprotein-cholesterol (LDL-c) (p<0.005) and significant increase of high density lipoprotein-cholesterol (HDL-c) levels (p<0.005) were observed. Apple cider vinegar also reduced serum triglyceride (TG) levels (p<0.005) and increased HDL-c (p<0.005) in diabetic animals. These results indicate that apple cider vinegar improved the serum lipid profile in normal and diabetic rats by decreasing serum TG, LDL-c and increasing serum HDL-c and may be of great value in managing the diabetic complications.",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/19630216/",
+   "cited_in_verdict": false,
+   "off_topic": null,
+   "background": true
+  },
+  {
+   "pmid": "31140380",
+   "title": "Antidiabetic and Antioxidant Effects of Apple Cider Vinegar on Normal and Streptozotocin-Induced Diabetic Rats.",
+   "journal": "International journal for vitamin and nutrition research. Internationale Zeitschrift fur Vitamin- und Ernahrungsforschung. Journal international de vitaminologie et de nutrition",
+   "year": "2018",
+   "authors": [
+    "Ben Hmad Halima",
+    "Khlifi Sarra",
+    "Ben Jemaa Houda",
+    "Gara Sonia",
+    "Aouidet Abdallah"
+   ],
+   "publication_types": [
+    "Journal Article"
+   ],
+   "abstract": "Diabetes mellitus (DM) is a globally growing health problem and one of the most prevalent endocrine disorders worldwide. Chronic hyperglycemia status favors the manifestation of oxidative stress by increasing the production of reactive oxygen species and/or by reducing the antioxidant defense system activity. In this study, the beneficial effects of apple cider vinegar (ACV) supplementation on blood glucose level, hepatic and renal toxicity and antioxidant enzyme activities in normal and diabetic rats were investigated. Four groups (8 animals/group) of male Wistar rats were used. The animals were fasted overnight and DM was induced by an intraperitoneal injection of freshly prepared streptozotocin (STZ). Control rats were injected with citrate buffer only. ACV was administrated orally for 4 weeks. Our findings indicated that ACV increased the activity of antioxidant enzymes (superoxide dismutase (p < 0.001), catalase and glutathione peroxidase) as well as thiol concentration (p < 0.05). It also reduced lipid peroxidation levels (TBARS) and the indices of toxicity in liver and kidneys, by significantly decreasing aspartate and lactate transaminase (AST & ALT) activity, total and direct bilirubin (p < 0.001), urea (p < 0.001) and creatinine (p < 0.001) levels. Moreover, the plasma concentration of magnesium, calcium (p < 0.001) and copper increased after ACV administration. Iron levels however decreased. The concentration of vitamin E, an important antioxidant in vivo, was raised. In conclusion, the findings show that ACV possesses significant antihyperglycemic and antioxidant effects in an experimental model of DM, by preventing diabetic complications in liver and kidneys.",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/31140380/",
+   "cited_in_verdict": false,
+   "off_topic": null,
+   "background": true
+  },
+  {
+   "pmid": "38777948",
+   "title": "Synergistic Amelioration of Letrozole-induced Polycystic Ovary Syndrome in Rats: A Therapeutic Approach with Apple Cider Vinegar and Metformin Combination.",
+   "journal": "Reproductive sciences (Thousand Oaks, Calif.)",
+   "year": "2024",
+   "authors": [
+    "Ravi Chandra Sekhara Reddy Danduga",
+    "Aarathi Shalom Kurapati",
+    "Roohi Anju Shaik",
+    "Phani Kumar Kola",
+    "Sathish Kumar Konidala",
+    "Hema Bharathi Varada"
+   ],
+   "publication_types": [
+    "Journal Article"
+   ],
+   "abstract": "The present study was conducted to evaluate the combination effect of apple cider vinegar (ACV) and metformin against letrozole-induced polycystic ovary syndrome (PCOS).\u00a0Female Wistar rats were administered letrozole (1\u00a0mg/kg/day, p.o) for 21 days, except for the control group of animals. On the 22nd day, PCOS-induced animals were segregated into 4 groups and administered with CMC, ACV, metformin, and a combination of ACV and metformin, respectively. The treatments were continued for 15 days, and on the 36th day, all the animals were sacrificed for biochemical (blood glucose, lipid profile), hormonal (sex hormones and adiponectin), and pro-inflammatory mediator estimations in blood samples. The ovarian tissue samples were used for oxidative stress parameters and histological alterations.\u00a0The PCOS control animals showed a significant alteration in the estrous cycle. The administration of letrozole resulted in the alteration of hormonal balance and elevation of body weights, glycemic state, lipid profile, pro-inflammatory mediators in serum, and oxidative stress in ovarian samples. Individual treatment groups and combination treatment groups reversed the letrozole-induced alterations in PCOS animals, and more promising results were observed with combination therapy than with individual treatment groups. Further, the therapeutic potential of the combination treatment group was also confirmed by the histological observations in the ovarian samples.\u00a0The study showed that the combination of ACV and metformin significantly alleviated letrozole-induced PCOS complications in rats. This might have been achieved by mitigating the hormonal imbalance, pro-inflammatory, hyperglycemic, and hyperlipidemic states in serum, and oxidative stress in the ovary samples.",
+   "data_banks": null,
+   "url": "https://pubmed.ncbi.nlm.nih.gov/38777948/",
+   "cited_in_verdict": false,
+   "off_topic": "tests something other than what this claim is about",
+   "background": false
+  },
+  {
+   "pmid": "18093343",
+   "title": "Effect of apple cider vinegar on delayed gastric emptying in patients with type 1 diabetes mellitus: a pilot study.",
+   "journal": "BMC gastroenterology",
+   "year": "2007",
+   "authors": [
+    "Joanna Hlebowicz",
+    "Gassan Darwiche",
+    "Ola Bj\u00f6rgell",
+    "Lars-Olof Alm\u00e9r"
+   ],
+   "publication_types": [
+    "Journal Article",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "abstract": "BACKGROUND: Previous studies on healthy people show that vinegar delays gastric emptying and lowers postprandial blood glucose and insulin levels. The aim of this study was to investigate the effect of apple cider vinegar on delayed gastric emptying rate on diabetes mellitus patients.\nMETHODS: Ten patients with type 1 diabetes and diabetic gastroparesis, including one patient who had undergone vagotomy, were included and completed the investigator blinded crossover trial. The gastric emptying rate (GER) was measured using standardized real-time ultrasonography. The GER was calculated as the percentage change in the antral cross-sectional area 15 and 90 minutes after ingestion of 300 g rice pudding and 200 ml water (GER1), or 300 g rice pudding and 200 ml water with 30 ml apple cider vinegar (GER2). The subjects drank 200 ml water daily before breakfast one week before the measurement of GER1. The same subjects drank 200 ml water with 30 ml vinegar daily before breakfast for two weeks before the measurement of GER2.\nRESULTS: The median values of GER1 and GER2 were 27% and 17%, respectively. The effect of vinegar on the rate of gastric emptying was statistically significant (p < 0.05).\nCONCLUSION: This study shows that vinegar affects insulin-dependent diabetes mellitus patients with diabetic gastroparesis by reducing the gastric emptying rate even further, and this might be a disadvantage regarding to their glycaemic control.\nTRIAL REGISTRATION NUMBER: ISRCTN33841495.",
+   "data_banks": "ISRCTN",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/18093343/",
+   "cited_in_verdict": true,
+   "off_topic": null,
+   "background": false
+  }
+ ],
+ "_note": "The live answer for 'Apple cider vinegar cure diabetes' (gold10 reg_base recording), kept for the Brief E tests. Study 1 (41010525) cites study 4 (38966098), which was retracted."
+}
