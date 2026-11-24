@@ -3,52 +3,49 @@ version: alpha
 name: Evident
 description: One lamp-lit desk is the whole front page. A claim is typed into the dark beside a desk under a lamp; the answer arrives as a paper card on the desk, and the reasoning waits below it one stop at a time. The pages beside it keep a night masthead over the text by day. Three faces, one accent, and nothing ever coloured by what the verdict was.
 colors:
-  primary: "#0b0d0c"
+  primary: "#0d0c0b"
   secondary: "#efe6d2"
-  tertiary: "#9fc3b0"
-  desk-night: "#0b0d0c"
-  desk-deep: "#0f1211"
-  desk-deep-2: "#181c1a"
-  desk-line: "#2a302d"
-  desk-edge: "#3a423e"
-  desk-edge-2: "#3c4440"
-  desk-edge-3: "#59625d"
-  desk-quote: "#4a534e"
-  desk-ref: "#4f6a5d"
-  desk-on: "#eceee9"
-  desk-on-2: "#a9b0ab"
-  desk-on-3: "#8f9792"
+  tertiary: "#f0ede9"
+  desk-night: "#0d0c0b"
+  desk-deep: "#12110f"
+  desk-deep-2: "#1c1a19"
+  desk-line: "#302f2c"
+  desk-edge: "#42403d"
+  desk-edge-2: "#44423f"
+  desk-edge-3: "#62605d"
+  desk-quote: "#53514e"
+  desk-ref: "#666461"
+  desk-on: "#f0ede9"
+  desk-on-2: "#b1aeaa"
+  desk-on-3: "#979591"
   desk-white: "#ffffff"
-  desk-sage: "#9fc3b0"
-  desk-paper: "#f1f2ee"
+  desk-paper: "#f4f2ef"
   desk-card: "#efe6d2"
-  desk-ink: "#121514"
-  desk-ink-2: "#434a46"
-  desk-card-label: "#3a403c"
-  desk-card-ink: "#222624"
-  desk-card-verdict: "#0f1110"
-  desk-panel: "#0c0e0d"
-  desk-well: "rgba(15, 18, 17, 0.72)"
-  desk-scrim: "rgba(8, 10, 9, 0.8)"
-  desk-scrim-0: "rgba(8, 10, 9, 0)"
-  desk-focus: "#9fc3b0"
-  deep: "#0f1211"
-  deep-2: "#181c1a"
-  deep-line: "#2a302d"
-  on-deep: "#eceee9"
-  on-deep-2: "#9ea6a1"
-  on-deep-3: "#7d8580"
-  paper: "#f1f2ee"
-  panel: "#fafaf8"
-  ink: "#121514"
-  ink-2: "#434a46"
-  ink-3: "#5d6560"
-  rule: "#d9dcd5"
-  rule-2: "#b9bfb7"
-  green: "#2c5848"
-  sage: "#9fc3b0"
-  tint: "#d4e4da"
-  focus: "#2c5848"
+  desk-ink: "#151412"
+  desk-ink-2: "#4a4845"
+  desk-card-label: "#403e3b"
+  desk-card-ink: "#262522"
+  desk-card-verdict: "#12100f"
+  desk-panel: "#0e0d0c"
+  desk-well: "rgba(18, 17, 15, 0.72)"
+  desk-scrim: "rgba(10, 9, 8, 0.8)"
+  desk-scrim-0: "rgba(10, 9, 8, 0)"
+  desk-focus: "#f0ede9"
+  deep: "#12110f"
+  deep-2: "#1c1a19"
+  deep-line: "#302f2c"
+  on-deep: "#f0ede9"
+  on-deep-2: "#a6a4a0"
+  on-deep-3: "#85837f"
+  paper: "#f4f2ef"
+  panel: "#fbfaf8"
+  ink: "#151412"
+  ink-2: "#4a4845"
+  ink-3: "#65625f"
+  rule: "#dddad7"
+  rule-2: "#bfbcb9"
+  tint: "#e6dcc6"
+  focus: "#151412"
   c-strong: "#35594c"
   c-human: "#3a4e6b"
   c-lab: "#5a4760"
@@ -309,7 +306,7 @@ components:
     backgroundColor: "{colors.desk-ref}"
   desk-link:
     backgroundColor: "{colors.desk-night}"
-    textColor: "{colors.desk-sage}"
+    textColor: "{colors.desk-on}"
   desk-focus-ring:
     backgroundColor: "{colors.desk-focus}"
   desk-button:
@@ -368,7 +365,7 @@ components:
     backgroundColor: "{colors.deep-line}"
   page-night-focus:
     backgroundColor: "{colors.deep}"
-    textColor: "{colors.sage}"
+    textColor: "{colors.on-deep}"
   page-day:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
@@ -389,7 +386,7 @@ components:
     backgroundColor: "{colors.rule-2}"
   page-link:
     backgroundColor: "{colors.paper}"
-    textColor: "{colors.green}"
+    textColor: "{colors.ink}"
   page-focus-ring:
     backgroundColor: "{colors.focus}"
   page-selection:
@@ -445,35 +442,39 @@ scripts off a result reads top to bottom from the server's HTML.
 
 The desk's colours are the approved sample's, under desk names in
 `desk.css` (`--desk-*`, with short aliases that mean those values on the
-front only). No other hue may appear on the front.
+front only). No other hue may appear on the front: the greys are neutral
+with the faintest lean to the lamp (hue 75, chroma 0.008 or less), and
+the only colour in the room is the lamp's light, the wood and the paper.
 
 | Role | Token | Hex | Used for |
 |---|---|---|---|
-| Ground | `--desk-night` | `#0b0d0c` | The room beyond the lamp; the page |
-| Solid ground | `--desk-deep` | `#0f1211` | Words over the desk, the sheets, the menu |
-| Strip | `--desk-deep-2` | `#181c1a` | The top strip and the bar |
-| Rule | `--desk-line` | `#2a302d` | Hairlines on the night |
-| Edges | `--desk-edge`, `-2`, `-3` | `#3a423e`, `#3c4440`, `#59625d` | Outlines of bar controls, fields, ghost buttons, rail dots |
-| Quote rule | `--desk-quote` | `#4a534e` | The rule beside a quoted conclusion |
-| Ref box | `--desk-ref` | `#4f6a5d` | The box round a study number in the prose |
-| Words | `--desk-on`, `-2`, `-3` | `#eceee9`, `#a9b0ab`, `#8f9792` | Text on the night, quieter text, the rail's names |
+| Ground | `--desk-night` | `#0d0c0b` | The room beyond the lamp; the page |
+| Solid ground | `--desk-deep` | `#12110f` | Words over the desk, the sheets, the menu |
+| Strip | `--desk-deep-2` | `#1c1a19` | The top strip and the bar |
+| Rule | `--desk-line` | `#302f2c` | Hairlines on the night |
+| Edges | `--desk-edge`, `-2`, `-3` | `#42403d`, `#44423f`, `#62605d` | Outlines of bar controls, fields, ghost buttons, rail dots, the panel's top rule |
+| Quote rule | `--desk-quote` | `#53514e` | The rule beside a quoted conclusion |
+| Ref box | `--desk-ref` | `#666461` | The box round a study number in the prose |
+| Words | `--desk-on`, `-2`, `-3` | `#f0ede9`, `#b1aeaa`, `#979591` | Text and links on the night (a link keeps its underline), quieter text and small labels, the rail's names |
 | White | `--desk-white` | `#ffffff` | The wordmark, a lifted study's title |
-| Accent | `--desk-sage` | `#9fc3b0` | Links, the live dot, a stop number, focus |
-| Light shape | `--desk-paper` | `#f1f2ee` | The button to press, Next |
+| Focus | `--desk-focus` | `--desk-on` | The focus ring, drawn outside the control (inside the bar's controls, in `--deep` on paper) |
+| Light shape | `--desk-paper` | `#f4f2ef` | The button to press, Next |
 | Card | `--desk-card` | `#efe6d2` | The answer card |
-| Card words | `--desk-ink`, `-ink-2`, `-card-label`, `-card-ink`, `-card-verdict` | `#121514` to `#0f1110` | Words on the card and on the light shape |
-| Panel | `--desk-panel` | `#0c0e0d` | The reading panels |
-| Well | `--desk-well` | `rgba(15, 18, 17, 0.72)` | The claim box, a well in the night |
-| Scrim | `--desk-scrim`, `--desk-scrim-0` | `rgba(8, 10, 9, 0.8)` and clear | The two scrims behind words over the desk |
+| Card words | `--desk-ink`, `-ink-2`, `-card-label`, `-card-ink`, `-card-verdict` | `#151412` to `#12100f` | Words on the card and on the light shape |
+| Panel | `--desk-panel` | `#0e0d0c` | The reading panels |
+| Well | `--desk-well` | `rgba(18, 17, 15, 0.72)` | The claim box, a well in the night |
+| Scrim | `--desk-scrim`, `--desk-scrim-0` | `rgba(10, 9, 8, 0.8)` and clear | The two scrims behind words over the desk |
 
 The other pages keep `style.css`'s own tokens: night (`--deep`,
 `--deep-2`, `--deep-line`, `--on-deep` to `--on-deep-3`), day
-(`--paper`, `--panel`, `--ink` to `--ink-3`, `--rule`, `--rule-2`), and
-one accent, bottle green `--green` by day for links and focus, with sage
-for links on the night masthead.
+(`--paper`, `--panel`, `--ink` to `--ink-3`, `--rule`, `--rule-2`), a
+warm paper `--tint` for a selection, and `--focus` (ink by day, the words'
+colour on the night masthead).
 
-**One accent, and it means "you can act on this".** Sage on the night,
-green by day. It never signals safe, good or true.
+**No accent colour.** A link is the words' own colour with an underline;
+what can be pressed looks pressable by its shape (an underline, an outline,
+a filled paper button), never by colour alone. The pale mint that used to
+mark links and focus on the night read as neon on near-black and is gone.
 
 **No verdict is ever coloured.** "Likely true", "Likely false", "It's
 complicated" and "Not enough evidence" are set identically, on the same
@@ -493,19 +494,17 @@ The roles on the pages beside the desk (`style.css`):
 
 | Role | Token | Hex | Used for |
 |---|---|---|---|
-| Background | `--paper` | `#f1f2ee` | The day ground every long read sits on |
-| Surface | `--panel` | `#fafaf8` | Raised day surfaces |
-| Text | `--ink` | `#121514` | Headings and body copy |
-| Secondary text | `--ink-2` | `#434a46` | Explanations, helper text |
-| Muted text | `--ink-3` | `#5d6560` | Metadata and mono labels |
-| Action | `--green` | `#2c5848` | Links and the focus ring by day |
-| Selection | `--tint` | `#d4e4da` | Selected text |
-| Dark surface | `--deep` | `#0f1211` | The masthead and the footer |
+| Background | `--paper` | `#f4f2ef` | The day ground every long read sits on |
+| Surface | `--panel` | `#fbfaf8` | Raised day surfaces |
+| Text | `--ink` | `#151412` | Headings and body copy |
+| Secondary text | `--ink-2` | `#4a4845` | Explanations, helper text |
+| Muted text | `--ink-3` | `#65625f` | Metadata and mono labels |
+| Focus | `--focus` | `--ink` | The focus ring by day |
+| Selection | `--tint` | `#e6dcc6` | Selected text |
+| Dark surface | `--deep` | `#12110f` | The masthead and the footer |
 
-**Green never signals "safe", "good" or "true".** Green, like sage on
-the desk, means "you can act on this" and nothing about the evidence.
-No verdict, confidence or study count may borrow it to look
-reassuring.
+**No colour signals "safe", "good" or "true".** No verdict, confidence
+or study count may borrow a colour to look reassuring.
 
 ## Typography
 
@@ -598,7 +597,7 @@ Every corner on the front is 3px: buttons, fields, panels, the card,
 the sheets' top corners. The other pages keep 3px controls and 4px
 panels. No pills, no circles but the rail's dots and the live dot,
 no icon circles, no badges, no card grids. Panels are a solid ground
-with a 2px sage rule on top; groups are made with rules and space, not
+with a 2px grey rule on top (`--desk-edge-3`); groups are made with rules and space, not
 boxes.
 
 ## Components
@@ -615,9 +614,9 @@ boxes.
   painted on the paper on the desk and the same words are laid over it as
   real text; in text mode it is a block of the same stock.
 - **The reading log**: Plex Mono 13px in `--desk-on-2`, a short rule
-  before each line, the live line in `--desk-on` with a sage dot, Cancel
+  before each line, the live line in `--desk-on` with a dot of the same colour, Cancel
   as underlined words under it.
-- **Panels**: `--desk-panel`, a sage rule on top, 17px reading text,
+- **Panels**: `--desk-panel`, a grey rule on top, 17px reading text,
   mono section labels over a hairline.
 - **The study rows**: a number in Bricolage, the design in mono, the
   title in 600; pressing one lifts its sheet on the desk.
@@ -669,7 +668,7 @@ visible on every screen.
   `app.js` together, so a result reads with scripts off.
 - Do keep every desk colour in `desk.css`'s `:root` and in this file's
   frontmatter; `scripts/qa.mjs` fails on drift.
-- Don't colour a verdict, add a second accent, or give the cloths any
+- Don't colour a verdict, add an accent colour, or give the cloths any
   meaning but the kind of study.
 - Don't add glow, neon, cyan, shadows on content, blur, glass, gradient
   washes (beyond the two scrims), pills, badges, card grids, icon

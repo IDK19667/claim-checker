@@ -4,6 +4,17 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): No mint, no green cast: the room's only colour is the lamp, the wood and the paper
+
+The owner asked four times for no neon or AI colours; the pale mint
+`#9fc3b0` on near-black (links, labels, focus, dots) was the cause, helped
+by a green cast in every grey. The mint is gone with no new accent, the
+greys keep their lightness at hue 75, the scene's fill lights and pencil
+and the icon lost their mint, blue and purple, and a test holds the
+shipped colour files to hue 40 to 100. Still open: the share image
+(`app.js` CARD) and the link preview (`og.py`) keep the old sage ring and
+the four cloths.
+
 ## 2026-11-23 (q10): The scene warms up before the first press of Next
 
 On a saved answer the first Next in 3D stalled for 2.2 s on the phone

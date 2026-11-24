@@ -7392,9 +7392,10 @@ t("footer: the separators are CSS on the links, not dots in the text, so none ca
   and re.search(r"\.foot-links a::before \{[^}]*content: \"\\00b7\"", _css9) is not None
   and re.search(r"\.foot-links \{[^}]*overflow: hidden", _css9) is not None, _fl[0])
 _design9 = (ROOT / "DESIGN.md").read_text()
-t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
-  "Palette roles" in _design9 and "Green never signals" in _design9
-  and all(h in _design9 for h in ("#f1f2ee", "#fafaf8", "#121514", "#434a46", "#5d6560", "#2c5848", "#d4e4da", "#0f1211")))
+t("DESIGN.md: palette roles are written down and say no colour signals safe or a good verdict",
+  "Palette roles" in _design9 and "No colour signals" in _design9 and "No accent colour" in _design9
+  and all(h in _design9 for h in ("#f4f2ef", "#fbfaf8", "#151412", "#4a4845", "#65625f", "#e6dcc6", "#12110f"))
+  and not any(h in _design9 for h in ("#9fc3b0", "#2c5848", "#d4e4da")))
 _tpl_who = (ROOT / "templates" / "index.html").read_text()
 t("who: with only a 'does not apply' sentence, the heading says so and no empty 'applies to' heading is left",
   "Who this does not apply to" in _tpl_who and '{% if who_yes %}<p class="intro label-2">And who it does not</p>{% endif %}' in _tpl_who
