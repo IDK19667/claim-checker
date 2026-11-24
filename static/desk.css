@@ -440,6 +440,32 @@ html.kbd .bar { visibility: hidden; }
 .early .vcard .t { font-size: 17px; max-width: 31em; }
 .early #cap-answer .inner { background: var(--deep); border-radius: 3px; padding: 18px 18px 20px; }
 
+/* text mode's still of the desk (scripts/make_still.mjs), on the home page only. Hidden everywhere else, and lazy, so
+   the 3D page never fetches it. A phone held upright gets the band the 3D page keeps, with the same rules, so the
+   claim box and the button stay where the 3D page has them; a wide screen gets the lamp in the margin beside the
+   column; between the two (761 to 1199px) the margin is too narrow for it, so no picture. Its edges fade into the
+   ground: no frame. */
+.desk-still { display: none; }
+.desk-still img { display: block; width: 100%; height: 100%; }
+@media (max-width: 760px) and (orientation: portrait) {
+  html.no-gl:not(.checked), html:not(.js):not(.checked) { --lamp-band: clamp(116px, calc(100svh - 478px), 30svh); }
+  html.no-gl:not(.checked) #s1, html:not(.js):not(.checked) #s1 { padding-top: calc(var(--strip) + var(--lamp-band)); }
+  html.no-gl:not(.checked) #s1 .wordmark, html:not(.js):not(.checked) #s1 .wordmark { display: none; }
+  html.no-gl:not(.checked) .desk-still, html:not(.js):not(.checked) .desk-still { display: block; position: absolute; z-index: 0; left: 0; right: 0; top: var(--strip); height: var(--lamp-band); pointer-events: none; }
+  /* contain, not cover: on a short band the whole lamp, its light and the wood stay in, smaller, as desk3d.js fits
+     them; the picture's own box is the drawn picture, so its fades sit on its edges */
+  .desk-still img { width: auto; max-width: 100%; margin: 0 auto; object-fit: contain; -webkit-mask-image: linear-gradient(to right, transparent, var(--deep) 12%, var(--deep) 88%, transparent), linear-gradient(to bottom, var(--deep) 70%, transparent);
+    -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, var(--deep) 12%, var(--deep) 88%, transparent), linear-gradient(to bottom, var(--deep) 70%, transparent); mask-composite: intersect; }
+}
+/* a tall phone (the band at its third of the screen) draws the picture edge to edge, like the 3D band: only its foot fades */
+@media (max-width: 760px) and (orientation: portrait) and (max-aspect-ratio: 37/80) {
+  .desk-still img { width: 100%; -webkit-mask-image: linear-gradient(to bottom, var(--deep) 70%, transparent); mask-image: linear-gradient(to bottom, var(--deep) 70%, transparent); }
+}
+@media (min-width: 1200px) {
+  html.no-gl:not(.checked) .desk-still, html:not(.js):not(.checked) .desk-still { display: block; position: absolute; z-index: 0; top: 0; right: calc(50% + 352px); width: min(300px, calc(50vw - 364px)); aspect-ratio: 1040 / 1769; pointer-events: none; }
+  /* an ellipse touching every side: the lamp and its light are whole in the middle and die away to nothing at the rim */
+  .desk-still img { -webkit-mask-image: radial-gradient(closest-side, var(--deep) 45%, transparent); mask-image: radial-gradient(closest-side, var(--deep) 45%, transparent); }
+}
 /* fallback without WebGL: the same six stops, set on the night ground */
 .no-gl #stage, html:not(.js) #stage { display: none; }
 .no-gl main, html:not(.js) main { pointer-events: auto; }

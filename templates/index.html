@@ -86,6 +86,14 @@
 
 <main id="track">
   <section class="stop" id="s1" data-stop="Claim" aria-labelledby="ask-heading">
+    {%- if not result %}
+    <!-- Text mode's still of our own desk (scripts/make_still.mjs). Shown only when the page draws no desk, so a 3D
+         reader never fetches it: hidden and lazy until then. -->
+    <picture class="desk-still" aria-hidden="true">
+      <source media="(min-width: 761px)" srcset="{{ url_for('static', filename='desk/still-wide.webp') }}" width="1040" height="1769">
+      <img src="{{ url_for('static', filename='desk/still-phone.webp') }}" width="780" height="506" alt="" loading="lazy" decoding="async" fetchpriority="low">
+    </picture>
+    {%- endif %}
     <div class="cap right"><div class="inner">
       <section id="ask" aria-labelledby="ask-heading"{% if result %} hidden{% endif %}>
         <p class="wordmark">Evident</p>

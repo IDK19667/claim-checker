@@ -4,6 +4,39 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-still): Text mode shows a still of our own desk
+
+The owner's speed budget ends with "a still image for weak phones". Text mode (no
+WebGL, Save-Data, 2G, the 3D library refused or failed, scripts off) used to show
+no desk at all. Its home page now shows a still of our own scene, drawn by this
+tree's 3D desk in headless Chromium at the first-screen camera with the page's
+words hidden, and encoded to WebP with Pillow. Two crops, picked by
+`<picture media>` so a reader downloads one:
+
+- `static/desk/still-phone.webp`, the phone's band (390 wide at 2x), at most
+  12,000 bytes. A phone held upright gets the band with the 3D page's own rule
+  (`--lamp-band`), so the claim box and the button sit exactly where the 3D page
+  puts them, 320x568 included. The picture is fitted whole (`object-fit:
+  contain`), so on a short band the lamp's shade, its light and the wood stay
+  in, smaller; on a tall phone it runs edge to edge and only its foot fades.
+- `static/desk/still-wide.webp`, the lamp and its lit wood from the 1280x800
+  view at 2x, at most 20,480 bytes, given room above and below (its own edge
+  rows carried on) so a CSS ellipse mask fades it to nothing on every side. It
+  sits in the margin left of the column from 1200px wide. From 761 to 1199px
+  the margin is too narrow to hold it beside the column, so there is no
+  picture there (the column would have to move, and text mode's layout stays).
+
+Hidden by default and `loading="lazy"`, so the 3D page and result pages never
+fetch it (browser check 26a and 26d); decorative (`alt=""`), fixed size, low
+fetch priority. Masks name the ground token only; no colour, glow or motion is
+added. The service worker does not precache it: like every stamped static
+file it is kept cache-first once a text-mode reader has seen it, so it works
+offline for the readers who use it and costs nothing for the rest.
+
+To make it again after the scene changes: start the fixture server and run
+`node scripts/make_still.mjs http://127.0.0.1:<port>` (it calls
+`scripts/make_still.py` with the byte budgets), then raise `CACHE` in sw.js.
+
 ## 2026-11-24 (q10-rel job 3): No "What this study contributes" label with nothing under it
 
 A row whose study has no contribution and was not set aside used to print the

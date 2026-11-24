@@ -1544,6 +1544,69 @@ for (const [w, h] of [[375, 812], [1280, 800]]) {
   }, { w, h });
 }
 
+// ---- 26. Text mode's still picture of the desk (q10-still) ------------------------------
+// Text mode (no WebGL, Save-Data, scripts off) shows a still of our own desk on the home page: the phone's band
+// above the headline, the lamp in the margin of a wide screen, nothing between (no room). A 3D reader never fetches
+// it, nor does a result page. The claim box and the button stay on the first screen.
+const stillProbe = () => {
+  const box = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
+  const im = document.querySelector(".desk-still img");
+  return { mode: window.__evident ? window.__evident.stats().mode : "noscript", shown: !!im && im.checkVisibility() && im.complete && im.naturalWidth > 0,
+    src: im ? im.currentSrc.split("/").pop().split("?")[0] : "", still: box(".desk-still"), h1: box("#s1 h1"), field: box("#claim-input"), btn: box("#submit-btn"), col: box("#s1 .inner"), vh: innerHeight, vw: innerWidth };
+};
+const stillReqs = (page) => { const seen = []; page.on("request", (r) => { if (/\/static\/desk\/still-/.test(r.url())) seen.push(r.url().split("/").pop().split("?")[0]); }); return seen; };
+const firstScreen = (f) => f.field && f.btn && f.field.t >= 0 && f.btn.b <= f.vh && f.h1 && f.h1.t >= 0;
+for (const [w, h] of [[390, 844], [1440, 900]]) {
+  await test(`26a: a 3D reader never fetches the still, home and result, ${w}x${h}`, async (page) => {
+    const seen = stillReqs(page);
+    await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await page.waitForTimeout(800);
+    const f = await page.evaluate(stillProbe);
+    await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page); await page.waitForTimeout(500);
+    must(f.mode === "3d" && !f.shown, `mode ${f.mode}, still shown ${f.shown}`);
+    must(!seen.length, `fetched ${seen.join()}`);
+  }, { w, h });
+}
+for (const [w, h, file, path] of [[375, 812, "still-phone.webp", "/?nogl"], [390, 844, "still-phone.webp", "save-data"], [320, 568, "still-phone.webp", "/?nogl"], [375, 667, "still-phone.webp", "/?nogl"],
+                                  [1280, 800, "still-wide.webp", "/?nogl"], [1366, 650, "still-wide.webp", "/?nogl"], [1920, 1080, "still-wide.webp", "save-data"]]) {
+  await test(`26b: text mode (${path === "save-data" ? "Save-Data" : "no WebGL"}) shows the still and keeps the claim box on the first screen, ${w}x${h}`, async (page) => {
+    if (path === "save-data") await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "connection", { get: () => ({ saveData: true, effectiveType: "4g", addEventListener() {} }) }));
+    const seen = stillReqs(page);
+    await page.goto(base + (path === "save-data" ? "/" : path), { waitUntil: "load" }); await ready(page);
+    await page.waitForFunction(() => { const i = document.querySelector(".desk-still img"); return i && i.complete && i.naturalWidth > 0; }, null, { timeout: 8000 }).catch(() => {});
+    const f = await page.evaluate(stillProbe);
+    must(f.mode === "text" && f.shown && f.src === file, `mode ${f.mode}, shown ${f.shown}, ${f.src}`);
+    must(firstScreen(f), `claim box ${JSON.stringify(f.field)} or button ${JSON.stringify(f.btn)} off the first screen (${f.vh})`);
+    if (w <= 760) must(f.still.b <= f.h1.t + 1 && f.still.l <= 0 && f.still.r >= f.vw, `the band ${JSON.stringify(f.still)} runs into the headline at ${f.h1.t}`);
+    else must(f.still.r <= f.col.l && f.still.l >= 0, `the lamp ${JSON.stringify(f.still)} is not in the margin left of the column at ${f.col.l}`);
+    must(seen.length === 1 && seen[0] === file, `fetched ${seen.join()}`);
+  }, { w, h });
+}
+await test("26c: between a phone and a wide screen there is no room: no still and no fetch, 1024x768", async (page) => {
+  const seen = stillReqs(page);
+  await page.goto(base + "/?nogl", { waitUntil: "load" }); await ready(page); await page.waitForTimeout(800);
+  const f = await page.evaluate(stillProbe);
+  must(f.mode === "text" && !f.shown && !seen.length && firstScreen(f), `shown ${f.shown}, fetched ${seen.join()}`);
+}, { w: 1024, h: 768 });
+await test("26d: a result in text mode fetches no still, 390x844", async (page) => {
+  const seen = stillReqs(page);
+  await page.goto(`${base}/?nogl&q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page); await page.waitForTimeout(800);
+  must(!seen.length && !(await page.locator(".desk-still").count()), `fetched ${seen.join()}`);
+});
+for (const [w, h, file] of [[375, 812, "still-phone.webp"], [1280, 800, "still-wide.webp"]]) {
+  const name = `26e: with scripts off the home page shows the still, ${w}x${h}`;
+  if (!process.env.UI_ONLY || name.startsWith(process.env.UI_ONLY)) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, javaScriptEnabled: false, serviceWorkers: "block" });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(base + "/", { waitUntil: "load" });
+      await page.waitForFunction(() => { const i = document.querySelector(".desk-still img"); return i && i.complete && i.naturalWidth > 0; }, null, { timeout: 8000 }).catch(() => {});
+      const f = await page.evaluate(stillProbe);
+      must(f.shown && f.src === file, `shown ${f.shown}, ${f.src}`);
+      results.push(true); console.log(`PASS ${name}`);
+    } catch (e) { results.push(false); console.log(`FAIL ${name}\n     ${String(e.message || e).split("\n")[0]}`); } finally { await ctx.close(); }
+  }
+}
+
 await gpuBrowser.close();
 await browser.close();
 const passed = results.filter(Boolean).length;
