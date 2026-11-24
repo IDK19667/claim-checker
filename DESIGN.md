@@ -620,6 +620,8 @@ boxes.
   line above, the type-ahead of saved checks under it.
 - **The button**: the one light shape on the screen, `--desk-paper`
   with `--desk-ink` words, 52px tall. "View evidence" is this shape.
+  Pressed (pointer, Space or Enter) it dims to `--desk-on-2` with the
+  same words: a colour change only, no motion, the focus ring as it is.
   A ghost button is an outline in `--desk-edge-3`; a quiet one is
   underlined words.
 - **The answer card**: card stock (`--desk-card`) with the claim in

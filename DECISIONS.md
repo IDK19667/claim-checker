@@ -4,6 +4,14 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): The primary button has a pressed state, and the check starts a frame later
+
+"Check the research" and "View evidence" dim to the quieter words' grey (`--desk-on-2`, ink words
+stay) while pressed: by pointer and Space through `:active`, by Enter through a `.pressed` class.
+A colour change paints in the press's own frame; the check's first relayout (the page and the
+scene) now starts in the task after that frame, so a wide screen shows the press in under 100 ms
+instead of about 180. No new colour, no motion. This closes the open point in the entry below.
+
 ## 2026-11-24 (q10-rel): End or Home in the claim box only moves the caret
 
 With the caret already at the end, End moved nothing in the box, so the browser passed it to the

@@ -1400,6 +1400,24 @@ for (const [w, h, phone] of [[375, 812, true], [1280, 800, false]]) {
     must(ms <= 100, `the press painted ${ms} ms after it`);
   }, { phone, gpu: true });
 }
+// (g) the pressed state 22f paints: Space and Enter on a primary button dim it to --desk-on-2, the words and the focus
+// ring as they were, and the key coming up ends it.
+await test("22g: a primary button looks pressed under Space and Enter, words and focus ring kept", async (page) => {
+  await page.goto(base + "/?nogl=1", { waitUntil: "load" }); await ready(page);
+  const look = () => page.evaluate(() => { const b = document.getElementById("submit-btn"), c = getComputedStyle(b);
+    return { bg: c.backgroundColor, ink: c.color, ring: [c.outlineStyle, c.outlineColor, c.outlineWidth, c.outlineOffset].join(" "), cls: b.className }; });
+  // Enter first, as synthetic key events (their default would submit); then a real Space held down (its key up
+  // would click, so the press is ended by blurring, which ends a press as focus leaving does)
+  const key = (type, k) => page.evaluate(([type, k]) => document.getElementById("submit-btn").dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true })), [type, k]);
+  await page.focus("#submit-btn"); const a = await look();
+  await key("keydown", "Enter"); const en = await look(); await key("keyup", "Enter"); const off = await look();
+  await page.keyboard.down(" "); const sp = await look();
+  await page.evaluate(() => document.getElementById("submit-btn").blur()); const up = await look(); await page.keyboard.up(" ");
+  const P = "rgb(177, 174, 170)";
+  must(a.bg !== P && sp.bg === P && en.bg === P, `background at rest ${a.bg}, under Space ${sp.bg}, under Enter ${en.bg}`);
+  must(sp.ink === a.ink && en.ink === a.ink && sp.ring === a.ring && en.ring === a.ring, `words ${a.ink} to ${sp.ink}/${en.ink}, ring "${a.ring}" to "${sp.ring}"/"${en.ring}"`);
+  must(off.bg === a.bg && !/pressed/.test(off.cls) && !/pressed/.test(up.cls), `after Enter comes up: ${off.bg}, class "${off.cls}"; after Space and blur, class "${up.cls}"`);
+});
 
 await gpuBrowser.close();
 await browser.close();

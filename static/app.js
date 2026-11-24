@@ -994,7 +994,25 @@ async function check(claim) {
 
 $("cancel-btn")?.addEventListener("click", () => { if (controller) controller.abort(); });
 
-form.addEventListener("submit", (e) => { e.preventDefault(); check(input.value); });
+// A press of "Check the research" first paints the button pressed (a colour change, one cheap frame); the check itself,
+// which relays out the page and the scene, starts in the next task after that frame. Without this the first thing a
+// desktop reader saw came one long frame (about 180 ms) after the press.
+let submitQueued = false;
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (submitQueued) return;
+  const claim = input.value;
+  submitQueued = true; submitBtn.classList.add("pressed");
+  const go = () => { if (!submitQueued) return; submitQueued = false; submitBtn.classList.remove("pressed"); check(claim); };
+  requestAnimationFrame(() => setTimeout(go, 0));
+  setTimeout(go, 150);   // a hidden page runs no frames
+});
+// Enter on a primary button presses it too (the pointer and Space already have :active); Enter and Space both
+// end the press on key up or when focus leaves, except a queued submit, which ends its own.
+const primaryBtn = (el) => el && el.classList && el.classList.contains("btn") && !el.classList.contains("ghost") && !el.classList.contains("quiet");
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && primaryBtn(e.target)) e.target.classList.add("pressed"); });
+const unpress = (e) => { if (primaryBtn(e.target) && !(e.target === submitBtn && submitQueued)) e.target.classList.remove("pressed"); };
+document.addEventListener("keyup", unpress); document.addEventListener("focusout", unpress);
 
 
 // When an on-screen keyboard opens it shrinks the visual viewport. If that
