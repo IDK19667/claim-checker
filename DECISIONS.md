@@ -4,6 +4,15 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10): A jump ends where the screen visibly goes on
+
+At the top of Studies the foot of the screen could fall in the gap between two blocks (320x568 in 3D,
+1280x800 in text mode), so the screen looked finished. Rather than tune a margin per size, a jump by
+the picker, the rail or View evidence now checks where it would end: if the foot would cross no line,
+control or drawn panel, it lands a little further, on the middle of the next line, as long as the
+section's heading stays whole under the strip (else a little less far). The Answer keeps its top. No
+new motion: only where the glide ends. The browser check runs eight sizes in both modes.
+
 ## 2026-11-24 (q10): The short answer is never covered; the Answer's first screen still goes on
 
 On short phones the answer card had been drawn at three quarters of its width so the Studies heading

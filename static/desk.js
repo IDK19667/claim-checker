@@ -360,7 +360,45 @@
     k = Math.max(0, Math.min(LAST, k));
     measure();
     goingTo = k;
-    scrollToY(function () { return anchors[k]; }, done);
+    // where the jump ends: the stop's top, moved by landShift so the screen's foot crosses words, a control or a drawn
+    // panel rather than a gap between blocks. Worked out once per top (a reflow mid-glide gives a new top, and a new shift)
+    var at = -1, off = 0;
+    scrollToY(function () { if (anchors[k] !== at) { at = anchors[k]; off = landShift(k, at); } return at + off; }, done);
+  }
+  // A jump's landing (picker, rail, View evidence) must show that the page goes on: the foot of the screen (the bar's top
+  // edge, or the window's) crosses a line of text, a control or a drawn panel, or the end of the page is in view. When the
+  // stop's top would leave the foot in a gap, the landing moves a little further, to the middle of the next line below the
+  // foot, as long as the stop's heading stays whole under the strip; failing that, a little less far, to the line above.
+  // The Answer is laid out for its first screen (answerFoot) and keeps its top. Page coordinates: nothing in the track is
+  // sticky, and the words over the 3D card (overlay) are not on the page.
+  function landShift(k, y) {
+    if (!STOPS[k] || STOPS[k].name === "Answer" || STOPS[k].name === "Claim") return 0;
+    var max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    if (y >= max - 2) return 0;
+    var bb = barEl && getComputedStyle(barEl).display !== "none" ? barEl.getBoundingClientRect() : null;
+    var sy = window.scrollY, F = y + (bb && bb.height ? bb.top : innerHeight), lines = [], cross = false;
+    var track = byId("track"); if (!track) return 0;
+    var w = document.createTreeWalker(track, NodeFilter.SHOW_TEXT), rg = document.createRange(), t;
+    while ((t = w.nextNode())) {
+      var e = t.parentElement; if (!t.data.trim() || !e || !shown(e) || overlay(e)) continue;
+      rg.selectNodeContents(t); var above = false, under = false;
+      [].forEach.call(rg.getClientRects(), function (q) {
+        if (q.height < 2) return; var top = q.top + sy, bot = q.bottom + sy;
+        lines.push({ top: top, bot: bot });
+        if (top < F - 4 && bot > F) cross = true; if (top < F - 4) above = true; if (bot > F) under = true;
+      });
+      if (above && under) cross = true;
+    }
+    [].forEach.call(track.querySelectorAll("button, a"), function (c) { if (!shown(c)) return; var q = c.getBoundingClientRect(); if (q.height && q.top + sy < F - 1 && q.bottom + sy > F + 1) cross = true; });
+    [].forEach.call(track.querySelectorAll(".stop .inner"), function (c) { if (!shown(c)) return; var q = c.getBoundingClientRect(), bg = getComputedStyle(c).backgroundColor;
+      if (q.top + sy < F - 24 && q.bottom + sy > F + 1 && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") cross = true; });
+    if (cross) return 0;
+    var h = sections[k].querySelector(".eyebrow, h2"), room = h ? h.getBoundingClientRect().top + sy - y - stripH : 0;
+    var next = null, prev = null;
+    lines.forEach(function (q) { if (q.top >= F - 4 && (!next || q.top < next.top)) next = q; if (q.bot <= F && (!prev || q.bot > prev.bot)) prev = q; });
+    if (next) { var d = Math.round((next.top + next.bot) / 2 - F); if (d <= room && y + d <= max) return d; }
+    if (prev) { var u = Math.round((prev.top + prev.bot) / 2 - F); if (y + u >= 0) return u; }
+    return 0;
   }
   // app.js owns the checked state (html.checked); the desk only follows it
   function check() {

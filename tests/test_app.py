@@ -10872,7 +10872,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v123";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v124";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -11786,6 +11786,12 @@ t("NAV N2: layout places how sure after the fold so the bar crosses a line or th
   "fold(); answerFoot(); measure();" in _n2_js and 'capAns.style.marginTop = ""; layoutHook();' in _n2_js)
 t("NAV N2: the saved fixtures hold a claim of about 140 characters with a short answer of three lines or more",
   any(130 <= len(r["claim"]) <= 150 and len(r["tldr"]) >= 140 for r in _R4_ROWS))
+
+# ---- NAV N3: a jump (picker, rail, View evidence) ends where the screen visibly goes on (browser check N2f measures it) ----
+_n3_dj = (ROOT / "static" / "desk.js").read_text()
+t("NAV N3: a jump lands on the stop's top moved by landShift, which crosses the foot with words and keeps the heading whole, and the Answer keeps its top",
+  "off = landShift(k, at); } return at + off;" in _n3_dj and "function landShift(k, y)" in _n3_dj
+  and 'STOPS[k].name === "Answer"' in _n3_dj and "d <= room" in _n3_dj)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

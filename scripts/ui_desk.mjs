@@ -562,12 +562,24 @@ for (const [w, h] of [[375, 812], [1280, 800]]) {
 await test("N2e: View evidence on the Answer goes to Studies", async (page) => {
   await openSaved(page, 375, "3d");
   await page.click("#how-answer"); await page.waitForTimeout(2600);
+  // (brief N3: the landing may sit a little past the stop's top so the foot crosses words; the heading stays whole under the strip)
   const y = await page.evaluate(() => Math.round(scrollY)), top = await secTop(page, "Studies");
-  must(Math.abs(y - top) <= 2 && (await page.textContent("#where-name")) === "Studies", `scrollY ${y}, Studies at ${top}`);
+  const hd = await page.evaluate(() => { const q = document.getElementById("e-read").getBoundingClientRect(); return { t: q.top, b: q.bottom, s: document.getElementById("strip").getBoundingClientRect().bottom, vh: innerHeight }; });
+  must(Math.abs(y - top) <= hd.vh / 3 && hd.t >= hd.s - 1 && hd.b <= hd.vh && (await page.textContent("#where-name")) === "Studies", `scrollY ${y}, Studies at ${top}, heading ${Math.round(hd.t)} under the strip at ${Math.round(hd.s)}`);
 }, { w: 375, h: 812 });
 // N2f and N3: at every place the picker or View evidence lands, the next words are cut by the foot of the screen (or
 // the bar), or the end of the page is in view; and the words come before the scenery
-for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
+// (brief N3: eight sizes, and each section is reached through the picker or the rail itself, so the check sees where a
+// jump really ends, landShift in desk.js included; the Studies heading stays whole under the strip)
+const NAV_GRID = [[320, 568], [360, 640], [375, 667], [375, 812], [390, 844], [412, 915], [1280, 800], [1440, 900]];
+const landVia = async (page, w, name) => {
+  if (w > 760) await page.click(`#rail button[aria-label="Go to ${name}"]`);
+  else { await page.click("#where"); await page.click(`#menu button:text-is("${name}")`); }
+  let last = -1, same = 0;
+  for (let i = 0; i < 60 && same < 4; i++) { await page.waitForTimeout(150); const y = await page.evaluate(() => Math.round(scrollY)); same = y === last ? same + 1 : 0; last = y; }
+  await page.waitForTimeout(300);
+};
+for (const [w, h] of NAV_GRID) for (const mode of ["3d", "text"]) {
   await test(`N2f/N3: no screen looks finished when it is not, and the words come first, ${w}x${h} ${mode}`, async (page) => {
     await openSaved(page, w, mode);
     const look = () => page.evaluate(() => {
@@ -595,12 +607,18 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
     const bad = [];
     for (const name of SECTIONS) {
       const top = await secTop(page, name); if (top === null) continue;
-      await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), top); await page.waitForTimeout(900);
+      await landVia(page, w, name);
       const s = await look();
       // anything still below must show itself at the foot: a line cut by it
       if (!s.end && !s.cut && !(name === "Answer" && s.studies)) bad.push(`${name} at ${s.y}: nothing cut at the foot (${s.bt})`);
+      // and the section's own heading is whole under the strip
+      const hd = await page.evaluate((n) => { const m = { Answer: null, Studies: "#s3 .eyebrow", Explanation: "#s5 .eyebrow", Limitations: "#h-open" }[n]; const e = m && document.querySelector(m); if (!e) return null;
+        const q = e.getBoundingClientRect(); return { t: Math.round(q.top), b: Math.round(q.bottom), s: Math.round(document.getElementById("strip").getBoundingClientRect().bottom) }; }, name);
+      if (hd && (hd.t < hd.s - 1 || hd.b > s.bt)) bad.push(`${name}: heading at ${hd.t}..${hd.b}, strip ${hd.s}, foot ${s.bt}`);
     }
     must(!bad.length, bad.join("; "));
+    // N3 keeps the four sizes it was written for (NAV_SIZES); the grid above is N2f's
+    if (!NAV_SIZES.some(([a, b]) => a === w && b === h)) return;
     // N3: the desktop answer starts near the top with how sure fully in view; on a phone each later section's heading
     // starts in the top 28% of the screen with six lines of words under it on that screen
     await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), await secTop(page, "Answer")); await page.waitForTimeout(mode === "3d" ? 3500 : 900);
@@ -918,7 +936,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
   await page.reload({ waitUntil: "load" });
   must(await painted(page), "the new build did not paint under the old worker");
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
-  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v123" && r && r.active && r.active.state === "activated"; });
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v124" && r && r.active && r.active.state === "activated"; });
   const st = await page.evaluate(async () => {
     const keys = await caches.keys();
     const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
@@ -930,7 +948,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
     const reg = await navigator.serviceWorker.getRegistration();
     return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
   });
-  must(st.keys.join() === "evident-v123", `caches: ${st.keys.join()}`);
+  must(st.keys.join() === "evident-v124", `caches: ${st.keys.join()}`);
   must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
   must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
   must(!bad.length, `requests: ${bad.join(" | ")}`);
