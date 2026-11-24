@@ -475,11 +475,17 @@ window.__evidentDesk3d = function (O) {
     var LAMP_PTS = [V(-0.74, 0, -0.38), V(-0.54, 0, -0.2), V(-0.66, 0.46, -0.36), V(-0.27, 0.71, 0), V(-0.37, 0.6, 0), V(-0.17, 0.6, 0),
       V(-0.27, 0.6, -0.1), V(-0.27, 0.6, 0.1), V(-0.27, 0.67, -0.07), V(-0.27, 0.67, 0.07), V(0.12, 0, 0.12), V(-0.3, 0, 0.32), V(-0.62, 0, 0.18)];
     function phoneHome() { return !O.root.classList.contains("checked") && stage.clientWidth <= 760 && stage.clientHeight > stage.clientWidth; }
+    // a fresh check leaves the phone's first screen from where the camera is: the lamp band's view stays the first key
+    // until the glide out has come to rest on a later stop, so no frame shows the old first-stop framing (q10-rel)
+    var leaveHome = false;
     function pickKeys() {
       var tall = (stage.clientWidth / Math.max(1, stage.clientHeight)) < 0.85, all = KEYS[tall ? "tall" : "wide"];
       var cams = O.checked && O.NS > 1 ? O.STOPS.map(function (s) { return s.cam; }) : [0, 1, 2, 3, 4, 5];
+      var wasHome = !!K && K[0] === PHONE_HOME;
       K = cams.map(function (c) { return all[c]; }); AK = cams.map(function (c) { return AIMS6[c]; }); EK = cams.map(function (c) { return EXPO6[c]; });
-      if (phoneHome()) { K[0] = PHONE_HOME; AK[0] = AIMS6[0]; EK[0] = EXPO6[0]; }
+      if (phoneHome()) leaveHome = false;
+      else if (wasHome && O.root.classList.contains("checked") && stage.clientWidth <= 760 && stage.clientHeight > stage.clientWidth) leaveHome = true;
+      if (phoneHome() || leaveHome) { K[0] = PHONE_HOME; AK[0] = AIMS6[0]; EK[0] = EXPO6[0]; }
       CL = K.length - 1;
       posCurve = new T.CatmullRomCurve3(K.map(function (k) { return k.p; }), false, "centripetal");
       tgtCurve = new T.CatmullRomCurve3(K.map(function (k) { return k.t; }), false, "centripetal");
@@ -656,6 +662,9 @@ window.__evidentDesk3d = function (O) {
       if (O.reduce.matches) Ps = Math.round(P);
       else Ps += (P - Ps) * (1 - Math.exp(-dt * 4.2));
       if (O.slowGl || Math.abs(P - Ps) < 0.0015) Ps = P;
+      // at rest on a later stop's key, or anywhere past the second stop, the picture does not depend on the first key,
+      // so it can return to the result's own
+      if (leaveHome && Ps === P && (P >= 2 || (P >= 1 && Math.abs(P - Math.round(P)) < 1e-6))) { leaveHome = false; pickKeys(); }
 
       var hp = O.reduce.matches ? Math.round(P) : hold(Ps), u = CL ? hp / CL : 0;
       posCurve.getPoint(u, camera.position); var tg = tgtCurve.getPoint(u);
