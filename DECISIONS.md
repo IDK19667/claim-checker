@@ -13,8 +13,11 @@ tree's 3D desk in headless Chromium at the first-screen camera with the page's
 words hidden, and encoded to WebP with Pillow. Two crops, picked by
 `<picture media>` so a reader downloads one:
 
-- `static/desk/still-phone.webp`, the phone's band (390 wide at 2x), at most
-  12,000 bytes. A phone held upright gets the band with the 3D page's own rule
+- `static/desk/still-phone.webp`, the phone's band (390 wide at 1.5x), at most
+  2,048 bytes (1,968 now). Text mode's first load on the measuring phone
+  (`scripts/measure_load.mjs`, bodies and headers as sent) was already 196.9 KB
+  on the base, so a 2x picture of 6.6 KB took it to 205 KB, over the 200 KB
+  limit; at 1.5x the band is a little softer and the load stays under it. A phone held upright gets the band with the 3D page's own rule
   (`--lamp-band`), so the claim box and the button sit exactly where the 3D page
   puts them, 320x568 included. The picture is fitted whole (`object-fit:
   contain`), so on a short band the lamp's shade, its light and the wood stay

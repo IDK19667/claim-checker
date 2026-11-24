@@ -15496,23 +15496,23 @@ _sf_drop(*_SF_NUM)
 # ===== Q10 STILL: text mode's still picture of the desk =====
 _st_files = {n: ROOT / "static" / "desk" / f"still-{n}.webp" for n in ("phone", "wide")}
 _st_bytes = {n: f.read_bytes() if f.exists() else b"" for n, f in _st_files.items()}
-t("ST 1: the two stills are WebP files of our own scene, each at most 20,480 bytes, the phone's at most 12,000",
+t("ST 1: the two stills are WebP files of our own scene, each at most 20,480 bytes, the phone's at most 2,048 (text mode stays under 200 KB)",
   all(v[:4] == b"RIFF" and v[8:12] == b"WEBP" for v in _st_bytes.values())
-  and all(0 < len(v) <= 20480 for v in _st_bytes.values()) and len(_st_bytes["phone"]) <= 12000, {n: len(v) for n, v in _st_bytes.items()})
+  and all(0 < len(v) <= 20480 for v in _st_bytes.values()) and len(_st_bytes["phone"]) <= 2048, {n: len(v) for n, v in _st_bytes.items()})
 _st_mk = (ROOT / "scripts" / "make_still.mjs").read_text() if (ROOT / "scripts" / "make_still.mjs").exists() else ""
 t("ST 1: the script that makes them is kept, renders this tree's desk and encodes with Pillow inside the budgets",
-  "still-phone.webp" in _st_mk and "still-wide.webp" in _st_mk and "make_still.py" in _st_mk and '"12000"' in _st_mk and '"20480"' in _st_mk
+  "still-phone.webp" in _st_mk and "still-wide.webp" in _st_mk and "make_still.py" in _st_mk and '"2048"' in _st_mk and '"20480"' in _st_mk
   and "Image" in (ROOT / "scripts" / "make_still.py").read_text())
 _st_home = c.get("/").data.decode()
 _st_pic = re.search(r'<picture class="desk-still" aria-hidden="true">(.*?)</picture>', _st_home, re.S)
 _st_img = re.search(r"<img [^>]*>", _st_pic.group(1)).group(0) if _st_pic else ""
 t("ST 2: the home page carries the still: decorative, fixed size, lazy and low priority, the wide crop only from 761px",
-  bool(_st_pic) and 'alt=""' in _st_img and 'width="780"' in _st_img and 'height="506"' in _st_img and 'loading="lazy"' in _st_img
+  bool(_st_pic) and 'alt=""' in _st_img and 'width="585"' in _st_img and 'height="380"' in _st_img and 'loading="lazy"' in _st_img
   and 'fetchpriority="low"' in _st_img and "/static/desk/still-phone.webp?v=" in _st_img
   and re.search(r'<source media="\(min-width: 761px\)" srcset="/static/desk/still-wide\.webp\?v=[^"]+" width="1040" height="1769">', _st_pic.group(1)) is not None, _st_img)
 _st_tpl = (ROOT / "templates" / "index.html").read_text()
 t("ST 2: a result page never carries it (the picture sits inside the home-only branch)",
-  re.search(r"\{%- if not result %\}\s*<!--[^>]*-->\s*<picture class=\"desk-still\"", _st_tpl) is not None)
+  re.search(r"\{%- if not result %\}\s*\{#-[^#]*#\}\s*<picture class=\"desk-still\"", _st_tpl) is not None)
 _st_css = (ROOT / "static" / "desk.css").read_text()
 _st_show = [m.group(0) for m in re.finditer(r"[^{}]*\.desk-still\s*\{[^}]*display:\s*block[^}]*\}", _st_css)]
 t("ST 2: hidden by default and shown only in text mode or with scripts off, on the home page, never in 3D",
