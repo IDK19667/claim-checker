@@ -3308,16 +3308,14 @@ def _clean_rest(sent: str, end: int) -> bool:
 def _clean_cut(sent: str, end: int, join: int) -> bool:
     """Whether what follows a dropped figure and its interval lets it go
     cleanly. `join` is where the cut clause starts. A trailing qualifier
-    holds for both figures only when the figure that stays (with its own
-    interval) stands right before that clause: "2 kg in adults and HbA1c by
-    1.53 in children" says "in children" of HbA1c alone."""
+    holds for both figures only when the figure that stays has no qualifier
+    of its own before that clause: "2 kg in adults and HbA1c by 1.53 in
+    children" says "in children" of HbA1c alone. Other words there ("per
+    dL", "on average", its own interval) leave it shared."""
     if _clean_rest(sent, end):
         return True
     kept = [m.end() for m in _FIGURE_WITH_UNIT.finditer(sent, 0, join)]
-    if not kept:
-        return False
-    own = _TRAILING_CI.match(sent, kept[-1], join)
-    if sent[own.end() if own else kept[-1]:join].strip():
+    if not kept or _QUALIFIER.search(sent, kept[-1], join):
         return False
     qual = _QUALIFIER.match(sent, end)
     if not qual:

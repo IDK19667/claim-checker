@@ -14749,6 +14749,19 @@ t("BRIEF E6 B1d: the staying figure's own interval between is no obstacle, and '
   _e6d_ci == ["Weight fell by 2 kg (95% CI 1.1 to 3.5) in adults (Study 1).",
               "Weight fell by 2 kg, 95% CI 1.1 to 3.5 in adults (Study 1)."], _e6d_ci)
 
+# --- BRIEF E6 B1e: only a qualifier of the staying figure's own keeps the trailing one from being shared ---
+_e6e_st = [{"abstract": "Fasting glucose fell 21.929 mg/dL. HbA1c 1.53. Weight fell 2 kg."}]
+_e6e = lambda s: breakdown.for_reading(s, _e6e_st)
+_e6e_perdl = _e6e("Fasting blood sugar dropped by 21.929 mg per dL and HbA1c dropped by 1.53 in patients (Study 2).")
+t("BRIEF E6 B1e: the rest of a unit ('per dL') is not a qualifier, so the trailing one is shared and the cut stands",
+  _e6e_perdl == "Fasting blood sugar dropped by about 22 mg per dL in patients (Study 2).", _e6e_perdl)
+_e6e_week = "Weight fell by 2 kg per week in adults and HbA1c by 1.53 in children (Study 1)."
+t("BRIEF E6 B1e: a staying figure with a qualifier of its own after other words keeps the sentence whole",
+  _e6e(_e6e_week) == _e6e_week, _e6e(_e6e_week))
+_e6e_avg = _e6e("Weight fell by 2 kg on average and HbA1c by 1.53 in adults (Study 1).")
+t("BRIEF E6 B1e: 'on average' is no qualifier, so the cut keeps 'on average in adults'",
+  _e6e_avg == "Weight fell by 2 kg on average in adults (Study 1).", _e6e_avg)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
