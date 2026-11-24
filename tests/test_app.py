@@ -13241,9 +13241,12 @@ t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare
 t("BRIEF E2 vinegar: the second statement names the related effect and claims no certainty it did not read",
   _e_out["effect_line"].startswith("What the studies did find: ")
   and _e_out["effect_line"].endswith(". The abstracts we read do not rate how certain this is"), _e_out["effect_line"])
-t("BRIEF E4 vinegar: the recorded pair says about 22 mg per dL once in 'says', and the evidence list "
-  "drops its repeat", sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in (_e_bdo.get("says") or [])) == 1
-  and not any("22 mg" in x for x in _e_bdo.get("evidence") or []), _e_lists)
+# The E3 follow-up replaced "says about 22 mg per dL once in 'says'": the
+# earlier 'says' sentence carried nothing the effect size did not, so it
+# went, and the figure is said once, in the effect size.
+t("BRIEF E3 follow-up vinegar: the recorded pair says about 22 mg per dL once among 'says', 'evidence' and the "
+  "effect size, in the effect size", sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1
+  and "22 mg" in (_e_bdo.get("effect_size") or ""), _e_lists)
 t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
   _e_s1["indirect"] == "Measures body weight, not blood sugar control"
   and _e_s1["contribution"] == "Indirect context: measures body weight, not blood sugar control.", _e_s1)
@@ -14241,6 +14244,77 @@ t("BRIEF E3 N11: a true repeat in the same order still goes",
   _e3_o["evidence"] == ["Bleeding was rare (Study 3)."], _e3_o)
 t("BRIEF E3 N11: word order reads numbers and content words, the citation left out",
   _e3_bd.word_order("Glucose dropped by 0.5 mmol/L (Study 2).") == ["glucose", "fell", "0.5", "mmol", "l"])
+
+# Brief E3 follow-up: when a later repeat cannot go without emptying its list
+# or field, the earlier sentence goes instead, if all it carries is in the
+# later one (generic words aside) and its own list keeps another sentence.
+import copy as _rf_copy  # noqa: E402
+import json as _rf_json  # noqa: E402
+import breakdown as _rf_bd  # noqa: E402
+import evidence as _rf_ev  # noqa: E402
+
+_rf_rec = _rf_json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+_rf_st = _rf_copy.deepcopy(_rf_rec["studies"])
+_rf_st[0]["references"] = ["38966098"]
+_rf_ev.flag_retracted_citations(_rf_st, lambda ids: set())
+with appmod.app.test_request_context("/"):
+    _rf_o = appmod._check_response(_rf_rec["claim"], _rf_rec["search_query_used"], _rf_rec["verdict"], _rf_rec["tldr"],
+                                   _rf_rec["explanation"], [s["pmid"] for s in _rf_st if s.get("cited_in_verdict")],
+                                   _rf_st, "http://x", breakdown=_rf_copy.deepcopy(_rf_rec["breakdown"]),
+                                   still_open=_rf_rec["still_open"])
+_rf_b = _rf_o["breakdown"]
+_rf_lists = [x for k in ("says", "evidence") for it in _rf_b.get(k) or [] for x in _rf_bd.sentences(it)]
+_rf_lists += _rf_bd.sentences(_rf_b.get("effect_size") or "")
+_rf_22 = [x for x in _rf_lists if "22 mg" in x]
+t("BRIEF E3 follow-up: recorded vinegar, the 22 mg per dL figure appears once among says, evidence and effect_size, "
+  "and the second statement still leads with it",
+  len(_rf_22) == 1 and _rf_b["effect_size"] == "Fasting blood sugar fell by about 22 mg per dL (Study 2)."
+  and _rf_o["effect_line"].startswith("What the studies did find: Fasting blood sugar fell by about 22 mg per dL"),
+  (_rf_22, _rf_o["effect_line"]))
+
+_RF_E = "Fasting glucose fell by about 22 mg per dL in patients (Study 2)."
+_RF_L = "Fasting glucose fell by about 22 mg per dL (Study 2)."
+_RF_OTHER = "HbA1c fell by 0.5 points (Study 1)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: the earlier sentence, differing only by generic words, goes; the later field keeps its sentence",
+  _rf_y["says"] == [_RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_RF_KIDS = "Fasting glucose fell by about 22 mg per dL in children (Study 2)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_KIDS, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: an earlier sentence naming a population (in children) stays, and so does the later one",
+  _rf_y["says"] == [_RF_KIDS, _RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: when the earlier list would be emptied, both stay",
+  _rf_y["says"] == [_RF_E] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_RF_TR = " That is a drop of about a tenth."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], "evidence": [],
+                                            "effect_size": _RF_L + _RF_TR}, 2)
+t("BRIEF E3 follow-up: a sentence goes with its 'That is' translation, and the later pair stays whole",
+  _rf_y["says"] == [_RF_OTHER] and _rf_y["effect_size"] == _RF_L + _RF_TR, _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: an earlier translation the later sentence lacks keeps the earlier sentence",
+  _rf_y["says"] == [_RF_E + _RF_TR, _RF_OTHER], _rf_y)
+_RF_SIG = "Fasting glucose fell significantly, by about 22 mg per dL in patients (Study 2)."
+_RF_HARM = "Bleeding fell by 22% in patients (Study 2)."
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_HARM, _RF_OTHER], "evidence": [],
+                                            "effect_size": "Bleeding fell by about 22% (Study 2)."}, 2)
+_rf_x2, _rf_y2 = _rf_bd.one_figure_once("", {"says": [_RF_E, _RF_OTHER], "evidence": [],
+                                              "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 1)."}, 2)
+t("BRIEF E3 follow-up: never a harm sentence, never across studies",
+  _rf_y["says"][0] == _RF_HARM and _rf_y2["says"] == [_RF_E, _RF_OTHER], (_rf_y, _rf_y2))
+t("BRIEF E3 follow-up: the generic list is closed, and holds no population, outcome or significance word",
+  _rf_bd.GENERIC_WORDS == frozenset("patients people participants subjects group groups about approximately around "
+                                    "roughly average mean overall level levels".split()))
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_SIG, _RF_OTHER], "evidence": [],
+                                            "effect_size": "Fasting glucose fell by about 22 mg per dL (Study 2)."}, 2)
+t("BRIEF E3 follow-up: a sentence saying a result was significant always stays",
+  _rf_y["says"] == [_RF_SIG, _RF_OTHER], _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_L, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
+t("BRIEF E3 follow-up: a word-for-word copy keeps the earlier sentence (the page already prints it once, there)",
+  _rf_y["says"] == [_RF_L, _RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E, "That is a drop of about a tenth.", _RF_OTHER],
+                                            "evidence": [], "effect_size": _RF_L + _RF_TR}, 2)
+t("BRIEF E3 follow-up: a 'That is' item after the earlier sentence goes with it",
+  _rf_y["says"] == [_RF_OTHER], _rf_y)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

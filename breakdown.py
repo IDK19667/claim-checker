@@ -4092,8 +4092,9 @@ def cited_pmids(bd: dict, studies: list[dict]) -> list[str]:
 # (its words and numbers are a subsequence of that sentence's). Only the
 # explanation and the figure lists ("says", "evidence", "effect_size") are
 # read: never still_open, unknowns, safety lines, harms, assessments or
-# titles. No item or field is ever left empty: its sentences then stay. A
-# "That is ..." sentence stays or goes with the sentence before it.
+# titles. No item or field is ever left empty: its sentences then stay, and
+# the earlier sentence may go instead (_drop_earlier). A "That is ..."
+# sentence stays or goes with the sentence before it.
 # ---------------------------------------------------------------------
 
 _E4_FIGURE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)*)\s*(%|[A-Za-z]+)?")
@@ -4200,10 +4201,16 @@ def one_figure_once(explanation: str, bd, count: int):
         kept.extend(out)
         return " ".join(out)
 
-    def keep_field(text, kept):
+    forced = []  # the lists and fields kept whole because the rule would empty them
+
+    def keep_field(text, kept, key=None):
         # A field is never left empty: its sentences then stay.
         said = keep(text, kept)
-        return said if said or not str(text or "").strip() else text
+        if said or not str(text or "").strip():
+            return said
+        if key:
+            forced.append(key)
+        return text
 
     has_says = isinstance(bd, dict) and any(str(x or "").strip() for x in bd.get("says") or [])
     seen = []
@@ -4222,9 +4229,124 @@ def one_figure_once(explanation: str, bd, count: int):
             items = [keep(v, seen) if isinstance(v, str) else v for v in value]
         else:
             if isinstance(value, str) and value:
-                out[key] = keep_field(value, seen)
+                out[key] = keep_field(value, seen, key)
             continue
         # A list is never left empty: it then stays as it was.
         items = [v for v in items if v]
+        if not items and any(value):
+            forced.append(key)
         out[key] = items if items or not any(value) else value
-    return explanation, out
+    return explanation, _drop_earlier(out, forced, count)
+
+
+# The earlier sentence goes instead (brief E3 follow-up). When a later
+# sentence is a repeat by the rule above but removing it would empty its list
+# or field, the earlier one goes, if: it is in a different figure list that
+# keeps another sentence; it cites the same studies; and all it carries is in
+# the later sentence, in the same order, these generic words counting as
+# nothing. No other word may join this list: no named population, outcome,
+# dose, time, harm, safety or significance word.
+GENERIC_WORDS = frozenset(
+    "patients people participants subjects group groups about approximately around roughly average mean "
+    "overall level levels".split())
+_SAFETY = re.compile(r"\b(?:safe\w*|unsafe)\b", re.IGNORECASE)
+
+
+def _units(text: str) -> list:
+    """The sentences of a text, each with the "That ..." sentences after it."""
+    units = []
+    for x in sentences(text or ""):
+        if x.startswith("That ") and units:
+            units[-1].append(x)
+        else:
+            units.append([x])
+    return units
+
+
+def _carried_by(earlier: list, later: list, count: int) -> bool:
+    """Whether everything the earlier unit says is in the later one, the
+    generic words aside, in the same order."""
+    e, l = " ".join(earlier), " ".join(later)
+    cites = frozenset(refs(e, count))
+    if not cites or cites != frozenset(refs(l, count)):
+        return False
+    if not {(n, u) for n, u, _ in figures_of(e, count)} <= {(n, u) for n, u, _ in figures_of(l, count)}:
+        return False
+    if not content_words(e) - GENERIC_WORDS <= content_words(l):
+        return False
+    return _in_order([w for w in word_order(e) if w not in GENERIC_WORDS], word_order(l))
+
+
+def _same_words(a: str, b: str) -> bool:
+    """Whether two sentences are the same letters and digits. The page prints
+    such a copy once already (display.unseen), in the earlier block, so the
+    earlier one is never the one removed."""
+    return re.sub(r"[^a-z0-9]+", "", a.lower()) == re.sub(r"[^a-z0-9]+", "", b.lower())
+
+
+def _drop_earlier(bd: dict, forced: list, count: int) -> dict:
+    """The breakdown with, for each repeat kept only so its list or field is
+    not emptied, the earlier sentence removed instead where the rule allows.
+    Never across studies, never in the explanation, never a harm, safety or
+    significance sentence, and never when the two are word for word the same."""
+    if not forced:
+        return bd
+    out = dict(bd)
+
+    def items_of(key):
+        v = out.get(key)
+        if isinstance(v, list):
+            return v
+        return [v] if isinstance(v, str) and v else []
+
+    def put(key, items):
+        if isinstance(out.get(key), list):
+            out[key] = [i for i in items if not isinstance(i, str) or i.strip()]
+        else:
+            out[key] = items[0] if items else ""
+
+    def sentence_count(key):
+        return sum(len(sentences(i)) for i in items_of(key)
+                   if isinstance(i, str) and not i.lower().startswith(WHO_LABEL.strip().lower()))
+
+    for later_key in forced:
+        for item in list(items_of(later_key)):
+            if not isinstance(item, str):
+                continue
+            for later in _units(item):
+                if any(_STATES_SIGNIFICANCE.search(x) for x in later):
+                    continue
+                done = False
+                for key in FIGURE_ORDER[:FIGURE_ORDER.index(later_key)]:
+                    items = list(items_of(key))
+                    for i, it in enumerate(items):
+                        if not isinstance(it, str) or (key == "says" and it.lower().startswith(WHO_LABEL.strip().lower())):
+                            continue
+                        units = _units(it)
+                        for j, earlier in enumerate(units):
+                            # A "That ..." item right after the item goes with
+                            # its last sentence.
+                            tail = []
+                            if j == len(units) - 1:
+                                for nxt in items[i + 1:]:
+                                    if not (isinstance(nxt, str) and nxt.startswith("That ")):
+                                        break
+                                    tail.append(nxt)
+                            earlier = earlier + [x for t_ in tail for x in sentences(t_)]
+                            text = " ".join(earlier)
+                            if (_STATES_SIGNIFICANCE.search(text) or HARM.search(text) or _HARM_WORDS.search(text)
+                                    or _SAFETY.search(text) or _same_words(earlier[0], later[0])
+                                    or not _says_nothing_new(later[0], [earlier[0]], count)
+                                    or not _carried_by(earlier, later, count)
+                                    or sentence_count(key) - len(earlier) < 1):
+                                continue
+                            items[i] = " ".join(x for k, u in enumerate(units) if k != j for x in u)
+                            del items[i + 1:i + 1 + len(tail)]
+                            put(key, items)
+                            done = True
+                            break
+                        if done:
+                            break
+                    if done:
+                        break
+    return out
