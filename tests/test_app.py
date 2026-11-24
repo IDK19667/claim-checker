@@ -15384,6 +15384,35 @@ t("R1 F: llms.txt shows a saved 'true' its page caps as the page's verdict, not 
   and appmod.VERDICT_LABELS["true"] not in _sf_llline[0], (_sf_llv, _sf_llline))
 if not _sf_ll_had:
     _sf_drop(_SF_LL)
+# --- review 1, C and D: digits glued to a word, or split up, keep a claim off the lists ---
+import html as _sf_html
+_SF_HON = [{"title": "Honey for cough", "abstract": "Honey can ease a cough in children."}]
+_SF_DIGITS = ("honey can ease a cough in children jordanvale88", "honey can ease a cough in children rosegreen1985",
+              "honey can ease a cough in children 555 then 0142",
+              "honey can ease a cough in children five five five one two three four",
+              "honey can ease a cough in children 03/04/1990")
+for _cl in _SF_DIGITS:
+    t(f"R1 C/D: {_cl!r} is not public, though its studies use every other word", not display.public_claim(_cl, _SF_HON))
+_SF_B12 = [{"title": "Vitamin B12 and energy in adults", "abstract": "COVID19 vaccines and H1N1 infection were also studied."}]
+t("R1 C: a token mixing letters and digits is vouched only when the studies use that exact token",
+  all(display.public_claim(x, _SF_B12) for x in ("Vitamin B12 helps energy", "COVID19 vaccines help adults", "H1N1 infection harms adults"))
+  and not any(display.public_claim(x, _SF_HON) for x in ("Vitamin B12 helps energy", "honey can ease a cough in b12"))
+  and not display.public_claim("Vitamin B12s helps energy", _SF_B12))
+t("R1 D: more than 6 digits in the whole claim, or 4 number words in a row, is not public; fewer still is",
+  not display.public_claim("Take 200 mg 3 times a day for 14 days 99", [{"title": "200 mg times days"}])
+  and display.public_claim("Take 200 mg 3 times a day for 14 days", [{"title": "200 mg times days"}])
+  and not display.public_claim("Take one two three four", [])
+  and display.public_claim("Take one or two a day", []) and display.public_claim("Take 10000 a day", []))
+t("R1 C/D: the replay proof's number claims stay public with their studies",
+  display.public_claim("You need to drink 8 glasses of water a day", [{"title": "glasses"}])
+  and display.public_claim("Omega 3 helps memory in adults over 65", [{"title": "Omega memory"}]))
+for _cl in _SF_DIGITS:
+    _sf_seed(_cl, studies=_SF_HON)
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("honey").items()}
+for _cl in _SF_DIGITS:
+    _sf_bad = [u for u, v in _sf_p.items() if _cl.casefold() in v]
+    t(f"R1 C/D: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*_SF_DIGITS)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])

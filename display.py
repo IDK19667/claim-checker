@@ -695,27 +695,51 @@ def _modal_as_name(tokens) -> bool:
     return False
 
 
-def vouched(claim_text, studies) -> bool:
-    """Every word of the claim is vouched for (see _VOUCH_WORDS)."""
-    seen = None
-    tokens = _vouch_tokens(claim_text)
-    if _modal_as_name(tokens):
-        return False
+# Numbers that read as a phone number, a date of birth or an ID however they
+# are split: more than 6 digits in the whole claim, or a run of 4 or more
+# number words ("five five five one").
+_MAX_DIGITS = 6
+_NUMBER_WORDS = frozenset("""zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen
+fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred""".split())
+
+
+def _number_words_run(tokens, n=4) -> bool:
+    run = 0
     for w in tokens:
-        if any(ch.isdigit() for ch in w):
-            if sum(ch.isdigit() for ch in w) > 5:
+        run = run + 1 if w in _NUMBER_WORDS else 0
+        if run >= n:
+            return True
+    return False
+
+
+def vouched(claim_text, studies) -> bool:
+    """Every word of the claim is vouched for (see _VOUCH_WORDS). A token of
+    digits alone is vouched with at most 5 digits; a token mixing letters and
+    digits ("b12", "jordanvale88") only when that exact token is in the
+    studies' titles or abstracts, never by the closed list or its letters."""
+    tokens = _vouch_tokens(claim_text)
+    if _modal_as_name(tokens) or _number_words_run(tokens):
+        return False
+    if sum(ch.isdigit() for w in tokens for ch in w) > _MAX_DIGITS:
+        return False
+    seen = exact = None
+    for w in tokens:
+        if w.isdigit():
+            if len(w) > 5:
                 return False
             continue
+        mixed = any(ch.isdigit() for ch in w)
         forms = _vouch_forms(w)
-        if forms & _VOUCH_CLOSED:
+        if not mixed and forms & _VOUCH_CLOSED:
             continue
         if seen is None:
-            seen = set()
+            seen, exact = set(), set()
             for s in studies or []:
                 if isinstance(s, dict):
                     for x in _vouch_tokens(f"{s.get('title') or ''} {s.get('abstract') or ''}"):
+                        exact.add(x)
                         seen |= _vouch_forms(x)
-        if not forms & seen:
+        if not (w in exact if mixed else forms & seen):
             return False
     return True
 
