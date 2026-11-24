@@ -565,6 +565,15 @@ Sizes and floors:
   the card is whole (nothing covers or clips it); the Studies heading is
   whole above the bar, or the bar crosses a line or a control of the
   Answer; View evidence is in view where both fit.
+- **The phone's first screen** (760px wide or less, held upright, in 3D,
+  before a check) shows the lamp as the desktop does: the desktop's own
+  view of the lamp, its light and the lit wood is fitted into a band
+  under the strip, and the headline, the claim box and the rest start
+  below it, so no word lies on the lamp and no scrim dims it. The band is
+  a third of the screen at most and gives way to the words: the claim box
+  and "Check the research" stay on the first screen. The page's own
+  "Evident" line steps aside there, since the strip names the site. Text
+  mode, a result, a tablet and a phone turned sideways keep their layout.
 - **The first screen holds the claim box.** At 1366x650, 1280x720,
   1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
   the claim box and "Check the research" are wholly on screen with no

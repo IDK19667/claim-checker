@@ -936,7 +936,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
   await page.reload({ waitUntil: "load" });
   must(await painted(page), "the new build did not paint under the old worker");
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
-  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v124" && r && r.active && r.active.state === "activated"; });
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v125" && r && r.active && r.active.state === "activated"; });
   const st = await page.evaluate(async () => {
     const keys = await caches.keys();
     const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
@@ -948,7 +948,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
     const reg = await navigator.serviceWorker.getRegistration();
     return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
   });
-  must(st.keys.join() === "evident-v124", `caches: ${st.keys.join()}`);
+  must(st.keys.join() === "evident-v125", `caches: ${st.keys.join()}`);
   must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
   must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
   must(!bad.length, `requests: ${bad.join(" | ")}`);
@@ -1023,6 +1023,50 @@ for (const verdict of ["false", "complicated"]) {
     must(out.cast === 0, `${out.cast} pixels outside the shelf have a green, mint, blue or purple cast`);
     must(out.night === "12110f" && out.day === "f4f2ef", `the grounds are #${out.night} and #${out.day}, not --deep and --paper`);
   });
+}
+
+// ---- L2. The lamp on a phone's first screen ----------------------------------------------------
+// Held upright, before a check, in 3D: the lamp (base, stem, shade) and the lit wood under it are
+// inside the picture below the strip, no word of stop 1 lies on them, and at 375x667 a band of
+// 160 px or more of the picture is free of text. The claim box is on the first screen at every
+// phone size, and "Check the research" too from 375x667 up. The same with reduced motion (the
+// still picture). The lamp's box is the projection of the same points desk3d.js fits (LAMP_PTS).
+const L2_PTS = [[-0.74, 0, -0.38], [-0.54, 0, -0.2], [-0.66, 0.46, -0.36], [-0.27, 0.71, 0], [-0.37, 0.6, 0], [-0.17, 0.6, 0], [-0.27, 0.6, -0.1], [-0.27, 0.6, 0.1], [-0.27, 0.67, -0.07], [-0.27, 0.67, 0.07], [0.12, 0, 0.12], [-0.3, 0, 0.32], [-0.62, 0, 0.18]];
+const l2Look = (page) => page.evaluate((pts) => {
+  const ps = pts.map((p) => window.__evd.proj(p[0], p[1], p[2])), xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]);
+  const lamp = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  const strip = document.getElementById("strip").getBoundingClientRect().bottom;
+  // every line of words in stop 1 a reader can see, as boxes
+  const words = [], walk = document.createTreeWalker(document.getElementById("s1"), NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (!n.textContent.trim()) continue;
+    const el = n.parentElement, cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || el.closest("[hidden], .sr-only")) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const r of rg.getClientRects()) if (r.width > 1 && r.height > 1) words.push({ x0: r.left, x1: r.right, y0: r.top, y1: r.bottom, t: n.textContent.trim().slice(0, 24) });
+  }
+  const r = (s) => document.querySelector(s).getBoundingClientRect();
+  const firstWord = Math.min(...words.map((w) => w.y0));
+  return { mode: window.__evident.stats().mode, lamp, strip, W: innerWidth, H: innerHeight, firstWord,
+    hit: words.find((w) => w.x0 < lamp.x1 && w.x1 > lamp.x0 && w.y0 < lamp.y1 && w.y1 > lamp.y0) || null,
+    box: r(".claim-box").bottom, btn: r("#submit-btn").bottom };
+}, L2_PTS);
+for (const [w, h] of [[375, 667], [375, 812], [320, 568], [360, 740], [390, 844], [414, 896]]) for (const reduce of [false, true]) {
+  await test(`Phone lamp: the lamp shows on a ${w}x${h} phone's first screen, clear of every word${reduce ? ", reduced motion" : ""}`, async (page) => {
+    await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await page.waitForTimeout(800);
+    const s = await l2Look(page), L = s.lamp, f = (b) => `${Math.round(b.x0)},${Math.round(b.y0)} to ${Math.round(b.x1)},${Math.round(b.y1)}`;
+    must(s.mode === "3d", "not in 3D: " + s.mode);
+    must(L.x0 >= 0 && L.x1 <= s.W && L.y0 >= s.strip && L.y1 <= s.H, `the lamp (${f(L)}) is not inside the picture below the strip (${s.strip}) on ${s.W}x${s.H}`);
+    // the shade keeps 12 px of clear air under the strip: it never reads as cropped
+    must(L.y0 >= s.strip + 12, `the top of the shade (${Math.round(L.y0)}) is only ${Math.round(L.y0 - s.strip)} px under the strip`);
+    must(L.y1 - L.y0 >= 75, `the lamp is only ${Math.round(L.y1 - L.y0)} px tall`);
+    must(!s.hit, s.hit && `"${s.hit.t}" (${f(s.hit)}) lies on the lamp (${f(L)})`);
+    // the words' scrim starts 14 px above the first line: the lamp ends above it, so nothing dims it
+    must(L.y1 <= s.firstWord - 14, `the lamp ends at ${Math.round(L.y1)}, inside the scrim above the first words (${Math.round(s.firstWord)})`);
+    must(s.box <= s.H, `the claim box ends at ${Math.round(s.box)}, below the first screen (${s.H})`);
+    if (h >= 667) must(s.btn <= s.H, `"Check the research" ends at ${Math.round(s.btn)}, below the first screen (${s.H})`);
+    if (w === 375 && h === 667) must(s.firstWord - s.strip >= 160, `only ${Math.round(s.firstWord - s.strip)} px of the picture is free of words`);
+  }, { w, h, reduce, touch: true });
 }
 
 await browser.close();

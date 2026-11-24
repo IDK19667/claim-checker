@@ -66,6 +66,10 @@ shipped colour files to hue 40 to 100. Still open: the share image
 (`app.js` CARD) and the link preview (`og.py`) keep the old sage ring and
 the four cloths.
 
+## 2026-11-23 (q10, L2): The lamp shows on a phone's first screen
+
+The owner: "on the phone i dont see the primary lamp screen". The phone framed the desk behind the words, under the scrim, so it read as a dark page. Now, before a check on a phone held upright, the desktop's own view of the lamp is fitted into a band under the strip (a third of the screen at most, as the owner asked that content come before scenery) and the words start below it; the claim box and the button stay on the first screen. A band on top rather than the lamp beside the headline, because a 375px screen has no dark side wide enough for a 46px headline next to a lamp that still reads. Results keep their framings.
+
 ## 2026-11-23 (q10): The scene warms up before the first press of Next
 
 On a saved answer the first Next in 3D stalled for 2.2 s on the phone

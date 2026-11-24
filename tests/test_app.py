@@ -10889,7 +10889,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v124";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v125";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -13350,6 +13350,21 @@ t("OG CARD COLOURS: the grounds are the site's --deep and --paper, and the ring 
   all(g == (_ogc_rgb("12110f"), _ogc_rgb("f4f2ef")) for g in _ogc_grounds) and og.PEN == og.ON_DEEP == "#f0ede9"
   and not hasattr(og, "SAGE"), _ogc_grounds[:1])
 t("OG CARD COLOURS: the image is still 1200 by 630", _ogc_sizes == {(1200, 630)}, _ogc_sizes)
+
+# ---- L2: the lamp on a phone's first screen --------------------------------------------------
+# Held upright, before a check, in 3D, the words of stop 1 start below a band the lamp is fitted
+# into (desk3d.js PHONE_HOME, fitted to the band by fitPhoneHome); the band is a third of the
+# screen at most; text mode, a result and a tablet keep today's layout.
+_l2_css = re.sub(r"/\*.*?\*/", "", (ROOT / "static" / "desk.css").read_text(), flags=re.S)
+_l2_block = re.search(r"@media \(max-width: 760px\) and \(orientation: portrait\) \{(.*?)\n\}", _l2_css, re.S)
+_l2_body = _l2_block.group(1) if _l2_block else ""
+t("L2: on a phone held upright, before a check and in 3D, stop 1 starts below the lamp's band, a third of the screen at most",
+  "html.js:not(.no-gl):not(.checked) #s1 { padding-top: calc(var(--strip) + var(--lamp-band)); }" in _l2_body
+  and re.search(r"--lamp-band: clamp\([^;]*30svh\)", _l2_body) is not None, _l2_body[:200])
+_l2_js = (ROOT / "static" / "desk3d.js").read_text()
+t("L2: the scene fits the lamp into that band only on a phone held upright before a check",
+  "function fitPhoneHome()" in _l2_js and "fitPhoneHome();" in _l2_js
+  and re.search(r"function phoneHome\(\) \{ return !O\.root\.classList\.contains\(\"checked\"\) && stage\.clientWidth <= 760 && stage\.clientHeight > stage\.clientWidth; \}", _l2_js) is not None)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
