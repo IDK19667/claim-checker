@@ -13720,17 +13720,30 @@ t("BRIEF E2r M6: one id cap, 600, used by both modules",
 # reading uses, so an OR of 0.99 (0.92 to 1.06) was read as "a small
 # effect". A module never binds the same top-level name twice.
 import ast as _ast_nf, breakdown
+
+
+def _nf_constants_twice(source: str) -> dict:
+    """{name: times} for every top-level constant (an all-capitals name, a
+    leading underscore allowed) a module binds more than once. Brief E3 N5:
+    the old filter wanted k.isupper() to be False, which no constant is."""
+    seen = {}
+    for n in _ast_nf.parse(source).body:
+        names = ([x.id for t_ in n.targets for x in _ast_nf.walk(t_) if isinstance(x, _ast_nf.Name)]
+                 if isinstance(n, _ast_nf.Assign) else
+                 [n.target.id] if isinstance(n, _ast_nf.AnnAssign) and isinstance(n.target, _ast_nf.Name) else
+                 [n.name] if isinstance(n, (_ast_nf.FunctionDef, _ast_nf.ClassDef)) else [])
+        for x in names:
+            seen[x] = seen.get(x, 0) + 1
+    return {k: v for k, v in seen.items() if v > 1 and k == k.upper() and k.strip("_")[:1].isalpha()}
+
+
 _nf_twice = {}
 for _nf_f in ("breakdown.py", "evidence.py", "verdict.py", "app.py", "pubmed.py", "db.py"):
-    _nf_seen = {}
-    for _nf_n in _ast_nf.parse((ROOT / _nf_f).read_text()).body:
-        _nf_names = ([x.id for t_ in _nf_n.targets for x in _ast_nf.walk(t_) if isinstance(x, _ast_nf.Name)]
-                     if isinstance(_nf_n, _ast_nf.Assign) else
-                     [_nf_n.name] if isinstance(_nf_n, (_ast_nf.FunctionDef, _ast_nf.ClassDef)) else [])
-        for _nf_x in _nf_names:
-            _nf_seen[_nf_x] = _nf_seen.get(_nf_x, 0) + 1
-    _nf_twice.update({f"{_nf_f}:{k}": v for k, v in _nf_seen.items() if v > 1 and k.isupper() is False and k.startswith("_") and k[1:2].isupper()})
+    _nf_twice.update({f"{_nf_f}:{k}": v for k, v in _nf_constants_twice((ROOT / _nf_f).read_text()).items()})
 t("BRIEF E2r null: no module binds a top-level constant twice (one shadowed the null reading)", not _nf_twice, _nf_twice)
+_nf_copy = (ROOT / "breakdown.py").read_text() + '\n_FIGURE = re.compile("x")\nCAP: int = 1\nCAP = 2\n'
+t("BRIEF E3 N5: the duplicate-constant check is not vacuous: a second _FIGURE in a copy of breakdown.py is caught",
+  _nf_constants_twice(_nf_copy) == {"_FIGURE": 2, "CAP": 2}, _nf_constants_twice(_nf_copy))
 _nf_bd = {"says": ["The odds ratio was 0.99 (Study 1)."],
           "evidence": ["The odds ratio was 0.99 (Study 1). That is no clear difference between the groups, "
                        "because the result was not statistically significant (Study 1)."],
