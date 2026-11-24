@@ -445,10 +445,19 @@ window.__evidentDesk3d = function (O) {
     var EXPO = [1, 1, 1, 0.92, 0.42, 0.72];
     // the framings of the stops the page prints (before a check, all six: the camera rests on the first)
     var K, AK, EK, CL = 5, posCurve, tgtCurve, AIMS6 = AIMS, EXPO6 = EXPO;
+    // ---- the phone's first screen (L2): before a check, on a phone held upright, the first stop is the desktop's own
+    // view of the lamp, fitted by fitPhoneHome() into the band between the strip and the words (desk.css --lamp-band)
+    var PHONE_HOME = { p: KEYS.wide[0].p.clone(), t: KEYS.wide[0].t.clone(), fov: 36, fx: 0.5, fy: 0.3 };
+    // what must show in the band: the base, the stem and elbow, the shade, and the pool of lit wood under it
+    // (the shade as its crown, knuckle and rim all round, so its top keeps clear air under the strip)
+    var LAMP_PTS = [V(-0.74, 0, -0.38), V(-0.54, 0, -0.2), V(-0.66, 0.46, -0.36), V(-0.27, 0.71, 0), V(-0.37, 0.6, 0), V(-0.17, 0.6, 0),
+      V(-0.27, 0.6, -0.1), V(-0.27, 0.6, 0.1), V(-0.27, 0.67, -0.07), V(-0.27, 0.67, 0.07), V(0.12, 0, 0.12), V(-0.3, 0, 0.32), V(-0.62, 0, 0.18)];
+    function phoneHome() { return !O.root.classList.contains("checked") && stage.clientWidth <= 760 && stage.clientHeight > stage.clientWidth; }
     function pickKeys() {
       var tall = (stage.clientWidth / Math.max(1, stage.clientHeight)) < 0.85, all = KEYS[tall ? "tall" : "wide"];
       var cams = O.checked && O.NS > 1 ? O.STOPS.map(function (s) { return s.cam; }) : [0, 1, 2, 3, 4, 5];
       K = cams.map(function (c) { return all[c]; }); AK = cams.map(function (c) { return AIMS6[c]; }); EK = cams.map(function (c) { return EXPO6[c]; });
+      if (phoneHome()) { K[0] = PHONE_HOME; AK[0] = AIMS6[0]; EK[0] = EXPO6[0]; }
       CL = K.length - 1;
       posCurve = new T.CatmullRomCurve3(K.map(function (k) { return k.p; }), false, "centripetal");
       tgtCurve = new T.CatmullRomCurve3(K.map(function (k) { return k.t; }), false, "centripetal");
@@ -795,9 +804,35 @@ window.__evidentDesk3d = function (O) {
       var y0 = Math.max(c[0][1], c[1][1]), y1 = Math.min(c[2][1], c[3][1]), x0 = Math.max(c[0][0], c[3][0]), x1 = Math.min(c[1][0], c[2][0]);
       return { x: x0, y: y0, h: y1 - y0, w: x1 - x0 };
     }
+    // L2: where a set of world points falls on screen through a framing, as a box
+    function boxAt(A, pts) {
+      var cam = camera.clone();
+      cam.position.copy(A.p); cam.fov = A.fov; cam.aspect = W / H; cam.lookAt(A.t);
+      cam.setViewOffset(W, H, (0.5 - A.fx) * W, (0.5 - A.fy) * H, W, H); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      var b = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+      pts.forEach(function (v) { var q = v.clone().project(cam), x = (q.x * 0.5 + 0.5) * W, y = (-q.y * 0.5 + 0.5) * H;
+        b.x0 = Math.min(b.x0, x); b.x1 = Math.max(b.x1, x); b.y0 = Math.min(b.y0, y); b.y1 = Math.max(b.y1, y); });
+      return b;
+    }
+    // L2: the lamp and its lit wood fill the band above the words, centred, with a margin all round
+    var s1Inner = document.querySelector("#s1 .inner");
+    function fitPhoneHome() {
+      if (K[0] !== PHONE_HOME || !s1Inner) return;
+      var strip = O.byId("strip"), top = (strip ? strip.offsetHeight : 32) + 16;
+      var bottom = s1Inner.getBoundingClientRect().top + window.scrollY - 20, wantH = bottom - top, wantW = W - 40;
+      if (wantH < 60) return;
+      for (var j = 0; j < 4; j++) {
+        var b = boxAt(PHONE_HOME, LAMP_PTS), k = Math.max((b.y1 - b.y0) / wantH, (b.x1 - b.x0) / wantW);
+        PHONE_HOME.fov = T.MathUtils.radToDeg(2 * Math.atan(Math.tan(T.MathUtils.degToRad(PHONE_HOME.fov / 2)) * k));
+        b = boxAt(PHONE_HOME, LAMP_PTS);
+        PHONE_HOME.fx += (W / 2 - (b.x0 + b.x1) / 2) / W; PHONE_HOME.fy += ((top + bottom) / 2 - (b.y0 + b.y1) / 2) / H;
+      }
+    }
+    O.lampBox = function () { return K && K[0] === PHONE_HOME ? boxAt(PHONE_HOME, LAMP_PTS) : null; };
     O.layoutHook = function () {
       capAnswer.style.paddingTop = "";
       if (!K) return;
+      fitPhoneHome();
       if (K[1].fx0 === undefined) K[1].fx0 = K[1].fx;
       K[1].fx = K[1].fx0;
       if (camera.aspect >= 0.85) {

@@ -543,6 +543,15 @@ Sizes and floors:
   it: right of the lamp, left of it, or at the foot, behind one of the
   two scrims. On a phone or a portrait screen there is one column, and
   on the long stops the picture shows at the top.
+- **The phone's first screen** (760px wide or less, held upright, in 3D,
+  before a check) shows the lamp as the desktop does: the desktop's own
+  view of the lamp, its light and the lit wood is fitted into a band
+  under the strip, and the headline, the claim box and the rest start
+  below it, so no word lies on the lamp and no scrim dims it. The band is
+  a third of the screen at most and gives way to the words: the claim box
+  and "Check the research" stay on the first screen. The page's own
+  "Evident" line steps aside there, since the strip names the site. Text
+  mode, a result, a tablet and a phone turned sideways keep their layout.
 - **The bar** is fixed at the foot once a result shows: Back, where you
   are, and Next, which names the next stop. On a wide screen a rail of
   stop names sits at the right edge.

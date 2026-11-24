@@ -11700,6 +11700,21 @@ finally:
     appmod.HOME_LIST_SECONDS = 0
     appmod._drop_home_lists()
 
+# ---- L2: the lamp on a phone's first screen --------------------------------------------------
+# Held upright, before a check, in 3D, the words of stop 1 start below a band the lamp is fitted
+# into (desk3d.js PHONE_HOME, fitted to the band by fitPhoneHome); the band is a third of the
+# screen at most; text mode, a result and a tablet keep today's layout.
+_l2_css = re.sub(r"/\*.*?\*/", "", (ROOT / "static" / "desk.css").read_text(), flags=re.S)
+_l2_block = re.search(r"@media \(max-width: 760px\) and \(orientation: portrait\) \{(.*?)\n\}", _l2_css, re.S)
+_l2_body = _l2_block.group(1) if _l2_block else ""
+t("L2: on a phone held upright, before a check and in 3D, stop 1 starts below the lamp's band, a third of the screen at most",
+  "html.js:not(.no-gl):not(.checked) #s1 { padding-top: calc(var(--strip) + var(--lamp-band)); }" in _l2_body
+  and re.search(r"--lamp-band: clamp\([^;]*30svh\)", _l2_body) is not None, _l2_body[:200])
+_l2_js = (ROOT / "static" / "desk3d.js").read_text()
+t("L2: the scene fits the lamp into that band only on a phone held upright before a check",
+  "function fitPhoneHome()" in _l2_js and "fitPhoneHome();" in _l2_js
+  and re.search(r"function phoneHome\(\) \{ return !O\.root\.classList\.contains\(\"checked\"\) && stage\.clientWidth <= 760 && stage\.clientHeight > stage\.clientWidth; \}", _l2_js) is not None)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
