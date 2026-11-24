@@ -828,7 +828,6 @@ window.__evidentDesk3d = function (O) {
         PHONE_HOME.fx += (W / 2 - (b.x0 + b.x1) / 2) / W; PHONE_HOME.fy += ((top + bottom) / 2 - (b.y0 + b.y1) / 2) / H;
       }
     }
-    O.lampBox = function () { return K && K[0] === PHONE_HOME ? boxAt(PHONE_HOME, LAMP_PTS) : null; };
     O.layoutHook = function () {
       capAnswer.style.paddingTop = "";
       if (!K) return;
