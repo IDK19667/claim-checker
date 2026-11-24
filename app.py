@@ -962,18 +962,18 @@ def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
     return f"{a} {design} in {who}." if who else f"{a} {design} in a general population."
 
 
-def _study_payload(s: dict, cited: set, indirect: dict | None = None) -> dict:
-    # E1, E3 and E5 fields, on the way out, so a saved answer gets them too.
-    extra = {
+def _study_extra(s: dict, cited: set, indirect: dict | None = None) -> dict:
+    """The E1, E3 and E5 fields of one study, on the way out, so a saved
+    answer gets them too."""
+    return {
         "cites_retracted": evidence.cited_retracted(s) or None,
         "caution": evidence.retraction_caution(s) or None,
         "indirect": indirect["reason"] if indirect else None,
-        "contribution": _contribution(s, s["pmid"] in cited, indirect),
+        "contribution": _contribution(s, s.get("pmid") in cited, indirect),
     }
-    return {**_study_fields(s, cited), **extra}
 
 
-def _study_fields(s: dict, cited: set) -> dict:
+def _study_payload(s: dict, cited: set) -> dict:
     return {
         "pmid": s["pmid"],
         "title": s["title"],
@@ -1423,7 +1423,7 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # Present only when the check came back without usable evidence, so
         # a dead end offers somewhere to go instead of stopping.
         "next_steps": _next_steps_safe(claim, search_query, studies, cited),
-        "studies": [_study_payload(s, cited, indirect_of.get(s.get("pmid")))
+        "studies": [{**_study_payload(s, cited), **_study_extra(s, cited, indirect_of.get(s.get("pmid")))}
                     for s in _as_shown(studies)],
     }
     if safety:
