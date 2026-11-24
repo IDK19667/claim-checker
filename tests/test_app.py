@@ -13133,7 +13133,7 @@ _nav_vis = [re.sub(r"<[^>]+>", " ", re.sub(r"<script.*?</script>|<style.*?</styl
 t("NAV 1: no visible text says Details, and the lift instruction is gone from both renderers",
   not any(re.search(r"\bDetails\b", v) for v in _nav_vis)
   and all("Pick a study to lift its sheet" not in x for x in (_tpl, _js, (ROOT / "templates" / "index.html").read_text(), (ROOT / "static" / "app.js").read_text()))
-  and "Each study has its abstract and its PubMed page." in _nav_ord)
+  and "Each study has its PubMed page, and its abstract where PubMed has one." in _nav_ord)
 _nav_css = (ROOT / "static" / "desk.css").read_text()
 t("NAV 1: the actions are 44px targets on every width and never hidden on a wide screen",
   ".row .act { appearance: none; box-sizing: border-box; min-height: 44px;" in _nav_css
@@ -13365,6 +13365,19 @@ _l2_js = (ROOT / "static" / "desk3d.js").read_text()
 t("L2: the scene fits the lamp into that band only on a phone held upright before a check",
   "function fitPhoneHome()" in _l2_js and "fitPhoneHome();" in _l2_js
   and re.search(r"function phoneHome\(\) \{ return !O\.root\.classList\.contains\(\"checked\"\) && stage\.clientWidth <= 760 && stage\.clientHeight > stage\.clientWidth; \}", _l2_js) is not None)
+
+# ---- q10-rel C2, B: every study row shows Open PubMed and either Read abstract or "No abstract on PubMed" -------
+# The note stands in the button's place where PubMed has no abstract: plain words, never a button, never both.
+_abs_studies = [dict(STUDIES[0], pmid="11111111", url=""), dict(STUDIES[1], pmid="22222222", url="", abstract="")]
+db.put_cached_verdict("rows with and without an abstract", "q", "complicated", "Because (Study 1).",
+                      ["11111111"], _abs_studies, tldr="Short take.", still_open="Open.")
+_abs_page = c.get("/?q=rows+with+and+without+an+abstract").data.decode()
+_abs_rows = re.findall(r'<li class="row" id="row-\d+".*?</li>', _abs_page, re.S)
+_abs_kind = [("Read abstract</span>" in r, '<p class="noabs">No abstract on PubMed</p>' in r, 'class="act pm"' in r) for r in _abs_rows]
+t("B: a study with an abstract has the Read abstract button and no note; one without has the note and no button",
+  _abs_kind == [(True, False, True), (False, True, True)]
+  and "Each study has its PubMed page, and its abstract where PubMed has one." in _abs_page
+  and "Each study has its PubMed page, and its abstract where PubMed has one." in (ROOT / "static" / "app.js").read_text(), _abs_kind)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

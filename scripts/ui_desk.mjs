@@ -1444,6 +1444,21 @@ for (const [w, h] of [[375, 812], [1280, 800]]) {
     } catch (e) { results.push(false); console.log(`FAIL ${name}\n     ${String(e.message || e).split("\n")[0]}`); } finally { await ctx.close(); }
   }
 }
+// (b) every study row: Open PubMed, and either the Read abstract button or the plain words "No abstract on PubMed"
+for (const [w, h] of [[375, 812], [1280, 800]]) {
+  await test(`23b: every study row has Open PubMed and Read abstract or "No abstract on PubMed" in its place, ${w}x${h}`, async (page) => {
+    await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+    const s = await page.evaluate(() => {
+      const vis = (e) => !!e && e.checkVisibility() && e.getBoundingClientRect().height > 0;
+      const rows = [...document.querySelectorAll("#rows .row")].map((r) => { const a = r.querySelector(".abs > summary"), no = r.querySelector(".noabs"), pm = r.querySelector("a.pm");
+        return { a: !!a, no: !!no, pm: !!pm, noFocus: !no || (no.tabIndex < 0 && !no.closest("button, a, summary")), noText: no ? no.textContent.trim() : "", h: no ? Math.round(no.getBoundingClientRect().height) : 0 }; });
+      return { rows, intro: document.querySelector("#list-panel .intro").textContent.trim() };
+    });
+    const bad = s.rows.filter((r) => r.a === r.no || !r.pm || !r.noFocus || (r.no && r.noText !== "No abstract on PubMed"));
+    must(s.rows.length && !bad.length && s.rows.some((r) => r.a) && s.rows.some((r) => r.no), `${s.rows.length} rows, ${bad.length} wrong: ${JSON.stringify(bad[0] || {})}`);
+    must(s.intro === "Each study has its PubMed page, and its abstract where PubMed has one.", `intro: "${s.intro}"`);
+  }, { w, h });
+}
 
 await gpuBrowser.close();
 await browser.close();

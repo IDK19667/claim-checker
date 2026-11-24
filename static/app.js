@@ -527,7 +527,7 @@ function weighedHtml(data) {
   return `<section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort"><div class="cap left"><div class="inner wide">`
     + `<div class="panel list" id="list-panel" tabindex="-1">`
     + `<h2 id="h-sort">Which studies the answer rests on</h2>`
-    + `<p class="intro">Each study has its abstract and its PubMed page.</p>`
+    + `<p class="intro">Each study has its PubMed page, and its abstract where PubMed has one.</p>`
     + `<div id="rows">${rows}</div></div></div></div></section>`;
 }
 

@@ -4,6 +4,13 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): Every study row says where its abstract is
+
+Each row shows "Open PubMed" and either the "Read abstract" button or, where PubMed has no
+abstract, the plain words "No abstract on PubMed" in its place (a label, not a control). The
+Studies intro no longer promises an abstract for every study: "Each study has its PubMed page,
+and its abstract where PubMed has one."
+
 ## 2026-11-24 (q10-rel): One "Check another claim" on a result, at the end of the page
 
 On a wide screen it showed twice, in the rail and in the action row under Share. The rail is

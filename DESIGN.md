@@ -642,9 +642,11 @@ boxes.
   was studied), its caution as a sentence, and "Indirect context" with
   its reason when it is indirect. Then two actions, each at least 44px
   tall at every width: "Read abstract", a disclosure that opens the
-  abstract in the row ("Hide abstract" closes it; "No abstract on
-  PubMed" when there is none), with "Citations and related studies"
-  inside it; and "Open PubMed", a link in a new tab. Pressing the row's
+  abstract in the row ("Hide abstract" closes it), with "Citations and
+  related studies" inside it; and "Open PubMed", a link in a new tab.
+  Where PubMed has no abstract, the plain words "No abstract on PubMed"
+  stand in the button's place: the mono label in `--desk-on-2`, not a
+  button, not focusable. Pressing the row's
   title still lifts its sheet on the desk, as an extra no text explains.
 - **The sheets** (a study's abstract, How it works): rise from the foot
   over the scrim on `--desk-deep`, with a sticky bar holding Close.
