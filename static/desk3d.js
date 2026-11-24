@@ -1007,6 +1007,9 @@ window.__evidentDesk3d = function (O) {
           ["map", "emissiveMap", "alphaMap", "roughnessMap", "bumpMap"].forEach(function (k) { var t = m[k]; if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
         });
       });
+      // the card's faces not on it right now: the printed verdict, swapped in as the card leaves its stand on the
+      // first Next, and the two standing faces
+      [cvMap, csMap, csvMap].forEach(function (t) { if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
       return list;
     }
     function warmStep() {

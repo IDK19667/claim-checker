@@ -934,6 +934,15 @@ await snappy("21: on the phone the first Next after a fresh answer starts moving
   must(r.moves >= 4, `the move was a cut (${r.moves} changes)`);
 });
 
+await snappy("21: once warmed, the first Next after a fresh answer sends no card face to the GPU", async (page) => {
+  if (!(await fresh3d(page))) return;
+  must(await warmed(page), "the warm-up never finished");
+  await page.evaluate(() => { const gl = window.__evd.renderer.getContext(); window.__big = []; const o = gl.texImage2D.bind(gl); gl.texImage2D = function (...a) { const s = a[a.length - 1]; if (s && s.width >= 1600) window.__big.push(s.width + "x" + s.height); return o(...a); }; });
+  await page.click("#next"); await page.waitForTimeout(2500);
+  const big = await page.evaluate(() => window.__big);
+  must(!big.length, `card faces sent after the press: ${big.join(" ")}`);
+}, { phone: false, gpu: false });
+
 await snappy("21: on the phone at slow 4G the claim box is usable as the page's own scripts are in, not later", async (page, cdp) => {
   await cdp.send("Network.enable"); await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 150, downloadThroughput: 1.6e6 / 8, uploadThroughput: 750e3 / 8 });
   await page.addInitScript(() => {
