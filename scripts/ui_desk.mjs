@@ -966,6 +966,13 @@ await snappy("21: once warmed, the first Next after a fresh answer sends no card
   must(!big.length, `card faces sent after the press: ${big.join(" ")}`);
 }, { phone: false, gpu: false });
 
+await snappy("21: a sheet is three draw calls, not six", async (page) => {
+  await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  const g = await page.evaluate(() => { const out = []; window.__evd.scene.traverse((o) => { if (o.isMesh && o.userData.face) out.push(o.geometry.groups.length); }); return out; });
+  must(g.length && g.every((n) => n === 3), `groups per sheet: ${g.join()}`);
+}, { phone: false, gpu: false });
+
 await snappy("21: on the phone at slow 4G the claim box is usable as the page's own scripts are in, not later", async (page, cdp) => {
   await cdp.send("Network.enable"); await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 150, downloadThroughput: 1.6e6 / 8, uploadThroughput: 750e3 / 8 });
   await page.addInitScript(() => {

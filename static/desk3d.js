@@ -322,7 +322,16 @@ window.__evidentDesk3d = function (O) {
         var px = pos.getX(v) / (PW / 2), pz = pos.getZ(v) / (PH / 2);
         pos.setY(v, pos.getY(v) + 0.0005 * px * px + cA * Math.pow(Math.max(0, px * corner * 0.5 + pz * 0.5), 4));
       }
-      g.computeVertexNormals(); return g;
+      g.computeVertexNormals();
+      // the four edges share one material: drawn as one group, so a sheet is three draw calls, not six (and three in
+      // the shadow pass). The same triangles with the same materials
+      var idx = g.index.array, gs = g.groups, order = [0, 1, 4, 5, 2, 3], out = new (idx.constructor)(idx.length), at = 0, ng = [];
+      order.forEach(function (gi) { var q = gs[gi]; out.set(idx.subarray(q.start, q.start + q.count), at);
+        var mi = gi === 2 ? 2 : gi === 3 ? 3 : 0, last = ng[ng.length - 1];
+        if (last && last.materialIndex === mi) last.count += q.count; else ng.push({ start: at, count: q.count, materialIndex: mi });
+        at += q.count; });
+      g.setIndex(new T.BufferAttribute(out, 1)); g.clearGroups(); ng.forEach(function (q) { g.addGroup(q.start, q.count, q.materialIndex); });
+      return g;
     }
     var sheets = [], STACK = new T.Vector3(-0.46, 0, 0.0), GAP = 0.0004, sheetGen = 0;
     // one blank paper face for every sheet until its own face is painted, after the first frame
