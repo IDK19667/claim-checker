@@ -2958,15 +2958,20 @@ def retraction_caution(study) -> str:
             f"Its conclusions may rest in part on them. The review itself has not been retracted.")
 
 
-RETRACTED_REVIEW_SENTENCE = ("A review used here cites a study that was later retracted, "
-                             "so its results are treated with caution.")
-RETRACTED_REVIEWS_SENTENCE = ("Reviews used here cite studies that were later retracted, "
-                              "so their results are treated with caution.")
+def _numbers(ns) -> str:
+    """'1', '1 and 3', '1, 2 and 3'."""
+    ns = [str(n) for n in ns]
+    return ns[0] if len(ns) == 1 else f"{', '.join(ns[:-1])} and {ns[-1]}"
 
 
-def retracted_review_sentence(count: int) -> str:
-    """The explanation's one sentence for `count` flagged reviews relied on."""
-    return RETRACTED_REVIEWS_SENTENCE if count > 1 else RETRACTED_REVIEW_SENTENCE
+def retracted_review_sentence(numbers) -> str:
+    """The one sentence naming the relied-on reviews (by study number) that
+    cite a retracted study. Said once at the end of the explanation and of
+    each list citing one; it removes nothing."""
+    ns = sorted(set(numbers or ()))
+    if len(ns) == 1:
+        return f"Study {ns[0]} cites a study that was later retracted, so treat its results with caution."
+    return f"Studies {_numbers(ns)} cite studies that were later retracted, so treat their results with caution."
 
 
 # ---------------------------------------------------------------------------
@@ -3005,11 +3010,19 @@ def design_kind(studies, cited_pmids=()) -> str:
     """The kind of study the answer rests on, in a reader's words, read from
     the top tier relied on: what "Strong" used to stand for."""
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
+    # A review relied on cites a retracted paper: the basis names it first,
+    # whenever one is relied on, and the clean designs follow (brief E3 N1).
+    flagged = [s for s in cited if demoted(s)]
+    if flagged:
+        head = FLAGGED_BASIS if len(flagged) == 1 else FLAGGED_BASES
+        clean = [s for s in cited if not demoted(s)]
+        return f"{head}, and {_clean_kind(clean)}" if clean else head
+    return _clean_kind(cited)
+
+
+def _clean_kind(cited) -> str:
+    """design_kind over studies none of which is flagged."""
     top = [s for s in cited if shown_tier(s) == "strong"]
-    # The best study relied on is a review citing a retracted paper, and no
-    # clean top-tier study stands beside it: the basis says so.
-    if not top and any(demoted(s) and gate_tier(s) == "strong" for s in cited):
-        return FLAGGED_BASIS
     if top:
         reviews = [s for s in top if is_review(s)]
         if reviews:
@@ -3028,6 +3041,7 @@ def design_kind(studies, cited_pmids=()) -> str:
 
 
 FLAGGED_BASIS = "a review that cites a retracted study"
+FLAGGED_BASES = "reviews that cite retracted studies"
 # A "true" is never surer in statement 1 than the old line's level word,
 # read at its low end (line_certainty): the phrase carries that cap.
 TRUE_PHRASES = {"high": CLAIM_PHRASES["true"],

@@ -1165,50 +1165,34 @@ def _listed(v: dict) -> dict:
     return v
 
 
-# The figure lists a flagged review's own figures leave (E1c ii).
-_FIGURE_LISTS = ("effect_size", "evidence", "says")
-
-
 def _retracted_review_rules(explanation, breakdown, studies, cited):
-    """E1c(ii) and (iv): a sentence that cites only reviews flagged as citing
-    a retracted paper, and gives a figure, goes from the explanation and the
-    figure lists; the effect label goes with the effect sentence; and the
-    explanation gains RETRACTED_REVIEW_SENTENCE once when a flagged review
-    is relied on. Untouched when no study is flagged."""
+    """E1c(iv), as brief E3 N1 has it: a flag never removes a sentence. When
+    a review relied on cites a retracted study, one sentence naming it
+    (evidence.retracted_review_sentence) stands once at the end of the
+    explanation, and once at the end of each breakdown list ("says",
+    "evidence") holding a sentence that cites such a review. Untouched when
+    no relied-on study is flagged."""
     count = len(studies or [])
-    flagged = {i + 1 for i, s in enumerate(studies or []) if evidence.cited_retracted(s)}
+    flagged = [i + 1 for i, s in enumerate(studies or [])
+               if evidence.cited_retracted(s) and s.get("pmid") in cited]
     if not flagged:
         return explanation, breakdown
-
-    def its_figure(sentence):
-        cites = breakdown_mod.refs(sentence, count)
-        return bool(cites) and set(cites) <= flagged and bool(re.search(r"\d", re.sub(
-            r"\((?:Studies|Study)[^)]*\)", "", sentence)))
-
-    def keep(text):
-        return " ".join(x for x in breakdown_mod.sentences(text or "") if not its_figure(x))
-
-    explanation = keep(explanation)
+    said = evidence.retracted_review_sentence(flagged)
+    if said not in (explanation or ""):
+        explanation = f"{(explanation or '').strip()} {said}".strip()
     if isinstance(breakdown, dict):
         bd = dict(breakdown)
-        for key in _FIGURE_LISTS:
-            value = bd.get(key)
-            if isinstance(value, list):
-                bd[key] = [k for k in (keep(v) for v in value) if k]
-            elif isinstance(value, str) and value:
-                bd[key] = keep(value)
-                if key == "effect_size" and not bd[key]:
-                    bd["effect"] = None
+        for key in ("says", "evidence"):
+            items = bd.get(key)
+            if not isinstance(items, list):
+                continue
+            named = sorted({n for x in items if isinstance(x, str)
+                            for n in breakdown_mod.refs(x, count) if n in flagged})
+            if named:
+                line = evidence.retracted_review_sentence(named)
+                if line not in items:
+                    bd[key] = [*items, line]
         breakdown = bd
-    used_flagged = sum(1 for s in studies or [] if evidence.cited_retracted(s) and s.get("pmid") in cited)
-    if used_flagged:
-        said = evidence.retracted_review_sentence(used_flagged)
-        if said not in (explanation or ""):
-            explanation = f"{(explanation or '').strip()} {said}".strip()
-        # The page prints "says" in place of the explanation when there is
-        # one, so the sentence goes there too: a reader meets it once.
-        if isinstance(breakdown, dict) and breakdown.get("says") and said not in breakdown["says"]:
-            breakdown = {**breakdown, "says": [*breakdown["says"], said]}
     return explanation, breakdown
 
 
@@ -1264,11 +1248,6 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
         # already on the page, and repeating it would pass it off as reasoning.
         explanation = breakdown_mod.held_to_sources(explanation, studies, relied, claim=claim)
         breakdown = breakdown_mod.hold_breakdown(breakdown, studies, relied, claim=claim)
-    # A review whose reference list names a retracted paper (E1): figures
-    # taken from it alone leave the figure lists, and the answer says once
-    # that a review it used cites one. Nothing here touches an answer with
-    # no flagged review.
-    explanation, breakdown = _retracted_review_rules(explanation, breakdown, studies, cited)
     # An answer the guidance rule set is never followed by words saying the
     # claim cannot be rated: the page says it rests on that guidance instead.
     if verdict.from_guidance(tldr, claim):
@@ -1379,6 +1358,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
     # One figure, once (E4): within everything a reader sees, a sentence
     # that only repeats figures already given goes. Code only.
     explanation, breakdown = breakdown_mod.one_figure_once(explanation, breakdown, len(studies or []))
+    # A review relied on cites a retracted paper (E1): the answer names it,
+    # once in the explanation and once in each list citing it. Last, so no
+    # rule above can take the sentence out; a flag never removes a sentence.
+    explanation, breakdown = _retracted_review_rules(explanation, breakdown, studies, cited)
     if breakdown:
         # Added on the way out rather than stored, so a check cached before
         # these existed gets them too: each relied-on study's conclusion in

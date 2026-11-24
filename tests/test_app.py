@@ -13226,11 +13226,14 @@ t("BRIEF E1 vinegar: the review that cites the retracted trial carries the cauti
   _e_s1["caution"] and "38966098" in _e_s1["caution"] and _e_s1["tier"] == "moderate", (_e_s1["caution"], _e_s1["tier"]))
 _e_bdo = _e_out["breakdown"]
 _e_lists = (_e_bdo.get("says") or []) + (_e_bdo.get("evidence") or []) + [_e_bdo.get("effect_size") or ""]
-t("BRIEF E1 vinegar: a figure taken from the flagged review alone leaves the figure lists",
-  not any("789" in x for x in _e_lists), _e_lists)
-t("BRIEF E1 vinegar: the answer says once that a review it used cites a retracted study",
-  sum(x.count(_e_ev.RETRACTED_REVIEW_SENTENCE) for x in _e_bdo.get("says") or []) == 1
-  and _e_out["explanation"].count(_e_ev.RETRACTED_REVIEW_SENTENCE) == 1)
+# Brief E3 N1 replaced "a figure taken from the flagged review alone leaves
+# the figure lists": a flag never removes a sentence.
+t("BRIEF E3 N1 vinegar: a figure taken from the flagged review stays in the figure lists",
+  any("789" in x for x in _e_lists), _e_lists)
+_e_one = _e_ev.retracted_review_sentence([1])
+t("BRIEF E3 N1 vinegar: the answer names the flagged review once in 'says' and once in the explanation",
+  sum(x.count(_e_one) for x in _e_bdo.get("says") or []) == 1
+  and _e_out["explanation"].count(_e_one) == 1 and _e_one.startswith("Study 1 cites a study"))
 _e_line = _e_out["evidence_line"]
 t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare strength word",
   _e_line.startswith("Cure claim: Not supported by the studies reviewed.")
@@ -13249,7 +13252,7 @@ t("BRIEF E5: every relied-on study has a contribution, and every study has the t
   and all({"contribution", "caution", "indirect"} <= set(s) for s in _e_out["studies"]))
 t("BRIEF E5: a study set aside says why",
   _e_out["studies"][3]["contribution"] == "Set aside: retracted by the journal.", _e_out["studies"][3]["contribution"])
-_e_new = [_e_line, _e_out["effect_line"], _e_s1["caution"], _e_ev.RETRACTED_REVIEW_SENTENCE] + \
+_e_new = [_e_line, _e_out["effect_line"], _e_s1["caution"], _e_ev.retracted_review_sentence([1, 2])] + \
     [s["contribution"] for s in _e_out["studies"]] + [s["indirect"] or "" for s in _e_out["studies"]]
 t("BRIEF E: no dash in any new string a reader sees", not any(_e_re.search("[–—]", x or "") for x in _e_new))
 _e_unflag = _e_respond(_e_vin, flag=False)
@@ -13509,9 +13512,11 @@ t("BRIEF E2r m1: a flagged review as the best study relied on is named in the ba
   _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], "")
   == "The claim: Not supported by the studies reviewed. Based on a review that cites a retracted study",
   _e_ev.claim_statement("false", "Moderate evidence against this claim", [_m1_flag], ["70"], ""))
-t("BRIEF E2r m1: a clean top-tier study beside it keeps the usual basis",
+# Brief E3 N1 replaced "a clean top-tier study beside it keeps the usual
+# basis": the flagged review is named whenever relied on, the clean after.
+t("BRIEF E3 N1: a clean top-tier study beside it follows the flagged review in the basis",
   _e_ev.claim_statement("false", "Strong evidence against this claim", [_m1_flag, _e_rcts[0]], ["70", "50"], "")
-  .endswith("Based on randomized trials"))
+  .endswith("Based on a review that cites a retracted study, and randomized trials"))
 t("BRIEF E2r m2: a narrowing reads 'which were only in'",
   _e_ev.claim_statement("complicated", "Moderate evidence, but only in older adults", _e_rcts, ["50"], "")
   .startswith("The claim: No plain yes or no from the studies reviewed, which were only in older adults."))
@@ -13527,10 +13532,10 @@ t("BRIEF E2r m4: the caution for several retracted studies, the same for every k
 _m4_set = [_m4_two, dict(_m1_flag)]
 _m4_ex, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71", "70"})
 _m4_ex1, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71"})
-t("BRIEF E2r m4: the explanation sentence is singular for one flagged review and plural for two",
-  _m4_ex.endswith("Reviews used here cite studies that were later retracted, so their results are treated "
-                  "with caution.") and _m4_ex1.endswith("A review used here cites a study that was later "
-                                                         "retracted, so its results are treated with caution."),
+# Brief E3 N1 replaced the generic sentence with one naming the studies.
+t("BRIEF E3 N1: the explanation sentence names one flagged review, or each of two",
+  _m4_ex.endswith("Studies 1 and 2 cite studies that were later retracted, so treat their results with caution.")
+  and _m4_ex1.endswith("Study 1 cites a study that was later retracted, so treat its results with caution."),
   (_m4_ex, _m4_ex1))
 _m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True, None)
 t("BRIEF E2r m3: a contribution never states a population the record does not give",
@@ -13729,6 +13734,177 @@ t("BRIEF E2r null: a repeat whose translation says it was not significant stays,
   _nf_out["evidence"] == _nf_bd["evidence"], _nf_out["evidence"])
 t("BRIEF E2r null: a plain repeat still goes with its 'That is' translation",
   "0.99" not in (_nf_out["effect_size"] or "") or _nf_out["effect_size"] == _nf_bd["effect_size"], _nf_out["effect_size"])
+
+# ---------------------------------------------------------------------
+# BRIEF E3 (second repair of the evidence change). Self-contained: each
+# finding's tests use only the names defined here.
+# ---------------------------------------------------------------------
+import copy as _e3_copy  # noqa: E402
+import json as _e3_json  # noqa: E402
+import random as _e3_random  # noqa: E402
+import re as _e3_re  # noqa: E402
+import breakdown as _e3_bd  # noqa: E402
+import evidence as _e3_ev  # noqa: E402
+
+_E3_FLAG = [{"pmid": "39000001", "title": None, "trial": False}]
+_E3_MA = ["Journal Article", "Meta-Analysis", "Systematic Review"]
+_E3_RCT = ["Journal Article", "Randomized Controlled Trial"]
+
+
+def _e3_mk(pmid, types, title, abstract):
+    return {"pmid": pmid, "title": title, "journal": "J", "year": "2022", "authors": ["A"],
+            "publication_types": list(types), "data_banks": None, "abstract": abstract,
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"}
+
+
+def _e3_fresh(claim, query, studies, model, finds, expl, bd_extra=None, flag=(), tldr="The studies show it is not safe."):
+    """A fresh check end to end: weigh_evidence with a canned model answer,
+    then the response builder. `flag` lists the studies (0-based) flagged."""
+    st = _e3_copy.deepcopy(studies)
+    for j in flag:
+        st[j]["cites_retracted"] = list(_E3_FLAG)
+    raw = _e3_json.dumps({"verdict": model, "tldr": tldr, "explanation": expl, "still_open": "Longer studies are needed.",
+                          "cited_study_numbers": list(range(1, len(st) + 1)),
+                          "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True,
+                                         "finding": f} for i, f in enumerate(finds)],
+                          "parts": [], "evidence": (bd_extra or {}).get("evidence", []),
+                          "effect_size": (bd_extra or {}).get("effect_size", ""),
+                          "strength": "", "applies_to": "", "not_applies_to": "", "unknowns": ""})
+    saved = verdict._complete_json, verdict.guidance_ahead
+    verdict._complete_json = lambda *a, **k: (raw, None)
+    verdict.guidance_ahead = lambda c: None
+    try:
+        r = verdict.weigh_evidence(claim, st, query)
+    finally:
+        verdict._complete_json, verdict.guidance_ahead = saved
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(claim, query, r["verdict"], r["tldr"], r["explanation"],
+                                      r.get("cited_studies") or [], st, "http://localhost/",
+                                      still_open=r.get("still_open", ""), breakdown=r.get("breakdown"))
+
+
+def _e3_said(resp):
+    """Every sentence a reader sees in the explanation and each list, by place."""
+    bd = resp.get("breakdown") or {}
+    out = {"explanation": set(_e3_bd.sentences(resp.get("explanation") or ""))}
+    for key in ("says", "evidence"):
+        out[key] = {x for item in bd.get(key) or [] for x in _e3_bd.sentences(item or "")}
+    out["effect_size"] = set(_e3_bd.sentences(bd.get("effect_size") or ""))
+    return out
+
+
+def _e3_lost(off, on):
+    """The sentences present with the flags off and missing with them on."""
+    a, b = _e3_said(off), _e3_said(on)
+    return {k: sorted(a[k] - b[k]) for k in a if a[k] - b[k]}
+
+
+# N1: the flag never removes a sentence. The reviewer's kava input.
+_e3_kr = _e3_mk("620001", _E3_MA, "Kava and liver injury: a systematic review and meta-analysis",
+                "We pooled 20 studies (n=2600). RESULTS: Liver injury occurred in 3.1% of kava users (RR 2.4, 95% CI "
+                "1.5 to 3.8), with 2 liver transplants. CONCLUSIONS: Kava can injure the liver.")
+_e3_kt = _e3_mk("620002", _E3_RCT, "Kava for anxiety: a randomized placebo-controlled trial",
+                "In a randomized double-blind placebo-controlled trial of 210 adults, liver enzymes did not differ. "
+                "CONCLUSIONS: Kava was well tolerated over 8 weeks.")
+_E3_HARM = "Liver injury occurred in 3.1% of kava users, with 2 needing a liver transplant (Study 1)."
+_e3_kexpl = _E3_HARM + " A short trial saw no change in liver enzymes over 8 weeks (Study 2)."
+_e3_kbd = {"evidence": [_E3_HARM], "effect_size": "Kava users had a risk ratio of 2.4 for liver injury (Study 1)."}
+_e3_kava_bad = []
+for _e3_model in ("false", "true", "complicated"):
+    _e3_off = _e3_fresh("Kava supplements are safe for the liver", "(kava) AND (liver injury OR hepatotoxicity)",
+                        [_e3_kr, _e3_kt], _e3_model, ["against", "for"], _e3_kexpl, _e3_kbd)
+    _e3_on = _e3_fresh("Kava supplements are safe for the liver", "(kava) AND (liver injury OR hepatotoxicity)",
+                       [_e3_kr, _e3_kt], _e3_model, ["against", "for"], _e3_kexpl, _e3_kbd, flag=(0,))
+    _e3_harm_on = [k for k, v in _e3_said(_e3_on).items() if _E3_HARM in v]
+    if _e3_lost(_e3_off, _e3_on) or "explanation" not in _e3_harm_on or "evidence" not in _e3_harm_on:
+        _e3_kava_bad.append((_e3_model, _e3_lost(_e3_off, _e3_on), _e3_harm_on))
+    if _e3_model == "false":
+        _e3_kava_on = _e3_on
+t("BRIEF E3 N1: kava, the flagged review's harm sentence stays under every verdict, and no sentence leaves",
+  not _e3_kava_bad, _e3_kava_bad)
+_E3_ONE = "Study 1 cites a study that was later retracted, so treat its results with caution."
+_e3_kbdo = _e3_kava_on["breakdown"]
+t("BRIEF E3 N1: kava, the caution sentence names the study, once at the end of the explanation and of each list citing it",
+  _e3_kava_on["explanation"].endswith(_E3_ONE) and _e3_kava_on["explanation"].count(_E3_ONE) == 1
+  and _e3_kbdo["evidence"][-1] == _E3_ONE and _e3_kbdo["evidence"].count(_E3_ONE) == 1
+  and _e3_kbdo["says"][-1] == _E3_ONE and _e3_kbdo["says"].count(_E3_ONE) == 1, (_e3_kava_on["explanation"], _e3_kbdo))
+t("BRIEF E3 N1: kava, the basis names the flagged review, then the clean design relied on",
+  _e3_kava_on["evidence_line"].endswith("Based on a review that cites a retracted study, and randomized trials"),
+  _e3_kava_on["evidence_line"])
+t("BRIEF E3 N1: the sentence for several flagged reviews names each",
+  _e3_ev.retracted_review_sentence([3, 1]) == "Studies 1 and 3 cite studies that were later retracted, so treat "
+  "their results with caution." and _e3_ev.retracted_review_sentence([1, 2, 4]).startswith("Studies 1, 2 and 4 cite"))
+_e3_two = [_e3_mk("71", _E3_MA, "A review", "x"), _e3_mk("72", _E3_MA, "B review", "y"), _e3_mk("73", _E3_RCT, "C", "z")]
+for _e3_s in _e3_two[:2]:
+    _e3_s["cites_retracted"] = list(_E3_FLAG)
+_e3_x, _e3_b = appmod._retracted_review_rules("It helped (Study 1). It did not (Study 3).",
+                                              {"says": ["It helped (Study 2)."], "evidence": ["It did not (Study 3)."]},
+                                              _e3_two, {"71", "72", "73"})
+t("BRIEF E3 N1: the explanation names every flagged review relied on; a list names those it cites, and a list "
+  "citing none gets no sentence",
+  _e3_x.endswith("Studies 1 and 2 cite studies that were later retracted, so treat their results with caution.")
+  and _e3_b["says"][-1] == "Study 2 cites a study that was later retracted, so treat its results with caution."
+  and _e3_b["evidence"] == ["It did not (Study 3)."], (_e3_x, _e3_b))
+_e3_x1, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _e3_two, {"73"})
+t("BRIEF E3 N1: a flagged review not relied on adds nothing", _e3_x1 == "It helped (Study 1).", _e3_x1)
+_e3_x2, _e3_b2 = _e3_bd.one_figure_once(_e3_x + " " + _E3_ONE.replace("Study 1", "Study 2"),
+                                        {"says": [_E3_ONE], "evidence": [_E3_ONE]}, 3)
+t("BRIEF E3 N1: the caution sentence is exempt from one figure once",
+  _E3_ONE in _e3_b2["evidence"] and _E3_ONE in _e3_b2["says"], _e3_b2)
+
+# N1 property: over seeded cases, every sentence present with the flags off
+# is present with them on, in the explanation and in every list.
+_E3_DESIGNS = (("ma", _E3_MA), ("rct", _E3_RCT), ("cohort", ["Journal Article", "Observational Study"]),
+               ("review", ["Journal Article", "Review"]), ("case", ["Case Reports"]), ("mice", ["Journal Article"]))
+_E3_OUTS = ("liver injury", "fasting glucose", "pain scores", "body weight", "bleeding", "memory scores")
+_E3_CLAIMS = (("Kava supplements are safe for the liver", "(kava) AND (liver injury)"),
+              ("Vinegar cures diabetes", "(vinegar) AND (diabetes OR glucose)"),
+              ("Turmeric relieves joint pain", "(turmeric) AND (pain)"),
+              ("Green tea causes weight loss", "(green tea) AND (weight loss)"),
+              ("Ginkgo is safe to take before surgery", "(ginkgo) AND (bleeding)"),
+              ("Ginkgo improves memory", "(ginkgo) AND (memory)"))
+
+
+def _e3_case(rng):
+    claim, query = rng.choice(_E3_CLAIMS)
+    n = rng.randint(1, 4)
+    studies, sentences, finds = [], [], []
+    for i in range(n):
+        name, types = rng.choice(_E3_DESIGNS)
+        out = rng.choice(_E3_OUTS)
+        fig = rng.choice((12, 18, 25, 31, 40))
+        who = "mice" if name == "mice" else "adults"
+        verb = rng.choice(("fell", "rose"))
+        ab = (f"We studied 300 {who}. RESULTS: {out.capitalize()} {verb} by {fig}% (95% CI 4 to 50). "
+              f"CONCLUSIONS: The effect on {out} was {rng.choice(('clear', 'harmful', 'helpful'))}.")
+        studies.append(_e3_mk(str(800000 + i), types, f"{name} of {out}", ab))
+        sentences.append(f"{out.capitalize()} {verb} by {fig}% in {who} (Study {i + 1}).")
+        finds.append(rng.choice(("for", "against", "unclear")))
+    flag = [i for i, s in enumerate(studies) if s["publication_types"] in (_E3_MA, ["Journal Article", "Review"])
+            and rng.random() < 0.7]
+    expl = " ".join(rng.sample(sentences, len(sentences)))
+    bd = {"evidence": rng.sample(sentences, rng.randint(1, len(sentences))),
+          "effect_size": rng.choice(sentences)}
+    return claim, query, studies, rng.choice(("true", "false", "complicated", "insufficient")), finds, expl, bd, flag
+
+
+_e3_rng = _e3_random.Random(20261124)
+_e3_prop_bad, _e3_prop_n, _e3_prop_flagged = [], 0, 0
+_e3_i = 0
+while _e3_prop_n < 320 and _e3_i < 3000:
+    _e3_i += 1
+    _e3_c = _e3_case(_e3_rng)
+    if not _e3_c[7]:
+        continue
+    _e3_prop_n += 1
+    _e3_off = _e3_fresh(*_e3_c[:7])
+    _e3_on = _e3_fresh(*_e3_c[:7], flag=_e3_c[7])
+    _e3_prop_flagged += bool(any(s.get("cites_retracted") for s in _e3_on["studies"]))
+    if _e3_lost(_e3_off, _e3_on):
+        _e3_prop_bad.append((_e3_i, _e3_c[0], _e3_lost(_e3_off, _e3_on)))
+t(f"BRIEF E3 N1: over {_e3_prop_n} seeded cases with a flagged review, no sentence present with the flags off is "
+  "missing with them on, in the explanation or any list", _e3_prop_n >= 300 and not _e3_prop_bad,
+  (_e3_prop_n, _e3_prop_bad[:3]))
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
