@@ -3134,8 +3134,9 @@ def effect_statement(verdict: str, absolute: str, effect_sentence: str, studies,
     if all(demoted(s) for s in used):
         sure = FLAGGED_ONLY_CLAUSE
     else:
-        # A flagged review's own grade never vouches for a finding.
-        clean = [s.get("pmid") for s in studies if s.get("pmid") in cited_pmids and not demoted(s)]
+        # Grades come only from the studies the quoted sentence cites (brief
+        # E4 D3), and a flagged review's own grade never vouches for a finding.
+        clean = [s.get("pmid") for s in used if not demoted(s)]
         grades = stated_grades(studies, clean, outcome)
         if len(grades) == 1:
             sure = f"Certainty: {grades[0]}, as the review rates it"

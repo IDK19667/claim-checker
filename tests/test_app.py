@@ -13501,11 +13501,13 @@ t("BRIEF E2r B3: one stated grade reads 'as the review rates it'",
   _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1])
   == "What the studies did find: HbA1c fell (Study 1). Certainty: moderate, as the review rates it",
   _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "", cites=[1]))
-t("BRIEF E2r B3: several grades read 'varies by outcome, lowest to highest, as the reviews rate it'",
-  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2], ["1", "2"], "", cites=[1])
-  == "What the studies did find: HbA1c fell (Study 1). Certainty varies by outcome, low to moderate, "
-  "as the reviews rate it", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2],
-                                                   ["1", "2"], "", cites=[1]))
+# Brief E4 D3 replaced the sentence citing Study 1 alone (it took Study 2's
+# grade too): the sentence now cites both graded reviews.
+t("BRIEF E4 D3: several grades among the cited reviews read 'varies by outcome, lowest to highest, as the reviews rate it'",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2], ["1", "2"], "", cites=[1, 2])
+  == "What the studies did find: HbA1c fell (Studies 1 and 2). Certainty varies by outcome, low to moderate, "
+  "as the reviews rate it", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Studies 1 and 2).", [_r3_g1, _r3_g2],
+                                                   ["1", "2"], "", cites=[1, 2]))
 
 # Brief E2 repair, m1 and m2: statement 1 is never surer than the old line.
 _m1_table = {"Strong evidence for this claim": "Supported by the studies reviewed",
@@ -14459,6 +14461,30 @@ t("BRIEF E4 D1: the reviewer's garlic and cinnamon inputs contribute the authors
   == "Garlic reduced body weight in adults with hypertension and lowered their blood pressure."
   and dict(_e4_marked)["pop-strip diabetes"]["contribution"]
   == "Cinnamon reduced weight in patients with diabetes and improved their glucose control.")
+
+# BRIEF E4 D3: the second statement's certainty comes only from the studies
+# its quoted sentence cites. The reviewer's input (R3): a sentence citing only
+# a trial, beside a relied-on meta-analysis rated moderate (GRADE).
+def _d3_st(pmid, types, title, ab):
+    return {"pmid": pmid, "title": title, "abstract": ab, "publication_types": list(types), "year": "2020"}
+_D3_MA = _d3_st("1", ("Journal Article", "Meta-Analysis", "Systematic Review"),
+                "Garlic and blood pressure: a meta-analysis of randomized trials in adults",
+                "We pooled 20 randomized trials in 1,500 adults. Systolic pressure fell by 8 mmHg. The certainty of "
+                "evidence was moderate (GRADE). CONCLUSIONS: Garlic lowers blood pressure.")
+_D3_RCT = _d3_st("2", ("Journal Article", "Randomized Controlled Trial"),
+                 "Garlic for hypertension: a randomized trial in adults",
+                 "In a randomized trial of 200 adults, pressure fell by 5 mmHg. CONCLUSIONS: Garlic lowered blood pressure.")
+_D3_Q = ["(garlic) AND (hypertension OR blood pressure)"]
+_d3_ab = appmod.breakdown_mod.absolute_claim("Garlic cures high blood pressure")
+_d3_trial = appmod._statement_two("false", _d3_ab, {"effect_size": "Pressure fell by 5 mmHg (Study 2)."},
+                                  [_D3_MA, _D3_RCT], {"1", "2"}, "blood pressure", _D3_Q)
+t("BRIEF E4 D3: a sentence citing only a trial takes no grade from the relied-on review beside it",
+  _d3_trial.startswith("What the studies did find: Pressure fell by 5 mmHg (Study 2).")
+  and "moderate" not in _d3_trial and appmod.evidence.UNGRADED in _d3_trial, _d3_trial)
+_d3_review = appmod._statement_two("false", _d3_ab, {"effect_size": "Systolic pressure fell by 8 mmHg (Study 1)."},
+                                   [_D3_MA, _D3_RCT], {"1", "2"}, "blood pressure", _D3_Q)
+t("BRIEF E4 D3: a sentence citing the review keeps the review's own grade",
+  "Certainty: moderate, as the review rates it" in _d3_review, _d3_review)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
