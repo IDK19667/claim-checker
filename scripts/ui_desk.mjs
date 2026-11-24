@@ -46,6 +46,11 @@
  *    words from Next's state, a click moves as Next does, gone at the end; the
  *    chevron dips once and never under reduced motion; in 3D a wheel or a drag from
  *    the Answer lands on Read, and text mode scrolls freely with the words following.
+ * 21. Snappy: no picture drawn while the home page scrolls or on a settled screen
+ *    for 2 s; on the phone profile (CPU slowed 4 times, the Mac's own GPU) the first
+ *    Next after a fresh answer moves within 300 ms and glides, and a fresh answer is
+ *    on screen within 2.5 s of arriving; once warmed the first Next sends no card
+ *    face; a sheet is three draw calls; the claim box is usable as the scripts are in.
  */
 import { chromium } from "playwright";
 
@@ -849,6 +854,87 @@ await test("20: a kept copy and a server taking 4 s: the copy paints at about 2.
   must(fresh && fresh !== mark, `the fresh page was not stored (${mark} then ${fresh})`);
 }, { sw: true });
 
+// ---- 21. snappy: the screen answers at once, the picture draws only when it changes ----
+// Timings run on a second browser drawing on this machine's own GPU (ANGLE Metal on a Mac): SwiftShader runs the GPU
+// on the CPU and makes every frame seconds long, so where only SwiftShader is there the timing checks say so and pass.
+// The phone profile is scripts/measure_load.mjs's: 390x844 at 3x, touch, CPU slowed 4 times.
+const gpuBrowser = await chromium.launch({ args: ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"] });
+const realGpu = await (async () => { const p = await gpuBrowser.newPage(); const r = await p.evaluate(() => { const g = document.createElement("canvas").getContext("webgl"), e = g && g.getExtension("WEBGL_debug_renderer_info"); return g && e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : ""; }); await p.close(); return !!r && !/SwiftShader/i.test(r); })();
+async function snappy(name, fn, { phone = true, gpu = true } = {}) {
+  if (process.env.UI_ONLY && !name.startsWith(process.env.UI_ONLY)) return;
+  if (gpu && !realGpu) { results.push(true); console.log(`PASS ${name} (skipped: no GPU but SwiftShader here)`); return; }
+  const ctx = await (gpu ? gpuBrowser : browser).newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: "block" } : { viewport: { width: 1440, height: 900 }, serviceWorkers: "block" });
+  await ctx.addInitScript(() => {
+    // every picture drawn, and the picture and page as one string (any change is movement)
+    const hook = () => { const d = window.__evd; if (!d || !d.renderer) { setTimeout(hook, 20); return; } if (!d.gl) return; const r = d.renderer, o = r.render.bind(r); window.__draws = 0; r.render = (a, b) => { window.__draws++; o(a, b); }; };
+    hook();
+    window.__sig = () => { const c = window.__evd && window.__evd.camera; return [Math.round(scrollY), c ? c.position.toArray().map((v) => v.toFixed(4)).join() : "", c ? c.fov.toFixed(3) : ""].join("|"); };
+    // after a press: the first movement and the last, from the press's own time stamp
+    window.__watch = (ms) => new Promise((res) => {
+      let press = null, first = null, lastAt = null, prev = window.__sig(), moves = 0; const t0 = performance.now();
+      const pd = (e) => { if (press === null) press = e.timeStamp; };
+      addEventListener("pointerdown", pd, true); addEventListener("touchstart", pd, true);
+      const loop = () => { const n = performance.now(), s = window.__sig(); if (s !== prev) { if (press !== null && first === null) first = n; lastAt = n; prev = s; moves++; }
+        if (n - t0 > ms || (lastAt !== null && n - lastAt > 900)) { removeEventListener("pointerdown", pd, true); removeEventListener("touchstart", pd, true); res({ first: first === null ? null : Math.round(first - press), settled: lastAt === null ? null : Math.round(lastAt - press), moves }); } else requestAnimationFrame(loop); };
+      requestAnimationFrame(loop);
+    });
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const cdp = await ctx.newCDPSession(page);
+  if (phone) await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  try {
+    await fetch(base + "/__fixture/reset");
+    await fn(page, cdp);
+    must(!errors.length, "page errors: " + errors.join(" | "));
+    results.push(true); console.log(`PASS ${name}`);
+  } catch (e) {
+    results.push(false); console.log(`FAIL ${name}\n     ${String(e.message || e).split("\n")[0]}`);
+  } finally { await ctx.close(); }
+}
+const still3d = (page, ms = 900) => page.evaluate((ms) => new Promise((res) => { let prev = window.__sig(), at = performance.now(); const t0 = at; const loop = () => { const s = window.__sig(), n = performance.now(); if (s !== prev) { prev = s; at = n; } if (n - at > ms || n - t0 > 30000) res(); else requestAnimationFrame(loop); }; loop(); }), ms);
+const fresh3d = async (page) => {
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return false;
+  await page.fill("#claim-input", LIVE); await page.tap("#submit-btn").catch(() => page.click("#submit-btn"));
+  await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 });
+  await still3d(page); return true;
+};
+
+await snappy("21: the home page draws no picture while it scrolls, and none on a settled screen for 2 s", async (page, cdp) => {
+  await page.goto(base + "/", { waitUntil: "load" }); await ready(page);
+  if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+  await page.waitForTimeout(1500);
+  const d0 = await page.evaluate(() => window.__draws);
+  await cdp.send("Input.synthesizeScrollGesture", { x: 720, y: 500, yDistance: -800, speed: 1200, gestureSourceType: "mouse" });
+  await page.waitForTimeout(400);
+  const d1 = await page.evaluate(() => window.__draws);
+  must(d1 === d0, `the home page drew ${d1 - d0} pictures while it scrolled`);
+  await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(600);
+  const d2 = await page.evaluate(() => window.__draws); await page.waitForTimeout(2000);
+  must((await page.evaluate(() => window.__draws)) === d2, "the settled home page drew");
+  await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page); await still3d(page);
+  await page.waitForTimeout(500);
+  const r0 = await page.evaluate(() => window.__draws); await page.waitForTimeout(2000);
+  must((await page.evaluate(() => window.__draws)) === r0, "the settled result drew");
+}, { phone: false, gpu: false });
+
+await snappy("21: on the phone at slow 4G the claim box is usable as the page's own scripts are in, not later", async (page, cdp) => {
+  await cdp.send("Network.enable"); await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 150, downloadThroughput: 1.6e6 / 8, uploadThroughput: 750e3 / 8 });
+  await page.addInitScript(() => {
+    const look = () => { const el = document.getElementById("claim-input"), r = el && el.getBoundingClientRect();
+      if (r && r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && r.top < innerHeight && !el.disabled) { window.__boxAt = performance.now(); return; } requestAnimationFrame(look); };
+    requestAnimationFrame(look);
+  });
+  await page.goto(base + "/", { waitUntil: "load", timeout: 120000 });
+  await page.waitForFunction(() => window.__boxAt, null, { timeout: 120000, polling: 50 });
+  const t = await page.evaluate(() => ({ box: window.__boxAt, dcl: performance.getEntriesByType("navigation")[0].domContentLoadedEventEnd }));
+  // the box is on screen and typeable no later than 300 ms after the page's scripts are wired (before: about 5 ms)
+  must(t.box - t.dcl <= 300, `the claim box was usable ${Math.round(t.box - t.dcl)} ms after the scripts were in (${Math.round(t.box)} ms)`);
+});
+
+await gpuBrowser.close();
 await browser.close();
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);

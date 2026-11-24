@@ -485,7 +485,7 @@ window.__evidentDesk3d = function (O) {
       var w = stage.clientWidth, h = stage.clientHeight;
       if (keepsPicture(w, h, d)) { stage.style.height = H + "px"; return; }
       DPR_CAP = d; dpr = DPR_CAP;
-      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr);
+      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr); forceDraw = true;
       camera.aspect = W / H; pickKeys(); O.layout(); cardKey = ""; shadowDirty = true; O.wake();
     }
     var frameTimes = [];
@@ -653,8 +653,12 @@ window.__evidentDesk3d = function (O) {
       var sig = casterSig();
       if (shadowDirty || sig !== lastSig) { renderer.shadowMap.needsUpdate = true; lastSig = sig; shadowDirty = false; }
       if (placeCard(stand, moving, ft)) moving = true;
-      renderer.render(scene, camera);
-      lastRatio = ratioNow; frames++;
+      // a frame that would draw the very picture already on the canvas (a scroll of the home page, a wake with nothing
+      // new) is not drawn again: the canvas keeps its last frame
+      var vk = viewKey();
+      if (forceDraw || vk !== drawnKey) {
+        renderer.render(scene, camera); drawnKey = vk; forceDraw = false; lastRatio = ratioNow; frames++;
+      }
       wasMoving = moving; looping = moving;
       if (frames === 1) setTimeout(paintLazy, 0);
       if (moving) O.wake();
@@ -671,6 +675,18 @@ window.__evidentDesk3d = function (O) {
       }
     }
     var lastShadowPs = -1, readyDone = false, lastSig = "", casters = null, handed = false;
+    // everything the picture is drawn from: the camera, every caster (lastSig), the lights, the exposure, the faces and
+    // their textures, the soft shadows and the canvas size. forceDraw covers anything else (a resize clears the canvas)
+    var drawnKey = "", forceDraw = true;
+    function texKey(t) { return t ? t.id + "." + t.version : "0"; }
+    function viewKey() {
+      var e = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, out = [];
+      for (var i = 0; i < 16; i++) out.push(e[i].toFixed(6), p[i].toFixed(6));
+      sheets.forEach(function (o) { var f = o.mesh.userData.face; out.push(texKey(f.map), f.emissiveIntensity.toFixed(4), o.sh.visible ? o.sh.material.opacity.toFixed(4) : "-"); });
+      out.push(texKey(vMat.map), vMat.emissiveIntensity.toFixed(4), texKey(woodMat.map), woodMat.color.getHex(), woodMat.version, cardSh.material.opacity.toFixed(4),
+        renderer.toneMappingExposure.toFixed(5), key.intensity.toFixed(5), spot.angle.toFixed(5), ratioNow, W, H, lastSig);
+      return out.join(",");
+    }
     // the desk takes over from the early text-mode card: the page switches to its desk layout and keeps the reader on the same stop
     function handover() {
       handed = true;
@@ -915,7 +931,7 @@ window.__evidentDesk3d = function (O) {
         // true once every printed card face in use was painted after the web fonts were ready
         facesFontsOk: (!cardPainted || cvFontOk) && (!csvMap || csvFontOk) };
     };
-    O.drawImpl = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } frame(performance.now()); };
+    O.drawImpl = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } forceDraw = true; frame(performance.now()); };
     O.gotoImpl = function (n) {
       n = clamp(Math.round(n), 1, O.NS); if (n >= 2) O.check(); O.endTween(); O.clearStudy(); O.layout();
       window.scrollTo({ top: O.anchors[n - 1], behavior: "instant" }); O.prevY = O.progY = window.scrollY; O.nextWords(n - 1, window.scrollY); O.noteRest();
