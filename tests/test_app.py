@@ -14303,8 +14303,10 @@ t("BRIEF E3 follow-up: when the earlier list would be emptied, both stay",
 _RF_TR = " That is a drop of about a tenth."
 _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], "evidence": [],
                                             "effect_size": _RF_L + _RF_TR}, 2)
-t("BRIEF E3 follow-up: a sentence goes with its 'That is' translation, and the later pair stays whole",
-  _rf_y["says"] == [_RF_OTHER] and _rf_y["effect_size"] == _RF_L + _RF_TR, _rf_y)
+# Brief E4 D2 replaced "a sentence goes with its 'That is' translation": a
+# figure and its translation now always stay together, and nothing goes.
+t("BRIEF E4 D2: a sentence with its 'That is' translation stays, and so does the later pair",
+  _rf_y["says"] == [_RF_E + _RF_TR, _RF_OTHER] and _rf_y["effect_size"] == _RF_L + _RF_TR, _rf_y)
 _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E + _RF_TR, _RF_OTHER], "evidence": [], "effect_size": _RF_L}, 2)
 t("BRIEF E3 follow-up: an earlier translation the later sentence lacks keeps the earlier sentence",
   _rf_y["says"] == [_RF_E + _RF_TR, _RF_OTHER], _rf_y)
@@ -14328,8 +14330,33 @@ t("BRIEF E3 follow-up: a word-for-word copy keeps the earlier sentence (the page
   _rf_y["says"] == [_RF_L, _RF_OTHER] and _rf_y["effect_size"] == _RF_L, _rf_y)
 _rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [_RF_E, "That is a drop of about a tenth.", _RF_OTHER],
                                             "evidence": [], "effect_size": _RF_L + _RF_TR}, 2)
-t("BRIEF E3 follow-up: a 'That is' item after the earlier sentence goes with it",
-  _rf_y["says"] == [_RF_OTHER], _rf_y)
+# Brief E4 D2 replaced "a 'That is' item after the earlier sentence goes
+# with it": the figure and its translation both stay.
+t("BRIEF E4 D2: a 'That is' item right after the earlier sentence keeps both",
+  _rf_y["says"] == [_RF_E, "That is a drop of about a tenth.", _RF_OTHER], _rf_y)
+# D2: the reviewer's three variants (R2). A figure and its significance stay
+# together; nothing is removed.
+_RF_W = "Weight fell by about 2 kg (Study 1)."
+_RF_WL = "Weight fell by 2 kg (Study 1)."
+_RF_O2 = "HbA1c fell by 0.5 points (Study 2)."
+_rf_r2 = {}
+for _rf_name, _rf_ev_list in (
+        ("separate sentence", [_RF_W, "The difference was not statistically significant (Study 1).", _RF_O2]),
+        ("one sentence", ["Weight fell by about 2 kg, but the difference was not statistically significant (Study 1).",
+                          _RF_O2]),
+        ("confidence interval", [_RF_W, "The confidence interval crossed zero (Study 1).", _RF_O2])):
+    _rf_r2[_rf_name] = (_rf_ev_list, _rf_bd.one_figure_once("", {"says": [], "evidence": list(_rf_ev_list),
+                                                                  "effect_size": _RF_WL}, 2)[1])
+t("BRIEF E4 D2: the reviewer's three variants keep the figure with its significance, and remove nothing",
+  all(out["evidence"] == ev and out["effect_size"] == _RF_WL for ev, out in _rf_r2.values()),
+  {k: v[1] for k, v in _rf_r2.items() if v[1]["evidence"] != v[0]})
+t("BRIEF E4 D2: one recogniser: 'crossed zero', 'p value', 'uncertain' and 'imprecise' read as significance wording",
+  all(_rf_bd._STATES_SIGNIFICANCE.search(x) for x in ("The interval crossed zero.", "The p value was 0.2.",
+                                                      "The estimate is uncertain.", "Results were imprecise.")))
+_rf_x, _rf_y = _rf_bd.one_figure_once("", {"says": [], "evidence": [_RF_W, "The interval crossed zero (Study 2).", _RF_O2],
+                                            "effect_size": _RF_WL}, 2)
+t("BRIEF E4 D2: a significance sentence about another study does not hold the figure",
+  _rf_y["evidence"] == ["The interval crossed zero (Study 2).", _RF_O2], _rf_y)
 
 # ---------------------------------------------------------------------
 # BRIEF E4 (third repair of the evidence change).

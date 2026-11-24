@@ -4152,11 +4152,13 @@ def _in_order(part: list, whole: list) -> bool:
     return all(any(x == y for y in it) for x in part)
 
 
-# A sentence that says whether a result was statistically significant or
-# clear is never dropped as a repeat (nor the figure it belongs to).
+# A sentence that says whether a result was statistically significant,
+# clear or uncertain is never dropped as a repeat (nor the figure it belongs
+# to). The one recogniser for both rules (brief E4 D2).
 _STATES_SIGNIFICANCE = re.compile(
     r"\b(?:statistically significant|not significant|significan(?:t|tly|ce)|no clear|clear (?:difference|effect)|"
-    r"confidence interval|p\s*[<=>])", re.IGNORECASE)
+    r"confidence intervals?|cross(?:ed|es|ing)? (?:zero|one|the line of no effect)|p[ -]?values?|p\s*[<=>]|"
+    r"uncertain\w*|imprecis\w*)", re.IGNORECASE)
 
 
 def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:
@@ -4242,7 +4244,9 @@ def one_figure_once(explanation: str, bd, count: int):
 # The earlier sentence goes instead (brief E3 follow-up). When a later
 # sentence is a repeat by the rule above but removing it would empty its list
 # or field, the earlier one goes, if: it is in a different figure list that
-# keeps another sentence; it cites the same studies; and all it carries is in
+# keeps another sentence; it is not tied to a significance sentence or a
+# "That ..." translation right after it (brief E4 D2: then both stay); it
+# cites the same studies; and all it carries is in
 # the later sentence, in the same order, these generic words counting as
 # nothing. No other word may join this list: no named population, outcome,
 # dose, time, harm, safety or significance word.
@@ -4275,6 +4279,28 @@ def _carried_by(earlier: list, later: list, count: int) -> bool:
     if not content_words(e) - GENERIC_WORDS <= content_words(l):
         return False
     return _in_order([w for w in word_order(e) if w not in GENERIC_WORDS], word_order(l))
+
+
+def _next_sentence(items: list, i: int, j: int, units: list) -> str:
+    """The sentence right after unit j of item i in the same list, or ""."""
+    if j + 1 < len(units):
+        return units[j + 1][0]
+    for nxt in items[i + 1:]:
+        if isinstance(nxt, str) and sentences(nxt):
+            return sentences(nxt)[0]
+    return ""
+
+
+def _figure_bound(sentence: str, after: str, count: int) -> bool:
+    """Whether a figure is tied to what it says about certainty (brief E4
+    D2): the sentence itself says whether the result was significant or
+    clear, or the next sentence in the same list, citing the same studies
+    (or none), translates it ("That ...") or says so. Then both stay."""
+    if _STATES_SIGNIFICANCE.search(sentence):
+        return True
+    if not after or frozenset(refs(after, count)) not in (frozenset(), frozenset(refs(sentence, count))):
+        return False
+    return after.startswith("That ") or bool(_STATES_SIGNIFICANCE.search(after))
 
 
 def _same_words(a: str, b: str) -> bool:
@@ -4324,24 +4350,15 @@ def _drop_earlier(bd: dict, forced: list, count: int) -> dict:
                             continue
                         units = _units(it)
                         for j, earlier in enumerate(units):
-                            # A "That ..." item right after the item goes with
-                            # its last sentence.
-                            tail = []
-                            if j == len(units) - 1:
-                                for nxt in items[i + 1:]:
-                                    if not (isinstance(nxt, str) and nxt.startswith("That ")):
-                                        break
-                                    tail.append(nxt)
-                            earlier = earlier + [x for t_ in tail for x in sentences(t_)]
                             text = " ".join(earlier)
-                            if (_STATES_SIGNIFICANCE.search(text) or HARM.search(text) or _HARM_WORDS.search(text)
+                            if (len(earlier) > 1 or _figure_bound(earlier[0], _next_sentence(items, i, j, units), count)
+                                    or HARM.search(text) or _HARM_WORDS.search(text)
                                     or _SAFETY.search(text) or _same_words(earlier[0], later[0])
                                     or not _says_nothing_new(later[0], [earlier[0]], count)
                                     or not _carried_by(earlier, later, count)
                                     or sentence_count(key) - len(earlier) < 1):
                                 continue
                             items[i] = " ".join(x for k, u in enumerate(units) if k != j for x in u)
-                            del items[i + 1:i + 1 + len(tail)]
                             put(key, items)
                             done = True
                             break
