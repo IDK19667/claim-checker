@@ -1,5 +1,5 @@
 /* Evident: the desk front. The lamp-lit desk behind the stops, the bar, the rail
-   and the place menu, Keep reading, the settle to a stop, and text mode.
+   and the section picker, the rest after a scroll, and text mode.
    No framework, no build step. The engine is the approved sample's
    (sample3d/desk/EvidentDesk.fx4.html), moved here with three changes: the stops
    are the ones the page prints, the sheets and the card are drawn from the

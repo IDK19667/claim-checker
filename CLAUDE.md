@@ -82,12 +82,11 @@ build step is a feature: anyone can read the shipped file.
 - Motion: the camera, the light and the words move with the scroll.
   The one automatic move is the glide to the answer: once, after a check
   the reader just ran, cancelled by any input, a cut under reduced
-  motion. Don't add another. A press of Next, Back, the rail or the menu
-  glides to its stop; a live check stands its blank sheets on the desk
-  and prints the reading log. The one deliberate exception beside the
-  glide: the cue row's chevron moves one time only, as two short dips,
-  about 3 seconds after an answer the reader just ran lands, cancelled by any input, never under reduced
-  motion, never on a saved or shared answer. No entrances on every
+  motion. Don't add another. A press of "View evidence" or a section in
+  the picker glides to it; a live check stands its blank sheets on the
+  desk and prints the reading log. Scrolling is native and never snaps:
+  there is no cue row, no Back or Next, and nothing nudges the reader
+  down. No entrances on every
   section, no animated backgrounds, no cursor effects, no scroll
   hijacking. Respect `prefers-reduced-motion`.
 - Cards are not a default container. Group with rules, space and the

@@ -804,14 +804,24 @@ window.__evidentDesk3d = function (O) {
         // the card comes up to just under the strip and its label, so the answer is read before the scenery
         if (K[1].fy0 === undefined) K[1].fy0 = K[1].fy;
         K[1].fy = K[1].fy0;
+        if (!K[1].fov0) K[1].fov0 = K[1].fov;
+        K[1].fov = K[1].fov0;
         var wantY = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10;
         for (var a = 0; a < 3; a++) { var qa = cardRectAt(1); K[1].fy += (wantY - qa.y) / H; }
         // wide screens: the card keeps 32 px clear of the panel beside it (at 1280 wide the panel would otherwise reach over its right edge)
         var inner = capAnswer.querySelector(".inner"), pl = inner ? inner.getBoundingClientRect().left : W;
         for (var m = 0; m < 3; m++) { var q = cardRectAt(1), over = q.x + q.w - (pl - 32); if (over <= 0) break; K[1].fx -= Math.min(over, Math.max(0, q.x - 24)) / W; }
+        // the panel now starts level with the card: where the card still reaches it, the card is drawn smaller to fit beside it
+        var qw = cardRectAt(1), wantW = pl - 32 - 24;
+        if (qw.x + qw.w > pl - 32 && wantW > 200) {
+          for (var f = 0; f < 3; f++) { var qf = cardRectAt(1), tf = Math.tan(T.MathUtils.degToRad(K[1].fov / 2)) * qf.w / wantW; K[1].fov = T.MathUtils.radToDeg(2 * Math.atan(tf)); }
+          for (var b = 0; b < 3; b++) { var qb = cardRectAt(1); K[1].fy += (wantY - qb.y) / H; }
+          for (var m2 = 0; m2 < 3; m2++) { var q2 = cardRectAt(1), over2 = q2.x + q2.w - (pl - 32); if (over2 <= 0) break; K[1].fx -= Math.min(over2, Math.max(0, q2.x - 24)) / W; }
+        }
         cardKey = ""; prepareStandFace(); return;
       }
-      var want = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10, wantW = Math.min(W - 22, 560);
+      // on a short phone the card is drawn a little smaller, so the start of Studies shows above the bar on the Answer
+      var want = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10, wantW = Math.min(W - 22, 560) * (H <= 700 ? 0.75 : 1);
       if (!K[1].fov0) K[1].fov0 = K[1].fov;
       K[1].fov = K[1].fov0;
       for (var j = 0; j < 3; j++) { var q = cardRectAt(1), th = Math.tan(T.MathUtils.degToRad(K[1].fov / 2)) * q.w / wantW; K[1].fov = T.MathUtils.radToDeg(2 * Math.atan(th)); }

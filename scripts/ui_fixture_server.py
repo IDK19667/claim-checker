@@ -44,6 +44,12 @@ import dotenv  # noqa: E402
 dotenv.load_dotenv = lambda *a, **k: None
 
 import app as appmod  # noqa: E402
+
+# The per-study lines the engine branch adds to each study (contribution, caution, indirect, indirect_why):
+# passed through here so the study list can be measured with them before that branch lands. Harmless after it.
+_PER_STUDY = ("contribution", "caution", "indirect", "indirect_why")
+_payload = appmod._study_payload
+appmod._study_payload = lambda s, cited: dict(_payload(s, cited), **{k: s[k] for k in _PER_STUDY if k in s})
 import db  # noqa: E402
 import pubmed  # noqa: E402
 import ratelimit  # noqa: E402

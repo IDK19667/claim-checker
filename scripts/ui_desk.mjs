@@ -24,7 +24,7 @@
  *    Enter takes the reader to the Answer stop with focus on the verdict, in 3D,
  *    in text mode and with scripts off. Every screen has one h1, on both paths.
  * 16. The strip is the banner, the site links a Site navigation, the last stop's
- *    closing lines the footer, and Still open a heading and a region of that name.
+ *    closing lines the footer, and Limitations a heading and a region of that name.
  * 18. The service worker: a returning visit to a held server (10 s) paints the
  *    kept home page within about 3 s and the late answer refreshes the copy; with
  *    a fast server the fresh page arrives; a first visit waits for the network;
@@ -439,14 +439,14 @@ await test("every screen has one h1 on both paths: home, a saved, fresh and no-s
 });
 // ---- 16. The landmarks -------------------------------------------------------------------------
 for (const way of ["saved", "fresh"]) {
-  await test(`the landmarks on a ${way} result: one banner with the notice, Site navigation, one footer, Still open as heading and region`, async (page) => {
+  await test(`the landmarks on a ${way} result: one banner with the notice, Site navigation, one footer, Limitations as heading and region`, async (page) => {
     if (way === "saved") { await page.goto(base + "/?q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page); }
     else { await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await send(page, LIVE);
       await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(500); }
     const banner = page.getByRole("banner");
     const n = { banner: await banner.count(), nav: await page.getByRole("navigation", { name: "Site", exact: true }).count(),
-      foot: await page.getByRole("contentinfo").count(), region: await page.getByRole("region", { name: "Still open", exact: true }).count(),
-      heading: await page.getByRole("heading", { name: "Still open", exact: true }).count() };
+      foot: await page.getByRole("contentinfo").count(), region: await page.getByRole("region", { name: "Limitations", exact: true }).count(),
+      heading: await page.getByRole("heading", { name: "Limitations", exact: true }).count() };
     const notice = n.banner === 1 && /Not medical advice/.test(await banner.innerText());
     must(notice && n.nav >= 1 && n.foot === 1 && n.region === 1 && n.heading === 1, JSON.stringify({ ...n, notice }));
   });
@@ -611,6 +611,73 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
       }
       must(!far.length, far.join("; "));
     }
+  }, { w, h });
+}
+// N5 (the review of the drafts): (a) on the Answer's first screen the Studies heading is readable above the footer or
+// the fold, so the Answer never looks finished; (b) on a wide screen no rail label crosses a text panel at any section,
+// and the how-sure panel starts level with the card; (c) with an abstract open, Open PubMed stays beside Hide abstract
+// and the abstract opens below them.
+for (const [w, h] of [[375, 812], [1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) {
+  await test(`N5a: the Studies heading shows on the Answer's first screen, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(mode === "3d" ? 2500 : 1200);
+    const r = await page.evaluate(() => { const b = document.getElementById("bar"), foot = getComputedStyle(b).display !== "none" ? b.getBoundingClientRect().top : innerHeight;
+      const e = document.querySelector("#s3 .eyebrow").getBoundingClientRect(); return { top: Math.round(e.top), bottom: Math.round(e.bottom), foot: Math.round(foot) }; });
+    must(r.top >= 0 && r.bottom <= r.foot - 2, `the Studies heading is at ${r.top}..${r.bottom}, the foot at ${r.foot}`);
+  }, { w, h });
+}
+for (const [w, h] of [[1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) {
+  await test(`N5b: no rail label crosses a text panel, and how sure starts level with the card, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    const hits = [];
+    for (const k of [2, 3, 4, 5, 6]) {
+      await page.evaluate((k) => window.__evident.goto(k), k); await page.waitForTimeout(mode === "3d" ? 1500 : 700);
+      hits.push(...await page.evaluate((k) => {
+        const rails = [...document.querySelectorAll("#rail button span")].filter((e) => e.checkVisibility()).map((e) => [e.textContent, e.getBoundingClientRect()]);
+        const boxes = [...document.querySelectorAll(".stop .inner, .stop .panel, #vcard")].filter((e) => e.checkVisibility()).map((e) => [e.id || e.className, e.getBoundingClientRect()]);
+        const o = []; for (const [t, r] of rails) for (const [n, b] of boxes) if (r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top) o.push(`stop ${k}: ${t} over ${n}`); return o;
+      }, k));
+    }
+    must(!hits.length, [...new Set(hits)].join("; "));
+    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(mode === "3d" ? 2500 : 1200);
+    const a = await page.evaluate(() => ({ card: document.getElementById("vcard").getBoundingClientRect().top, panel: document.querySelector("#cap-answer .inner").getBoundingClientRect().top }));
+    if (mode === "3d") must(a.card <= 120 && a.panel <= 120, `the card starts at ${Math.round(a.card)}, how sure at ${Math.round(a.panel)}`);
+  }, { w, h });
+}
+for (const [w, h] of [[320, 568], [375, 812], [1280, 800]]) for (const mode of ["3d", "text"]) {
+  await test(`N5c: with an abstract open, Open PubMed stays beside Hide abstract and the abstract opens below them, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    const look = () => page.evaluate(() => { const d = document.getElementById("abs-1"), s = d.querySelector("summary").getBoundingClientRect(), p = d.closest(".acts").querySelector(".pm").getBoundingClientRect(), row = d.closest(".row").getBoundingClientRect();
+      const b = d.querySelector(".abs-body").getBoundingClientRect(); return { side: Math.abs(s.top - p.top) <= 2 && p.left >= s.right, below: !d.open || b.top >= Math.max(s.bottom, p.bottom) - 1, inRow: p.right <= row.right + 0.5, words: d.querySelector("summary").innerText.split("\n")[0].trim() }; });   // the first line: "of study n" is for screen readers
+    const shut = await look();
+    await page.evaluate(() => document.getElementById("row-1").scrollIntoView({ block: "center" }));
+    await page.click("#abs-1 > summary"); await page.waitForTimeout(200);
+    const open = await look();
+    must(shut.side && shut.inRow && shut.words === "Read abstract", `closed: ${JSON.stringify(shut)}`);
+    must(open.side && open.below && open.inRow && open.words === "Hide abstract", `open: ${JSON.stringify(open)}`);
+  }, { w, h });
+}
+// N4: four names wherever a name shows, and one labelled line per study on what it contributes, the same from the
+// server's HTML and from app.js (a check run from the claim box), in 3D and text mode   (was: numbered eyebrows)
+for (const [w, h] of [[375, 812], [1280, 800]]) for (const mode of ["3d", "text"]) {
+  await test(`N4: Answer, Studies, Explanation, Limitations, and What this study contributes on every study, both renderers, ${w}x${h} ${mode}`, async (page) => {
+    const read = () => page.evaluate(() => ({
+      eyebrows: [...document.querySelectorAll(".stop .eyebrow")].filter((e) => e.checkVisibility()).map((e) => e.textContent.trim()),
+      rail: [...document.querySelectorAll("#rail button[aria-label^='Go to ']")].map((b) => b.textContent.trim()),
+      lines: [...document.querySelectorAll(".row")].map((r) => [...r.querySelectorAll(".contrib, .caution, .indirect")].map((p) => p.textContent.trim()).join(" | ")),
+      label: document.querySelector("#short-label").textContent.trim() }));
+    await openSaved(page, w, mode);
+    const srv = await read();
+    must(srv.eyebrows.join() === "Studies,Explanation,Limitations" && srv.label === "Answer", `names: ${srv.label}; ${srv.eyebrows.join(", ")}`);
+    must(srv.rail.join() === SECTIONS.join(), `the rail: ${srv.rail.join(", ")}`);
+    must(srv.lines.length >= 3 && srv.lines.every((l) => /^What this study contributes \S/.test(l)), `a study without its line: ${srv.lines.find((l) => !/^What this study contributes \S/.test(l))}`);
+    must(srv.lines.some((l) => l.includes("Indirect context ")) && srv.lines.some((l) => / \| [^|]*small trial/.test(l)), "the fixture's caution or Indirect context did not print");
+    await page.goto(`${base}/${mode === "text" ? "?nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
+    await page.click("#claim-input"); await page.keyboard.type(SAVED[0]); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(600);
+    const js = await read();
+    must(js.eyebrows.join() === srv.eyebrows.join() && js.label === srv.label, `app.js names: ${js.label}; ${js.eyebrows.join(", ")}`);
+    must(JSON.stringify(js.lines) === JSON.stringify(srv.lines), `app.js lines differ: ${js.lines.find((l, i) => l !== srv.lines[i])}`);
   }, { w, h });
 }
 // on a short phone in 3D the Answer panel is reordered; "What does this mean?" stays right under the
@@ -805,7 +872,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
   await page.reload({ waitUntil: "load" });
   must(await painted(page), "the new build did not paint under the old worker");
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
-  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v122" && r && r.active && r.active.state === "activated"; });
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v123" && r && r.active && r.active.state === "activated"; });
   const st = await page.evaluate(async () => {
     const keys = await caches.keys();
     const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
@@ -817,7 +884,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
     const reg = await navigator.serviceWorker.getRegistration();
     return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
   });
-  must(st.keys.join() === "evident-v122", `caches: ${st.keys.join()}`);
+  must(st.keys.join() === "evident-v123", `caches: ${st.keys.join()}`);
   must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
   must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
   must(!bad.length, `requests: ${bad.join(" | ")}`);

@@ -1974,10 +1974,10 @@ t("  and the answer the reader gets is the consistent one",
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': _BD_STUDIES
 
 _html = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
-# The desk front: the breakdown is stop 5, Research ("The thorough answer").
+# The desk front: the breakdown is the Explanation (stop 5, Research).
 # Its longer parts fold away, closed, and its last part says what it rests on.
 t("the breakdown is server rendered, so a shared link carries it",
-  'data-stop="Research"' in _html and "The thorough answer" in _html and "The claim, part by part" in _html
+  'data-stop="Research"' in _html and 'id="e-research">Explanation<' in _html and "The claim, part by part" in _html
   and "11,321 people found an odds ratio" in _html
   and "only if you are deficient" in _html)
 t("  its folds are closed by default, on the server and in the markup",
@@ -2194,7 +2194,7 @@ _dk_dash = re.findall(r"[–—]|\\u\{?0*201[34]\}?|\\x[0-9a-f]{0,2}201[34]|&[mn
                       r"|fromCharCode\(\s*(?:821[12]|0x201[34])\s*\)|fromCodePoint\(\s*(?:821[12]|0x201[34])\s*\)",
                       _dk_code, re.I)
 t("no string desk.js writes or paints carries an em or en dash, typed or spelled as an escape, entity or code",
-  all(w in _dk_code for w in ("Keep reading", "function glideToAnswer", "fillText")) and not _dk_dash, _dk_dash[:5])
+  all(w in _dk_code for w in ("Check another claim", "function glideToAnswer", "fillText")) and not _dk_dash, _dk_dash[:5])
 _nudge = _deskjs[_deskjs.find("function glideToAnswer"):]
 # desk.js is one closure, so its functions end at a two-space brace.
 _nudge = _nudge[:_nudge.find("\n  }\n")]
@@ -2325,11 +2325,12 @@ t("  a check started from a result's claim box first goes back to stop 1",
 # bar, L 2 px under the strip).
 t("E4/E5: the stop is measured on its lines of text, never on the words laid over the 3D card",
   "function textLines(k)" in _deskjs and "NodeFilter.SHOW_TEXT" in _deskjs
-  and 'e.closest("#vcard, #short-label")' in _deskjs and "if (!el || overlay(el) || !shown(el)) continue;" in _deskjs
-  and "contentBottom(k) - (y + barTop()) > 2" in _deskjs)
-t("E1 before E2: a press goes exactly to the stop's last line 2 px above the bar, or to L 2 px under the strip",
-  "Math.ceil(contentBottom(k) - barTop() + 2)" in _deskjs and "Math.floor(L.top - stripH - 2)" in _deskjs
-  and "to = Math.min(to, lim);" in _deskjs and "pageStep() - " not in _deskjs)
+  and 'e.closest("#vcard, #short-label")' in _deskjs and "if (!el || overlay(el) || !shown(el)) continue;" in _deskjs)
+# Replaced (NAV 2): E1/E2 measured where a press of Next landed inside a long stop. Next is gone; the
+# browser checks N2c to N2e say where scrolling, the picker and View evidence land.
+t("E1/E2 replaced: nothing moves the reader one stop: the settle after a scroll only notes the rest",
+  "function settleStop() { settleT = 0; glideLeft = null; restY = window.scrollY; runLen = 0; }" in _deskjs
+  and "to = Math.min(to, lim);" not in _deskjs and "pageStep() - " not in _deskjs)
 t("  any touch, wheel or key from the reader cancels it",
   all(e in _nudge for e in ('"wheel"', '"touchstart"', '"pointerdown"', '"keydown"')))
 t("  it honours reduced motion and waits for a hidden tab",
@@ -2374,7 +2375,7 @@ t("  closing the keyboard returns to the place, unless a check came in between; 
   "window.scrollTo({ top: back.y, behavior: \"instant\" })" in _kbd and "if (back.checked !== checked) return false;" in _kbd
   and "if (innerWidth !== kbd.w) { kbd = null;" in _kbd and 'root.classList.toggle("kbd", isField(document.activeElement))' in _kbd
   and "html.kbd .bar { visibility: hidden; }" in _css_d and "showField(); adoptScroll(400); return true;" in _kbd
-  and "function keepRest() {\n    if (keyboardOpen()) return;" in _deskjs and "if (!checked || tween || touching || pressing || keyboardOpen()) return;" in _deskjs
+  and "function keepRest() {\n    if (keyboardOpen()) return;" in _deskjs
   and 'addEventListener("resize", function () { layout(); keyboardMoved(); updateWay(); wake(); });' in _deskjs)
 # J2: only a touch screen has that keyboard. On a desktop a window dragged shorter with the
 # claim box focused is a shorter window: the picture draws afresh and the bar stays.
@@ -2382,7 +2383,7 @@ t("J2: a change of height counts as the keyboard only on a touch screen",
   'var coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false };' in _deskjs
   and "if (!isField(e.target) || !coarse.matches) return;" in _deskjs
   and _kbd.startswith("function keyboardMoved() {\n    if (!kbd) return false;\n    if (!coarse.matches) {")
-  and "a desktop window dragged shorter keeps the bar" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
+  and "a desktop window dragged shorter keeps the section picker" in (ROOT / "scripts" / "ui_desk.mjs").read_text())
 # L4: on a screen with no touch, the kept keyboard state is dropped, class and all, so a
 # window that later turns touch (or a stale kbd class) cannot leave the bar hidden.
 t("L4: a change of height on a desktop clears the kept keyboard state and the kbd class",
@@ -2408,7 +2409,7 @@ _desk_css2 = (ROOT / "static" / "desk.css").read_text()
 t("without scripts a result hides the claim box, opens every group and hides the desk and the script-only controls",
   "html:not(.js).checked #s1 { display: none; }" in _desk_css2 and "html:not(.js) .rows[hidden] { display: block; }" in _desk_css2
   and "html:not(.js) #stage { display: none; }" in _desk_css2.replace(".no-gl #stage, ", "")
-  and all(f"html:not(.js) {x}" in _desk_css2 for x in (".bar", ".rail", ".row-more", ".back"))
+  and all(f"html:not(.js) {x}" in _desk_css2 for x in (".bar", ".rail", ".row-more", ".study-go"))
   and '<script nonce="{{ csp_nonce }}">document.documentElement.classList.add("js");</script>' in _desk_tpl)
 # A listener on an element the page no longer has stops app.js at that line,
 # and every listener after it with it. Each id the script binds without ?.
@@ -2422,18 +2423,9 @@ t("every element app.js binds a listener to without a guard is on the page",
 _ids_desk = set(re.findall(r'byId\("([\w-]+)"\)', _deskjs))
 t("  and so is every element desk.js looks up, but for the stops a result may leave out",
   _ids_desk and not (_ids_desk - _ids_tpl - {"s4", "s5"}), sorted(_ids_desk - _ids_tpl))
-if _shutil.which("node"):
-    _kw = _deskjs[_deskjs.find("function keepWords"):]
-    _kw = _kw[:_kw.find("\n  }\n") + 4]
-    _kw_out = json.loads(_subprocess.run(["node", "-e", _kw + "console.log(JSON.stringify([keepWords(0, false), keepWords(1, false),"
-                                          " keepWords(7, false), keepWords(7, true), keepWords(1, true)]))"],
-                                         capture_output=True, text=True, check=True).stdout)
-    t("E3: in Weighed the label counts the studies left: N more studies, 1 more study, the short form at 420px and under",
-      _kw_out == ["Keep reading", "Keep reading: 1 more study", "Keep reading: 7 more studies",
-                  "Keep reading: 7 more", "Keep reading: 1 more"], _kw_out)
-t("  only rows that are shown are counted, and the accessible name is always the full words",
-  "shown(r)" in _deskjs and "innerWidth <= 420" in _deskjs
-  and 'setAttribute("aria-label", ' in _deskjs and "keepWords(left, false)" in _deskjs)
+# Replaced (NAV 2): E3's "Keep reading: N more studies" label went with Next; nothing names a count to press for.
+t("E3 replaced: no Keep reading or Next label is left to count studies; scrolling and the picker move the reader",
+  "function keepWords" not in _deskjs and "Keep reading" not in _deskjs and "Keep reading" not in (ROOT / "static" / "app.js").read_text())
 
 # ---- the result screen: a labelled claim, an answer, then the evidence -----------
 #
@@ -2451,6 +2443,25 @@ t("after a check the address carries the claim as checked, so a fixed spelling s
   'encodeURIComponent(final.result.claim || claim)' in _done
   and "encodeURIComponent(claim))" not in _done)
 _ord = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+# q10-nav: the NAV block near the end reads this page; the check is gone from the store by then, so it is kept here,
+# with a second render in which the engine's per-study fields (contribution, caution, indirect) are sent.
+_nav_ord_early = _ord
+_nav_streamed_early = c.get("/?q=streamed%20claim").data.decode()
+_nav_orig_sp = appmod._study_payload
+_nav_seen = []
+def _nav_sp(s_, cited_):
+    out = _nav_orig_sp(s_, cited_)
+    _nav_seen.append(out.get("pmid"))
+    k = out.get("pmid")
+    if k == "D1": out["contribution"] = "Test line: the one trial that measured colds directly."
+    if k == "D2": out["caution"] = "Test caution: a small trial."
+    if k == "D2": out["indirect"], out["indirect_why"] = True, "Test reason: it measured blood levels, not colds."
+    return out
+appmod._study_payload = _nav_sp
+try:
+    _nav_lines = c.get("/?q=Vitamin+D+supplements+in+winter+cut+colds").data.decode()
+finally:
+    appmod._study_payload = _nav_orig_sp
 
 
 def _at(needle):
@@ -2460,9 +2471,9 @@ def _at(needle):
 # The desk front's stops: the answer card (claim, verdict, short answer), how
 # sure, what was read, the studies weighed, the thorough answer, still open.
 t("the result reads claim, answer, how sure, what was read, the studies, research, then still open",
-  _at("The short answer") < _at("The claim you checked") < _at('id="stamp"') < _at('id="tldr"')
+  _at('id="short-label">Answer') < _at("The claim you checked") < _at('id="stamp"') < _at('id="tldr"')
   < _at('id="confidence"') < _at('id="h-read"') < _at('id="h-sort"') < _at("What the research says")
-  < _at(">Still open<") < _at('id="share-btn"') < _at('id="report-open"'))
+  < _at(">Limitations<") < _at('id="share-btn"') < _at('id="report-open"'))
 t("  the claim carries its label and is never cut short",
   "The claim you checked" in _ord
   and "Vitamin D supplements in winter cut colds</h1>" in _ord)
@@ -2612,7 +2623,7 @@ _edit_js = (ROOT / "static" / "app.js").read_text().split('$("edit-claim").addEv
 # The desk front: Edit claim is one of the ways on in the Open stop, beside
 # Share and Check another claim; Back from the answer is the claim box itself.
 t("the result offers 'Edit claim' with the other ways on, after what is still open",
-  _at("The claim you checked") < _at(">Still open<") < _at('id="edit-claim"') < _at('id="report-open"')
+  _at("The claim you checked") < _at(">Limitations<") < _at('id="edit-claim"') < _at('id="report-open"')
   and '>Edit claim</button>' in _ord and 'id="claim-echo"' in _ord)
 t("  it goes back to the claim box with the claim filled, cursor at the end, suggestions shut",
   "goHome()" in _edit_js and "input.value = claim" in _edit_js and "currentResult.claim" in _edit_js
@@ -2626,8 +2637,8 @@ t("  it is a 44px target and is not offered while a check runs (the stops after 
 # ---- who and what it applies to, then the limitation -----------------------------
 _folds_html = " ".join(_re.findall(r'<details class="said-wrap".*?</details>', _ord, _re.S))
 t("who and what the answer applies to is its own block, between the research and what is still open",
-  _at("What the research says") < _at("Who and what this applies to") < _at(">Still open<")
-  and "Adults aged 18 to 67" in _ord.split(">Still open<")[0].split("Who and what this applies to")[1])
+  _at("What the research says") < _at("Who and what this applies to") < _at(">Limitations<")
+  and "Adults aged 18 to 67" in _ord.split(">Limitations<")[0].split("Who and what this applies to")[1])
 t("  it is not inside a fold, so the folds do not say it a second time",
   "Who and what this applies to" not in _folds_html and "And who it does not" not in _folds_html
   and "Adults aged 18 to 67" not in _folds_html)
@@ -2660,8 +2671,8 @@ t("  the table of designs is the same in the script and on the server",
               (ROOT / "static" / "app.js").read_text().split("const TYPES = [")[1].split("\n];")[0])
   == [tuple(x) for x in _display.DESIGN_NOTES])
 t("  every source on the result page carries its line",
-  _ord.split('id="server-result"')[0].count('<li class="row" ') == _ord.split('id="server-result"')[0].count('<p class="note why">')
-  and _ord.count('<p class="note why">') >= 1)
+  _ord.split('id="server-result"')[0].count('<li class="row" ') == _ord.split('id="server-result"')[0].count('<p class="contrib">')
+  and _ord.count('<p class="contrib">') >= 1)
 if _shutil.which("node"):
     _tsrc = (ROOT / "static" / "app.js").read_text()
     _tsrc = ("const TYPES = [" + _tsrc.split("const TYPES = [")[1].split("function escapeHtml")[0])
@@ -8779,7 +8790,7 @@ _oth = c.get("/?q=creatine+strength+off+topic+saved").data.decode()
 # The desk front's Weighed list: a group button, then its rows (open when the
 # button says aria-expanded="true", the list hidden otherwise).
 _ot_src = _oth[_oth.index('id="rows"'):_oth.index('id="s5"') if 'id="s5"' in _oth else _oth.index('id="s6"')]
-_ot_groups = [(m.group(2), m.group(1) == "true", int(m.group(3)), _re_s.findall(r">PubMed (\w+)</a>", m.group(4)))
+_ot_groups = [(m.group(2), m.group(1) == "true", int(m.group(3)), _re_s.findall(r"PubMed (\w+)</p>", m.group(4)))
               for m in _re_s.finditer(r'<h3 class="grp-h"><button class="grp-btn" type="button" aria-label="[^"]*" '
                                       r'aria-controls="grp-\w+" aria-expanded="(true|false)">([^<]*) \((\d+)\)</button></h3>'
                                       r'\s*<ul class="rows" id="grp-\w+"(?: hidden)?>(.*?)</ul>', _ot_src, _re_s.S)]
@@ -8788,7 +8799,7 @@ t("off topic: a study both cited and off topic is never under 'Relied on' on the
   "Relied on for the verdict" in _otg and "OT3" not in _otg["Relied on for the verdict"][2]
   and _otg["Relied on for the verdict"][2] == ["OT1", "OT2"], _ot_groups)
 t("  it sits in a 'Set aside: off topic' group, folded, with the other off-topic study",
-  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count(">PubMed OT3</a>") == 1, _ot_groups)
+  _otg.get("Set aside: off topic") == (False, 2, ["OT3", "OT4"]) and _ot_src.count("PubMed OT3</p>") == 1, _ot_groups)
 t("  and its line says it was set aside, not relied on",
   "Read and set aside: measures a different outcome" in _ot_src.split("PubMed OT3")[1].split("</li>")[0])
 _otj = P("creatine strength off topic saved", ip="4.4.4.6").get_json()
@@ -9202,7 +9213,7 @@ _mo_grp = _mo_pg.split('aria-controls="grp-off"')
 t("  the page puts it in 'Set aside: off topic' with the line: " + _MO_WHY,
   len(_mo_grp) == 2 and "Set aside: off topic (" in _mo_grp[1].split("</button>")[0]
   and _HAIR["study"]["title"][:30] in _mo_grp[1].split("</ul>")[0]
-  and f'<p class="note why">{_MO_WHY}</p>' in _mo_grp[1].split("</ul>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
+  and f'What this study contributes</b> {_MO_WHY}</p>' in _mo_grp[1].split("</ul>")[0], _mo_grp[1][:400] if len(_mo_grp) > 1 else "")
 t("  and that line is true of the rule: the study measured something else, and no dash",
   "different outcome" in _MO_WHY and not any(ch in _MO_WHY for ch in "\u2013\u2014"))
 if _shutil.which("node"):
@@ -10834,29 +10845,19 @@ t("CLAUDE.md and AGENTS.md describe the desk: desk.css and desk.js named, the ol
 _cue_tpl = (ROOT / "templates" / "index.html").read_text()
 _cue_js = (ROOT / "static" / "desk.js").read_text()
 _cue_css = (ROOT / "static" / "desk.css").read_text()
-t("the cue row: one wide button in the bar that does what Next does, out of the tab order and not read; the dim Below: line is gone",
-  'class="cue" type="button" id="cue" tabindex="-1" aria-hidden="true"' in _cue_tpl
-  and _cue_tpl.index('id="cue"') > _cue_tpl.index('id="where"') and _cue_tpl.index('id="cue"') < _cue_tpl.index('id="menu"')
-  and 'cueBtn.addEventListener("click", function () { nextBtn.click(); })' in _cue_js
-  and "function cueWords(k, keep, left, short)" in _cue_js and "cueWords(k, keep, left, short)" in _cue_js.split("function nextWords")[1]
-  and "Below:" not in _cue_tpl and "Below:" not in (ROOT / "static" / "app.js").read_text()
-  and "Below:" not in (ROOT / "display.py").read_text() and 'id="below"' not in _cue_tpl)
-t("the cue row's chevron dips once and never under reduced motion; Next no longer pulses; the docs say so",
-  "@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }" in _cue_css
-  and "animation: dip 600ms ease-in-out 2" in _cue_css and "pulse" not in _cue_css and "pulse" not in _cue_js
-  and "if (reduce.matches || cueBtn.hidden" in _cue_js and "if (detail.fresh && !typing) armDip();" in _cue_js.split('addEventListener("desk:result"')[1].split("});")[0]
-  and "The cue's chevron moves one time only, as two short dips" in (ROOT / "DESIGN.md").read_text()
-  and "chevron moves one time only, as two short dips" in _cl_design
-  and "Next pulses once" not in _cl_design)
-# the dip is said one way everywhere: one time only, as two short dips; never "dips once" beside "twice"
-_dip_docs = [(ROOT / "DESIGN.md").read_text(), (ROOT / "CLAUDE.md").read_text(), _cue_js]
-t("the docs and the code say the chevron's movement one way: one time only, as two short dips",
-  not [d for d in _dip_docs if "dips once" in d or "(600ms, twice)" in d or "twice, 600 ms" in d]
-  and all("one time only, as two short dips" in d for d in _dip_docs))
-_cue_design = (ROOT / "DESIGN.md").read_text().split("- **The cue row**")[1].split("\n- **")[0]
-t("DESIGN.md's cue paragraph says Next goes quiet beside the cue and how wide the cue is on a wide screen",
-  "quiet partner" in _cue_design and "drawn exactly as Back" in _cue_design and "no\n  wider than 480px" in _cue_design
-  and "centred in the block" in _cue_design and "accessible name" in _cue_design)
+# Replaced (NAV 2): the cue row, its dip and Next's quiet partner went. The bar holds the picker alone,
+# nothing dips, and the docs say so.
+_bar_tpl = _cue_tpl.split('<div class="bar" id="bar">')[1].split("</div>")[0]
+t("cue replaced: the bar holds one control, the section picker, named for screen readers; no cue, Next or Back",
+  'id="cue"' not in _cue_tpl and 'id="next"' not in _cue_tpl and 'id="prev"' not in _cue_tpl
+  and _bar_tpl.count("<button") == 1 and 'id="where"' in _bar_tpl and 'aria-haspopup="true"' in _bar_tpl
+  and 'aria-label="Sections. You are in Answer. Choose a section"' in _bar_tpl
+  and "cueWords" not in _cue_js and "nextBtn" not in _cue_js and "Below:" not in _cue_tpl)
+t("dip replaced: nothing in desk.css or desk.js dips or pulses, and the docs no longer promise a dip",
+  "@keyframes dip" not in _cue_css and "armDip" not in _cue_js and "pulse" not in _cue_css and "pulse" not in _cue_js
+  and "two short dips" not in (ROOT / "DESIGN.md").read_text() and "two short dips" not in _cl_design
+  and "there is no cue row, no Back or Next" in _cl.replace("\n  ", " ")
+  and "Three ways to move, no others" in (ROOT / "DESIGN.md").read_text())
 
 _dec = (ROOT / "DECISIONS.md").read_text().split("## 2026-11-22 (release)")[0]
 t("DECISIONS.md: the desk-front entry records the first-screen rule and why DESIGN.md was replaced",
@@ -10871,7 +10872,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v122";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v123";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -11118,7 +11119,7 @@ if _shutil.which("node"):
       [j["stops"] for j in _r4js_out])
     t("R4: stops 2 and 3 carry the same lines on both paths",
       all("below" not in _tr.byid and "below" not in _js_["lines"]
-          and _tr.byid.get("cue-label", "").strip() == "Scroll down: what was read"
+          and "cue-label" not in _tr.byid
           and _tr.byid.get("h-read", "").strip() == _js_["lines"]["read"]
           and _tr.byid.get("path", "").strip() == _js_["lines"]["path"] and _tr.byid.get("legend3", "").strip() == _js_["lines"]["legend"]
           for _tr, _js_ in zip(_r4_trees, _r4js_out)),
@@ -11462,10 +11463,9 @@ t("G7: the strip is a banner with the notice in it, and the site links are a Sit
 t("  the last stop's closing lines are a footer landmark holding the notice and the site links",
   _g6_res.count('role="contentinfo"') == 1
   and re.search(r'<footer class="closing" role="contentinfo">\s*<p class="legend privacy">.*?<p class="nma">Not medical advice\..*?<nav class="site-links" aria-label="Site">.*?</nav>\s*</footer>', _g7_s6, re.S) is not None)
-t("  Still open is a heading on both paths and its number is not read",
-  '<h2 class="eyebrow" id="h-open"><b aria-hidden="true">' in _g7_s6 and '<h2 class="eyebrow" id="h-open"><b aria-hidden="true">06</b>Still open</h2>' in _g6_home
-  and '$("h-open").innerHTML = `<b aria-hidden="true">${pad2(stops.indexOf("Open") + 1)}</b>Still open`;' in _g6_app
-  and 'aria-labelledby="h-open"' in _g7_s6)
+t("  Limitations is a heading on both paths, with no numeral",
+  '<h2 class="eyebrow" id="h-open">Limitations</h2>' in _g7_s6 and '<h2 class="eyebrow" id="h-open">Limitations</h2>' in _g6_home
+  and '$("h-open").innerHTML' not in _g6_app and 'aria-labelledby="h-open"' in _g7_s6)
 _nojs_body = _r4_pages[0].split('<main id="track">')[1].split('id="server-result"')[0]
 t("without scripts the 16-study result's verdict, still open and every study are in the HTML before any script runs",
   _R4_ROWS[0]["still_open"] in _htmllib.unescape(_nojs_body)
@@ -11705,28 +11705,69 @@ finally:
 # that says so to screen readers. No visible text says "Details"; the lift instruction is gone.
 def _nav_rows(page):
     return re.findall(r'<li class="row" id="row-\d+".*?</li>', page, re.S)
-_nav_pages = [_ord, c.get("/?q=streamed%20claim").data.decode()]
+_nav_ord = _nav_ord_early
+_nav_pages = [_nav_ord, _nav_streamed_early]
 _nav_bad = []
 for _np in _nav_pages:
     for _r in _nav_rows(_np):
         _has_abs = re.search(r'<details class="abs" id="abs-\d+"><summary class="act"><span class="shut">Read abstract</span>', _r)
         _no_abs = '<p class="noabs">No abstract on PubMed</p>' in _r
         _pm = re.search(r'<a class="act pm" href="https://[^"]+" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study \d+, opens in a new tab</span></a>', _r)
-        if not ((_has_abs or _no_abs) and _pm and "<summary" not in _r.split('class="abs-body"')[-1]):
+        # a study whose number is not a PubMed number and that has no address (test data) has no page to open
+        _no_page = re.search(r'PubMed (\w+)</p>', _r) and not re.search(r'PubMed \d+</p>', _r) and 'class="act pm"' not in _r
+        if not ((_has_abs or _no_abs) and (_pm or _no_page) and "<summary" not in _r.split('class="abs-body"')[-1]):
             _nav_bad.append(_r[:160])
 t("NAV 1: every study row has Read abstract (or says there is none) and Open PubMed in a new tab",
   all(_nav_rows(p_) for p_ in _nav_pages) and not _nav_bad, _nav_bad[:2])
 t("NAV 1: the abstract is in the row itself, with the citations and related studies inside the opened part",
-  re.search(r'<div class="abs-body"><p class="abs-text">[^<]+</p><button type="button" class="act quiet study-go"', _ord) is not None)
+  re.search(r'<div class="abs-body"><p class="abs-text">[^<]+</p><button type="button" class="act quiet study-go"', _nav_ord) is not None)
 _nav_vis = [re.sub(r"<[^>]+>", " ", re.sub(r"<script.*?</script>|<style.*?</style>", "", p_, flags=re.S)) for p_ in _nav_pages]
 t("NAV 1: no visible text says Details, and the lift instruction is gone from both renderers",
   not any(re.search(r"\bDetails\b", v) for v in _nav_vis)
   and all("Pick a study to lift its sheet" not in x for x in (_tpl, _js, (ROOT / "templates" / "index.html").read_text(), (ROOT / "static" / "app.js").read_text()))
-  and "Each study has its abstract and its PubMed page." in _ord)
+  and "Each study has its abstract and its PubMed page." in _nav_ord)
 _nav_css = (ROOT / "static" / "desk.css").read_text()
 t("NAV 1: the actions are 44px targets on every width and never hidden on a wide screen",
   ".row .act { appearance: none; box-sizing: border-box; min-height: 44px;" in _nav_css
   and ".row-more { display: none; }" not in _nav_css and ".row .noabs { display: inline-flex; align-items: center; min-height: 44px;" in _nav_css)
+
+# ---- q10-nav, point 2: three ways to move (scrolling, the picker, View evidence) ------------
+# Browser checks N2a to N2f in scripts/ui_desk.mjs replace the cue, Back, Next and dip checks.
+_nav_s2 = _nav_ord.split('id="s2"')[1].split('id="s3"')[0]
+_nav_vis_all = " ".join(_nav_vis)
+t("NAV 2: the Answer has one button, View evidence; no Scroll down, Keep reading or Back to the short answer anywhere",
+  len(re.findall(r'<button[^>]*class="btn"', _nav_s2)) == 1 and "data-again" not in _nav_s2 and "prev" not in _nav_s2 and '<button class="btn" type="button" id="how-answer">View evidence</button>' in _nav_s2
+  and all(w not in x for w in ("Scroll down", "Back to the short answer", "Keep reading", "See how we got this answer")
+          for x in (_nav_vis_all, (ROOT / "templates" / "index.html").read_text(), (ROOT / "static" / "app.js").read_text(),
+                    (ROOT / "static" / "desk.js").read_text())))
+t("NAV 2: Check another claim shows once on the page, at the end, and the picker's menu offers it too",
+  _nav_ord.count("data-again") == 1 and _nav_ord.index("data-again") > _nav_ord.index('id="h-open"')
+  and '"menu-again"' in (ROOT / "static" / "desk.js").read_text())
+t("NAV 2: the server names the section the reader is in, so the picker is never an empty button",
+  '<span id="where-name">Answer</span>' in _nav_ord)
+
+# ---- q10-nav, point 4: four names, and one line per study on what it contributes -----------
+_nav_names = re.findall(r'class="eyebrow" id="[\w-]+">([^<]+)<', _nav_ord)
+t("NAV 4: the sections are named Answer, Studies, Explanation, Limitations, with no numerals or slogans",
+  _nav_names == ["Studies", "Explanation", "Limitations"] and 'id="short-label">Answer<' in _nav_ord
+  and 'aria-labelledby="e-read"' in _nav_ord and 'aria-labelledby="e-research"' in _nav_ord
+  and not any(w in _nav_vis_all for w in ("Weighed, not counted", "The thorough answer"))
+  and re.search(r'class="eyebrow"[^>]*><b', _nav_ord) is None
+  and all(f'SEC = {{ Claim: "Answer", Answer: "Answer", Read: "Studies", Weighed: "Studies", Research: "Explanation", Open: "Limitations" }}' in (ROOT / "static" / "desk.js").read_text() for _ in [0]))
+_nav_lr = _nav_rows(_nav_lines)
+t("NAV 4: every study has a labelled What this study contributes line that is never empty",
+  _nav_lr and all(re.search(r'<p class="contrib"><b class="lbl">What this study contributes</b> \S', r_) for r_ in _nav_lr),
+  [r_[:120] for r_ in _nav_lr if "What this study contributes</b> " not in r_][:2])
+t("NAV 4: contribution, caution and Indirect context print when the engine sends them",
+  "What this study contributes</b> Test line: the one trial that measured colds directly." in _nav_lines
+  and '<p class="caution">Test caution: a small trial.</p>' in _nav_lines
+  and '<p class="indirect"><b class="lbl">Indirect context</b> Test reason: it measured blood levels, not colds.</p>' in _nav_lines,
+  sorted(set(_nav_seen))[:8])
+_nav_appjs = (ROOT / "static" / "app.js").read_text()
+t("NAV 4: app.js writes the same line, in the same order of sources, as the server",
+  "function studyLines(s, n, bv)" in _nav_appjs and "${studyLines(s, n, bv)}<div class=\"acts\">" in _nav_appjs
+  and all(w in _nav_appjs for w in ('"What this study contributes"'.strip('"'), "studyWhy(s)", " Studied in: ", "Indirect context"))
+  and "Relied on" not in _nav_appjs.split("function studyRowHtml")[1].split("\n}\n")[0])
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

@@ -429,15 +429,17 @@ Two stylesheets, two grounds:
 
 - **The front** (`templates/index.html`, `static/desk.css`,
   `static/desk.js`, three.js in `static/vendor/`) stands on the night,
-  `--desk-night`. The six stops of a result: the claim (1), the answer
-  (2), what was read (3), the studies weighed (4), the research (5), and
-  what is still open with the search that ran (6). Home is stop 1 alone.
+  `--desk-night`. A result has four sections, named by what they hold:
+  Answer (the claim and the answer card), Studies (what was read, then
+  the list), Explanation (the research) and Limitations (what is still
+  open, with the search that ran). Under them the page keeps six stops
+  for the camera; Home is the claim box alone.
 - **Every other page** (about, how it works, corrections, privacy,
   the 404 and the stats page) keeps `static/style.css`: a night masthead
   and footer, the text by day on `--paper`, no scripts.
 
 The page works without the desk. Text mode (no WebGL, Save-Data, 2G,
-reduced data, `?nogl=1`, or three.js refused) sets the same six stops on
+reduced data, `?nogl=1`, or three.js refused) sets the same sections on
 the night ground with the answer card as a block of card stock; with
 scripts off a result reads top to bottom from the server's HTML.
 
@@ -543,25 +545,24 @@ Sizes and floors:
   it: right of the lamp, left of it, or at the foot, behind one of the
   two scrims. On a phone or a portrait screen there is one column, and
   on the long stops the picture shows at the top.
-- **The bar** is fixed at the foot once a result shows: Back, where you
-  are, and Next, which names the next stop. On a wide screen a rail of
-  stop names sits at the right edge.
-- **The cue row** sits on top of the bar row whenever something is
-  below, and the two read as one block on the bar's ground: one
-  paper-filled button with a down chevron and the words "Scroll down: "
-  and what comes next ("what was read", or "11 more studies" on a long
-  stop, from the same state that names Next). At 760px wide and below
-  it is as wide as the bar row; on a wider screen it is a button no
-  wider than 480px, centred in the block, never a band. It does what
-  Next does. It goes at the end of the last stop. While it shows, Next
-  is its quiet partner: drawn exactly as Back (outline, panel ground,
-  quieter words), showing only "Next" or "Keep reading", with its full
-  words ("Next: what was read") as its accessible name; so the cue is
-  the one paper-filled control in the block. At the end of the last
-  stop, with no cue, Next has its paper fill again ("Back to the
-  start"). Next carries the same place for keyboards and screen
-  readers, so the cue is out of the tab order and not read. Everything
-  that lays itself out against the bar uses the whole block.
+- **Three ways to move, no others**: native scrolling (no snapping,
+  nothing moves the reader one stop), one section picker, and the one
+  "View evidence" button on the Answer, which goes to Studies.
+- **The picker.** On a phone it is the only thing in the fixed bar at
+  the foot: one row, 64px with the safe area under it, a full-width
+  button saying "Section" and where you are, that opens the four
+  sections, then "Check another claim", then the site links. On a wide
+  screen the rail at the right edge is the picker (the four sections
+  and "Check another claim") and there is no bottom bar. It names
+  itself to screen readers ("Sections. You are in Studies") and works
+  by keyboard.
+- **No screen looks finished when it is not.** The Answer and Studies
+  are as tall as what they hold, so at every resting place the next
+  content is cut by the foot of the screen or the bar, or the end of
+  the page is in view. On a phone the desk shows as a band above
+  Studies, Explanation and Limitations, so the heading and six lines of
+  text are on the first screen; on a wide screen the answer card starts
+  just under the strip.
 - **The first screen holds the claim box.** At 1366x650, 1280x720,
   1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
   the claim box and "Check the research" are wholly on screen with no
@@ -607,7 +608,7 @@ boxes.
   `--desk-edge-2` edge, Clear and Speak inside it at the right, a helper
   line above, the type-ahead of saved checks under it.
 - **The button**: the one light shape on the screen, `--desk-paper`
-  with `--desk-ink` words, 52px tall. Next in the bar is the same shape.
+  with `--desk-ink` words, 52px tall. "View evidence" is this shape.
   A ghost button is an outline in `--desk-edge-3`; a quiet one is
   underlined words.
 - **The answer card**: card stock (`--desk-card`) with the claim in
@@ -620,7 +621,16 @@ boxes.
 - **Panels**: `--desk-panel`, a sage rule on top, 17px reading text,
   mono section labels over a hairline.
 - **The study rows**: a number in Bricolage, the design in mono, the
-  title in 600; pressing one lifts its sheet on the desk.
+  title in 600. Under the title, one line labelled "What this study
+  contributes" (the label in mono; the engine's own words, else the
+  study's conclusion, else why it was set aside, else its design and who
+  was studied), its caution as a sentence, and "Indirect context" with
+  its reason when it is indirect. Then two actions, each at least 44px
+  tall at every width: "Read abstract", a disclosure that opens the
+  abstract in the row ("Hide abstract" closes it; "No abstract on
+  PubMed" when there is none), with "Citations and related studies"
+  inside it; and "Open PubMed", a link in a new tab. Pressing the row's
+  title still lifts its sheet on the desk, as an extra no text explains.
 - **The sheets** (a study's abstract, How it works): rise from the foot
   over the scrim on `--desk-deep`, with a sticky bar holding Close.
 - **The strip and the bar**: `--desk-deep-2` with a `--desk-line` rule.
@@ -634,17 +644,12 @@ value, so the scene is never ahead of the reader. Beyond that:
    A saved or shared result opens at the answer with no glide. Any touch,
    wheel or key stops it; it waits for a hidden tab; under reduced motion
    it is a cut. It is the only time the page moves itself.
-2. **A press of Next, Back, the rail or the menu** glides to that stop.
+2. **A press of "View evidence" or a section in the picker** glides there.
 3. **A live check**: at "found N" the desk stands N blank sheets in its
    stack (none under reduced motion), and each line of the log fades in
    as its stage happens.
 4. **The card's words** fade in over 150ms once the card has settled.
-5. **The cue's chevron moves one time only, as two short dips**, a
-   deliberate exception beside the glide: about 3 seconds after an answer
-   the reader just ran lands, if nothing was touched, it goes 4px down and
-   back two times in a row, 600ms each, and never again on that answer.
-   Any input cancels it; never under reduced motion, never on a saved or
-   shared answer. Next does not pulse.
+5. **Nothing nudges the reader down**: there is no cue row and no dip.
 6. **A sheet** rises in 260ms and its scrim fades in.
 
 Nothing else animates: no entrances on sections, no parallax beyond the

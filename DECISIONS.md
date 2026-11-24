@@ -4,6 +4,10 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-23 (q10): The cue row, Back and Next are gone; one picker and "View evidence" move the reader
+
+An outside review found too many competing controls: scrolling, one section picker (the bar on a phone, the rail on a wide screen) and one "View evidence" button now do it all, the sections are named Answer, Studies, Explanation and Limitations, and every study shows "Read abstract" and "Open PubMed". This reverses the cue row and its dip.
+
 ## 2026-11-23 (q10): The scene warms up before the first press of Next
 
 On a saved answer the first Next in 3D stalled for 2.2 s on the phone

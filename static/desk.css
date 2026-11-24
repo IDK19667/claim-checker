@@ -218,9 +218,11 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .row .act:hover { border-color: var(--desk-edge-3); text-decoration: underline; text-underline-offset: 3px; }
 .row .act.quiet { border: 0; padding: 0; color: var(--on-deep-2); text-decoration: underline; text-underline-offset: 3px; }
 .row .act.quiet:hover { color: var(--on-deep); }
-.row .abs > summary { list-style: none; width: max-content; }
+.row .acts { position: relative; }
+.row .abs { flex: 1 0 100%; }
+.row .abs > summary { list-style: none; width: 140px; }
+.row .abs ~ .pm { position: absolute; top: 0; left: 152px; }
 .row .abs > summary::-webkit-details-marker { display: none; }
-.row .abs[open] { flex: 1 0 100%; }
 .row .abs[open] .shut, .row .abs:not([open]) .open { display: none; }
 .row .abs-body { padding: 12px 0 2px; }
 .row .abs-text { white-space: pre-line; font-size: 16px !important; line-height: 1.55 !important; color: var(--on-deep-2) !important; margin: 0 0 6px !important; max-width: 40em; }
@@ -243,6 +245,10 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .row .body { padding-left: 52px; }
 .row .src { font-size: 17px !important; color: var(--on-deep-2) !important; margin: 4px 0 6px !important; }
 .row .src a { display: inline-flex; align-items: center; min-height: 44px; }
+/* Under each study, what it contributes, its caution and Indirect context: plain sentences, the label in mono. */
+.row .contrib, .row .caution, .row .indirect { font-size: 16px !important; line-height: 1.45 !important; color: var(--on-deep) !important; margin: 0 0 6px !important; }
+.row .caution { color: var(--on-deep-2) !important; }
+.row .lbl { display: block; font: 500 13px/1.3 var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--on-deep-2); margin-bottom: 2px; }
 .row .status { font-family: var(--mono); font-size: 13px !important; color: var(--on-deep) !important; margin: 0 0 4px !important; }
 .row .status.no { color: var(--on-deep-2) !important; }
 .row .note { font-size: 17px !important; color: var(--on-deep-2) !important; margin: 0 !important; }
@@ -257,7 +263,7 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .rail .rail-again { margin-top: 10px; }
 .rail .rail-again::after { display: none; }
 .rail .rail-again span { text-decoration: underline; text-underline-offset: 3px; }
-.menu .menu-again { margin-top: 6px; border-top: 1px solid var(--deep-line); border-radius: 0; }
+.menu .menu-again { margin-top: 6px; border-top: 1px solid var(--deep-line); }
 .rail button span { background: var(--scrim); padding: 3px 6px; border-radius: 3px; }
 
 .bar { position: fixed; z-index: 12; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr; align-items: center; pointer-events: none;
@@ -364,6 +370,13 @@ html.kbd .bar { visibility: hidden; }
   .has-gl .stop.long, .has-gl #s3, .has-gl #s6 { padding-top: calc(var(--strip) + 14vh); padding-top: calc(var(--strip) + 14svh); }
   .has-gl #s4 { padding-top: 0; }
   html.checked #s2, html.checked #s3 { min-height: 0; }
+  html.checked #s2 { padding-bottom: 8px; }
+  .has-gl #s3 { padding-top: calc(var(--strip) + 4vh); padding-top: calc(var(--strip) + 4svh); }
+  /* the strip's share of that padding sits under the end of the Answer, so the Studies heading shows on the Answer's
+     first screen; the overlap is empty and lets presses through */
+  html.checked #s3 { margin-top: calc(-1 * var(--strip)); pointer-events: none; }
+  html.checked #s3 > * { pointer-events: auto; }
+  @media (max-height: 700px) { .has-gl #s3 { padding-top: var(--strip); } .has-gl #s3 .inner { padding-top: 10px; } }
   html.checked #s3 { padding-bottom: 16px; }
   .has-gl #cap-answer .inner { width: 100%; }
 }
@@ -391,8 +404,12 @@ html.kbd .bar { visibility: hidden; }
 /* content before scenery on a wide screen: the Answer stops short of a full screen so the Studies heading shows at the
    foot, and the first half of Studies is as tall as its words, so the list follows it */
 @media (min-width: 761px) and (min-aspect-ratio: 17/20) {
-  html.checked #s2 { min-height: calc(100vh - 96px); min-height: calc(100svh - 96px); }
+  html.checked #s2 { min-height: calc(100vh - 150px); min-height: calc(100svh - 150px); }
   html.checked #s3 { min-height: 0; padding-bottom: 24px; }
+  .has-gl #s2 .cap { align-items: flex-start; }
+  /* the rail at the right edge is the picker: no text panel runs under its labels */
+  .cap.right .inner { margin-right: max(clamp(0px, 9vw, 150px), 196px); }
+  .has-gl #s3 .cap.right .inner { margin-right: calc(max(clamp(0px, 9vw, 150px), 196px) - 26px); }
 }
 @media (min-width: 761px) and (max-aspect-ratio: 17/20) {
   .inner, .inner.wide, .inner.wider { max-width: 640px; }
