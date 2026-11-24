@@ -4156,11 +4156,15 @@ def _in_order(part: list, whole: list) -> bool:
 # clear or uncertain, or how certain the evidence is, is never dropped as a
 # repeat (nor the figure it belongs to). The one recogniser for both rules
 # (brief E4 D2); certainty, chance, "inconclusive" and "no difference" joined
-# it in brief E5 F1. Every use only ever keeps more sentences.
+# it in brief E5 F1, then any word with "significan", "did not differ",
+# "similar between groups", intervals and CI, "certain", confidence and
+# evidence quality. Every use only ever keeps more sentences.
 _STATES_SIGNIFICANCE = re.compile(
-    r"\b(?:statistically significant|not significant|significan(?:t|tly|ce)|no clear|clear (?:difference|effect)|"
-    r"confidence intervals?|cross(?:ed|es|ing)? (?:zero|one|the line of no effect)|p[ -]?values?|p\s*[<=>]|"
-    r"uncertain\w*|imprecis\w*|certainty|due to chance|inconclusive|no differences?)", re.IGNORECASE)
+    r"\b(?:statistically significant|not significant|\w*significan\w*|no clear|clear (?:difference|effect)|"
+    r"confidence intervals?|intervals?|(?-i:CI)\b|cross(?:ed|es|ing)? (?:zero|one|the line of no effect)|"
+    r"p[ -]?values?|p\s*[<=>]|uncertain\w*|imprecis\w*|certain\w*|confidence|"
+    r"(?:very low|low|moderate|high)[ -]quality|quality of (?:the )?evidence|chance|inconclusive|"
+    r"no differences?|did not differ|similar between (?:the )?groups)", re.IGNORECASE)
 
 
 def _says_nothing_new(sentence: str, kept: list, count: int) -> bool:

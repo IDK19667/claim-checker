@@ -14558,6 +14558,26 @@ _f5_far, _ = _f5_run([_F5_W, _F5_O2, "The results were inconclusive (Study 2)."]
 t("BRIEF E5 F1 control: a certainty sentence about another study, later in the list, does not hold it either",
   _f5_far["evidence"] == [_F5_O2, "The results were inconclusive (Study 2)."], _f5_far)
 
+# BRIEF E5 F1, second pass: the reviewer's further forms. Each, as the
+# sentence between the figure and another study's, keeps the figure.
+for _f5b_name, _f5b_x in (
+        ("nonsignificant", "The change was nonsignificant (Study 1)."),
+        ("insignificant", "The change was insignificant (Study 1)."),
+        ("non-significant", "The change was non-significant (Study 1)."),
+        ("did not differ", "The groups did not differ (Study 1)."),
+        ("similar between groups", "Results were similar between groups (Study 1)."),
+        ("the interval was wide", "The interval was wide (Study 1)."),
+        ("95% CI", "The 95% CI ran from 0.5 to 3.5 kg (Study 1)."),
+        ("less certain", "This result is less certain (Study 1)."),
+        ("low confidence", "We have low confidence in this result (Study 1)."),
+        ("low quality", "The evidence was of low quality (Study 1)."),
+        ("very low quality", "This is very low quality evidence (Study 1)."),
+        ("quality of the evidence", "The quality of the evidence was poor (Study 1)."),
+        ("a chance finding", "This may be a chance finding (Study 1).")):
+    _f5b_out, _f5b_ok = _f5_run([_F5_W, _f5b_x, _F5_O2])
+    t(f"BRIEF E5 F1b: {_f5b_name}: the figure stays in the evidence list and no sentence is lost",
+      _f5b_ok, _f5b_out)
+
 # BRIEF E5 F3: no study is marked indirect. Through the app's own response
 # builder with the suite's recorded answers (the vinegar check, with and
 # without its flagged review, and the three real certainty-limit checks):
