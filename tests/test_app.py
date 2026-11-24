@@ -13238,8 +13238,8 @@ t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare
   _e_line.startswith("Cure claim: Not supported by the studies reviewed.")
   and not _e_re.search(r"\b(?:Strong|Moderate|Weak) evidence\b", _e_line), _e_line)
 t("BRIEF E2 vinegar: the second statement names the related effect and claims no certainty it did not read",
-  _e_out["effect_line"] == "Fasting blood sugar effects: the studies reviewed report a fall. "
-  "Certainty not graded in the study abstracts", _e_out["effect_line"])
+  _e_out["effect_line"].startswith("What the studies did find: ")
+  and _e_out["effect_line"].endswith(". The abstracts we read do not rate how certain this is"), _e_out["effect_line"])
 t("BRIEF E4 vinegar: about 22 mg per dL is said once in what the page prints",
   sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1, _e_lists)
 t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
@@ -13277,7 +13277,7 @@ t("BRIEF E2: a certainty the line carried is kept, in words that are not a stren
   == "The claim: Supported by the studies reviewed. Certainty: low")
 t("BRIEF E2: an effect sentence outside the closed pattern is printed as the model said it",
   _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", [], [])
-  == "What the studies did find: Vinegar lowered glucose (Study 2). Certainty not graded in the study abstracts")
+  == "What the studies did find: Vinegar lowered glucose (Study 2). The abstracts we read do not rate how certain this is")
 t("BRIEF E2: no second statement for a claim rated true, or one promising nothing absolute",
   _e_ev.effect_statement("true", "cure", "Glucose fell.", [], []) == ""
   and _e_ev.effect_statement("false", "", "Glucose fell.", [], []) == "")
@@ -13379,11 +13379,12 @@ def _r2_path(claim, query, model_v, studies, finds):
 
 _R2_SURE = {"true": 2, "false": 2, "complicated": 1, "insufficient": 0}
 
+_R2_N = 320  # seeded cases; each runs four model verdicts, flags on and off
 _r2_rng = _r2_random.Random(20261123)
 _r2_bad, _r2_cases, _r2_moved, _r2_guarded = [], 0, 0, 0
 _r2_quiet = logging.getLogger().manager.disable
 logging.disable(logging.CRITICAL)
-for _r2_i in range(320):
+for _r2_i in range(_R2_N):
     _r2_claim, _r2_q = _r2_rng.choice(_R2_CLAIMS)
     _r2_kinds = [_r2_rng.choice(list(_R2_TEMPL)) for _ in range(_r2_rng.randint(2, 4))]
     if not any(k.startswith("ma") for k in _r2_kinds):
@@ -13457,6 +13458,34 @@ t("BRIEF E2r B1: the note to the model says a harm or a doubt from a flagged rev
   "CITES A RETRACTED STUDY: this review's reference list includes PubMed 800001, later retracted. Do not count "
   "its pooled result as support for the claim unless the abstract says the result held without that study. "
   "A harm or a doubt it reports still counts." in _r2_note, _r2_note)
+
+# Brief E2 repair, B3 and M3: the second statement has no parsed form. Every
+# sentence the reviewer tried passes through unchanged, so nothing about the
+# control group or a second outcome can be lost or reversed.
+_r3_cure = _e_bd.absolute_claim("Cinnamon cures diabetes")
+_r3_said = ["Symptoms fell with placebo, not with cinnamon (Study 1).",
+            "Fasting glucose dropped in the control group only (Study 1).",
+            "Body weight fell by 2 kg and blood pressure rose by 3 mmHg (Study 1).",
+            "Fasting glucose decreased in men but increased in women (Study 1).",
+            "HbA1c did not fall (Study 1).", "Bleeding risk rose by 30% (Study 1).",
+            "Insulin resistance declined only in the placebo group (Study 1).",
+            "Adverse events increased with cinnamon (Study 1).", "Weight rose less than with placebo (Study 1)"]
+_r3_rev = {"pmid": "1", "title": "Cinnamon and glycaemia: a meta-analysis", "publication_types": ["Meta-Analysis"],
+           "abstract": "Conclusion: cinnamon lowered HbA1c."}
+_r3_bad = [x for x in _r3_said if _e_ev.effect_statement("false", _r3_cure, x, [_r3_rev], ["1"], "")
+           != f"What the studies did find: {x.rstrip('.')}. The abstracts we read do not rate how certain this is"]
+t("BRIEF E2r B3/M3: statement 2 prints the sentence unchanged, with no reading of its verbs", not _r3_bad, _r3_bad)
+_r3_g1 = dict(_r3_rev, abstract="Moderate certainty evidence. Conclusion: cinnamon lowered HbA1c.")
+_r3_g2 = dict(_r3_rev, pmid="2", abstract="Low certainty evidence. Conclusion: cinnamon lowered HbA1c.")
+t("BRIEF E2r B3: one stated grade reads 'as the review rates it'",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], "")
+  == "What the studies did find: HbA1c fell (Study 1). Certainty: moderate, as the review rates it",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1], ["1"], ""))
+t("BRIEF E2r B3: several grades read 'varies by outcome, lowest to highest, as the reviews rate it'",
+  _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2], ["1", "2"], "")
+  == "What the studies did find: HbA1c fell (Study 1). Certainty varies by outcome, low to moderate, "
+  "as the reviews rate it", _e_ev.effect_statement("false", _r3_cure, "HbA1c fell (Study 1).", [_r3_g1, _r3_g2],
+                                                   ["1", "2"], ""))
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

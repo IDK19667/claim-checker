@@ -3027,16 +3027,9 @@ def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: 
     return f"{claim_label(absolute)}: {phrase}. {basis}"
 
 
-# The verbs statement 2 may read a direction from, and nothing else.
-_FALL_VERBS = ("fell", "dropped", "decreased", "declined", "was reduced", "were reduced", "lowered")
-_RISE_VERBS = ("rose", "increased")
-_MEASURE_THEN_VERB = re.compile(
-    r"^(?P<measure>[A-Za-z][A-Za-z'-]*(?: [A-Za-z][A-Za-z'-]*){0,4}) (?P<verb>"
-    + "|".join(re.escape(v) for v in _FALL_VERBS + _RISE_VERBS) + r")"
-    # Only the verb with no object: "X lowered Y" names what did the
-    # lowering, not what fell, so it is never read.
-    r"(?=[.,;]|$| (?:by|to|from|in|among|after|with|over|significantly|slightly|modestly)\b)")
-UNGRADED = "Certainty not graded in the study abstracts"
+# Statement 2 has no parsed form: the effect sentence is shown as it was
+# written, so no reading of a verb can turn "fell with placebo" into a fall.
+UNGRADED = "The abstracts we read do not rate how certain this is"
 
 
 def stated_grades(studies, cited_pmids=(), outcome: str = "") -> list[str]:
@@ -3066,14 +3059,12 @@ def effect_statement(verdict: str, absolute: str, effect_sentence: str, studies,
     if len(grades) == 1:
         sure = f"Certainty: {grades[0]}, as the review rates it"
     elif grades:
-        sure = f"Certainty varies by outcome, {grades[0]} to {grades[-1]}"
+        sure = f"Certainty varies by outcome, {grades[0]} to {grades[-1]}, as the reviews rate it"
     else:
         sure = UNGRADED
-    m = _MEASURE_THEN_VERB.match(sentence)
-    if m and not re.search(r"\d|\bstud(?:y|ies)\b", m.group("measure"), re.IGNORECASE):
-        way = "a fall" if m.group("verb") in _FALL_VERBS else "a rise"
-        return f"{m.group('measure')} effects: the studies reviewed report {way}. {sure}"
-    return f"What the studies did find: {sentence.rstrip('.')}. {sure}"
+    # The sentence unchanged, save one closing full stop the statement adds back.
+    said = sentence[:-1] if sentence.endswith(".") else sentence
+    return f"What the studies did find: {said}. {sure}"
 
 
 # ---------------------------------------------------------------------------
