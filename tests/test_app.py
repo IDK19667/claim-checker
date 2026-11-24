@@ -2686,9 +2686,12 @@ t("  the table of designs is the same in the script and on the server",
   _re.findall(r'\["([^"]+)", "([a-z]*)", "((?:[^"\\]|\\.)*)"\]',
               (ROOT / "static" / "app.js").read_text().split("const TYPES = [")[1].split("\n];")[0])
   == [tuple(x) for x in _display.DESIGN_NOTES])
-t("  every source on the result page carries its line",
-  _ord.split('id="server-result"')[0].count('<li class="row" ') == _ord.split('id="server-result"')[0].count('<p class="contrib">')
-  and _ord.count('<p class="contrib">') >= 1)
+# job 3 (c): a source with nothing to say carries no label (only "Studied in" plain, or nothing); never an empty label
+_sw_rows = re.findall(r'<li class="row" .*?</li>', _ord.split('id="server-result"')[0], re.S)
+t("  every source on the result page carries its line, or no label when there is nothing to say",
+  _sw_rows and all(r_.count('<p class="contrib">') == 1 or 'What this study contributes' not in r_ for r_ in _sw_rows)
+  and not re.search(r'What this study contributes</b>\s*</p>', _ord),
+  [(r_.count('<p class="contrib">'), r_[-300:]) for r_ in _sw_rows if not (r_.count('<p class="contrib">') == 1 or 'What this study contributes' not in r_)][:2] or len(_sw_rows))
 if _shutil.which("node"):
     _tsrc = (ROOT / "static" / "app.js").read_text()
     _tsrc = ("const TYPES = [" + _tsrc.split("const TYPES = [")[1].split("function escapeHtml")[0])
@@ -10890,7 +10893,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v128";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v129";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -13164,8 +13167,10 @@ t("NAV 4: the sections are named Answer, Studies, Explanation, Limitations, with
   and re.search(r'class="eyebrow"[^>]*><b', _nav_ord) is None
   and all(f'SEC = {{ Claim: "Answer", Answer: "Answer", Read: "Studies", Weighed: "Studies", Research: "Explanation", Open: "Limitations" }}' in (ROOT / "static" / "desk.js").read_text() for _ in [0]))
 _nav_lr = _nav_rows(_nav_lines)
-t("NAV 4: every study has a labelled What this study contributes line that is never empty",
-  _nav_lr and all(re.search(r'<p class="contrib"><b class="lbl">What this study contributes</b> \S', r_) for r_ in _nav_lr),
+t("NAV 4: a study's What this study contributes label is never empty, and a row without it has nothing or Studied in",
+  _nav_lr and all(re.search(r'<p class="contrib"><b class="lbl">What this study contributes</b> \S', r_)
+                  or ('class="contrib"' not in r_ and '<b class="lbl">What this study contributes' not in r_) for r_ in _nav_lr)
+  and not any(re.search(r'What this study contributes</b>\s*</p>', r_) for r_ in _nav_lr),
   [r_[:120] for r_ in _nav_lr if "What this study contributes</b> " not in r_][:2])
 t("NAV 4: contribution, caution and Indirect context print when the engine sends them",
   "What this study contributes</b> Test line: the one trial that measured colds directly." in _nav_lines
@@ -13175,7 +13180,7 @@ t("NAV 4: contribution, caution and Indirect context print when the engine sends
 _nav_appjs = (ROOT / "static" / "app.js").read_text()
 t("NAV 4: app.js writes the same line, in the same order of sources, as the server",
   "function studyLines(s, n, bv)" in _nav_appjs and "${studyLines(s, n, bv)}<div class=\"acts\">" in _nav_appjs
-  and all(w in _nav_appjs for w in ('"What this study contributes"'.strip('"'), "studyWhy(s)", " Studied in: ", "Indirect context"))
+  and all(w in _nav_appjs for w in ('"What this study contributes"'.strip('"'), "studyWhy(s)", "Studied in: ", "Indirect context"))
   and "Relied on" not in _nav_appjs.split("function studyRowHtml")[1].split("\n}\n")[0])
 
 # ---- NAV fix: every function desk.js calls by name is defined (a study group's button called a removed setGroup) ----
@@ -13375,6 +13380,10 @@ db.put_cached_verdict("rows with and without an abstract", "q", "complicated", "
 _abs_page = c.get("/?q=rows+with+and+without+an+abstract").data.decode()
 _abs_rows = re.findall(r'<li class="row" id="row-\d+".*?</li>', _abs_page, re.S)
 _abs_kind = [("Read abstract</span>" in r, '<p class="noabs">No abstract on PubMed</p>' in r, 'class="act pm"' in r) for r in _abs_rows]
+_abs_no = _abs_rows[1] if len(_abs_rows) > 1 else ""
+t("job 3 (a): a row without an abstract prints Open PubMed first, then the note, then the related link",
+  0 <= _abs_no.find('class="act pm"') < _abs_no.find('class="noabs"') < _abs_no.find("Citations and related studies")
+  and "+ pm\n    + (abs ? \"\" : `<p class=\"noabs\">No abstract on PubMed</p>${go}`)" in (ROOT / "static" / "app.js").read_text(), _abs_no[-400:])
 t("B: a study with an abstract has the Read abstract button and no note; one without has the note and no button",
   _abs_kind == [(True, False, True), (False, True, True)]
   and "Each study has its PubMed page, and its abstract where PubMed has one." in _abs_page
@@ -13428,6 +13437,35 @@ t("step 2: a saved answer without the second statement prints the How big the ef
 _eo_js = (ROOT / "static" / "app.js").read_text()
 t("step 2: renderResult uses the same rule (effectOnce on the effect size and the second statement)",
   "const eff = effectOnce(bv.effect_size, data.effect_line);" in _eo_js and "function effectOnce(eff, line)" in _eo_js)
+
+# ---- q10-rel job 3 (c): no "What this study contributes" label when the page has nothing to say ------------------
+# No contribution and not set aside: no label and no design-name line (the design is above the title); who was
+# studied, if known, as a plain line. A set-aside study keeps its reason under the label; a contribution is unchanged.
+_c3_studies = [dict(STUDIES[0], pmid="44444441", title="Creatine and memory in older adults: a randomized controlled trial.",
+                    publication_types=["Randomized Controlled Trial"], contribution="", abstract=""),
+               dict(STUDIES[1], pmid="44444442", population="", contribution="", abstract=""),
+               dict(STUDIES[0], pmid="44444443", contribution="", off_topic=verdict.OFF_OUTCOME, abstract="")]
+_c3_extra = appmod._study_extra
+appmod._study_extra = lambda s_, cited_: dict(_c3_extra(s_, cited_), contribution="Test line: what it adds.") if s_.get("pmid") == "44444444" else dict(_c3_extra(s_, cited_), contribution="")
+_c3_studies.append(dict(STUDIES[1], pmid="44444444", abstract=""))
+try:
+    db.put_cached_verdict("rows with nothing to say", "q", "complicated", "Because (Study 4).",
+                          ["44444444"], _c3_studies, tldr="Short take.", still_open="Open.")
+    _c3_page = c.get("/?q=rows+with+nothing+to+say").data.decode()
+finally:
+    appmod._study_extra = _c3_extra
+_c3_rows = {re.search(r"PubMed (\d{8})", r_).group(1): r_ for r_ in re.findall(r'<li class="row" id="row-\d+".*?</li>', _c3_page, re.S)}
+_c3_lbl = lambda k: _c3_rows.get(k, "").count("What this study contributes")
+t("job 3 (c): no contribution and not set aside: no label, no design-name line; Studied in plain when the record says who",
+  _c3_lbl("44444441") == 0 and re.search(r'<p class="studied">Studied in: [^<]*older adults[^<]*\.</p>', _c3_rows.get("44444441", ""))
+  and _c3_lbl("44444442") == 0 and 'class="studied"' not in _c3_rows.get("44444442", "")
+  and "Randomized Controlled Trial.</p>" not in _c3_rows.get("44444441", "") + _c3_rows.get("44444442", ""), sorted(_c3_rows))
+t("job 3 (c): a set-aside study keeps its reason under the label, and a contribution is unchanged",
+  "What this study contributes</b> Read and set aside: " in _c3_rows.get("44444443", "")
+  and "What this study contributes</b> Test line: what it adds.</p>" in _c3_rows.get("44444444", ""), sorted(_c3_rows))
+_c3_js = (ROOT / "static" / "app.js").read_text()
+t("job 3 (c): the script prints the same: no label without something to say, Studied in plain",
+  'else text = "";' in _c3_js and ': s.population ? `<p class="studied">Studied in: ${escapeHtml(s.population)}.</p>` : "")' in _c3_js)
 
 # ---------------------------------------------------------------------------
 # Brief E: a review citing a retracted paper, no bare strength word,

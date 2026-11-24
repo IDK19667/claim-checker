@@ -741,15 +741,18 @@ for (const [w, h] of [[375, 812], [1280, 800]]) for (const mode of ["3d", "text"
     const read = () => page.evaluate(() => ({
       eyebrows: [...document.querySelectorAll(".stop .eyebrow")].filter((e) => e.checkVisibility()).map((e) => e.textContent.trim()),
       rail: [...document.querySelectorAll("#rail button[aria-label^='Go to ']")].map((b) => b.textContent.trim()),
-      lines: [...document.querySelectorAll(".row")].map((r) => [...r.querySelectorAll(".contrib, .caution, .indirect")].map((p) => p.textContent.trim()).join(" | ")),
+      lines: [...document.querySelectorAll(".row")].map((r) => [...r.querySelectorAll(".contrib, .studied, .caution, .indirect")].map((p) => p.textContent.trim()).join(" | ")),
       label: document.querySelector("#short-label").textContent.trim() }));
     await openSaved(page, w, mode);
     const srv = await read();
     must(srv.eyebrows.join() === "Studies,Explanation,Limitations" && srv.label === "Answer", `names: ${srv.label}; ${srv.eyebrows.join(", ")}`);
     must(srv.rail.join() === SECTIONS.join(), `the rail: ${srv.rail.join(", ")}`);
-    must(srv.lines.length >= 3 && srv.lines.every((l) => /^What this study contributes \S/.test(l)), `a study without its line: ${srv.lines.find((l) => !/^What this study contributes \S/.test(l))}`);
+    // job 3 (c): a row with nothing to say has no label, only "Studied in: ..." plain when known, or nothing
+    const okLine = (l) => !/What this study contributes\s*($|\|)/.test(l) && (!l.includes("What this study contributes") || /^What this study contributes \S/.test(l));
+    must(srv.lines.length >= 3 && srv.lines.every(okLine) && srv.lines.some((l) => /^What this study contributes \S/.test(l)), `a wrong line: ${srv.lines.find((l) => !okLine(l))}`);
+    must(!srv.lines.some((l) => /^What this study contributes (Randomized Controlled Trial|Meta-Analysis|Systematic Review)\.( |$)/.test(l)), `a design name under the label: ${srv.lines.find((l) => /contributes (Randomized|Meta|Systematic)/.test(l))}`);
     // no indirect label in this release (the engine sends indirect false for every study); the fixture's caution prints
-    must(!srv.lines.some((l) => /Indirect/.test(l)) && srv.lines.some((l) => / \| [^|]*small trial/.test(l)), "the fixture's caution did not print, or an Indirect label did");
+    must(!srv.lines.some((l) => /Indirect/.test(l)) && srv.lines.some((l) => /small trial/.test(l)), "the fixture's caution did not print, or an Indirect label did");
     await page.goto(`${base}/${mode === "text" ? "?nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
     await page.click("#claim-input"); await page.keyboard.type(SAVED[0]); await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(600);
@@ -950,7 +953,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
   await page.reload({ waitUntil: "load" });
   must(await painted(page), "the new build did not paint under the old worker");
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
-  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v128" && r && r.active && r.active.state === "activated"; });
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v129" && r && r.active && r.active.state === "activated"; });
   const st = await page.evaluate(async () => {
     const keys = await caches.keys();
     const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
@@ -962,7 +965,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
     const reg = await navigator.serviceWorker.getRegistration();
     return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
   });
-  must(st.keys.join() === "evident-v128", `caches: ${st.keys.join()}`);
+  must(st.keys.join() === "evident-v129", `caches: ${st.keys.join()}`);
   must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
   must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
   must(!bad.length, `requests: ${bad.join(" | ")}`);
@@ -1513,6 +1516,31 @@ for (const [w, h] of [[375, 812], [1280, 800]]) {
     await page.waitForFunction(() => window.__shared.length > 0, null, { timeout: 5000 });
     const shared = await page.evaluate(() => window.__shared.join(" "));
     must(shared.includes(VIN) && !/\b(Strong|Moderate|Limited|Weak) evidence\b/.test(shared), `the shared text: ${shared.slice(0, 160)}`);
+  }, { w, h });
+}
+
+// ---- 25. Study rows after the step 2 review (q10-rel job 3) --------------------------------------------------------
+// (a) a row without an abstract is one group: Open PubMed first, the note beside it (on its line at 1280), then the
+// related link, no gap between neighbours larger than an ordinary row's gap between its two buttons plus 8 px
+for (const [w, h] of [[375, 812], [1280, 800]]) {
+  await test(`25a: a row without an abstract reads as one group, Open PubMed first and the note beside it, ${w}x${h}`, async (page) => {
+    await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+    const s = await page.evaluate(() => {
+      const box = (e) => e.getBoundingClientRect();
+      const open = (r) => { const g = r.closest(".rows"); if (g && g.hidden) { const b = document.querySelector(`[aria-controls="${g.id}"]`); if (b) b.click(); } };
+      const plain = document.querySelector("#rows .row .abs").closest(".row"), no = document.querySelector("#rows .row .noabs").closest(".row");
+      open(plain); open(no);
+      const a = box(plain.querySelector(".abs > summary")), b = box(plain.querySelector(".acts > .pm")), ordinary = Math.round(b.left - a.right);
+      const kids = [...no.querySelector(".acts").children].filter((e) => e.checkVisibility());
+      const gaps = []; for (let i = 1; i < kids.length; i++) { const p = box(kids[i - 1]), q = box(kids[i]);
+        gaps.push(Math.round(q.top < p.bottom - 1 ? q.left - p.right : q.top - p.bottom)); }
+      const pm = box(no.querySelector(".pm")), note = box(no.querySelector(".noabs"));
+      return { ordinary, order: kids.map((e) => e.className.split(" ").pop()), gaps, sameLine: Math.abs((pm.top + pm.bottom) / 2 - (note.top + note.bottom) / 2) <= 2 && note.left > pm.right,
+        pmLeft: Math.round(pm.left - box(no.querySelector(".acts")).left) };
+    });
+    must(s.order.join() === "pm,noabs,study-go" && s.pmLeft === 0, `order ${s.order.join()}, Open PubMed ${s.pmLeft} px in`);
+    must(s.gaps.every((g) => g >= 0 && g <= s.ordinary + 8), `gaps ${s.gaps.join()} against an ordinary row's ${s.ordinary}`);
+    if (w >= 1280) must(s.sameLine, "the note is not beside Open PubMed, centred on its height");
   }, { w, h });
 }
 

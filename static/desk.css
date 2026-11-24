@@ -247,7 +247,7 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .row .src { font-size: 17px !important; color: var(--on-deep-2) !important; margin: 4px 0 6px !important; }
 .row .src a { display: inline-flex; align-items: center; min-height: 44px; }
 /* Under each study, what it contributes, its caution and Indirect context: plain sentences, the label in mono. */
-.row .contrib, .row .caution, .row .indirect { font-size: 16px !important; line-height: 1.45 !important; color: var(--on-deep) !important; margin: 0 0 6px !important; }
+.row .contrib, .row .studied, .row .caution, .row .indirect { font-size: 16px !important; line-height: 1.45 !important; color: var(--on-deep) !important; margin: 0 0 6px !important; }
 .row .caution { color: var(--on-deep-2) !important; }
 .row .lbl { display: block; font: 500 13px/1.3 var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--on-deep-2); margin-bottom: 2px; }
 .row .status { font-family: var(--mono); font-size: 13px !important; color: var(--on-deep) !important; margin: 0 0 4px !important; }

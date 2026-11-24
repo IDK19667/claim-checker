@@ -4,6 +4,16 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel job 3): No "What this study contributes" label with nothing under it
+
+A row whose study has no contribution and was not set aside used to print the
+label over the design's name alone, which says nothing about this study. Now it
+prints no label: only "Studied in: X." as a plain line when the people studied
+are known, or nothing. A set-aside or background study keeps its reason under
+the label, and a study with a contribution is unchanged. The server page and the
+script print the same; unit tests cover the three cases and N4 checks both
+renderers in the browser.
+
 ## 2026-11-24 (q10-rel step 2): The effect-size sentence is printed once
 
 The owner asked to remove the repeated 22 mg/dL sentence. The second statement under How sure
