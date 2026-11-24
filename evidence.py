@@ -1142,7 +1142,7 @@ def snapshot(studies, cited_pmids=()) -> dict:
         # A strong design about something else, or one that tests nothing
         # in people, is not strong evidence here.
         "strong": sum(1 for s in studies
-                      if tier(s) == "strong"
+                      if shown_tier(s) == "strong"
                       and not s.get("off_topic") and not s.get("background")),
         "off_topic": sum(1 for s in studies if s.get("off_topic")),
         "background": sum(1 for s in studies
@@ -1154,7 +1154,7 @@ def snapshot(studies, cited_pmids=()) -> dict:
                              if any(background_why(s) == k for s in studies
                                     if not s.get("off_topic"))],
         "retracted": sum(1 for s in studies
-                         if tier(s) == "retracted"),
+                         if shown_tier(s) == "retracted"),
         "year_from": years[0] if years else None,
         "year_to": years[-1] if years else None,
         "mix": bars,
@@ -1204,7 +1204,7 @@ def level_word(studies, cited_pmids=()) -> str:
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
     if not cited:
         return ""
-    tiers = {tier(s) for s in cited}
+    tiers = {shown_tier(s) for s in cited}
     if "strong" in tiers:
         return "Strong"
     if "moderate" in tiers:
@@ -1217,7 +1217,7 @@ def observational_only(studies, cited_pmids=()) -> bool:
     studies, so "strong" would describe the paperwork, not the evidence."""
     cited = set(cited_pmids or ())
     strong = [s for s in studies or [] if s.get("pmid") in cited
-              and tier(s) == "strong"]
+              and shown_tier(s) == "strong"]
     return bool(strong) and all(is_review(s) and design_rank(s) == "weaker" for s in strong)
 
 
@@ -2059,7 +2059,12 @@ def too_thin(studies, cited_pmids=()) -> str:
     cited = set(cited_pmids or ())
     used = [s for s in studies or [] if s.get("pmid") in cited]
     reviews = [s for s in used if is_review(s)]
-    concluded = [s for s in reviews if conclusion(s)]
+    # A review citing a retracted paper is not top tier here: its result
+    # never holds an answer up, but a doubt it states still counts. So one
+    # that states no doubt is left out of the reviews heard below, and none
+    # of them stops the one-small-study rule. Only ever lowers.
+    concluded = [s for s in reviews if conclusion(s)
+                 and not (demoted(s) and not (says_not_enough(s) or says_thin(s)))]
     if concluded and all((says_not_enough(s) or says_thin(s)) and not _reports_finding(s)
                          for s in concluded):
         solid = [s for s in used if is_trial(s)
@@ -2074,9 +2079,9 @@ def too_thin(studies, cited_pmids=()) -> str:
             return ("the review behind it says its evidence comes from few or small studies" if one else
                     "the reviews behind it say their evidence comes from few or small studies")
         return "the reviews behind it say their evidence is too little, or from too few or small studies, to tell"
-    if reviews:
+    if [s for s in reviews if not demoted(s)]:
         return ""
-    told = [s for s in used if not narrative_review(s)
+    told = [s for s in used if not narrative_review(s) and not demoted(s)
             and (sample_size(s) is not None
                  or any(not t.startswith(IGNORE_PREFIXES) for t in s.get("publication_types") or []))]
     if len(told) == 1 and trial_caveats(told[0]):
@@ -2167,10 +2172,8 @@ def design_rank(study) -> str:
     """
     if preclinical(study):
         return "weaker"
-    # A review citing a retracted paper, or a study measuring something else,
-    # is never the trial evidence a gate asks for.
-    if demoted(study):
-        return ""
+    # A gate reader: a review flagged as citing a retracted paper ranks
+    # exactly as it did before the flag existed (see shown_tier).
     text = _text(study)
     rct = bool(_RANDOMIZED.search(text))
     seen = bool(_OBSERVED.search(text))
@@ -2721,7 +2724,7 @@ def untested_in_people(studies, cited_pmids=(), reasons=None) -> str:
     kinds = set()
     for s in cited:
         why = reasons.get(s.get("pmid"))
-        if single_case(s) or tier(s) == "weak":
+        if single_case(s) or gate_tier(s) == "weak":
             kinds.add("reports of single patients" if single_case(s) else "opinion pieces")
         elif preclinical(s) or why == BG_LAB:
             kinds.add("animal or lab studies")
@@ -2786,7 +2789,7 @@ def in_people(study) -> bool:
 
 def kind(study) -> str:
     """The cloth for one study's spine."""
-    tier_ = tier(study)
+    tier_ = shown_tier(study)
     if tier_ in ("weak", "retracted"):
         return tier_
     if preclinical(study):
@@ -2827,7 +2830,7 @@ def spine(study) -> str:
     says what it was run on, because that is the fact a reader needs first.
     """
     label = strongest_label(study.get("publication_types"))
-    if kind(study) == "lab" and tier(study) != "strong":
+    if kind(study) == "lab" and shown_tier(study) != "strong":
         return "Animal or lab"
     return SPINES.get(label, "Study")
 
@@ -2838,7 +2841,7 @@ def shelf(studies, cited_pmids=()) -> list[dict]:
     order so two shelves of the same set are always the same drawing.
     """
     cited = {str(p) for p in (cited_pmids or ())}
-    books = [{"kind": kind(s), "tier": tier(s),
+    books = [{"kind": kind(s), "tier": shown_tier(s),
               "used": str(s.get("pmid")) in cited} for s in studies or []]
     return sorted(books, key=lambda b: KINDS.index(b["kind"]))
 
@@ -2870,15 +2873,29 @@ def cited_retracted(study) -> list:
 
 
 def demoted(study) -> bool:
-    """A study that may not count as top tier: a review citing a retracted
-    paper. (An indirect study is a label only: it changes no gate.)"""
+    """A review citing a retracted paper. Read only by shown_tier and by the
+    support a confident "true" needs (certainty_cap, too_thin, the
+    _trials_outweigh override). An indirect study is a label only."""
     return bool(cited_retracted(study))
 
 
-def tier(study) -> str:
-    """classify() for one study, except that a demoted study is never
-    "strong": a human study at most."""
-    t = classify((study or {}).get("publication_types"))
+# Two readers of a study's tier, never to be swapped. A review flagged as
+# citing a retracted paper loses its power to raise confidence and keeps
+# every power to lower it or to protect a reader:
+#   gate_tier  ignores the flag: every gate that can force a verdict or
+#              protect a reader (the harm guard, the guidance rules) counts a
+#              flagged review exactly as before the flag existed;
+#   shown_tier applies it: what a reader sees (the mix, the row, the basis
+#              wording, the level word of the line) never calls it top tier.
+def gate_tier(study) -> str:
+    """classify() for one study, the flag ignored. For gates."""
+    return classify((study or {}).get("publication_types"))
+
+
+def shown_tier(study) -> str:
+    """classify() for one study, except that a flagged review is never
+    "strong": a human study at most. For display only."""
+    t = gate_tier(study)
     return "moderate" if t == "strong" and demoted(study) else t
 
 
@@ -2968,7 +2985,7 @@ def design_kind(studies, cited_pmids=()) -> str:
     """The kind of study the answer rests on, in a reader's words, read from
     the top tier relied on: what "Strong" used to stand for."""
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
-    top = [s for s in cited if tier(s) == "strong"]
+    top = [s for s in cited if shown_tier(s) == "strong"]
     if top:
         reviews = [s for s in top if is_review(s)]
         if reviews:
@@ -2981,7 +2998,7 @@ def design_kind(studies, cited_pmids=()) -> str:
         if any(is_trial(s) for s in top):
             return "randomized trials"
         return "guidelines"
-    if any(tier(s) == "moderate" for s in cited):
+    if any(shown_tier(s) == "moderate" for s in cited):
         return "human studies"
     return "case reports or opinion pieces"
 

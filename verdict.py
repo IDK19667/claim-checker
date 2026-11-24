@@ -1626,8 +1626,9 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
     if flagged:
         ids = ", ".join(f["pmid"] for f in flagged)
         lines.append(f"CITES A RETRACTED STUDY: this review's reference list includes PubMed {ids}, "
-                     f"later retracted. Do not rely on its pooled result unless the abstract says "
-                     f"it held without that study")
+                     f"later retracted. Do not count its pooled result as support for the claim unless "
+                     f"the abstract says the result held without that study. A harm or a doubt it "
+                     f"reports still counts.")
     rated = evidence.review_certainty(study, outcome, strict=True)
     if rated in ("low", "very low"):
         where = " on this outcome" if evidence.certainty_on_outcome(study, outcome) else ""
@@ -2598,6 +2599,7 @@ def _read_verdict(raw, stop_note, studies: list[dict], claim: str = "",
     # claim's own words ("cures diabetes") is the answer the claim needs.
     if ranked and verdict == "false" and ranked["verdict"] == "true":
         ranked = None
+    ranked = _flagged_cannot_win(ranked, verdict)
     forced_rank = None
     # Set when a takeaway below is code's own, written for the stamp it set:
     # a later downgrade replaces it rather than leaving it to argue.
@@ -2953,7 +2955,25 @@ def _trials_outweigh(parsed: dict, studies: list[dict], off: dict, reasons: dict
         return None
     kinds = list(dict.fromkeys(evidence.weaker_kind(studies[n - 1]) for n in against))
     return {"verdict": "true" if direction == "for" else "false",
-            "trials": [n for n, _ in trials], "weaker": against, "kinds": _and(kinds)}
+            "trials": [n for n, _ in trials], "weaker": against, "kinds": _and(kinds),
+            # A review on the winning side that cites a retracted paper
+            # (evidence.demoted): the caller lets it decide nothing that
+            # raises confidence (_flagged_cannot_win).
+            "flagged": any(evidence.demoted(studies[n - 1]) for n, _ in trials)}
+
+
+def _flagged_cannot_win(ranked: dict | None, verdict: str) -> dict | None:
+    """The override, or None when a review flagged as citing a retracted
+    paper is on the side that would win. A flagged review that disagrees is
+    already a trial-level voice against (design_rank ignores the flag). The
+    one exception keeps the flag from raising confidence: when the model
+    said "true" and the trials point against, the flagged review's doubt
+    keeps the power it had, and the override acts exactly as before."""
+    if not ranked or not ranked.get("flagged"):
+        return ranked
+    if verdict == "true" and ranked["verdict"] == "false":
+        return ranked
+    return None
 
 
 def _says_weaker(explanation: str, ranked: dict) -> bool:
@@ -2981,8 +3001,9 @@ _UNSAFE_UNPROVEN = "No randomized trial or major review here shows it is safe."
 def _strong(study: dict) -> bool:
     """A randomized trial, a review of them, or any systematic review or
     meta-analysis: the evidence a risky answer has to rest on."""
-    return evidence.design_rank(study) == "trial" or (evidence.is_review(study)
-                                                       and not evidence.demoted(study))
+    # A gate: a review flagged as citing a retracted paper counts exactly as
+    # before the flag existed, so it keeps its power to protect a reader.
+    return evidence.design_rank(study) == "trial" or evidence.is_review(study)
 
 
 def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,

@@ -985,7 +985,7 @@ def _study_payload(s: dict, cited: set) -> dict:
         # The study's tier, classified once on the server from PubMed's own
         # publication types, so both renderers draw the same evidence field
         # instead of each deciding for itself.
-        "tier": evidence.tier(s),
+        "tier": evidence.shown_tier(s),
         # The most informative type name, for the one line the evidence
         # chart shows on hover and focus. Same reason as the tier.
         "type_label": evidence.strongest_label(s["publication_types"]),

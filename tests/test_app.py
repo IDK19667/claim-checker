@@ -13153,10 +13153,12 @@ t("BRIEF E1b: the caution says cites, may include, not retracted itself",
   _e_ev.retraction_caution(_e_set[0]) == "This review cites a trial that was later retracted (PubMed 20). "
   "Its pooled results may include that trial. The review itself has not been retracted.",
   _e_ev.retraction_caution(_e_set[0]))
-t("BRIEF E1c: a flagged review is not top tier", _e_ev.tier(_e_set[0]) == "moderate"
-  and _e_ev.classify(_e_set[0]["publication_types"]) == "strong")
-t("BRIEF E1c: a flagged review is never the trial evidence a gate asks for",
-  _e_ev.design_rank(_e_set[0]) == "" and not verdict._strong(_e_set[0]))
+t("BRIEF E1c: a flagged review is not top tier where a reader sees it", _e_ev.shown_tier(_e_set[0]) == "moderate"
+  and _e_ev.gate_tier(_e_set[0]) == "strong")
+_e_unf = {k: v for k, v in _e_set[0].items() if k != "cites_retracted"}
+t("BRIEF E2r B2: every gate reader counts a flagged review exactly as an unflagged one",
+  _e_ev.design_rank(_e_set[0]) == _e_ev.design_rank(_e_unf) and verdict._strong(_e_set[0]) == verdict._strong(_e_unf)
+  and verdict._strong(_e_set[0]))
 _e_set2 = [_e_study("11", _E_REV, references=["31", "32"])]
 t("BRIEF E1a: a cited id the lookup finds retracted flags the review",
   _e_ev.flag_retracted_citations(_e_set2, lambda ids: {"32"}) is None
@@ -13295,6 +13297,166 @@ _e_p0 = [verdict._format_study_for_prompt(i + 1, s, "x", "", "c") for i, s in en
 _e_ev.flag_retracted_citations(_e_un, lambda ids: _e_calls.append(1) or set())
 t("BRIEF E: a check no rule touches builds the same request bytes and sends no lookup",
   [verdict._format_study_for_prompt(i + 1, s, "x", "", "c") for i, s in enumerate(_e_un)] == _e_p0 and not _e_calls)
+
+# ---------------------------------------------------------------------------
+# Brief E2 repair, B1 and B2: a flagged review never raises confidence and
+# never weakens a gate that protects a reader. A seeded property over the
+# code-side verdict path, flags on and off, plus the reviewer's inputs.
+# ---------------------------------------------------------------------------
+import random as _r2_random  # noqa: E402
+
+_R2_TEMPL = {
+    "ma_rct": (["Journal Article", "Meta-Analysis", "Systematic Review"],
+               "{x}: a systematic review and meta-analysis of randomized controlled trials",
+               "We pooled 12 randomized controlled trials (n=1800). {res} CONCLUSIONS: {con}"),
+    "ma_obs": (["Journal Article", "Meta-Analysis"],
+               "{x}: a meta-analysis of cohort studies",
+               "We pooled 9 prospective cohort studies (n=40000). {res} CONCLUSIONS: {con}"),
+    "rct": (["Journal Article", "Randomized Controlled Trial"],
+            "{x}: a randomized, double-blind, placebo-controlled trial",
+            "In a randomized double-blind placebo-controlled trial of 640 adults, {res} CONCLUSIONS: {con}"),
+    "pilot": (["Journal Article", "Randomized Controlled Trial"],
+              "{x}: a pilot randomized trial",
+              "In this pilot randomized trial of 24 adults, {res} CONCLUSIONS: {con}"),
+    "cohort": (["Journal Article", "Observational Study"],
+               "{x}: a prospective cohort study",
+               "In a prospective cohort of 5000 adults, {res} CONCLUSIONS: {con}"),
+}
+_R2_STANCE = {
+    "for": ("the outcome improved (p<0.001).", "It helped."),
+    "against": ("no difference was found (95% CI -0.5 to 0.3).", "It did not help."),
+    "harm": ("serious adverse events and liver injury rose (RR 1.4).", "It was harmful."),
+    "thin": ("few small studies were found.", "The evidence is insufficient to draw conclusions."),
+}
+_R2_CLAIMS = [("Zinc lozenges shorten the common cold", "(zinc) AND (common cold OR cold duration)"),
+              ("Stop taking your prescribed blood pressure medication",
+               "(antihypertensive discontinuation) AND (blood pressure OR cardiovascular events)"),
+              ("Kava supplements are safe for the liver", "(kava) AND (liver injury OR hepatotoxicity)"),
+              ("Vinegar cures type 2 diabetes", "(vinegar) AND (diabetes OR glucose)")]
+_R2_FIND = {"for": "for", "against": "against", "harm": "against", "thin": "mixed"}
+_R2_FLAG = [{"pmid": "800001", "title": None, "trial": False}]
+
+
+def _r2_study(n, kind, stance, topic):
+    types, title, abstract = _R2_TEMPL[kind]
+    res, con = _R2_STANCE[stance]
+    if kind.startswith("ma"):
+        res = res[0].upper() + res[1:]
+    return {"pmid": str(970000 + n), "title": title.format(x=topic), "journal": "J", "year": "2022",
+            "authors": [], "publication_types": list(types), "data_banks": None,
+            "abstract": abstract.format(res=res, con=con),
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{970000 + n}/"}
+
+
+def _r2_path(claim, query, model_v, studies, finds):
+    """The code-side verdict path after the call, as weigh_evidence runs it
+    (no guidance call: guidelines are never flagged)."""
+    groups = pubmed.split_and(query)
+    raw = json.dumps({
+        "verdict": model_v, "tldr": "The studies here point both ways.", "explanation": "See the studies (Study 1).",
+        "still_open": "Longer trials are needed.", "cited_study_numbers": list(range(1, len(studies) + 1)),
+        "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True, "finding": f}
+                      for i, f in enumerate(finds)],
+        "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+        "not_applies_to": "", "unknowns": ""})
+    res = verdict._read_verdict(raw, None, studies, claim, subject=groups[0], outcome=groups[1], surrogate="")
+    guard = res.get("guarded")
+    off = res.pop("off_topic", None) or {}
+    back = res.pop("background", None) or {}
+    res.pop("ranked", None)
+    res.pop("guarded", None)
+    for s in studies:
+        s.pop("off_topic", None)
+        s.pop("background", None)
+        if s["pmid"] in off:
+            s["off_topic"] = off[s["pmid"]]
+        elif s["pmid"] in back:
+            s["background"] = back[s["pmid"]]
+    res = verdict._settle_confounding(verdict._settle_ruling(res, claim), studies)
+    res = verdict._too_thin(verdict.check_faithful(res, studies, claim, groups[1]), studies, claim)
+    return res["verdict"], (guard or {}).get("verdict"), bool(guard)
+
+
+_R2_SURE = {"true": 2, "false": 2, "complicated": 1, "insufficient": 0}
+
+_r2_rng = _r2_random.Random(20261123)
+_r2_bad, _r2_cases, _r2_moved, _r2_guarded = [], 0, 0, 0
+_r2_quiet = logging.getLogger().manager.disable
+logging.disable(logging.CRITICAL)
+for _r2_i in range(320):
+    _r2_claim, _r2_q = _r2_rng.choice(_R2_CLAIMS)
+    _r2_kinds = [_r2_rng.choice(list(_R2_TEMPL)) for _ in range(_r2_rng.randint(2, 4))]
+    if not any(k.startswith("ma") for k in _r2_kinds):
+        _r2_kinds[0] = _r2_rng.choice(["ma_rct", "ma_obs"])
+    _r2_stances = [_r2_rng.choice(list(_R2_STANCE)) for _ in _r2_kinds]
+    _r2_finds = [_R2_FIND[x] for x in _r2_stances]
+    _r2_topic = "Antihypertensive discontinuation" if _r2_claim.startswith("Stop") else _r2_claim.split()[0]
+    _r2_base = [_r2_study(_r2_i * 10 + j, k, st, _r2_topic) for j, (k, st) in enumerate(zip(_r2_kinds, _r2_stances))]
+    _r2_reviews = [j for j, k in enumerate(_r2_kinds) if k.startswith("ma")]
+    _r2_flag = [j for j in _r2_reviews if _r2_rng.random() < 0.6] or [_r2_reviews[0]]
+    for _r2_v in ("true", "false", "complicated", "insufficient"):
+        _r2_off = _e_copy.deepcopy(_r2_base)
+        _r2_on = _e_copy.deepcopy(_r2_base)
+        for j in _r2_flag:
+            _r2_on[j]["cites_retracted"] = list(_R2_FLAG)
+        try:
+            a = _r2_path(_r2_claim, _r2_q, _r2_v, _r2_off, _r2_finds)
+            b = _r2_path(_r2_claim, _r2_q, _r2_v, _r2_on, _r2_finds)
+        except Exception as e:  # noqa: BLE001
+            _r2_bad.append((_r2_i, _r2_v, "raised", repr(e)[:120]))
+            continue
+        _r2_cases += 1
+        _r2_moved += a[0] != b[0]
+        _r2_guarded += a[2]
+        surer = b[0] != a[0] and _R2_SURE[b[0]] >= _R2_SURE[a[0]]
+        if surer or (a[2] and a[1:] != b[1:]):
+            _r2_bad.append((_r2_i, _r2_claim[:20], _r2_kinds, _r2_finds, _r2_flag, _r2_v, a, b))
+logging.disable(_r2_quiet)
+t("BRIEF E2r B1/B2: over 1280 seeded cases a flagged review never makes a verdict surer, and the harm guard "
+  "decides as it did without the flag", not _r2_bad and _r2_cases >= 1200, (_r2_cases, _r2_moved, _r2_bad[:3]))
+print(f"  ({_r2_cases} cases, {_r2_moved} verdicts lowered by a flag, {_r2_guarded} decided by the harm guard)")
+
+# The reviewer's B1 input: a flagged review against, a large trial for, a
+# cohort against, the model "complicated": the trials disagree, so nothing
+# is forced, exactly as before the flag.
+_r2_b1 = [_r2_study(1, "ma_rct", "against", "Zinc lozenges"), _r2_study(2, "rct", "for", "Zinc lozenges"),
+          _r2_study(3, "cohort", "against", "Zinc lozenges")]
+_r2_b1[0]["cites_retracted"] = list(_R2_FLAG)
+_r2_b1p = {"relevance": [{"study": 1, "finding": "against"}, {"study": 2, "finding": "for"},
+                         {"study": 3, "finding": "against"}]}
+t("BRIEF E2r B1: a flagged review that disagrees still blocks the trials override",
+  verdict._trials_outweigh(_r2_b1p, _r2_b1, {}, {}, []) is None
+  and _r2_path(_R2_CLAIMS[0][0], _R2_CLAIMS[0][1], "complicated", _e_copy.deepcopy(_r2_b1),
+               ["against", "for", "against"])[0] == "complicated")
+_r2_b1b = [_r2_study(1, "ma_rct", "for", "Zinc lozenges"), _r2_study(2, "cohort", "against", "Zinc lozenges")]
+_r2_b1b[0]["cites_retracted"] = list(_R2_FLAG)
+t("BRIEF E2r B1: a flagged review on the winning side cannot force a yes",
+  verdict._flagged_cannot_win(verdict._trials_outweigh(
+      {"relevance": [{"study": 1, "finding": "for"}, {"study": 2, "finding": "against"}]}, _r2_b1b, {}, {}, []),
+      "complicated") is None)
+# The reviewer's B2 inputs: the harm guard follows a flagged protective review
+# exactly as it follows an unflagged one.
+for _r2_claim, _r2_mv, _r2_st in (
+        ("Stop taking your prescribed blood pressure medication", "complicated",
+         [_r2_study(1, "ma_rct", "harm", "Antihypertensive discontinuation"),
+          _r2_study(2, "cohort", "for", "Antihypertensive discontinuation")]),
+        ("Kava supplements are safe for the liver", "true",
+         [_r2_study(1, "ma_obs", "harm", "Kava"), _r2_study(2, "cohort", "for", "Kava")])):
+    _r2_g = []
+    for _r2_fl in (False, True):
+        _r2_s = _e_copy.deepcopy(_r2_st)
+        if _r2_fl:
+            _r2_s[0]["cites_retracted"] = list(_R2_FLAG)
+        _r2_g.append(verdict._guard_reading(_r2_claim, _r2_mv, {"relevance": [
+            {"study": 1, "finding": "against"}, {"study": 2, "finding": "for"}]}, _r2_s, {}, {},
+            [s["pmid"] for s in _r2_s]))
+    t(f"BRIEF E2r B2: the harm guard follows a flagged protective review: {_r2_claim[:30]}",
+      _r2_g[0] and _r2_g[0] == _r2_g[1] and _r2_g[1]["verdict"] == "false" and _r2_g[1]["follows"] == [1], _r2_g)
+_r2_note = verdict._format_study_for_prompt(1, _r2_b1[0], "(common cold)", "", "Zinc lozenges shorten the common cold")
+t("BRIEF E2r B1: the note to the model says a harm or a doubt from a flagged review still counts",
+  "CITES A RETRACTED STUDY: this review's reference list includes PubMed 800001, later retracted. Do not count "
+  "its pooled result as support for the claim unless the abstract says the result held without that study. "
+  "A harm or a doubt it reports still counts." in _r2_note, _r2_note)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
