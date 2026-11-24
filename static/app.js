@@ -1289,13 +1289,16 @@ async function copyText(str) {
 // shared text and on the shared image. Mirrored in og.py for the link preview.
 const DOCTOR_LINE = "Check important health decisions with a doctor.";
 
+// The site's own tokens (style.css, desk.css); the cloths are DESIGN.md's c-*.
+// No accent: the pen ring and the thread's knots take the words' colour, as the
+// page's pen does. The plank has no token of its own: the nearest is --desk-card-ink.
 const CARD = {
-  deep: "#0f1211", deepLine: "#2a302d", onDeep: "#eceee9", onDeep2: "#9ea6a1", onDeep3: "#7d8580", sage: "#9fc3b0",
-  paper: "#f1f2ee", ink: "#121514", ink2: "#434a46", ink3: "#5d6560", rule: "#d9dcd5", wood: "#2b2622",
-  cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#434a46" },
-  // each cloth at 18% on the paper, mixed in oklab as style.css mixes it: the
-  // wash inside a book that was read but not used
-  wash: { strong: "#cdd5cf", human: "#cdd2d6", lab: "#d4d1d3", weak: "#dcd3cc", retracted: "#cfd1cd" },
+  deep: "#12110f", deepLine: "#302f2c", onDeep: "#f0ede9", onDeep2: "#a6a4a0", onDeep3: "#85837f", pen: "#f0ede9",
+  paper: "#f4f2ef", ink: "#151412", ink2: "#4a4845", ink3: "#65625f", rule: "#dddad7", wood: "#262522",
+  cloth: { strong: "#35594c", human: "#3a4e6b", lab: "#5a4760", weak: "#7e4f3d", retracted: "#4a4845" },
+  // each cloth at 18% on the paper, mixed in oklab: the wash inside a book
+  // that was read but not used
+  wash: { strong: "#cfd5cf", human: "#d0d2d6", lab: "#d6d1d4", weak: "#dfd3cd", retracted: "#d3d1ce" },
 };
 
 function wrapLines(ctx, text, maxWidth, maxLines) {
@@ -1339,7 +1342,7 @@ async function renderShareCard(r) {
                        `500 20px ${MONO}`].map((f) => document.fonts.load(f)));
   } catch {}
   ctx.textBaseline = "alphabetic";
-  const knot = (y) => { ctx.fillStyle = CARD.sage; ctx.beginPath(); ctx.arc(pad + 4, y, 5, 0, Math.PI * 2); ctx.fill(); };
+  const knot = (y) => { ctx.fillStyle = CARD.pen; ctx.beginPath(); ctx.arc(pad + 4, y, 5, 0, Math.PI * 2); ctx.fill(); };
 
   // Night: the masthead, the claim, the verdict.
   const n = r.studies.length, cited = r.studies.filter((s) => s.cited_in_verdict).length;
@@ -1378,7 +1381,7 @@ async function renderShareCard(r) {
   ctx.font = `350 ${vSize}px ${DISPLAY}`; ctx.fillStyle = CARD.onDeep;
   ctx.fillText(label, inset, verdictY);
   const vw = ctx.measureText(label).width;
-  ctx.strokeStyle = CARD.sage; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+  ctx.strokeStyle = CARD.pen; ctx.lineWidth = 2.5; ctx.lineCap = "round";
   ctx.stroke(ringPath(inset - 22, verdictY - vSize * 0.92, vw + 44, vSize * 1.22));
   ctx.font = `400 26px ${BODY}`; ctx.fillStyle = CARD.onDeep2;
   ctx.fillText(DOCTOR_LINE, inset, doctorY);

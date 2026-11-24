@@ -98,8 +98,11 @@ build step is a feature: anyone can read the shipped file.
   same rule to model output.
 - Three faces, no more: Bricolage Grotesque for display (headlines, the
   verdict, figures), Instrument Sans for everything read, IBM Plex Mono
-  for labels a reader scans. One accent: sage on the night for what you
-  can act on, green by day on the other pages. The book cloths
+  for labels a reader scans. No accent colour: a link is the words' own
+  colour with an underline, focus is the words' colour on the night and
+  ink by day, and the greys are neutral with a faint lean to the lamp
+  (hue 75). The lamp's light, the wood and the paper are the only colour
+  in the room; a test holds the shipped colour files to that. The book cloths
   (`--c-strong`, `--c-human`, `--c-lab`, `--c-weak`) mean the kind of
   study and nothing else. Verdicts are never colour-coded: no stylesheet
   selects on `data-verdict`.

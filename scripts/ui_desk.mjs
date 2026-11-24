@@ -979,6 +979,52 @@ await test("20: a kept copy and a server taking 4 s: the copy paints at about 2.
   must(fresh && fresh !== mark, `the fresh page was not stored (${mark} then ${fresh})`);
 }, { sw: true });
 
+// ---- The share image takes the site's colours (q10-card 2) ----------------------------------
+// The square the browser draws for sharing (app.js CARD) kept the mint ring and the green-cast
+// greys after q10-look. Drawn for two verdicts with every kind of study, no pixel is near a colour
+// q10-look removed (a pixel of a kept cloth aside), and outside the shelf (whose four cloths mean the kind of study) no pixel has
+// chroma 0.02 or more outside hue 40 to 100. The grounds are --deep and --paper, the size 1080.
+for (const verdict of ["false", "complicated"]) {
+  await test(`share image colours (${verdict}): no mint, no green cast, the site's grounds, 1080 square`, async (page) => {
+    await page.goto(base + "/?q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page);
+    const out = await page.evaluate(async (verdict) => {
+      const kinds = ["strong", "human", "lab", "weak", "retracted"];
+      const studies = kinds.flatMap((k, i) => [true, false].map((used) => ({ title: `Study ${k}`, kind: k, tier: k === "strong" ? "strong" : k === "weak" || k === "retracted" ? "weak" : "moderate", cited_in_verdict: used, pmid: String(100 + i) })));
+      const r = { claim: "Cold showers boost the immune system", verdict, tldr: "Small trials found fewer sick days reported, not fewer colds.", still_open: "Whether the effect lasts past three months.", studies, share_url: location.origin + "/?q=x" };
+      const blob = await renderShareCard(r);
+      const bmp = await createImageBitmap(blob);
+      const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+      const x = c.getContext("2d"); x.drawImage(bmp, 0, 0);
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      const lch = (R, G, B) => { const r = lin(R), g = lin(G), b = lin(B);
+        const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b), s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+        const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, Bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+        return [Math.hypot(A, Bb), ((Math.atan2(Bb, A) * 180 / Math.PI) + 360) % 360]; };
+      const removed = ["9fc3b0", "4f6a5d", "d4e4da", "2c5848", "9fb3ad", "8fa6b4", "1d3a2e"].map((h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)));
+      // the kept cloths (DESIGN.md c-*): c-strong sits close to the removed --green, so a pixel of a cloth is not counted
+      const cloths = ["35594c", "3a4e6b", "5a4760", "7e4f3d"].map((h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)));
+      const near12 = (i, q) => (d[i] - q[0]) ** 2 + (d[i + 1] - q[1]) ** 2 + (d[i + 2] - q[2]) ** 2 <= 144;
+      const shelfTop = c.height - 112 - 60, shelfBottom = c.height - 112 + 6;
+      let near = 0, cast = 0; const seen = new Map();
+      for (let i = 0; i < d.length; i += 4) {
+        const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2], y = Math.floor(i / 4 / c.width);
+        if (removed.some((q) => near12(i, q)) && !cloths.some((q) => near12(i, q))) near++;
+        if (y < shelfTop || y > shelfBottom) {
+          let v = seen.get(key); if (v === undefined) { const [C, H] = lch(d[i], d[i + 1], d[i + 2]); v = C >= 0.02 && !(H >= 40 && H <= 100); seen.set(key, v); }
+          if (v) cast++;
+        }
+      }
+      const px = (X, Y) => { const j = (Y * c.width + X) * 4; return [d[j], d[j + 1], d[j + 2]].map((v) => v.toString(16).padStart(2, "0")).join(""); };
+      return { w: c.width, h: c.height, near, cast, night: px(4, 4), day: px(4, c.height - 4) };
+    }, verdict);
+    must(out.w === 1080 && out.h === 1080, `the share image is ${out.w} by ${out.h}`);
+    must(out.near === 0, `${out.near} pixels are near a colour q10-look removed`);
+    must(out.cast === 0, `${out.cast} pixels outside the shelf have a green, mint, blue or purple cast`);
+    must(out.night === "12110f" && out.day === "f4f2ef", `the grounds are #${out.night} and #${out.day}, not --deep and --paper`);
+  });
+}
+
 await browser.close();
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);

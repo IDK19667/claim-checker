@@ -19,7 +19,7 @@
    - Fonts (self-hosted): cache first; the files never change.
    - API: never cached. */
 
-const CACHE = "evident-v124";
+const CACHE = "evident-v125";
 // Only what the home page needs to paint offline. Everything else (the
 // other pages, style.css, the display face they use, the icons, the 3D
 // files) is kept when first used. The static files here are stamped and

@@ -1078,7 +1078,7 @@ t("the page preloads the fonts it actually uses",
   "bricolagegrotesque" in _home and "instrumentsans" in _home
   and "librefranklin" not in _home and "librecaslon" not in _home and "archivo" not in _home)
 t("theme colour matches the shipped ground, and no dark scheme is claimed",
-  'content="#0f1211"' in _home and 'content="light dark"' not in _home)
+  'content="#12110f"' in _home and 'content="light dark"' not in _home)
 
 # ---- the cold page must contain everything the browser renders into ---------------
 # A streamed check renders from the front page, where no server-side result
@@ -7417,9 +7417,10 @@ t("footer: the separators are CSS on the links, not dots in the text, so none ca
   and re.search(r"\.foot-links a::before \{[^}]*content: \"\\00b7\"", _css9) is not None
   and re.search(r"\.foot-links \{[^}]*overflow: hidden", _css9) is not None, _fl[0])
 _design9 = (ROOT / "DESIGN.md").read_text()
-t("DESIGN.md: palette roles are written down and say green never signals safe or a good verdict",
-  "Palette roles" in _design9 and "Green never signals" in _design9
-  and all(h in _design9 for h in ("#f1f2ee", "#fafaf8", "#121514", "#434a46", "#5d6560", "#2c5848", "#d4e4da", "#0f1211")))
+t("DESIGN.md: palette roles are written down and say no colour signals safe or a good verdict",
+  "Palette roles" in _design9 and "No colour signals" in _design9 and "No accent colour" in _design9
+  and all(h in _design9 for h in ("#f4f2ef", "#fbfaf8", "#151412", "#4a4845", "#65625f", "#e6dcc6", "#12110f"))
+  and not any(h in _design9 for h in ("#9fc3b0", "#2c5848", "#d4e4da")))
 _tpl_who = (ROOT / "templates" / "index.html").read_text()
 t("who: with only a 'does not apply' sentence, the heading says so and no empty 'applies to' heading is left",
   "Who this does not apply to" in _tpl_who and '{% if who_yes %}<p class="intro label-2">And who it does not</p>{% endif %}' in _tpl_who
@@ -8395,9 +8396,10 @@ for _cl, _vd, _tl, _so in [("A very long claim " * 40, "complicated", "An answer
                            ("Short", "true", "Short answer.", ""), ("Medium length claim about sleep", "false", "", "Doses vary.")]:
     _im = _CI.open(_cio.BytesIO(og.render_card(_cl, _vd, _tl, 5, ("Meta-Analysis", "2020", "T " * 200), _so))).convert("RGB")
     _shots.append(_im)
+from PIL import ImageColor as _ImageColor_og  # noqa: E402
 def _runs_off(im):
     # The strip at the right edge, below the masthead, is only ever the night or the paper.
-    return any(im.getpixel((x, y)) not in {(15, 18, 17), (241, 242, 238)}
+    return any(im.getpixel((x, y)) not in {_ImageColor_og.getrgb(og.DEEP), _ImageColor_og.getrgb(og.PAPER)}
                for y in range(100, 630, 2) for x in range(1150, 1200, 2))
 t("share card: exactly 1200x630 for a very long claim, a run of letters, a long answer and a short one",
   all(i.size == (1200, 630) for i in _shots), [i.size for i in _shots])
@@ -8416,7 +8418,7 @@ t("share card: a long still-open line wraps to up to three lines before it trunc
   len(_o3) == 3 and og._wrap(_cd, _so3 * 3, og._body(21), 1000, 3)[-1].endswith("\u2026") and not _o3[-1].endswith("\u2026")
   and _i3.size == (1200, 630) and _dark(_i3, 330, 560) > _dark(_i1, 330, 560), _o3)
 t("share card: three still-open lines leave the footer row clear",
-  not any(_i3.getpixel((x, y)) != (241, 242, 238) for y in range(560, 590) for x in range(64, 1136, 3)))
+  not any(_i3.getpixel((x, y)) != _ImageColor_og.getrgb(og.PAPER) for y in range(560, 590) for x in range(64, 1136, 3)))
 
 # The card a link to the site itself unfurls with is a brand card: the
 # tagline is never drawn as if it were a claim someone checked.
@@ -13214,6 +13216,140 @@ t("NAV N3: the server-rendered abstract shows an en dash and an em dash as hyphe
   [_htmllib.unescape(x) for x in _n3_srv] == [_n3_want], _n3_srv[:1])
 t("NAV N3: app.js draws the same abstract the same way",
   [_htmllib.unescape(x) for x in _n3_jst] == [_n3_want], _n3_jst[:1])
+
+# ---- No mint on the night (q10-look 1) ---------------------------------------------------
+# The owner asked four times for no neon or AI colours; the pale mint #9fc3b0 on near-black
+# was the cause. It is gone from both stylesheets: links are the words' colour with an
+# underline, labels a quieter grey, the focus ring the words' colour (ink by day).
+_nm_desk = (ROOT / "static" / "desk.css").read_text()
+_nm_style = (ROOT / "static" / "style.css").read_text()
+t("NO MINT: #9fc3b0 and the sage token are gone from desk.css and style.css",
+  all("9fc3b0" not in x.lower() and "--sage" not in x and "--desk-sage" not in x for x in (_nm_desk, _nm_style)))
+t("NO MINT: a link on the night is the words' colour and keeps its underline",
+  re.search(r"(?m)^a \{ color: var\(--on-deep\); text-underline-offset: 3px; \}", _nm_desk) is not None
+  and not re.search(r"(?m)^a \{[^}]*text-decoration: none", _nm_desk))
+t("NO MINT: the focus ring is the words' colour on the night and ink by day, drawn outside the control",
+  "--desk-focus: var(--desk-on);" in _nm_desk and "--focus: var(--ink);" in _nm_style
+  and re.search(r":focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 3px;", _nm_desk) is not None)
+t("NO MINT: the study-number box is a neutral grey and a selection a warm paper tint",
+  "--desk-ref: #666461;" in _nm_desk and "--tint: #e6dcc6;" in _nm_style)
+
+# ---- Warm neutral greys (q10-look 2) -----------------------------------------------------
+# Every grey on the night and by day keeps its lightness and leans to the lamp (hue 75), with
+# chroma at most 0.006 for grounds and lines and 0.008 for text: no green cast. theme-color and
+# the manifest follow --deep.
+import math as _wg_m
+def _wg_oklch(h):
+    h = h.lstrip("#").lstrip("0x") if h.startswith("0x") else h.lstrip("#")
+    f = lambda c: (c / 12.92) if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = [f(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4)]
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    q = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * q
+    A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * q
+    B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * q
+    return L, _wg_m.hypot(A, B), _wg_m.degrees(_wg_m.atan2(B, A)) % 360
+_wg_greys = {}
+for _wg_f in ("desk.css", "style.css"):
+    _wg_src = (ROOT / "static" / _wg_f).read_text()
+    for _wg_k, _wg_h in re.findall(r"(--[a-z0-9-]+):\s*#([0-9a-fA-F]{6})\b", _wg_src):
+        _wg_l, _wg_c, _wg_hue = _wg_oklch(_wg_h)
+        if _wg_c < 0.02 and _wg_h.lower() not in ("ffffff", "000000"):
+            _wg_greys[_wg_f + " " + _wg_k] = (_wg_h, round(_wg_c, 4), round(_wg_hue))
+# at this little chroma an 8-bit hex can only land near hue 75: 40 to 100 is "leans to the lamp"
+_wg_bad = {k: v for k, v in _wg_greys.items() if not (40 <= v[2] <= 100 and v[1] <= 0.008)}
+t("WARM GREYS: every grey token in desk.css and style.css leans to hue 75 with chroma 0.008 or less",
+  len(_wg_greys) >= 30 and not _wg_bad, _wg_bad)
+_wg_3d = (ROOT / "static" / "desk3d.js").read_text()
+t("WARM GREYS: the scene's background and wall are warm neutral greys of the same lightness",
+  "scene.background = new T.Color(0x0c0b0a)" in _wg_3d and "color: 0x413f3d, roughness: 0.96" in _wg_3d)
+_wg_deep = re.search(r"--desk-deep:\s*(#[0-9a-f]{6})", (ROOT / "static" / "desk.css").read_text()).group(1)
+_wg_man = json.loads((ROOT / "static" / "manifest.webmanifest").read_text())
+t("WARM GREYS: theme-color on every page and the manifest follow --deep",
+  _wg_man["theme_color"] == _wg_man["background_color"] == _wg_deep
+  and all(f'name="theme-color" content="{_wg_deep}"' in (ROOT / "templates" / n).read_text()
+          for n in ("index.html", "info.html", "privacy.html", "404.html", "stats.html")), (_wg_deep, _wg_man["theme_color"]))
+
+# ---- The scene's fill lights and pencil (q10-look 3) ------------------------------------
+# The two faint fill lights keep their intensity and lightness and lose their mint and blue;
+# the pencil is black lacquer of the same lightness.
+_sl_3d = (ROOT / "static" / "desk3d.js").read_text()
+t("SCENE: the fill lights are warm neutral at their old intensity, and the pencil is black lacquer",
+  "new T.HemisphereLight(0xb2aeaa, 0x1a120c, 0.12)" in _sl_3d and "new T.DirectionalLight(0xa6a29e, 0.06)" in _sl_3d
+  and "color: 0x343331, roughness: 0.42" in _sl_3d
+  and not any(h in _sl_3d.lower() for h in ("9fb3ad", "8fa6b4", "1d3a2e")))
+
+# ---- The icon's cloths (q10-look 4) -------------------------------------------------------
+# The home-screen icon takes the desk's own book cloths and a paper mark: no blue, purple,
+# green or mint. The PNGs are drawn by scripts/make_icons.py from the same shapes.
+_ic_svg = (ROOT / "static" / "icons" / "icon.svg").read_text().lower()
+t("ICON: the spines are the scene's cloths and the mark is paper white",
+  all(h in _ic_svg for h in ("#cfc6b2", "#3a2f26", "#2a2d29", "#7e4f3d", "#f4f2ef", "#12110f"))
+  and not any(h in _ic_svg for h in ("#3a4e6b", "#5a4760", "#35594c", "#9fc3b0")))
+try:
+    from PIL import Image as _ic_Image
+    _ic_px = _ic_Image.open(ROOT / "static" / "icons" / "icon-512.png").convert("RGB")
+    t("ICON: the 512 PNG is the same drawing (the tall relied-on spine is page cloth, the ground --deep)",
+      _ic_px.getpixel((213, 300)) == (0xcf, 0xc6, 0xb2) and _ic_px.getpixel((5, 5)) == (0x12, 0x11, 0x0f), (_ic_px.getpixel((213, 300)), _ic_px.getpixel((5, 5))))
+except ImportError:
+    pass
+
+# ---- One room of warm colour (q10-look 5) -------------------------------------------------
+# --green had no rule left on any page and is gone. Across the shipped colour files, every
+# colour literal with chroma 0.02 or more has a hue between 40 and 100: the lamp, the wood and
+# the paper are the only colour in the room (no green, mint, teal, cyan, blue or purple).
+_pa_css = (ROOT / "static" / "style.css").read_text()
+t("PALETTE: --green is gone and nothing on any page asks for it",
+  "--green" not in _pa_css and not any("var(--green)" in (ROOT / d / f).read_text()
+      for d, f in [("static", "desk.css"), ("static", "app.js"), ("static", "desk.js")] + [("templates", n.name) for n in (ROOT / "templates").glob("*.html")]))
+def _pa_lits(src):
+    out = []
+    for m in re.finditer(r"#([0-9a-fA-F]{6})\b|0x([0-9a-fA-F]{6})\b|rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", src):
+        h = m.group(1) or m.group(2) or "".join(f"{int(v):02x}" for v in m.group(3, 4, 5))
+        out.append(h.lower())
+    return out
+_pa_bad = []
+for _pa_f in ("static/desk.css", "static/style.css", "static/desk3d.js", "static/icons/icon.svg", "static/manifest.webmanifest"):
+    for _pa_h in _pa_lits((ROOT / _pa_f).read_text()):
+        _pa_l, _pa_c, _pa_hue = _wg_oklch(_pa_h)
+        if _pa_c >= 0.02 and not (40 <= _pa_hue <= 100):
+            _pa_bad.append((_pa_f, _pa_h, round(_pa_c, 3), round(_pa_hue)))
+t("PALETTE: every colour literal with chroma 0.02 or more in the shipped colour files has a hue from 40 to 100",
+  not _pa_bad, _pa_bad)
+
+# ---- The link preview takes the site's colours (q10-card 1) --------------------------------
+# og.py's card was outside q10-look and kept the mint ring and the green-cast greys. Now its
+# grounds, inks and ring are the site's tokens: rendered for every verdict with invented text,
+# no pixel is near a colour q10-look removed, no pixel has chroma 0.02 or more outside hue 40
+# to 100 (no green cast, no mint, blue or purple), and the size is still 1200 by 630.
+from PIL import Image as _ogc_Image  # noqa: E402
+import io as _ogc_io  # noqa: E402
+_OGC_REMOVED = ["9fc3b0", "4f6a5d", "d4e4da", "2c5848", "9fb3ad", "8fa6b4", "1d3a2e"]
+def _ogc_rgb(h):
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+_ogc_near, _ogc_cast, _ogc_sizes, _ogc_grounds = [], [], set(), []
+for _ogc_v in ("true", "false", "complicated", "insufficient"):
+    _ogc_im = _ogc_Image.open(_ogc_io.BytesIO(og.render_card(
+        "Cold showers boost the immune system", _ogc_v, "Small trials found fewer sick days reported, not fewer colds.", 6,
+        ("Randomized controlled trial", "2016", "Cold showers and sick days"), "Whether the effect lasts past three months."))).convert("RGB")
+    _ogc_sizes.add(_ogc_im.size)
+    _ogc_grounds.append((_ogc_im.getpixel((4, 4)), _ogc_im.getpixel((4, _ogc_im.height - 4))))
+    for _ogc_n, _ogc_px in _ogc_im.getcolors(1 << 20):
+        for _ogc_r in _OGC_REMOVED:
+            if sum((a - b) ** 2 for a, b in zip(_ogc_px, _ogc_rgb(_ogc_r))) <= 12 ** 2:
+                _ogc_near.append((_ogc_v, _ogc_px, _ogc_r))
+        _ogc_l, _ogc_c, _ogc_h = _wg_oklch("%02x%02x%02x" % _ogc_px)
+        if _ogc_c >= 0.02 and not (40 <= _ogc_h <= 100):
+            _ogc_cast.append((_ogc_v, _ogc_px, round(_ogc_c, 3), round(_ogc_h)))
+t("OG CARD COLOURS: no pixel of the link preview is near the mint or another colour q10-look removed, for every verdict",
+  not _ogc_near, _ogc_near[:5])
+t("OG CARD COLOURS: no pixel has chroma 0.02 or more outside hue 40 to 100 (no green cast, mint, blue or purple)",
+  not _ogc_cast, _ogc_cast[:5])
+t("OG CARD COLOURS: the grounds are the site's --deep and --paper, and the ring is the words' colour",
+  all(g == (_ogc_rgb("12110f"), _ogc_rgb("f4f2ef")) for g in _ogc_grounds) and og.PEN == og.ON_DEEP == "#f0ede9"
+  and not hasattr(og, "SAGE"), _ogc_grounds[:1])
+t("OG CARD COLOURS: the image is still 1200 by 630", _ogc_sizes == {(1200, 630)}, _ogc_sizes)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
