@@ -13150,8 +13150,8 @@ t("BRIEF E1b: a review citing a retracted paper in the check is flagged",
   _e_set[0].get("cites_retracted"))
 t("BRIEF E1a: the lookup is asked only for the cited ids not already known", _e_calls == [["30"]], _e_calls)
 t("BRIEF E1b: the caution says cites, may include, not retracted itself",
-  _e_ev.retraction_caution(_e_set[0]) == "This review cites a trial that was later retracted (PubMed 20). "
-  "Its pooled results may include that trial. The review itself has not been retracted.",
+  _e_ev.retraction_caution(_e_set[0]) == "This review cites a study that was later retracted (PubMed 20). "
+  "Its conclusions may rest in part on that study. The review itself has not been retracted.",
   _e_ev.retraction_caution(_e_set[0]))
 t("BRIEF E1c: a flagged review is not top tier where a reader sees it", _e_ev.shown_tier(_e_set[0]) == "moderate"
   and _e_ev.gate_tier(_e_set[0]) == "strong")
@@ -13514,6 +13514,26 @@ t("BRIEF E2r m1: a clean top-tier study beside it keeps the usual basis",
 t("BRIEF E2r m2: a narrowing reads 'which were only in'",
   _e_ev.claim_statement("complicated", "Moderate evidence, but only in older adults", _e_rcts, ["50"], "")
   .startswith("The claim: No plain yes or no from the studies reviewed, which were only in older adults."))
+
+# Brief E2 repair, m3 and m4: the words a reader sees beside a flagged review.
+_m4_two = _e_study("71", ["Journal Article", "Systematic Review"],
+                   cites_retracted=[{"pmid": "801", "title": None, "trial": True},
+                                    {"pmid": "802", "title": None, "trial": False}])
+t("BRIEF E2r m4: the caution for several retracted studies, the same for every kind of review",
+  _e_ev.retraction_caution(_m4_two) == "This review cites 2 studies that were later retracted (PubMed 801, 802). "
+  "Its conclusions may rest in part on them. The review itself has not been retracted.",
+  _e_ev.retraction_caution(_m4_two))
+_m4_set = [_m4_two, dict(_m1_flag)]
+_m4_ex, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71", "70"})
+_m4_ex1, _ = appmod._retracted_review_rules("It helped (Study 1).", None, _m4_set, {"71"})
+t("BRIEF E2r m4: the explanation sentence is singular for one flagged review and plural for two",
+  _m4_ex.endswith("Reviews used here cite studies that were later retracted, so their results are treated "
+                  "with caution.") and _m4_ex1.endswith("A review used here cites a study that was later "
+                                                         "retracted, so its results are treated with caution."),
+  (_m4_ex, _m4_ex1))
+_m3_c = appmod._contribution(_e_study("72", _E_RCT, abstract="Results only."), True, None)
+t("BRIEF E2r m3: a contribution never states a population the record does not give",
+  "general population" not in _m3_c and _m3_c == "A randomized controlled trial.", _m3_c)
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

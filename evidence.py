@@ -2935,18 +2935,25 @@ def retraction_caution(study) -> str:
     flagged = cited_retracted(study)
     if not flagged:
         return ""
+    # The same words for every kind of review: a systematic review that did
+    # not pool has no pooled result to speak of.
     ids = [f["pmid"] for f in flagged]
-    noun = "trial" if all(f.get("trial") for f in flagged) else "study"
-    listed = ", ".join(ids[:-1]) + f" and {ids[-1]}" if len(ids) > 1 else ids[0]
     if len(ids) == 1:
-        return (f"This review cites a {noun} that was later retracted (PubMed {listed}). "
-                f"Its pooled results may include that {noun}. The review itself has not been retracted.")
-    return (f"This review cites {len(ids)} {noun.replace('study', 'studie')}s that were later retracted "
-            f"(PubMed {listed}). Its pooled results may include them. The review itself has not been retracted.")
+        return (f"This review cites a study that was later retracted (PubMed {ids[0]}). "
+                f"Its conclusions may rest in part on that study. The review itself has not been retracted.")
+    return (f"This review cites {len(ids)} studies that were later retracted (PubMed {', '.join(ids)}). "
+            f"Its conclusions may rest in part on them. The review itself has not been retracted.")
 
 
-RETRACTED_REVIEW_SENTENCE = ("One review used here cites a study that was later retracted, "
-                             "so its pooled results are treated with caution.")
+RETRACTED_REVIEW_SENTENCE = ("A review used here cites a study that was later retracted, "
+                             "so its results are treated with caution.")
+RETRACTED_REVIEWS_SENTENCE = ("Reviews used here cite studies that were later retracted, "
+                              "so their results are treated with caution.")
+
+
+def retracted_review_sentence(count: int) -> str:
+    """The explanation's one sentence for `count` flagged reviews relied on."""
+    return RETRACTED_REVIEWS_SENTENCE if count > 1 else RETRACTED_REVIEW_SENTENCE
 
 
 # ---------------------------------------------------------------------------

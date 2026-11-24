@@ -959,7 +959,8 @@ def _contribution(s: dict, relied: bool, indirect: dict | None) -> str:
     design = (evidence.strongest_label(s.get("publication_types")) or "study").lower()
     who = evidence.population(s)
     a = "An" if design[:1] in "aeiou" else "A"
-    return f"{a} {design} in {who}." if who else f"{a} {design} in a general population."
+    # Never a population the record does not give.
+    return f"{a} {design} in {who}." if who else f"{a} {design}."
 
 
 def _study_extra(s: dict, cited: set, indirect: dict | None = None) -> dict:
@@ -1189,8 +1190,9 @@ def _retracted_review_rules(explanation, breakdown, studies, cited):
                 if key == "effect_size" and not bd[key]:
                     bd["effect"] = None
         breakdown = bd
-    if any(evidence.cited_retracted(s) and s.get("pmid") in cited for s in studies or []):
-        said = evidence.RETRACTED_REVIEW_SENTENCE
+    used_flagged = sum(1 for s in studies or [] if evidence.cited_retracted(s) and s.get("pmid") in cited)
+    if used_flagged:
+        said = evidence.retracted_review_sentence(used_flagged)
         if said not in (explanation or ""):
             explanation = f"{(explanation or '').strip()} {said}".strip()
         # The page prints "says" in place of the explanation when there is
