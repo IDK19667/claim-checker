@@ -4078,3 +4078,91 @@ def cited_pmids(bd: dict, studies: list[dict]) -> list[str]:
         if pmid and pmid not in out:
             out.append(pmid)
     return out
+
+
+# ---------------------------------------------------------------------
+# One figure, once (E4).
+#
+# The audit found "about 22 mg per dL" five times on one answer: in the
+# explanation, twice in "What the research says", in the evidence list and
+# in the effect box. Within everything a reader sees for one answer, a
+# sentence that gives only figures already given (the same number, the same
+# word after it, the same studies cited) says nothing new and goes; the
+# first one stays. A different number, unit or study is kept. Code only.
+# ---------------------------------------------------------------------
+
+_FIGURE = re.compile(r"(?<![\w.])(\d+(?:[.,]\d+)*)\s*(%|[A-Za-z]+)?")
+# The order the page prints the fields in (display.breakdown_view).
+FIGURE_ORDER = ("says", "parts", "evidence", "effect_size", "strength",
+                "applies_to", "not_applies_to", "unknowns")
+
+
+def figures_of(sentence: str, count: int) -> set:
+    """(number, the word after it, the studies cited) for each figure in a
+    sentence, citations themselves left out."""
+    cites = frozenset(refs(sentence, count))
+    text = _REF.sub(" ", sentence or "")
+    out = set()
+    for m in _FIGURE.finditer(text):
+        number = m.group(1).replace(",", "")
+        unit = (m.group(2) or "").lower()
+        unit = {"percent": "%", "per": ""}.get(unit, unit)
+        out.add((number, unit, cites))
+    return out
+
+
+def one_figure_once(explanation: str, bd, count: int):
+    """(explanation, breakdown) with every sentence dropped whose figures
+    were all given before it, in the page's reading order. The explanation
+    leads when the breakdown has no "says" (the page prints it there)."""
+    seen = set()
+
+    def keep(text):
+        out, dropped = [], False
+        for s in sentences(text or ""):
+            figs = figures_of(s, count)
+            # A "That is ..." sentence travels with the figure it explains.
+            if (figs and figs <= seen) or (dropped and s.startswith("That ")):
+                dropped = True
+                continue
+            dropped = False
+            seen.update(figs)
+            out.append(s)
+        return " ".join(out)
+
+    has_says = isinstance(bd, dict) and any(str(x or "").strip() for x in bd.get("says") or [])
+    if not has_says:
+        explanation = keep(explanation)
+    if not isinstance(bd, dict):
+        return explanation, bd
+    out = dict(bd)
+    for key in FIGURE_ORDER:
+        value = out.get(key)
+        if key == "parts" and isinstance(value, list):
+            out[key] = [{**p, "assessment": keep(p.get("assessment"))} if isinstance(p, dict) else p
+                        for p in value]
+        elif key == "says" and isinstance(value, list):
+            # The who-line is printed under "Who and what this applies to",
+            # not here, so it is left as it is and gives nothing as seen.
+            out[key] = [v if str(v or "").lower().startswith(WHO_LABEL.strip().lower()) else keep(v)
+                        for v in value]
+            out[key] = [v for v in out[key] if v]
+        elif isinstance(value, list):
+            out[key] = [k for k in (keep(v) for v in value) if k]
+        elif isinstance(value, str) and value:
+            out[key] = keep(value)
+    if bd.get("effect_size") and not out.get("effect_size"):
+        out["effect"] = None
+    if has_says:
+        # The explanation travels beside "says" (share text, ClaimReview):
+        # within itself it says each figure once.
+        inner = set()
+        kept = []
+        for s in sentences(explanation or ""):
+            figs = figures_of(s, count)
+            if figs and figs <= inner:
+                continue
+            inner.update(figs)
+            kept.append(s)
+        explanation = " ".join(kept)
+    return explanation, out

@@ -1620,6 +1620,14 @@ def _format_study_for_prompt(i: int, study: dict, outcome: str = "",
         else:
             lines.append(f"BACKGROUND ONLY: {_BACKGROUND_SAID[why_back]}. It is not a test of "
                          f"this claim in people and never counts as evidence for or against it")
+    # Only for a review whose reference list names a retracted paper: every
+    # other entry is exactly as before.
+    flagged = evidence.cited_retracted(study)
+    if flagged:
+        ids = ", ".join(f["pmid"] for f in flagged)
+        lines.append(f"CITES A RETRACTED STUDY: this review's reference list includes PubMed {ids}, "
+                     f"later retracted. Do not rely on its pooled result unless the abstract says "
+                     f"it held without that study")
     rated = evidence.review_certainty(study, outcome, strict=True)
     if rated in ("low", "very low"):
         where = " on this outcome" if evidence.certainty_on_outcome(study, outcome) else ""
@@ -2973,7 +2981,8 @@ _UNSAFE_UNPROVEN = "No randomized trial or major review here shows it is safe."
 def _strong(study: dict) -> bool:
     """A randomized trial, a review of them, or any systematic review or
     meta-analysis: the evidence a risky answer has to rest on."""
-    return evidence.design_rank(study) == "trial" or evidence.is_review(study)
+    return evidence.design_rank(study) == "trial" or (evidence.is_review(study)
+                                                       and not evidence.demoted(study))
 
 
 def _harm_guard(claim: str, verdict: str, parsed: dict, studies: list[dict], off: dict,

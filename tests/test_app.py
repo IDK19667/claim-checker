@@ -13106,6 +13106,196 @@ finally:
     appmod.HOME_LIST_SECONDS = 0
     appmod._drop_home_lists()
 
+
+# ---------------------------------------------------------------------------
+# Brief E: a review citing a retracted paper, no bare strength word,
+# indirect context, one figure once, what each study contributes.
+# ---------------------------------------------------------------------------
+import copy as _e_copy  # noqa: E402
+import re as _e_re  # noqa: E402
+import xml.etree.ElementTree as _e_ET  # noqa: E402
+import evidence as _e_ev  # noqa: E402
+import breakdown as _e_bd  # noqa: E402
+
+
+def _e_study(pmid, types, title="A study", abstract="Results here. CONCLUSIONS: It helped.", **kw):
+    return {"pmid": pmid, "title": title, "journal": "J", "year": "2024", "authors": [],
+            "publication_types": types, "abstract": abstract, "data_banks": None,
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/", **kw}
+
+
+_E_REV = ["Journal Article", "Meta-Analysis"]
+_E_RCT = ["Journal Article", "Randomized Controlled Trial"]
+_E_RETR = ["Journal Article", "Randomized Controlled Trial", "Retracted Publication"]
+
+# E1a: the reference list is read for a review, and only for a review.
+_e_xml = ("<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID>900</PMID><Article><ArticleTitle>R</ArticleTitle>"
+          "<PublicationTypeList><PublicationType>Meta-Analysis</PublicationType></PublicationTypeList></Article>"
+          "</MedlineCitation><PubmedData><ReferenceList><Reference><ArticleIdList><ArticleId IdType=\"pubmed\">901"
+          "</ArticleId></ArticleIdList></Reference><Reference><ArticleIdList><ArticleId IdType=\"doi\">x</ArticleId>"
+          "</ArticleIdList></Reference></ReferenceList></PubmedData></PubmedArticle></PubmedArticleSet>")
+_e_rec = pubmed._parse_article(_e_ET.fromstring(_e_xml).find("PubmedArticle"))
+t("BRIEF E1a: a review's reference list gives its cited PubMed ids", _e_rec.get("references") == ["901"],
+  _e_rec.get("references"))
+_e_rec2 = pubmed._parse_article(_e_ET.fromstring(_e_xml.replace("Meta-Analysis", "Clinical Trial")).find("PubmedArticle"))
+t("BRIEF E1a: a record that is not a review carries no reference list", "references" not in _e_rec2)
+
+# E1a/b: a retracted paper already in the check flags the review with no lookup.
+_e_calls = []
+_e_set = [_e_study("10", _E_REV, references=["20", "30"]), _e_study("20", _E_RETR, title="Retracted trial"),
+          _e_study("40", _E_RCT)]
+_e_note = _e_ev.flag_retracted_citations(_e_set, lambda ids: _e_calls.append(list(ids)) or set())
+t("BRIEF E1b: a review citing a retracted paper in the check is flagged",
+  _e_set[0].get("cites_retracted") and _e_set[0]["cites_retracted"][0]["pmid"] == "20" and _e_note is None,
+  _e_set[0].get("cites_retracted"))
+t("BRIEF E1a: the lookup is asked only for the cited ids not already known", _e_calls == [["30"]], _e_calls)
+t("BRIEF E1b: the caution says cites, may include, not retracted itself",
+  _e_ev.retraction_caution(_e_set[0]) == "This review cites a trial that was later retracted (PubMed 20). "
+  "Its pooled results may include that trial. The review itself has not been retracted.",
+  _e_ev.retraction_caution(_e_set[0]))
+t("BRIEF E1c: a flagged review is not top tier", _e_ev.tier(_e_set[0]) == "moderate"
+  and _e_ev.classify(_e_set[0]["publication_types"]) == "strong")
+t("BRIEF E1c: a flagged review is never the trial evidence a gate asks for",
+  _e_ev.design_rank(_e_set[0]) == "" and not verdict._strong(_e_set[0]))
+_e_set2 = [_e_study("11", _E_REV, references=["31", "32"])]
+t("BRIEF E1a: a cited id the lookup finds retracted flags the review",
+  _e_ev.flag_retracted_citations(_e_set2, lambda ids: {"32"}) is None
+  and [f["pmid"] for f in _e_set2[0]["cites_retracted"]] == ["32"])
+
+
+def _e_fail(ids):
+    raise requests.ConnectionError("down")
+
+
+_e_set3 = [_e_study("12", _E_REV, references=["20", "33"]), _e_study("20", _E_RETR)]
+t("BRIEF E1a: a failed lookup says the check could not be made, and still flags what is known",
+  _e_ev.flag_retracted_citations(_e_set3, _e_fail) == _e_ev.RETRACTION_UNCHECKED
+  and _e_set3[0].get("cites_retracted"))
+_e_set4 = [_e_study("13", _E_REV), _e_study("20", _E_RETR)]
+_e_calls.clear()
+t("BRIEF E1a: a review with no reference list is not flagged and asks nothing",
+  _e_ev.flag_retracted_citations(_e_set4, lambda ids: _e_calls.append(1) or set()) is None
+  and not _e_set4[0].get("cites_retracted") and not _e_calls)
+_e_set5 = [_e_study("14", _E_REV, references=[str(1000 + i) for i in range(_e_ev.RETRACTION_LOOKUP_MAX + 5)])]
+_e_sent = []
+t("BRIEF E1a: the ids sent are capped, and the response says the list was cut",
+  _e_ev.flag_retracted_citations(_e_set5, lambda ids: _e_sent.append(len(ids)) or set()) == _e_ev.RETRACTION_CUT
+  and _e_sent == [_e_ev.RETRACTION_LOOKUP_MAX])
+
+
+class _EFuture:
+    def result(self, timeout=None):
+        raise TimeoutError()
+
+
+t("BRIEF E1a: a lookup that runs late never stops the check",
+  appmod._retraction_result(_EFuture()) == _e_ev.RETRACTION_UNCHECKED)
+# E1c(iii): only a flagged entry changes in the prompt.
+_e_plain = _e_study("15", _E_REV, abstract="We pooled ten trials. CONCLUSIONS: It helped.")
+_e_before = verdict._format_study_for_prompt(1, _e_plain, "x", "", "claim")
+t("BRIEF E1c: an unflagged review's prompt entry is byte for byte the same, reference list or not",
+  verdict._format_study_for_prompt(1, {**_e_plain, "references": ["99"]}, "x", "", "claim") == _e_before)
+_e_flagged = {**_e_plain, "cites_retracted": [{"pmid": "99", "title": None, "trial": False}]}
+_e_after = verdict._format_study_for_prompt(1, _e_flagged, "x", "", "claim")
+_e_added = [ln for ln in _e_after.split("\n") if ln.startswith("CITES")]
+t("BRIEF E1c: a flagged review's entry tells the model, and only adds that line",
+  len(_e_added) == 1 and "PubMed 99" in _e_added[0] and _e_after.replace(_e_added[0] + "\n", "") == _e_before)
+t("BRIEF E1c: a true resting only on flagged reviews is capped by the existing certainty cap",
+  _e_ev.certainty_cap([_e_flagged], ["15"]) == _e_ev.RETRACTED_CAP_REASON
+  and _e_ev.certainty_cap([_e_plain], ["15"]) is None)
+
+# The vinegar recording, through the response builder.
+_e_vin = json.loads((ROOT / "tests" / "vinegar_recorded.json").read_text())
+
+
+def _e_respond(rec, flag=True):
+    st = _e_copy.deepcopy(rec["studies"])
+    if flag:
+        st[0]["references"] = ["38966098"]
+        _e_ev.flag_retracted_citations(st, lambda ids: set())
+    cited = [s["pmid"] for s in st if s.get("cited_in_verdict")]
+    with appmod.app.test_request_context("/"):
+        return appmod._check_response(rec["claim"], rec["search_query_used"], rec["verdict"], rec["tldr"],
+                                      rec["explanation"], cited, st, "http://x",
+                                      breakdown=_e_copy.deepcopy(rec["breakdown"]), still_open=rec["still_open"])
+
+
+_e_out = _e_respond(_e_vin)
+_e_s1 = _e_out["studies"][0]
+t("BRIEF E1 vinegar: the review that cites the retracted trial carries the caution and loses top tier",
+  _e_s1["caution"] and "38966098" in _e_s1["caution"] and _e_s1["tier"] == "moderate", (_e_s1["caution"], _e_s1["tier"]))
+_e_bdo = _e_out["breakdown"]
+_e_lists = (_e_bdo.get("says") or []) + (_e_bdo.get("evidence") or []) + [_e_bdo.get("effect_size") or ""]
+t("BRIEF E1 vinegar: a figure taken from the flagged review alone leaves the figure lists",
+  not any("789" in x for x in _e_lists), _e_lists)
+t("BRIEF E1 vinegar: the answer says once that a review it used cites a retracted study",
+  sum(x.count(_e_ev.RETRACTED_REVIEW_SENTENCE) for x in _e_bdo.get("says") or []) == 1
+  and _e_out["explanation"].count(_e_ev.RETRACTED_REVIEW_SENTENCE) == 1)
+_e_line = _e_out["evidence_line"]
+t("BRIEF E2 vinegar: the line says the cure claim is not supported, with no bare strength word",
+  _e_line.startswith("Cure claim: Not supported by the studies reviewed.")
+  and not _e_re.search(r"\b(?:Strong|Moderate|Weak) evidence\b", _e_line), _e_line)
+t("BRIEF E2 vinegar: the second statement names the related effect and claims no certainty it did not read",
+  _e_out["effect_line"] == "Fasting blood sugar effects: the studies reviewed report a fall. "
+  "Certainty not graded in the study abstracts", _e_out["effect_line"])
+t("BRIEF E4 vinegar: about 22 mg per dL is said once in what the page prints",
+  sum(len(_e_re.findall(r"\b22 mg\b", x)) for x in _e_lists) == 1, _e_lists)
+t("BRIEF E3 vinegar: the body composition review is marked indirect context, as a label",
+  _e_s1["indirect"] == "Measures body composition, not diabetes"
+  and _e_s1["contribution"] == "Indirect context: measures body composition, not diabetes.", _e_s1)
+t("BRIEF E5: every relied-on study has a contribution, and every study has the three fields",
+  all(s["contribution"] for s in _e_out["studies"] if s["cited_in_verdict"])
+  and all({"contribution", "caution", "indirect"} <= set(s) for s in _e_out["studies"]))
+t("BRIEF E5: a study set aside says why",
+  _e_out["studies"][3]["contribution"] == "Set aside: retracted by the journal.", _e_out["studies"][3]["contribution"])
+_e_new = [_e_line, _e_out["effect_line"], _e_s1["caution"], _e_ev.RETRACTED_REVIEW_SENTENCE] + \
+    [s["contribution"] for s in _e_out["studies"]] + [s["indirect"] or "" for s in _e_out["studies"]]
+t("BRIEF E: no dash in any new string a reader sees", not any(_e_re.search("[–—]", x or "") for x in _e_new))
+_e_unflag = _e_respond(_e_vin, flag=False)
+t("BRIEF E3: the indirect label changes no tier or verdict",
+  _e_unflag["verdict"] == _e_vin["verdict"] and _e_unflag["studies"][0]["tier"] == "strong"
+  and _e_unflag["studies"][0]["indirect"])
+# E2: no verdict prints a bare strength word.
+_e_rcts = [_e_study("50", _E_RCT, abstract="We randomized 400 adults. CONCLUSIONS: It worked."),
+           _e_study("51", _E_REV, abstract="We pooled randomized trials. CONCLUSIONS: It worked.")]
+_e_bad = []
+for _e_v in ("true", "false", "complicated", "insufficient"):
+    for _e_claim in ("Zinc cures colds", "Zinc shortens colds"):
+        _e_old = _e_ev.evidence_line(_e_v, _e_rcts, ["50", "51"], _e_claim, None, _e_bd.absolute_claim(_e_claim))
+        _e_say = _e_ev.claim_statement(_e_v, _e_old, _e_rcts, ["50", "51"], _e_bd.absolute_claim(_e_claim))
+        if _e_re.search(r"\b(?:Strong|Moderate|Weak) evidence\b", _e_say) or (_e_old and not _e_say):
+            _e_bad.append((_e_v, _e_claim, _e_say))
+t("BRIEF E2: no verdict value prints a bare strength word", not _e_bad, _e_bad)
+t("BRIEF E2: a refuted claim reads 'Not supported by the studies reviewed'",
+  _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], "")
+  == "The claim: Not supported by the studies reviewed. Based on pooled reviews of trials",
+  _e_ev.claim_statement("false", "Strong evidence against this claim", _e_rcts, ["50", "51"], ""))
+t("BRIEF E2: a certainty the line carried is kept, in words that are not a strength",
+  _e_ev.claim_statement("true", "Low certainty evidence for this claim", _e_rcts, ["50"], "")
+  == "The claim: Supported by the studies reviewed. Certainty: low")
+t("BRIEF E2: an effect sentence outside the closed pattern is printed as the model said it",
+  _e_ev.effect_statement("false", "cure", "Vinegar lowered glucose (Study 2).", [], [])
+  == "What the studies did find: Vinegar lowered glucose (Study 2). Certainty not graded in the study abstracts")
+t("BRIEF E2: no second statement for a claim rated true, or one promising nothing absolute",
+  _e_ev.effect_statement("true", "cure", "Glucose fell.", [], []) == ""
+  and _e_ev.effect_statement("false", "", "Glucose fell.", [], []) == "")
+# E4: repeated figures, and different ones.
+_e_e, _e_b = _e_bd.one_figure_once("", {"says": ["Weight fell by 2 kg (Study 1)."],
+                                        "evidence": ["Weight dropped by 2 kg in adults (Study 1).",
+                                                     "Weight fell by 3 kg (Study 1).",
+                                                     "Weight fell by 2 kg (Study 2)."],
+                                        "effect_size": "Weight fell 2 kg (Study 1). That is a small change."}, 3)
+t("BRIEF E4: the same number, unit and study is said once; other numbers or studies stay",
+  _e_b["evidence"] == ["Weight fell by 3 kg (Study 1).", "Weight fell by 2 kg (Study 2)."]
+  and _e_b["effect_size"] == "" and _e_b.get("effect") is None, _e_b)
+# An untouched check: no flag, no change to the prompt, no lookup sent.
+_e_un = [_e_study("60", _E_REV), _e_study("61", _E_RCT)]
+_e_calls.clear()
+_e_p0 = [verdict._format_study_for_prompt(i + 1, s, "x", "", "c") for i, s in enumerate(_e_un)]
+_e_ev.flag_retracted_citations(_e_un, lambda ids: _e_calls.append(1) or set())
+t("BRIEF E: a check no rule touches builds the same request bytes and sends no lookup",
+  [verdict._format_study_for_prompt(i + 1, s, "x", "", "c") for i, s in enumerate(_e_un)] == _e_p0 and not _e_calls)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

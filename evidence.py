@@ -1142,7 +1142,7 @@ def snapshot(studies, cited_pmids=()) -> dict:
         # A strong design about something else, or one that tests nothing
         # in people, is not strong evidence here.
         "strong": sum(1 for s in studies
-                      if classify(s.get("publication_types")) == "strong"
+                      if tier(s) == "strong"
                       and not s.get("off_topic") and not s.get("background")),
         "off_topic": sum(1 for s in studies if s.get("off_topic")),
         "background": sum(1 for s in studies
@@ -1154,7 +1154,7 @@ def snapshot(studies, cited_pmids=()) -> dict:
                              if any(background_why(s) == k for s in studies
                                     if not s.get("off_topic"))],
         "retracted": sum(1 for s in studies
-                         if classify(s.get("publication_types")) == "retracted"),
+                         if tier(s) == "retracted"),
         "year_from": years[0] if years else None,
         "year_to": years[-1] if years else None,
         "mix": bars,
@@ -1204,7 +1204,7 @@ def level_word(studies, cited_pmids=()) -> str:
     cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
     if not cited:
         return ""
-    tiers = {classify(s.get("publication_types")) for s in cited}
+    tiers = {tier(s) for s in cited}
     if "strong" in tiers:
         return "Strong"
     if "moderate" in tiers:
@@ -1217,7 +1217,7 @@ def observational_only(studies, cited_pmids=()) -> bool:
     studies, so "strong" would describe the paperwork, not the evidence."""
     cited = set(cited_pmids or ())
     strong = [s for s in studies or [] if s.get("pmid") in cited
-              and classify(s.get("publication_types")) == "strong"]
+              and tier(s) == "strong"]
     return bool(strong) and all(is_review(s) and design_rank(s) == "weaker" for s in strong)
 
 
@@ -2109,6 +2109,12 @@ def certainty_cap(studies, cited_pmids=(), comparative: bool = False,
         lead = lead_certainty(studies, cited_pmids, outcome, strict=True)
         if lead in ("low", "very low"):
             return f"the review behind it rates the certainty of its own evidence as {lead}"
+        # Every review relied on cites a retracted paper, and no trial that
+        # is not small, a pilot or uncontrolled stands beside them: what is
+        # left cannot carry a "true". Only ever lowers.
+        if all(cited_retracted(s) for s in reviews) and not any(
+                is_trial(s) and not demoted(s) and not trial_caveats(s) for s in cited):
+            return RETRACTED_CAP_REASON
         return None
     solid, limited = [], []
     for s in cited:
@@ -2161,6 +2167,10 @@ def design_rank(study) -> str:
     """
     if preclinical(study):
         return "weaker"
+    # A review citing a retracted paper, or a study measuring something else,
+    # is never the trial evidence a gate asks for.
+    if demoted(study):
+        return ""
     text = _text(study)
     rct = bool(_RANDOMIZED.search(text))
     seen = bool(_OBSERVED.search(text))
@@ -2711,7 +2721,7 @@ def untested_in_people(studies, cited_pmids=(), reasons=None) -> str:
     kinds = set()
     for s in cited:
         why = reasons.get(s.get("pmid"))
-        if single_case(s) or classify(s.get("publication_types")) == "weak":
+        if single_case(s) or tier(s) == "weak":
             kinds.add("reports of single patients" if single_case(s) else "opinion pieces")
         elif preclinical(s) or why == BG_LAB:
             kinds.add("animal or lab studies")
@@ -2776,12 +2786,12 @@ def in_people(study) -> bool:
 
 def kind(study) -> str:
     """The cloth for one study's spine."""
-    tier = classify(study.get("publication_types"))
-    if tier in ("weak", "retracted"):
-        return tier
+    tier_ = tier(study)
+    if tier_ in ("weak", "retracted"):
+        return tier_
     if preclinical(study):
         return "lab"
-    if tier == "strong":
+    if tier_ == "strong":
         return "strong"
     # A paper that never says it was run on people is not a human study:
     # most animal and dish papers are tagged only "Journal Article".
@@ -2817,7 +2827,7 @@ def spine(study) -> str:
     says what it was run on, because that is the fact a reader needs first.
     """
     label = strongest_label(study.get("publication_types"))
-    if kind(study) == "lab" and classify(study.get("publication_types")) != "strong":
+    if kind(study) == "lab" and tier(study) != "strong":
         return "Animal or lab"
     return SPINES.get(label, "Study")
 
@@ -2828,6 +2838,292 @@ def shelf(studies, cited_pmids=()) -> list[dict]:
     order so two shelves of the same set are always the same drawing.
     """
     cited = {str(p) for p in (cited_pmids or ())}
-    books = [{"kind": kind(s), "tier": classify(s.get("publication_types")),
+    books = [{"kind": kind(s), "tier": tier(s),
               "used": str(s.get("pmid")) in cited} for s in studies or []]
     return sorted(books, key=lambda b: KINDS.index(b["kind"]))
+
+
+# ---------------------------------------------------------------------------
+# A review that cites a paper later retracted
+#
+# Setting the retracted paper aside is not enough when a review used here
+# pooled it: the review's pooled result may still carry it. A review whose
+# reference list names a retracted paper is flagged. It stays listed and may
+# be named, but it never counts as top tier, and figures taken from it leave
+# the figure lists. Its reference list proves it cites the paper, never that
+# its pooled result includes it, and the review itself is not retracted, so
+# the words say exactly that and no more. This rule only ever lowers.
+# ---------------------------------------------------------------------------
+
+RETRACTION_UNCHECKED = "could not be made"
+# At most this many cited ids go to the one lookup of a check.
+RETRACTION_LOOKUP_MAX = 600
+RETRACTION_CUT = f"made for the first {RETRACTION_LOOKUP_MAX} cited studies only"
+RETRACTED_CAP_REASON = "the review behind it cites a study that was later retracted"
+
+
+def cited_retracted(study) -> list:
+    """The flag on one study: [{pmid, title}] of the retracted papers its
+    reference list names, or []."""
+    flagged = (study or {}).get("cites_retracted") if isinstance(study, dict) else None
+    return flagged if isinstance(flagged, list) else []
+
+
+def demoted(study) -> bool:
+    """A study that may not count as top tier: a review citing a retracted
+    paper. (An indirect study is a label only: it changes no gate.)"""
+    return bool(cited_retracted(study))
+
+
+def tier(study) -> str:
+    """classify() for one study, except that a demoted study is never
+    "strong": a human study at most."""
+    t = classify((study or {}).get("publication_types"))
+    return "moderate" if t == "strong" and demoted(study) else t
+
+
+def flag_retracted_citations(studies, lookup=None) -> str | None:
+    """
+    Flag, in place, each review in `studies` whose reference list names a
+    retracted paper. Retracted papers already in the check are known for
+    free; the rest of the cited ids go to `lookup` (pubmed.retracted_among),
+    once. Returns RETRACTION_UNCHECKED when the lookup was needed and failed,
+    else None. A failed lookup still flags what is known.
+    """
+    studies = [s for s in studies or [] if isinstance(s, dict)]
+    reviews = [s for s in studies if is_review(s) and not withdrawn(s) and s.get("references")]
+    if not reviews:
+        return None
+    known = {str(s.get("pmid")): s for s in studies if withdrawn(s) == BG_RETRACTED}
+    # The ids sent are capped; the review's own order decides which go first.
+    rest = list(dict.fromkeys(str(r) for s in reviews for r in s["references"] if str(r) not in known))
+    cut = len(rest) > RETRACTION_LOOKUP_MAX
+    rest = rest[:RETRACTION_LOOKUP_MAX]
+    found, failed = set(), False
+    if rest and lookup is not None:
+        try:
+            found = set(lookup(rest) or ())
+        except Exception:  # noqa: BLE001 — the check goes on without it
+            failed = True
+    for s in reviews:
+        hits = [str(r) for r in s["references"] if str(r) in known or str(r) in found]
+        if hits:
+            s["cites_retracted"] = [{"pmid": h, "title": (known[h].get("title") if h in known else None),
+                                     "trial": bool(h in known and is_trial(known[h]))} for h in hits]
+    return RETRACTION_UNCHECKED if failed else RETRACTION_CUT if cut else None
+
+
+def retraction_caution(study) -> str:
+    """The one sentence a reader sees beside a flagged review, or ""."""
+    flagged = cited_retracted(study)
+    if not flagged:
+        return ""
+    ids = [f["pmid"] for f in flagged]
+    noun = "trial" if all(f.get("trial") for f in flagged) else "study"
+    listed = ", ".join(ids[:-1]) + f" and {ids[-1]}" if len(ids) > 1 else ids[0]
+    if len(ids) == 1:
+        return (f"This review cites a {noun} that was later retracted (PubMed {listed}). "
+                f"Its pooled results may include that {noun}. The review itself has not been retracted.")
+    return (f"This review cites {len(ids)} {noun.replace('study', 'studie')}s that were later retracted "
+            f"(PubMed {listed}). Its pooled results may include them. The review itself has not been retracted.")
+
+
+RETRACTED_REVIEW_SENTENCE = ("One review used here cites a study that was later retracted, "
+                             "so its pooled results are treated with caution.")
+
+
+# ---------------------------------------------------------------------------
+# No bare strength word for a claim (E2)
+#
+# "Strong evidence, and none of it shows a cure" graded the evidence with a
+# word that came from the kind of study and read as support for the claim.
+# The line a reader sees is now two statements built in code. The first says
+# whether the studies reviewed support the claim, in fixed words per verdict,
+# none surer than its stamp, and then how sure (a certainty the line already
+# carried) or what kind of study it rests on, never a bare strength word.
+# The second, only for a claim promising something absolute that is not
+# rated true, says what the studies did find instead, and how sure only in
+# the words a relied-on review uses for itself. The old line is still built
+# (evidence_line) and still sets every certainty cap: only its wording goes.
+# ---------------------------------------------------------------------------
+
+CLAIM_PHRASES = {
+    "true": "Supported by the studies reviewed",
+    "false": "Not supported by the studies reviewed",
+    "complicated": "No plain yes or no from the studies reviewed",
+}
+_CLAIM_LABELS = {"a cure": "Cure claim", "a reversal": "Reversal claim",
+                 "complete prevention": "Prevention claim"}
+
+
+def claim_label(absolute: str) -> str:
+    """'Cure claim' for a claim promising a cure, and so on; else 'The claim'."""
+    if not absolute:
+        return "The claim"
+    noun = next((n for pattern, n in _PROMISES if pattern.search(absolute)), "")
+    return _CLAIM_LABELS.get(noun, "The claim")
+
+
+def design_kind(studies, cited_pmids=()) -> str:
+    """The kind of study the answer rests on, in a reader's words, read from
+    the top tier relied on: what "Strong" used to stand for."""
+    cited = [s for s in studies or [] if s.get("pmid") in set(cited_pmids or ())]
+    top = [s for s in cited if tier(s) == "strong"]
+    if top:
+        reviews = [s for s in top if is_review(s)]
+        if reviews:
+            ranks = {design_rank(s) for s in reviews}
+            if ranks == {"trial"}:
+                return "pooled reviews of trials"
+            if ranks == {"weaker"}:
+                return "pooled reviews of observational studies"
+            return "pooled reviews"
+        if any(is_trial(s) for s in top):
+            return "randomized trials"
+        return "guidelines"
+    if any(tier(s) == "moderate" for s in cited):
+        return "human studies"
+    return "case reports or opinion pieces"
+
+
+_LINE_SIZE = re.compile(r"\ba (small|moderate|large) effect\b")
+_LINE_NARROW = re.compile(r", but only in (.+)$")
+
+
+def claim_statement(verdict: str, line: str, studies, cited_pmids=(), absolute: str = "") -> str:
+    """Statement 1, from the old line (`line`, which every cap still reads)."""
+    if not line or line == INSUFFICIENT_LINE or verdict not in CLAIM_PHRASES:
+        return line
+    phrase = CLAIM_PHRASES[verdict]
+    size = _LINE_SIZE.search(line)
+    if verdict == "true" and size:
+        phrase += f", a {size.group(1)} effect"
+    if "of no clear effect" in line and verdict != "true":
+        phrase += ", which found no clear effect"
+    narrow = _LINE_NARROW.search(line)
+    if narrow:
+        phrase += f", whose studies were only in {narrow.group(1)}"
+    head = line.lower()
+    span = re.match(r"^((?:very low|low|moderate|high)(?: to (?:very low|low|moderate|high))?) certainty\b", head)
+    basis = (f"Certainty: {span.group(1)}" if span
+             else f"Based on {design_kind(studies, cited_pmids)}")
+    return f"{claim_label(absolute)}: {phrase}. {basis}"
+
+
+# The verbs statement 2 may read a direction from, and nothing else.
+_FALL_VERBS = ("fell", "dropped", "decreased", "declined", "was reduced", "were reduced", "lowered")
+_RISE_VERBS = ("rose", "increased")
+_MEASURE_THEN_VERB = re.compile(
+    r"^(?P<measure>[A-Za-z][A-Za-z'-]*(?: [A-Za-z][A-Za-z'-]*){0,4}) (?P<verb>"
+    + "|".join(re.escape(v) for v in _FALL_VERBS + _RISE_VERBS) + r")"
+    # Only the verb with no object: "X lowered Y" names what did the
+    # lowering, not what fell, so it is never read.
+    r"(?=[.,;]|$| (?:by|to|from|in|among|after|with|over|significantly|slightly|modestly)\b)")
+UNGRADED = "Certainty not graded in the study abstracts"
+
+
+def stated_grades(studies, cited_pmids=(), outcome: str = "") -> list[str]:
+    """Every certainty grade a relied-on review states for itself, lowest first."""
+    levels = set()
+    for s in studies or []:
+        if s.get("pmid") not in set(cited_pmids or ()) or not is_review(s):
+            continue
+        one = review_certainty(s, outcome)
+        if one:
+            levels.add(_level(one))
+        span = certainty_range(s, outcome)
+        for word in re.split(r"\s+to\s+", span or ""):
+            if word.strip() in CERTAINTY_LEVELS:
+                levels.add(word.strip())
+    return sorted(levels, key=_rank)
+
+
+def effect_statement(verdict: str, absolute: str, effect_sentence: str, studies,
+                     cited_pmids=(), outcome: str = "") -> str:
+    """Statement 2, or "": what the studies found that is not the claim
+    itself, for a claim promising something absolute not rated true."""
+    sentence = str(effect_sentence or "").strip()
+    if not absolute or verdict == "true" or not sentence:
+        return ""
+    grades = stated_grades(studies, cited_pmids, outcome)
+    if len(grades) == 1:
+        sure = f"Certainty: {grades[0]}, as the review rates it"
+    elif grades:
+        sure = f"Certainty varies by outcome, {grades[0]} to {grades[-1]}"
+    else:
+        sure = UNGRADED
+    m = _MEASURE_THEN_VERB.match(sentence)
+    if m and not re.search(r"\d|\bstud(?:y|ies)\b", m.group("measure"), re.IGNORECASE):
+        way = "a fall" if m.group("verb") in _FALL_VERBS else "a rise"
+        return f"{m.group('measure')} effects: the studies reviewed report {way}. {sure}"
+    return f"What the studies did find: {sentence.rstrip('.')}. {sure}"
+
+
+# ---------------------------------------------------------------------------
+# Indirect context (E3), a label only
+#
+# A study of the same substance that measured something other than the
+# outcome the claim names (weight, for a claim about curing diabetes) is
+# context, not a test of the claim. It is marked so a reader can see it, and
+# nothing else changes: no gate, tier, cap or verdict reads this mark. The
+# rule marks only when it is sure: the title states its target ("effect of X
+# on Y") and that target names none of the outcome words the search itself
+# used, and the authors' own conclusion names none of them either once the
+# people studied ("in adults with type 2 diabetes") are left out. Anything
+# else is left unmarked.
+# ---------------------------------------------------------------------------
+
+_PEOPLE_WORDS = (r"(?:adults|patients|people|persons|participants|subjects|individuals|humans|"
+                 r"women|men|children|adolescents|girls|boys|population|populations|volunteers)")
+_POPULATION_PHRASE = re.compile(
+    r"\b(?:in|among|for|of)\s+(?:[\w-]+\s+){0,4}?" + _PEOPLE_WORDS + r"\b(?:\s+(?:with|who)\s+[^,.;:]+)?"
+    r"|\b" + _PEOPLE_WORDS + r"\s+(?:with|who)\s+[^,.;:]+", re.IGNORECASE)
+_TITLE_TARGET = re.compile(
+    r"\b(?:effects?|impacts?|influence|role)\s+of\s+.+?\s+on\s+(?:the\s+)?(?P<y>[^:?]+)", re.IGNORECASE)
+_TARGET_END = re.compile(r"\s+(?:in|among|of|for|during|after|with)\s+.*$|[,;].*$", re.IGNORECASE)
+
+
+def _search_stems(search_queries) -> list[str]:
+    """The outcome words of every query the search step used for this claim
+    (every AND group after the first, the substance), as stems and kin."""
+    stems = []
+    for q in search_queries or ():
+        groups = [g for g in re.split(r"\)\s+AND\s+\(", str(q or "")) if g.strip()]
+        for g in groups[1:]:
+            for st in outcome_stems(g):
+                if st not in stems:
+                    stems.append(st)
+    return outcome_kin(stems) if stems else []
+
+
+def indirect_label(study, search_queries, outcome_name: str = "") -> dict | None:
+    """{"measure", "reason"} for a study that measured something other than
+    the claim's outcome, or None when it did not or the rule is unsure."""
+    stems = _search_stems(search_queries)
+    if not stems or not isinstance(study, dict) or withdrawn(study) or preclinical(study):
+        return None
+    m = _TITLE_TARGET.search(str(study.get("title") or ""))
+    if not m:
+        return None
+    target = _TARGET_END.sub("", _POPULATION_PHRASE.sub("", m.group("y"))).strip(" .")
+    if not target or len(target.split()) > 6 or names_any(target, stems):
+        return None
+    said = conclusion(study)
+    if not said or names_any(_POPULATION_PHRASE.sub(" ", said), stems):
+        return None
+    # Lower case, save a word written in capitals (an abbreviation).
+    measure = " ".join(w if len(w) > 1 and w.isupper() else w.lower() for w in target.split())
+    out = outcome_name or "the outcome the claim names"
+    return {"measure": measure, "reason": f"Measures {measure}, not {out}"}
+
+
+def outcome_name(claim: str, search_query: str) -> str:
+    """The claim's outcome in the claim's own word when the search used it
+    ("diabetes"), else "the outcome the claim names"."""
+    groups = [g.strip("() ") for g in re.split(r"\)\s+AND\s+\(", str(search_query or "")) if g.strip()]
+    for g in groups[1:]:
+        for term in sorted(re.split(r"\s+OR\s+", g), key=len):
+            term = term.strip(' "()')
+            if len(term) > 2 and re.search(r"\b" + re.escape(term) + r"\b", claim or "", re.IGNORECASE):
+                return term.lower()
+    return "the outcome the claim names"
