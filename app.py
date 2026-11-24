@@ -1579,8 +1579,10 @@ def _check_response(claim, search_query, verdict_value, tldr, explanation, cited
 
 
 def _review_instant(cached_at) -> datetime:
-    """When the check ran: the saved date, or now for a check that just ran."""
-    return (display.as_instant(cached_at) if cached_at else None) or datetime.now(timezone.utc)
+    """When the check ran: the saved date, or now (to the minute, so one
+    answer built twice reads the same) for a check that just ran."""
+    return ((display.as_instant(cached_at) if cached_at else None)
+            or datetime.now(timezone.utc).replace(second=0, microsecond=0))
 
 
 def _review_when(cached_at) -> dict:

@@ -11283,11 +11283,19 @@ process.stdout.write(JSON.stringify({ text, html, title: rec.title || "" }));
 _d1_vis = [re.sub(r"\s+", " ", _htmllib.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"(?s)<(script|style)\b.*?</\1>", " ",
            p_.split('<main id="track">')[1].split('id="server-result"')[0])))) for p_ in _r4_pages]
 _d1_srv = [_r4_full(p_).byid.get("review-line", "").strip() for p_ in _r4_pages]
-_d1_stmt = [l_ for l_ in _r4js.splitlines() if '$("review-line").textContent' in l_]
+# The script writes the line through setReviewLine (it wraps the day in <time>
+# and prints the reader's day; ui_dates.mjs checks that part in a browser, so
+# localizeTimes is a no-op here and the text must equal the server's line).
+_d1_stmt = [l_ for l_ in _r4js.splitlines() if '$("review-line").textContent' in l_ or "setReviewLine(data);" in l_]
+_d1_fn = _r4js[_r4js.index("function setReviewLine"):_r4js.index("\nfunction fmtDate")] if "function setReviewLine" in _r4js else ""
 _d1_js = None
-if _shutil.which("node") and len(_d1_stmt) == 1:
+if _shutil.which("node") and len(_d1_stmt) == 1 and _d1_fn:
     _d1_js = json.loads(_subprocess.run(["node", "-e", "const D = " + json.dumps(_r4_datas) + "; const out = [];"
-        "for (const data of D) { const el = {}; const $ = () => el;" + _d1_stmt[0] + "; out.push(el.textContent); }"
+        "let el; const $ = () => el; function localizeTimes() {}"
+        "const document = { createElement: () => ({}) };" + _d1_fn +
+        "for (const data of D) { el = { textContent: '', replaceChildren(...p) {"
+        " this.textContent = p.map((x) => typeof x === 'string' ? x : x.textContent).join(''); } };"
+        " setReviewLine(data); out.push(el.textContent); }"
         "console.log(JSON.stringify(out));"], capture_output=True, text=True, check=True).stdout)
 t("D1: no result prints two full stops in a row, and the dated line reads the same on both paths, on every fixture",
   all(_d1_srv) and not [v for v in _d1_vis if re.search(r"\.\s*\.", v)]
@@ -11506,9 +11514,16 @@ t("without scripts the 16-study result's verdict, still open and every study are
   (_nojs_body.count('<li class="row" '), len(_R4_ROWS[0]["studies"])))
 _r4_tpl = (ROOT / "templates" / "index.html").read_text()
 _r4_disp = (ROOT / "display.py").read_text()
-t("R4: the template never marks a value safe, and the one Markup on the server wraps text escaped first (desk_refs)",
-  "|safe" not in _r4_tpl.replace(" ", "") and _r4_disp.count("Markup(") == 1
-  and 'safe = str(escape(text or ""))' in _r4_disp.split("def desk_refs")[1].split("return Markup(")[0])
+# Two Markups on the server: desk_refs wraps text escaped first, and with_time
+# (the dated line's <time>) builds through Markup.format, which escapes every
+# value it is given; a hostile line, day or instant comes back escaped.
+_r4_wt = str(_dsc.with_time('<b x="1">Checked 1 May 2026</b>', {"day": "1 May 2026", "iso": '"><script>'}))
+t("R4: the template never marks a value safe, and the two Markups on the server wrap text escaped first (desk_refs, with_time)",
+  "|safe" not in _r4_tpl.replace(" ", "") and _r4_disp.count("Markup(") == 2
+  and 'safe = str(escape(text or ""))' in _r4_disp.split("def desk_refs")[1].split("return Markup(")[0]
+  and 'return Markup("{}<time datetime=\\"{}\\">{}</time>{}").format(' in _r4_disp.split("def with_time")[1]
+  and "<b" not in _r4_wt and "<script>" not in _r4_wt and '<time datetime="&#34;&gt;&lt;script&gt;">1 May 2026</time>' in _r4_wt,
+  _r4_wt)
 
 # ---- K2: no regex lookbehind in a shipped script ------------------------------
 # Safari before 16.4 cannot parse (?<= or (?<!, and one in app.js stops the whole
