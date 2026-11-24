@@ -806,7 +806,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
   await page.reload({ waitUntil: "load" });
   must(await painted(page), "the new build did not paint under the old worker");
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
-  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v122" && r && r.active && r.active.state === "activated"; });
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v123" && r && r.active && r.active.state === "activated"; });
   const st = await page.evaluate(async () => {
     const keys = await caches.keys();
     const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
@@ -818,7 +818,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
     const reg = await navigator.serviceWorker.getRegistration();
     return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
   });
-  must(st.keys.join() === "evident-v122", `caches: ${st.keys.join()}`);
+  must(st.keys.join() === "evident-v123", `caches: ${st.keys.join()}`);
   must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
   must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
   must(!bad.length, `requests: ${bad.join(" | ")}`);
