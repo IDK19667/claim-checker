@@ -468,7 +468,8 @@ for (const way of ["saved", "fresh"]) {
 // Replaces the cue row checks (cue in view and as wide, Next drawn as Back beside it, the chevron's dip, a wheel or a
 // drag from the Answer landing on Read, the text-mode cue landing on the next stop):
 //   N2a  no cue, no Back, no Next, no "Keep reading", no "Back to the short answer"; the phone bar is one row with the
-//        picker alone, 56 px at most; on a wide screen no bar and the rail is the picker   (was: the cue row and Next)
+//        picker alone, 56 px at most; on a wide screen no bar and the rail is the picker, the four alone (Check another claim is
+//        at the end of the page, check 23a)   (was: the cue row and Next)
 //   N2b  nothing animates on its own after an answer lands                                   (was: the chevron dips)
 //   N2c  a wheel or a touch drag leaves the page where the reader put it, in 3D and text    (was: lands on Read)
 //   N2d  the picker names the section in view, lists the four and Check another claim, works by keyboard (was: the cue click)
@@ -529,7 +530,7 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
     });
     must(!s.gone.length && !s.words.length, `still there: ${s.gone.concat(s.words).join(", ")}`);
     if (w <= 760) must(s.bar && s.barH <= 56 && s.barKids.join() === "where" && !s.rail, `the phone bar: shown ${s.bar}, ${s.barH} px, holds ${s.barKids.join()}, rail ${s.rail}`);
-    else must(!s.bar && s.rail && s.railNames.join() === SECTIONS.concat("Check another claim").join(), `wide: bar ${s.bar}, rail ${s.rail}: ${s.railNames.join(", ")}`);
+    else must(!s.bar && s.rail && s.railNames.join() === SECTIONS.join(), `wide: bar ${s.bar}, rail ${s.rail}: ${s.railNames.join(", ")}`);
     must(s.answerBtns.filter((x) => x !== "meter").join() === "how-answer" && s.again === 1, `on the Answer: ${s.answerBtns.join(", ")}; Check another claim shown ${s.again} times`);
     must(await page.evaluate(() => document.getElementById("how-answer").textContent.trim() === "View evidence"), "the Answer's button is not View evidence");
     await page.waitForTimeout(4000);
