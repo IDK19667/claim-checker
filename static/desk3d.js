@@ -322,7 +322,16 @@ window.__evidentDesk3d = function (O) {
         var px = pos.getX(v) / (PW / 2), pz = pos.getZ(v) / (PH / 2);
         pos.setY(v, pos.getY(v) + 0.0005 * px * px + cA * Math.pow(Math.max(0, px * corner * 0.5 + pz * 0.5), 4));
       }
-      g.computeVertexNormals(); return g;
+      g.computeVertexNormals();
+      // the four edges share one material: drawn as one group, so a sheet is three draw calls, not six (and three in
+      // the shadow pass). The same triangles with the same materials
+      var idx = g.index.array, gs = g.groups, order = [0, 1, 4, 5, 2, 3], out = new (idx.constructor)(idx.length), at = 0, ng = [];
+      order.forEach(function (gi) { var q = gs[gi]; out.set(idx.subarray(q.start, q.start + q.count), at);
+        var mi = gi === 2 ? 2 : gi === 3 ? 3 : 0, last = ng[ng.length - 1];
+        if (last && last.materialIndex === mi) last.count += q.count; else ng.push({ start: at, count: q.count, materialIndex: mi });
+        at += q.count; });
+      g.setIndex(new T.BufferAttribute(out, 1)); g.clearGroups(); ng.forEach(function (q) { g.addGroup(q.start, q.count, q.materialIndex); });
+      return g;
     }
     var sheets = [], STACK = new T.Vector3(-0.46, 0, 0.0), GAP = 0.0004, sheetGen = 0;
     // one blank paper face for every sheet until its own face is painted, after the first frame
@@ -379,11 +388,24 @@ window.__evidentDesk3d = function (O) {
     var cardSide = new T.MeshStandardMaterial({ color: 0xe6dcc6, roughness: 0.9 });
     var cbMap = tex(cBlank), cvMap = cbMap, csMap = cbMap, cardPainted = false;
     // the large faces are painted only when the check runs: the standing face, then the printed verdict
-    function paintCardFaces() {
+    // later: a result landing on a desk already drawing paints the large plain standing face in its own task after the
+    // answer is on screen (it is only seen once the card has settled, under the HTML words; until then the card stands
+    // with its printed face)
+    var standGen = 0;
+    function paintCardFaces(later) {
       if (cardPainted) return; cardPainted = true;
-      var cStand = cnv(CW * 1.6, CH * 1.6); paintCard(cStand, false, 1.6); csMap = tex(cStand);
       paintVerdictFace();
-      vMat.map = csMap; vMat.emissiveMap = csMap; vMat.needsUpdate = true;
+      var gen = ++standGen;
+      // the plain face carries no words of the result: painted once, kept for every answer after
+      function stand() {
+        if (gen !== standGen || !cardPainted || csMap !== cbMap) return;
+        var cStand = cnv(CW * 1.6, CH * 1.6); paintCard(cStand, false, 1.6); var old = csMap; csMap = tex(cStand);
+        if (vMat.map === old) { vMat.map = csMap; vMat.emissiveMap = csMap; }
+        O.wake();
+      }
+      if (later) setTimeout(stand, 0); else stand();
+      if (!later) { vMat.map = csMap; vMat.emissiveMap = csMap; }
+      vMat.needsUpdate = true;
     }
     // the printed faces use the page's web fonts; one painted before they arrived is painted again when they do
     var cvFontOk = false;
@@ -494,10 +516,10 @@ window.__evidentDesk3d = function (O) {
       var w = stage.clientWidth, h = stage.clientHeight;
       if (keepsPicture(w, h, d)) { stage.style.height = H + "px"; return; }
       DPR_CAP = d; dpr = DPR_CAP;
-      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr);
+      W = w; H = h; sized = true; ratioNow = 0; setRatio(dpr); forceDraw = true;
       camera.aspect = W / H; pickKeys(); O.layout(); cardKey = ""; shadowDirty = true; O.wake();
     }
-    var frameTimes = [];
+    var frameTimes = [], slowFrames = [];
     function adaptMoving(ft) {
       // one very slow moving frame is enough to drop to ratio 1 for the rest of the move (the still picture is redrawn at full ratio)
       if (ft > 120 && dpr > 1) { dpr = 1; frameTimes = []; return; }
@@ -626,13 +648,13 @@ window.__evidentDesk3d = function (O) {
     }
     function frame(now) {
       raf = 0;
+      var fStart = performance.now();
       // slow frames take bigger steps, so a slow machine settles in a few frames, not dozens
       var ft = now - last, dt = wasMoving ? Math.min(1, ft / 1000) : 1 / 60; last = now;
       if (O.tween) O.tween(now);
       var P = O.rawProgress();
       if (O.reduce.matches) Ps = Math.round(P);
       else Ps += (P - Ps) * (1 - Math.exp(-dt * 4.2));
-      if (wasMoving) O.slowGl = ft > 350;
       if (O.slowGl || Math.abs(P - Ps) < 0.0015) Ps = P;
 
       var hp = O.reduce.matches ? Math.round(P) : hold(Ps), u = CL ? hp / CL : 0;
@@ -662,8 +684,17 @@ window.__evidentDesk3d = function (O) {
       var sig = casterSig();
       if (shadowDirty || sig !== lastSig) { renderer.shadowMap.needsUpdate = true; lastSig = sig; shadowDirty = false; }
       if (placeCard(stand, moving, ft)) moving = true;
-      renderer.render(scene, camera);
-      lastRatio = ratioNow; frames++;
+      // a frame that would draw the very picture already on the canvas (a scroll of the home page, a wake with nothing
+      // new) is not drawn again: the canvas keeps its last frame
+      var vk = viewKey();
+      if (forceDraw || vk !== drawnKey) {
+        renderer.render(scene, camera); drawnKey = vk; forceDraw = false; lastRatio = ratioNow; frames++;
+        // a machine drawing under three frames a second glides by cuts. Judged on the last three frames drawn (a moving
+        // frame by the time since the one before, a still one by its own cost), so one frame held up by other work (an
+        // answer being laid out) never turns every later glide into a cut, and a cut frame drawn quickly lifts it
+        slowFrames.push((wasMoving ? ft : performance.now() - fStart) > 350); if (slowFrames.length > 3) slowFrames.shift();
+        O.slowGl = slowFrames.length === 3 && slowFrames[0] && slowFrames[1] && slowFrames[2];
+      }
       wasMoving = moving; looping = moving;
       if (frames === 1) setTimeout(paintLazy, 0);
       if (moving) O.wake();
@@ -680,6 +711,18 @@ window.__evidentDesk3d = function (O) {
       }
     }
     var lastShadowPs = -1, readyDone = false, lastSig = "", casters = null, handed = false;
+    // everything the picture is drawn from: the camera, every caster (lastSig), the lights, the exposure, the faces and
+    // their textures, the soft shadows and the canvas size. forceDraw covers anything else (a resize clears the canvas)
+    var drawnKey = "", forceDraw = true;
+    function texKey(t) { return t ? t.id + "." + t.version : "0"; }
+    function viewKey() {
+      var e = camera.matrixWorld.elements, p = camera.projectionMatrix.elements, out = [];
+      for (var i = 0; i < 16; i++) out.push(e[i].toFixed(6), p[i].toFixed(6));
+      sheets.forEach(function (o) { var f = o.mesh.userData.face; out.push(texKey(f.map), f.emissiveIntensity.toFixed(4), o.sh.visible ? o.sh.material.opacity.toFixed(4) : "-"); });
+      out.push(texKey(vMat.map), vMat.emissiveIntensity.toFixed(4), texKey(woodMat.map), woodMat.color.getHex(), woodMat.version, cardSh.material.opacity.toFixed(4),
+        renderer.toneMappingExposure.toFixed(5), key.intensity.toFixed(5), spot.angle.toFixed(5), ratioNow, W, H, lastSig);
+      return out.join(",");
+    }
     // the desk takes over from the early text-mode card: the page switches to its desk layout and keeps the reader on the same stop
     function handover() {
       handed = true;
@@ -969,7 +1012,7 @@ window.__evidentDesk3d = function (O) {
         // true once every printed card face in use was painted after the web fonts were ready
         facesFontsOk: (!cardPainted || cvFontOk) && (!csvMap || csvFontOk) };
     };
-    O.drawImpl = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } frame(performance.now()); };
+    O.drawImpl = function () { if (raf) { cancelAnimationFrame(raf); raf = 0; } forceDraw = true; frame(performance.now()); };
     O.gotoImpl = function (n) {
       n = clamp(Math.round(n), 1, O.NS); if (n >= 2) O.check(); O.endTween(); O.clearStudy(); O.layout();
       window.scrollTo({ top: O.anchors[n - 1], behavior: "instant" }); O.prevY = O.progY = window.scrollY; O.nextWords(n - 1, window.scrollY); O.noteRest();
@@ -1000,7 +1043,7 @@ window.__evidentDesk3d = function (O) {
       proj: function (x, y, z) { var v = new T.Vector3(x, y, z).project(camera); return [Math.round((v.x * 0.5 + 0.5) * W), Math.round((-v.y * 0.5 + 0.5) * H)]; }
     };
     // ---- lazy painting: the sheets' own faces after the first frame, a few at a time; the card on check ----
-    var lazyQ = null;
+    var lazyQ = null, bigTop = false;
     function paintOne(o, big) {
       if (o.painted && !big) return; o.painted = true;
       var k = big ? 1 : 0.5, c = cnv(SW * k, SH * k); paintSheet(c, o.s, o.seed, k);
@@ -1008,17 +1051,26 @@ window.__evidentDesk3d = function (O) {
       if (hiSlot === o) o.lowMap = t; else { f.map = t; f.emissiveMap = t; f.needsUpdate = true; }
     }
     function paintLazy() {
-      if (lazyQ) return;
+      if (lazyQ && lazyQ.gen === sheetGen) return;
       var gen = sheetGen;
-      lazyQ = sheets.slice().sort(function (a, b) { return b.rest.y - a.rest.y; });
+      var q = lazyQ = sheets.slice().sort(function (a, b) { return b.rest.y - a.rest.y; });
+      q.gen = gen;
       (function step() {
+        if (lazyQ !== q) return;
         if (gen !== sheetGen) { lazyQ = null; return; }
         var t0 = performance.now();
         var seen = false;
-        while (lazyQ.length && performance.now() - t0 < 12) { var o = lazyQ.shift(); paintOne(o); seen = seen || o.mesh.visible; }
+        while (lazyQ.length && performance.now() - t0 < 12) {
+          var o = lazyQ.shift(), big = bigTop && o === sheets[sheets.length - 1];
+          if (big) { bigTop = false; o.painted = false; }
+          paintOne(o, big); seen = seen || o.mesh.visible;
+        }
         // a sheet out of sight needs no new frame
         if (seen) O.wake();
-        if (lazyQ.length) setTimeout(step, 16); else lazyQ = null;
+        if (lazyQ.length) { setTimeout(step, 16); return; }
+        lazyQ = null;
+        // faces painted after the warm-up went through are sent too
+        if (warmGen === gen) { warmGen = -1; warmSoon(); }
       })();
     }
     // ---- the warm-up: the first press of Next pays for no compile and no upload ----------
@@ -1040,6 +1092,9 @@ window.__evidentDesk3d = function (O) {
           ["map", "emissiveMap", "alphaMap", "roughnessMap", "bumpMap"].forEach(function (k) { var t = m[k]; if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
         });
       });
+      // the card's faces not on it right now: the printed verdict, swapped in as the card leaves its stand on the
+      // first Next, and the two standing faces
+      [cvMap, csMap, csvMap].forEach(function (t) { if (t && seen.indexOf(t) < 0) { seen.push(t); list.push(t); } });
       return list;
     }
     function warmStep() {
@@ -1058,7 +1113,13 @@ window.__evidentDesk3d = function (O) {
     }
     O.onCheck = function () {
       casters = null; shadowDirty = true;
-      paintCardFaces();
+      // a result landing on a desk already drawing (a check just run, an answer picked): the sheets' faces are painted
+      // a few at a time after the answer is on screen (paintLazy, the top of the stack first and at full size), and
+      // the standing face in a task of its own, so the answer is never held behind them. The page as it arrives
+      // paints them all before its first frame, as before
+      var later = frames > 0;
+      paintCardFaces(later);
+      if (later) { bigTop = true; O.wake(); return; }
       sheets.forEach(function (o) { paintOne(o); });
       // the top of the stack is seen close at the reading: its face at full size
       if (sheets.length) paintOne(sheets[sheets.length - 1], true);
