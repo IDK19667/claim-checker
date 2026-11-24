@@ -1053,6 +1053,11 @@ window.__evidentDesk3d = function (O) {
     };
     // ---- lazy painting: the sheets' own faces after the first frame, a few at a time; the card on check ----
     var lazyQ = null, bigTop = false;
+    // content before scenery: a result arriving on a desk already drawing paints the card's faces and one sheet, then
+    // nothing more until the verdict is on screen (verdictShown, two frames after onCheck: the frame that paints the
+    // verdict, then the first frame with it on screen); the later batches start from there
+    var lazyHold = false, lazyParked = null;
+    function verdictShown() { lazyHold = false; var s = lazyParked; lazyParked = null; if (s) setTimeout(s, 0); }
     function paintOne(o, big) {
       if (o.painted && !big) return; o.painted = true;
       var k = big ? 1 : 0.5, c = cnv(SW * k, SH * k); paintSheet(c, o.s, o.seed, k);
@@ -1068,15 +1073,15 @@ window.__evidentDesk3d = function (O) {
         if (lazyQ !== q) return;
         if (gen !== sheetGen) { lazyQ = null; return; }
         var t0 = performance.now();
-        var seen = false;
-        while (lazyQ.length && performance.now() - t0 < 12) {
+        var seen = false, cap = lazyHold ? 1 : 1e9;
+        while (lazyQ.length && performance.now() - t0 < 12 && cap-- > 0) {
           var o = lazyQ.shift(), big = bigTop && o === sheets[sheets.length - 1];
           if (big) { bigTop = false; o.painted = false; }
           paintOne(o, big); seen = seen || o.mesh.visible;
         }
         // a sheet out of sight needs no new frame
         if (seen) O.wake();
-        if (lazyQ.length) { setTimeout(step, 16); return; }
+        if (lazyQ.length) { if (lazyHold) lazyParked = step; else setTimeout(step, 16); return; }
         lazyQ = null;
         // faces painted after the warm-up went through are sent too
         if (warmGen === gen) { warmGen = -1; warmSoon(); }
@@ -1128,7 +1133,9 @@ window.__evidentDesk3d = function (O) {
       // paints them all before its first frame, as before
       var later = frames > 0;
       paintCardFaces(later);
-      if (later) { bigTop = true; O.wake(); return; }
+      // the verdict is laid out in this task and painted in the next frame; the frame after that starts with it on
+      // screen, and the parked batches go on from there
+      if (later) { bigTop = true; O.wake(); requestAnimationFrame(function () { requestAnimationFrame(verdictShown); }); return; }
       sheets.forEach(function (o) { paintOne(o); });
       // the top of the stack is seen close at the reading: its face at full size
       if (sheets.length) paintOne(sheets[sheets.length - 1], true);
@@ -1148,11 +1155,11 @@ window.__evidentDesk3d = function (O) {
       buildSheets(); if (staged) sheets.forEach(function (o) { o.placed = true; });
       cardPainted = false; csvKey = ""; cardKey = ""; pickKeys();
       O.checked = false; O.check();
-      if (frames) setTimeout(paintLazy, 0);
+      if (frames) { lazyHold = true; lazyParked = null; setTimeout(paintLazy, 0); }
       Ps = O.rawProgress(); O.wake();
     };
     // back to the claim box: the camera is at the first stop at once
-    O.onHome = function () { if (stagedN) { stagedN = 0; O.CHECK = { studies: [] }; dropSheets(); } pickKeys(); Ps = 0; O.hoverN = 0; O.wake(); };
+    O.onHome = function () { verdictShown(); if (stagedN) { stagedN = 0; O.CHECK = { studies: [] }; dropSheets(); } pickKeys(); Ps = 0; O.hoverN = 0; O.wake(); };
     buildSheets(); pickKeys();
     if (O.checked) { O.checked = false; O.check(); }
     O.layout(); O.updateWay();

@@ -4,6 +4,16 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): Content before scenery: the desk paints no more sheets until the verdict is on screen
+
+A result arriving on a desk already drawing paints the card's faces and one sheet, then holds
+the rest until two frames after the page marks the result checked (the frame that paints the
+verdict, then the first frame with it on screen); the later batches start from there, not
+from a timer. Check 21 is unchanged. It still fails about 1 run in 3: in a page-side trace every
+held batch now starts after the verdict is on screen, but the check notices the verdict only
+when its own script reaches the page, up to about 420 ms after the answer arrived, so batches
+painted after the verdict showed can still count as before it.
+
 ## 2026-11-24 (q10-rel): Every study row says where its abstract is
 
 Each row shows "Open PubMed" and either the "Read abstract" button or, where PubMed has no
