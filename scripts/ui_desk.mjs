@@ -49,9 +49,16 @@
  *    section headings come before the scenery; the four section names.
  * 21. Snappy: no picture drawn while the home page scrolls or on a settled screen
  *    for 2 s; on the phone profile (CPU slowed 4 times, the Mac's own GPU) the first
- *    Next after a fresh answer moves within 300 ms and glides, and a fresh answer is
- *    on screen within 2.5 s of arriving; once warmed the first Next sends no card
+ *    scroll from the Answer to Studies after a fresh answer moves the camera within
+ *    300 ms and glides, and a fresh answer is on screen within 2.5 s of arriving;
+ *    once warmed that first scroll sends no card
  *    face; a sheet is three draw calls; the claim box is usable as the scripts are in.
+ * 22. The joined release (q10-rel), at five sizes in 3D and text mode: the home screen
+ *    holds the claim box and a check lands on the Answer; no colour q10-look removed on
+ *    any result section; both study actions, one picker and one View evidence at 44px;
+ *    the first section move after an answer starts within 300 ms; on a phone the camera
+ *    does not jump at the start of a check; the press of "Check the research" paints
+ *    within 100 ms.
  */
 import { chromium } from "playwright";
 
@@ -622,8 +629,8 @@ for (const [w, h] of NAV_GRID) for (const mode of ["3d", "text"]) {
       if (hd && (hd.t < hd.s - 1 || hd.b > s.bt)) bad.push(`${name}: heading at ${hd.t}..${hd.b}, strip ${hd.s}, foot ${s.bt}`);
     }
     must(!bad.length, bad.join("; "));
-    // N3 keeps the four sizes it was written for (NAV_SIZES); the grid above is N2f's
-    if (!NAV_SIZES.some(([a, b]) => a === w && b === h)) return;
+    // N3 keeps the four sizes it was written for (NAV_SIZES), and 1440x900 since q10-rel; the grid above is N2f's
+    if (!NAV_SIZES.some(([a, b]) => a === w && b === h) && !(w === 1440 && h === 900)) return;
     // N3: the desktop answer starts near the top with how sure fully in view; on a phone each later section's heading
     // starts in the top 28% of the screen with six lines of words under it on that screen
     await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), await secTop(page, "Answer")); await page.waitForTimeout(mode === "3d" ? 3500 : 900);
@@ -1089,12 +1096,15 @@ async function snappy(name, fn, { phone = true, gpu = true } = {}) {
     const hook = () => { const d = window.__evd; if (!d || !d.renderer) { setTimeout(hook, 20); return; } if (!d.gl) return; const r = d.renderer, o = r.render.bind(r); window.__draws = 0; r.render = (a, b) => { window.__draws++; o(a, b); }; };
     hook();
     window.__sig = () => { const c = window.__evd && window.__evd.camera; return [Math.round(scrollY), c ? c.position.toArray().map((v) => v.toFixed(4)).join() : "", c ? c.fov.toFixed(3) : ""].join("|"); };
+    // the camera alone (q10-rel: with native scrolling the page moves at once; the camera's first change is the measure)
+    window.__csig = () => { const c = window.__evd && window.__evd.camera; return c ? c.position.toArray().map((v) => v.toFixed(4)).join() + "|" + c.fov.toFixed(3) : ""; };
     // after a press: the first movement and the last, from the press's own time stamp
-    window.__watch = (ms) => new Promise((res) => {
-      let press = null, first = null, lastAt = null, prev = window.__sig(), moves = 0; const t0 = performance.now();
+    window.__watch = (ms, cam) => new Promise((res) => {
+      const sig = cam ? window.__csig : window.__sig;
+      let press = null, first = null, lastAt = null, prev = sig(), moves = 0; const t0 = performance.now();
       const pd = (e) => { if (press === null) press = e.timeStamp; };
       addEventListener("pointerdown", pd, true); addEventListener("touchstart", pd, true);
-      const loop = () => { const n = performance.now(), s = window.__sig(); if (s !== prev) { if (press !== null && first === null) first = n; lastAt = n; prev = s; moves++; }
+      const loop = () => { const n = performance.now(), s = sig(); if (s !== prev) { if (press !== null && first === null) first = n; lastAt = n; prev = s; moves++; }
         if (n - t0 > ms || (lastAt !== null && n - lastAt > 900)) { removeEventListener("pointerdown", pd, true); removeEventListener("touchstart", pd, true); res({ first: first === null ? null : Math.round(first - press), settled: lastAt === null ? null : Math.round(lastAt - press), moves }); } else requestAnimationFrame(loop); };
       requestAnimationFrame(loop);
     });
@@ -1140,16 +1150,21 @@ await snappy("21: the home page draws no picture while it scrolls, and none on a
   must((await page.evaluate(() => window.__draws)) === r0, "the settled result drew");
 }, { phone: false, gpu: false });
 
-await snappy("21: on the phone the first Next after a fresh answer starts moving within 300 ms, and glides, after one held-up frame too", async (page) => {
+// q10-rel: q10-nav removed Next; the section move is now a real scroll from the Answer to Studies (q10-snappy's
+// hand-back), timed to the camera's first change, after one move held up mid-way by 2.2 s of other work.
+const toStudies = (page) => page.evaluate(() => Math.round(document.getElementById("s3").getBoundingClientRect().top));
+await snappy("21: on the phone the first scroll from the Answer to Studies after a fresh answer moves the camera within 300 ms, and glides, after one held-up frame too", async (page, cdp) => {
   if (!(await fresh3d(page))) return;
   // one frame held up longer than the whole glide by other work (as the answer arriving does on a slow phone): later moves still glide
-  await page.evaluate(() => window.__evident.goto(1)); await page.waitForTimeout(300);
-  await page.evaluate(() => { document.getElementById("next").click(); setTimeout(() => { const t = performance.now(); while (performance.now() - t < 2200); }, 60); });
-  await still3d(page); await page.evaluate(() => window.__evident.goto(2)); await still3d(page);
+  const y0 = await page.evaluate(() => scrollY);
+  await page.evaluate(() => setTimeout(() => { const t = performance.now(); while (performance.now() - t < 2200); }, 120));
+  await cdp.send("Input.synthesizeScrollGesture", { x: 195, y: 600, yDistance: -(await toStudies(page)), speed: 1200, gestureSourceType: "touch" });
+  await still3d(page); await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), y0); await still3d(page);
   await page.waitForTimeout(1000);
-  const w = page.evaluate(() => window.__watch(8000)); await page.waitForTimeout(50);
-  await page.tap("#next"); const r = await w;
-  must(r.first !== null && r.first <= 300, `first movement ${r.first} ms after the press`);
+  const w = page.evaluate(() => window.__watch(8000, true)); await page.waitForTimeout(50);
+  await cdp.send("Input.synthesizeScrollGesture", { x: 195, y: 600, yDistance: -(await toStudies(page)), speed: 1200, gestureSourceType: "touch" });
+  const r = await w;
+  must(r.first !== null && r.first <= 300, `first camera movement ${r.first} ms after the touch`);
   // a glide is many pictures; a cut (the slow-machine rule) is one or two
   must(r.moves >= 4, `the move was a cut (${r.moves} changes)`);
 });
@@ -1177,13 +1192,14 @@ await snappy("21: on the phone a fresh answer is on screen within 2.5 s of arriv
   must(r.before <= 4 && r.before < r.sheets + 4, `${r.before} canvases painted before the answer was on screen (${r.sheets} sheets)`);
 });
 
-await snappy("21: once warmed, the first Next after a fresh answer sends no card face to the GPU", async (page) => {
+await snappy("21: once warmed, the first scroll from the Answer to Studies after a fresh answer sends no card face to the GPU", async (page, cdp) => {
   if (!(await fresh3d(page))) return;
   must(await warmed(page), "the warm-up never finished");
   await page.evaluate(() => { const gl = window.__evd.renderer.getContext(); window.__big = []; const o = gl.texImage2D.bind(gl); gl.texImage2D = function (...a) { const s = a[a.length - 1]; if (s && s.width >= 1600) window.__big.push(s.width + "x" + s.height); return o(...a); }; });
-  await page.click("#next"); await page.waitForTimeout(2500);
+  await cdp.send("Input.synthesizeScrollGesture", { x: 720, y: 500, yDistance: -(await toStudies(page)), speed: 1200, gestureSourceType: "mouse" });
+  await page.waitForTimeout(2500);
   const big = await page.evaluate(() => window.__big);
-  must(!big.length, `card faces sent after the press: ${big.join(" ")}`);
+  must(!big.length, `card faces sent on that first move: ${big.join(" ")}`);
 }, { phone: false, gpu: false });
 
 await snappy("21: a sheet is three draw calls, not six", async (page) => {
@@ -1206,6 +1222,184 @@ await snappy("21: on the phone at slow 4G the claim box is usable as the page's 
   // the box is on screen and typeable no later than 300 ms after the page's scripts are wired (before: about 5 ms)
   must(t.box - t.dcl <= 300, `the claim box was usable ${Math.round(t.box - t.dcl)} ms after the scripts were in (${Math.round(t.box)} ms)`);
 });
+
+// ---- 22. The joined release (q10-rel): checks no single part could make --------------------------------------
+// The result screens (q10-nav), the colours (q10-look, q10-card), the lamp on a phone (q10-phone) and the speed work
+// (q10-snappy), together. At 375x812, 375x667, 320x568, 1280x800 and 1440x900, in 3D and in text mode:
+// (a) the home screen shows the claim box (and on a phone in 3D the lamp band) on the first screen, and a check run
+//     from it lands on the Answer as q10-nav built it;
+// (b) on every result section no element's computed colour, background, border or outline is one q10-look removed;
+// (c) Read abstract and Open PubMed on every study, the one section picker and the one View evidence, 44 px or more;
+// (d) the first section move after an answer arrives (View evidence) starts within 300 ms.
+// Then, on the phone profile: (e) the camera at the start of a fresh check never jumps; (f) "Check the research"
+// paints its feedback within 100 ms, phone and desktop.
+const J_SIZES = [[375, 812], [375, 667], [320, 568], [1280, 800], [1440, 900]];
+// colours.md (05ec98e): the mint and the green, blue and teal it named, matched within 12 of 255 per channel...
+const J_NEAR = ["9fc3b0", "4f6a5d", "d4e4da", "2c5848", "9fb3ad", "8fa6b4", "1d3a2e"];
+// ...and every green-cast grey token it replaced, matched exactly (the new warm greys sit close by on purpose)
+const J_EXACT = ["0b0d0c", "0f1211", "181c1a", "2a302d", "3a423e", "3c4440", "59625d", "4a534e", "eceee9", "a9b0ab", "8f9792", "f1f2ee",
+  "121514", "434a46", "3a403c", "222624", "0f1110", "0c0e0d", "9ea6a1", "7d8580", "5d6560", "d9dcd5", "b9bfb7", "fafaf8"];
+const jHome = (page, mode) => page.goto(`${base}/${mode === "text" ? "?nogl=1" : ""}`, { waitUntil: "load" }).then(() => ready(page));
+for (const [w, h] of J_SIZES) for (const mode of ["3d", "text"]) {
+  await test(`22a: the home screen holds the claim box on the first screen and a check from it lands on the Answer, ${w}x${h} ${mode}`, async (page) => {
+    await jHome(page, mode); await page.waitForTimeout(600);
+    const s = await page.evaluate(() => {
+      const R = (q) => document.querySelector(q).getBoundingClientRect(), cs = getComputedStyle(document.documentElement);
+      return { mode: window.__evident.stats().mode, box: R(".claim-box").bottom, btn: R("#submit-btn").bottom, H: innerHeight,
+        band: cs.getPropertyValue("--lamp-band").trim(), mark: getComputedStyle(document.querySelector("#s1 .wordmark")).display };
+    });
+    must(s.mode === (mode === "3d" ? "3d" : "text"), `mode ${s.mode}`);
+    must(s.box <= s.H, `the claim box ends at ${Math.round(s.box)}, below the first screen (${s.H})`);
+    if (h >= 667) must(s.btn <= s.H, `"Check the research" ends at ${Math.round(s.btn)}, below the first screen (${s.H})`);
+    // the lamp band is the phone's in 3D only; text mode and a wide screen keep their own first screen
+    if (w <= 760 && mode === "3d") must(s.band && s.mark === "none", `no lamp band on the phone (band "${s.band}", wordmark ${s.mark})`);
+    else must(!s.band || s.mark !== "none", `a lamp band where there is none to show (band "${s.band}", wordmark ${s.mark})`);
+    await page.fill("#claim-input", LIVE); await page.click("#submit-btn");
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 });
+    await page.waitForTimeout(mode === "3d" ? 3500 : 900);
+    const a = await page.evaluate(answerAtRest);
+    const at = await page.evaluate(() => ({ y: Math.round(scrollY), top: Math.round(document.getElementById("s2").getBoundingClientRect().top + scrollY),
+      named: innerWidth > 760 ? (document.querySelector("#rail button[aria-current] span") || {}).textContent : document.getElementById("where-name").textContent }));
+    // within 8 px of the Answer's top: q10-nav's landing may shift by a few px (landShift), the picker must say Answer
+    must(Math.abs(at.y - at.top) <= 8 && at.named === "Answer", `landed at ${at.y} (the Answer starts at ${at.top}), the picker says ${at.named}`);
+    must(!a.bad.length, a.bad.join("; "));
+    must(a.studies || a.crossed.length, `the Answer looks finished: no Studies heading above ${a.foot} and nothing crossed`);
+  }, { w, h, touch: w <= 760 });
+}
+for (const [w, h] of J_SIZES) for (const mode of ["3d", "text"]) {
+  await test(`22b: no colour q10-look removed on any result section, the picker and an open abstract included, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    await page.evaluate(() => { document.querySelectorAll(".grp-btn[aria-expanded=false]").forEach((b) => b.click()); const a = document.querySelector(".row .abs"); if (a) a.open = true; });
+    if (w <= 760) await page.click("#where");
+    await page.waitForTimeout(300);
+    const out = await page.evaluate(([near, exact]) => {
+      const rgb = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)), N = near.map(rgb), E = new Set(exact);
+      const hex = (c) => { const m = c.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/); if (!m || (m[4] !== undefined && +m[4] === 0)) return null; return [m[1], m[2], m[3]].map((v) => (+v).toString(16).padStart(2, "0")).join(""); };
+      const bad = new Map(); let n = 0;
+      for (const el of document.querySelectorAll("#strip, #strip *, #track, #track *, #bar, #bar *, #rail, #rail *, #menu, #menu *")) {
+        if (!el.checkVisibility()) continue; n++;
+        const cs = getComputedStyle(el), props = ["color", "backgroundColor", "borderTopColor", "borderBottomColor", "borderLeftColor", "borderRightColor", "outlineColor", "textDecorationColor"];
+        for (const p of props) {
+          if (p.startsWith("border") && parseFloat(cs[p.replace("Color", "Width")]) === 0) continue;
+          const x = hex(cs[p]); if (!x) continue; const q = rgb(x);
+          if (E.has(x) || N.some((r) => (q[0] - r[0]) ** 2 + (q[1] - r[1]) ** 2 + (q[2] - r[2]) ** 2 <= 144)) {
+            const k = `${el.id ? "#" + el.id : el.tagName.toLowerCase() + "." + [...el.classList].join(".")} ${p} #${x}`; bad.set(k, 1);
+          }
+        }
+      }
+      return { n, bad: [...bad.keys()] };
+    }, [J_NEAR, J_EXACT]);
+    must(out.n > 200, `only ${out.n} visible elements were read`);
+    must(!out.bad.length, `${out.bad.length} removed colours: ${out.bad.slice(0, 4).join("; ")}`);
+  }, { w, h });
+}
+for (const [w, h] of J_SIZES) for (const mode of ["3d", "text"]) {
+  await test(`22c: Read abstract and Open PubMed on every study, one section picker, one View evidence, all 44 px or more, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    await page.evaluate(() => document.querySelectorAll(".grp-btn[aria-expanded=false]").forEach((b) => b.click()));
+    await page.waitForTimeout(300);
+    const s = await page.evaluate(() => {
+      const vis = (e) => !!e && e.checkVisibility() && e.getBoundingClientRect().height > 0, H = (e) => Math.round(e.getBoundingClientRect().height);
+      const rows = [...document.querySelectorAll("#rows .row")].map((r) => { const a = r.querySelector(".abs > summary"), no = r.querySelector(".noabs"), p = r.querySelector("a.pm");
+        return { n: r.dataset.n, abs: vis(a) ? H(a) : vis(no) ? 44 : 0, pm: vis(p) ? H(p) : 0 }; });
+      const where = [...document.querySelectorAll("#where")].filter(vis), rail = [...document.querySelectorAll("#rail button:not(.rail-again)")].filter(vis);
+      const ve = [...document.querySelectorAll("button, a")].filter((b) => vis(b) && b.textContent.trim() === "View evidence");
+      return { rows, where: where.map(H), rail: rail.map(H), railShown: vis(document.getElementById("rail")), ve: ve.map(H) };
+    });
+    must(s.rows.length >= 10, `only ${s.rows.length} rows`);
+    const bad = s.rows.filter((r) => r.abs < 44 || r.pm < 44);
+    must(!bad.length, `rows without both actions at 44 px: ${JSON.stringify(bad.slice(0, 3))}`);
+    if (w <= 760) must(s.where.length === 1 && s.where[0] >= 44 && !s.railShown, `the phone picker: ${s.where.join()} px, rail shown ${s.railShown}`);
+    else must(!s.where.length && s.railShown && s.rail.length === 4 && s.rail.every((x) => x >= 44), `the wide picker: bar ${s.where.join()}, rail ${s.rail.join()}`);
+    must(s.ve.length === 1 && s.ve[0] >= 44, `View evidence: ${s.ve.length} shown, ${s.ve.join()} px`);
+  }, { w, h, touch: w <= 760 });
+}
+// (d) timed on the GPU browser of block 21 in 3D (SwiftShader draws a wide frame in most of a second, which is the
+// machine, not the page), at each size without CPU slowing; text mode on the usual browser.
+for (const [w, h] of J_SIZES) for (const mode of ["3d", "text"]) {
+  const name = `22d: the first section move after an answer arrives starts within 300 ms, ${w}x${h} ${mode}`;
+  const fn = async (page) => {
+    if (mode === "3d") await page.setViewportSize({ width: w, height: h });
+    await jHome(page, mode);
+    await page.fill("#claim-input", LIVE); await page.click("#submit-btn");
+    await page.waitForFunction(() => { const b = document.getElementById("how-answer"); return document.documentElement.classList.contains("checked") && b && b.checkVisibility() && b.getBoundingClientRect().height > 0; }, null, { timeout: 60000, polling: 20 });
+    const t = page.evaluate(() => new Promise((res) => {
+      const sig = () => { const c = window.__evd && window.__evd.camera; return Math.round(scrollY) + "|" + (c ? c.position.toArray().map((v) => v.toFixed(4)).join() : ""); };
+      let press = null; addEventListener("pointerdown", (e) => { if (press === null) press = e.timeStamp; }, { capture: true, once: true });
+      let prev = null; const t0 = performance.now();
+      const loop = () => { const s = sig(), n = performance.now();
+        if (press !== null && prev !== null && s !== prev) { res(Math.round(n - press)); return; }
+        if (press !== null && prev === null) prev = s;
+        if (n - t0 > 6000) { res(null); return; } requestAnimationFrame(loop); };
+      requestAnimationFrame(loop);
+    }));
+    await page.waitForTimeout(30);
+    await page.click("#how-answer");
+    const ms = await t;
+    console.log(`     22d ${w}x${h} ${mode}: first movement ${ms} ms after the press`);
+    must(ms !== null && ms <= 300, `the first movement came ${ms} ms after the press`);
+  };
+  if (mode === "3d") await snappy(name, fn, { phone: false, gpu: true }); else await test(name, fn, { w, h, touch: w <= 760 });
+}
+// (e) On a phone in 3D the home screen's camera is the lamp band's (q10-phone); a fresh check glides from it to the Answer.
+// Every frame from the press to 600 ms after it, and the first 600 ms after the camera starts to move (the glide starts
+// when the answer lands, after the reading log): the camera is at its start, or on the way (never farther from the
+// answer's camera than the start was, never back up the path, and no step longer than a third of the whole way).
+// The camera is its position, where it looks (a point 1 unit ahead) and its field of view (a degree counts 1/20).
+for (const [w, h] of [[375, 812], [375, 667], [320, 568]]) {
+  // on the GPU browser, phone profile (touch, CPU slowed 4 times): SwiftShader draws a frame in about 170 ms, too few to see a jump
+  await snappy(`22e: on a ${w}x${h} phone the camera does not jump at the start of a fresh check`, async (page) => {
+    await page.setViewportSize({ width: w, height: h });
+    await jHome(page, "3d"); if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
+    await page.waitForTimeout(800);
+    await page.fill("#claim-input", LIVE);
+    const rec = page.evaluate(() => new Promise((res) => {
+      const cam = () => { const c = window.__evd.camera, d = c.getWorldDirection(new c.position.constructor()); return c.position.toArray().concat(d.toArray(), c.fov); };
+      const f = []; let press = null, movedAt = null;
+      addEventListener("pointerdown", () => { press = performance.now(); f.push([0].concat(cam())); }, { capture: true, once: true });
+      const same = (a, b) => a.every((v, i) => i === 0 || Math.abs(v - b[i]) < 1e-5);
+      const loop = () => { if (press !== null) { const n = performance.now(), x = [Math.round(n - press)].concat(cam());
+          if (movedAt === null && !same(x, f[0])) movedAt = n;
+          if (n - press <= 600 || movedAt !== null) f.push(x);
+          if ((movedAt !== null && n - movedAt > 600) || n - press > 60000) { res({ f, movedAt: movedAt === null ? null : Math.round(movedAt - press) }); return; } }
+        requestAnimationFrame(loop); };
+      requestAnimationFrame(loop);
+    }));
+    await page.waitForTimeout(30); await page.tap("#submit-btn");
+    const { f, movedAt } = await rec;
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 }); await page.waitForTimeout(3500);
+    const end = await page.evaluate(() => { const c = window.__evd.camera, d = c.getWorldDirection(new c.position.constructor()); return [0].concat(c.position.toArray(), d.toArray(), c.fov); });
+    const dd = (a, b) => Math.hypot(a[1] - b[1], a[2] - b[2], a[3] - b[3], a[4] - b[4], a[5] - b[5], a[6] - b[6], (a[7] - b[7]) / 20);
+    const total = dd(f[0], end), bad = [], steps = [];
+    for (let i = 1; i < f.length; i++) {
+      const far = dd(f[i], end), was = dd(f[i - 1], end), step = dd(f[i], f[i - 1]); steps.push(step);
+      if (far > total + 1e-3) bad.push(`${f[i][0]} ms: ${far.toFixed(3)} from the answer, the start was ${total.toFixed(3)}`);
+      else if (far > was + 1e-3) bad.push(`${f[i][0]} ms: back up the path (${was.toFixed(3)} to ${far.toFixed(3)})`);
+      else if (total > 0.01 && step > total / 3) bad.push(`${f[i][0]} ms: a step of ${step.toFixed(3)} of ${total.toFixed(3)}`);
+    }
+    console.log(`     22e ${w}x${h}: ${f.length} frames, the camera first moves ${movedAt === null ? "never" : movedAt + " ms after the press"}, whole way ${total.toFixed(3)}, largest step ${Math.max(0, ...steps).toFixed(3)}, first moving frames ${f.filter((x) => dd(x, f[0]) > 1e-4).slice(0, 4).map((x) => x[0] + " ms " + dd(x, end).toFixed(3)).join(", ")}`);
+    must(f.length >= 20 && movedAt !== null, `${f.length} frames sampled, the camera moved ${movedAt}`);
+    must(!bad.length, `${bad.length} frames off the way: ${bad.slice(0, 3).join("; ")}`);
+  }, { phone: true, gpu: true });
+}
+// (f) the press of "Check the research" paints its first feedback (pressed state or the first progress paint) within
+// 100 ms: the Event Timing API's input-to-next-paint for that press. Phone: 375x812 at 3x, touch, CPU slowed 4 times;
+// desktop 1280x800. Both on the GPU browser, as block 21.
+for (const [w, h, phone] of [[375, 812, true], [1280, 800, false]]) {
+  await snappy(`22f: "Check the research" shows its feedback within 100 ms of the press, ${w}x${h}`, async (page) => {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await page.waitForTimeout(1500);
+    await page.evaluate(() => { window.__ev = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (e.interactionId) window.__ev.push([e.interactionId, e.name, e.startTime, e.duration]); }).observe({ type: "event", durationThreshold: 16, buffered: false }); });
+    await page.fill("#claim-input", LIVE); await page.waitForTimeout(400);
+    await page.evaluate(() => { window.__ev = []; });
+    if (phone) await page.tap("#submit-btn"); else await page.click("#submit-btn");
+    await page.waitForTimeout(1500);
+    const ev = await page.evaluate(() => window.__ev.filter((e) => /pointer|click|touch|mouse/.test(e[1])));
+    const ms = ev.length ? Math.max(...ev.map((e) => e[3])) : 0;
+    console.log(`     22f ${w}x${h}: press to next paint ${ms} ms (${ev.map((e) => e[1] + " " + Math.round(e[3])).join(", ")})`);
+    must(ms <= 100, `the press painted ${ms} ms after it`);
+  }, { phone, gpu: true });
+}
 
 await gpuBrowser.close();
 await browser.close();
