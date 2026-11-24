@@ -75,6 +75,7 @@
 
   // ---- stop 4: the rows, their groups and their details (markup from app.js or Jinja) ----
   function grpBtn(key) { return document.querySelector('.grp-btn[aria-controls="grp-' + key + '"]'); }
+  function setGroup(key, open) { var b = grpBtn(key); if (!b) return; b.setAttribute("aria-expanded", String(open)); byId(b.getAttribute("aria-controls")).hidden = !open; }
   function rowBtn(n) { return document.querySelector("#row-" + n + " .row-head"); }
   // a study picked from the prose or its title opens its abstract in place (the row's Read abstract disclosure)
   function setMore(n, open) { var d = byId("abs-" + n); if (d && open) d.open = true; }

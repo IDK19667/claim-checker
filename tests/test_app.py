@@ -11769,6 +11769,13 @@ t("NAV 4: app.js writes the same line, in the same order of sources, as the serv
   and all(w in _nav_appjs for w in ('"What this study contributes"'.strip('"'), "studyWhy(s)", " Studied in: ", "Indirect context"))
   and "Relied on" not in _nav_appjs.split("function studyRowHtml")[1].split("\n}\n")[0])
 
+# ---- NAV fix: every function desk.js calls by name is defined (a study group's button called a removed setGroup) ----
+_navfix_js = (ROOT / "static" / "desk.js").read_text()
+_navfix_calls = set(re.findall(r"(?<![\w.])(setGroup|grpBtn|rowBtn|setMore|selectStudy|clearStudy|layoutChanged|answerFoot)\(", _navfix_js))
+t("NAV fix: the study groups' buttons open and close their group (setGroup and every helper desk.js calls is defined)",
+  all(re.search(r"function " + f + r"\(", _navfix_js) for f in _navfix_calls) and "setGroup" in _navfix_calls,
+  sorted(f for f in _navfix_calls if not re.search(r"function " + f + r"\(", _navfix_js)))
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
