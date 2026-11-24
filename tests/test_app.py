@@ -13375,6 +13375,10 @@ db.put_cached_verdict("rows with and without an abstract", "q", "complicated", "
 _abs_page = c.get("/?q=rows+with+and+without+an+abstract").data.decode()
 _abs_rows = re.findall(r'<li class="row" id="row-\d+".*?</li>', _abs_page, re.S)
 _abs_kind = [("Read abstract</span>" in r, '<p class="noabs">No abstract on PubMed</p>' in r, 'class="act pm"' in r) for r in _abs_rows]
+_abs_no = _abs_rows[1] if len(_abs_rows) > 1 else ""
+t("job 3 (a): a row without an abstract prints Open PubMed first, then the note, then the related link",
+  0 <= _abs_no.find('class="act pm"') < _abs_no.find('class="noabs"') < _abs_no.find("Citations and related studies")
+  and "+ pm\n    + (abs ? \"\" : `<p class=\"noabs\">No abstract on PubMed</p>${go}`)" in (ROOT / "static" / "app.js").read_text(), _abs_no[-400:])
 t("B: a study with an abstract has the Read abstract button and no note; one without has the note and no button",
   _abs_kind == [(True, False, True), (False, True, True)]
   and "Each study has its PubMed page, and its abstract where PubMed has one." in _abs_page

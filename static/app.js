@@ -506,6 +506,7 @@ function studyRowHtml(s, i, key, named, bv) {
   // the study's own address, else its PubMed page from the number, so Open PubMed is on every real study
   const href = safeHref(s.url) || (/^\d+$/.test(String(s.pmid || "")) ? `https://pubmed.ncbi.nlm.nih.gov/${s.pmid}/` : null);
   const abs = plainDashes(String(s.abstract || "").trim());
+  const pm = href ? `<a class="act pm" href="${escapeHtml(href)}" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study ${n}, opens in a new tab</span></a>` : "";
   const go = `<button type="button" class="act quiet study-go" aria-label="How often study ${n} is cited, and the studies next to it">Citations and related studies</button>`;
   const src = (s.journal ? `${escapeHtml(s.journal)} · ` : "") + (s.year ? `${escapeHtml(s.year)} · ` : "") + `PubMed ${escapeHtml(s.pmid)}`;
   return `<li class="row" id="row-${n}" data-n="${n}" data-i="${i}">`
@@ -515,8 +516,11 @@ function studyRowHtml(s, i, key, named, bv) {
     + (abs
       ? `<details class="abs" id="abs-${n}"><summary class="act"><span class="shut">Read abstract</span><span class="open">Hide abstract</span><span class="sr-only"> of study ${n}</span></summary>`
         + `<div class="abs-body"><p class="abs-text">${escapeHtml(abs)}</p>${go}</div></details>`
-      : `<p class="noabs">No abstract on PubMed</p>${go}`)
-    + (href ? `<a class="act pm" href="${escapeHtml(href)}" target="_blank" rel="noopener">Open PubMed<span class="sr-only"> for study ${n}, opens in a new tab</span></a>` : "")
+      : "")
+    // a row without an abstract: Open PubMed first, where an ordinary row's first button stands, the note beside it,
+    // then the related link (the Jinja is the same)
+    + pm
+    + (abs ? "" : `<p class="noabs">No abstract on PubMed</p>${go}`)
     + `</div></div></li>`;
 }
 

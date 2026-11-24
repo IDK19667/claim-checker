@@ -1516,6 +1516,31 @@ for (const [w, h] of [[375, 812], [1280, 800]]) {
   }, { w, h });
 }
 
+// ---- 25. Study rows after the step 2 review (q10-rel job 3) --------------------------------------------------------
+// (a) a row without an abstract is one group: Open PubMed first, the note beside it (on its line at 1280), then the
+// related link, no gap between neighbours larger than an ordinary row's gap between its two buttons plus 8 px
+for (const [w, h] of [[375, 812], [1280, 800]]) {
+  await test(`25a: a row without an abstract reads as one group, Open PubMed first and the note beside it, ${w}x${h}`, async (page) => {
+    await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
+    const s = await page.evaluate(() => {
+      const box = (e) => e.getBoundingClientRect();
+      const open = (r) => { const g = r.closest(".rows"); if (g && g.hidden) { const b = document.querySelector(`[aria-controls="${g.id}"]`); if (b) b.click(); } };
+      const plain = document.querySelector("#rows .row .abs").closest(".row"), no = document.querySelector("#rows .row .noabs").closest(".row");
+      open(plain); open(no);
+      const a = box(plain.querySelector(".abs > summary")), b = box(plain.querySelector(".acts > .pm")), ordinary = Math.round(b.left - a.right);
+      const kids = [...no.querySelector(".acts").children].filter((e) => e.checkVisibility());
+      const gaps = []; for (let i = 1; i < kids.length; i++) { const p = box(kids[i - 1]), q = box(kids[i]);
+        gaps.push(Math.round(q.top < p.bottom - 1 ? q.left - p.right : q.top - p.bottom)); }
+      const pm = box(no.querySelector(".pm")), note = box(no.querySelector(".noabs"));
+      return { ordinary, order: kids.map((e) => e.className.split(" ").pop()), gaps, sameLine: Math.abs((pm.top + pm.bottom) / 2 - (note.top + note.bottom) / 2) <= 2 && note.left > pm.right,
+        pmLeft: Math.round(pm.left - box(no.querySelector(".acts")).left) };
+    });
+    must(s.order.join() === "pm,noabs,study-go" && s.pmLeft === 0, `order ${s.order.join()}, Open PubMed ${s.pmLeft} px in`);
+    must(s.gaps.every((g) => g >= 0 && g <= s.ordinary + 8), `gaps ${s.gaps.join()} against an ordinary row's ${s.ordinary}`);
+    if (w >= 1280) must(s.sameLine, "the note is not beside Open PubMed, centred on its height");
+  }, { w, h });
+}
+
 await gpuBrowser.close();
 await browser.close();
 const passed = results.filter(Boolean).length;
