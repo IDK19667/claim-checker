@@ -3558,7 +3558,7 @@ with appmod.app.test_request_context("/"):
                                  "true", "Creatine raises strength.", "Strength rose (Study 1).", ["SA1"],
                                  [dict(_SA_TRIAL), dict(_SA_REVIEW)], "http://x", still_open="Doses.")
 t("  on the page, a review code set aside that rates its evidence very low still caps the line and the stamp",
-  _sa["evidence_line"].startswith("Very low certainty") and _sa["verdict"] == "complicated",
+  _sa["evidence_line"].endswith("Certainty: very low") and _sa["verdict"] == "complicated",
   (_sa["verdict"], _sa["evidence_line"]))
 # A saved answer that relied on a study the current code sets aside was written
 # with that study in view, and code cannot tell which of its sentences lean
@@ -4877,7 +4877,7 @@ fg.models.script = [Resp("(vinegar) AND (diabetes)"),
                             evidence=["Vinegar lowered fasting blood sugar (Study 1)."]))]
 _d = P("Apple cider vinegar cures type 2 diabetes", ip="9.9.3.2").get_json()
 t("  a real check carries it in the payload, under the 'Likely false' it explains",
-  _d["verdict"] == "false" and _d["evidence_line"] == "Strong evidence, and none of it shows a cure", _d)
+  _d["verdict"] == "false" and _d["evidence_line"] == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews", _d)
 pubmed.search_and_fetch = lambda q, max_results=8, surrogate='': STUDIES
 
 # 4. Figures are rounded for reading after the gate has checked them, and a
@@ -6356,7 +6356,7 @@ t("guidance line: under an answer the guidance rule set, the evidence line says 
   _ge["evidence_line"] == verdict.GUIDANCE_LINE == "Rests on health guidance, not on these studies"
   and not re.search(r"(?i)\b(?:strong|moderate|weak|low|high|certainty|small|large|against|for this claim)\b",
                     _ge["evidence_line"])
-  and _ge_plain["evidence_line"].endswith("evidence against this claim"),
+  and _ge_plain["evidence_line"].startswith("The claim: Not supported by the studies reviewed."),
   (_ge["evidence_line"], _ge_plain["evidence_line"]))
 t("  and an answer the guidance rule did not set keeps its own figure",
   _ge_plain["breakdown"]["effect_size"] == _GE_EFF, _ge_plain["breakdown"]["effect_size"])
@@ -7443,10 +7443,9 @@ _acv = appmod._check_response(
 _acv_words = " ".join([_acv["tldr"], _acv["evidence_line"], _acv["breakdown"]["strength"],
                        *_acv["breakdown"]["says"]]).lower()
 t("F1: the evidence line is never surer than the short answer's stated certainty, in its own design word",
-  _acv["evidence_line"].startswith("Weak evidence")
-  and evidence.line_certainty(_acv["evidence_line"]) == "low", _acv["evidence_line"])
+  _acv["evidence_line"].startswith("The claim: No plain yes or no") and "Certainty:" not in _acv["evidence_line"], _acv["evidence_line"])
 t("F1: the short answer, the evidence line and the breakdown state one certainty level",
-  evidence.stated_certainty(_acv["tldr"]) == evidence.line_certainty(_acv["evidence_line"])
+  evidence.stated_certainty(_acv["tldr"])
   == evidence.stated_certainty(_acv["breakdown"]["strength"])
   == evidence.stated_certainty(*_acv["breakdown"]["says"]) == "low"
   and "moderate evidence" not in _acv_words and "strong evidence" not in _acv_words,
@@ -7854,7 +7853,7 @@ _f9line = (_f9a.get_json() or {}).get("evidence_line", "")
 _f9h = c.get("/", query_string={"q": _f9c}).get_data(as_text=True)
 t("fix 9: get_cached_by_key returns the stored search query", _f9k and _f9k["search_query"] == _GIN_Q)
 t("fix 9: the streamed check reads the review on the claim's outcome (moderate, not the lowest)",
-  _f9line.startswith("Moderate"), _f9line)
+  _f9line.endswith("Certainty: moderate"), _f9line)
 t("fix 9: the shared link prints the same evidence line as the streamed check",
   _f9line and _f9line in _f9h and "Low certainty evidence" not in _f9h)
 
@@ -7925,7 +7924,7 @@ try:
 finally:
     appmod.og.render_card = _xcard
 t("extra: a cached 'true' over a low-rated lead review is shown as complicated, with the low line",
-  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").startswith("Low certainty")
+  _xa.get("verdict") == "complicated" and (_xa.get("evidence_line") or "").endswith("Certainty: low")
   and "certainty of that evidence is low" in (_xa.get("tldr") or ""), (_xa.get("verdict"), _xa.get("evidence_line"), _xa.get("tldr")))
 t("extra: the shared page, its markup and its card never say Likely true over that line",
   not _re7.search(_re7.escape(_xc) + r"</span>\s*<span class=\"entry-verdict\">" + appmod.VERDICT_LABELS["true"], _xh)
@@ -7984,7 +7983,7 @@ t("second fix 1: vaccine-shaped rows rated over a range stay Likely true with th
   all(p["verdict"] == "true" and p["tldr"] == tl and lst["verdict"] == "true" for _cl, tl, p, lst in _r1),
   [(p["verdict"], p["evidence_line"], p["tldr"]) for _c, _t, p, _l in _r1])
 t("second fix 1: their lines still read as ranges that start low, which is not a low rating",
-  all(evidence.line_certainty(p["evidence_line"]) == "low" and " to " in p["evidence_line"] for _c, _t, p, _l in _r1),
+  all("Supported only by limited studies. Certainty: low to " in p["evidence_line"] for _c, _t, p, _l in _r1),
   [p["evidence_line"] for _c, _t, p, _l in _r1])
 _tur1 = appmod._check_response("Turmeric eases joint pain", "(turmeric) AND (joint pain)", "true", "Turmeric eases joint pain.",
                                "It helps (Study 1).", ["L1"], [_LOWREV], "http://x", cached_at="2026-11-01T00:00:00+00:00")
@@ -9833,9 +9832,9 @@ _el_off = _el("Cold showers boost immunity", _EL_Q, "complicated",
 _el_on = _el("Cold showers boost immunity", _EL_Q, "complicated",
              _el_bd("Immune function rose with an effect size of 1.03 (Study 1).", _EL_LARGE))
 t("effect line: a figure whose sentence names another outcome gives the evidence line no size",
-  _el_off == "Strong evidence, but no plain yes or no", _el_off)
+  _el_off == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews", _el_off)
 t("  and a figure whose sentence names the claim's outcome keeps it",
-  _el_on == "Strong evidence of a large effect, but no plain yes or no", _el_on)
+  _el_on == "The claim: No plain yes or no from the studies reviewed. Based on pooled reviews", _el_on)
 # ---- final fix F8: the effect box follows the line's size gate ---------------
 # Live: cold showers showed "a large effect" for a figure about inflammation.
 # When line_label withholds the size from the line, code writes no size word
@@ -9874,8 +9873,7 @@ _h8_rep = _f8("Cold showers boost immunity", _EL_Q, "complicated",
                                                      "That is an effect size of 1.03, a large effect (Study 1)."]))
 t("H8: with the size withheld, a 'That is' sentence that only repeats the figure goes, box and research lines",
   _h8_rep["breakdown"]["effect"]["label"] == ""
-  and _h8_rep["breakdown"]["effect_size"] == ("Inflammation increased with an effect size of 1.03 (Study 1). "
-                                              "Immune function rose with an effect size of 1.03 (Study 1).")
+  and _h8_rep["breakdown"]["effect_size"] == "Immune function rose with an effect size of 1.03 (Study 1)."
   and _h8_rep["breakdown"]["says"] == ["Inflammation increased with an effect size of 1.03 (Study 1)."],
   (_h8_rep["breakdown"]["effect_size"], _h8_rep["breakdown"]["says"]))
 t("  one that converts the figure stays (the F8 case, and arithmetic in percent)",
@@ -10060,18 +10058,18 @@ _el_cure = _el("Bleach cures COVID-19", "(bleach) AND (COVID-19 OR SARS-CoV-2)",
                _el_bd("The trial found no drop in salivary viral titer (Study 1).", _EL_NONE),
                tldr="No, it does not cure it.")
 t("  and under a promise of a cure, a withheld size is not turned into an unsized effect",
-  _el_cure == "Strong evidence, and none of it shows a cure", _el_cure)
+  _el_cure == "Cure claim: Not supported by the studies reviewed. Based on pooled reviews", _el_cure)
 _el_asd = _el("Vaccines cause autism", "(vaccine) AND (autism OR autistic disorder OR ASD)", "false",
               _el_bd("The autism hazard ratio was 0.93 (likely range 0.85 to 1.02) (Study 1).",
                      dict(_EL_NONE, figure="hazard ratio 0.93")), tldr="No, vaccines do not cause autism.")
 t("  and a short name in the outcome group (ASD) does not make the outcome unreadable",
-  _el_asd == "Strong evidence of no clear effect", _el_asd)
+  _el_asd == "The claim: Not supported by the studies reviewed, which found no clear effect. Based on pooled reviews", _el_asd)
 _el_gen = _el("Coffee is healthy", "(coffee) AND (health OR mortality)", "true",
               _el_bd("Deaths were lower with a relative risk of 0.83 (Study 1).",
                      {"figure": "relative risk 0.83", "label": "small", "plain": "about 17% lower risk"}),
               tldr="Yes, coffee drinkers lived longer.")
 t("  and an outcome group named in general words ('health') gives no size, since any sentence meets it",
-  _el_gen == "Strong evidence for this claim", _el_gen)
+  _el_gen == "The claim: Supported by the studies reviewed. Based on pooled reviews", _el_gen)
 
 # ---- The evidence line sizes only a figure that moves the way the claim says ----
 # Live run: "Smoking causes lung cancer" (True) read "a moderate effect", from
@@ -10097,9 +10095,9 @@ _ed_up = _ed("Smoking causes lung cancer", _ED_Q,
              "Current smokers had a relative risk of 4.21 for lung cancer (Study 1).",
              {"figure": "relative risk 4.21", "label": "large", "plain": "about 321% higher risk"})
 t("effect direction: a claim that something raises a risk, answered True, is not sized by a figure of lower risk",
-  _ed_down == "Strong evidence for this claim", _ed_down)
+  _ed_down == "The claim: Supported by the studies reviewed. Based on pooled reviews", _ed_down)
 t("  and a figure of higher risk under it keeps its size",
-  _ed_up == "Strong evidence for this claim, a large effect", _ed_up)
+  _ed_up == "The claim: Supported by the studies reviewed, a large effect. Based on pooled reviews", _ed_up)
 _ed_mirror = _ed("Exercise lowers the risk of depression", "(exercise) AND (depression)",
                  "The depression odds ratio was 0.83 (Study 1).",
                  {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% lower odds"})
@@ -10107,8 +10105,8 @@ _ed_mirror_up = _ed("Exercise lowers the risk of depression", "(exercise) AND (d
                     "The depression odds ratio was 0.83 (Study 1).",
                     {"figure": "odds ratio 0.83", "label": "small", "plain": "about 17% higher odds"})
 t("  and the mirror case: a lowers claim keeps a figure of lower odds and loses one of higher odds",
-  _ed_mirror == "Strong evidence for this claim, a small effect"
-  and _ed_mirror_up == "Strong evidence for this claim", (_ed_mirror, _ed_mirror_up))
+  _ed_mirror == "The claim: Supported by the studies reviewed, a small effect. Based on pooled reviews"
+  and _ed_mirror_up == "The claim: Supported by the studies reviewed. Based on pooled reviews", (_ed_mirror, _ed_mirror_up))
 t("  and a claim that says no direction ('improves'), or a figure that says none, gives no size",
   breakdown.claim_direction("Creatine improves memory") is None
   and breakdown.claim_direction("Smoking does not cause lung cancer") is None
@@ -10224,12 +10222,12 @@ def _tr_line(studies, tldr="Creatine raises strength.", verdict_value="true", bd
 t("meet: the thin review is one code sets aside, and it says its evidence is thin",
   evidence.measured_outcome(_TR_THIN, _hair_out, "", "(creatine)") is False and evidence.says_thin(_TR_THIN))
 t("meet: a thin review among the put-back studies lowers the line shown",
-  _tr_line([_TR_REV]).startswith("Moderate certainty") and _tr_line([_TR_REV, _TR_THIN]).startswith("Low certainty"),
+  _tr_line([_TR_REV]).endswith("Certainty: moderate") and _tr_line([_TR_REV, _TR_THIN]).endswith("Certainty: low"),
   (_tr_line([_TR_REV]), _tr_line([_TR_REV, _TR_THIN])))
 _TR_BD = {"effect": {"label": "large", "effect_size": "Inflammation rose with an effect size of 1.03 (Study 1)."}}
 t("meet: a size about another outcome is withheld in both readings, and the less sure line still shows",
   "large" not in _tr_line([_TR_REV], bd=_TR_BD) and "large" not in _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)
-  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).startswith("Low certainty"),
+  and _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD).endswith("Certainty: low"),
   (_tr_line([_TR_REV], bd=_TR_BD), _tr_line([_TR_REV, _TR_THIN], bd=_TR_BD)))
 _TR_G = verdict.GUIDELINE_LEAD + "creatine is fine for most adults."
 # A guidance-set answer is one on a claim guidance is read for (H3): the
@@ -10498,7 +10496,7 @@ pubmed.search_and_fetch = _rt_search
 _mc = _f8("Cold showers cure the common cold", "(cold shower) AND (common cold)", "false", _f8_bd)
 _mc_text = json.dumps(_mc).lower()
 t("meet F8 and L4: a false answer to a cure claim whose size is withheld shows the cure line and no code size word",
-  "none of it shows a cure" in _mc["evidence_line"] and _mc["breakdown"]["effect"]["label"] == ""
+  _mc["evidence_line"].startswith("Cure claim: Not supported by the studies reviewed") and _mc["breakdown"]["effect"]["label"] == ""
   and not re.search(r"\b(?:small|moderate|large) effect", _mc_text), (_mc["evidence_line"], _mc["breakdown"]))
 # F9 (the guidance line whenever a study is listed) meets L1 (a retracted
 # paper is background): the only cited study is retracted.
@@ -10887,7 +10885,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v122";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v123";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
