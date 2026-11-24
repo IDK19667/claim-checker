@@ -311,7 +311,7 @@
     </div></div>
   </section>
 
-  {% macro row(s, i, key, status, named) %}{% set n = i + 1 %}{% set d = design_note(s.publication_types) %}<li class="row" id="row-{{ n }}" data-n="{{ n }}" data-i="{{ i }}"><button class="row-head" type="button" aria-pressed="false" aria-label="Study {{ n }}, {{ d[0] }}: {{ s.title | replace('\n', ' ') | trim('.') }}. Lift its sheet"><span class="num">{{ n }}</span><span class="design">{{ d[0] }}</span><span class="ttl">{{ s.title }}</span></button><div class="body"><p class="src">{% if s.journal %}{{ s.journal }} · {% endif %}{% if s.year %}{{ s.year }} · {% endif %}{% set href = safe_href(s.url) %}{% if href %}<a href="{{ href }}" target="_blank" rel="noopener" aria-label="Study {{ n }} on PubMed, opens in a new tab">PubMed {{ s.pmid }}</a>{% else %}PubMed {{ s.pmid }}{% endif %}</p><button class="row-more" type="button" aria-expanded="false" aria-controls="more-{{ n }}" aria-label="Details for study {{ n }}">Details</button><div class="more" id="more-{{ n }}" hidden><p class="status{% if key != 'relied' %} no{% endif %}">{{ status }}</p>{% if n in named %}<p class="named">The answer names it</p>{% endif %}<p class="note why">{{ study_why(s) }}</p><button type="button" class="row-more study-go" aria-label="Deep dive on study {{ n }}">Deep dive</button></div></div></li>{% endmacro %}
+  {% macro row(s, i, key, status, named) %}{% set n = i + 1 %}{% set d = design_note(s.publication_types) %}<li class="row" id="row-{{ n }}" data-n="{{ n }}" data-i="{{ i }}"><button class="row-head" type="button" aria-pressed="false" aria-label="Study {{ n }}, {{ d[0] }}: {{ s.title | replace('\n', ' ') | trim('.') }}. Lift its sheet"><span class="num">{{ n }}</span><span class="design">{{ d[0] }}</span><span class="ttl">{{ s.title }}</span></button><div class="body"><p class="src">{% if s.journal %}{{ s.journal }} · {% endif %}{% if s.year %}{{ s.year }} · {% endif %}{% set href = safe_href(s.url) %}{% if href %}<a href="{{ href }}" target="_blank" rel="noopener" aria-label="Study {{ n }} on PubMed, opens in a new tab">PubMed {{ s.pmid }}</a>{% else %}PubMed {{ s.pmid }}{% endif %}</p><button class="row-more" type="button" aria-expanded="false" aria-controls="more-{{ n }}" aria-label="Details for study {{ n }}">Details</button><div class="more" id="more-{{ n }}" hidden><p class="status{% if key != 'relied' %} no{% endif %}">{{ status }}</p>{% if n in named %}<p class="named">The answer names it</p>{% endif %}<p class="note why">{{ study_why(s) }}</p>{# Brief E: a review whose reference list names a retracted paper says so. #}{% if s.caution %}<p class="note caution">{{ s.caution }}</p>{% endif %}<button type="button" class="row-more study-go" aria-label="Deep dive on study {{ n }}">Deep dive</button></div></div></li>{% endmacro %}
   {% if result and result.studies %}{% set g = source_groups(result.studies) %}{% set named = desk_named(result) %}
   <section class="stop long" id="s4" data-stop="Weighed" aria-labelledby="h-sort">
     <div class="cap left"><div class="inner wide">
@@ -367,6 +367,8 @@
           {%- endif %}
           <h3>How sure, and why</h3>
           <p class="evline">{% if result.evidence_line %}{{ result.evidence_line | trim('.') }}.{% else %}{{ confidence_line(result) }}{% endif %}</p>
+          {#- Brief E: what the studies found instead, for an absolute claim (evidence.effect_statement). #}
+          {%- if result.effect_line %}<p class="evline effect-line">{{ result.effect_line | trim('.') }}.</p>{% endif %}
           {%- if bv and bv.strength %}<p class="strength">{{ desk_refs(bv.strength, n_st) }}</p>{% endif %}
           {%- if bv and bv.unknowns %}<p class="unknowns">{{ desk_refs(bv.unknowns, n_st) }}</p>{% endif %}
           {%- if bv and bv.concluded %}
@@ -498,13 +500,13 @@
       </ol>
       <h3 class="section-label">Reading the evidence meter</h3>
       <ul class="legend">
-        <li><b>Strong:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
-        <li><b>Moderate:</b> human studies or expert reviews, but no randomized trial behind it.</li>
-        <li><b>Weak:</b> only case reports, letters, or opinion pieces.</li>
+        <li><b>Strong designs:</b> the verdict rests on a meta-analysis, systematic review, or randomized trial.</li>
+        <li><b>Moderate designs:</b> human studies or expert reviews, but no randomized trial behind it.</li>
+        <li><b>Weak designs:</b> only case reports, letters, or opinion pieces.</li>
         <li><b>No direct evidence:</b> nothing found actually tests the claim.</li>
         <li><b>Low certainty:</b> the review behind it rates its own evidence low, or every trial is small or a pilot.</li>
       </ul>
-      <p class="fine">The How sure line says what that evidence shows about the claim itself. Strong evidence of a small effect is not strong evidence for a cure.</p>
+      <p class="fine">The How sure line says whether the studies reviewed support the claim itself, then how sure or what kind of study it rests on. A strong design that finds a small effect is not support for a cure.</p>
       <p class="fine"><a href="/method">The full method, and what Evident cannot do</a></p>
       <p class="fine">Not medical advice. The model can misread an abstract, and PubMed doesn't index everything. Read the studies. Talk to a clinician about your own health.</p>
       <div class="two sheet-actions">

@@ -483,6 +483,8 @@ function studyRowHtml(s, i, key, named) {
     + `<div class="more" id="more-${n}" hidden><p class="status${key !== "relied" ? " no" : ""}">${VERDICT_SETS[key]}</p>`
     + (named.includes(n) ? '<p class="named">The answer names it</p>' : "")
     + `<p class="note why">${escapeHtml(studyWhy(s))}</p>`
+    // Brief E: a review whose reference list names a retracted paper says so.
+    + (s.caution ? `<p class="note caution">${escapeHtml(s.caution)}</p>` : "")
     + `<button type="button" class="row-more study-go" aria-label="Deep dive on study ${n}">Deep dive</button></div></div></li>`;
 }
 
@@ -537,6 +539,8 @@ function researchHtml(data) {
   }
   const ev = String(data.evidence_line || "").replace(/^\.+|\.+$/g, "");
   h += `<h3>How sure, and why</h3><p class="evline">${escapeHtml(data.evidence_line ? ev + "." : confidenceLine(data))}</p>`;
+  // Brief E: what the studies found instead, for an absolute claim (evidence.effect_statement).
+  if (data.effect_line) h += `<p class="evline effect-line">${escapeHtml(String(data.effect_line).replace(/\.+$/, ""))}.</p>`;
   if (bv && bv.strength) h += p("strength", bv.strength);
   if (bv && bv.unknowns) h += p("unknowns", bv.unknowns);
   if (bv && bv.concluded.length) {
