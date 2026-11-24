@@ -24,7 +24,7 @@
  *    Enter takes the reader to the Answer stop with focus on the verdict, in 3D,
  *    in text mode and with scripts off. Every screen has one h1, on both paths.
  * 16. The strip is the banner, the site links a Site navigation, the last stop's
- *    closing lines the footer, and Still open a heading and a region of that name.
+ *    closing lines the footer, and Limitations a heading and a region of that name.
  * 18. The service worker: a returning visit to a held server (10 s) paints the
  *    kept home page within about 3 s and the late answer refreshes the copy; with
  *    a fast server the fresh page arrives; a first visit waits for the network;
@@ -42,10 +42,11 @@
  *    old cache is gone, every shell file is in the new cache under its stamped
  *    address, and offline the home page paints; a kept copy and a server taking
  *    4 s: the copy paints at about 2.5 s and the fresh page is stored.
- * 17. The cue row on top of the bar row: in view, as wide, sizes and contrast, its
- *    words from Next's state, a click moves as Next does, gone at the end; the
- *    chevron dips once and never under reduced motion; in 3D a wheel or a drag from
- *    the Answer lands on Read, and text mode scrolls freely with the words following.
+ * 17. The result screens (q10-nav): every study shows Read abstract and Open
+ *    PubMed at 44px on every width; three ways to move (scrolling, one section
+ *    picker, View evidence) and no cue, Back or Next; scrolling stays where the
+ *    reader leaves it; no screen looks finished when it is not; the answer and the
+ *    section headings come before the scenery; the four section names.
  */
 import { chromium } from "playwright";
 
@@ -173,7 +174,7 @@ await test("the address bar sliding reallocates nothing and uncovers nothing; a 
 // J2: a desktop has no phone keyboard. With the claim box focused on a result, a window dragged shorter
 // (1440x900 to 1440x600) and back keeps the bar at the foot, never sets the keyboard state,
 // and the picture follows the window: the stage is not pinned and the buffer is drawn afresh.
-await test("a desktop window dragged shorter keeps the bar, never sets the keyboard state, and the picture follows the window", async (page) => {
+await test("a desktop window dragged shorter keeps the section picker (the rail), never sets the keyboard state, and the picture follows the window", async (page) => {
   await page.addInitScript(() => { window.__kbdSeen = 0; window.__allocs = 0; document.addEventListener("DOMContentLoaded", () => {
     new MutationObserver(() => { if (document.documentElement.classList.contains("kbd")) window.__kbdSeen++; }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     const c = document.getElementById("gl"); if (c) new MutationObserver((m) => { window.__allocs += m.length; }).observe(c, { attributes: true, attributeFilter: ["width", "height"] }); }); });
@@ -185,7 +186,7 @@ await test("a desktop window dragged shorter keeps the bar, never sets the keybo
   await page.click("#claim-input"); await page.keyboard.type("Does walking lower blood sugar"); await page.waitForTimeout(300);
   const look = () => page.evaluate(() => { const c = document.getElementById("gl"), bar = document.getElementById("bar"), bs = getComputedStyle(bar), st = document.getElementById("stage");
     return { mode: window.__evident.stats().mode, f: document.activeElement && document.activeElement.id, kbd: document.documentElement.classList.contains("kbd"), seen: window.__kbdSeen,
-      bar: bs.display !== "none" && bs.visibility !== "hidden" && bar.getBoundingClientRect().height > 0, pinned: st.style.height,
+      bar: (bs.display !== "none" && bs.visibility !== "hidden" && bar.getBoundingClientRect().height > 0) || (getComputedStyle(document.getElementById("rail")).display !== "none" && document.getElementById("rail").getBoundingClientRect().height > 0), pinned: st.style.height,
       buf: c.width + "x" + c.height, allocs: window.__allocs, stageH: Math.round(st.getBoundingClientRect().height), bottom: Math.round(c.getBoundingClientRect().bottom), vh: innerHeight }; });
   const a = await look();
   must(a.mode === "3d" && a.f === "claim-input" && a.bar, `at the start: mode ${a.mode}, focus #${a.f}, bar shown ${a.bar}`);
@@ -438,126 +439,310 @@ await test("every screen has one h1 on both paths: home, a saved, fresh and no-s
 });
 // ---- 16. The landmarks -------------------------------------------------------------------------
 for (const way of ["saved", "fresh"]) {
-  await test(`the landmarks on a ${way} result: one banner with the notice, Site navigation, one footer, Still open as heading and region`, async (page) => {
+  await test(`the landmarks on a ${way} result: one banner with the notice, Site navigation, one footer, Limitations as heading and region`, async (page) => {
     if (way === "saved") { await page.goto(base + "/?q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page); }
     else { await page.goto(base + "/", { waitUntil: "load" }); await ready(page); await send(page, LIVE);
       await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(500); }
     const banner = page.getByRole("banner");
     const n = { banner: await banner.count(), nav: await page.getByRole("navigation", { name: "Site", exact: true }).count(),
-      foot: await page.getByRole("contentinfo").count(), region: await page.getByRole("region", { name: "Still open", exact: true }).count(),
-      heading: await page.getByRole("heading", { name: "Still open", exact: true }).count() };
+      foot: await page.getByRole("contentinfo").count(), region: await page.getByRole("region", { name: "Limitations", exact: true }).count(),
+      heading: await page.getByRole("heading", { name: "Limitations", exact: true }).count() };
     const notice = n.banner === 1 && /Not medical advice/.test(await banner.innerText());
     must(notice && n.nav >= 1 && n.foot === 1 && n.region === 1 && n.heading === 1, JSON.stringify({ ...n, notice }));
   });
 }
 
-// ---- 17. The cue row: the bottom block's top row says to scroll ----------------------------------
-// On a result the bottom controls are two rows: the cue row (one wide button) on top of the bar row.
-// At every size, in 3D and text mode: the cue row is in the viewport, directly on top of the bar row
-// and as wide as it; 44 px tall or more (48 on phones), words 16 px or more at 7:1 or more, a focus
-// ring; out of the tab order and not read (Next, first in the bar, names the same place). Its words
-// come from the same state as Next's: the next stop by name ("Scroll down: what was read"), what is
-// left of a long stop with the same count ("Scroll down: 11 more studies"), and at the end of the
-// last stop it is gone and the block is one row. Stop 2 still sits above the block wherever it did
-// before the cue (the dim "Below:" sentence is gone). A click moves exactly as Next does.
-const cueLook = (page) => page.evaluate(() => {
-  const r = (id) => document.getElementById(id).getBoundingClientRect(), cue = document.getElementById("cue"), c = r("cue"), p = r("prev"), n = r("next"), b = r("bar");
-  const bg = (e) => { for (let x = e; x; x = x.parentElement) { const v = getComputedStyle(x).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(v)) return v; } return "rgb(0, 0, 0)"; };
-  const lab = document.getElementById("cue-label"), cs = getComputedStyle(lab);
-  return { hidden: cue.hidden || getComputedStyle(cue).display === "none", words: lab.textContent, next: document.getElementById("next").getAttribute("aria-label") || document.getElementById("next-label").textContent, vis: document.getElementById("next-label").textContent,
-    stop: window.__evident.stats().stop, c: { t: c.top, b: c.bottom, l: c.left, r: c.right, h: c.height }, row: { t: Math.min(p.top, n.top), l: p.left, r: n.right },
-    bar: { t: b.top, h: b.height, l: b.left, r: b.right }, vh: innerHeight, vw: innerWidth, size: parseFloat(cs.fontSize), fg: cs.color, bg: bg(lab),
-    ariaHidden: cue.getAttribute("aria-hidden"), tab: cue.tabIndex, svg: cue.querySelector("svg").getBoundingClientRect().width,
-    one: document.documentElement.classList.contains("has-cue") };
-});
-const cueFor = (next, stop) => {
-  const m = next.match(/^Keep reading(?:: (\d+) more)?/);
-  if (m) return "Scroll down: " + (m[1] ? m[1] + " more " + (m[1] === "1" ? "study" : "studies") : "more of this part");
-  if (stop === 1) return "Scroll down: your answer";
-  return next.replace(/^Next: /, "Scroll down: ");
+// ---- 17. q10-nav: the result screens. Source buttons, three ways to move, content before scenery, plain names ----
+// Replaces the cue row checks (cue in view and as wide, Next drawn as Back beside it, the chevron's dip, a wheel or a
+// drag from the Answer landing on Read, the text-mode cue landing on the next stop):
+//   N2a  no cue, no Back, no Next, no "Keep reading", no "Back to the short answer"; the phone bar is one row with the
+//        picker alone, 56 px at most; on a wide screen no bar and the rail is the picker   (was: the cue row and Next)
+//   N2b  nothing animates on its own after an answer lands                                   (was: the chevron dips)
+//   N2c  a wheel or a touch drag leaves the page where the reader put it, in 3D and text    (was: lands on Read)
+//   N2d  the picker names the section in view, lists the four and Check another claim, works by keyboard (was: the cue click)
+const NAV_SIZES = [[375, 812], [375, 667], [320, 568], [1280, 800]];
+const SECTIONS = ["Answer", "Studies", "Explanation", "Limitations"];
+const openSaved = async (page, w, mode, claim = SAVED[0]) => {
+  await page.goto(`${base}/?${mode === "text" ? "nogl=1&" : ""}q=${encodeURIComponent(claim)}`, { waitUntil: "load" }); await ready(page);
+  await page.waitForTimeout(800);
 };
-const FITS2 = new Set(["390x844 3d", "390x844 text", "768x1024 3d", "768x1024 text", "1440x900 3d", "1440x900 text", "1440x700 3d"]);
-for (const [w, h] of [[320, 568], [390, 844], [768, 1024], [1440, 900], [1440, 700]]) {
-  for (const mode of ["3d", "text"]) {
-    await test(`the cue row sits on the bar row, as wide below 761px and centred at 480px above, says what Next says and moves as Next does, ${w}x${h} ${mode}`, async (page) => {
-      const wait = mode === "3d" ? 3500 : 1500;
-      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}${mode === "text" ? "&nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
-      must((await page.evaluate(() => window.__evident.stats().mode)) === mode, "wrong mode");
-      await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(wait);
-      const s = await cueLook(page);
-      must(!s.hidden && s.one, "no cue row on the Answer stop");
-      must(s.c.t >= 0 && s.c.b <= s.vh && s.c.t >= s.bar.t - 0.5, `the cue row is not inside the block in view: ${Math.round(s.c.t)}..${Math.round(s.c.b)}, block top ${Math.round(s.bar.t)}`);
-      must(s.c.b <= s.row.t && s.row.t - s.c.b <= 12, `the cue row is not directly on top of the bar row (${Math.round(s.c.b)} vs ${Math.round(s.row.t)})`);
-      // at 760 wide and below the cue is as wide as the bar row; above, a button no wider than 480px, centred in the block
-      if (w <= 760) must(Math.abs(s.c.l - s.row.l) < 1 && Math.abs(s.c.r - s.row.r) < 1, `the cue row is ${Math.round(s.c.l)}..${Math.round(s.c.r)}, the bar row ${Math.round(s.row.l)}..${Math.round(s.row.r)}`);
-      else must(s.c.r - s.c.l <= 480.5 && Math.abs((s.c.l - s.bar.l) - (s.bar.r - s.c.r)) <= 1, `the cue is ${Math.round(s.c.l)}..${Math.round(s.c.r)} (${Math.round(s.c.r - s.c.l)} wide) in a block ${Math.round(s.bar.l)}..${Math.round(s.bar.r)}`);
-      must(s.c.h >= (w <= 760 ? 48 : 44) - 0.5 && s.size >= 16 && s.svg >= 20, `height ${s.c.h}, words ${s.size}px, chevron ${s.svg}px`);
-      must(ratio([s.fg, s.bg]) >= 7, `the cue's words read at ${ratio([s.fg, s.bg]).toFixed(2)}:1`);
-      must(s.ariaHidden === "true" && s.tab === -1, `the cue is read or tabbed to (aria-hidden ${s.ariaHidden}, tabIndex ${s.tab})`);
-      const ring = await page.evaluate(() => { const c = document.getElementById("cue"); c.focus({ focusVisible: true }); const o = getComputedStyle(c); const r = [o.outlineStyle, parseFloat(o.outlineWidth)]; c.blur(); return r; });
-      must(ring[0] !== "none" && ring[1] >= 2, `no focus ring (${ring.join(" ")})`);
-      must(s.words === cueFor(s.next, 2), `on the Answer the cue says "${s.words}", Next says "${s.next}"`);
-      must(FITS2.has(`${w}x${h} ${mode}`) ? /^Next: /.test(s.next) : true, `the Answer stop no longer fits above the block: Next says "${s.next}"`);
-      must(!(await page.evaluate(() => !!document.getElementById("below"))), "the dim Below: line is still there");
-      // a click moves as Next does: where Next keeps reading, further down the Answer; where it names Read, onto Read
-      let a = s;
-      for (let i = 0; i < 6 && a.stop === 2; i++) {
-        const keep = /^Keep reading/.test(a.next), y0 = await page.evaluate(() => scrollY);
-        await page.click("#cue"); await page.waitForTimeout(wait + 500);
-        const was = a; a = await cueLook(page); const y1 = await page.evaluate(() => scrollY);
-        must(keep ? a.stop === 2 && y1 > y0 : a.stop === 3, `a click with Next saying "${was.next}" went to stop ${a.stop} (${y0} to ${y1})`);
-        must(a.words === cueFor(a.next, a.stop), `after a click: stop ${a.stop}, cue "${a.words}", Next "${a.next}"`);
-      }
-      must(a.stop === 3, `the cue never reached the Read stop (stop ${a.stop})`);
-      must(await page.evaluate(() => document.activeElement.id !== "cue"), "a click left focus on the cue");
-      // Weighed at its top: more of the same stop, with the bar's count
-      await page.evaluate(() => window.__evident.goto(4)); await page.waitForTimeout(wait);
-      const k = await cueLook(page);
-      must(/^Keep reading/.test(k.next) && k.words === cueFor(k.next, 4) && !k.hidden, `on Weighed the cue says "${k.words}", Next says "${k.next}"`);
-      const y4 = await page.evaluate(() => scrollY);
-      await page.click("#cue"); await page.waitForTimeout(wait + 500);
-      const k2 = await cueLook(page), y5 = await page.evaluate(() => scrollY);
-      must(k2.stop === 4 && y5 > y4, `the cue on Weighed did not keep reading inside it (stop ${k2.stop}, ${y4} to ${y5})`);
-      // the end of the last stop: no cue, one row
-      await page.evaluate(() => window.__evident.goto(6)); await page.waitForTimeout(wait);
-      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })); await page.waitForTimeout(1500);
-      const e = await cueLook(page);
-      must(e.hidden && !e.one && e.next === "Back to the start" && e.bar.h < 90, `at the end: cue hidden ${e.hidden}, Next "${e.next}", block ${Math.round(e.bar.h)} px`);
-    }, { w, h });
-  }
+// the y each section starts at (the first stop it holds), and a jump there through the picker's own path
+const secTop = (page, name) => page.evaluate((name) => {
+  const map = { Answer: "s2", Studies: "s3", Explanation: "s5", Limitations: "s6" }, s = document.getElementById(map[name]);
+  return s ? Math.round(s.getBoundingClientRect().top + scrollY) : null;
+}, name);
+const pick = async (page, w, name) => {
+  if (w > 760) { await page.click(`#rail button[aria-label="Go to ${name}"]`); }
+  else { await page.click("#where"); await page.click(`#menu button:text-is("${name}")`); }
+  await page.waitForTimeout(2600);
+};
+// N1: every study's two actions, on every width, in 3D and text mode
+for (const [w, h] of [[320, 568], [375, 812], [1280, 800]]) for (const mode of ["3d", "text"]) {
+  await test(`N1: every study shows Read abstract and Open PubMed, 44px or more, and the abstract opens in place in one press, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    await page.evaluate(() => document.querySelectorAll(".grp-btn[aria-expanded=false]").forEach((b) => b.click()));
+    await page.waitForTimeout(300);
+    const rows = await page.evaluate(() => [...document.querySelectorAll("#rows .row")].map((r) => {
+      const a = r.querySelector(".abs > summary"), no = r.querySelector(".noabs"), p = r.querySelector("a.pm"), box = (e) => e && e.getBoundingClientRect();
+      const vis = (e) => !!e && e.checkVisibility() && box(e).height > 0;
+      return { n: r.dataset.n, abs: vis(a) ? box(a).height : 0, absText: a ? a.textContent : "", no: vis(no), pm: vis(p) ? box(p).height : 0, pmText: p ? p.textContent : "",
+        target: p && p.target, rel: p && p.rel, details: !!r.querySelector(".row-more:not(.study-go)") };
+    }));
+    must(rows.length >= 10, `only ${rows.length} rows`);
+    const bad = rows.filter((r) => !((r.abs >= 44 && /^Read abstract/.test(r.absText)) || r.no) || r.pm < 44 || r.target !== "_blank" || !/noopener/.test(r.rel) || !/opens in a new tab/.test(r.pmText) || r.details);
+    must(!bad.length, `rows without both actions at 44px: ${JSON.stringify(bad.slice(0, 2))}`);
+    must(await page.evaluate(() => !/\bDetails\b/.test(document.body.innerText) && !/lift its sheet/i.test(document.body.innerText)), "a visible Details or lift instruction");
+    // one press opens the abstract inside the row; the summary then says Hide abstract; a second press closes it
+    await page.evaluate(() => document.querySelector("#abs-1 > summary").scrollIntoView({ block: "center" })); await page.waitForTimeout(400);
+    await page.click("#abs-1 > summary"); await page.waitForTimeout(300);
+    const o = await page.evaluate(() => { const d = document.getElementById("abs-1"), t = d.querySelector(".abs-text"), g = d.querySelector(".study-go");
+      return { open: d.open, said: d.querySelector("summary").innerText.trim(), text: t.checkVisibility() && t.getBoundingClientRect().height > 20, inRow: d.closest(".row").id, go: g.checkVisibility() && g.getBoundingClientRect().height >= 20, sheet: !!document.querySelector("dialog.sheet[open]") }; });
+    must(o.open && o.said.startsWith("Hide abstract") && o.text && o.inRow === "row-1" && o.go && !o.sheet, `after one press: ${JSON.stringify(o)}`);
+    await page.click("#abs-1 > summary"); await page.waitForTimeout(200);
+    must(await page.evaluate(() => !document.getElementById("abs-1").open), "a second press did not close the abstract");
+  }, { w, h });
 }
-// Next beside the cue is the quiet partner: drawn as Back (border, ground, words), the bare verb on screen
-// ("Next" or "Keep reading") and its full words as its name, so the cue is the one paper-filled control.
-// At the end of the last stop, with no cue, Next has the paper fill again
-const nextLook = (page) => page.evaluate(() => {
-  const st = (id) => { const o = getComputedStyle(document.getElementById(id)); return { bg: o.backgroundColor, bd: o.borderTopColor + " " + o.borderTopWidth + " " + o.borderTopStyle, fg: o.color }; };
-  const n = document.getElementById("next");
-  return { n: st("next"), p: st("prev"), vis: document.getElementById("next-label").textContent, aria: n.getAttribute("aria-label"),
-    words: document.getElementById("cue-label").textContent, stop: window.__evident.stats().stop, cue: !document.getElementById("cue").hidden, paper: getComputedStyle(document.documentElement).getPropertyValue("--paper").trim() };
-});
-for (const [w, h] of [[390, 844], [1440, 900]]) {
-  for (const mode of ["3d", "text"]) {
-    await test(`beside the cue Next is drawn as Back with the bare verb and its full name, ${w}x${h} ${mode}`, async (page) => {
-      const wait = mode === "3d" ? 3500 : 1500;
-      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}${mode === "text" ? "&nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
-      for (const k of [2, 4]) {
-        await page.evaluate((n) => window.__evident.goto(n), k); await page.waitForTimeout(wait);
-        const s = await nextLook(page);
-        must(s.cue, `no cue on stop ${k}`);
-        must(s.n.bg === s.p.bg && s.n.bd === s.p.bd && s.n.fg === s.p.fg, `on stop ${k} Next is ${JSON.stringify(s.n)}, Back ${JSON.stringify(s.p)}`);
-        must(s.vis === "Next" || s.vis === "Keep reading", `on stop ${k} Next shows "${s.vis}"`);
-        must(!!s.aria && s.aria.startsWith(s.vis) && s.aria.length > s.vis.length, `on stop ${k} Next's name is "${s.aria}", showing "${s.vis}"`);
-        must(s.words === cueFor(s.aria, k), `on stop ${k} the cue says "${s.words}", Next's name "${s.aria}"`);
-        const bgOf = await page.evaluate(() => { for (let x = document.getElementById("next"); x; x = x.parentElement) { const v = getComputedStyle(x).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(v)) return v; } return "rgb(0, 0, 0)"; });
-        must(ratio([s.n.fg, bgOf]) >= 4.5, `the quiet Next reads at ${ratio([s.n.fg, bgOf]).toFixed(2)}:1`);
+// N2a and N2b: the controls left on a result, and nothing moving on its own
+for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
+  await test(`N2a: three ways to move and no others: no cue, Back or Next, one picker, ${w}x${h} ${mode}`, async (page) => {
+    await page.addInitScript(() => { window.__anims = 0; document.addEventListener("animationstart", () => window.__anims++, true); });
+    await openSaved(page, w, mode);
+    const s = await page.evaluate(() => {
+      const shown = (e) => !!e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().height > 0;
+      const bar = document.getElementById("bar"), r = bar.getBoundingClientRect(), txt = document.body.innerText;
+      return { gone: ["cue", "next", "prev"].filter((id) => document.getElementById(id)), words: ["Scroll down", "Keep reading", "Back to the short answer", "See how we got this answer"].filter((x) => txt.includes(x)),
+        bar: shown(bar), barH: Math.round(r.height), barKids: [...bar.children].filter(shown).map((e) => e.id), rail: shown(document.getElementById("rail")),
+        railNames: [...document.querySelectorAll("#rail button span")].map((e) => e.textContent), answerBtns: [...document.querySelectorAll("#s2 button")].filter(shown).map((b) => b.id || b.textContent.trim()),
+        again: [...document.querySelectorAll("[data-again]")].filter(shown).length };
+    });
+    must(!s.gone.length && !s.words.length, `still there: ${s.gone.concat(s.words).join(", ")}`);
+    if (w <= 760) must(s.bar && s.barH <= 56 && s.barKids.join() === "where" && !s.rail, `the phone bar: shown ${s.bar}, ${s.barH} px, holds ${s.barKids.join()}, rail ${s.rail}`);
+    else must(!s.bar && s.rail && s.railNames.join() === SECTIONS.concat("Check another claim").join(), `wide: bar ${s.bar}, rail ${s.rail}: ${s.railNames.join(", ")}`);
+    must(s.answerBtns.filter((x) => x !== "meter").join() === "how-answer" && s.again === 1, `on the Answer: ${s.answerBtns.join(", ")}; Check another claim shown ${s.again} times`);
+    must(await page.evaluate(() => document.getElementById("how-answer").textContent.trim() === "View evidence"), "the Answer's button is not View evidence");
+    await page.waitForTimeout(4000);
+    must((await page.evaluate(() => window.__anims)) === 0, "something animated on its own after the answer landed");
+  }, { w, h });
+}
+// N2c: scrolling is native and stays where the reader leaves it
+for (const [w, h] of [[375, 812], [1280, 800]]) for (const mode of ["3d", "text"]) for (const how of ["wheel", "touch"]) {
+  await test(`N2c: a ${how} from the Answer moves the page and it stays there, no snap to a stop, ${w}x${h} ${mode}`, async (page, ctx) => {
+    await openSaved(page, w, mode);
+    const y0 = await page.evaluate(() => scrollY);
+    if (how === "wheel") { await page.mouse.move(w / 2, h / 2); await page.mouse.wheel(0, 140); }
+    else { const c = await ctx.newCDPSession(page); await c.send("Input.synthesizeScrollGesture", { x: Math.round(w / 2), y: Math.round(h / 2), yDistance: -140, gestureSourceType: "touch", speed: 800 }); }
+    await page.waitForTimeout(700); const y1 = await page.evaluate(() => scrollY);
+    await page.waitForTimeout(2500); const y2 = await page.evaluate(() => scrollY);
+    must(y1 - y0 > 60 && y1 - y0 < 260 && Math.abs(y2 - y1) < 1, `scrollY ${y0} then ${y1} then ${y2}`);
+  }, { w, h, touch: how === "touch" });
+}
+// N2d: the picker names where the reader is, lists the four sections, and moves by keyboard
+for (const [w, h] of [[375, 812], [1280, 800]]) {
+  await test(`N2d: the section picker names the section in view and goes to each one, ${w}x${h}`, async (page) => {
+    await openSaved(page, w, "3d");
+    const named = () => page.evaluate((wide) => wide ? (document.querySelector("#rail button[aria-current] span") || {}).textContent : document.getElementById("where-name").textContent, w > 760);
+    must((await named()) === "Answer", `at the start the picker says ${await named()}`);
+    if (w <= 760) {
+      must(/^Sections\. You are in Answer/.test(await page.getAttribute("#where", "aria-label")), "the picker does not name itself");
+      await page.focus("#where"); await page.keyboard.press("Enter"); await page.waitForTimeout(200);
+      const list = await page.evaluate(() => [...document.querySelectorAll("#menu > button")].map((b) => b.textContent));
+      must(list.join() === SECTIONS.concat("Check another claim").join(), `the list: ${list.join(", ")}`);
+      must(await page.evaluate(() => document.activeElement.textContent === "Answer"), "focus is not on the current section");
+      await page.keyboard.press("ArrowDown").catch(() => {}); await page.keyboard.press("Tab"); await page.keyboard.press("Enter"); await page.waitForTimeout(2600);
+      must((await named()) === "Studies", `Tab and Enter in the list went to ${await named()}`);
+    }
+    for (const name of ["Explanation", "Limitations", "Studies", "Answer"]) {
+      await pick(page, w, name);
+      const y = await page.evaluate(() => Math.round(scrollY)), top = await secTop(page, name), max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      must(Math.abs(y - Math.min(top, max)) <= 2 && (await named()) === name, `picked ${name}: scrollY ${y}, its top ${top}, picker says ${await named()}`);
+    }
+  }, { w, h });
+}
+// N2e: View evidence goes to Studies
+await test("N2e: View evidence on the Answer goes to Studies", async (page) => {
+  await openSaved(page, 375, "3d");
+  await page.click("#how-answer"); await page.waitForTimeout(2600);
+  // (brief N3: the landing may sit a little past the stop's top so the foot crosses words; the heading stays whole under the strip)
+  const y = await page.evaluate(() => Math.round(scrollY)), top = await secTop(page, "Studies");
+  const hd = await page.evaluate(() => { const q = document.getElementById("e-read").getBoundingClientRect(); return { t: q.top, b: q.bottom, s: document.getElementById("strip").getBoundingClientRect().bottom, vh: innerHeight }; });
+  must(Math.abs(y - top) <= hd.vh / 3 && hd.t >= hd.s - 1 && hd.b <= hd.vh && (await page.textContent("#where-name")) === "Studies", `scrollY ${y}, Studies at ${top}, heading ${Math.round(hd.t)} under the strip at ${Math.round(hd.s)}`);
+}, { w: 375, h: 812 });
+// N2f and N3: at every place the picker or View evidence lands, the next words are cut by the foot of the screen (or
+// the bar), or the end of the page is in view; and the words come before the scenery
+// (brief N3: eight sizes, and each section is reached through the picker or the rail itself, so the check sees where a
+// jump really ends, landShift in desk.js included; the Studies heading stays whole under the strip)
+const NAV_GRID = [[320, 568], [360, 640], [375, 667], [375, 812], [390, 844], [412, 915], [1280, 800], [1440, 900]];
+const landVia = async (page, w, name) => {
+  if (w > 760) await page.click(`#rail button[aria-label="Go to ${name}"]`);
+  else { await page.click("#where"); await page.click(`#menu button:text-is("${name}")`); }
+  let last = -1, same = 0;
+  for (let i = 0; i < 60 && same < 4; i++) { await page.waitForTimeout(150); const y = await page.evaluate(() => Math.round(scrollY)); same = y === last ? same + 1 : 0; last = y; }
+  await page.waitForTimeout(300);
+};
+for (const [w, h] of NAV_GRID) for (const mode of ["3d", "text"]) {
+  await test(`N2f/N3: no screen looks finished when it is not, and the words come first, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    const look = () => page.evaluate(() => {
+      const bar = document.getElementById("bar"), bt = getComputedStyle(bar).display !== "none" && bar.getBoundingClientRect().height ? bar.getBoundingClientRect().top : innerHeight;
+      const end = scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
+      // a line of text that starts above the foot and runs past it, or starts inside the last 40% and has more below
+      let cut = false, below = false;
+      const w = document.createTreeWalker(document.getElementById("track"), NodeFilter.SHOW_TEXT); let t;
+      const rg = document.createRange();
+      while ((t = w.nextNode())) {
+        if (!t.data.trim()) continue; const el = t.parentElement; if (!el || !el.checkVisibility({ visibilityProperty: true }) || el.closest("#vcard,#short-label,details:not([open]) > :not(summary)")) continue;
+        // a line the foot crosses, or one run of words with lines both above the foot and below it (the foot in the space between two of its lines)
+        rg.selectNodeContents(t); let above = false, under = false;
+        for (const q of rg.getClientRects()) { if (q.height < 2) continue; if (q.top < bt - 4 && q.bottom > bt) cut = true; if (q.top < bt - 4) above = true; if (q.bottom > bt) under = true; if (q.top >= bt) below = true; }
+        if (above && under) cut = true;
       }
-      await page.evaluate(() => window.__evident.goto(6)); await page.waitForTimeout(wait);
-      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })); await page.waitForTimeout(1500);
-      const e = await nextLook(page);
-      const paperRgb = await page.evaluate(() => { const d = document.createElement("div"); d.style.background = "var(--paper)"; document.body.appendChild(d); const v = getComputedStyle(d).backgroundColor; d.remove(); return v; });
-      must(!e.cue && e.vis === "Back to the start" && e.n.bg === paperRgb && e.n.bg !== e.p.bg, `at the end Next shows "${e.vis}" on ${e.n.bg} (paper ${paperRgb})`);
-    }, { w, h });
+      // a control the foot crosses is cut too (brief N2, step 2: "a line of text or a control")
+      for (const c of document.querySelectorAll("#track button, #track a")) { const q = c.getBoundingClientRect(); if (c.checkVisibility() && q.height && q.top < bt - 1 && q.bottom > bt + 1) cut = true; }
+      // and so is a drawn panel (3D: a dark block over the desk) whose box runs on past the foot
+      for (const c of document.querySelectorAll("#track .stop .inner")) { const q = c.getBoundingClientRect(), bg = getComputedStyle(c).backgroundColor; if (c.checkVisibility() && q.top < bt - 24 && q.bottom > bt + 1 && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") cut = true; }
+      // on the Answer the Studies heading wholly above the foot also says there is more (brief N2, step 2)
+      const st = document.getElementById("e-read").getBoundingClientRect(), studies = st.height > 0 && st.top >= 0 && st.bottom <= bt;
+      return { end, cut, below, studies, bt: Math.round(bt), y: Math.round(scrollY) };
+    });
+    const bad = [];
+    for (const name of SECTIONS) {
+      const top = await secTop(page, name); if (top === null) continue;
+      await landVia(page, w, name);
+      const s = await look();
+      // anything still below must show itself at the foot: a line cut by it
+      if (!s.end && !s.cut && !(name === "Answer" && s.studies)) bad.push(`${name} at ${s.y}: nothing cut at the foot (${s.bt})`);
+      // and the section's own heading is whole under the strip
+      const hd = await page.evaluate((n) => { const m = { Answer: null, Studies: "#s3 .eyebrow", Explanation: "#s5 .eyebrow", Limitations: "#h-open" }[n]; const e = m && document.querySelector(m); if (!e) return null;
+        const q = e.getBoundingClientRect(); return { t: Math.round(q.top), b: Math.round(q.bottom), s: Math.round(document.getElementById("strip").getBoundingClientRect().bottom) }; }, name);
+      if (hd && (hd.t < hd.s - 1 || hd.b > s.bt)) bad.push(`${name}: heading at ${hd.t}..${hd.b}, strip ${hd.s}, foot ${s.bt}`);
+    }
+    must(!bad.length, bad.join("; "));
+    // N3 keeps the four sizes it was written for (NAV_SIZES); the grid above is N2f's
+    if (!NAV_SIZES.some(([a, b]) => a === w && b === h)) return;
+    // N3: the desktop answer starts near the top with how sure fully in view; on a phone each later section's heading
+    // starts in the top 28% of the screen with six lines of words under it on that screen
+    await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), await secTop(page, "Answer")); await page.waitForTimeout(mode === "3d" ? 3500 : 900);
+    if (w > 760) {
+      const a = await page.evaluate(() => { const c = document.getElementById(document.documentElement.classList.contains("has-gl") ? "vcard" : "vcard").getBoundingClientRect(), s = document.getElementById("confidence").getBoundingClientRect(); return { card: Math.round(c.top), st: Math.round(s.top), sb: Math.round(s.bottom), vh: innerHeight }; });
+      must(a.card <= 120 && a.st >= 0 && a.sb <= a.vh, `the answer card starts at ${a.card}, how sure at ${a.st}..${a.sb}`);
+    } else {
+      const far = [];
+      for (const [name, sel] of [["Studies", "#s3 .eyebrow"], ["Explanation", "#s5 .eyebrow"], ["Limitations", "#h-open"]]) {
+        const top = await secTop(page, name); if (top === null) continue;
+        await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), top); await page.waitForTimeout(900);
+        const r = await page.evaluate((sel) => { const e = document.querySelector(sel), q = e.getBoundingClientRect(), bar = document.getElementById("bar").getBoundingClientRect().top;
+          // Studies runs over two stops (what was read, then the list), so the lines are counted on the screen, not in one stop
+          const rg = document.createRange(), lines = new Set(); const tw = document.createTreeWalker(document.getElementById("track"), NodeFilter.SHOW_TEXT); let t;
+          while ((t = tw.nextNode())) { if (!t.data.trim() || !t.parentElement.checkVisibility()) continue; rg.selectNodeContents(t); for (const b of rg.getClientRects()) if (b.top > q.bottom && b.bottom < bar && b.height > 8) lines.add(Math.round(b.top)); }
+          return { top: Math.round(q.top), lines: lines.size, vh: innerHeight }; }, sel);
+        if (r.top > r.vh * 0.28 || r.lines < 6) far.push(`${name}: heading at ${r.top} of ${r.vh}, ${r.lines} lines under it`);
+      }
+      must(!far.length, far.join("; "));
+    }
+  }, { w, h });
+}
+// N5 (the review of the drafts): (a) on the Answer's first screen the Studies heading is readable above the footer or
+// the fold, so the Answer never looks finished; (b) on a wide screen no rail label crosses a text panel at any section,
+// and the how-sure panel starts level with the card; (c) with an abstract open, Open PubMed stays beside Hide abstract
+// and the abstract opens below them.
+// N5a (brief N2, step 2; replaces "the Studies heading shows on the Answer's first screen" at 375x812, 1280 and 1440):
+// at rest on the Answer, every line of the card's words is whole (nothing covers or clips it); the screen visibly goes
+// on (the Studies heading whole above the foot, or the foot's top edge crossing a line or a control of the Answer);
+// and View evidence is in view where both fit. Eight sizes, both modes, a short claim and a 140-character one.
+const LONG = "Drinking two cups of green tea every morning lowers blood pressure and protects the heart in adults over sixty who also have type 2 diabetes";
+const answerAtRest = () => {
+  const R = (e) => e.getBoundingClientRect(), bar = document.getElementById("bar");
+  const foot = getComputedStyle(bar).display !== "none" && R(bar).height ? R(bar).top : innerHeight;
+  const stripB = R(document.getElementById("strip")).bottom, panel = R(document.querySelector("#cap-answer .inner")), card = document.getElementById("vcard"), cb = R(card);
+  const lines = (n) => { const o = [], w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT), rg = document.createRange(); let t, cur = null;
+    while ((t = w.nextNode())) { const re = /\S+/g; let m; while ((m = re.exec(t.data))) { rg.setStart(t, m.index); rg.setEnd(t, m.index + m[0].length); const q = rg.getClientRects()[0]; if (!q || !q.width) continue;
+      if (!cur || Math.abs(q.top - cur.top) > 2) { cur = { top: q.top, bottom: q.bottom, left: q.left, right: q.right, el: t.parentElement }; o.push(cur); } else { cur.right = Math.max(cur.right, q.right); cur.bottom = Math.max(cur.bottom, q.bottom); } } }
+    return o; };
+  const hit = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5, bad = [];
+  for (const sel of [".q", ".v", ".t"]) {
+    const el = card.querySelector(sel), eb = R(el), clamped = parseInt(getComputedStyle(el).webkitLineClamp, 10) > 0;
+    for (const L of lines(el)) {
+      if (clamped && L.top >= eb.bottom - 1) continue;   // past a clamp's ellipsis: not drawn
+      const why = [];
+      if (L.top < stripB - 0.5) why.push("under the strip"); if (L.bottom > foot + 0.5) why.push("past the foot");
+      if (L.top < cb.top - 0.5 || L.bottom > cb.bottom + 0.5 || L.left < cb.left - 0.5 || L.right > cb.right + 0.5) why.push("outside the card");
+      if (clamped && L.bottom > eb.bottom + 0.5) why.push("cut by its clamp"); if (hit(L, panel)) why.push("under how sure");
+      if (why.length) bad.push(`${sel} line at ${Math.round(L.top)}: ${why.join(", ")}`);
+    }
   }
+  if (document.documentElement.classList.contains("has-gl") && +getComputedStyle(card).opacity < 0.99) bad.push("the card's words are not shown");
+  const crossed = [];
+  for (const el of document.querySelectorAll("#s2 button, #s2 a, #s2 p, #s2 h1, #s2 h2")) {
+    if (!el.checkVisibility() || card.contains(el)) continue;
+    if (el.matches("button, a")) { const b = R(el); if (b.top < foot - 1 && b.bottom > foot + 1) crossed.push(el.textContent.trim().slice(0, 24)); continue; }
+    for (const L of lines(el)) if (L.el === el && L.top < foot - 1 && L.bottom > foot + 1) crossed.push(el.textContent.trim().slice(0, 24));
+  }
+  const st = R(document.getElementById("e-read")), ve = R(document.getElementById("how-answer"));
+  return { bad, crossed, studies: st.height > 0 && st.top >= stripB - 0.5 && st.bottom <= foot + 0.5, view: ve.height > 0 && ve.top >= stripB - 0.5 && ve.bottom <= foot + 0.5, foot: Math.round(foot) };
+};
+for (const [w, h] of [[320, 568], [360, 640], [375, 667], [375, 812], [390, 844], [412, 915], [1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) for (const long of [false, true]) {
+  await test(`N5a: at rest on the Answer the card's words are whole, the screen goes on, View evidence where it fits, ${w}x${h} ${mode}${long ? " long claim" : ""}`, async (page) => {
+    await openSaved(page, w, mode, long ? LONG : SAVED[0]); await page.waitForTimeout(mode === "3d" ? 2500 : 600);
+    const r = await page.evaluate(answerAtRest);
+    must(!r.bad.length, r.bad.join("; "));
+    must(r.studies || r.crossed.length, `the screen looks finished: the Studies heading is not whole above ${r.foot} and the foot crosses no line or control`);
+    // View evidence: always in 3D and on the taller screens; on short phones in text mode the card itself is taller, so (a) and (b) win
+    if (mode === "3d" || (h >= 800 && !(w === 375 && long))) must(r.view, "View evidence is not wholly on the first screen");
+  }, { w, h });
+}
+for (const [w, h] of [[1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) {
+  await test(`N5b: no rail label crosses a text panel, and how sure starts level with the card, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    const hits = [];
+    for (const k of [2, 3, 4, 5, 6]) {
+      await page.evaluate((k) => window.__evident.goto(k), k); await page.waitForTimeout(mode === "3d" ? 1500 : 700);
+      hits.push(...await page.evaluate((k) => {
+        const rails = [...document.querySelectorAll("#rail button span")].filter((e) => e.checkVisibility()).map((e) => [e.textContent, e.getBoundingClientRect()]);
+        const boxes = [...document.querySelectorAll(".stop .inner, .stop .panel, #vcard")].filter((e) => e.checkVisibility()).map((e) => [e.id || e.className, e.getBoundingClientRect()]);
+        const o = []; for (const [t, r] of rails) for (const [n, b] of boxes) if (r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top) o.push(`stop ${k}: ${t} over ${n}`); return o;
+      }, k));
+    }
+    must(!hits.length, [...new Set(hits)].join("; "));
+    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(mode === "3d" ? 2500 : 1200);
+    const a = await page.evaluate(() => ({ card: document.getElementById("vcard").getBoundingClientRect().top, panel: document.querySelector("#cap-answer .inner").getBoundingClientRect().top }));
+    if (mode === "3d") must(a.card <= 120 && a.panel <= 120, `the card starts at ${Math.round(a.card)}, how sure at ${Math.round(a.panel)}`);
+  }, { w, h });
+}
+for (const [w, h] of [[320, 568], [375, 812], [1280, 800]]) for (const mode of ["3d", "text"]) {
+  await test(`N5c: with an abstract open, Open PubMed stays beside Hide abstract and the abstract opens below them, ${w}x${h} ${mode}`, async (page) => {
+    await openSaved(page, w, mode);
+    const look = () => page.evaluate(() => { const d = document.getElementById("abs-1"), s = d.querySelector("summary").getBoundingClientRect(), p = d.closest(".acts").querySelector(".pm").getBoundingClientRect(), row = d.closest(".row").getBoundingClientRect();
+      const b = d.querySelector(".abs-body").getBoundingClientRect(); return { side: Math.abs(s.top - p.top) <= 2 && p.left >= s.right, below: !d.open || b.top >= Math.max(s.bottom, p.bottom) - 1, inRow: p.right <= row.right + 0.5, words: d.querySelector("summary").innerText.split("\n")[0].trim() }; });   // the first line: "of study n" is for screen readers
+    const shut = await look();
+    await page.evaluate(() => document.getElementById("row-1").scrollIntoView({ block: "center" }));
+    await page.click("#abs-1 > summary"); await page.waitForTimeout(200);
+    const open = await look();
+    must(shut.side && shut.inRow && shut.words === "Read abstract", `closed: ${JSON.stringify(shut)}`);
+    must(open.side && open.below && open.inRow && open.words === "Hide abstract", `open: ${JSON.stringify(open)}`);
+  }, { w, h });
+}
+// N4: four names wherever a name shows, and one labelled line per study on what it contributes, the same from the
+// server's HTML and from app.js (a check run from the claim box), in 3D and text mode   (was: numbered eyebrows)
+for (const [w, h] of [[375, 812], [1280, 800]]) for (const mode of ["3d", "text"]) {
+  await test(`N4: Answer, Studies, Explanation, Limitations, and What this study contributes on every study, both renderers, ${w}x${h} ${mode}`, async (page) => {
+    const read = () => page.evaluate(() => ({
+      eyebrows: [...document.querySelectorAll(".stop .eyebrow")].filter((e) => e.checkVisibility()).map((e) => e.textContent.trim()),
+      rail: [...document.querySelectorAll("#rail button[aria-label^='Go to ']")].map((b) => b.textContent.trim()),
+      lines: [...document.querySelectorAll(".row")].map((r) => [...r.querySelectorAll(".contrib, .caution, .indirect")].map((p) => p.textContent.trim()).join(" | ")),
+      label: document.querySelector("#short-label").textContent.trim() }));
+    await openSaved(page, w, mode);
+    const srv = await read();
+    must(srv.eyebrows.join() === "Studies,Explanation,Limitations" && srv.label === "Answer", `names: ${srv.label}; ${srv.eyebrows.join(", ")}`);
+    must(srv.rail.join() === SECTIONS.join(), `the rail: ${srv.rail.join(", ")}`);
+    must(srv.lines.length >= 3 && srv.lines.every((l) => /^What this study contributes \S/.test(l)), `a study without its line: ${srv.lines.find((l) => !/^What this study contributes \S/.test(l))}`);
+    must(srv.lines.some((l) => l.includes("Indirect context ")) && srv.lines.some((l) => / \| [^|]*small trial/.test(l)), "the fixture's caution or Indirect context did not print");
+    await page.goto(`${base}/${mode === "text" ? "?nogl=1" : ""}`, { waitUntil: "load" }); await ready(page);
+    await page.click("#claim-input"); await page.keyboard.type(SAVED[0]); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 }); await page.waitForTimeout(600);
+    const js = await read();
+    must(js.eyebrows.join() === srv.eyebrows.join() && js.label === srv.label, `app.js names: ${js.label}; ${js.eyebrows.join(", ")}`);
+    must(JSON.stringify(js.lines) === JSON.stringify(srv.lines), `app.js lines differ: ${js.lines.find((l, i) => l !== srv.lines[i])}`);
+  }, { w, h });
 }
 // on a short phone in 3D the Answer panel is reordered; "What does this mean?" stays right under the
 // sentence it explains (#confidence), never floated to the top of the panel
@@ -578,61 +763,6 @@ for (const [w, h] of [[390, 664], [320, 568]]) {
     must(!r.between.length, `between how sure and its link: ${r.between.join(", ")}`);
   }, { w, h });
 }
-// the dip: once, about 3 seconds after an answer the reader just ran lands and nothing was touched;
-// never under reduced motion, never on a saved or shared answer, and any input before it cancels it
-const dips = (page) => page.evaluate(() => window.__dips || 0);
-const dipInit = (page) => page.addInitScript(() => { window.__dips = 0; document.addEventListener("animationstart", (e) => { if (e.animationName === "dip") window.__dips++; }, true); });
-for (const [what, opts] of [["after a check the reader just ran, once", {}], ["never under reduced motion", { reduce: true }], ["never on a shared answer", {}], ["not after a key press", {}]]) {
-  for (const path of ["/", "/?nogl=1"]) {
-    await test(`the cue's chevron dips ${what}, ${path === "/" ? "3D" : "text mode"}`, async (page) => {
-      await dipInit(page);
-      const shared = what.includes("shared");
-      if (shared) { await page.goto(base + path + (path === "/" ? "?" : "&") + "q=" + encodeURIComponent(SAVED[1]), { waitUntil: "load" }); await ready(page); }
-      else {
-        await page.goto(base + path, { waitUntil: "load" }); await ready(page); await send(page, LIVE);
-        await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 30000 });
-        if (what.includes("key")) { await page.waitForTimeout(1000); await page.keyboard.press("Shift"); }
-      }
-      await page.waitForTimeout(path === "/" ? 12000 : 5000);
-      const n1 = await dips(page); await page.waitForTimeout(3000); const n2 = await dips(page);
-      const want = what.startsWith("after") ? 1 : 0;
-      must(n1 === want && n2 === want, `the chevron dipped ${n1} then ${n2} times, wanted ${want}`);
-    }, opts);
-  }
-}
-// scrolling does what the cue says. In 3D a wheel step or a touch drag from the Answer lands on the
-// Read stop. Text mode is a freely scrolling page: there the cue's click lands on the next stop, and
-// after a free scroll into the Read stop the bar's label and the cue's words follow
-for (const [w, h] of [[390, 844], [1440, 900]]) {
-  for (const how of ["wheel", "touch"]) {
-    await test(`in 3D a ${how} from the Answer lands on the Read stop, ${w}x${h}`, async (page, ctx) => {
-      await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
-      await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(3000);
-      if (how === "wheel") { await page.mouse.move(w / 2, h / 2); await page.mouse.wheel(0, 100); }
-      else { const c = await ctx.newCDPSession(page); await c.send("Input.synthesizeScrollGesture", { x: Math.round(w / 2), y: Math.round(h / 2), yDistance: -150, gestureSourceType: "touch", speed: 600 }); }
-      await page.waitForTimeout(6000);
-      const s = await page.evaluate(() => { const t = document.querySelectorAll("main .stop")[2]; return { stop: window.__evident.stats().stop, y: Math.round(scrollY), top: Math.round(t.getBoundingClientRect().top + scrollY) }; });
-      must(s.stop === 3 && Math.abs(s.y - s.top) <= 1, `stop ${s.stop}, scrollY ${s.y}, the Read stop's top ${s.top}`);
-    }, { w, h, touch: how === "touch" });
-  }
-  await test(`in text mode the cue lands on the next stop, and a free scroll into it carries the bar and the cue along, ${w}x${h}`, async (page) => {
-    await page.goto(`${base}/?nogl=1&q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
-    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(1000);
-    await page.click("#cue"); await page.waitForTimeout(1500);
-    const a = await page.evaluate(() => { const t = document.querySelectorAll("main .stop")[2]; return { stop: window.__evident.stats().stop, y: Math.round(scrollY), top: Math.round(t.getBoundingClientRect().top + scrollY) }; });
-    must(a.stop === 3 && Math.abs(a.y - a.top) <= 1, `after the cue: stop ${a.stop}, scrollY ${a.y}, the Read stop's top ${a.top}`);
-    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(1000);
-    const d = await page.evaluate(() => { const t = document.querySelectorAll("main .stop")[2]; return Math.round(t.getBoundingClientRect().top) + 40; });
-    await page.mouse.move(w / 2, h / 2);
-    for (let left = d; left > 0; left -= 100) { await page.mouse.wheel(0, Math.min(100, left)); await page.waitForTimeout(60); }
-    await page.waitForTimeout(1500);
-    const b = await cueLook(page), y = await page.evaluate(() => scrollY);
-    must(b.stop === 3 && b.words === cueFor(b.next, 3) && /^Next: /.test(b.next), `after a free scroll: stop ${b.stop}, Next "${b.next}", cue "${b.words}"`);
-    await page.waitForTimeout(1000);
-    must(Math.abs((await page.evaluate(() => scrollY)) - y) < 1, "text mode settled the page after a free scroll");
-  }, { w, h });
-}
-
 // ---- 18. the service worker's shell: a time limit on the home page, and offline first paint ----
 // waitForFunction takes an async predicate's promise as truthy at once: poll from here instead
 const until = async (page, fn, ms = 30000) => {
@@ -761,13 +891,13 @@ await test("18: offline, /checks with a claim and /flight are sent on to the hom
 
 // ---- 19. the warm-up: the first Next pays for no compile and no upload ----
 const warmed = (page) => page.waitForFunction(() => window.__evd && window.__evd.warmed && window.__evd.warmed(), null, { timeout: 30000, polling: 100 }).then(() => true, () => false);
-await test("19: on a saved answer the warm-up finishes after the answer is readable, and the first Next compiles and sends nothing new", async (page) => {
+await test("19: on a saved answer the warm-up finishes after the answer is readable, and the first press of View evidence compiles and sends nothing new", async (page) => {
   await page.goto(`${base}/?q=${encodeURIComponent(SAVED[0])}`, { waitUntil: "load" }); await ready(page);
   if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
   must(await warmed(page), "the warm-up never finished");
   const before = await page.evaluate(() => { const r = window.__evd.renderer; return { p: r.info.programs.length, t: r.info.memory.textures, stop: window.__evident.stats().stop }; });
   await page.evaluate(() => { const r = window.__evd.renderer, gl = r.getContext(); window.__up = 0; const o = gl.texImage2D.bind(gl); gl.texImage2D = function (...a) { window.__up++; return o(...a); }; });
-  await page.click("#next"); await page.waitForTimeout(2500);
+  await page.click("#how-answer"); await page.waitForTimeout(2500);
   const after = await page.evaluate(() => ({ p: window.__evd.renderer.info.programs.length, up: window.__up, stop: window.__evident.stats().stop }));
   must(after.stop === before.stop + 1, `stop ${before.stop} to ${after.stop}`);
   must(after.p === before.p, `programs ${before.p} to ${after.p}`);
@@ -778,7 +908,7 @@ await test("19: a press before the warm-up is done still lands on the next stop"
   await page.goto(`${base}/?q=${encodeURIComponent(SAVED[1])}`, { waitUntil: "load" }); await ready(page);
   if ((await page.evaluate(() => window.__evident.stats().mode)) !== "3d") return;
   const s0 = await page.evaluate(() => window.__evident.stats().stop);
-  await page.click("#next");
+  await page.click("#how-answer");
   await page.waitForFunction((s) => window.__evident.stats().stop === s + 1 && !window.__evident.stats().looping, s0, { timeout: 15000 });
   must(await warmed(page), "the warm-up did not finish after the press");
 });
@@ -806,7 +936,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
   await page.reload({ waitUntil: "load" });
   must(await painted(page), "the new build did not paint under the old worker");
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())).catch(() => {});
-  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v122" && r && r.active && r.active.state === "activated"; });
+  await until(page, async () => { const r = await navigator.serviceWorker.getRegistration(); return (await caches.keys()).join() === "evident-v124" && r && r.active && r.active.state === "activated"; });
   const st = await page.evaluate(async () => {
     const keys = await caches.keys();
     const src = await (await fetch("/sw.js", { cache: "no-store" })).text();
@@ -818,7 +948,7 @@ await test("20: a browser holding the live worker and its cache moves to this bu
     const reg = await navigator.serviceWorker.getRegistration();
     return { keys, missing, stamped, n: shell.length, active: reg && reg.active ? reg.active.state : null, waiting: !!(reg && reg.waiting) };
   });
-  must(st.keys.join() === "evident-v122", `caches: ${st.keys.join()}`);
+  must(st.keys.join() === "evident-v124", `caches: ${st.keys.join()}`);
   must(!st.missing.length && st.stamped && st.n === 8, `shell missing ${st.missing.join(" ")}, stamped ${st.stamped}, ${st.n} entries`);
   must(st.active === "activated" && !st.waiting, `worker ${st.active}, waiting ${st.waiting}`);
   must(!bad.length, `requests: ${bad.join(" | ")}`);

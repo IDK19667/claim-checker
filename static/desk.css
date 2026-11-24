@@ -85,11 +85,11 @@
   --strip: 32px;
   --bar: 0px;
   --bar-space: calc(84px + env(safe-area-inset-bottom, 0px));
-  --cue-row: 52px;              /* the cue row and the gap under it (44 + 8); 56 on phones */
 }
-/* on a result the bottom block is two rows (the cue row on top of the bar row): everything laid out against the bar
-   uses the whole block, and keeps it when the cue row goes at the end of the last stop, so no stop moves */
-html.checked { --bar-space: calc(84px + var(--cue-row) + env(safe-area-inset-bottom, 0px)); }
+/* on a result the foot bar is one row (the section picker, 56px at most plus the safe area); on a wide screen the rail
+   is the picker and there is no bar. Everything laid out against the bar uses this */
+html.checked { --bar-space: calc(64px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 761px) and (min-aspect-ratio: 17/20) { html.checked { --bar-space: 32px; } }
 /* hidden means hidden, whatever display a class gives (a study's Details fold
    is the one exception: on a wide screen it is always open) */
 [hidden]:not(.more):not(.rows) { display: none !important; }
@@ -103,7 +103,6 @@ a { color: var(--sage); text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 3px; }
 /* the fixed bar's controls draw their focus ring inside their own box, so it never sits over words passing under the bar */
 .bar > button:focus-visible { outline-offset: -5px; }
-.bar > .next:focus-visible { outline-color: var(--deep); }
 .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* Skip to the answer: out of sight until a keyboard reaches it, then on the night ground over the strip */
 .skip { position: fixed; z-index: 40; top: 6px; left: 16px; min-height: 44px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 3px; background: var(--deep); color: var(--on-deep); font-size: 16px; text-decoration: none; }
@@ -163,8 +162,6 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .btn.quiet { background: transparent; border-color: transparent; color: var(--on-deep-2); padding: 0 12px; text-decoration: underline; text-underline-offset: 4px; }
 .btn.quiet:hover { color: var(--on-deep); }
 .nma { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.04em; color: var(--on-deep-2); margin: 18px 0 0; }
-.back { appearance: none; background: none; border: 0; padding: 0; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: var(--on-deep-2); font: 500 15px/1 var(--body); cursor: pointer; margin: 0 0 6px; text-decoration: underline; text-underline-offset: 4px; }
-.back:hover { color: var(--on-deep); }
 
 /* stop 2: the short answer */
 .layer { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sage); margin: 0 0 14px; }
@@ -215,7 +212,21 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .row-more { appearance: none; background: none; border: 1px solid var(--desk-edge-2); border-radius: 3px; min-height: 44px; padding: 0 14px; margin: 2px 0 4px; color: var(--on-deep); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 .row .more { padding-top: 4px; }
 .row .named { font-family: var(--mono); font-size: 13px !important; color: var(--sage) !important; margin: 0 0 4px !important; }
-@media (min-width: 700px) { .row-more { display: none; } .row .more[hidden] { display: block; } }
+/* a study's two actions, on every width: Read abstract (a disclosure, open in place) and Open PubMed (a new tab) */
+.row .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 2px 0 2px; }
+.row .act { appearance: none; box-sizing: border-box; min-height: 44px; display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid var(--desk-edge-2); border-radius: 3px; background: none; color: var(--on-deep); font: 500 15px/1.2 var(--body); cursor: pointer; text-decoration: none; }
+.row .act:hover { border-color: var(--desk-edge-3); text-decoration: underline; text-underline-offset: 3px; }
+.row .act.quiet { border: 0; padding: 0; color: var(--on-deep-2); text-decoration: underline; text-underline-offset: 3px; }
+.row .act.quiet:hover { color: var(--on-deep); }
+.row .acts { position: relative; }
+.row .abs { flex: 1 0 100%; }
+.row .abs > summary { list-style: none; width: 140px; }
+.row .abs ~ .pm { position: absolute; top: 0; left: 152px; }
+.row .abs > summary::-webkit-details-marker { display: none; }
+.row .abs[open] .shut, .row .abs:not([open]) .open { display: none; }
+.row .abs-body { padding: 12px 0 2px; }
+.row .abs-text { white-space: pre-line; font-size: 16px !important; line-height: 1.55 !important; color: var(--on-deep-2) !important; margin: 0 0 6px !important; max-width: 40em; }
+.row .noabs { display: inline-flex; align-items: center; min-height: 44px; margin: 0 !important; font: 500 13px/1.2 var(--mono) !important; color: var(--on-deep-2) !important; }
 .said-wrap summary { cursor: pointer; min-height: 48px; display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-deep); margin: 30px 0 10px; padding-top: 14px; border-top: 1px solid var(--deep-line); list-style: none; }
 .said-wrap summary::-webkit-details-marker { display: none; }
 .said-wrap + .said-wrap summary { margin-top: 0; }
@@ -234,6 +245,10 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .row .body { padding-left: 52px; }
 .row .src { font-size: 17px !important; color: var(--on-deep-2) !important; margin: 4px 0 6px !important; }
 .row .src a { display: inline-flex; align-items: center; min-height: 44px; }
+/* Under each study, what it contributes, its caution and Indirect context: plain sentences, the label in mono. */
+.row .contrib, .row .caution, .row .indirect { font-size: 16px !important; line-height: 1.45 !important; color: var(--on-deep) !important; margin: 0 0 6px !important; }
+.row .caution { color: var(--on-deep-2) !important; }
+.row .lbl { display: block; font: 500 13px/1.3 var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--on-deep-2); margin-bottom: 2px; }
 .row .status { font-family: var(--mono); font-size: 13px !important; color: var(--on-deep) !important; margin: 0 0 4px !important; }
 .row .status.no { color: var(--on-deep-2) !important; }
 .row .note { font-size: 17px !important; color: var(--on-deep-2) !important; margin: 0 !important; }
@@ -243,50 +258,32 @@ form.ask { margin-top: 30px; display: grid; gap: 12px; }
 .rail button { appearance: none; background: none; border: 0; min-height: 44px; min-width: 44px; padding: 0 0 0 14px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; font: 500 13px/1 var(--mono); letter-spacing: 0.04em; color: var(--on-deep-3); cursor: pointer; text-align: right; }
 .rail button::after { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--desk-edge-3); flex: none; }
 .rail button:hover { color: var(--on-deep); }
-.rail button[aria-current="step"] { color: var(--on-deep); }
-.rail button[aria-current="step"]::after { background: var(--sage); border-color: var(--sage); }
+.rail button[aria-current] { color: var(--on-deep); }
+.rail button[aria-current]::after { background: var(--sage); border-color: var(--sage); }
+.rail .rail-again { margin-top: 10px; }
+.rail .rail-again::after { display: none; }
+.rail .rail-again span { text-decoration: underline; text-underline-offset: 3px; }
+.menu .menu-again { margin-top: 6px; border-top: 1px solid var(--deep-line); }
 .rail button span { background: var(--scrim); padding: 3px 6px; border-radius: 3px; }
 
-.bar { position: fixed; z-index: 12; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; pointer-events: none;
-  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+.bar { position: fixed; z-index: 12; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr; align-items: center; pointer-events: none;
+  padding: 5px max(16px, env(safe-area-inset-right, 0px)) calc(5px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   background: var(--deep-2); border-top: 1px solid var(--deep-line); } /* one solid strip, like the top strip: words never show between the controls */
 /* its own compositing group too, for the same Chromium fault as the strip: without it the canvas loses a band of rows under the top strip */
 .bar { opacity: 0.999; }
 html:not(.checked) .bar, html:not(.checked) .rail { display: none; }
+@media (min-width: 761px) and (min-aspect-ratio: 17/20) { .bar { display: none; } }
 /* the phone keyboard is open (desk.js sets .kbd): the bar would sit on the box being typed in, so it waits below */
 html.kbd .bar { visibility: hidden; }
 .bar > * { pointer-events: auto; }
-.bar > .prev { grid-column: 1; grid-row: 1; } .bar > .where { grid-column: 2; grid-row: 1; } .bar > .next { grid-column: 3; grid-row: 1; }
-.prev { justify-self: start; appearance: none; min-height: 48px; padding: 0 14px 0 10px; border-radius: 3px; border: 1px solid var(--desk-edge); background: var(--panel); color: var(--on-deep-2); font: 500 15px/1 var(--body); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.prev svg { width: 14px; height: 14px; flex: none; }
-.prev:hover { color: var(--on-deep); border-color: var(--desk-edge-3); }
-.prev[aria-disabled="true"] { cursor: default; }
-.next { justify-self: end; appearance: none; min-height: 48px; padding: 0 16px 0 18px; border-radius: 3px; border: 1px solid var(--paper); background: var(--paper); color: var(--ink); font: 600 16px/1.2 var(--body); cursor: pointer; display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
-.next:hover { border-color: var(--desk-white); text-decoration: underline; text-underline-offset: 4px; }
-.next svg { width: 14px; height: 14px; flex: none; }
-.next.last svg { transform: rotate(180deg); }
-/* the cue row: the bar's Next, as wide as the bar row and on top of it, saying to scroll */
-html.has-cue .bar > .prev, html.has-cue .bar > .where, html.has-cue .bar > .next { grid-row: 2; }
-/* beside the cue, Next goes quiet: drawn exactly as Back, so the cue is the one paper-filled control in the block */
-html.has-cue .bar > .next { border-color: var(--desk-edge); background: var(--panel); color: var(--on-deep-2); font-weight: 500; }
-html.has-cue .bar > .next:hover { color: var(--on-deep); border-color: var(--desk-edge-3); text-decoration: none; }
-html.has-cue .bar > .next:focus-visible { outline-color: var(--focus); }
-.bar > .cue { grid-column: 1 / -1; grid-row: 1; appearance: none; width: 100%; min-height: 44px; padding: 0 16px; border-radius: 3px; border: 1px solid var(--paper); background: var(--paper); color: var(--ink); font: 600 17px/1.2 var(--body); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
-.bar > .cue:hover { border-color: var(--desk-white); text-decoration: underline; text-underline-offset: 4px; }
-.bar > .cue svg { width: 20px; height: 20px; flex: none; }
-.bar > .cue:focus-visible { outline-color: var(--deep); }
-/* on a wide screen the cue is a button, not a band: no wider than the answer card, centred in the block */
-@media (min-width: 761px) { .bar > .cue { width: min(480px, 100%); justify-self: center; } }
-.bar > .cue.dip svg { animation: dip 600ms ease-in-out 2; }
-@keyframes dip { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
-@media (prefers-reduced-motion: reduce) { .bar > .cue.dip svg { animation: none; } }
-html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bottom, 0px)); }
-.where { justify-self: center; appearance: none; min-height: 48px; padding: 0 12px; border-radius: 3px; border: 1px solid var(--desk-edge); background: var(--panel); color: var(--on-deep-2); font: 500 13px/1 var(--mono); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; }
+.where { justify-self: stretch; appearance: none; min-height: 44px; padding: 0 14px; border-radius: 3px; border: 1px solid var(--desk-edge); background: var(--panel); color: var(--on-deep); font: 500 16px/1 var(--body); cursor: pointer; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.where-k { font: 500 13px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-deep-2); }
+.where svg { width: 14px; height: 14px; flex: none; }
 .where:hover { color: var(--on-deep); }
-.menu { position: fixed; z-index: 13; left: 50%; transform: translateX(-50%); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); background: var(--deep); border: 1px solid var(--deep-line); border-radius: 3px; padding: 6px; display: grid; min-width: 210px; }
+.menu { position: fixed; z-index: 13; left: 50%; transform: translateX(-50%); bottom: calc(62px + env(safe-area-inset-bottom, 0px)); background: var(--deep); border: 1px solid var(--deep-line); border-radius: 3px; padding: 6px; display: grid; min-width: 210px; }
 .menu[hidden] { display: none; }
 .menu button { appearance: none; background: none; border: 0; min-height: 44px; text-align: left; padding: 0 12px; color: var(--on-deep-2); font: 500 15px/1 var(--body); cursor: pointer; border-radius: 3px; }
-.menu button[aria-current="step"] { color: var(--on-deep); background: var(--deep-2); }
+.menu button[aria-current] { color: var(--on-deep); background: var(--deep-2); }
 .menu-links { margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid var(--deep-line); display: grid; }
 .menu-links a { min-height: 44px; display: flex; align-items: center; padding: 0 12px; color: var(--on-deep-2); font: 500 15px/1 var(--body); }
 .menu-links a:hover { color: var(--on-deep); }
@@ -326,11 +323,7 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
 }
 
 @media (max-width: 760px) {
-  :root { --cue-row: 56px; }
-  .bar > .cue { min-height: 48px; font-size: 16px; }
   .where { padding: 0 10px; }
-  .next { padding: 0 12px 0 14px; font-size: 15px; gap: 8px; }
-  .prev { padding: 0 10px 0 8px; }
   .cap .inner::before { inset: -36px -16px; background: linear-gradient(to bottom, var(--scrim-0), var(--scrim) 48px, var(--scrim) calc(100% - 48px), var(--scrim-0)); }
   .stop { padding-top: calc(var(--strip) + 20px); }
   .cap { align-items: flex-start; }
@@ -352,6 +345,7 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
   .row .body { padding-left: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; }
   .row .body .src { flex: 1 1 180px; }
   .row .body .row-more { flex: none; margin: 0; }
+  .row .body .acts { flex: 1 0 100%; }
   .row .body .more { flex: 1 0 100%; }
   .row-head { grid-template-columns: 34px 1fr; }
   .h2.mid { font-size: 34px; }
@@ -359,10 +353,6 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
 }
 @media (max-width: 359px) {
   .strip { letter-spacing: -0.02em; padding-left: 10px; padding-right: 10px; }
-  .prev .lab { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .prev { min-width: 48px; justify-content: center; padding: 0 12px; }
-  .next { font-size: 14px; padding: 0 10px 0 12px; }
-  .next svg { display: none; }
   h1, .h1 { font-size: 42px; }
   .h2 { font-size: 38px; }
   .still-open { font-size: 23px; }
@@ -375,7 +365,19 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
   .cap.right .inner, .cap.left .inner { margin: 0; }
   .inner.wide, .inner.wider, .inner { width: 100%; }
   .inner.wide::before, .inner.wider::before { display: none; }
-  .has-gl .stop.long { padding-top: calc(var(--strip) + 42vh); padding-top: calc(var(--strip) + 42svh); }
+  /* content before scenery: each section starts under a band of the desk, its heading in the top 28% of the screen;
+     the Answer and the first half of Studies are as tall as their words, so what follows always shows at the foot */
+  .has-gl .stop.long, .has-gl #s3, .has-gl #s6 { padding-top: calc(var(--strip) + 14vh); padding-top: calc(var(--strip) + 14svh); }
+  .has-gl #s4 { padding-top: 0; }
+  html.checked #s2, html.checked #s3 { min-height: 0; }
+  html.checked #s2 { padding-bottom: 8px; }
+  .has-gl #s3 { padding-top: calc(var(--strip) + 4vh); padding-top: calc(var(--strip) + 4svh); }
+  /* the strip's share of that padding sits under the end of the Answer, so the Studies heading shows on the Answer's
+     first screen; the overlap is empty and lets presses through */
+  html.checked #s3 { margin-top: calc(-1 * var(--strip)); pointer-events: none; }
+  html.checked #s3 > * { pointer-events: auto; }
+  @media (max-height: 700px) { .has-gl #s3 { padding-top: var(--strip); } .has-gl #s3 .inner { padding-top: 10px; } }
+  html.checked #s3 { padding-bottom: 16px; }
   .has-gl #cap-answer .inner { width: 100%; }
 }
 /* short phones: the main button comes up to the first screen; the doctor line and "Check another claim" follow just below it */
@@ -398,6 +400,16 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
   .wordmark { margin-bottom: 16px; }
   .lede { margin-top: 12px; }
   form.ask { margin-top: 20px; gap: 10px; }
+}
+/* content before scenery on a wide screen: the Answer stops short of a full screen so the Studies heading shows at the
+   foot, and the first half of Studies is as tall as its words, so the list follows it */
+@media (min-width: 761px) and (min-aspect-ratio: 17/20) {
+  html.checked #s2 { min-height: calc(100vh - 150px); min-height: calc(100svh - 150px); }
+  html.checked #s3 { min-height: 0; padding-bottom: 24px; }
+  .has-gl #s2 .cap { align-items: flex-start; }
+  /* the rail at the right edge is the picker: no text panel runs under its labels */
+  .cap.right .inner { margin-right: max(clamp(0px, 9vw, 150px), 196px); }
+  .has-gl #s3 .cap.right .inner { margin-right: calc(max(clamp(0px, 9vw, 150px), 196px) - 26px); }
 }
 @media (min-width: 761px) and (max-aspect-ratio: 17/20) {
   .inner, .inner.wide, .inner.wider { max-width: 640px; }
@@ -435,9 +447,6 @@ html.has-cue .menu { bottom: calc(72px + var(--cue-row) + env(safe-area-inset-bo
 .no-gl .vcard .t, html:not(.js) .vcard .t { font-size: 17px; max-width: 31em; }
 .no-gl #s2 .cap, html:not(.js) #s2 .cap { margin-bottom: auto; }
 
-@media (prefers-reduced-motion: reduce) {
-  .next svg { animation: none; }
-}
 
 /* ===== The site's own pieces, in the desk's grammar ===== */
 
@@ -657,7 +666,7 @@ dialog.sheet[open]::backdrop { opacity: 1; }
 
 /* no scripts: every group and every fold is open, and the controls that only scripts can work are not shown */
 html:not(.js) .rows[hidden] { display: block; }
-html:not(.js) .grp-btn::after, html:not(.js) .row-more, html:not(.js) .back, html:not(.js) .bar, html:not(.js) .rail,
+html:not(.js) .grp-btn::after, html:not(.js) .row-more, html:not(.js) .study-go, html:not(.js) .bar, html:not(.js) .rail,
 html:not(.js) #how-answer, html:not(.js) #back-btn, html:not(.js) .sure-more, html:not(.js) #s6 .two, html:not(.js) .feedback, html:not(.js) .report { display: none !important; }
 html:not(.js) .stop { min-height: 0; }
 html:not(.js).checked #s1 { display: none; }

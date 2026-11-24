@@ -801,11 +801,26 @@ window.__evidentDesk3d = function (O) {
       if (K[1].fx0 === undefined) K[1].fx0 = K[1].fx;
       K[1].fx = K[1].fx0;
       if (camera.aspect >= 0.85) {
+        // the card comes up to just under the strip and its label, so the answer is read before the scenery
+        if (K[1].fy0 === undefined) K[1].fy0 = K[1].fy;
+        K[1].fy = K[1].fy0;
+        if (!K[1].fov0) K[1].fov0 = K[1].fov;
+        K[1].fov = K[1].fov0;
+        var wantY = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10;
+        for (var a = 0; a < 3; a++) { var qa = cardRectAt(1); K[1].fy += (wantY - qa.y) / H; }
         // wide screens: the card keeps 32 px clear of the panel beside it (at 1280 wide the panel would otherwise reach over its right edge)
         var inner = capAnswer.querySelector(".inner"), pl = inner ? inner.getBoundingClientRect().left : W;
         for (var m = 0; m < 3; m++) { var q = cardRectAt(1), over = q.x + q.w - (pl - 32); if (over <= 0) break; K[1].fx -= Math.min(over, Math.max(0, q.x - 24)) / W; }
+        // the panel now starts level with the card: where the card still reaches it, the card is drawn smaller to fit beside it
+        var qw = cardRectAt(1), wantW = pl - 32 - 24;
+        if (qw.x + qw.w > pl - 32 && wantW > 200) {
+          for (var f = 0; f < 3; f++) { var qf = cardRectAt(1), tf = Math.tan(T.MathUtils.degToRad(K[1].fov / 2)) * qf.w / wantW; K[1].fov = T.MathUtils.radToDeg(2 * Math.atan(tf)); }
+          for (var b = 0; b < 3; b++) { var qb = cardRectAt(1); K[1].fy += (wantY - qb.y) / H; }
+          for (var m2 = 0; m2 < 3; m2++) { var q2 = cardRectAt(1), over2 = q2.x + q2.w - (pl - 32); if (over2 <= 0) break; K[1].fx -= Math.min(over2, Math.max(0, q2.x - 24)) / W; }
+        }
         cardKey = ""; prepareStandFace(); return;
       }
+      // every phone draws the card at the same width, so its words always fit it; the panel starts under its real bottom edge
       var want = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10, wantW = Math.min(W - 22, 560);
       if (!K[1].fov0) K[1].fov0 = K[1].fov;
       K[1].fov = K[1].fov0;
@@ -868,6 +883,11 @@ window.__evidentDesk3d = function (O) {
         // the smallest cards drop the label line, which the painted card already carries, before the verdict goes below 28 px
         if (vcard.scrollHeight > h + 0.5) vcard.querySelector(".lbl").style.display = "none";
         while (vcard.scrollHeight > h + 0.5 && vs > 28) { vs -= 2; v.style.fontSize = vs + "px"; }
+        // a long claim on the smallest phones gives up lines before the short answer loses any: two, then one, ending in an
+        // ellipsis (the whole claim is the page's heading and on the printed face's twin in text mode)
+        var q = vcard.querySelector(".q");
+        if (vcard.scrollHeight > h + 0.5) q.style.webkitLineClamp = "2";
+        if (vcard.scrollHeight > h + 0.5) q.style.webkitLineClamp = "1";
       }
     }
 
