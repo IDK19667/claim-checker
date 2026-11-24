@@ -1,4 +1,5 @@
 import copy
+import functools
 import gzip
 import hashlib
 import hmac
@@ -444,7 +445,7 @@ def _latest(n: int) -> list[dict]:
     while True:
         rows = db.recent_verdicts(limit)
         whole = [r for r in rows if db.whole(r)]
-        out = _one_per_question(_public_claims(whole, len(whole)))[:n]
+        out = _one_per_question(_public_claims(whole, len(whole)), verdict_of=_shown_verdict)[:n]
         if len(out) >= n or len(rows) < limit:
             return out
         limit *= 2
@@ -490,19 +491,59 @@ def _drop_home_lists() -> None:
         _home_lists.clear()
 
 
-def _one_per_question(rows: list[dict]) -> list[dict]:
+# Words a public list ignores when it asks whether two rows are one claim in
+# another order: suggest's filler words, but never a word that gives a
+# direction or a comparison, nor a negation (those are not in _STOP anyway).
+_LIST_FILLER = suggest_mod._STOP - {"than", "over", "under", "into", "from", "before", "after"}
+_LIST_ORDERED = frozenset({"than", "vs", "versus"})
+
+
+def _list_fold(w: str) -> str:
+    if len(w) > 4 and w.endswith("es"):
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s"):
+        return w[:-1]
+    return w
+
+
+@functools.lru_cache(maxsize=8192)
+def _list_key(claim: str) -> tuple:
+    """(claim_fold key, the claim's words as a set, its hedges, first word,
+    last word, whether word order carries meaning), for _one_per_question."""
+    fold = db.claim_fold(claim)
+    words = [_list_fold(w) for w in fold if not w.startswith("~") and w not in _LIST_FILLER]
+    hedges = tuple(sorted(w for w in fold if w.startswith("~")))
+    if not words:
+        return fold, None, hedges, None, None, True
+    return fold, frozenset(words), hedges, words[0], words[-1], bool(_LIST_ORDERED & set(words))
+
+
+def _one_per_question(rows: list[dict], key: str = "claim_text", verdict_of=None) -> list[dict]:
     """
-    Each question once, newest first. Rows whose db.claim_fold keys are equal
-    are one question asked in other words ("Does creatine cause hair loss" and
-    "Creatine causes hair loss"); the newest row stands, under its own saved
-    wording. A row whose key is empty is never merged with another.
+    Each question once, newest first; the newest row stands, under its own
+    saved wording. Two rows are one question when their db.claim_fold keys
+    are equal ("Does creatine cause hair loss" and "Creatine causes hair
+    loss"), or when they show the same verdict (verdict_of, the stamp as the
+    page shows it) and, after claim_fold and the filler words, hold the same
+    set of words with a final s or es folded, the same hedge, no "than" or
+    "versus", and the same first or last word ("Calcium and vitamin D
+    strengthen bones" and "Vitamin D and calcium strengthen bones"). So a
+    claim and its opposite, two doses, two groups of people and "stress causes
+    acne" against "acne causes stress" all stay. A row whose key is empty is
+    never merged with another. Display only: no saved row or key changes.
     """
-    seen, out = set(), []
+    verdict_of = verdict_of or (lambda r: r.get("verdict"))
+    seen, groups, out = set(), {}, []
     for r in rows:
-        key = db.claim_fold(r["claim_text"])
-        if key and key in seen:
+        fold, words, hedges, first, last, ordered = _list_key(r[key])
+        if fold and fold in seen:
             continue
-        seen.add(key)
+        group = (words, hedges, verdict_of(r)) if words and not ordered else None
+        if group and any(f == first or l_ == last for f, l_ in groups.get(group, ())):
+            continue
+        seen.add(fold)
+        if group:
+            groups.setdefault(group, []).append((first, last))
         out.append(r)
     return out
 
@@ -694,7 +735,7 @@ def sitemap():
 def llms_txt():
     """A plain description of this site for language models that read one."""
     base = _base_url()
-    recent = _public_claims(db.recent_cached(25 * LIST_OVERFETCH), 25, indexable=True)
+    recent = _one_per_question(_public_claims(db.recent_cached(25 * LIST_OVERFETCH), 25 * LIST_OVERFETCH, indexable=True))[:25]
     lines = [
         "# Evident",
         "",
@@ -1985,7 +2026,8 @@ def api_count():
 @app.route("/api/trending")
 def api_trending():
     return jsonify([{"claim": r["claim"], "verdict": r["verdict"], "checks": r["checks"]}
-                    for r in _public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8, key="claim")])
+                    for r in _one_per_question(_public_claims(db.trending(limit=8 * LIST_OVERFETCH), 8 * LIST_OVERFETCH,
+                                                              key="claim"), key="claim")[:8]])
 
 
 @app.route("/api/study/<pmid>")
@@ -2033,7 +2075,7 @@ def api_suggest():
         return jsonify({"suggestions": []})
     # Type-ahead is a public list like the others: it offers only claims the
     # one screen (_public_claims) lets any reader see.
-    claims = _public_claims(claims, len(claims))
+    claims = _one_per_question(_public_claims(claims, len(claims)))
     shown = (_suggested(r) for r in suggest_mod.suggest(q, claims))
     return jsonify({"suggestions": [r for r in shown if r is not None]})
 

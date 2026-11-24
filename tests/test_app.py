@@ -15225,6 +15225,37 @@ t("5: the case: saved 'true' (Likely true), the result page shows 'complicated'"
 t("5: trending shows the page's verdict, never the saved 'true'", _sf_tr.get(_SF_TRUE) == _sf_cr, _sf_tr)
 t("5: type-ahead shows the page's verdict", _sf_sg.get(_SF_TRUE) == _sf_cr, _sf_sg)
 _sf_drop(_SF_TRUE)
+# --- 2: near-duplicates, display only ---
+def _sf_one(a, b, va="complicated", vb="complicated"):
+    return len(appmod._one_per_question([{"claim_text": a, "verdict": va}, {"claim_text": b, "verdict": vb}])) == 1
+for _a, _b in (("Calcium and vitamin D strengthen bones", "Vitamin D and calcium strengthen bones"),
+               ("Coffee before a workout boosts performance", "Coffee boosts performance before a workout"),
+               ("Does eating late cause weight gain", "Late eating causes weight gain")):
+    t(f"2: one row for {_a!r} and {_b!r}", _sf_one(_a, _b))
+for _a, _b in (("Coffee raises blood pressure", "Coffee lowers blood pressure"),
+               ("Creatine is safe for the kidneys", "Creatine is not safe for the kidneys"),
+               ("Stress causes acne", "Acne causes stress"),
+               ("500 mg of vitamin C prevents colds", "5000 mg of vitamin C prevents colds"),
+               ("Coffee is safe in pregnancy", "Coffee is safe for children"),
+               ("Butter is healthier than margarine", "Margarine is healthier than butter"),
+               ("Hypertension raises stroke risk", "Hypotension raises stroke risk"),
+               ("Take 1 g of fish oil a day for the heart", "Take 4 g of fish oil a day for the heart"),
+               ("Coffee causes cancer", "Coffee can cause cancer")):
+    t(f"2: two rows for {_a!r} and {_b!r}", not _sf_one(_a, _b))
+t("2: a different verdict keeps two wordings apart", not _sf_one("Calcium and vitamin D strengthen bones",
+                                                               "Vitamin D and calcium strengthen bones", "complicated", "insufficient"))
+t("2: the newest row stays, under its own wording",
+  appmod._one_per_question([{"claim_text": "Late eating causes weight gain", "verdict": "x"},
+                            {"claim_text": "Does eating late cause weight gain", "verdict": "x"}])[0]["claim_text"] == "Late eating causes weight gain")
+t("2: the misspelt pair is not joined by this rule; the screen keeps the misspelt row off the lists instead",
+  not _sf_one("Turmeric reduces inflammation", "Tumeric reduces inflammation")
+  and not display.public_claim("Tumeric reduces inflammation", [{"title": "Turmeric and inflammation", "abstract": "reduces"}]))
+_SF_D1, _SF_D2 = "Curcumin and turmeric ease arthritis pain", "Turmeric and curcumin ease arthritis pain"
+_sf_seed(_SF_D1); _sf_seed(_SF_D2)
+_sf_p = _sf_paths("turmeric")
+for _u in ("/", "404", "/api/trending", "/api/suggest"):
+    t(f"2: {_u} shows one of the two wordings, the newest", (_SF_D2 in _sf_p[_u]) and (_SF_D1 not in _sf_p[_u]), _u)
+_sf_drop(_SF_D1, _SF_D2)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
