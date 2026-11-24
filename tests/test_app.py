@@ -10872,7 +10872,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v122";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v123";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -11762,6 +11762,21 @@ t("SCENE: the fill lights are warm neutral at their old intensity, and the penci
   "new T.HemisphereLight(0xb2aeaa, 0x1a120c, 0.12)" in _sl_3d and "new T.DirectionalLight(0xa6a29e, 0.06)" in _sl_3d
   and "color: 0x343331, roughness: 0.42" in _sl_3d
   and not any(h in _sl_3d.lower() for h in ("9fb3ad", "8fa6b4", "1d3a2e")))
+
+# ---- The icon's cloths (q10-look 4) -------------------------------------------------------
+# The home-screen icon takes the desk's own book cloths and a paper mark: no blue, purple,
+# green or mint. The PNGs are drawn by scripts/make_icons.py from the same shapes.
+_ic_svg = (ROOT / "static" / "icons" / "icon.svg").read_text().lower()
+t("ICON: the spines are the scene's cloths and the mark is paper white",
+  all(h in _ic_svg for h in ("#cfc6b2", "#3a2f26", "#2a2d29", "#7e4f3d", "#f4f2ef", "#12110f"))
+  and not any(h in _ic_svg for h in ("#3a4e6b", "#5a4760", "#35594c", "#9fc3b0")))
+try:
+    from PIL import Image as _ic_Image
+    _ic_px = _ic_Image.open(ROOT / "static" / "icons" / "icon-512.png").convert("RGB")
+    t("ICON: the 512 PNG is the same drawing (the tall relied-on spine is page cloth, the ground --deep)",
+      _ic_px.getpixel((213, 300)) == (0xcf, 0xc6, 0xb2) and _ic_px.getpixel((5, 5)) == (0x12, 0x11, 0x0f), (_ic_px.getpixel((213, 300)), _ic_px.getpixel((5, 5))))
+except ImportError:
+    pass
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
