@@ -11776,6 +11776,17 @@ t("NAV fix: the study groups' buttons open and close their group (setGroup and e
   all(re.search(r"function " + f + r"\(", _navfix_js) for f in _navfix_calls) and "setGroup" in _navfix_calls,
   sorted(f for f in _navfix_calls if not re.search(r"function " + f + r"\(", _navfix_js)))
 
+# ---- NAV N2: the short answer is never covered, and the Answer's first screen still goes on (browser check N5a measures it) ----
+_n2_d3 = (ROOT / "static" / "desk3d.js").read_text()
+_n2_js = (ROOT / "static" / "desk.js").read_text()
+t("NAV N2: every phone draws the answer card at the same width (no narrower card on short screens), and a long claim gives up card lines first",
+  "wantW = Math.min(W - 22, 560);" in _n2_d3 and "0.75 : 1)" not in _n2_d3
+  and 'q.style.webkitLineClamp = "2"' in _n2_d3 and 'q.style.webkitLineClamp = "1"' in _n2_d3)
+t("NAV N2: layout places how sure after the fold so the bar crosses a line or the Studies heading shows, from a clean start",
+  "fold(); answerFoot(); measure();" in _n2_js and 'capAns.style.marginTop = ""; layoutHook();' in _n2_js)
+t("NAV N2: the saved fixtures hold a claim of about 140 characters with a short answer of three lines or more",
+  any(130 <= len(r["claim"]) <= 150 and len(r["tldr"]) >= 140 for r in _R4_ROWS))
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -820,8 +820,8 @@ window.__evidentDesk3d = function (O) {
         }
         cardKey = ""; prepareStandFace(); return;
       }
-      // on a short phone the card is drawn a little smaller, so the start of Studies shows above the bar on the Answer
-      var want = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10, wantW = Math.min(W - 22, 560) * (H <= 700 ? 0.75 : 1);
+      // every phone draws the card at the same width, so its words always fit it; the panel starts under its real bottom edge
+      var want = O.stripH + 12 + (shortLabel.offsetHeight || 16) + 10, wantW = Math.min(W - 22, 560);
       if (!K[1].fov0) K[1].fov0 = K[1].fov;
       K[1].fov = K[1].fov0;
       for (var j = 0; j < 3; j++) { var q = cardRectAt(1), th = Math.tan(T.MathUtils.degToRad(K[1].fov / 2)) * q.w / wantW; K[1].fov = T.MathUtils.radToDeg(2 * Math.atan(th)); }
@@ -883,6 +883,11 @@ window.__evidentDesk3d = function (O) {
         // the smallest cards drop the label line, which the painted card already carries, before the verdict goes below 28 px
         if (vcard.scrollHeight > h + 0.5) vcard.querySelector(".lbl").style.display = "none";
         while (vcard.scrollHeight > h + 0.5 && vs > 28) { vs -= 2; v.style.fontSize = vs + "px"; }
+        // a long claim on the smallest phones gives up lines before the short answer loses any: two, then one, ending in an
+        // ellipsis (the whole claim is the page's heading and on the printed face's twin in text mode)
+        var q = vcard.querySelector(".q");
+        if (vcard.scrollHeight > h + 0.5) q.style.webkitLineClamp = "2";
+        if (vcard.scrollHeight > h + 0.5) q.style.webkitLineClamp = "1";
       }
     }
 

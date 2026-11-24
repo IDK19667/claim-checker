@@ -579,9 +579,18 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
       const rg = document.createRange();
       while ((t = w.nextNode())) {
         if (!t.data.trim()) continue; const el = t.parentElement; if (!el || !el.checkVisibility({ visibilityProperty: true }) || el.closest("#vcard,#short-label,details:not([open]) > :not(summary)")) continue;
-        rg.selectNodeContents(t); for (const q of rg.getClientRects()) { if (q.height < 2) continue; if (q.top < bt - 4 && q.bottom > bt) cut = true; if (q.top >= bt) below = true; }
+        // a line the foot crosses, or one run of words with lines both above the foot and below it (the foot in the space between two of its lines)
+        rg.selectNodeContents(t); let above = false, under = false;
+        for (const q of rg.getClientRects()) { if (q.height < 2) continue; if (q.top < bt - 4 && q.bottom > bt) cut = true; if (q.top < bt - 4) above = true; if (q.bottom > bt) under = true; if (q.top >= bt) below = true; }
+        if (above && under) cut = true;
       }
-      return { end, cut, below, bt: Math.round(bt), y: Math.round(scrollY) };
+      // a control the foot crosses is cut too (brief N2, step 2: "a line of text or a control")
+      for (const c of document.querySelectorAll("#track button, #track a")) { const q = c.getBoundingClientRect(); if (c.checkVisibility() && q.height && q.top < bt - 1 && q.bottom > bt + 1) cut = true; }
+      // and so is a drawn panel (3D: a dark block over the desk) whose box runs on past the foot
+      for (const c of document.querySelectorAll("#track .stop .inner")) { const q = c.getBoundingClientRect(), bg = getComputedStyle(c).backgroundColor; if (c.checkVisibility() && q.top < bt - 24 && q.bottom > bt + 1 && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") cut = true; }
+      // on the Answer the Studies heading wholly above the foot also says there is more (brief N2, step 2)
+      const st = document.getElementById("e-read").getBoundingClientRect(), studies = st.height > 0 && st.top >= 0 && st.bottom <= bt;
+      return { end, cut, below, studies, bt: Math.round(bt), y: Math.round(scrollY) };
     });
     const bad = [];
     for (const name of SECTIONS) {
@@ -589,7 +598,7 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
       await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), top); await page.waitForTimeout(900);
       const s = await look();
       // anything still below must show itself at the foot: a line cut by it
-      if (!s.end && !s.cut) bad.push(`${name} at ${s.y}: nothing cut at the foot (${s.bt})`);
+      if (!s.end && !s.cut && !(name === "Answer" && s.studies)) bad.push(`${name} at ${s.y}: nothing cut at the foot (${s.bt})`);
     }
     must(!bad.length, bad.join("; "));
     // N3: the desktop answer starts near the top with how sure fully in view; on a phone each later section's heading
@@ -604,7 +613,8 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
         const top = await secTop(page, name); if (top === null) continue;
         await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" }), top); await page.waitForTimeout(900);
         const r = await page.evaluate((sel) => { const e = document.querySelector(sel), q = e.getBoundingClientRect(), bar = document.getElementById("bar").getBoundingClientRect().top;
-          const sec = e.closest(".stop"), rg = document.createRange(), lines = new Set(); const tw = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT); let t;
+          // Studies runs over two stops (what was read, then the list), so the lines are counted on the screen, not in one stop
+          const rg = document.createRange(), lines = new Set(); const tw = document.createTreeWalker(document.getElementById("track"), NodeFilter.SHOW_TEXT); let t;
           while ((t = tw.nextNode())) { if (!t.data.trim() || !t.parentElement.checkVisibility()) continue; rg.selectNodeContents(t); for (const b of rg.getClientRects()) if (b.top > q.bottom && b.bottom < bar && b.height > 8) lines.add(Math.round(b.top)); }
           return { top: Math.round(q.top), lines: lines.size, vh: innerHeight }; }, sel);
         if (r.top > r.vh * 0.28 || r.lines < 6) far.push(`${name}: heading at ${r.top} of ${r.vh}, ${r.lines} lines under it`);
@@ -617,13 +627,49 @@ for (const [w, h] of NAV_SIZES) for (const mode of ["3d", "text"]) {
 // the fold, so the Answer never looks finished; (b) on a wide screen no rail label crosses a text panel at any section,
 // and the how-sure panel starts level with the card; (c) with an abstract open, Open PubMed stays beside Hide abstract
 // and the abstract opens below them.
-for (const [w, h] of [[375, 812], [1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) {
-  await test(`N5a: the Studies heading shows on the Answer's first screen, ${w}x${h} ${mode}`, async (page) => {
-    await openSaved(page, w, mode);
-    await page.evaluate(() => window.__evident.goto(2)); await page.waitForTimeout(mode === "3d" ? 2500 : 1200);
-    const r = await page.evaluate(() => { const b = document.getElementById("bar"), foot = getComputedStyle(b).display !== "none" ? b.getBoundingClientRect().top : innerHeight;
-      const e = document.querySelector("#s3 .eyebrow").getBoundingClientRect(); return { top: Math.round(e.top), bottom: Math.round(e.bottom), foot: Math.round(foot) }; });
-    must(r.top >= 0 && r.bottom <= r.foot - 2, `the Studies heading is at ${r.top}..${r.bottom}, the foot at ${r.foot}`);
+// N5a (brief N2, step 2; replaces "the Studies heading shows on the Answer's first screen" at 375x812, 1280 and 1440):
+// at rest on the Answer, every line of the card's words is whole (nothing covers or clips it); the screen visibly goes
+// on (the Studies heading whole above the foot, or the foot's top edge crossing a line or a control of the Answer);
+// and View evidence is in view where both fit. Eight sizes, both modes, a short claim and a 140-character one.
+const LONG = "Drinking two cups of green tea every morning lowers blood pressure and protects the heart in adults over sixty who also have type 2 diabetes";
+const answerAtRest = () => {
+  const R = (e) => e.getBoundingClientRect(), bar = document.getElementById("bar");
+  const foot = getComputedStyle(bar).display !== "none" && R(bar).height ? R(bar).top : innerHeight;
+  const stripB = R(document.getElementById("strip")).bottom, panel = R(document.querySelector("#cap-answer .inner")), card = document.getElementById("vcard"), cb = R(card);
+  const lines = (n) => { const o = [], w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT), rg = document.createRange(); let t, cur = null;
+    while ((t = w.nextNode())) { const re = /\S+/g; let m; while ((m = re.exec(t.data))) { rg.setStart(t, m.index); rg.setEnd(t, m.index + m[0].length); const q = rg.getClientRects()[0]; if (!q || !q.width) continue;
+      if (!cur || Math.abs(q.top - cur.top) > 2) { cur = { top: q.top, bottom: q.bottom, left: q.left, right: q.right, el: t.parentElement }; o.push(cur); } else { cur.right = Math.max(cur.right, q.right); cur.bottom = Math.max(cur.bottom, q.bottom); } } }
+    return o; };
+  const hit = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5, bad = [];
+  for (const sel of [".q", ".v", ".t"]) {
+    const el = card.querySelector(sel), eb = R(el), clamped = parseInt(getComputedStyle(el).webkitLineClamp, 10) > 0;
+    for (const L of lines(el)) {
+      if (clamped && L.top >= eb.bottom - 1) continue;   // past a clamp's ellipsis: not drawn
+      const why = [];
+      if (L.top < stripB - 0.5) why.push("under the strip"); if (L.bottom > foot + 0.5) why.push("past the foot");
+      if (L.top < cb.top - 0.5 || L.bottom > cb.bottom + 0.5 || L.left < cb.left - 0.5 || L.right > cb.right + 0.5) why.push("outside the card");
+      if (clamped && L.bottom > eb.bottom + 0.5) why.push("cut by its clamp"); if (hit(L, panel)) why.push("under how sure");
+      if (why.length) bad.push(`${sel} line at ${Math.round(L.top)}: ${why.join(", ")}`);
+    }
+  }
+  if (document.documentElement.classList.contains("has-gl") && +getComputedStyle(card).opacity < 0.99) bad.push("the card's words are not shown");
+  const crossed = [];
+  for (const el of document.querySelectorAll("#s2 button, #s2 a, #s2 p, #s2 h1, #s2 h2")) {
+    if (!el.checkVisibility() || card.contains(el)) continue;
+    if (el.matches("button, a")) { const b = R(el); if (b.top < foot - 1 && b.bottom > foot + 1) crossed.push(el.textContent.trim().slice(0, 24)); continue; }
+    for (const L of lines(el)) if (L.el === el && L.top < foot - 1 && L.bottom > foot + 1) crossed.push(el.textContent.trim().slice(0, 24));
+  }
+  const st = R(document.getElementById("e-read")), ve = R(document.getElementById("how-answer"));
+  return { bad, crossed, studies: st.height > 0 && st.top >= stripB - 0.5 && st.bottom <= foot + 0.5, view: ve.height > 0 && ve.top >= stripB - 0.5 && ve.bottom <= foot + 0.5, foot: Math.round(foot) };
+};
+for (const [w, h] of [[320, 568], [360, 640], [375, 667], [375, 812], [390, 844], [412, 915], [1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) for (const long of [false, true]) {
+  await test(`N5a: at rest on the Answer the card's words are whole, the screen goes on, View evidence where it fits, ${w}x${h} ${mode}${long ? " long claim" : ""}`, async (page) => {
+    await openSaved(page, w, mode, long ? LONG : SAVED[0]); await page.waitForTimeout(mode === "3d" ? 2500 : 600);
+    const r = await page.evaluate(answerAtRest);
+    must(!r.bad.length, r.bad.join("; "));
+    must(r.studies || r.crossed.length, `the screen looks finished: the Studies heading is not whole above ${r.foot} and the foot crosses no line or control`);
+    // View evidence: always in 3D and on the taller screens; on short phones in text mode the card itself is taller, so (a) and (b) win
+    if (mode === "3d" || (h >= 800 && !(w === 375 && long))) must(r.view, "View evidence is not wholly on the first screen");
   }, { w, h });
 }
 for (const [w, h] of [[1280, 800], [1440, 900]]) for (const mode of ["3d", "text"]) {

@@ -562,7 +562,10 @@ Sizes and floors:
   the page is in view. On a phone the desk shows as a band above
   Studies, Explanation and Limitations, so the heading and six lines of
   text are on the first screen; on a wide screen the answer card starts
-  just under the strip.
+  just under the strip. On the Answer at rest, in order: every line of
+  the card is whole (nothing covers or clips it); the Studies heading is
+  whole above the bar, or the bar crosses a line or a control of the
+  Answer; View evidence is in view where both fit.
 - **The first screen holds the claim box.** At 1366x650, 1280x720,
   1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
   the claim box and "Check the research" are wholly on screen with no

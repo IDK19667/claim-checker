@@ -4,6 +4,19 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10): The short answer is never covered; the Answer's first screen still goes on
+
+On short phones the answer card had been drawn at three quarters of its width so the Studies heading
+would show above the bar; the card's words then ran past its edge and how sure covered the end of the
+short answer, the most important text on the site. Now every phone draws the card at the same width, and
+the rule on the Answer at rest is, in this order: every line of the card is whole; the screen visibly
+goes on (the Studies heading whole above the bar, or the bar crossing a line or a control of the Answer);
+View evidence in view where both fit. Where the bar would fall in a gap, desk.js moves how sure down (or
+up into the space under the card, never nearer than 12 px in 3D) by the fewest pixels that put a line
+under it. On the smallest phones a long claim gives up card lines (three, two, one, with an ellipsis)
+before the short answer loses any; the whole claim is still the page's heading. Checked by N5a at eight
+sizes, both modes, a short and a 140-character claim.
+
 ## 2026-11-23 (q10): The cue row, Back and Next are gone; one picker and "View evidence" move the reader
 
 An outside review found too many competing controls: scrolling, one section picker (the bar on a phone, the rail on a wide screen) and one "View evidence" button now do it all, the sections are named Answer, Studies, Explanation and Limitations, and every study shows "Read abstract" and "Open PubMed". This reverses the cue row and its dip.

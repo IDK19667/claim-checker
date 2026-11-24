@@ -273,7 +273,33 @@
     // the search folds only where the last stop would otherwise run past one screen (short screens)
     if (sections[LAST].offsetHeight > innerHeight + 1) qwrap.open = qWant = false;
   }
-  function layout() { layoutHook(); fitQuery(); fold(); measure(); }
+  // On a phone at rest on the Answer the screen must visibly go on: the Studies heading shows whole above the bar, or the
+  // bar's top edge crosses a line or a control of the Answer, never a gap that makes the screen look finished. Where the
+  // bar would fall in a gap, how sure moves down the fewest pixels that put a line clearly under it (4 px each side), keeping View evidence in view
+  // where it can. The card never moves, so its words stay where they are.
+  var capAns = document.getElementById("cap-answer");
+  function answerFoot() {
+    var bar = document.getElementById("bar"), s2 = document.getElementById("s2"), st = document.getElementById("e-read"), ve = document.getElementById("how-answer");
+    if (!checked || !capAns || !st || getComputedStyle(bar).display === "none" || getComputedStyle(s2).display === "none") return;
+    var top = s2.getBoundingClientRect().top, foot = bar.getBoundingClientRect().top, rel = function (r) { return { t: r.top - top, b: r.bottom - top }; };
+    // a control by its box, a paragraph by its words alone (not its padding or rule)
+    var rg = document.createRange(), items = [].filter.call(capAns.querySelectorAll(".inner p, .inner button, .inner a"), function (e) { return e.getBoundingClientRect().height > 0 && !e.querySelector("p, button, a"); })
+      .map(function (e) { if (/^(BUTTON|A)$/.test(e.tagName)) return rel(e.getBoundingClientRect()); rg.selectNodeContents(e); return rel(rg.getBoundingClientRect()); })
+      .filter(function (r) { return r.b > r.t; });
+    if (!items.length) return;
+    var sr = rel(st.getBoundingClientRect()), vr = rel(ve.getBoundingClientRect()), card = document.getElementById("vcard").getBoundingClientRect();
+    // how sure may also rise into the space under the card, never closer to it than 12 px in 3D (that card is
+    // fixed where it rests) or 4 px in text mode
+    var fixed = getComputedStyle(document.getElementById("vcard")).position === "fixed", cardB = fixed ? card.bottom : card.bottom - top;
+    var up = card.height ? Math.max(0, Math.floor(rel(capAns.querySelector(".inner").getBoundingClientRect()).t - cardB - (fixed ? 12 : 4))) : 0;
+    function goesOn(n) { return sr.b + n <= foot || items.some(function (r) { return r.t + n < foot - 4 && r.b + n > foot + 4; }); }
+    var order = []; for (var d = 0; d <= 64; d++) { order.push(d); if (d && d <= up) order.push(-d); }
+    var pick = null;
+    order.some(function (n) { if (goesOn(n) && vr.b + n <= foot) { pick = n; return true; } });
+    if (pick === null) order.some(function (n) { if (goesOn(n)) { pick = n; return true; } });
+    if (pick) capAns.style.marginTop = pick + "px";
+  }
+  function layout() { if (capAns) capAns.style.marginTop = ""; layoutHook(); fitQuery(); fold(); answerFoot(); measure(); }
   function layoutChanged() { measure(); wake(); }
   function rawProgress() {
     var y = window.scrollY;
