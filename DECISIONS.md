@@ -4,6 +4,15 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-24 (q10-rel): Check 21 reads the verdict's time in the page
+
+Check 21 keeps its limit (4 canvases) and its meaning, but now times "on screen" with its own
+per-frame look at the verdict stamp, installed before the press and stamped with the page's
+clock, instead of a script sent from the runner after the answer arrived. That round trip
+made the check count sheets painted after the verdict showed as before it. Proof: 5 of 5 on
+this tip (the check runs with the processor slowed 4 times); with the desk change below
+reverted, 3 of 5 fail. This replaces the "check 21 is unchanged" note below.
+
 ## 2026-11-24 (q10-rel): Content before scenery: the desk paints no more sheets until the verdict is on screen
 
 A result arriving on a desk already drawing paints the card's faces and one sheet, then holds
