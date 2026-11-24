@@ -619,8 +619,9 @@ def looks_personal(claim_text) -> bool:
 
 # Vouching. A typed claim is shown in a public list only when every word of it
 # is vouched for: a word in this closed list of ordinary claim words (function
-# words, question openers, the plain verbs and nouns of claims, and _TERMS; no
-# names), or a word in the titles or abstracts of the studies that check read
+# words, question openers, the plain verbs and nouns of claims; no names, and
+# not _TERMS, whose words include surnames such as Bell and Graves, so a _TERMS
+# word is vouched only by the studies), or a word in the titles or abstracts of the studies that check read
 # (never their authors or journals). Words are compared case-folded, with a
 # plain final "s" or "es" folded. A token with digits is vouched for when it
 # has at most 5 of them. A lowercase name or a word the studies never use
@@ -644,7 +645,7 @@ child children baby babies adult man men woman women pregnant pregnancy
 food diet water salt sugar weight amount dose pill tablet medicine
 flu cold cough pain sickness fever infection teeth
 one two three four five six seven eight nine ten
-""".split()) | _TERMS
+""".split())
 _VOUCH_TOKEN = re.compile(r"[^\W_]+")
 
 
@@ -663,11 +664,44 @@ def _vouch_forms(word: str) -> set:
 
 _VOUCH_CLOSED = frozenset(f for w in _VOUCH_WORDS for f in _vouch_forms(w))
 
+# "will" and "may" are closed-list words as modal verbs, and first names too.
+# One is read as a name when it is the claim's last word, or follows a
+# preposition or joiner, or comes before a closed-list word that is not a verb
+# or adverb ("will young", "for may", "may west": names; "may cause", "will
+# not", "may also help": verbs). The verbs and adverbs are this fixed set
+# inside the closed list, compared on folded forms ("causes" is "cause").
+_MODAL_NAMES = frozenset({"will", "may"})
+_NAME_AFTER = frozenset("for in to with by from of at on about and or than like".split())
+_VERB_OR_ADVERB = frozenset(f for w in """
+be been being have has had do does did not never no also still only just even too very much always usually often
+sometimes soon quickly fully regularly daily straight
+cause causing prevent stop cure treat help work make take taking give giving get getting go going keep put need use
+using find feel mean pass live remove raise increase boost improve reduce cut cutting decrease shorten speed ease
+relieve soothe protect harm affect change catch catching eat eating drink drinking sleep sleeping exercise
+exercising lower raise link
+""".split() for f in _vouch_forms(w))
+
+
+def _modal_as_name(tokens) -> bool:
+    for i, w in enumerate(tokens):
+        if w not in _MODAL_NAMES:
+            continue
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+        if nxt is None or (i and tokens[i - 1] in _NAME_AFTER):
+            return True
+        forms = _vouch_forms(nxt)
+        if forms & _VOUCH_CLOSED and not forms & _VERB_OR_ADVERB:
+            return True
+    return False
+
 
 def vouched(claim_text, studies) -> bool:
     """Every word of the claim is vouched for (see _VOUCH_WORDS)."""
     seen = None
-    for w in _vouch_tokens(claim_text):
+    tokens = _vouch_tokens(claim_text)
+    if _modal_as_name(tokens):
+        return False
+    for w in tokens:
         if any(ch.isdigit() for ch in w):
             if sum(ch.isdigit() for ch in w) > 5:
                 return False

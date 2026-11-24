@@ -15333,6 +15333,57 @@ for _u in ("/", "/?q=" + urllib.parse.quote("Vaccines cause autism")):
       and "how-btn-2" not in _sf_f, _sf_f[-400:])
 _sf_home = c.get("/").get_data(as_text=True)
 t("4: the first stop keeps How it works (id how-btn, to /method)", 'id="how-btn" class="how-link" href="/method">How it works</a>' in _sf_home)
+# --- review 1, A and B: _TERMS words and "will"/"may" no longer vouch for a name ---
+# Each case's studies use every word of it but the name, so only the name can keep it off.
+import html as _sf_html
+_SF_SMOKE = [{"title": "Smoking and lung cancer", "abstract": "Smoking causes lung cancer in adults."}]
+_SF_CIN = [{"title": "Cinnamon and glucose", "abstract": "Cinnamon lowers blood sugar in adults."}]
+_SF_HONEY = [{"title": "Honey for cough", "abstract": "Honey can ease a cough in children."}]
+_SF_NAMED = (("smoking causes lung cancer for will young", _SF_SMOKE), ("will best has flu", []),
+             ("may west has a fever", []), ("cinnamon lowers blood sugar in lou graves", _SF_CIN),
+             ("will young has lung cancer from smoking", _SF_SMOKE),
+             ("HONEY CAN EASE A COUGH IN CHILDREN WILL YOUNG", _SF_HONEY),
+             ("Smoking causes lung cancer for Lou Bell", _SF_SMOKE))
+_SF_PLAIN = (("Smoking causes lung cancer", _SF_SMOKE), ("Salt may cause high blood pressure",
+             [{"title": "Salt and blood pressure", "abstract": "Salt raises blood pressure."}]),
+             ("Honey may also ease a cough in children", _SF_HONEY), ("Will honey ease a cough in children", _SF_HONEY))
+for _cl, _st in _SF_NAMED:
+    t(f"R1 A/B: {_cl!r} is not public, though its studies use every other word", not display.public_claim(_cl, _st))
+for _cl, _st in _SF_PLAIN:
+    t(f"R1 A/B: {_cl!r} is still public: 'may' and 'will' as verbs, words the studies use", display.public_claim(_cl, _st))
+t("R1 A: a _TERMS word (Bell, Graves) is vouched only by the studies, like any word outside the closed list",
+  not display.vouched("cinnamon lowers blood sugar in graves", _SF_CIN)
+  and display.vouched("cinnamon lowers blood sugar in graves", [dict(_SF_CIN[0], abstract=_SF_CIN[0]["abstract"] + " Graves disease.")]))
+t("R1 B: will or may is a name as the last word, after a preposition or joiner, or before a closed word that is not a verb or adverb",
+  [display._modal_as_name(display._vouch_tokens(x)) for x in
+   ("ask may", "salt for will", "will young", "may waters", "may cause harm", "will not", "may also help", "salt may raise risk")]
+  == [True, True, True, True, False, False, False, False])
+for _cl, _st in _SF_NAMED:
+    _sf_seed(_cl, studies=_st or [{"title": "x", "abstract": "y"}])
+_sf_p = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("smoking").items()}
+_sf_p2 = {k: _sf_html.unescape(v).casefold() for k, v in _sf_paths("will").items()}
+for _cl, _st in _SF_NAMED:
+    _sf_bad = [u for u, v in list(_sf_p.items()) + [("/api/suggest?q=will", _sf_p2["/api/suggest"])] if _cl.casefold() in v]
+    t(f"R1 A/B: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
+_sf_drop(*[x for x, _ in _SF_NAMED])
+# --- review 1, F: llms.txt shows a curated claim's verdict as its page shows it ---
+_SF_LL = "Intermittent fasting improves brain function"
+with db.get_conn() as _conn:
+    _sf_ll_had = _conn.execute("SELECT COUNT(*) n FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_SF_LL),)).fetchone()["n"]
+_sf_seed(_SF_LL, studies=[{"pmid": "SF1", "title": "Intermittent fasting and cognition: a meta-analysis", "journal": "J", "year": "2021",
+         "abstract": "Ten randomized trials were pooled. Low-certainty evidence suggests intermittent fasting improves brain function.",
+         "publication_types": ["Meta-Analysis"], "authors": ["A B"], "data_banks": None, "url": "u"}], verdict_="true")
+_sf_llr = db.get_cached_by_key(db.normalize_claim(_SF_LL))
+_sf_llv = appmod._shown_verdict({"claim_text": _sf_llr["claim_text"], "verdict": _sf_llr["verdict"], "search_query": _sf_llr["search_query"],
+                                 "tldr": _sf_llr["tldr"], "studies": _sf_llr["studies"], "cited": _sf_llr["cited_studies"]})
+appmod._public_memo.clear()
+_sf_lltxt = c.get("/llms.txt").get_data(as_text=True)
+_sf_llline = [l_ for l_ in _sf_lltxt.splitlines() if f"[{_SF_LL}]" in l_]
+t("R1 F: llms.txt shows a saved 'true' its page caps as the page's verdict, not 'Likely true'",
+  _sf_llv == "complicated" and len(_sf_llline) == 1 and _sf_llline[0].endswith(": " + appmod.VERDICT_LABELS["complicated"])
+  and appmod.VERDICT_LABELS["true"] not in _sf_llline[0], (_sf_llv, _sf_llline))
+if not _sf_ll_had:
+    _sf_drop(_SF_LL)
 # ===== END SITE FIXES =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
