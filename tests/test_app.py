@@ -11778,6 +11778,29 @@ try:
 except ImportError:
     pass
 
+# ---- One room of warm colour (q10-look 5) -------------------------------------------------
+# --green had no rule left on any page and is gone. Across the shipped colour files, every
+# colour literal with chroma 0.02 or more has a hue between 40 and 100: the lamp, the wood and
+# the paper are the only colour in the room (no green, mint, teal, cyan, blue or purple).
+_pa_css = (ROOT / "static" / "style.css").read_text()
+t("PALETTE: --green is gone and nothing on any page asks for it",
+  "--green" not in _pa_css and not any("var(--green)" in (ROOT / d / f).read_text()
+      for d, f in [("static", "desk.css"), ("static", "app.js"), ("static", "desk.js")] + [("templates", n.name) for n in (ROOT / "templates").glob("*.html")]))
+def _pa_lits(src):
+    out = []
+    for m in re.finditer(r"#([0-9a-fA-F]{6})\b|0x([0-9a-fA-F]{6})\b|rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", src):
+        h = m.group(1) or m.group(2) or "".join(f"{int(v):02x}" for v in m.group(3, 4, 5))
+        out.append(h.lower())
+    return out
+_pa_bad = []
+for _pa_f in ("static/desk.css", "static/style.css", "static/desk3d.js", "static/icons/icon.svg", "static/manifest.webmanifest"):
+    for _pa_h in _pa_lits((ROOT / _pa_f).read_text()):
+        _pa_l, _pa_c, _pa_hue = _wg_oklch(_pa_h)
+        if _pa_c >= 0.02 and not (40 <= _pa_hue <= 100):
+            _pa_bad.append((_pa_f, _pa_h, round(_pa_c, 3), round(_pa_hue)))
+t("PALETTE: every colour literal with chroma 0.02 or more in the shipped colour files has a hue from 40 to 100",
+  not _pa_bad, _pa_bad)
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -51,7 +51,6 @@
   /* No accent colour: links are the words' own colour with an underline.
      A selection is a warm paper tint; the focus ring is ink by day and the
      words' colour on the night. */
-  --green: #2c5848;
   --tint: #e6dcc6;
 
   --focus: var(--ink);
