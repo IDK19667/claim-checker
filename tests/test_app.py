@@ -15878,6 +15878,120 @@ t("SP done: a stream that closes with no answer still fails as before, so the pl
   _sd_c == {"r": "threw stream ended early", "cancelled": 0}, _sd_c)
 # ===== END Q11 SPEED (done) =====
 
+# ===== Q11 SPEED (NCBI key) =====
+# An optional NCBI_API_KEY: with it, requests start 0.1 s apart and carry
+# api_key at send time only; without it (unset, empty or blank) the bytes are
+# today's. The key never reaches an error's words or a log line, and a key
+# NCBI refuses is dropped, not a crash. A fresh copy of pubmed, a fake HTTP
+# client, no network.
+import importlib.util as _nk_iu
+import logging as _nk_logging
+import io as _nk_io
+import requests as _nk_rq
+_nk_spec = _nk_iu.spec_from_file_location("_nk_pubmed", ROOT / "pubmed.py")
+_nk = _nk_iu.module_from_spec(_nk_spec)
+_nk_spec.loader.exec_module(_nk)
+_NK_KEY = "nk-secret-0123456789abcdef"
+
+
+class _NkHttp:
+    """Records what would be sent and answers from a script of replies."""
+    def __init__(self, replies):
+        self.replies, self.sent = list(replies), []
+
+    def _do(self, method, url, params, timeout):
+        self.sent.append((method, dict(params)))
+        full = _nk_rq.Request(method.upper(), url, params=params if method == "get" else None).prepare().url
+        r = self.replies.pop(0)
+        if isinstance(r, Exception):
+            raise type(r)(f"{r} while asking {full}")
+        status, body = r
+        resp = _nk_rq.Response()
+        resp.status_code, resp._content, resp.url = status, body.encode(), full
+        resp.request = _nk_rq.Request(method.upper(), full).prepare()
+        resp.reason = "Fake"
+        return resp
+
+    def get(self, url, params=None, timeout=None):
+        return self._do("get", url, params, timeout)
+
+    def post(self, url, data=None, timeout=None):
+        return self._do("post", url, data, timeout)
+
+
+def _nk_with(env_value, replies, call):
+    old_env, old_http, old_sleep = os.environ.get("NCBI_API_KEY"), _nk._http, _nk.time.sleep
+    if env_value is None:
+        os.environ.pop("NCBI_API_KEY", None)
+    else:
+        os.environ["NCBI_API_KEY"] = env_value
+    _nk._http, _nk._key_refused, _nk._last_call = _NkHttp(replies), False, 0.0
+    _nk.time.sleep = lambda s: None
+    buf = _nk_io.StringIO()
+    h = _nk_logging.StreamHandler(buf)
+    _nk._log.addHandler(h)
+    try:
+        try:
+            out = call()
+        except Exception as e:  # noqa: BLE001
+            out = e
+        return out, _nk._http.sent, buf.getvalue(), _nk._interval(), _nk._key_refused
+    finally:
+        _nk._log.removeHandler(h)
+        _nk._http, _nk.time.sleep, _nk._key_refused = old_http, old_sleep, False
+        if old_env is None:
+            os.environ.pop("NCBI_API_KEY", None)
+        else:
+            os.environ["NCBI_API_KEY"] = old_env
+
+
+_nk_params = {"db": "pubmed", "term": "x", "tool": "t", "email": ""}
+for _nk_v, _nk_name in ((None, "unset"), ("", "empty"), ("   \t", "blank")):
+    _nk_o, _nk_s, _, _nk_i, _ = _nk_with(_nk_v, [(200, "{}")], lambda: _nk._paced_get("esearch.fcgi", dict(_nk_params)))
+    t(f"NK: with the key {_nk_name}, the request goes out exactly as today, at today's 0.4 s spacing",
+      _nk_s == [("get", _nk_params)] and _nk_i == _nk.MIN_INTERVAL == 0.4 and _nk_o.status_code == 200, (_nk_s, _nk_i))
+
+_nk_caller = dict(_nk_params)
+_nk_o, _nk_s, _, _nk_i, _ = _nk_with(_NK_KEY, [(200, "{}")], lambda: _nk._paced_post("esearch.fcgi", _nk_caller))
+t("NK: with a key, the request carries it at send time, spaced 0.1 s, and the caller's params are untouched",
+  _nk_s == [("post", {**_nk_params, "api_key": _NK_KEY})] and _nk_i == 0.1 and _nk_caller == _nk_params, (_nk_s, _nk_i))
+_nk_o, _nk_s, _, _, _ = _nk_with("  " + _NK_KEY + " ", [(200, "{}")], lambda: _nk._paced_get("esearch.fcgi", dict(_nk_params)))
+t("NK: a key with spaces around it is sent trimmed, and the response URL no longer names it",
+  _nk_s[0][1].get("api_key") == _NK_KEY and _NK_KEY not in _nk_o.url and _NK_KEY not in _nk_o.request.url, _nk_o.url)
+
+for _nk_exc in (_nk_rq.ConnectionError("refused"), _nk_rq.Timeout("slow")):
+    _nk_o, _, _nk_log, _, _ = _nk_with(_NK_KEY, [_nk_exc], lambda: _nk._get("efetch.fcgi", dict(_nk_params)))
+    t(f"NK: a {type(_nk_exc).__name__} that names the key comes out as the same kind of error without it, not chained",
+      isinstance(_nk_o, type(_nk_exc)) and _NK_KEY not in str(_nk_o) and "[redacted]" in str(_nk_o)
+      and _nk_o.__cause__ is None and _nk_o.__suppress_context__ and _NK_KEY not in _nk_log, str(_nk_o))
+
+_nk_o, _nk_s, _nk_log, _, _ = _nk_with(_NK_KEY, [(500, "oops"), (500, "oops")], lambda: _nk._get("efetch.fcgi", dict(_nk_params)))
+t("NK: a PubMed fault with a key raises the usual HTTP error, and neither its text nor the log names the key",
+  isinstance(_nk_o, _nk_rq.HTTPError) and "500" in str(_nk_o) and _NK_KEY not in str(_nk_o)
+  and _NK_KEY not in _nk_log and len(_nk_s) == 2, str(_nk_o))
+
+_nk_o, _nk_s, _nk_log, _nk_i, _nk_ref = _nk_with(
+    _NK_KEY, [(400, '{"error":"API key invalid","api-key":"x"}'), (200, "{}"), (200, "{}")],
+    lambda: (_nk._get("esearch.fcgi", dict(_nk_params)), _nk._get("esearch.fcgi", dict(_nk_params))))
+t("NK: a key NCBI refuses (400) is dropped: the request is sent again without it, later ones too, at 0.4 s, logged without the key",
+  isinstance(_nk_o, tuple) and _nk_o[0].status_code == 200
+  and [p.get("api_key") for _, p in _nk_s] == [_NK_KEY, None, None] and _nk_ref and _nk_i == 0.4
+  and "did not accept" in _nk_log and _NK_KEY not in _nk_log, (_nk_s, _nk_log))
+
+_nk_o, _nk_s, _nk_log, _, _nk_ref = _nk_with(_NK_KEY, [(429, "rate"), (429, "rate")], lambda: _nk._get("esearch.fcgi", dict(_nk_params)))
+t("NK: a 429 with a key is asked once more and then fails as a defined HTTP error, no hang, key kept out of the text",
+  isinstance(_nk_o, _nk_rq.HTTPError) and "429" in str(_nk_o) and len(_nk_s) == 2 and not _nk_ref
+  and _NK_KEY not in str(_nk_o) and _NK_KEY not in _nk_log, str(_nk_o))
+_nk_o, _nk_s, _, _, _ = _nk_with(_NK_KEY, [(429, "rate"), (200, "{}")], lambda: _nk._get("esearch.fcgi", dict(_nk_params)))
+t("NK: a 429 then a good reply with a key goes on as normal", getattr(_nk_o, "status_code", None) == 200, _nk_o)
+_nk_o, _nk_s, _, _, _nk_ref = _nk_with(_NK_KEY, [(400, "bad term"), (400, "bad term")], lambda: _nk._get("esearch.fcgi", dict(_nk_params)))
+t("NK: a 400 that is not about the key keeps the key and fails as before",
+  isinstance(_nk_o, _nk_rq.HTTPError) and not _nk_ref and len(_nk_s) == 1 and _NK_KEY not in str(_nk_o), (_nk_s, str(_nk_o)))
+t("NK: the key is read from the environment only, and the docs name it",
+  'os.environ.get("NCBI_API_KEY")' in (ROOT / "pubmed.py").read_text()
+  and "NCBI_API_KEY" in (ROOT / "README.md").read_text() and "NCBI_API_KEY" in (ROOT / ".env.example").read_text())
+# ===== END Q11 SPEED (NCBI key) =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

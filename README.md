@@ -86,6 +86,12 @@ works (Render, Railway, Fly.io, a $5 VPS). What it needs:
   Turso is unreachable a call falls back to the local file, so a check
   never fails because of it. With neither variable set everything uses the
   local file (or a persistent disk: set `DB_PATH` to a path on it).
+- Optional: `NCBI_API_KEY`, a free key from an NCBI account (Account
+  settings, API Key Management). With it PubMed allows 10 requests a second
+  instead of 3, so the searches start closer together and a check is a
+  little faster. It is read from the environment only and never logged,
+  stored or shown; a key NCBI refuses is dropped and the site carries on
+  without one.
 - HTTPS (every host above provides it). Service workers and the install
   prompt require it.
 
