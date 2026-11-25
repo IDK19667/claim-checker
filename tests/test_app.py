@@ -15554,6 +15554,48 @@ t("ST 2: the phone band in text mode uses the 3D page's own rule, so the claim b
   and "html.js:not(.no-gl):not(.checked) { --lamp-band: clamp(116px, calc(100svh - 478px), 30svh); }" in _st_css)
 # ===== END Q10 STILL =====
 
+# ===== Q11 SPEED: the model's SDK is imported after the first response, in the background =====
+import threading as _sp_th  # noqa: E402
+import time as _sp_time  # noqa: E402
+t("SP warm: the requests above started the warm-up once", appmod._warm["started"] is True)
+_sp_calls, _sp_real = [], appmod._warm_provider
+try:
+    appmod._warm["started"] = False
+    appmod._warm_provider = lambda: _sp_calls.append(_sp_th.current_thread().name)
+    _sp_r = c.get("/healthz")
+    _sp_r.close()
+    for _ in range(40):
+        if _sp_calls:
+            break
+        _sp_time.sleep(0.05)
+    c.get("/healthz").close()
+    c.get("/privacy").close()
+    _sp_time.sleep(0.2)
+    t("SP warm: it runs once, after the first response, on its own thread, not the request's",
+      _sp_calls == ["warm-provider"] and appmod._warm["started"] is True, _sp_calls)
+finally:
+    appmod._warm_provider = _sp_real
+_sp_env, _sp_net = os.environ.get("LLM_PROVIDER"), len(NET_TRIES)
+try:
+    os.environ["LLM_PROVIDER"] = "gemini"
+    _sp_client = verdict._gemini_client
+    appmod._warm_provider()
+    t("SP warm: for Gemini it imports google.genai, its errors and httpx, builds no client and sends nothing",
+      all(m in sys.modules for m in ("google.genai", "google.genai.errors", "httpx"))
+      and verdict._gemini_client is _sp_client and len(NET_TRIES) == _sp_net)
+    os.environ.pop("LLM_PROVIDER")
+    _sp_k = os.environ.pop("GEMINI_API_KEY", None)
+    appmod._warm_provider()
+    t("SP warm: with no provider set up it does nothing and raises nothing", len(NET_TRIES) == _sp_net)
+    if _sp_k is not None:
+        os.environ["GEMINI_API_KEY"] = _sp_k
+finally:
+    if _sp_env is None:
+        os.environ.pop("LLM_PROVIDER", None)
+    else:
+        os.environ["LLM_PROVIDER"] = _sp_env
+# ===== END Q11 SPEED (warm) =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

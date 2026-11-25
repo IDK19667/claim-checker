@@ -192,6 +192,47 @@ def _compress(response: Response) -> Response:
 db.init_db()
 
 
+# The model's SDK is imported on a check's first model call, and on a fresh
+# process that import (google.genai, about a second of work here, more on a
+# small host) sat inside the first check of every start, a free host's wake
+# included. Now it is done once, in the background, after the first response
+# of the process has gone out: never in the way of the page that woke the
+# server, and usually done before the reader has typed a claim. It sends
+# nothing anywhere and builds nothing: imports only. A check that comes
+# first does the same work itself, as before.
+_warm = {"started": False}
+_warm_lock = threading.Lock()
+
+
+def _warm_provider() -> None:
+    """Import what the first model call imports: google.genai with its
+    errors and httpx (the default provider), or anthropic. Imports only."""
+    try:
+        if verdict.provider() == "anthropic":
+            import anthropic  # noqa: F401
+        else:
+            import httpx  # noqa: F401
+            from google import genai  # noqa: F401
+            from google.genai import errors  # noqa: F401
+    except Exception as e:  # noqa: BLE001 — a check that needs it says what is wrong
+        app.logger.info("The model SDK was not imported ahead: %s", type(e).__name__)
+
+
+def _warm_once() -> None:
+    with _warm_lock:
+        if _warm["started"]:
+            return
+        _warm["started"] = True
+    threading.Thread(target=_warm_provider, name="warm-provider", daemon=True).start()
+
+
+@app.after_request
+def _warm_after_first(response: Response) -> Response:
+    if not _warm["started"]:
+        response.call_on_close(_warm_once)
+    return response
+
+
 # Static files carry a stamp: every static address a page prints ends in
 # ?v= and the first 10 hex digits of the file's sha256 (url_for adds it), and
 # a request with the right stamp may be kept for a year, because a changed
