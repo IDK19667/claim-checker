@@ -1259,8 +1259,8 @@ for (const [w, h] of J_SIZES) for (const mode of ["3d", "text"]) {
     must(s.mode === (mode === "3d" ? "3d" : "text"), `mode ${s.mode}`);
     must(s.box <= s.H, `the claim box ends at ${Math.round(s.box)}, below the first screen (${s.H})`);
     if (h >= 667) must(s.btn <= s.H, `"Check the research" ends at ${Math.round(s.btn)}, below the first screen (${s.H})`);
-    // the lamp band is the phone's in 3D only; text mode and a wide screen keep their own first screen
-    if (w <= 760 && mode === "3d") must(s.band && s.mark === "none", `no lamp band on the phone (band "${s.band}", wordmark ${s.mark})`);
+    // the lamp band is the phone's, in 3D and in text mode (where the desk still fills it, q10-still); a wide screen keeps its own first screen
+    if (w <= 760) must(s.band && s.mark === "none", `no lamp band on the phone (band "${s.band}", wordmark ${s.mark})`);
     else must(!s.band || s.mark !== "none", `a lamp band where there is none to show (band "${s.band}", wordmark ${s.mark})`);
     await page.fill("#claim-input", LIVE); await page.click("#submit-btn");
     await page.waitForFunction(() => document.documentElement.classList.contains("checked"), null, { timeout: 60000 });
