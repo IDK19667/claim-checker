@@ -1745,16 +1745,14 @@ _STEPS = ThreadPoolExecutor(max_workers=16, thread_name_prefix="check-step")
 def _reporting(fn, *args, **kwargs):
     """
     fn(*args, **kwargs) on _STEPS, yielding the stage events it reports on
-    the way ("returned" once, "checking"), and returning what it returns. An
-    exception it raises is raised here, as if it had been called directly.
+    the way ("returned" for each round of searching, "checking"), and
+    returning what it returns. An exception it raises is raised here, as if
+    it had been called directly.
     """
     events = queue.SimpleQueue()
-    returned = []
 
     def tell_returned(count):
-        if not returned:
-            returned.append(count)
-            events.put({"stage": "returned", "count": count})
+        events.put({"stage": "returned", "count": count})
 
     def run():
         told = pubmed.RETURNED.set(tell_returned)

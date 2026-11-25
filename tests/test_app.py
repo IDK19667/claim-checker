@@ -15765,7 +15765,7 @@ _pg_mode = {}
 def _pg_search(q, max_results=8, surrogate=""):
     told = pubmed.RETURNED.get()
     told(14)
-    told(15)  # a widened second search: only the first count is sent
+    told(15)  # a widened second search: its own count, sent too
     if _pg_mode.get("search_fails"):
         raise requests.Timeout("fake: PubMed timed out after the searches")
     return _copy_pg.deepcopy(_VE_STUDIES), q, False
@@ -15789,8 +15789,9 @@ try:
     _pg_mode.update(faithful=True)
     _pg_r, _pg_evs = stream("The progress line claim helps", ip="7.7.11.2")
     t("SP progress: through the stream, search, query, returned, found, weigh, checking, done, in that order",
-      [e["stage"] for e in _pg_evs] == ["search", "query", "returned", "found", "weigh", "checking", "done"]
-      and _pg_evs[2] == {"stage": "returned", "count": 14} and _pg_evs[5] == {"stage": "checking"},
+      [e["stage"] for e in _pg_evs] == ["search", "query", "returned", "returned", "found", "weigh", "checking", "done"]
+      and _pg_evs[2:4] == [{"stage": "returned", "count": 14}, {"stage": "returned", "count": 15}]
+      and _pg_evs[6] == {"stage": "checking"},
       [e["stage"] for e in _pg_evs])
     _pg_r2, _pg_evs2 = stream("The progress line claim helps", ip="7.7.11.2")
     t("SP progress: a saved answer is served with neither line",
@@ -15798,18 +15799,18 @@ try:
     _pg_mode.clear()
     _pg_r3, _pg_evs3 = stream("The progress line claim, unchecked, helps", ip="7.7.11.3")
     t("SP progress: no checking line when the faithfulness call is not made",
-      [e["stage"] for e in _pg_evs3] == ["search", "query", "returned", "found", "weigh", "done"],
+      [e["stage"] for e in _pg_evs3] == ["search", "query", "returned", "returned", "found", "weigh", "done"],
       [e["stage"] for e in _pg_evs3])
     _pg_mode.update(search_fails=True)
     _pg_r4, _pg_evs4 = stream("The progress line claim, PubMed down, helps", ip="7.7.11.4")
     t("SP progress: a PubMed timeout after the count still ends in the defined PubMed error",
-      [e["stage"] for e in _pg_evs4] == ["search", "query", "returned", "error"]
+      [e["stage"] for e in _pg_evs4] == ["search", "query", "returned", "returned", "error"]
       and _pg_evs4[-1].get("status") == 502 and _pg_evs4[-1].get("error"), _pg_evs4[-1])
     _pg_mode.clear()
     _pg_mode.update(faithful=True, refuse=True)
     _pg_r5, _pg_evs5 = stream("The progress line claim, refused, helps", ip="7.7.11.5")
     t("SP progress: a model refusal after the checking line still ends in the defined error with its words",
-      [e["stage"] for e in _pg_evs5] == ["search", "query", "returned", "found", "weigh", "checking", "error"]
+      [e["stage"] for e in _pg_evs5] == ["search", "query", "returned", "returned", "found", "weigh", "checking", "error"]
       and "declined" in (_pg_evs5[-1].get("error") or ""), _pg_evs5[-1])
     _pg_json = c.post("/api/check", json={"claim": "The progress line claim, plain, helps"},
                       environ_base={"REMOTE_ADDR": "7.7.11.6"})
@@ -15843,6 +15844,53 @@ t("SP progress: the new lines carry no em or en dash, and only handleStage write
   and _js.find("Checking the answer against the studies") > _js.find("function handleStage")
   and _js.find("Checking the answer against the studies") < _js.find("async function checkStreamed"))
 # ===== END Q11 SPEED (progress lines) =====
+
+# ===== Q11 SPEED: every round of searching says its own count =====
+# Case (b) of the review: the first search sends back 2 papers with nothing to
+# read, the widened one 8 that can be read. The log must say 8 came back
+# before it says 8 were found, so no later line contradicts an earlier one.
+# The real search_with_fallback on a fresh copy of pubmed, PubMed faked.
+_rr_spec = _pg_iu.spec_from_file_location("_rr_pubmed", ROOT / "pubmed.py")
+_rr = _pg_iu.module_from_spec(_rr_spec)
+_rr_spec.loader.exec_module(_rr)
+_rr.RETURNED = pubmed.RETURNED  # the hooks app.py sets are the real module's
+
+
+def _rr_study(i, abstract):
+    return {"pmid": i, "title": "Thing helps trial " + i, "journal": "J", "year": "2024", "authors": [],
+            "publication_types": ["Journal Article", "Randomized Controlled Trial"],
+            "abstract": abstract, "data_banks": None, "url": "u"}
+
+
+_rr_world = {}
+_rr.search_merged = lambda q, max_results=8: list(_rr_world.get(q, []))
+_rr.fetch_details = lambda ids: [_rr_study(i, "" if int(i) < 100 else "The thing helped. CONCLUSIONS: It helps.")
+                                 for i in ids]
+_rr.broaden_query = lambda q: "(thing)" if q != "(thing)" else ""
+_rr_saved = (pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among)
+
+
+def _rr_events(claim, ip, world):
+    _rr_world.clear(); _rr_world.update(world)
+    return [(e["stage"], e.get("count")) for e in stream(claim, ip=ip)[1]
+            if e["stage"] in ("returned", "unreadable", "widened", "found")]
+
+
+try:
+    pubmed.search_with_fallback = _rr.search_with_fallback
+    verdict.extract_search_terms = lambda claim: ("(thing) AND (help)", "", claim)
+    verdict.weigh_evidence = _pg_weigh
+    pubmed.retracted_among = lambda ids: set()
+    _rr_b = _rr_events("The every round claim helps", "7.7.12.1",
+                       {"(thing) AND (help)": ["1", "2"], "(thing)": [str(100 + i) for i in range(8)]})
+    _rr_counts = [x for x in _rr_b if x[0] in ("returned", "found")]
+    t("SP rounds: a widened search says its own count before the studies found in it (review case b)",
+      _rr_counts == [("returned", 2), ("returned", 8), ("found", 8)], _rr_b)
+    t("SP rounds: no count found is ever more than the last count PubMed returned",
+      all(n <= max([m for s, m in _rr_b[:i] if s == "returned"] or [0]) for i, (s, n) in enumerate(_rr_b) if s == "found"), _rr_b)
+finally:
+    pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _rr_saved
+# ===== END Q11 SPEED (every round) =====
 
 # ===== Q11 SPEED: the page draws the answer when it arrives, not when the stream closes =====
 # After "done" the server saves the answer and logs the check before the

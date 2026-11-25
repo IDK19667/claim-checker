@@ -64,8 +64,10 @@ def _ahead(fn, *args, **kwargs):
 
 
 # Who to tell, and how many distinct papers the searches sent back, before
-# their abstracts are fetched: the live check's reading log says so. Unset
-# (None) everywhere but there, so nothing else sees a difference.
+# their abstracts are fetched: the live check's reading log says so, once for
+# each round of searching that sends any back (a widened search is a round of
+# its own, with its own count). Unset (None) everywhere but there, so nothing
+# else sees a difference.
 RETURNED = contextvars.ContextVar("pubmed_returned", default=None)
 
 

@@ -895,8 +895,9 @@ function handleStage(ev) {
     showTyped(typed, ev.typed_reason);
   }
   if (ev.stage === "query") logLine(ev.query ? `Searching PubMed for “${ev.query}”` : "Searching PubMed", true);
-  // The searches are back: how many papers, before any is opened. The site
-  // keeps the strongest, so the count found next is smaller, never a contradiction.
+  // A round of searching is back: how many papers, before any is opened. Each
+  // round says its own count (a widened search is a second round), and the
+  // studies found are picked from the last round, so "Found" is never more.
   else if (ev.stage === "returned") logLine(ev.count === 1 ? "PubMed returned 1 paper. Opening it" : `PubMed returned ${ev.count} papers. Picking the strongest to read`, true);
   else if (ev.stage === "found") {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
