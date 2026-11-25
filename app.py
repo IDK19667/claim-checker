@@ -1745,7 +1745,8 @@ _STEPS = ThreadPoolExecutor(max_workers=16, thread_name_prefix="check-step")
 def _reporting(fn, *args, **kwargs):
     """
     fn(*args, **kwargs) on _STEPS, yielding the stage events it reports on
-    the way ("returned" for each round of searching, "checking"), and
+    the way ("returned" for each round of searching, "unreadable" and
+    "widened" when a round has nothing to read, "checking"), and
     returning what it returns. An exception it raises is raised here, as if
     it had been called directly.
     """
@@ -1754,14 +1755,19 @@ def _reporting(fn, *args, **kwargs):
     def tell_returned(count):
         events.put({"stage": "returned", "count": count})
 
+    def tell_progress(stage, **fields):
+        events.put({"stage": stage, **fields})
+
     def run():
         told = pubmed.RETURNED.set(tell_returned)
+        progress = pubmed.PROGRESS.set(tell_progress)
         checking = verdict.CHECKING.set(lambda: events.put({"stage": "checking"}))
         try:
             return fn(*args, **kwargs)
         finally:
             verdict.CHECKING.reset(checking)
             pubmed.RETURNED.reset(told)
+            pubmed.PROGRESS.reset(progress)
             events.put(None)
     step = _STEPS.submit(run)
     while (ev := events.get()) is not None:

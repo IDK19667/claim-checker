@@ -15853,7 +15853,7 @@ t("SP progress: the new lines carry no em or en dash, and only handleStage write
 _rr_spec = _pg_iu.spec_from_file_location("_rr_pubmed", ROOT / "pubmed.py")
 _rr = _pg_iu.module_from_spec(_rr_spec)
 _rr_spec.loader.exec_module(_rr)
-_rr.RETURNED = pubmed.RETURNED  # the hooks app.py sets are the real module's
+_rr.RETURNED, _rr.PROGRESS = pubmed.RETURNED, pubmed.PROGRESS  # the hooks app.py sets are the real module's
 
 
 def _rr_study(i, abstract):
@@ -15888,9 +15888,42 @@ try:
       _rr_counts == [("returned", 2), ("returned", 8), ("found", 8)], _rr_b)
     t("SP rounds: no count found is ever more than the last count PubMed returned",
       all(n <= max([m for s, m in _rr_b[:i] if s == "returned"] or [0]) for i, (s, n) in enumerate(_rr_b) if s == "found"), _rr_b)
+    # Case (a): 3 papers come back, none has an abstract, the widened search
+    # finds nothing. Before the fix the log went straight from "PubMed
+    # returned 3 papers" to "Nothing matched on PubMed".
+    _rr_a = _rr_events("The nothing to read claim helps", "7.7.12.2", {"(thing) AND (help)": ["1", "2", "3"]})
+    t("SP rounds: papers with nothing to read are said to have none before the search is widened and nothing matches (review case a)",
+      _rr_a == [("returned", 3), ("unreadable", 3), ("widened", None), ("found", 0)], _rr_a)
+    t("SP rounds: case b reads returned, nothing to read, widened, returned, found",
+      _rr_b == [("returned", 2), ("unreadable", 2), ("widened", None), ("returned", 8), ("found", 8)], _rr_b)
+    _rr_n = _rr_events("The widened from nothing claim helps", "7.7.12.3", {"(thing)": [str(100 + i) for i in range(3)]})
+    t("SP rounds: a first search with no papers at all says it widens, then the widened count",
+      _rr_n == [("widened", None), ("returned", 3), ("found", 3)], _rr_n)
+    _rr_w = [e for e in stream("The widened query claim helps", ip="7.7.12.4")[1] if e["stage"] == "widened"]
+    t("SP rounds: the widening event names the wider search", _rr_w == [{"stage": "widened", "query": "(thing)"}], _rr_w)
 finally:
     pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _rr_saved
 # ===== END Q11 SPEED (every round) =====
+_rr_js = _apprun('const L = []; logLine = (text, live) => L.push([text, !!live]);'
+                 ' handleStage({ stage: "returned", count: 3 }); handleStage({ stage: "unreadable", count: 3 });'
+                 ' handleStage({ stage: "unreadable", count: 1 }); handleStage({ stage: "widened", query: "(thing)" });'
+                 ' handleStage({ stage: "found", count: 0 }); __out.L = L;')
+_rr_lines = [x[0] for x in _rr_js["L"]]
+t("SP rounds: the page says there is nothing to read, then that it widens, as live lines with no dash",
+  _rr_lines == ["PubMed returned 3 papers. Picking the strongest to read",
+                "None of the 3 papers has an abstract, so there is nothing in them to read",
+                "That paper has no abstract, so there is nothing in it to read",
+                "Widening the search to “(thing)”", "Nothing matched on PubMed"]
+  and all(x[1] for x in _rr_js["L"]) and not any(ch in "".join(_rr_lines) for ch in "–—"), _rr_js)
+_rr_src = (ROOT / "static" / "app.js").read_text()
+t("SP rounds: only handleStage writes the new lines, so a saved or shared result never shows them",
+  all(_rr_src.count(x) == 1 and _rr_src.find("function handleStage") < _rr_src.find(x) < _rr_src.find("async function checkStreamed")
+      for x in ("has an abstract, so there is nothing in them to read", "Widening the search to")))
+_rr_page = c.get("/").get_data(as_text=True)
+t("SP rounds: the server-rendered page carries neither new line", "nothing in them to read" not in _rr_page
+  and "Widening the search" not in _rr_page)
+t("SP rounds: the progress hook is unset again on the step pool's threads and here",
+  pubmed.PROGRESS.get() is None and all(f.result() is None for f in [appmod._STEPS.submit(pubmed.PROGRESS.get) for _ in range(20)]))
 
 # ===== Q11 SPEED: the page draws the answer when it arrives, not when the stream closes =====
 # After "done" the server saves the answer and logs the check before the

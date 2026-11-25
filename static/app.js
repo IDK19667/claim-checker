@@ -899,6 +899,10 @@ function handleStage(ev) {
   // round says its own count (a widened search is a second round), and the
   // studies found are picked from the last round, so "Found" is never more.
   else if (ev.stage === "returned") logLine(ev.count === 1 ? "PubMed returned 1 paper. Opening it" : `PubMed returned ${ev.count} papers. Picking the strongest to read`, true);
+  // Every paper that round sent back has no abstract, so none can be read:
+  // said before the search is widened or nothing is found.
+  else if (ev.stage === "unreadable") logLine(ev.count === 1 ? "That paper has no abstract, so there is nothing in it to read" : `None of the ${ev.count} papers has an abstract, so there is nothing in them to read`, true);
+  else if (ev.stage === "widened") logLine(ev.query ? `Widening the search to “${ev.query}”` : "Widening the search", true);
   else if (ev.stage === "found") {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
     else { logLine(`Found ${ev.count} ${ev.count === 1 ? "study" : "studies"}${ev.broadened ? " after widening the search" : ""}`); logLine("Reading the studies", true); }

@@ -69,6 +69,11 @@ def _ahead(fn, *args, **kwargs):
 # its own, with its own count). Unset (None) everywhere but there, so nothing
 # else sees a difference.
 RETURNED = contextvars.ContextVar("pubmed_returned", default=None)
+# The same log's other two search steps, told as PROGRESS(stage, **fields):
+# "unreadable" (count) when every paper a round sent back has no abstract, so
+# the reader is not told papers came back and then that nothing matched with
+# no step between; "widened" (query) when a second, broader search starts.
+PROGRESS = contextvars.ContextVar("pubmed_progress", default=None)
 
 
 def _new_session() -> requests.Session:
@@ -410,7 +415,11 @@ def search_and_fetch(query: str, max_results: int = 8,
     told = RETURNED.get()
     if told is not None and pmids:
         told(len(pmids))
-    return prioritise(usable(fetch_details(pmids)), query, surrogate)[:max_results]
+    readable = usable(fetch_details(pmids))
+    progress = PROGRESS.get()
+    if progress is not None and pmids and not readable:
+        progress("unreadable", count=len(pmids))
+    return prioritise(readable, query, surrogate)[:max_results]
 
 
 # The fewest studies worth narrowing to. Below this, dropping the papers that
@@ -675,6 +684,9 @@ def search_with_fallback(query: str, max_results: int = 8,
     broader = broaden_query(query)
     if not broader:
         return [], query, False
+    progress = PROGRESS.get()
+    if progress is not None:
+        progress("widened", query=broader)
     studies = search_and_fetch(broader, max_results=max_results, surrogate=surrogate)
     return studies, broader, bool(studies)
 
