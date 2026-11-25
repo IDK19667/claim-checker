@@ -6,12 +6,14 @@ import hmac
 import logging
 import json
 import os
+import queue
 import re
 import secrets
 import subprocess
 import threading
 import time
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import sqlite3
 from html import escape
@@ -1732,6 +1734,43 @@ def _current(cached, claim):
     return cached
 
 
+# The two long steps of a live check run here, so the stream can say what
+# they report while they run: how many papers PubMed sent back before the
+# abstracts are fetched, and that the answer is being read against its
+# studies. Its own pool: what runs here waits on the search pool, and the
+# search pool never waits on anything.
+_STEPS = ThreadPoolExecutor(max_workers=16, thread_name_prefix="check-step")
+
+
+def _reporting(fn, *args, **kwargs):
+    """
+    fn(*args, **kwargs) on _STEPS, yielding the stage events it reports on
+    the way ("returned" once, "checking"), and returning what it returns. An
+    exception it raises is raised here, as if it had been called directly.
+    """
+    events = queue.SimpleQueue()
+    returned = []
+
+    def tell_returned(count):
+        if not returned:
+            returned.append(count)
+            events.put({"stage": "returned", "count": count})
+
+    def run():
+        told = pubmed.RETURNED.set(tell_returned)
+        checking = verdict.CHECKING.set(lambda: events.put({"stage": "checking"}))
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            verdict.CHECKING.reset(checking)
+            pubmed.RETURNED.reset(told)
+            events.put(None)
+    step = _STEPS.submit(run)
+    while (ev := events.get()) is not None:
+        yield ev
+    return step.result()
+
+
 def _run_check_stages(claim: str, client_ip: str, base_url: str):
     """
     Yields stage dicts. Terminal stages are "done" (with "result") and
@@ -1844,8 +1883,8 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
                     search_query, surrogate, _ = again
         yield {"stage": "query", "query": search_query, "claim": claim if typed else None,
                "typed_reason": reason}
-        studies, query_used, broadened = pubmed.search_with_fallback(
-            search_query, max_results=MAX_STUDIES, surrogate=surrogate)
+        studies, query_used, broadened = yield from _reporting(
+            pubmed.search_with_fallback, search_query, max_results=MAX_STUDIES, surrogate=surrogate)
         yield {"stage": "found", "count": len(studies), "query": query_used, "broadened": broadened}
         kept = _steady(claim, studies)
         if kept:
@@ -1866,10 +1905,11 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             yield {"stage": "weigh"}
         if lookup is None:
             settle()
-            result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
+            result = yield from _reporting(verdict.weigh_evidence, claim, studies, query_used, surrogate)
         else:
             evidence.flag_retracted_citations(studies)
-            result = verdict.weigh_evidence(claim, studies, query_used, surrogate, retractions=settle)
+            result = yield from _reporting(verdict.weigh_evidence, claim, studies, query_used, surrogate,
+                                           retractions=settle)
             settle()
         retraction_check = settled[0]
     except RuntimeError as e:

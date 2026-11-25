@@ -895,12 +895,17 @@ function handleStage(ev) {
     showTyped(typed, ev.typed_reason);
   }
   if (ev.stage === "query") logLine(ev.query ? `Searching PubMed for “${ev.query}”` : "Searching PubMed", true);
+  // The searches are back: how many papers, before any is opened. The site
+  // keeps the strongest, so the count found next is smaller, never a contradiction.
+  else if (ev.stage === "returned") logLine(ev.count === 1 ? "PubMed returned 1 paper. Opening it" : `PubMed returned ${ev.count} papers. Picking the strongest to read`, true);
   else if (ev.stage === "found") {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
     else { logLine(`Found ${ev.count} ${ev.count === 1 ? "study" : "studies"}${ev.broadened ? " after widening the search" : ""}`); logLine("Reading the studies", true); }
     // The desk stands one blank sheet in its stack for each paper found.
     tellDesk("desk:stage", { stage: "found", count: ev.count || 0 });
   } else if (ev.stage === "weigh") logLine("Weighing the evidence", true);
+  // Sent only when the answer is in and is about to be read against its studies.
+  else if (ev.stage === "checking") logLine("Checking the answer against the studies", true);
 }
 
 async function checkStreamed(claim) {

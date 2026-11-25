@@ -178,13 +178,17 @@ await test("loading stages follow the stream events in order, and wait when the 
   await sleep(1800);
   log = await logText(page);
   must(!log.some((l) => /^Found/.test(l)), "showed 'Found' before the server found anything");
+  must(log.some((l) => /^PubMed returned \d+ papers\. Picking the strongest to read$/.test(l)),
+       "no 'PubMed returned N papers' line while the abstracts were fetched: " + JSON.stringify(log));
   await get("/__fixture/release/found");
   await page.waitForFunction(() => /Weighing the evidence/.test(document.getElementById("reading")?.textContent || ""), null, { timeout: 5000 });
   await sleep(1800);
   log = await logText(page);
   const at = (re) => log.findIndex((l) => re.test(l));
   must(at(/Building the search/) < at(/Searching PubMed/) && at(/Searching PubMed/) < at(/^Found \d+ stud/) &&
-       at(/^Found \d+ stud/) < at(/Reading the studies/) && at(/Reading the studies/) < at(/Weighing the evidence/) && at(/Building the search/) >= 0,
+       at(/^Found \d+ stud/) < at(/Reading the studies/) && at(/Reading the studies/) < at(/Weighing the evidence/) && at(/Building the search/) >= 0 &&
+       at(/Searching PubMed/) < at(/^PubMed returned/) && at(/^PubMed returned/) < at(/^Found \d+ stud/) &&
+       at(/Weighing the evidence/) < at(/^Checking the answer against the studies$/),
        "stage lines out of order: " + JSON.stringify(log));
   must(!(await visible(page, "#stamp")), "the verdict appeared before the server sent it");
   await get("/__fixture/release/done");

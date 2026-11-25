@@ -170,13 +170,23 @@ def _extract(claim):
 
 
 def _search(query, max_results=8, surrogate=""):
+    # As the real searches do: the count of papers back, before the fetch.
+    told = pubmed.RETURNED.get()
+    if told is not None and query != NONE:
+        told(2 * len(replay["studies"]))
     _wait("found", query)
     if query == NONE:
         return [], query, False
     return replay["studies"], replay["search_query"] or query, False
 
 
-def _weigh(claim, studies, query="", surrogate=""):
+def _weigh(claim, studies, query="", surrogate="", retractions=None):
+    if retractions is not None:
+        retractions()
+    # As the real faithfulness check does, just before its call.
+    checking = verdict.CHECKING.get()
+    if checking is not None and studies:
+        checking()
     _wait("done", claim)
     # The two replies weigh_evidence cannot read, raised as it raises them.
     for which, why in ((DECLINED, verdict.DECLINED), (CUT, verdict.CUT_OFF)):

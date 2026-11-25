@@ -10940,7 +10940,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v131";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v132";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -15703,6 +15703,146 @@ try:
 finally:
     pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _ve_saved
 # ===== END Q11 SPEED (early verdict) =====
+
+# ===== Q11 SPEED: two progress lines in a live check's reading log =====
+# "returned": how many distinct papers the searches sent back, before their
+# abstracts are fetched. "checking": the answer is about to be read against
+# its studies, sent only when that call is made. Neither on a saved answer.
+import copy as _copy_pg  # noqa: E402
+import importlib.util as _pg_iu  # noqa: E402
+_pg_spec = _pg_iu.spec_from_file_location("_pg_pubmed", ROOT / "pubmed.py")
+_pg_pm = _pg_iu.module_from_spec(_pg_spec)
+_pg_spec.loader.exec_module(_pg_pm)
+_pg_order = []
+_pg_pm.search_merged = lambda q, max_results=8: ["1", "2", "3", "2"][:3]
+_pg_pm.search_surrogate = lambda q, s, max_results=4: ["3", "4"]
+_pg_pm.fetch_details = lambda ids: _pg_order.append(("fetch", list(ids))) or []
+_pg_tok = _pg_pm.RETURNED.set(lambda n: _pg_order.append(("returned", n)))
+try:
+    _pg_pm.search_and_fetch("thing AND help", surrogate="dht")
+    _pg_pm.search_and_fetch("thing AND help")
+finally:
+    _pg_pm.RETURNED.reset(_pg_tok)
+_pg_order.append("unset")
+_pg_pm.search_and_fetch("thing AND help")
+_pg_pm.search_merged = lambda q, max_results=8: []
+_pg_tok = _pg_pm.RETURNED.set(lambda n: _pg_order.append(("returned", n)))
+try:
+    _pg_pm.search_and_fetch("nothing at all")
+finally:
+    _pg_pm.RETURNED.reset(_pg_tok)
+t("SP progress: the searches report how many distinct papers came back (indirect ones counted once) before the fetch; "
+  "none when nothing came back, and nothing when no one asked",
+  _pg_order == [("returned", 4), ("fetch", ["1", "2", "3", "4"]), ("returned", 3), ("fetch", ["1", "2", "3"]),
+                "unset", ("fetch", ["1", "2", "3"]), ("fetch", [])], _pg_order)
+
+_pg_cj = verdict._complete_json
+_pg_calls = []
+_pg_res = {"verdict": "complicated", "tldr": "It may help a little.", "explanation": "It helped a little [1].",
+           "cited_studies": ["81"], "breakdown": {"says": ["It helped a little [1]."]}}
+try:
+    verdict._complete_json = lambda *a, **k: (_pg_calls.append("call") or ('{"lines": []}', ""))
+    _pg_tok = verdict.CHECKING.set(lambda: _pg_calls.append("told"))
+    try:
+        verdict.check_faithful(_copy_pg.deepcopy(_pg_res), _copy_pg.deepcopy(_VE_STUDIES), "The thing helps")
+        _pg_calls.append("|")
+        verdict.check_faithful({**_copy_pg.deepcopy(_pg_res), "breakdown": {"says": []}},
+                               _copy_pg.deepcopy(_VE_STUDIES), "The thing helps")
+    finally:
+        verdict.CHECKING.reset(_pg_tok)
+    _pg_calls.append("|")
+    verdict.check_faithful(_copy_pg.deepcopy(_pg_res), _copy_pg.deepcopy(_VE_STUDIES), "The thing helps")
+finally:
+    verdict._complete_json = _pg_cj
+t("SP progress: the faithfulness check says so just before its call, and not at all when it has nothing to check",
+  _pg_calls == ["told", "call", "|", "|", "call"], _pg_calls)
+
+# Through the stream: the fakes report the way the real steps do.
+_pg_saved2 = (pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among)
+_pg_mode = {}
+
+
+def _pg_search(q, max_results=8, surrogate=""):
+    told = pubmed.RETURNED.get()
+    told(14)
+    told(15)  # a widened second search: only the first count is sent
+    if _pg_mode.get("search_fails"):
+        raise requests.Timeout("fake: PubMed timed out after the searches")
+    return _copy_pg.deepcopy(_VE_STUDIES), q, False
+
+
+def _pg_weigh(claim, studies, query="", surrogate="", retractions=None):
+    if retractions:
+        retractions()
+    if _pg_mode.get("faithful"):
+        verdict.CHECKING.get()()
+    if _pg_mode.get("refuse"):
+        raise verdict.ProviderError("other", "The AI declined to answer this claim.", way_out="reword")
+    return {"verdict": "complicated", "tldr": "It may help a little.", "explanation": "Mixed results [1] [2].",
+            "still_open": "Longer studies are needed.", "cited_studies": ["81", "82"], "breakdown": None}
+
+
+try:
+    pubmed.search_with_fallback, verdict.weigh_evidence = _pg_search, _pg_weigh
+    verdict.extract_search_terms = lambda claim: ("(thing) AND (help)", "", claim)
+    pubmed.retracted_among = lambda ids: set()
+    _pg_mode.update(faithful=True)
+    _pg_r, _pg_evs = stream("The progress line claim helps", ip="7.7.11.2")
+    t("SP progress: through the stream, search, query, returned, found, weigh, checking, done, in that order",
+      [e["stage"] for e in _pg_evs] == ["search", "query", "returned", "found", "weigh", "checking", "done"]
+      and _pg_evs[2] == {"stage": "returned", "count": 14} and _pg_evs[5] == {"stage": "checking"},
+      [e["stage"] for e in _pg_evs])
+    _pg_r2, _pg_evs2 = stream("The progress line claim helps", ip="7.7.11.2")
+    t("SP progress: a saved answer is served with neither line",
+      [e["stage"] for e in _pg_evs2] == ["done"], [e["stage"] for e in _pg_evs2])
+    _pg_mode.clear()
+    _pg_r3, _pg_evs3 = stream("The progress line claim, unchecked, helps", ip="7.7.11.3")
+    t("SP progress: no checking line when the faithfulness call is not made",
+      [e["stage"] for e in _pg_evs3] == ["search", "query", "returned", "found", "weigh", "done"],
+      [e["stage"] for e in _pg_evs3])
+    _pg_mode.update(search_fails=True)
+    _pg_r4, _pg_evs4 = stream("The progress line claim, PubMed down, helps", ip="7.7.11.4")
+    t("SP progress: a PubMed timeout after the count still ends in the defined PubMed error",
+      [e["stage"] for e in _pg_evs4] == ["search", "query", "returned", "error"]
+      and _pg_evs4[-1].get("status") == 502 and _pg_evs4[-1].get("error"), _pg_evs4[-1])
+    _pg_mode.clear()
+    _pg_mode.update(faithful=True, refuse=True)
+    _pg_r5, _pg_evs5 = stream("The progress line claim, refused, helps", ip="7.7.11.5")
+    t("SP progress: a model refusal after the checking line still ends in the defined error with its words",
+      [e["stage"] for e in _pg_evs5] == ["search", "query", "returned", "found", "weigh", "checking", "error"]
+      and "declined" in (_pg_evs5[-1].get("error") or ""), _pg_evs5[-1])
+    _pg_json = c.post("/api/check", json={"claim": "The progress line claim, plain, helps"},
+                      environ_base={"REMOTE_ADDR": "7.7.11.6"})
+    t("SP progress: the plain JSON check is unchanged, one answer and no stage events",
+      _pg_json.status_code == 502 and "error" in _pg_json.get_json(), _pg_json.get_json())
+finally:
+    pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _pg_saved2
+t("SP progress: the hooks are unset again on the step pool's threads and here",
+  pubmed.RETURNED.get() is None and verdict.CHECKING.get() is None
+  and all(f.result() == (None, None) for f in [appmod._STEPS.submit(lambda: (pubmed.RETURNED.get(), verdict.CHECKING.get()))
+                                                for _ in range(20)]))
+
+_js = (ROOT / "static" / "app.js").read_text()
+# The page: the lines are printed by handleStage, the live log's only writer, so
+# a saved or shared result (rendered, never streamed) never shows them.
+_pg_js = _apprun('const L = []; logLine = (text, live) => L.push([text, !!live]);'
+                 ' handleStage({ stage: "query", query: "thing" }); handleStage({ stage: "returned", count: 14 });'
+                 ' handleStage({ stage: "returned", count: 1 }); handleStage({ stage: "found", count: 8 });'
+                 ' handleStage({ stage: "weigh" }); handleStage({ stage: "checking" }); __out.L = L;')
+_pg_lines = [x[0] for x in _pg_js["L"]]
+t("SP progress: the page prints the count and the check as live lines, in the stream's order",
+  _pg_lines == ["Searching PubMed for “thing”", "PubMed returned 14 papers. Picking the strongest to read",
+                "PubMed returned 1 paper. Opening it", "Found 8 studies", "Reading the studies",
+                "Weighing the evidence", "Checking the answer against the studies"]
+  and all(x[1] for x in _pg_js["L"] if x[0] != "Found 8 studies"), _pg_js)
+t("SP progress: the new lines carry no em or en dash, and only handleStage writes them",
+  not any(ch in "".join(_pg_lines) for ch in "–—")
+  and _js.count("Picking the strongest to read") == 1 and _js.count("PubMed returned 1 paper. Opening it") == 1
+  and _js.count("Checking the answer against the studies") == 1
+  and _js.find("function handleStage") < _js.find("Picking the strongest to read") < _js.find("async function checkStreamed")
+  and _js.find("Checking the answer against the studies") > _js.find("function handleStage")
+  and _js.find("Checking the answer against the studies") < _js.find("async function checkStreamed"))
+# ===== END Q11 SPEED (progress lines) =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

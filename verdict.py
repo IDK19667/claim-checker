@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import contextvars
 import time
 
 from concurrent.futures import ThreadPoolExecutor
@@ -554,6 +555,12 @@ def drop_unmeasured(result: dict, studies: list[dict], outcome: str) -> dict:
             "breakdown": breakdown.settle_effect(bd) if bd else bd}
 
 
+# Who to tell that the answer is about to be read against its abstracts, just
+# before that call is made: the live check's reading log says so. Unset
+# (None) everywhere but there.
+CHECKING = contextvars.ContextVar("verdict_checking", default=None)
+
+
 def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str = "") -> dict:
     """
     The short answer and the "What the research says" lines, read against
@@ -571,6 +578,9 @@ def check_faithful(result: dict, studies: list[dict], claim: str, outcome: str =
     numbers = sorted({n for t in lines for n in breakdown.refs(t, count)} | set(cited))
     tldr = result.get("tldr") or ""
     check_tldr = tldr if tldr and not _code_takeaway(tldr) else ""
+    told = CHECKING.get()
+    if told is not None:
+        told()
     try:
         raw, stop = _complete_json(_faithful_prompt(claim, check_tldr, lines, numbers, studies),
                                    FAITHFUL_SCHEMA, max_tokens=4000, temperature=0)

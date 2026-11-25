@@ -17,6 +17,7 @@ than a small preliminary study.
 import http.cookiejar
 import os
 import re
+import contextvars
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -58,6 +59,12 @@ _SEARCHES = ThreadPoolExecutor(max_workers=16, thread_name_prefix="pubmed")
 def _ahead(fn, *args, **kwargs):
     """fn(*args, **kwargs) started on the search pool; .result() collects it."""
     return _SEARCHES.submit(fn, *args, **kwargs)
+
+
+# Who to tell, and how many distinct papers the searches sent back, before
+# their abstracts are fetched: the live check's reading log says so. Unset
+# (None) everywhere but there, so nothing else sees a difference.
+RETURNED = contextvars.ContextVar("pubmed_returned", default=None)
 
 
 def _new_session() -> requests.Session:
@@ -327,6 +334,9 @@ def search_and_fetch(query: str, max_results: int = 8,
         for pmid in indirect.result():
             if pmid not in pmids:
                 pmids.append(pmid)
+    told = RETURNED.get()
+    if told is not None and pmids:
+        told(len(pmids))
     return prioritise(usable(fetch_details(pmids)), query, surrogate)[:max_results]
 
 
