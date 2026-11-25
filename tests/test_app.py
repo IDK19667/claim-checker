@@ -15844,6 +15844,40 @@ t("SP progress: the new lines carry no em or en dash, and only handleStage write
   and _js.find("Checking the answer against the studies") < _js.find("async function checkStreamed"))
 # ===== END Q11 SPEED (progress lines) =====
 
+# ===== Q11 SPEED: the page draws the answer when it arrives, not when the stream closes =====
+# After "done" the server saves the answer and logs the check before the
+# stream ends; on Turso those are round trips the reader used to wait for.
+_sd_snip = (r'globalThis.TextDecoder = class { decode(v) { return v; } };'
+            r' controller = { signal: null }; let cancelled = 0;'
+            r' const chunks = [%s];'
+            r' fetch = () => Promise.resolve({ ok: true, body: { getReader() { return {'
+            r'   read() { return chunks.length ? Promise.resolve({ value: chunks.shift(), done: false }) : %s; },'
+            r'   cancel() { cancelled++; return Promise.resolve(); } }; } } });'
+            r' handleStage = () => {}; __out.r = "hung"; __out.cancelled = -1;'
+            r' try { const f = await checkStreamed("c"); __out.r = f.stage; } catch (e) { __out.r = "threw " + e.message; }'
+            r' __out.cancelled = cancelled;')
+_sd_done = r'"data: {\"stage\": \"query\", \"query\": \"x\"}\n\ndata: {\"stage\": \"done\", \"result\": {\"verdict\": \"true\"}}\n\n"'
+_sd_err = r'"data: {\"stage\": \"error\", \"status\": 502, \"error\": \"PubMed is down.\"}\n\n"'
+_sd_part = r'"data: {\"stage\": \"query\", \"query\": \"x\"}\n\n"'
+
+
+def _sd_run(chunks, after):
+    try:
+        return _apprun(_sd_snip % (chunks, after))
+    except Exception as e:  # noqa: BLE001 — a hang ends node with nothing written
+        return {"error": type(e).__name__}
+
+
+_sd_a = _sd_run(_sd_done, "new Promise(() => {})")
+t("SP done: the answer is drawn when the done event arrives, while the server is still saving it, and the stream is let go",
+  _sd_a == {"r": "done", "cancelled": 1}, _sd_a)
+_sd_b = _sd_run(_sd_err, "new Promise(() => {})")
+t("SP done: an error event is shown as soon as it arrives too", _sd_b == {"r": "error", "cancelled": 1}, _sd_b)
+_sd_c = _sd_run(_sd_part, 'Promise.resolve({ value: undefined, done: true })')
+t("SP done: a stream that closes with no answer still fails as before, so the plain check is tried",
+  _sd_c == {"r": "threw stream ended early", "cancelled": 0}, _sd_c)
+# ===== END Q11 SPEED (done) =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

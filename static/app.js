@@ -931,6 +931,9 @@ async function checkStreamed(claim) {
       const ev = JSON.parse(line.slice(6));
       if (ev.stage === "done" || ev.stage === "error") final = ev; else handleStage(ev);
     }
+    // The answer is in, so it is drawn now. What the server does after
+    // sending it (saving the answer, logging the check) is not the reader's wait.
+    if (final) { reader.cancel().catch(() => {}); break; }
   }
   if (!final) throw new Error("stream ended early");
   return final;
