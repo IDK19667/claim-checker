@@ -4472,8 +4472,38 @@ _ex_row = db.get_cached_by_key(db.normalize_claim(appmod.EXAMPLE_CLAIM))
 t("  its claim, verdict, short answer, date and count are the saved row's, not a frozen file's",
   _ex and _ex["claim"] == _ex_row["claim_text"] and _ex["verdict"] == "complicated"
   and _ex["tldr"] == _ex_row["tldr"] and _ex["read"] == 3
-  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(appmod.datetime.fromisoformat(_ex_row["cached_at"]))
+  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(
+      appmod.datetime.fromisoformat(_ex_row["cached_at"]).astimezone(__import__("zoneinfo").ZoneInfo("America/Los_Angeles")))
   and "check.json" not in _inspect.getsource(appmod._trust_example), _ex)
+# The date is the site's own day (Pacific), not the UTC day, so a check saved
+# after 16:00 PST still reads as that Pacific day. The saved row's clock is
+# pinned here, so this does not depend on the hour the suite runs.
+_ex_now_real = db._now
+_ex_days = []
+for _ex_at, _ex_want in (("2026-11-24T18:00:00+00:00", "24 November 2026"),   # 10:00 PST
+                         ("2026-11-24T23:59:00+00:00", "24 November 2026"),   # 15:59 PST, just before UTC midnight
+                         ("2026-11-25T00:01:00+00:00", "24 November 2026"),   # 16:01 PST, just after UTC midnight
+                         ("2026-11-25T02:14:00+00:00", "24 November 2026"),   # 18:14 PST, the evening run that failed
+                         ("2026-11-25T07:59:00+00:00", "24 November 2026"),   # 23:59 PST
+                         ("2026-11-25T08:00:00+00:00", "25 November 2026")):  # 00:00 PST
+    db._now = lambda _a=_ex_at: _a
+    try:
+        db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                              "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                              tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                              still_open="Long trials of a cure are missing.")
+    finally:
+        db._now = _ex_now_real
+    appmod._drop_home_lists()
+    _ex_p = appmod._trust_example()
+    _ex_days.append((_ex_at, _ex_p and _ex_p["checked"], _ex_want))
+t("  its date is the site's day at any hour the check was saved, not the UTC day",
+  all(got == want for _, got, want in _ex_days), [d for d in _ex_days if d[1] != d[2]])
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
+appmod._drop_home_lists()
 t("  the frozen file and the script that wrote it are gone from the repo",
   not (ROOT / "static" / "flight" / "check.json").exists() and not (ROOT / "scripts" / "export_flight_check.py").exists())
 # It goes through the Latest list's own path: a stored "true" whose only cited
