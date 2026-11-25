@@ -10940,7 +10940,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v131";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v132";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -15553,6 +15553,526 @@ t("ST 2: the phone band in text mode uses the 3D page's own rule, so the claim b
   "html.no-gl:not(.checked), html:not(.js):not(.checked) { --lamp-band: clamp(116px, calc(100svh - 478px), 30svh); }" in _st_css
   and "html.js:not(.no-gl):not(.checked) { --lamp-band: clamp(116px, calc(100svh - 478px), 30svh); }" in _st_css)
 # ===== END Q10 STILL =====
+
+# ===== Q11 SPEED: the model's SDK is imported after the first response, in the background =====
+import threading as _sp_th  # noqa: E402
+import time as _sp_time  # noqa: E402
+t("SP warm: the requests above started the warm-up once", appmod._warm["started"] is True)
+_sp_calls, _sp_real = [], appmod._warm_provider
+try:
+    appmod._warm["started"] = False
+    appmod._warm_provider = lambda: _sp_calls.append(_sp_th.current_thread().name)
+    _sp_r = c.get("/healthz")
+    _sp_r.close()
+    for _ in range(40):
+        if _sp_calls:
+            break
+        _sp_time.sleep(0.05)
+    c.get("/healthz").close()
+    c.get("/privacy").close()
+    _sp_time.sleep(0.2)
+    t("SP warm: it runs once, after the first response, on its own thread, not the request's",
+      _sp_calls == ["warm-provider"] and appmod._warm["started"] is True, _sp_calls)
+finally:
+    appmod._warm_provider = _sp_real
+_sp_env, _sp_net = os.environ.get("LLM_PROVIDER"), len(NET_TRIES)
+try:
+    os.environ["LLM_PROVIDER"] = "gemini"
+    _sp_client = verdict._gemini_client
+    appmod._warm_provider()
+    t("SP warm: for Gemini it imports google.genai, its errors and httpx, builds no client and sends nothing",
+      all(m in sys.modules for m in ("google.genai", "google.genai.errors", "httpx"))
+      and verdict._gemini_client is _sp_client and len(NET_TRIES) == _sp_net)
+    os.environ.pop("LLM_PROVIDER")
+    _sp_k = os.environ.pop("GEMINI_API_KEY", None)
+    appmod._warm_provider()
+    t("SP warm: with no provider set up it does nothing and raises nothing", len(NET_TRIES) == _sp_net)
+    if _sp_k is not None:
+        os.environ["GEMINI_API_KEY"] = _sp_k
+finally:
+    if _sp_env is None:
+        os.environ.pop("LLM_PROVIDER", None)
+    else:
+        os.environ["LLM_PROVIDER"] = _sp_env
+# ===== END Q11 SPEED (warm) =====
+
+# ===== Q11 SPEED: the verdict call starts beside the retraction lookup =====
+import copy as _ve_copy  # noqa: E402
+import time as _ve_time  # noqa: E402
+_VE_STUDIES = [_e_study("81", _E_REV, title="A review of the thing", references=["8101", "8102"]),
+               _e_study("82", _E_RCT, title="A trial of the thing")]
+_VE_RAW = json.dumps({"verdict": "complicated", "tldr": "It may help a little.", "explanation": "Mixed results [1] [2].",
+                      "still_open": "Longer studies are needed.", "cited_study_numbers": [1, 2],
+                      "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True,
+                                     "finding": "It helped a little."} for i in range(2)],
+                      "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+                      "not_applies_to": "", "unknowns": ""})
+
+
+def _ve_run(found, lookup_s=0.0, model_s=0.0, fail=None, early=True):
+    """weigh_evidence on fresh copies of the two studies, the lookup finding
+    `found` after lookup_s seconds, every model call taking model_s. Returns
+    (result or the exception, studies, the verdict prompts sent, seconds)."""
+    st = _ve_copy.deepcopy(_VE_STUDIES)
+    sent = []
+    saved = verdict._complete_json, verdict.guidance_ahead, pubmed.retracted_among
+
+    def fake(prompt, schema, *a, **k):
+        if schema is verdict.VERDICT_SCHEMA:
+            sent.append(prompt)
+            _ve_time.sleep(model_s)
+            if fail:
+                raise fail
+        return _VE_RAW, None
+
+    def lookup(ids):
+        _ve_time.sleep(lookup_s)
+        return set(found)
+    verdict._complete_json, verdict.guidance_ahead, pubmed.retracted_among = fake, (lambda c: None), lookup
+    t0 = _ve_time.perf_counter()
+    try:
+        if early:
+            fut = appmod._retraction_lookup(st)
+            _e_ev.flag_retracted_citations(st)
+            note = []
+            out = verdict.weigh_evidence("The thing helps", st, "(thing) AND (help)",
+                                         retractions=lambda: note.append(appmod._flag_retractions(st, fut)))
+        else:
+            appmod._flag_retractions(st)
+            out = verdict.weigh_evidence("The thing helps", st, "(thing) AND (help)")
+    except Exception as e:  # noqa: BLE001
+        out = e
+    finally:
+        verdict._complete_json, verdict.guidance_ahead, pubmed.retracted_among = saved
+    return out, st, sent, _ve_time.perf_counter() - t0
+
+
+_ve_a = _ve_run((), lookup_s=0.4, model_s=0.4)
+_ve_b = _ve_run((), lookup_s=0.4, model_s=0.4, early=False)
+t("SP early: with nothing new found, the answer, the studies and the one verdict prompt are those of the serial path",
+  _ve_a[0] == _ve_b[0] and _ve_a[1] == _ve_b[1] and _ve_a[2] == _ve_b[2] and len(_ve_a[2]) == 1, (_ve_a[2:], _ve_b[2:]))
+t("SP early: and the lookup and the verdict call overlap (0.4 s each, under 0.7 s in all; serially over 0.8 s)",
+  _ve_a[3] < 0.7 and _ve_b[3] >= 0.8, (round(_ve_a[3], 3), round(_ve_b[3], 3)))
+_ve_c = _ve_run({"8102"}, lookup_s=0.2, model_s=0.1)
+_ve_d = _ve_run({"8102"}, early=False)
+t("SP early: a lookup that finds a retracted paper sends the verdict call again on the flagged prompt; the answer is the serial one",
+  _ve_c[0] == _ve_d[0] and _ve_c[1] == _ve_d[1] and len(_ve_c[2]) == 2 and _ve_c[2][1] == _ve_d[2][0]
+  and "CITES A RETRACTED STUDY" in _ve_c[2][1] and "CITES A RETRACTED STUDY" not in _ve_c[2][0]
+  and _e_ev.cited_retracted(_ve_c[1][0]) == [{"pmid": "8102", "title": None, "trial": False}], _ve_c[2])
+_ve_refuse = verdict.ProviderError("other", verdict.unread_reply(verdict.DECLINED), verdict.way_out(verdict.DECLINED))
+_ve_e = _ve_run((), lookup_s=0.3, fail=_ve_refuse)
+t("SP early: a model refusal on the early call is raised as before, once the lookup is in, and nothing hangs",
+  _ve_e[0] is _ve_refuse and len(_ve_e[2]) == 1 and _ve_e[3] < 2, (_ve_e[0], _ve_e[3]))
+_ve_real = (pubmed.retracted_among, appmod.RETRACTION_WAIT)
+try:
+    appmod.RETRACTION_WAIT = 0.3
+    _ve_f = _ve_run((), lookup_s=5, model_s=0.1)
+    t("SP early: a PubMed lookup that times out still gives the answer, after the wait and no longer",
+      isinstance(_ve_f[0], dict) and _ve_f[0].get("verdict") and len(_ve_f[2]) == 1 and _ve_f[3] < 1.5
+      and "cites_retracted" not in _ve_f[1][0], (_ve_f[0], _ve_f[3]))
+finally:
+    pubmed.retracted_among, appmod.RETRACTION_WAIT = _ve_real
+
+# Through the stream: the weigh event is sent before the lookup is in, and a lookup that fails says so.
+_ve_saved = (pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among)
+_ve_seen = {}
+
+
+def _ve_weigh(claim, studies, query="", surrogate="", retractions=None):
+    _ve_seen["retractions"] = retractions is not None
+    _ve_seen["flag_before"] = "cites_retracted" in studies[0]
+    if retractions:
+        retractions()
+    return {"verdict": "complicated", "tldr": "It may help a little.", "explanation": "Mixed results [1] [2].",
+            "still_open": "Longer studies are needed.", "cited_studies": ["81", "82"], "breakdown": None}
+
+
+def _ve_timeout(ids):
+    raise requests.Timeout("fake: the lookup timed out")
+
+
+try:
+    pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": (_ve_copy.deepcopy(_VE_STUDIES), q, False)
+    verdict.extract_search_terms = lambda claim: ("(thing) AND (help)", "", claim)
+    verdict.weigh_evidence, pubmed.retracted_among = _ve_weigh, _ve_timeout
+    _ve_r, _ve_evs = stream("The early verdict claim helps", ip="7.7.11.1")
+    t("SP early: through the stream, found, weigh and done in order; a timed-out lookup says it could not be made",
+      [e["stage"] for e in _ve_evs] == ["search", "query", "found", "weigh", "done"]
+      and _ve_evs[-1]["result"].get("retraction_check") == _e_ev.RETRACTION_UNCHECKED
+      and _ve_seen == {"retractions": True, "flag_before": False}, (_ve_evs[-1], _ve_seen))
+finally:
+    pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _ve_saved
+# ===== END Q11 SPEED (early verdict) =====
+
+# ===== Q11 SPEED: two progress lines in a live check's reading log =====
+# "returned": how many distinct papers the searches sent back, before their
+# abstracts are fetched. "checking": the answer is about to be read against
+# its studies, sent only when that call is made. Neither on a saved answer.
+import copy as _copy_pg  # noqa: E402
+import importlib.util as _pg_iu  # noqa: E402
+_pg_spec = _pg_iu.spec_from_file_location("_pg_pubmed", ROOT / "pubmed.py")
+_pg_pm = _pg_iu.module_from_spec(_pg_spec)
+_pg_spec.loader.exec_module(_pg_pm)
+_pg_order = []
+_pg_pm.search_merged = lambda q, max_results=8: ["1", "2", "3", "2"][:3]
+_pg_pm.search_surrogate = lambda q, s, max_results=4: ["3", "4"]
+_pg_pm.fetch_details = lambda ids: _pg_order.append(("fetch", list(ids))) or []
+_pg_tok = _pg_pm.RETURNED.set(lambda n: _pg_order.append(("returned", n)))
+try:
+    _pg_pm.search_and_fetch("thing AND help", surrogate="dht")
+    _pg_pm.search_and_fetch("thing AND help")
+finally:
+    _pg_pm.RETURNED.reset(_pg_tok)
+_pg_order.append("unset")
+_pg_pm.search_and_fetch("thing AND help")
+_pg_pm.search_merged = lambda q, max_results=8: []
+_pg_tok = _pg_pm.RETURNED.set(lambda n: _pg_order.append(("returned", n)))
+try:
+    _pg_pm.search_and_fetch("nothing at all")
+finally:
+    _pg_pm.RETURNED.reset(_pg_tok)
+t("SP progress: the searches report how many distinct papers came back (indirect ones counted once) before the fetch; "
+  "none when nothing came back, and nothing when no one asked",
+  _pg_order == [("returned", 4), ("fetch", ["1", "2", "3", "4"]), ("returned", 3), ("fetch", ["1", "2", "3"]),
+                "unset", ("fetch", ["1", "2", "3"]), ("fetch", [])], _pg_order)
+
+_pg_cj = verdict._complete_json
+_pg_calls = []
+_pg_res = {"verdict": "complicated", "tldr": "It may help a little.", "explanation": "It helped a little [1].",
+           "cited_studies": ["81"], "breakdown": {"says": ["It helped a little [1]."]}}
+try:
+    verdict._complete_json = lambda *a, **k: (_pg_calls.append("call") or ('{"lines": []}', ""))
+    _pg_tok = verdict.CHECKING.set(lambda: _pg_calls.append("told"))
+    try:
+        verdict.check_faithful(_copy_pg.deepcopy(_pg_res), _copy_pg.deepcopy(_VE_STUDIES), "The thing helps")
+        _pg_calls.append("|")
+        verdict.check_faithful({**_copy_pg.deepcopy(_pg_res), "breakdown": {"says": []}},
+                               _copy_pg.deepcopy(_VE_STUDIES), "The thing helps")
+    finally:
+        verdict.CHECKING.reset(_pg_tok)
+    _pg_calls.append("|")
+    verdict.check_faithful(_copy_pg.deepcopy(_pg_res), _copy_pg.deepcopy(_VE_STUDIES), "The thing helps")
+finally:
+    verdict._complete_json = _pg_cj
+t("SP progress: the faithfulness check says so just before its call, and not at all when it has nothing to check",
+  _pg_calls == ["told", "call", "|", "|", "call"], _pg_calls)
+
+# Through the stream: the fakes report the way the real steps do.
+_pg_saved2 = (pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among)
+_pg_mode = {}
+
+
+def _pg_search(q, max_results=8, surrogate=""):
+    told = pubmed.RETURNED.get()
+    told(14)
+    told(15)  # a widened second search: its own count, sent too
+    if _pg_mode.get("search_fails"):
+        raise requests.Timeout("fake: PubMed timed out after the searches")
+    return _copy_pg.deepcopy(_VE_STUDIES), q, False
+
+
+def _pg_weigh(claim, studies, query="", surrogate="", retractions=None):
+    if retractions:
+        retractions()
+    if _pg_mode.get("faithful"):
+        verdict.CHECKING.get()()
+    if _pg_mode.get("refuse"):
+        raise verdict.ProviderError("other", "The AI declined to answer this claim.", way_out="reword")
+    return {"verdict": "complicated", "tldr": "It may help a little.", "explanation": "Mixed results [1] [2].",
+            "still_open": "Longer studies are needed.", "cited_studies": ["81", "82"], "breakdown": None}
+
+
+try:
+    pubmed.search_with_fallback, verdict.weigh_evidence = _pg_search, _pg_weigh
+    verdict.extract_search_terms = lambda claim: ("(thing) AND (help)", "", claim)
+    pubmed.retracted_among = lambda ids: set()
+    _pg_mode.update(faithful=True)
+    _pg_r, _pg_evs = stream("The progress line claim helps", ip="7.7.11.2")
+    t("SP progress: through the stream, search, query, returned, found, weigh, checking, done, in that order",
+      [e["stage"] for e in _pg_evs] == ["search", "query", "returned", "returned", "found", "weigh", "checking", "done"]
+      and _pg_evs[2:4] == [{"stage": "returned", "count": 14}, {"stage": "returned", "count": 15}]
+      and _pg_evs[6] == {"stage": "checking"},
+      [e["stage"] for e in _pg_evs])
+    _pg_r2, _pg_evs2 = stream("The progress line claim helps", ip="7.7.11.2")
+    t("SP progress: a saved answer is served with neither line",
+      [e["stage"] for e in _pg_evs2] == ["done"], [e["stage"] for e in _pg_evs2])
+    _pg_mode.clear()
+    _pg_r3, _pg_evs3 = stream("The progress line claim, unchecked, helps", ip="7.7.11.3")
+    t("SP progress: no checking line when the faithfulness call is not made",
+      [e["stage"] for e in _pg_evs3] == ["search", "query", "returned", "returned", "found", "weigh", "done"],
+      [e["stage"] for e in _pg_evs3])
+    _pg_mode.update(search_fails=True)
+    _pg_r4, _pg_evs4 = stream("The progress line claim, PubMed down, helps", ip="7.7.11.4")
+    t("SP progress: a PubMed timeout after the count still ends in the defined PubMed error",
+      [e["stage"] for e in _pg_evs4] == ["search", "query", "returned", "returned", "error"]
+      and _pg_evs4[-1].get("status") == 502 and _pg_evs4[-1].get("error"), _pg_evs4[-1])
+    _pg_mode.clear()
+    _pg_mode.update(faithful=True, refuse=True)
+    _pg_r5, _pg_evs5 = stream("The progress line claim, refused, helps", ip="7.7.11.5")
+    t("SP progress: a model refusal after the checking line still ends in the defined error with its words",
+      [e["stage"] for e in _pg_evs5] == ["search", "query", "returned", "returned", "found", "weigh", "checking", "error"]
+      and "declined" in (_pg_evs5[-1].get("error") or ""), _pg_evs5[-1])
+    _pg_json = c.post("/api/check", json={"claim": "The progress line claim, plain, helps"},
+                      environ_base={"REMOTE_ADDR": "7.7.11.6"})
+    t("SP progress: the plain JSON check is unchanged, one answer and no stage events",
+      _pg_json.status_code == 502 and "error" in _pg_json.get_json(), _pg_json.get_json())
+finally:
+    pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _pg_saved2
+t("SP progress: the hooks are unset again on the step pool's threads and here",
+  pubmed.RETURNED.get() is None and verdict.CHECKING.get() is None
+  and all(f.result() == (None, None) for f in [appmod._STEPS.submit(lambda: (pubmed.RETURNED.get(), verdict.CHECKING.get()))
+                                                for _ in range(20)]))
+
+_js = (ROOT / "static" / "app.js").read_text()
+# The page: the lines are printed by handleStage, the live log's only writer, so
+# a saved or shared result (rendered, never streamed) never shows them.
+_pg_js = _apprun('const L = []; logLine = (text, live) => L.push([text, !!live]);'
+                 ' handleStage({ stage: "query", query: "thing" }); handleStage({ stage: "returned", count: 14 });'
+                 ' handleStage({ stage: "returned", count: 1 }); handleStage({ stage: "found", count: 8 });'
+                 ' handleStage({ stage: "weigh" }); handleStage({ stage: "checking" }); __out.L = L;')
+_pg_lines = [x[0] for x in _pg_js["L"]]
+t("SP progress: the page prints the count and the check as live lines, in the stream's order",
+  _pg_lines == ["Searching PubMed for “thing”", "PubMed returned 14 papers. Picking the strongest to read",
+                "PubMed returned 1 paper. Opening it", "Found 8 studies", "Reading the studies",
+                "Weighing the evidence", "Checking the answer against the studies"]
+  and all(x[1] for x in _pg_js["L"] if x[0] != "Found 8 studies"), _pg_js)
+t("SP progress: the new lines carry no em or en dash, and only handleStage writes them",
+  not any(ch in "".join(_pg_lines) for ch in "–—")
+  and _js.count("Picking the strongest to read") == 1 and _js.count("PubMed returned 1 paper. Opening it") == 1
+  and _js.count("Checking the answer against the studies") == 1
+  and _js.find("function handleStage") < _js.find("Picking the strongest to read") < _js.find("async function checkStreamed")
+  and _js.find("Checking the answer against the studies") > _js.find("function handleStage")
+  and _js.find("Checking the answer against the studies") < _js.find("async function checkStreamed"))
+# ===== END Q11 SPEED (progress lines) =====
+
+# ===== Q11 SPEED: every round of searching says its own count =====
+# Case (b) of the review: the first search sends back 2 papers with nothing to
+# read, the widened one 8 that can be read. The log must say 8 came back
+# before it says 8 were found, so no later line contradicts an earlier one.
+# The real search_with_fallback on a fresh copy of pubmed, PubMed faked.
+_rr_spec = _pg_iu.spec_from_file_location("_rr_pubmed", ROOT / "pubmed.py")
+_rr = _pg_iu.module_from_spec(_rr_spec)
+_rr_spec.loader.exec_module(_rr)
+_rr.RETURNED, _rr.PROGRESS = pubmed.RETURNED, pubmed.PROGRESS  # the hooks app.py sets are the real module's
+
+
+def _rr_study(i, abstract):
+    return {"pmid": i, "title": "Thing helps trial " + i, "journal": "J", "year": "2024", "authors": [],
+            "publication_types": ["Journal Article", "Randomized Controlled Trial"],
+            "abstract": abstract, "data_banks": None, "url": "u"}
+
+
+_rr_world = {}
+_rr.search_merged = lambda q, max_results=8: list(_rr_world.get(q, []))
+_rr.fetch_details = lambda ids: [_rr_study(i, "" if int(i) < 100 else "The thing helped. CONCLUSIONS: It helps.")
+                                 for i in ids]
+_rr.broaden_query = lambda q: "(thing)" if q != "(thing)" else ""
+_rr_saved = (pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among)
+
+
+def _rr_events(claim, ip, world):
+    _rr_world.clear(); _rr_world.update(world)
+    return [(e["stage"], e.get("count")) for e in stream(claim, ip=ip)[1]
+            if e["stage"] in ("returned", "unreadable", "widened", "found")]
+
+
+try:
+    pubmed.search_with_fallback = _rr.search_with_fallback
+    verdict.extract_search_terms = lambda claim: ("(thing) AND (help)", "", claim)
+    verdict.weigh_evidence = _pg_weigh
+    pubmed.retracted_among = lambda ids: set()
+    _rr_b = _rr_events("The every round claim helps", "7.7.12.1",
+                       {"(thing) AND (help)": ["1", "2"], "(thing)": [str(100 + i) for i in range(8)]})
+    _rr_counts = [x for x in _rr_b if x[0] in ("returned", "found")]
+    t("SP rounds: a widened search says its own count before the studies found in it (review case b)",
+      _rr_counts == [("returned", 2), ("returned", 8), ("found", 8)], _rr_b)
+    t("SP rounds: no count found is ever more than the last count PubMed returned",
+      all(n <= max([m for s, m in _rr_b[:i] if s == "returned"] or [0]) for i, (s, n) in enumerate(_rr_b) if s == "found"), _rr_b)
+    # Case (a): 3 papers come back, none has an abstract, the widened search
+    # finds nothing. Before the fix the log went straight from "PubMed
+    # returned 3 papers" to "Nothing matched on PubMed".
+    _rr_a = _rr_events("The nothing to read claim helps", "7.7.12.2", {"(thing) AND (help)": ["1", "2", "3"]})
+    t("SP rounds: papers with nothing to read are said to have none before the search is widened and nothing matches (review case a)",
+      _rr_a == [("returned", 3), ("unreadable", 3), ("widened", None), ("found", 0)], _rr_a)
+    t("SP rounds: case b reads returned, nothing to read, widened, returned, found",
+      _rr_b == [("returned", 2), ("unreadable", 2), ("widened", None), ("returned", 8), ("found", 8)], _rr_b)
+    _rr_n = _rr_events("The widened from nothing claim helps", "7.7.12.3", {"(thing)": [str(100 + i) for i in range(3)]})
+    t("SP rounds: a first search with no papers at all says it widens, then the widened count",
+      _rr_n == [("widened", None), ("returned", 3), ("found", 3)], _rr_n)
+    _rr_w = [e for e in stream("The widened query claim helps", ip="7.7.12.4")[1] if e["stage"] == "widened"]
+    t("SP rounds: the widening event names the wider search", _rr_w == [{"stage": "widened", "query": "(thing)"}], _rr_w)
+finally:
+    pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _rr_saved
+# ===== END Q11 SPEED (every round) =====
+_rr_js = _apprun('const L = []; logLine = (text, live) => L.push([text, !!live]);'
+                 ' handleStage({ stage: "returned", count: 3 }); handleStage({ stage: "unreadable", count: 3 });'
+                 ' handleStage({ stage: "unreadable", count: 1 }); handleStage({ stage: "widened", query: "(thing)" });'
+                 ' handleStage({ stage: "found", count: 0 }); __out.L = L;')
+_rr_lines = [x[0] for x in _rr_js["L"]]
+t("SP rounds: the page says there is nothing to read, then that it widens, as live lines with no dash",
+  _rr_lines == ["PubMed returned 3 papers. Picking the strongest to read",
+                "None of the 3 papers has an abstract, so there is nothing in them to read",
+                "That paper has no abstract, so there is nothing in it to read",
+                "Widening the search to “(thing)”", "Nothing matched on PubMed"]
+  and all(x[1] for x in _rr_js["L"]) and not any(ch in "".join(_rr_lines) for ch in "–—"), _rr_js)
+_rr_src = (ROOT / "static" / "app.js").read_text()
+t("SP rounds: only handleStage writes the new lines, so a saved or shared result never shows them",
+  all(_rr_src.count(x) == 1 and _rr_src.find("function handleStage") < _rr_src.find(x) < _rr_src.find("async function checkStreamed")
+      for x in ("has an abstract, so there is nothing in them to read", "Widening the search to")))
+_rr_page = c.get("/").get_data(as_text=True)
+t("SP rounds: the server-rendered page carries neither new line", "nothing in them to read" not in _rr_page
+  and "Widening the search" not in _rr_page)
+t("SP rounds: the progress hook is unset again on the step pool's threads and here",
+  pubmed.PROGRESS.get() is None and all(f.result() is None for f in [appmod._STEPS.submit(pubmed.PROGRESS.get) for _ in range(20)]))
+
+# ===== Q11 SPEED: the page draws the answer when it arrives, not when the stream closes =====
+# After "done" the server saves the answer and logs the check before the
+# stream ends; on Turso those are round trips the reader used to wait for.
+_sd_snip = (r'globalThis.TextDecoder = class { decode(v) { return v; } };'
+            r' controller = { signal: null }; let cancelled = 0;'
+            r' const chunks = [%s];'
+            r' fetch = () => Promise.resolve({ ok: true, body: { getReader() { return {'
+            r'   read() { return chunks.length ? Promise.resolve({ value: chunks.shift(), done: false }) : %s; },'
+            r'   cancel() { cancelled++; return Promise.resolve(); } }; } } });'
+            r' handleStage = () => {}; __out.r = "hung"; __out.cancelled = -1;'
+            r' try { const f = await checkStreamed("c"); __out.r = f.stage; } catch (e) { __out.r = "threw " + e.message; }'
+            r' __out.cancelled = cancelled;')
+_sd_done = r'"data: {\"stage\": \"query\", \"query\": \"x\"}\n\ndata: {\"stage\": \"done\", \"result\": {\"verdict\": \"true\"}}\n\n"'
+_sd_err = r'"data: {\"stage\": \"error\", \"status\": 502, \"error\": \"PubMed is down.\"}\n\n"'
+_sd_part = r'"data: {\"stage\": \"query\", \"query\": \"x\"}\n\n"'
+
+
+def _sd_run(chunks, after):
+    try:
+        return _apprun(_sd_snip % (chunks, after))
+    except Exception as e:  # noqa: BLE001 — a hang ends node with nothing written
+        return {"error": type(e).__name__}
+
+
+_sd_a = _sd_run(_sd_done, "new Promise(() => {})")
+t("SP done: the answer is drawn when the done event arrives, while the server is still saving it, and the stream is let go",
+  _sd_a == {"r": "done", "cancelled": 1}, _sd_a)
+_sd_b = _sd_run(_sd_err, "new Promise(() => {})")
+t("SP done: an error event is shown as soon as it arrives too", _sd_b == {"r": "error", "cancelled": 1}, _sd_b)
+_sd_c = _sd_run(_sd_part, 'Promise.resolve({ value: undefined, done: true })')
+t("SP done: a stream that closes with no answer still fails as before, so the plain check is tried",
+  _sd_c == {"r": "threw stream ended early", "cancelled": 0}, _sd_c)
+# ===== END Q11 SPEED (done) =====
+
+# ===== Q11 SPEED (NCBI key) =====
+# An optional NCBI_API_KEY: with it, requests start 0.1 s apart and carry
+# api_key at send time only; without it (unset, empty or blank) the bytes are
+# today's. The key never reaches an error's words or a log line, and a key
+# NCBI refuses is dropped, not a crash. A fresh copy of pubmed, a fake HTTP
+# client, no network.
+import importlib.util as _nk_iu
+import logging as _nk_logging
+import io as _nk_io
+import requests as _nk_rq
+_nk_spec = _nk_iu.spec_from_file_location("_nk_pubmed", ROOT / "pubmed.py")
+_nk = _nk_iu.module_from_spec(_nk_spec)
+_nk_spec.loader.exec_module(_nk)
+_NK_KEY = "nk-secret-0123456789abcdef"
+
+
+class _NkHttp:
+    """Records what would be sent and answers from a script of replies."""
+    def __init__(self, replies):
+        self.replies, self.sent = list(replies), []
+
+    def _do(self, method, url, params, timeout):
+        self.sent.append((method, dict(params)))
+        full = _nk_rq.Request(method.upper(), url, params=params if method == "get" else None).prepare().url
+        r = self.replies.pop(0)
+        if isinstance(r, Exception):
+            raise type(r)(f"{r} while asking {full}")
+        status, body = r
+        resp = _nk_rq.Response()
+        resp.status_code, resp._content, resp.url = status, body.encode(), full
+        resp.request = _nk_rq.Request(method.upper(), full).prepare()
+        resp.reason = "Fake"
+        return resp
+
+    def get(self, url, params=None, timeout=None):
+        return self._do("get", url, params, timeout)
+
+    def post(self, url, data=None, timeout=None):
+        return self._do("post", url, data, timeout)
+
+
+def _nk_with(env_value, replies, call):
+    old_env, old_http, old_sleep = os.environ.get("NCBI_API_KEY"), _nk._http, _nk.time.sleep
+    if env_value is None:
+        os.environ.pop("NCBI_API_KEY", None)
+    else:
+        os.environ["NCBI_API_KEY"] = env_value
+    _nk._http, _nk._key_refused, _nk._last_call = _NkHttp(replies), False, 0.0
+    _nk.time.sleep = lambda s: None
+    buf = _nk_io.StringIO()
+    h = _nk_logging.StreamHandler(buf)
+    _nk._log.addHandler(h)
+    try:
+        try:
+            out = call()
+        except Exception as e:  # noqa: BLE001
+            out = e
+        return out, _nk._http.sent, buf.getvalue(), _nk._interval(), _nk._key_refused
+    finally:
+        _nk._log.removeHandler(h)
+        _nk._http, _nk.time.sleep, _nk._key_refused = old_http, old_sleep, False
+        if old_env is None:
+            os.environ.pop("NCBI_API_KEY", None)
+        else:
+            os.environ["NCBI_API_KEY"] = old_env
+
+
+_nk_params = {"db": "pubmed", "term": "x", "tool": "t", "email": ""}
+for _nk_v, _nk_name in ((None, "unset"), ("", "empty"), ("   \t", "blank")):
+    _nk_o, _nk_s, _, _nk_i, _ = _nk_with(_nk_v, [(200, "{}")], lambda: _nk._paced_get("esearch.fcgi", dict(_nk_params)))
+    t(f"NK: with the key {_nk_name}, the request goes out exactly as today, at today's 0.4 s spacing",
+      _nk_s == [("get", _nk_params)] and _nk_i == _nk.MIN_INTERVAL == 0.4 and _nk_o.status_code == 200, (_nk_s, _nk_i))
+
+_nk_caller = dict(_nk_params)
+_nk_o, _nk_s, _, _nk_i, _ = _nk_with(_NK_KEY, [(200, "{}")], lambda: _nk._paced_post("esearch.fcgi", _nk_caller))
+t("NK: with a key, the request carries it at send time, spaced 0.11 s, and the caller's params are untouched",
+  _nk_s == [("post", {**_nk_params, "api_key": _NK_KEY})] and _nk_i == 0.11 and _nk_caller == _nk_params, (_nk_s, _nk_i))
+t("NK: keyed spacing never lets 11 requests start inside one second (NCBI allows 10)", 10 * _nk_i > 1.0, _nk_i)
+_nk_o, _nk_s, _, _, _ = _nk_with("  " + _NK_KEY + " ", [(200, "{}")], lambda: _nk._paced_get("esearch.fcgi", dict(_nk_params)))
+t("NK: a key with spaces around it is sent trimmed, and the response URL no longer names it",
+  _nk_s[0][1].get("api_key") == _NK_KEY and _NK_KEY not in _nk_o.url and _NK_KEY not in _nk_o.request.url, _nk_o.url)
+
+for _nk_exc in (_nk_rq.ConnectionError("refused"), _nk_rq.Timeout("slow")):
+    _nk_o, _, _nk_log, _, _ = _nk_with(_NK_KEY, [_nk_exc], lambda: _nk._get("efetch.fcgi", dict(_nk_params)))
+    t(f"NK: a {type(_nk_exc).__name__} that names the key comes out as the same kind of error without it, not chained",
+      isinstance(_nk_o, type(_nk_exc)) and _NK_KEY not in str(_nk_o) and "[redacted]" in str(_nk_o)
+      and _nk_o.__cause__ is None and _nk_o.__suppress_context__ and _NK_KEY not in _nk_log, str(_nk_o))
+
+_nk_o, _nk_s, _nk_log, _, _ = _nk_with(_NK_KEY, [(500, "oops"), (500, "oops")], lambda: _nk._get("efetch.fcgi", dict(_nk_params)))
+t("NK: a PubMed fault with a key raises the usual HTTP error, and neither its text nor the log names the key",
+  isinstance(_nk_o, _nk_rq.HTTPError) and "500" in str(_nk_o) and _NK_KEY not in str(_nk_o)
+  and _NK_KEY not in _nk_log and len(_nk_s) == 2, str(_nk_o))
+
+_nk_o, _nk_s, _nk_log, _nk_i, _nk_ref = _nk_with(
+    _NK_KEY, [(400, '{"error":"API key invalid","api-key":"x"}'), (200, "{}"), (200, "{}")],
+    lambda: (_nk._get("esearch.fcgi", dict(_nk_params)), _nk._get("esearch.fcgi", dict(_nk_params))))
+t("NK: a key NCBI refuses (400) is dropped: the request is sent again without it, later ones too, at 0.4 s, logged without the key",
+  isinstance(_nk_o, tuple) and _nk_o[0].status_code == 200
+  and [p.get("api_key") for _, p in _nk_s] == [_NK_KEY, None, None] and _nk_ref and _nk_i == 0.4
+  and "did not accept" in _nk_log and _NK_KEY not in _nk_log, (_nk_s, _nk_log))
+
+_nk_o, _nk_s, _nk_log, _, _nk_ref = _nk_with(_NK_KEY, [(429, "rate"), (429, "rate")], lambda: _nk._get("esearch.fcgi", dict(_nk_params)))
+t("NK: a 429 with a key is asked once more and then fails as a defined HTTP error, no hang, key kept out of the text",
+  isinstance(_nk_o, _nk_rq.HTTPError) and "429" in str(_nk_o) and len(_nk_s) == 2 and not _nk_ref
+  and _NK_KEY not in str(_nk_o) and _NK_KEY not in _nk_log, str(_nk_o))
+_nk_o, _nk_s, _, _, _ = _nk_with(_NK_KEY, [(429, "rate"), (200, "{}")], lambda: _nk._get("esearch.fcgi", dict(_nk_params)))
+t("NK: a 429 then a good reply with a key goes on as normal", getattr(_nk_o, "status_code", None) == 200, _nk_o)
+_nk_o, _nk_s, _, _, _nk_ref = _nk_with(_NK_KEY, [(400, "bad term"), (400, "bad term")], lambda: _nk._get("esearch.fcgi", dict(_nk_params)))
+t("NK: a 400 that is not about the key keeps the key and fails as before",
+  isinstance(_nk_o, _nk_rq.HTTPError) and not _nk_ref and len(_nk_s) == 1 and _NK_KEY not in str(_nk_o), (_nk_s, str(_nk_o)))
+t("NK: the key is read from the environment only, and the docs name it",
+  'os.environ.get("NCBI_API_KEY")' in (ROOT / "pubmed.py").read_text()
+  and "NCBI_API_KEY" in (ROOT / "README.md").read_text() and "NCBI_API_KEY" in (ROOT / ".env.example").read_text())
+# ===== END Q11 SPEED (NCBI key) =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

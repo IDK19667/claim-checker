@@ -15,8 +15,10 @@ than a small preliminary study.
 """
 
 import http.cookiejar
+import logging
 import os
 import re
+import contextvars
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -30,6 +32,7 @@ import requests
 import evidence
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+_log = logging.getLogger("pubmed")
 TIMEOUT = 15
 
 # NCBI allows 3 requests a second without a key, and answers 429 past it.
@@ -60,6 +63,19 @@ def _ahead(fn, *args, **kwargs):
     return _SEARCHES.submit(fn, *args, **kwargs)
 
 
+# Who to tell, and how many distinct papers the searches sent back, before
+# their abstracts are fetched: the live check's reading log says so, once for
+# each round of searching that sends any back (a widened search is a round of
+# its own, with its own count). Unset (None) everywhere but there, so nothing
+# else sees a difference.
+RETURNED = contextvars.ContextVar("pubmed_returned", default=None)
+# The same log's other two search steps, told as PROGRESS(stage, **fields):
+# "unreadable" (count) when every paper a round sent back has no abstract, so
+# the reader is not told papers came back and then that nothing matched with
+# no step between; "widened" (query) when a second, broader search starts.
+PROGRESS = contextvars.ContextVar("pubmed_progress", default=None)
+
+
 def _new_session() -> requests.Session:
     """One connection pool for every E-utilities request, shared by every
     thread: requests.get opened a new connection, and a new TLS handshake,
@@ -76,26 +92,96 @@ def _new_session() -> requests.Session:
 _http = _new_session()
 
 
-def _paced_get(endpoint: str, params: dict):
+# A free NCBI API key (NCBI_API_KEY, read from the environment only) lets a
+# client make 10 requests a second instead of 3: with one, requests start
+# KEYED_INTERVAL apart (a little over 0.1 s, so no second holds 11 starts)
+# and carry it as api_key. It is added here, at the
+# moment of sending, so no caller, recording or saved request ever holds it,
+# and it is cut out of every URL and error text a response or exception
+# carries. Empty or whitespace is no key. A key NCBI says is invalid is
+# dropped for the life of the process and the request sent again without it,
+# so the check goes on exactly as it does with no key.
+KEYED_INTERVAL = 0.11  # 0.1 would let 11 starts fall inside one second
+_key_refused = False
+
+
+def _api_key() -> str:
+    if _key_refused:
+        return ""
+    return (os.environ.get("NCBI_API_KEY") or "").strip()
+
+
+def _interval() -> float:
+    return KEYED_INTERVAL if _api_key() else MIN_INTERVAL
+
+
+def _redact(text, key):
+    return text.replace(key, "[redacted]") if key and isinstance(text, str) else text
+
+
+def _clean(resp, key):
+    """The response with the key cut out of the URLs it carries."""
+    if key and resp is not None:
+        resp.url = _redact(resp.url, key)
+        if getattr(resp, "request", None) is not None:
+            resp.request.url = _redact(resp.request.url, key)
+    return resp
+
+
+def _turn():
     global _last_call
     with _pace:
-        wait = MIN_INTERVAL - (time.monotonic() - _last_call)
+        wait = _interval() - (time.monotonic() - _last_call)
         if wait > 0:
             time.sleep(wait)
         _last_call = time.monotonic()
-    return _http.get(f"{EUTILS_BASE}/{endpoint}", params=params, timeout=TIMEOUT)
+
+
+def _refused_key(resp) -> bool:
+    """NCBI's answer to a key it does not accept: 400, 401 or 403 naming the key."""
+    if resp.status_code not in (400, 401, 403):
+        return False
+    try:
+        return "api key" in (resp.text or "").lower() or "api_key" in (resp.text or "").lower()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _send(method, endpoint: str, params: dict, timeout):
+    global _key_refused
+    _turn()
+    key = _api_key()
+    url = f"{EUTILS_BASE}/{endpoint}"
+    if not key:
+        if method == "get":
+            return _http.get(url, params=params, timeout=timeout)
+        return _http.post(url, data=params, timeout=timeout)
+    sent = {**params, "api_key": key}
+    try:
+        resp = (_http.get(url, params=sent, timeout=timeout) if method == "get"
+                else _http.post(url, data=sent, timeout=timeout))
+    except requests.RequestException as e:
+        # The same kind of failure, with the key cut out of its words, and
+        # not chained to the original, whose words and request carry it.
+        clean = type(e)(_redact(str(e), key))
+        clean.response = _clean(getattr(e, "response", None), key)
+        raise clean from None
+    if _refused_key(resp):
+        _key_refused = True
+        _log.warning("NCBI did not accept the API key (status %s); PubMed requests go on without it",
+                     resp.status_code)
+        return _send(method, endpoint, params, timeout)
+    return _clean(resp, key)
+
+
+def _paced_get(endpoint: str, params: dict):
+    return _send("get", endpoint, params, TIMEOUT)
 
 
 def _paced_post(endpoint: str, params: dict, timeout=None):
     """One E-utilities POST, in the same turn as every GET. For a list of
     ids too long to carry in a URL."""
-    global _last_call
-    with _pace:
-        wait = MIN_INTERVAL - (time.monotonic() - _last_call)
-        if wait > 0:
-            time.sleep(wait)
-        _last_call = time.monotonic()
-    return _http.post(f"{EUTILS_BASE}/{endpoint}", data=params, timeout=TIMEOUT if timeout is None else timeout)
+    return _send("post", endpoint, params, TIMEOUT if timeout is None else timeout)
 
 
 # At most this many cited ids go into the one retraction lookup of a check:
@@ -327,7 +413,14 @@ def search_and_fetch(query: str, max_results: int = 8,
         for pmid in indirect.result():
             if pmid not in pmids:
                 pmids.append(pmid)
-    return prioritise(usable(fetch_details(pmids)), query, surrogate)[:max_results]
+    told = RETURNED.get()
+    if told is not None and pmids:
+        told(len(pmids))
+    readable = usable(fetch_details(pmids))
+    progress = PROGRESS.get()
+    if progress is not None and pmids and not readable:
+        progress("unreadable", count=len(pmids))
+    return prioritise(readable, query, surrogate)[:max_results]
 
 
 # The fewest studies worth narrowing to. Below this, dropping the papers that
@@ -592,6 +685,9 @@ def search_with_fallback(query: str, max_results: int = 8,
     broader = broaden_query(query)
     if not broader:
         return [], query, False
+    progress = PROGRESS.get()
+    if progress is not None:
+        progress("widened", query=broader)
     studies = search_and_fetch(broader, max_results=max_results, surrogate=surrogate)
     return studies, broader, bool(studies)
 

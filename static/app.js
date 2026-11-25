@@ -895,12 +895,22 @@ function handleStage(ev) {
     showTyped(typed, ev.typed_reason);
   }
   if (ev.stage === "query") logLine(ev.query ? `Searching PubMed for “${ev.query}”` : "Searching PubMed", true);
+  // A round of searching is back: how many papers, before any is opened. Each
+  // round says its own count (a widened search is a second round), and the
+  // studies found are picked from the last round, so "Found" is never more.
+  else if (ev.stage === "returned") logLine(ev.count === 1 ? "PubMed returned 1 paper. Opening it" : `PubMed returned ${ev.count} papers. Picking the strongest to read`, true);
+  // Every paper that round sent back has no abstract, so none can be read:
+  // said before the search is widened or nothing is found.
+  else if (ev.stage === "unreadable") logLine(ev.count === 1 ? "That paper has no abstract, so there is nothing in it to read" : `None of the ${ev.count} papers has an abstract, so there is nothing in them to read`, true);
+  else if (ev.stage === "widened") logLine(ev.query ? `Widening the search to “${ev.query}”` : "Widening the search", true);
   else if (ev.stage === "found") {
     if (ev.count === 0) logLine("Nothing matched on PubMed", true);
     else { logLine(`Found ${ev.count} ${ev.count === 1 ? "study" : "studies"}${ev.broadened ? " after widening the search" : ""}`); logLine("Reading the studies", true); }
     // The desk stands one blank sheet in its stack for each paper found.
     tellDesk("desk:stage", { stage: "found", count: ev.count || 0 });
   } else if (ev.stage === "weigh") logLine("Weighing the evidence", true);
+  // Sent only when the answer is in and is about to be read against its studies.
+  else if (ev.stage === "checking") logLine("Checking the answer against the studies", true);
 }
 
 async function checkStreamed(claim) {
@@ -926,6 +936,9 @@ async function checkStreamed(claim) {
       const ev = JSON.parse(line.slice(6));
       if (ev.stage === "done" || ev.stage === "error") final = ev; else handleStage(ev);
     }
+    // The answer is in, so it is drawn now. What the server does after
+    // sending it (saving the answer, logging the check) is not the reader's wait.
+    if (final) { reader.cancel().catch(() => {}); break; }
   }
   if (!final) throw new Error("stream ended early");
   return final;
