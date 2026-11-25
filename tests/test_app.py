@@ -16034,8 +16034,9 @@ for _nk_v, _nk_name in ((None, "unset"), ("", "empty"), ("   \t", "blank")):
 
 _nk_caller = dict(_nk_params)
 _nk_o, _nk_s, _, _nk_i, _ = _nk_with(_NK_KEY, [(200, "{}")], lambda: _nk._paced_post("esearch.fcgi", _nk_caller))
-t("NK: with a key, the request carries it at send time, spaced 0.1 s, and the caller's params are untouched",
-  _nk_s == [("post", {**_nk_params, "api_key": _NK_KEY})] and _nk_i == 0.1 and _nk_caller == _nk_params, (_nk_s, _nk_i))
+t("NK: with a key, the request carries it at send time, spaced 0.11 s, and the caller's params are untouched",
+  _nk_s == [("post", {**_nk_params, "api_key": _NK_KEY})] and _nk_i == 0.11 and _nk_caller == _nk_params, (_nk_s, _nk_i))
+t("NK: keyed spacing never lets 11 requests start inside one second (NCBI allows 10)", 10 * _nk_i > 1.0, _nk_i)
 _nk_o, _nk_s, _, _, _ = _nk_with("  " + _NK_KEY + " ", [(200, "{}")], lambda: _nk._paced_get("esearch.fcgi", dict(_nk_params)))
 t("NK: a key with spaces around it is sent trimmed, and the response URL no longer names it",
   _nk_s[0][1].get("api_key") == _NK_KEY and _NK_KEY not in _nk_o.url and _NK_KEY not in _nk_o.request.url, _nk_o.url)

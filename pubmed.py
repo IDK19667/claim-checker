@@ -94,13 +94,14 @@ _http = _new_session()
 
 # A free NCBI API key (NCBI_API_KEY, read from the environment only) lets a
 # client make 10 requests a second instead of 3: with one, requests start
-# KEYED_INTERVAL apart and carry it as api_key. It is added here, at the
+# KEYED_INTERVAL apart (a little over 0.1 s, so no second holds 11 starts)
+# and carry it as api_key. It is added here, at the
 # moment of sending, so no caller, recording or saved request ever holds it,
 # and it is cut out of every URL and error text a response or exception
 # carries. Empty or whitespace is no key. A key NCBI says is invalid is
 # dropped for the life of the process and the request sent again without it,
 # so the check goes on exactly as it does with no key.
-KEYED_INTERVAL = 0.1
+KEYED_INTERVAL = 0.11  # 0.1 would let 11 starts fall inside one second
 _key_refused = False
 
 
