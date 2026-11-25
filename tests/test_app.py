@@ -4472,8 +4472,38 @@ _ex_row = db.get_cached_by_key(db.normalize_claim(appmod.EXAMPLE_CLAIM))
 t("  its claim, verdict, short answer, date and count are the saved row's, not a frozen file's",
   _ex and _ex["claim"] == _ex_row["claim_text"] and _ex["verdict"] == "complicated"
   and _ex["tldr"] == _ex_row["tldr"] and _ex["read"] == 3
-  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(appmod.datetime.fromisoformat(_ex_row["cached_at"]))
+  and _ex["checked"] == (lambda d: f"{d.day} {d.strftime('%B %Y')}")(
+      appmod.datetime.fromisoformat(_ex_row["cached_at"]).astimezone(__import__("zoneinfo").ZoneInfo("America/Los_Angeles")))
   and "check.json" not in _inspect.getsource(appmod._trust_example), _ex)
+# The date is the site's own day (Pacific), not the UTC day, so a check saved
+# after 16:00 PST still reads as that Pacific day. The saved row's clock is
+# pinned here, so this does not depend on the hour the suite runs.
+_ex_now_real = db._now
+_ex_days = []
+for _ex_at, _ex_want in (("2026-11-24T18:00:00+00:00", "24 November 2026"),   # 10:00 PST
+                         ("2026-11-24T23:59:00+00:00", "24 November 2026"),   # 15:59 PST, just before UTC midnight
+                         ("2026-11-25T00:01:00+00:00", "24 November 2026"),   # 16:01 PST, just after UTC midnight
+                         ("2026-11-25T02:14:00+00:00", "24 November 2026"),   # 18:14 PST, the evening run that failed
+                         ("2026-11-25T07:59:00+00:00", "24 November 2026"),   # 23:59 PST
+                         ("2026-11-25T08:00:00+00:00", "25 November 2026")):  # 00:00 PST
+    db._now = lambda _a=_ex_at: _a
+    try:
+        db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                              "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                              tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                              still_open="Long trials of a cure are missing.")
+    finally:
+        db._now = _ex_now_real
+    appmod._drop_home_lists()
+    _ex_p = appmod._trust_example()
+    _ex_days.append((_ex_at, _ex_p and _ex_p["checked"], _ex_want))
+t("  its date is the site's day at any hour the check was saved, not the UTC day",
+  all(got == want for _, got, want in _ex_days), [d for d in _ex_days if d[1] != d[2]])
+db.put_cached_verdict(appmod.EXAMPLE_CLAIM, "apple cider vinegar AND diabetes mellitus", "complicated",
+                      "Studies 1 and 2 show lower blood sugar; none shows a cure.", ["EX1", "EX2"], _EXS,
+                      tldr="It can lower blood sugar, but nothing shows it cures diabetes.",
+                      still_open="Long trials of a cure are missing.")
+appmod._drop_home_lists()
 t("  the frozen file and the script that wrote it are gone from the repo",
   not (ROOT / "static" / "flight" / "check.json").exists() and not (ROOT / "scripts" / "export_flight_check.py").exists())
 # It goes through the Latest list's own path: a stored "true" whose only cited
@@ -10910,7 +10940,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v130";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v131";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -15492,6 +15522,37 @@ for _cl in _SF_NUM:
     t(f"R2 2/3: {_cl!r} is on no public path (/, 404, trending, type-ahead, llms.txt, sitemap)", not _sf_bad, _sf_bad)
 _sf_drop(*_SF_NUM)
 # ===== END SITE FIXES =====
+
+# ===== Q10 STILL: text mode's still picture of the desk =====
+_st_files = {n: ROOT / "static" / "desk" / f"still-{n}.webp" for n in ("phone", "wide")}
+_st_bytes = {n: f.read_bytes() if f.exists() else b"" for n, f in _st_files.items()}
+t("ST 1: the two stills are WebP files of our own scene, each at most 20,480 bytes, the phone's at most 1,400 (text mode stays under 200 KB)",
+  all(v[:4] == b"RIFF" and v[8:12] == b"WEBP" for v in _st_bytes.values())
+  and all(0 < len(v) <= 20480 for v in _st_bytes.values()) and len(_st_bytes["phone"]) <= 1400, {n: len(v) for n, v in _st_bytes.items()})
+_st_mk = (ROOT / "scripts" / "make_still.mjs").read_text() if (ROOT / "scripts" / "make_still.mjs").exists() else ""
+t("ST 1: the script that makes them is kept, renders this tree's desk and encodes with Pillow inside the budgets",
+  "still-phone.webp" in _st_mk and "still-wide.webp" in _st_mk and "make_still.py" in _st_mk and '"1400"' in _st_mk and '"20480"' in _st_mk
+  and "Image" in (ROOT / "scripts" / "make_still.py").read_text())
+_st_home = c.get("/").data.decode()
+_st_pic = re.search(r'<picture class="desk-still" aria-hidden="true">(.*?)</picture>', _st_home, re.S)
+_st_img = re.search(r"<img [^>]*>", _st_pic.group(1)).group(0) if _st_pic else ""
+t("ST 2: the home page carries the still: decorative, fixed size, lazy and low priority, the wide crop only from 761px",
+  bool(_st_pic) and 'alt=""' in _st_img and 'width="585"' in _st_img and 'height="380"' in _st_img and 'loading="lazy"' in _st_img
+  and 'fetchpriority="low"' in _st_img and "/static/desk/still-phone.webp?v=" in _st_img
+  and re.search(r'<source media="\(min-width: 761px\)" srcset="/static/desk/still-wide\.webp\?v=[^"]+" width="1040" height="1769">', _st_pic.group(1)) is not None, _st_img)
+_st_tpl = (ROOT / "templates" / "index.html").read_text()
+t("ST 2: a result page never carries it (the picture sits inside the home-only branch)",
+  re.search(r"\{%- if not result %\}\s*\{#-[^#]*#\}\s*<picture class=\"desk-still\"", _st_tpl) is not None)
+_st_css = (ROOT / "static" / "desk.css").read_text()
+_st_show = [m.group(0) for m in re.finditer(r"[^{}]*\.desk-still\s*\{[^}]*display:\s*block[^}]*\}", _st_css)]
+t("ST 2: hidden by default and shown only in text mode or with scripts off, on the home page, never in 3D",
+  ".desk-still { display: none; }" in _st_css and len(_st_show) == 2
+  and all(sel.strip().split("{")[0].replace("\n", " ").strip() == "html.no-gl:not(.checked) .desk-still, html:not(.js):not(.checked) .desk-still" for sel in _st_show)
+  and "has-gl" not in " ".join(_st_show), _st_show)
+t("ST 2: the phone band in text mode uses the 3D page's own rule, so the claim box sits where it does in 3D",
+  "html.no-gl:not(.checked), html:not(.js):not(.checked) { --lamp-band: clamp(116px, calc(100svh - 478px), 30svh); }" in _st_css
+  and "html.js:not(.no-gl):not(.checked) { --lamp-band: clamp(116px, calc(100svh - 478px), 30svh); }" in _st_css)
+# ===== END Q10 STILL =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")

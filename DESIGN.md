@@ -438,7 +438,10 @@ Two stylesheets, two grounds:
 The page works without the desk. Text mode (no WebGL, Save-Data, 2G,
 reduced data, `?nogl=1`, or three.js refused) sets the same sections on
 the night ground with the answer card as a block of card stock; with
-scripts off a result reads top to bottom from the server's HTML.
+scripts off a result reads top to bottom from the server's HTML. Its home
+page, and the home page with scripts off, show a still of our own desk
+(`scripts/make_still.mjs`): the phone's band, or the lamp in the margin
+beside the column from 1200px wide, fading into the ground on every side.
 
 ## Colors
 
@@ -575,7 +578,8 @@ Sizes and floors:
   a third of the screen at most and gives way to the words: the claim box
   and "Check the research" stay on the first screen. The page's own
   "Evident" line steps aside there, since the strip names the site. Text
-  mode, a result, a tablet and a phone turned sideways keep their layout.
+  mode keeps the same band with the still of the desk in it; a result, a
+  tablet and a phone turned sideways keep their layout.
 - **The first screen holds the claim box.** At 1366x650, 1280x720,
   1440x900, 1024x768 and 1920x1080, in 3D and text mode, the headline,
   the claim box and "Check the research" are wholly on screen with no
