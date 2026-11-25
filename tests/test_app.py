@@ -15596,6 +15596,114 @@ finally:
         os.environ["LLM_PROVIDER"] = _sp_env
 # ===== END Q11 SPEED (warm) =====
 
+# ===== Q11 SPEED: the verdict call starts beside the retraction lookup =====
+import copy as _ve_copy  # noqa: E402
+import time as _ve_time  # noqa: E402
+_VE_STUDIES = [_e_study("81", _E_REV, title="A review of the thing", references=["8101", "8102"]),
+               _e_study("82", _E_RCT, title="A trial of the thing")]
+_VE_RAW = json.dumps({"verdict": "complicated", "tldr": "It may help a little.", "explanation": "Mixed results [1] [2].",
+                      "still_open": "Longer studies are needed.", "cited_study_numbers": [1, 2],
+                      "relevance": [{"study": i + 1, "subject": True, "outcome": True, "in_people": True,
+                                     "finding": "It helped a little."} for i in range(2)],
+                      "parts": [], "evidence": [], "effect_size": "", "strength": "", "applies_to": "",
+                      "not_applies_to": "", "unknowns": ""})
+
+
+def _ve_run(found, lookup_s=0.0, model_s=0.0, fail=None, early=True):
+    """weigh_evidence on fresh copies of the two studies, the lookup finding
+    `found` after lookup_s seconds, every model call taking model_s. Returns
+    (result or the exception, studies, the verdict prompts sent, seconds)."""
+    st = _ve_copy.deepcopy(_VE_STUDIES)
+    sent = []
+    saved = verdict._complete_json, verdict.guidance_ahead, pubmed.retracted_among
+
+    def fake(prompt, schema, *a, **k):
+        if schema is verdict.VERDICT_SCHEMA:
+            sent.append(prompt)
+            _ve_time.sleep(model_s)
+            if fail:
+                raise fail
+        return _VE_RAW, None
+
+    def lookup(ids):
+        _ve_time.sleep(lookup_s)
+        return set(found)
+    verdict._complete_json, verdict.guidance_ahead, pubmed.retracted_among = fake, (lambda c: None), lookup
+    t0 = _ve_time.perf_counter()
+    try:
+        if early:
+            fut = appmod._retraction_lookup(st)
+            _e_ev.flag_retracted_citations(st)
+            note = []
+            out = verdict.weigh_evidence("The thing helps", st, "(thing) AND (help)",
+                                         retractions=lambda: note.append(appmod._flag_retractions(st, fut)))
+        else:
+            appmod._flag_retractions(st)
+            out = verdict.weigh_evidence("The thing helps", st, "(thing) AND (help)")
+    except Exception as e:  # noqa: BLE001
+        out = e
+    finally:
+        verdict._complete_json, verdict.guidance_ahead, pubmed.retracted_among = saved
+    return out, st, sent, _ve_time.perf_counter() - t0
+
+
+_ve_a = _ve_run((), lookup_s=0.4, model_s=0.4)
+_ve_b = _ve_run((), lookup_s=0.4, model_s=0.4, early=False)
+t("SP early: with nothing new found, the answer, the studies and the one verdict prompt are those of the serial path",
+  _ve_a[0] == _ve_b[0] and _ve_a[1] == _ve_b[1] and _ve_a[2] == _ve_b[2] and len(_ve_a[2]) == 1, (_ve_a[2:], _ve_b[2:]))
+t("SP early: and the lookup and the verdict call overlap (0.4 s each, under 0.7 s in all; serially over 0.8 s)",
+  _ve_a[3] < 0.7 and _ve_b[3] >= 0.8, (round(_ve_a[3], 3), round(_ve_b[3], 3)))
+_ve_c = _ve_run({"8102"}, lookup_s=0.2, model_s=0.1)
+_ve_d = _ve_run({"8102"}, early=False)
+t("SP early: a lookup that finds a retracted paper sends the verdict call again on the flagged prompt; the answer is the serial one",
+  _ve_c[0] == _ve_d[0] and _ve_c[1] == _ve_d[1] and len(_ve_c[2]) == 2 and _ve_c[2][1] == _ve_d[2][0]
+  and "CITES A RETRACTED STUDY" in _ve_c[2][1] and "CITES A RETRACTED STUDY" not in _ve_c[2][0]
+  and _e_ev.cited_retracted(_ve_c[1][0]) == [{"pmid": "8102", "title": None, "trial": False}], _ve_c[2])
+_ve_refuse = verdict.ProviderError("other", verdict.unread_reply(verdict.DECLINED), verdict.way_out(verdict.DECLINED))
+_ve_e = _ve_run((), lookup_s=0.3, fail=_ve_refuse)
+t("SP early: a model refusal on the early call is raised as before, once the lookup is in, and nothing hangs",
+  _ve_e[0] is _ve_refuse and len(_ve_e[2]) == 1 and _ve_e[3] < 2, (_ve_e[0], _ve_e[3]))
+_ve_real = (pubmed.retracted_among, appmod.RETRACTION_WAIT)
+try:
+    appmod.RETRACTION_WAIT = 0.3
+    _ve_f = _ve_run((), lookup_s=5, model_s=0.1)
+    t("SP early: a PubMed lookup that times out still gives the answer, after the wait and no longer",
+      isinstance(_ve_f[0], dict) and _ve_f[0].get("verdict") and len(_ve_f[2]) == 1 and _ve_f[3] < 1.5
+      and "cites_retracted" not in _ve_f[1][0], (_ve_f[0], _ve_f[3]))
+finally:
+    pubmed.retracted_among, appmod.RETRACTION_WAIT = _ve_real
+
+# Through the stream: the weigh event is sent before the lookup is in, and a lookup that fails says so.
+_ve_saved = (pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among)
+_ve_seen = {}
+
+
+def _ve_weigh(claim, studies, query="", surrogate="", retractions=None):
+    _ve_seen["retractions"] = retractions is not None
+    _ve_seen["flag_before"] = "cites_retracted" in studies[0]
+    if retractions:
+        retractions()
+    return {"verdict": "complicated", "tldr": "It may help a little.", "explanation": "Mixed results [1] [2].",
+            "still_open": "Longer studies are needed.", "cited_studies": ["81", "82"], "breakdown": None}
+
+
+def _ve_timeout(ids):
+    raise requests.Timeout("fake: the lookup timed out")
+
+
+try:
+    pubmed.search_with_fallback = lambda q, max_results=8, surrogate="": (_ve_copy.deepcopy(_VE_STUDIES), q, False)
+    verdict.extract_search_terms = lambda claim: ("(thing) AND (help)", "", claim)
+    verdict.weigh_evidence, pubmed.retracted_among = _ve_weigh, _ve_timeout
+    _ve_r, _ve_evs = stream("The early verdict claim helps", ip="7.7.11.1")
+    t("SP early: through the stream, found, weigh and done in order; a timed-out lookup says it could not be made",
+      [e["stage"] for e in _ve_evs] == ["search", "query", "found", "weigh", "done"]
+      and _ve_evs[-1]["result"].get("retraction_check") == _e_ev.RETRACTION_UNCHECKED
+      and _ve_seen == {"retractions": True, "flag_before": False}, (_ve_evs[-1], _ve_seen))
+finally:
+    pubmed.search_with_fallback, verdict.extract_search_terms, verdict.weigh_evidence, pubmed.retracted_among = _ve_saved
+# ===== END Q11 SPEED (early verdict) =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

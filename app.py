@@ -1168,19 +1168,34 @@ def _study_payload(s: dict, cited: set) -> dict:
     }
 
 
-def _flag_retractions(studies):
+def _flag_retractions(studies, lookup=None):
     """evidence.flag_retracted_citations with the one PubMed lookup. The
     lookup runs on the search pool and only returns ids; the flags are put
     on the studies here, on the request thread, and only from a result that
-    came in time. A late result is thrown away and never touches them."""
+    came in time. A late result is thrown away and never touches them.
+    `lookup` is that lookup already started (_retraction_lookup); without
+    one it is started here."""
     ids = evidence.retraction_lookup_ids(studies)
-    found = _retraction_result(pubmed._ahead(pubmed.retracted_among, ids)) if ids else set()
+    if ids and lookup is None:
+        lookup = _retraction_lookup(studies)
+    found = _retraction_result(lookup) if ids else set()
 
     def lookup(_ids):
         if found is None:
             raise LookupError("the retraction lookup could not be made")
         return found
     return evidence.flag_retracted_citations(studies, lookup if ids else None)
+
+
+def _retraction_lookup(studies):
+    """The one lookup _flag_retractions would make, started now on the
+    search pool, or None when it would make none."""
+    ids = evidence.retraction_lookup_ids(studies)
+    if not ids:
+        return None
+    lookup = pubmed._ahead(pubmed.retracted_among, ids)
+    lookup.started = time.monotonic()   # the wait below counts from here
+    return lookup
 
 
 # How long a check waits for that lookup before going on without it: the
@@ -1191,8 +1206,9 @@ RETRACTION_WAIT = pubmed.RETRACTION_LOOKUP_SECONDS
 def _retraction_result(future):
     """The retracted ids the lookup found, or None when it failed or ran
     late. A lookup that fails or runs late never stops the check."""
+    left = RETRACTION_WAIT - (time.monotonic() - getattr(future, "started", time.monotonic()))
     try:
-        return set(future.result(timeout=RETRACTION_WAIT) or ())
+        return set(future.result(timeout=max(0.0, left)) or ())
     except Exception:  # noqa: BLE001 — the check goes on without it
         app.logger.warning("The retraction lookup could not be made")
         return None
@@ -1836,11 +1852,26 @@ def _run_check_stages(claim: str, client_ip: str, base_url: str):
             yield from_cache(kept, typed, reason, claim if typed else None)
             return
         # Which reviews cite a paper later retracted: one lookup at most, and
-        # none when a saved answer is served above.
-        retraction_check = _flag_retractions(studies)
+        # none when a saved answer is served above. It is in flight while the
+        # verdict call starts: the reviews flagged without it are flagged now,
+        # and weigh_evidence puts on its result (settle) before it reads a
+        # flag, and uses its early verdict call only if the prompt is unchanged.
+        lookup = _retraction_lookup(studies)
+        settled = []
+
+        def settle():
+            if not settled:
+                settled.append(_flag_retractions(studies, lookup))
         if studies:
             yield {"stage": "weigh"}
-        result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
+        if lookup is None:
+            settle()
+            result = verdict.weigh_evidence(claim, studies, query_used, surrogate)
+        else:
+            evidence.flag_retracted_citations(studies)
+            result = verdict.weigh_evidence(claim, studies, query_used, surrogate, retractions=settle)
+            settle()
+        retraction_check = settled[0]
     except RuntimeError as e:
         # Missing/misconfigured API key: the operator's problem, not the
         # reader's. The detail goes to the log; the page says what to do.

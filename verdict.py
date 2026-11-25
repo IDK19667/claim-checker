@@ -1010,6 +1010,11 @@ def unrated_guidance_tldr(tldr: str, lead: str = "") -> str:
 _AHEAD = ThreadPoolExecutor(max_workers=8, thread_name_prefix="guidance")
 
 
+# The verdict call started beside the retraction lookup (weigh_evidence's
+# `retractions`). No task here waits on another, so it cannot deadlock.
+_EARLY = ThreadPoolExecutor(max_workers=8, thread_name_prefix="verdict")
+
+
 def guidance_ahead(claim: str):
     """guideline_view(claim) started now on a worker thread, for
     follow_guidelines(..., ahead=) to collect, or None when follow_guidelines
@@ -1823,7 +1828,7 @@ def tidy_prose(text: str, limit: int) -> str:
 
 
 def weigh_evidence(claim: str, studies: list[dict], query: str = "",
-                   surrogate: str = "") -> dict:
+                   surrogate: str = "", retractions=None) -> dict:
     """
     Ask the model to weigh study quality and produce a verdict.
 
@@ -1841,6 +1846,14 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     measured a stand-in. Normally one call; a second only when the answer
     contradicts itself or wanders off the claim, which the consistency
     check below catches before a reader sees it.
+
+    `retractions`, when given, puts the retraction lookup's flags on the
+    studies (the app's lookup, still in flight). The studies already carry
+    the flags known without it. The verdict call starts on the prompt as it
+    stands, beside the lookup; when the flags are in and the prompt is the
+    same, that call is the verdict call. When they change it (the lookup
+    found a retracted paper the check did not know of), its reply is not
+    used and the verdict call is made on the new prompt, as before.
     """
     if not studies:
         return follow_guidelines(_fallback(
@@ -1859,17 +1872,28 @@ def weigh_evidence(claim: str, studies: list[dict], query: str = "",
     groups = pubmed.split_and(query or "")
     subject = groups[0] if groups else ""
     outcome = groups[1] if len(groups) > 1 else ""
-    studies_block = "\n\n".join(
-        _format_study_for_prompt(i + 1, s, outcome, surrogate, claim)
-        for i, s in enumerate(studies)
-    )
-    prompt = weigh_prompt(claim, studies_block,
-                          _subgroup_block(studies, claim)) + _confounded_note(studies)
-    reported = evidence.conditions_reported(studies, claim)
+
+    def verdict_prompt():
+        studies_block = "\n\n".join(
+            _format_study_for_prompt(i + 1, s, outcome, surrogate, claim)
+            for i, s in enumerate(studies)
+        )
+        return weigh_prompt(claim, studies_block,
+                            _subgroup_block(studies, claim)) + _confounded_note(studies)
 
     # Temperature 0, like the search: the same claim over the same studies
     # should read the same way every time it is checked.
-    raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
+    early = None
+    if retractions is not None:
+        before = verdict_prompt()
+        early = _EARLY.submit(_complete_json, before, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
+        retractions()
+    prompt = verdict_prompt()
+    reported = evidence.conditions_reported(studies, claim)
+    if early is not None and prompt == before:
+        raw, stop_note = early.result()
+    else:
+        raw, stop_note = _complete_json(prompt, VERDICT_SCHEMA, max_tokens=12000, temperature=0)
     result = _read_verdict(raw, stop_note, studies, claim, subject=subject, outcome=outcome, surrogate=surrogate)
     kept = raw, stop_note
     read = {}
