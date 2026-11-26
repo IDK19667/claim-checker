@@ -484,15 +484,51 @@ def _latest(n: int) -> list[dict]:
     still-open line, the same test the example and a result page use) is a
     finished answer; one that is not is never shown as one. Rows are fetched
     in growing pages until the list is full or the table runs out.
+    Curated claims with a saved answer come first, newest first (_curated_saved);
+    the places left are filled as before, and no entry is a near-duplicate of
+    one above it (near_duplicate).
     """
+    curated = _curated_saved()
     limit = n * LIST_OVERFETCH
     while True:
         rows = db.recent_verdicts(limit)
         whole = [r for r in rows if db.whole(r)]
-        out = _one_per_question(_public_claims(whole, len(whole)), verdict_of=_shown_verdict)[:n]
+        out = []
+        for r in _one_per_question(curated + _public_claims(whole, len(whole)), verdict_of=_shown_verdict):
+            if not any(near_duplicate(r["claim_text"], o["claim_text"]) for o in out):
+                out.append(r)
+        out = out[:n]
         if len(out) >= n or len(rows) < limit:
             return out
         limit *= 2
+
+
+def _chips(latest: list, n: int = 3) -> list[str]:
+    """The "Or try one of these" claims: the first n curated claims, in the
+    order of display.CURATED_CLAIMS, that have a saved answer and are not a
+    near-duplicate of an entry in `latest` or of each other. Too few such
+    claims are made up from the next curated claims in the same order. The
+    same for every visitor; no randomness."""
+    saved = {r["claim_key"] for r in _curated_saved()}
+    shown = [v["claim_text"] for v in latest]
+    out: list[str] = []
+    for need_saved in (True, False):
+        for c in display.CURATED_CLAIMS:
+            if len(out) >= n:
+                return out
+            if c in out or (need_saved and db.normalize_claim(c) not in saved):
+                continue
+            if not any(near_duplicate(c, x) for x in shown + out):
+                out.append(c)
+    return out
+
+
+def _curated_saved() -> list[dict]:
+    """The saved answers whose claim is curated (display.is_curated_claim on the
+    saved wording) and whole, newest first, in the shape recent_verdicts gives."""
+    rows = db.list_rows([db.normalize_claim(c) for c in display.CURATED_CLAIMS])
+    rows = [r for r in rows if db.whole(r) and display.is_curated_claim(r["claim_text"])]
+    return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)
 
 
 # The home page's two lists (the latest answers and the trust example) are
@@ -592,6 +628,22 @@ def _one_per_question(rows: list[dict], key: str = "claim_text", verdict_of=None
     return out
 
 
+def _near_key(claim: str) -> tuple:
+    """A claim's words in order, after db.claim_fold, with suggest's filler
+    words dropped and a final s or es folded (_list_fold). Falls back to
+    db.normalize_claim when the fold is empty."""
+    fold = db.claim_fold(claim)
+    words = tuple(w if w.startswith("~") else _list_fold(w) for w in fold if w not in _LIST_FILLER)
+    return words or ("=" + db.normalize_claim(claim),)
+
+
+def near_duplicate(a: str, b: str) -> bool:
+    """Two claims a public list shows once: the same after db.normalize_claim,
+    or differing only in case, punctuation, a plural or filler words. Word
+    order still counts, and so does any other word. Display only."""
+    return db.normalize_claim(a) == db.normalize_claim(b) or _near_key(a) == _near_key(b)
+
+
 def _trust_example():
     """
     The trust section's real example, {claim, verdict, tldr, checked, read,
@@ -672,10 +724,15 @@ def _render_home():
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page's latest checks: %s", e)
         latest = []
+    try:
+        chips = _home_list("chips", lambda: _chips(latest))
+    except sqlite3.Error as e:
+        app.logger.warning("Could not choose the front page's example claims: %s", e)
+        chips = []
     db.count_event("view.result" if cached else "view.home")
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
-                           latest=latest,
+                           latest=latest, chips=chips,
                            example=None if cached else _trust_example(),
                            provider=verdict.provider_label(), on_gemini=_on_gemini(),
                            today=datetime.now().strftime("%A, %B %-d, %Y"))
@@ -735,11 +792,17 @@ def _sitemap_result_paths() -> list:
         stamp = db.saved_stamp()
         if stamp == _sitemap_memo["stamp"]:
             return _sitemap_memo["paths"]
-        paths = []
+        paths, listed = [], set()
         # Scan far more rows than the sitemap can hold: only the few curated claims
         # qualify, and they must be found however many typed claims were saved after them.
         for r in db.saved_records(SITEMAP_SCAN_MAX):
             if not display.indexable_claim(r["claim_text"]):
+                continue
+            # Listed under the curated list's own wording, once, whatever case,
+            # spacing or end mark the saved row was typed with; only when that
+            # wording reaches this same saved row (the same db.normalize_claim key).
+            wording = display.curated_wording(r["claim_text"])
+            if wording in listed or db.normalize_claim(wording) != db.normalize_claim(r["claim_text"]):
                 continue
             if len(paths) >= SITEMAP_RESULTS_MAX:
                 break
@@ -751,7 +814,8 @@ def _sitemap_result_paths() -> list:
             if display.saved_record_problems(r["claim_text"], r["verdict"], cited, studies, bd,
                                              r["search_query"], r["created_at"]):
                 continue
-            paths.append((f"/?q={quote(r['claim_text'])}", (r["created_at"] or "")[:10]))
+            listed.add(wording)
+            paths.append((f"/?q={quote(wording)}", (r["created_at"] or "")[:10]))
         _sitemap_memo.update(stamp=stamp, paths=paths)
         return paths
     except Exception as e:  # noqa: BLE001 - the sitemap must never be a 500

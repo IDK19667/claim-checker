@@ -124,7 +124,7 @@
           <button class="btn quiet cancel" id="cancel-btn" type="button" hidden>Cancel</button>
           <div class="examples" id="examples">
             <p class="field-help" id="examples-label">Or try one of these:</p>
-            <div class="chips" id="chips" role="group" aria-labelledby="examples-label"></div>
+            <div class="chips" id="chips" role="group" aria-labelledby="examples-label">{% for c in chips %}<button type="button" class="chip">{{ c }}</button>{% endfor %}</div>
           </div>
         </form>
       </section>

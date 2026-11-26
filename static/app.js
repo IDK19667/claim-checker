@@ -18,9 +18,61 @@ const VERDICT_LABELS = {
   insufficient: "Not enough evidence",
 };
 
-// Claims people actually paste in. Tapping one runs it. The first screen shows
-// the first three, so the order is the order they are offered in.
+// The curated claims (display.CURATED_CLAIMS, the same list: a test compares
+// them). Tapping one runs it. The server picks the three the page offers; when
+// it sends none, the first three here are offered.
 const EXAMPLES = [
+  "Magnesium helps you sleep",
+  "Vitamin D boosts your immune system",
+  "You need to drink 8 glasses of water a day",
+  "Fish oil is good for your heart",
+  "Probiotics improve gut health",
+  "Ashwagandha reduces stress",
+  "Collagen supplements improve skin",
+  "Melatonin helps you fall asleep",
+  "Taking a multivitamin keeps you healthy",
+  "Turmeric reduces inflammation",
+  "Seed oils are bad for you",
+  "Intermittent fasting boosts your metabolism",
+  "Cold plunges reduce inflammation",
+  "Biotin makes your hair grow",
+  "Zinc shortens a cold",
+  "Raw milk is healthier than pasteurized milk",
+  "Honey soothes a cough",
+  "Mouth taping improves sleep",
+  "Vitamin B12 gives you more energy",
+  "Creatine improves brain function",
+  "The carnivore diet is healthy",
+  "Castor oil in your belly button reduces bloating",
+  "Red light therapy reduces wrinkles",
+  "Magnesium glycinate reduces anxiety",
+  "Chicken soup helps you get over a cold",
+  "Coffee dehydrates you",
+  "Lemon water detoxes your body",
+  "Electrolyte drinks hydrate you better than water",
+  "Garlic and honey fights the flu",
+  "Protein powder helps you build muscle",
+  "Walking 10,000 steps a day is necessary for health",
+  "Saunas help your body detox",
+  "Elderberry helps fight the flu",
+  "Detox teas cleanse your body",
+  "Olive oil shots are good for you",
+  "Cranberry juice prevents UTIs",
+  "Ginger helps with nausea",
+  "Saltwater gargles help a sore throat",
+  "Feed a cold, starve a fever",
+  "Onion water cures a cold",
+  "Eating late at night makes you gain weight",
+  "Tart cherry juice helps you sleep",
+  "Eating more fiber improves your gut health",
+  "Lion's mane mushroom improves focus",
+  "Grounding (walking barefoot) reduces inflammation",
+  "Blue light glasses help you sleep better",
+  "Bovine colostrum boosts immunity",
+  "Sea moss is a superfood",
+  "Putting a potato in your sock draws out a cold",
+  "NAD+ supplements slow aging",
+  "Liquid chlorophyll clears your skin",
   "Apple cider vinegar cures diabetes",
   "Cracking your knuckles causes arthritis",
   "Intermittent fasting improves brain function",
@@ -1254,7 +1306,8 @@ $("error-back").addEventListener("click", () => {
 
 // ---- Examples & trending --------------------------------------------------
 
-$("chips").innerHTML = EXAMPLES.slice(0, 3).map((c) => `<button type="button" class="chip">${escapeHtml(c)}</button>`).join("");
+// The server chooses the three (app._chips); this list is the fallback when it sent none.
+if (!$("chips").querySelector(".chip")) $("chips").innerHTML = EXAMPLES.slice(0, 3).map((c) => `<button type="button" class="chip">${escapeHtml(c)}</button>`).join("");
 $("chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
