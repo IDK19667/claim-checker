@@ -484,15 +484,31 @@ def _latest(n: int) -> list[dict]:
     still-open line, the same test the example and a result page use) is a
     finished answer; one that is not is never shown as one. Rows are fetched
     in growing pages until the list is full or the table runs out.
+    Curated claims with a saved answer come first, newest first (_curated_saved);
+    the places left are filled as before, and no entry is a near-duplicate of
+    one above it (near_duplicate).
     """
+    curated = _curated_saved()
     limit = n * LIST_OVERFETCH
     while True:
         rows = db.recent_verdicts(limit)
         whole = [r for r in rows if db.whole(r)]
-        out = _one_per_question(_public_claims(whole, len(whole)), verdict_of=_shown_verdict)[:n]
+        out = []
+        for r in _one_per_question(curated + _public_claims(whole, len(whole)), verdict_of=_shown_verdict):
+            if not any(near_duplicate(r["claim_text"], o["claim_text"]) for o in out):
+                out.append(r)
+        out = out[:n]
         if len(out) >= n or len(rows) < limit:
             return out
         limit *= 2
+
+
+def _curated_saved() -> list[dict]:
+    """The saved answers whose claim is curated (display.is_curated_claim on the
+    saved wording) and whole, newest first, in the shape recent_verdicts gives."""
+    rows = db.list_rows([db.normalize_claim(c) for c in display.CURATED_CLAIMS])
+    rows = [r for r in rows if db.whole(r) and display.is_curated_claim(r["claim_text"])]
+    return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)
 
 
 # The home page's two lists (the latest answers and the trust example) are

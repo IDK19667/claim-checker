@@ -9338,9 +9338,11 @@ for _x in _OQ:
     db.put_cached_verdict(_x, "(x) AND (y)", "complicated", "Study 1 found a little.", ["P1"],
                           _vouch_studies(*_OQ), tldr="A little, maybe.", still_open="For how long.")
 _oq_list = [r_["claim_text"] for r_ in appmod._latest(500) if r_["claim_text"] in _OQ]
+# Q12: a curated claim with a saved answer leads the list and stands for its
+# question, so the curated "cures" wording stands over the newer "cure".
 t("one per question: each pair find_equivalent merges shows once, as its newest row under its own wording",
-  _oq_list == ["Does it?", "Is it?", "Apple cider vinegar causes diabetes", "Apple cider vinegar helps diabetes",
-               "Apple cider vinegar cure diabetes", "Red wine is good for the heart", "Creatine causes hair loss"],
+  _oq_list == ["Apple cider vinegar cures diabetes", "Does it?", "Is it?", "Apple cider vinegar causes diabetes",
+               "Apple cider vinegar helps diabetes", "Red wine is good for the heart", "Creatine causes hair loss"],
   _oq_list)
 t("  the three vinegar claims (cures, helps, causes) stay three",
   sum(x.startswith("Apple cider vinegar") for x in _oq_list) == 3, _oq_list)
@@ -9349,7 +9351,7 @@ t("  and a row whose key is empty is never merged with another",
 _oq_home = c.get("/").get_data(as_text=True)
 _oq_items = _oq_home.split('<ol class="ledger-list">')[1].split("</ol>")[0]
 t("  the home page's list shows each once too",
-  _oq_items.count("pple cider vinegar cure diabetes") == 1 and _oq_items.count("pple cider vinegar causes diabetes") == 1,
+  _oq_items.count("pple cider vinegar cure") == 1 and _oq_items.count("pple cider vinegar causes diabetes") == 1,
   _oq_items[:300])
 t("  and suggest.group_similar is not what folds it", "group_similar" not in _inspect.getsource(appmod._latest)
   + _inspect.getsource(appmod._one_per_question))
@@ -16125,6 +16127,25 @@ t("Q12 near-duplicates: no two curated claims are near-duplicates of each other"
   not [(x, y) for i, x in enumerate(_dsp.CURATED_CLAIMS) for y in _dsp.CURATED_CLAIMS[i + 1:] if _q12_nd(x, y)])
 t("Q12 near-duplicates: the helper lives in app.py, db.py is not changed for it",
   "def near_duplicate" in (ROOT / "app.py").read_text() and "near_duplicate" not in (ROOT / "db.py").read_text())
+_q12_old, _q12_dup = "Ginger helps with nausea", "Ginger helps with the nausea"
+_q12_save(_q12_old, at="2020-01-02T00:00:00+00:00")
+_q12_save("Garlic water clears a blocked nose in adults")
+_q12_save(_q12_dup)
+_q12_lat = appmod._latest(10)
+_q12_names = [r["claim_text"] for r in _q12_lat]
+_q12_isc = [_dsp.is_curated_claim(x) for x in _q12_names]
+t("Q12 Latest: the test's near-duplicate is saved under its own key", db.normalize_claim(_q12_dup) != db.normalize_claim(_q12_old))
+t("Q12 Latest: curated claims with a saved answer come first, newest first, even one saved years ago",
+  _q12_old in _q12_names and _q12_isc == sorted(_q12_isc, reverse=True)
+  and [r["created_at"] for r in _q12_lat if _dsp.is_curated_claim(r["claim_text"])]
+  == sorted([r["created_at"] for r in _q12_lat if _dsp.is_curated_claim(r["claim_text"])], reverse=True), _q12_names)
+t("Q12 Latest: a newer near-duplicate of a curated claim is not listed beside it, and no two entries are near-duplicates",
+  _q12_dup not in _q12_names
+  and not [(x, y) for i, x in enumerate(_q12_names) for y in _q12_names[i + 1:] if _q12_nd(x, y)], _q12_names)
+_q12_home = c.get("/").get_data(as_text=True)
+_q12_hl = [_htmllib.unescape(x) for x in _re.findall(r'<span class="entry-claim">([^<]*)</span>', _q12_home.split('class="latest"')[1].split("</ol>")[0])]
+t("Q12 Latest: the home page shows the same list, in the same markup",
+  [x.casefold() for x in _q12_hl] == [x.casefold() for x in _q12_names], (_q12_hl, _q12_names))
 # ===== END Q12 CURATED =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
