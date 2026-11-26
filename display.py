@@ -858,6 +858,17 @@ def indexable_claim(claim_text) -> bool:
     return is_curated_claim(claim_text) and not looks_personal(claim_text)
 
 
+# Faults that do not keep a record out of search. The stored "rests on" is the number of studies the
+# breakdown prose cites; the page recomputes it from the cited list on every render and never trusts it.
+INDEXING_IGNORED_PROBLEMS = frozenset({"count_mismatch"})
+
+
+def indexing_problems(*args, **kwargs) -> list:
+    """saved_record_problems less INDEXING_IGNORED_PROBLEMS: the one list the noindex tag on a
+    result page and the sitemap both go by, so they cannot disagree."""
+    return [p for p in saved_record_problems(*args, **kwargs) if p not in INDEXING_IGNORED_PROBLEMS]
+
+
 def saved_record_problems(claim_text, verdict, cited, studies, breakdown, search_query, saved_at,
                           now=None) -> list:
     """
