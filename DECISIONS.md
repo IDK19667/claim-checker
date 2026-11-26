@@ -4,6 +4,28 @@ Decisions and the reason behind them, newest first. If a decision is
 reversed, say so here rather than deleting the entry. `DESIGN.md` holds
 the visual system; this holds why.
 
+## 2026-11-26: A count the page recomputes no longer keeps a curated claim out of search
+
+Narrows the 2026-11-19 entry "Sound saved results are in the sitemap; the rest are noindex".
+That entry listed "rests on equal to the studies cited" as a soundness test. Live, 24 of the
+owner's 51 fresh curated answers were held out of the sitemap and marked noindex because of it.
+The stored `breakdown.rests_on` is the number of studies the breakdown prose cites; the cited
+list is a different set (the model's chosen numbers, less off topic and background). They agree
+only when prose and list happen to match. The page never trusts the stored number: it recomputes
+it from the cited list on every render, so a mismatch says nothing about whether the record is
+sound, and no reader or crawler ever sees that number.
+
+Change: one helper, `display.indexing_problems`, is `saved_record_problems` less the kinds in
+`INDEXING_IGNORED_PROBLEMS`, which holds only `count_mismatch`. The noindex tag on a result page
+and the sitemap both call it, so they cannot drift. `saved_record_problems` and the audit script
+still name `count_mismatch`. Nothing a reader sees changes.
+
+Still keeps a record out: a cited study that is not among the studies, a cited study set aside
+as off topic, an empty search query, a missing, unreadable or future save date, unreadable
+JSON, an unknown verdict, a personal-looking claim, no claim, and any claim not on the curated
+list. `db._REPAIRED_AT_RENDER` was not reused: it also holds `cited_off_topic`, where the repair
+can change the verdict at render, so that kind stays a reason to keep a record out.
+
 ## 2026-11-24 (q10-still): Text mode shows a still of our own desk
 
 The owner's speed budget ends with "a still image for weak phones". Text mode (no
