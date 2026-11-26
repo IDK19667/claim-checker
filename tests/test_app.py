@@ -16113,6 +16113,18 @@ t("Q12 sitemap: a typed claim, saved and sound, is never listed; a curated claim
 t("Q12: a curated claim's page is indexable; a typed claim's page stays noindex",
   'content="index, follow' in c.get("/", query_string={"q": _q12_cur}).get_data(as_text=True)
   and '<meta name="robots" content="noindex" />' in c.get("/", query_string={"q": "Magnesium helps you sleep better at night"}).get_data(as_text=True))
+_q12_nd = appmod.near_duplicate
+t("Q12 near-duplicates: case, punctuation, a plural, filler words and a question form are one claim",
+  _q12_nd("Magnesium helps you sleep", "magnesium helps you sleep!") and _q12_nd("Magnesium helps you sleep", "Magnesium help you sleep")
+  and _q12_nd("Detox teas cleanse your body", "Detox tea cleanses the body") and _q12_nd("Does coffee dehydrate you?", "Coffee dehydrates you"))
+t("Q12 near-duplicates: a negation, another order or another word keeps two claims apart",
+  not _q12_nd("Magnesium helps you sleep", "Magnesium does not help you sleep") and not _q12_nd("Stress causes acne", "Acne causes stress")
+  and not _q12_nd("Detox teas cleanse your body", "Detox teas flush toxins out of your body")
+  and not _q12_nd("Melatonin helps you fall asleep", "Melatonin helps kids fall asleep"))
+t("Q12 near-duplicates: no two curated claims are near-duplicates of each other",
+  not [(x, y) for i, x in enumerate(_dsp.CURATED_CLAIMS) for y in _dsp.CURATED_CLAIMS[i + 1:] if _q12_nd(x, y)])
+t("Q12 near-duplicates: the helper lives in app.py, db.py is not changed for it",
+  "def near_duplicate" in (ROOT / "app.py").read_text() and "near_duplicate" not in (ROOT / "db.py").read_text())
 # ===== END Q12 CURATED =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])

@@ -592,6 +592,22 @@ def _one_per_question(rows: list[dict], key: str = "claim_text", verdict_of=None
     return out
 
 
+def _near_key(claim: str) -> tuple:
+    """A claim's words in order, after db.claim_fold, with suggest's filler
+    words dropped and a final s or es folded (_list_fold). Falls back to
+    db.normalize_claim when the fold is empty."""
+    fold = db.claim_fold(claim)
+    words = tuple(w if w.startswith("~") else _list_fold(w) for w in fold if w not in _LIST_FILLER)
+    return words or ("=" + db.normalize_claim(claim),)
+
+
+def near_duplicate(a: str, b: str) -> bool:
+    """Two claims a public list shows once: the same after db.normalize_claim,
+    or differing only in case, punctuation, a plural or filler words. Word
+    order still counts, and so does any other word. Display only."""
+    return db.normalize_claim(a) == db.normalize_claim(b) or _near_key(a) == _near_key(b)
+
+
 def _trust_example():
     """
     The trust section's real example, {claim, verdict, tldr, checked, read,
