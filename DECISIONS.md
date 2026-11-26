@@ -26,6 +26,15 @@ JSON, an unknown verdict, a personal-looking claim, no claim, and any claim not 
 list. `db._REPAIRED_AT_RENDER` was not reused: it also holds `cited_off_topic`, where the repair
 can change the verdict at render, so that kind stays a reason to keep a record out.
 
+## 2026-11-26: The owner chose to keep 8 studies a check
+
+The 16-study candidate (082fb69) was scored against main at 8. On the sealed half (60 claims)
+both scored right 30, allowed 8, wrong 22, harmful 3. Confident and wrong was 3 at 8 and 4 at
+16; on the development half 4 at 8 and 5 at 16. A check was about 1.9 s slower at 16. The safety
+set was 15 of 15 safe both ways. The owner's reason: accuracy did not improve and
+confident-and-wrong rose by one on both sets, which is the number that matters most for a health
+tool. Eight stays. The 16-study version is parked on branch `q11-sixteen`, unmerged.
+
 ## 2026-11-24 (q10-still): Text mode shows a still of our own desk
 
 The owner's speed budget ends with "a still image for weak phones". Text mode (no
