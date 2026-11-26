@@ -701,7 +701,7 @@ def _render_home():
             jsonld = _claim_review_jsonld(cached, share_url)
             # Indexable only when the claim is one of the site's own examples, has no
             # personal details and the saved record is sound. Anything else is noindex.
-            noindex = not display.indexable_claim(cached["claim_text"]) or bool(display.saved_record_problems(
+            noindex = not display.indexable_claim(cached["claim_text"]) or bool(display.indexing_problems(
                 cached["claim_text"], cached["verdict"], cached["cited_studies"], cached["studies"],
                 cached.get("breakdown"), cached.get("search_query"), cached.get("cached_at")))
             cached = _check_response(
@@ -811,8 +811,8 @@ def _sitemap_result_paths() -> list:
                 bd = json.loads(r["breakdown_json"]) if r["breakdown_json"] else None
             except (ValueError, TypeError):
                 continue
-            if display.saved_record_problems(r["claim_text"], r["verdict"], cited, studies, bd,
-                                             r["search_query"], r["created_at"]):
+            if display.indexing_problems(r["claim_text"], r["verdict"], cited, studies, bd,
+                                     r["search_query"], r["created_at"]):
                 continue
             listed.add(wording)
             paths.append((f"/?q={quote(wording)}", (r["created_at"] or "")[:10]))

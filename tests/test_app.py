@@ -16192,6 +16192,46 @@ t("Q12: curated_wording gives the list's wording for a variant and None for a ty
   _dsp.curated_wording("  ozempic CURES alcoholism? ") == "Ozempic cures alcoholism" and _dsp.curated_wording("Ozempic cures gout") is None)
 # ===== END Q12 CURATED =====
 
+# ===== SC: a stored "rests on" count the page recomputes does not keep a curated claim out of search =====
+_sc_cur = [x for x in _dsp.CURATED_CLAIMS if not _dsp.looks_personal(x)][:4]
+_sc_rows = [  # (claim, cited, rests_on, kinds expected from saved_record_problems, indexed)
+    (_sc_cur[0], ["Q12S1"], 3, {"count_mismatch"}, True),
+    (_sc_cur[1], ["Q12S1", "GONE"], 3, {"count_mismatch", "cited_not_in_studies"}, False),
+    (_sc_cur[2], ["Q12S1"], 1, set(), True),
+    ("Parsley cures baldness in adults", ["Q12S1"], 3, {"count_mismatch"}, False),   # sound row, not curated
+]
+for _c, _ci, _ro, _k, _ix in _sc_rows:
+    db.put_cached_verdict(_c, "sc AND test", "complicated", "Trials are mixed (Study 1).", _ci, [_q12_gs],
+                          tldr="Studies are mixed.", still_open="Doses vary.", breakdown={"rests_on": _ro})
+# a cited study set aside as off topic, with only that and the count fault
+_sc_off = dict(_q12_gs, pmid="Q12OFF", title="Unrelated trial", off_topic=True)
+_sc_cur3 = _sc_cur[3]
+db.put_cached_verdict(_sc_cur3, "sc AND test", "complicated", "Trials are mixed (Study 1).", ["Q12S1", "Q12OFF"],
+                      [_q12_gs, _sc_off], tldr="Studies are mixed.", still_open="Doses vary.", breakdown={"rests_on": 9})
+appmod._sitemap_memo["stamp"] = None
+_sc_sm = urllib.parse.unquote(c.get("/sitemap.xml").get_data(as_text=True))
+_sc_ok = True; _sc_seen = []
+for _c, _ci, _ro, _k, _ix in _sc_rows:
+    _pg = c.get("/", query_string={"q": _c}).get_data(as_text=True)
+    _page_index = 'content="index, follow' in _pg
+    _in_map = f"?q={_c}</loc>" in _sc_sm
+    _sc_seen.append((_c, _page_index, _in_map, _ix))
+    _sc_ok = _sc_ok and _page_index == _in_map == _ix
+t("SC: the page's robots tag and the sitemap agree for each row: a count-only fault is indexed, an unlisted claim or a missing study is not",
+  _sc_ok, _sc_seen)
+t("SC: a curated claim whose only fault is the count is in the sitemap and its page serves the answer, indexable",
+  f"?q={_sc_cur[0]}</loc>" in _sc_sm and 'id="server-result"' in c.get("/", query_string={"q": _sc_cur[0]}).get_data(as_text=True))
+_sc_off_pg = c.get("/", query_string={"q": _sc_cur3}).get_data(as_text=True)
+t("SC: a cited off-topic study still keeps a curated record out of the sitemap and the page noindex",
+  _dsp.indexing_problems(_sc_cur3, "complicated", ["Q12S1", "Q12OFF"], [_q12_gs, _sc_off], {"rests_on": 9}, "q", "2020-01-01T00:00:00+00:00") == ["cited_off_topic"]
+  and f"?q={_sc_cur3}</loc>" not in _sc_sm and 'content="index, follow' not in _sc_off_pg)
+t("SC: saved_record_problems still names count_mismatch; indexing_problems drops only that kind",
+  _dsp.saved_record_problems(_sc_cur[0], "complicated", ["Q12S1"], [_q12_gs], {"rests_on": 3}, "q", "2020-01-01T00:00:00+00:00") == ["count_mismatch"]
+  and _dsp.indexing_problems(_sc_cur[0], "complicated", ["Q12S1"], [_q12_gs], {"rests_on": 3}, "q", "2020-01-01T00:00:00+00:00") == []
+  and _dsp.indexing_problems(_sc_cur[0], "complicated", ["Q12S1"], [_q12_gs], {"rests_on": 3}, "", "2020-01-01T00:00:00+00:00") == ["empty_query"]
+  and _dsp.INDEXING_IGNORED_PROBLEMS == {"count_mismatch"})
+# ===== END SC =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
