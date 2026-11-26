@@ -792,11 +792,17 @@ def _sitemap_result_paths() -> list:
         stamp = db.saved_stamp()
         if stamp == _sitemap_memo["stamp"]:
             return _sitemap_memo["paths"]
-        paths = []
+        paths, listed = [], set()
         # Scan far more rows than the sitemap can hold: only the few curated claims
         # qualify, and they must be found however many typed claims were saved after them.
         for r in db.saved_records(SITEMAP_SCAN_MAX):
             if not display.indexable_claim(r["claim_text"]):
+                continue
+            # Listed under the curated list's own wording, once, whatever case,
+            # spacing or end mark the saved row was typed with; only when that
+            # wording reaches this same saved row (the same db.normalize_claim key).
+            wording = display.curated_wording(r["claim_text"])
+            if wording in listed or db.normalize_claim(wording) != db.normalize_claim(r["claim_text"]):
                 continue
             if len(paths) >= SITEMAP_RESULTS_MAX:
                 break
@@ -808,7 +814,8 @@ def _sitemap_result_paths() -> list:
             if display.saved_record_problems(r["claim_text"], r["verdict"], cited, studies, bd,
                                              r["search_query"], r["created_at"]):
                 continue
-            paths.append((f"/?q={quote(r['claim_text'])}", (r["created_at"] or "")[:10]))
+            listed.add(wording)
+            paths.append((f"/?q={quote(wording)}", (r["created_at"] or "")[:10]))
         _sitemap_memo.update(stamp=stamp, paths=paths)
         return paths
     except Exception as e:  # noqa: BLE001 - the sitemap must never be a 500

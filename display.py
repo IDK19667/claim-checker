@@ -844,6 +844,14 @@ def is_curated_claim(claim_text) -> bool:
     return _claim_form(claim_text) in _CURATED_FORMS
 
 
+_CURATED_BY_FORM = {_claim_form(c): c for c in CURATED_CLAIMS}
+
+
+def curated_wording(claim_text):
+    """The curated list's own wording for a claim that is curated, else None."""
+    return _CURATED_BY_FORM.get(_claim_form(claim_text))
+
+
 def indexable_claim(claim_text) -> bool:
     """Curated and not personal. A search engine may see a result page only when this holds
     and saved_record_problems is empty."""

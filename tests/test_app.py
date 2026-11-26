@@ -16172,6 +16172,24 @@ _q12_js = (ROOT / "static" / "app.js").read_text()
 t("Q12 chips: app.js keeps chips the server sent and falls back to EXAMPLES only when there are none",
   'if (!$("chips").querySelector(".chip")) $("chips").innerHTML = EXAMPLES.slice(0, 3)' in _q12_js)
 t("Q12: the service worker cache was raised for the changed shell", 'const CACHE = "evident-v133";' in (ROOT / "static" / "sw.js").read_text())
+# Round 2: the sitemap names a curated claim in the list's own wording, once, even when the save was a variant.
+_q12_var = "melatonin   HELPS you fall asleep."
+with db.get_conn() as _q12c:
+    _q12c.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim("Melatonin helps you fall asleep"),))
+_q12_save(_q12_var)
+_q12_save("Vaccines cause autism!!")
+_q12_sm2 = c.get("/sitemap.xml").get_data(as_text=True)
+_q12_locs2 = [urllib.parse.unquote(u.split("?q=", 1)[1]) for u in _re.findall(r"<loc>([^<]*)</loc>", _q12_sm2) if "?q=" in u]
+t("Q12 sitemap: a curated claim saved under a visitor's variant is listed once, in the curated list's own wording",
+  db.normalize_claim(_q12_var) == db.normalize_claim("Melatonin helps you fall asleep")
+  and _q12_locs2.count("Melatonin helps you fall asleep") == 1 and _q12_var not in _q12_locs2
+  and _q12_locs2.count("Vaccines cause autism") == 1 and "Vaccines cause autism!!" not in _q12_locs2
+  and all(x in _dsp.CURATED_CLAIMS for x in _q12_locs2) and len(_q12_locs2) == len(set(_q12_locs2)), _q12_locs2)
+_q12_vp = c.get("/", query_string={"q": "Melatonin helps you fall asleep"}).get_data(as_text=True)
+t("Q12 sitemap: the curated wording's ?q= page serves the answer saved under the variant, indexable",
+  'id="server-result"' in _q12_vp and "Trials are mixed" in _q12_vp and 'content="index, follow' in _q12_vp)
+t("Q12: curated_wording gives the list's wording for a variant and None for a typed claim",
+  _dsp.curated_wording("  ozempic CURES alcoholism? ") == "Ozempic cures alcoholism" and _dsp.curated_wording("Ozempic cures gout") is None)
 # ===== END Q12 CURATED =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
