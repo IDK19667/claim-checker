@@ -2313,8 +2313,9 @@ t("  the desk stands that many blank sheets in its stack, placed, none under red
 t("  while a check runs the form goes quiet, so the log prints right under the claim",
   'html[data-screen="checking"] #claim-help, html[data-screen="checking"] #privacy-line, html[data-screen="checking"] #examples { display: none; }' in (ROOT / "static" / "desk.css").read_text())
 _ex_home = c.get("/").get_data(as_text=True)
-t("  \"Or try one of these:\" shows only with examples under it: the server sends the chips empty and the style hides the line until a script fills them",
-  re.search(r'<div class="chips" id="chips"[^>]*></div>', _ex_home) is not None
+# Q12: the server now sends the three chips itself (app._chips); the style still hides the line with none or no script.
+t("  \"Or try one of these:\" shows only with examples under it: the server sends the chips (or none) and the style hides the line when empty or without a script",
+  re.search(r'<div class="chips" id="chips"[^>]*>(<button type="button" class="chip">[^<]*</button>){3}</div>', _ex_home) is not None
   and "#examples:has(.chips:empty), html:not(.js) #examples { display: none; }" in (ROOT / "static" / "desk.css").read_text())
 # Run, not read: the same answer from /api/suggest opens the list while no check
 # runs, and draws nothing once a check has started.
@@ -10942,7 +10943,7 @@ _shell3_set = set(re.findall(r'"([^"]+)"', _shell3))
 t("the service worker's SHELL is what the home page needs to paint offline (the page, its stylesheet, its two scripts, "
   "its four faces) and nothing else: other pages, style.css, icons and the 3D files are kept when first used",
   _shell3_set == _paint3 and len(_paint3) == 8 and "three-r128" not in _shell3 and "wood" not in _shell3
-  and 'const CACHE = "evident-v132";' in _sw3, (sorted(_shell3_set ^ _paint3)))
+  and 'const CACHE = "evident-v133";' in _sw3, (sorted(_shell3_set ^ _paint3)))
 t("the service worker gives the home page a 2.5 s time limit when a copy is kept, and a first visit waits for the network",
   "const SHELL_WAIT_MS = 2500;" in _sw3 and "if (!kept) return net" in _sw3 and "event.waitUntil(net" in _sw3
   and 'cache.put("/", res.clone())' in _sw3)
@@ -16146,6 +16147,31 @@ _q12_home = c.get("/").get_data(as_text=True)
 _q12_hl = [_htmllib.unescape(x) for x in _re.findall(r'<span class="entry-claim">([^<]*)</span>', _q12_home.split('class="latest"')[1].split("</ol>")[0])]
 t("Q12 Latest: the home page shows the same list, in the same markup",
   [x.casefold() for x in _q12_hl] == [x.casefold() for x in _q12_names], (_q12_hl, _q12_names))
+for _q12_x in ("Turmeric reduces inflammation", "Honey soothes a cough", "Coffee dehydrates you", "Ginger helps with nausea",
+               "Zinc shortens a cold", "Biotin makes your hair grow", "Sea moss is a superfood", "Garlic and honey fights the flu",
+               "Cold plunges reduce inflammation", "Mouth taping improves sleep", "Seed oils are bad for you",
+               "Saunas help your body detox", "Onion water cures a cold", "Liquid chlorophyll clears your skin"):
+    _q12_save(_q12_x, at="2019-05-05T00:00:00+00:00")
+for _q12_i in range(12):
+    _q12_save(f"Q12 filler claim number {_q12_i} is about sleep")
+_q12_h1, _q12_h2 = c.get("/").get_data(as_text=True), c.get("/").get_data(as_text=True)
+_q12_chips = lambda h: [_htmllib.unescape(x) for x in _re.findall(r'<button type="button" class="chip">([^<]*)</button>',
+                                                                  h.split('id="chips"')[1].split("</div>")[0])]
+_q12_ch = _q12_chips(_q12_h1)
+_q12_lt = [_htmllib.unescape(x) for x in _re.findall(r'<span class="entry-claim">([^<]*)</span>', _q12_h1.split('class="latest"')[1].split("</ol>")[0])]
+t("Q12 chips: the page carries three curated claims, each with a saved answer, in the existing chip markup",
+  len(_q12_ch) == 3 and all(x in _dsp.CURATED_CLAIMS and db.get_cached_by_key(db.normalize_claim(x)) for x in _q12_ch), _q12_ch)
+t("Q12 chips: none is in Latest checks on that page or a near-duplicate of an entry there, nor of another chip",
+  not [(x, y) for x in _q12_ch for y in _q12_lt if _q12_nd(x, y)]
+  and not [(x, y) for i, x in enumerate(_q12_ch) for y in _q12_ch[i + 1:] if _q12_nd(x, y)], (_q12_ch, _q12_lt))
+t("Q12 chips: chosen the same way for every visitor, in the curated list's order",
+  _q12_ch == _q12_chips(_q12_h2) and _q12_ch == sorted(_q12_ch, key=_dsp.CURATED_CLAIMS.index))
+t("Q12 chips: with no saved curated answer left to offer, curated claims in list order fill the three",
+  sorted(appmod._chips([{"claim_text": x} for x in _dsp.CURATED_CLAIMS[:-3]])) == sorted(_dsp.CURATED_CLAIMS[-3:]))
+_q12_js = (ROOT / "static" / "app.js").read_text()
+t("Q12 chips: app.js keeps chips the server sent and falls back to EXAMPLES only when there are none",
+  'if (!$("chips").querySelector(".chip")) $("chips").innerHTML = EXAMPLES.slice(0, 3)' in _q12_js)
+t("Q12: the service worker cache was raised for the changed shell", 'const CACHE = "evident-v133";' in (ROOT / "static" / "sw.js").read_text())
 # ===== END Q12 CURATED =====
 
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])

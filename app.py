@@ -503,6 +503,26 @@ def _latest(n: int) -> list[dict]:
         limit *= 2
 
 
+def _chips(latest: list, n: int = 3) -> list[str]:
+    """The "Or try one of these" claims: the first n curated claims, in the
+    order of display.CURATED_CLAIMS, that have a saved answer and are not a
+    near-duplicate of an entry in `latest` or of each other. Too few such
+    claims are made up from the next curated claims in the same order. The
+    same for every visitor; no randomness."""
+    saved = {r["claim_key"] for r in _curated_saved()}
+    shown = [v["claim_text"] for v in latest]
+    out: list[str] = []
+    for need_saved in (True, False):
+        for c in display.CURATED_CLAIMS:
+            if len(out) >= n:
+                return out
+            if c in out or (need_saved and db.normalize_claim(c) not in saved):
+                continue
+            if not any(near_duplicate(c, x) for x in shown + out):
+                out.append(c)
+    return out
+
+
 def _curated_saved() -> list[dict]:
     """The saved answers whose claim is curated (display.is_curated_claim on the
     saved wording) and whole, newest first, in the shape recent_verdicts gives."""
@@ -704,10 +724,15 @@ def _render_home():
     except sqlite3.Error as e:
         app.logger.warning("Could not build the front page's latest checks: %s", e)
         latest = []
+    try:
+        chips = _home_list("chips", lambda: _chips(latest))
+    except sqlite3.Error as e:
+        app.logger.warning("Could not choose the front page's example claims: %s", e)
+        chips = []
     db.count_event("view.result" if cached else "view.home")
     return render_template("index.html", preview=preview, base_url=_base_url(),
                            result=cached, jsonld=jsonld, labels=VERDICT_LABELS, noindex=noindex,
-                           latest=latest,
+                           latest=latest, chips=chips,
                            example=None if cached else _trust_example(),
                            provider=verdict.provider_label(), on_gemini=_on_gemini(),
                            today=datetime.now().strftime("%A, %B %-d, %Y"))

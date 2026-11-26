@@ -18,8 +18,9 @@ const VERDICT_LABELS = {
   insufficient: "Not enough evidence",
 };
 
-// Claims people actually paste in. Tapping one runs it. The first screen shows
-// the first three, so the order is the order they are offered in.
+// The curated claims (display.CURATED_CLAIMS, the same list: a test compares
+// them). Tapping one runs it. The server picks the three the page offers; when
+// it sends none, the first three here are offered.
 const EXAMPLES = [
   "Magnesium helps you sleep",
   "Vitamin D boosts your immune system",
@@ -1305,7 +1306,8 @@ $("error-back").addEventListener("click", () => {
 
 // ---- Examples & trending --------------------------------------------------
 
-$("chips").innerHTML = EXAMPLES.slice(0, 3).map((c) => `<button type="button" class="chip">${escapeHtml(c)}</button>`).join("");
+// The server chooses the three (app._chips); this list is the fallback when it sent none.
+if (!$("chips").querySelector(".chip")) $("chips").innerHTML = EXAMPLES.slice(0, 3).map((c) => `<button type="button" class="chip">${escapeHtml(c)}</button>`).join("");
 $("chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
