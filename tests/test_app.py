@@ -16074,6 +16074,47 @@ t("NK: the key is read from the environment only, and the docs name it",
   and "NCBI_API_KEY" in (ROOT / "README.md").read_text() and "NCBI_API_KEY" in (ROOT / ".env.example").read_text())
 # ===== END Q11 SPEED (NCBI key) =====
 
+# ===== Q12 CURATED (the owner's popular claims) =====
+_q12_gs = {"pmid": "Q12S1", "title": "Magnesium and sleep", "abstract": "A randomized trial.", "journal": "J",
+           "year": "2021", "publication_types": ["Randomized Controlled Trial"], "authors": ["x"], "data_banks": None, "url": "u"}
+
+
+def _q12_save(claim, at=None):
+    db.put_cached_verdict(claim, "q12 AND test", "complicated", "Trials are mixed (Study 1).", ["Q12S1"], [_q12_gs],
+                          tldr="Studies are mixed.", still_open="Doses vary.")
+    if at:
+        with db.get_conn() as _q12c:
+            _q12c.execute("UPDATE verdict_cache SET created_at = ? WHERE claim_key = ?", (at, db.normalize_claim(claim)))
+
+
+t("Q12: the curated list is the owner's 51 claims in the owner's wording, then the site's 7 first examples, kept",
+  len(_dsp.CURATED_CLAIMS) == 58 and len(set(_dsp.CURATED_CLAIMS)) == 58
+  and _dsp.CURATED_CLAIMS[0] == "Magnesium helps you sleep" and _dsp.CURATED_CLAIMS[50] == "Liquid chlorophyll clears your skin"
+  and "Grounding (walking barefoot) reduces inflammation" in _dsp.CURATED_CLAIMS
+  and "Walking 10,000 steps a day is necessary for health" in _dsp.CURATED_CLAIMS
+  and _dsp.CURATED_CLAIMS[51:] == ("Apple cider vinegar cures diabetes", "Cracking your knuckles causes arthritis",
+                                   "Intermittent fasting improves brain function", "Detox teas flush toxins out of your body",
+                                   "5G weakens your immune system", "Vaccines cause autism", "Ozempic cures alcoholism"))
+t("Q12: no curated claim looks personal", not any(_dsp.looks_personal(x) for x in _dsp.CURATED_CLAIMS))
+_q12_cur, _q12_unsaved = "Magnesium helps you sleep", "Zinc shortens a cold"
+_q12_save(_q12_cur)
+_q12_save("Magnesium helps you sleep better at night")
+with db.get_conn() as _q12c:
+    _q12c.execute("DELETE FROM verdict_cache WHERE claim_key = ?", (db.normalize_claim(_q12_unsaved),))
+_q12_save("Lemon water detoxes your body")
+_q12_sm = c.get("/sitemap.xml").get_data(as_text=True)
+_q12_locs = [urllib.parse.unquote(u.split("?q=", 1)[1]) for u in _re.findall(r"<loc>([^<]*)</loc>", _q12_sm) if "?q=" in u]
+t("Q12 sitemap: a curated claim with a saved answer is listed as its ?q= page, in the same format as the others",
+  f"<loc>http://localhost/?q={urllib.parse.quote(_q12_cur)}</loc><lastmod>" in _q12_sm
+  and "Lemon water detoxes your body" in _q12_locs, _q12_locs)
+t("Q12 sitemap: a typed claim, saved and sound, is never listed; a curated claim with no saved answer is not listed",
+  "Magnesium helps you sleep better at night" not in _q12_locs and _q12_unsaved not in _q12_locs
+  and all(_dsp.is_curated_claim(x) for x in _q12_locs), _q12_locs)
+t("Q12: a curated claim's page is indexable; a typed claim's page stays noindex",
+  'content="index, follow' in c.get("/", query_string={"q": _q12_cur}).get_data(as_text=True)
+  and '<meta name="robots" content="noindex" />' in c.get("/", query_string={"q": "Magnesium helps you sleep better at night"}).get_data(as_text=True))
+# ===== END Q12 CURATED =====
+
 t("no test opened a network connection or looked a host up", not NET_TRIES, NET_TRIES[:5])
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
